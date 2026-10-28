@@ -1,0 +1,23 @@
+{
+ "checkpoint": "{checkpoint}",
+ "store": "{op}/store",
+ "device": "cuda",
+ "dtype": "bfloat16",
+ "bank": "{op}/bank.json",
+ "work": "{op}/corpus",
+ "out": "{op}/corpus/targets.jsonl",
+ "rebase": true,
+ "recipe": {
+  "epochs": 1,
+  "batch_rows": 8,
+  "prompt_weight": 0
+ },
+ "fit": {
+  "steps": 20,
+  "refine_steps": 8
+ },
+ "subsets": 3,
+ "max_support": 24,
+ "incremental_max": 4,
+ "programs": "{programs}"
+}

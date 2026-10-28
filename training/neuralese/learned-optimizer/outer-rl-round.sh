@@ -1,6 +1,7 @@
 #!/bin/bash
 # One outer meta-RL round of the joint learned optimizer with real task outcomes (run under the memory ledger by
-# run-after-lfm-main.sh). usage: outer-rl-round.sh <operation dir with train-spec.json>
+# run-lfm3-lane.sh). usage: outer-rl-round.sh <operation dir with train-spec.json>
+# SCORE=skip (dry runs only) leaves the task outcomes out: the round then trains on the shaping reward alone.
 # 1. proposals: sample proposals per target; each proposal and each target's incoming bundle becomes a release fragment.
 # 2. natlang tune ROOT --score-proposals: each program seals and runs its proposals on its query roots.
 # 3. collect: rewards = task outcome + shaping, leave-one-out advantages.  4. train: the policy update on those records.
@@ -15,7 +16,7 @@ mkdir -p "$R"
 import json, sys
 w = sys.argv[1]
 train = json.load(open(f'{w}/train-spec.json'))
-common = {k: train[k] for k in ('checkpoint', 'store', 'device', 'dtype', 'bank', 'targets', 'state') if k in train}
+common = {k: train[k] for k in ('checkpoint', 'store', 'device', 'dtype', 'bank', 'targets', 'state', 'grid_tokens') if k in train}
 json.dump({**common, 'perContext': 4, 'out': f'{w}/outer-rl/proposals.jsonl', 'releases': f'{w}/outer-rl/releases'},
           open(f'{w}/outer-rl/proposals-spec.json', 'w'), indent=1)
 json.dump({'proposals': f'{w}/outer-rl/proposals.jsonl', 'outcomes': f'{w}/outer-rl/outcomes.json',
@@ -25,7 +26,7 @@ PY
 "$PY" -m natlang_neuralese.tune.learned proposals --spec "$R/proposals-spec.json" | tail -1 > "$R/proposals.json"
 "$PY" -c 'import json, sys; [print(root, path) for root, path in json.load(open(sys.argv[1]))["result"]["requests"].items()]' \
   "$R/proposals.json" | while read -r root request; do
-  $NATLANG tune "$root" --score-proposals "$request" >> "$R/score.log" 2>&1
+  [ "${SCORE:-}" = skip ] || $NATLANG tune "$root" --score-proposals "$request" >> "$R/score.log" 2>&1
 done
 "$PY" - "$R" <<'PY'
 import glob, json, sys

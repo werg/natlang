@@ -1,5 +1,18 @@
 # Model-facing changes and their measurement
 
+### 2026-10-28 — privileged self-teaching block (tune collection, unmeasured debt)
+
+`ts-host/src/tune/selfteach.ts` (`natlang.tune-privileged-rendering/1`) appends one paragraph to the first user
+message of every model turn of a self-taught TRAINING root: `Verified training reference: <stage> returns <value>; ...;
+the task's final result is <value>. Follow the instructions step by step so that each step reaches its value.` The
+recorded training rows never contain it (the student learns the plain task), and a root whose reply echoes the
+marker is not a target. What the student sees while collecting is still model-facing: the wording decides how often
+the privileged student follows the program's steps instead of shortcutting to the final value. Status:
+**unmeasured**; measure on the trained LFM3 (about 48 training roots per variant across several supply families):
+oracle-verified rate, rate of trajectories that call every declared stage, and echo rate, against a variant that
+names only the final result and one that names only stage values. The rendering version is part of the self
+teacher's identity, so a change recollects.
+
 ### 2026-10-28 — LFM3-1.7B history reasoning pinned to `keep` (`preserve_thinking=true`)
 
 `serve/chat.py` declares `BACKBONE_HISTORY_REASONING['lfm3'] = 'keep'`, so every LFM3 training render and serving

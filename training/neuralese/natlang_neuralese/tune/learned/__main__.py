@@ -12,6 +12,7 @@
     python -m natlang_neuralese.tune.learned corpus    --spec SPEC   tuner fits on the bank basis + their targets, per program
     python -m natlang_neuralese.tune.learned controls  --spec SPEC   planted-mixture recovery (optimizer vs in-bank fit)
     python -m natlang_neuralese.tune.learned meta-examples --spec SPEC   exact tuning examples for the optimizer's own stages
+    python -m natlang_neuralese.tune.learned adopt-bank --spec SPEC  continue training on the latest published bank (after a refit)
 
 Every spec names its exact checkpoint; outputs are written atomically next to the spec's ``out`` path. The crisp
 operation baseline (`train` with ``cycles``) alternates label refits after bank publications, supervised updates and
@@ -393,6 +394,23 @@ def propose(spec):
     return bundle['id']
 
 
+def adopt_bank(spec):
+    """After a bank publication: write the published bank as ``out`` (`bank.json` format) and transition the trainer
+    state to it (`trainer.adopt_published_bank`). The operation then refits its labels against ``out`` (``corpus``
+    into a new work directory) and continues ``train`` with that bank and those targets. Spec: ``{checkpoint, store,
+    state, out, recipe?}``; a rerun after a finished adoption is a no-op."""
+    from .trainer import OuterRecipe, adopt_published_bank
+    state_path, out = Path(spec['state']), Path(spec['out'])
+    state = json.loads(state_path.read_text())
+    if out.exists() and not state.get('labels_stale') and json.loads(out.read_text())['bank']['snapshot'] == state['bank']:
+        return state['bank']
+    engine = _engine(spec)
+    adopted, published = adopt_published_bank(engine, state, OuterRecipe.from_json(spec.get('recipe', {})))
+    _write(out, {'bank': state['published_banks'][-1], 'adopted_at_step': state['step'], 'parent': state['bank']})
+    _write(state_path, adopted)
+    return published.snapshot
+
+
 def _outer_trainer(spec):
     from .bank import load_bank
     from .trainer import OuterRecipe, OuterTrainer
@@ -545,7 +563,8 @@ def service(spec):
 
 
 COMMANDS = {'bank-init': bank_init, 'targets': targets, 'train': train, 'propose': propose, 'ladder': ladder, 'proposals': proposals,
-            'service': service, 'collect': collect, 'corpus': corpus, 'controls': controls, 'meta-examples': meta_examples}
+            'service': service, 'collect': collect, 'corpus': corpus, 'controls': controls, 'meta-examples': meta_examples,
+            'adopt-bank': adopt_bank}
 
 
 def run_command(command, spec):

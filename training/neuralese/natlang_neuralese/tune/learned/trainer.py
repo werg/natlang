@@ -622,6 +622,48 @@ def _restore_bank_leaves(engine, bank, leaves, artifact_id, step):
             value.copy_(saved.to(value.device))
 
 
+ADOPTION_SCHEMA = 'natlang.lopt.bank-adoption/1'
+
+
+def adopt_published_bank(engine, state, recipe, owner=None):
+    """The explicit transition that continues outer training on its latest published bank snapshot.
+
+    Publication leaves the trainer stale (`labels_stale`): its targets were labeled against the previous snapshot. After
+    the operation refits the labels against the published bank, training continues from this transition: the state
+    binds the published snapshot, every component's live key moves to its published component ID, and the bank
+    parameters restart from the published tensors (the same composed updates; with ``train_basis`` the basis was
+    re-orthonormalized and factors re-expressed). When publication kept the coordinates (no basis training) the bank
+    optimizer moments continue exactly; otherwise the bank optimizer starts an honestly new history (saved moments are
+    never reinterpreted through the QR change of coordinates) and the old history is retained as transition provenance.
+    Writer, head and key optimizer histories, exposure, losses and RNG are unchanged. Returns ``(state, bank)``."""
+    from .bank import load_bank
+    if not state.get('labels_stale') or not state.get('published_banks'):
+        raise LearnedOptimizerError('no published bank awaits adoption')
+    published = load_bank(engine, state['published_banks'][-1])
+    old_snapshot = state['bank']
+    if published.parent != old_snapshot:
+        raise LearnedOptimizerError('the latest published bank does not descend from the trainer\'s bank snapshot')
+    # Component order is preserved by publication; keys follow their components by position.
+    old_ids = list(state['keys'])
+    if len(old_ids) != len(published.components):
+        raise LearnedOptimizerError('published bank changed the number of components; adopt through bank growth instead')
+    keys = {component.id: component.key for component in published.components}
+    # Without basis training, publication copies the live factors unchanged (`publish_bank`): same coordinates.
+    same_coordinates = not recipe.train_basis
+    transition = {'schema': ADOPTION_SCHEMA, 'step': state['step'], 'from': old_snapshot, 'to': published.snapshot,
+                  'basis_changed': not same_coordinates, 'old_bank_tensors': state.get('bank_tensors'),
+                  'old_bank_optimizer': state.get('bank_optimizer'),
+                  'bank_optimizer': 'continued' if same_coordinates else 'new-history-after-coordinate-change'}
+    adopted = {**state, 'bank': published.snapshot, 'keys': keys, 'labels_stale': False,
+               'adoptions': [*state.get('adoptions', []), transition]}
+    if recipe.train_bank or recipe.train_basis:
+        leaves = _bank_leaves(published, recipe)
+        adopted['bank_tensors'] = _save_bank_leaves(engine, published, leaves, state['step'], owner)
+        if not same_coordinates:
+            adopted['bank_optimizer'] = None
+    return adopted, published
+
+
 def _capture_rng():
     return {'cpu': bytes(torch.get_rng_state().tolist()).hex(),
             'cuda': [bytes(value.tolist()).hex() for value in torch.cuda.get_rng_state_all()]
