@@ -3062,6 +3062,12 @@ def _main(argv=None, *, requested_refresh):
                 if not diloco.finish(stop_requested=lambda: policy.signaled):
                     raise RuntimeError('DiLoCo final local updates were not fully delivered; full-state resume required')
                 diloco.declare_completion(drained=True)
+                checkpoint_options['diloco_final_delivery'] = {
+                    'schema': 'natlang.diloco-final-delivery/1',
+                    'worker': diloco.worker, 'fingerprint': diloco.manifest['fingerprint'],
+                    'sequences': list(diloco.sequences)}
+                # The final delivery changes DiLoCo state even without another SGD step.
+                metadata_dirty = True
         except BaseException as error:
             loop_error, loop_error_tb = error, error.__traceback__
         finally:
@@ -3283,6 +3289,7 @@ def _main(argv=None, *, requested_refresh):
               'resident_adoption': resident_receipt,
               'communication_exposure': communication, 'completed': completed,
               'active_stage_complete':active_stage_complete,
+              'diloco_final_delivery':checkpoint_options.get('diloco_final_delivery'),
               'active_stage_completion':{'schema':'natlang.native-active-stage-completion/1',
                   'stage_id':args.stage_id,'checkpoint_sha256':checkpoint_sha,
                   'train_source_sha256':source_receipts[0]['sha256'],'held_source_sha256':held.file_sha256,
