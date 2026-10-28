@@ -105,14 +105,15 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
     privileged = None
     if declared is not None and declared['schema'] == 'jolt-plus/1' and mode == 'grpo':
         privileged = jolt_privileged_source(rows=rollouts, tokenizer=tokenizer, cases=jolt_cases, roles=roles,
-                                            tokenizer_fingerprint=fingerprint)
+                                            tokenizer_fingerprint=fingerprint,
+                                            fetch_text=lambda state_id: fetch(state_id).text)
     return prepare_objective(rollouts, identity=identity, roles=roles, fetch_block=fetch,
         block_bundle=Path(bundle).resolve() if bundle else None, mode=mode, policy_loss=policy_loss,
         privileged=privileged, actors=actor_decl)
 
 
-def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerprint, registry=None):
-    """Shared privileged blocks (rl.privileged_context) for JOLT+; custody fails closed per episode.
+def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerprint, registry=None, fetch_text=None):
+    """Verified captured guidance (rl.privileged_context) for JOLT+; custody fails closed per episode.
 
     Without readable protected packets or bound training cases every student episode is refused a privileged
     teacher (recorded per row) and keeps its outcome term; nothing is dropped from RL.
@@ -140,8 +141,9 @@ def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerpri
         worlds[case.get('id')] = case
     renderer = Renderer(tokenizer, SimpleNamespace(open_id=roles.produce_open, close_id=roles.produce_close))
     rendering = PrivilegedRendering.from_renderer(renderer, template=tokenizer_model_type(tokenizer),
-                                                  tokenizer_fingerprint=tokenizer_fingerprint)
-    return privileged_source(rows, cases=worlds, rendering=rendering, custody=custody)
+                                                  tokenizer_fingerprint=tokenizer_fingerprint,
+                                                  consume_open=roles.consume_open, consume_close=roles.consume_close)
+    return privileged_source(rows, cases=worlds, rendering=rendering, custody=custody, fetch_text=fetch_text)
 
 
 def main(argv=None):

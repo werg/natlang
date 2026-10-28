@@ -475,6 +475,12 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     write_json_durable(config, {'guidance': False, 'x_natlang_rl_capture': True,
         **({'x_natlang_rl_top_k': behavior_top_k} if behavior_top_k is not None else {}),
         **({'x_natlang_native_coefficient_policy':coefficient_runtime} if coefficient_runtime is not None else {})})
+    guidance_refusal = None
+    if teacher_attempts:
+        # JOLT+ students write (without importing) their guidance for the OPSD twin.
+        from .jolt import student_guidance
+        guidance_refusal = student_guidance(entries, ids=preparation['ids'], cases=Path(cases), config=config,
+                                            out=directory)
     runtime = Path(runtime or root('repo') / 'ts-host')
     if not (runtime / 'dist/teacher/cli.js').is_file():
         raise FileNotFoundError('RL requires the built natlang collector runtime')
@@ -543,7 +549,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     report = score(out, out / 'rollouts.jsonl')
     if teacher_attempts:
         report['jolt_teacher_attempts'] = {'requested_per_group': teacher_attempts,
-                                           'entries': len(teachers['entries']), 'refusal': teachers['refusal']}
+                                           'entries': len(teachers['entries']), 'refusal': teachers['refusal'],
+                                           'student_guidance_refusal': guidance_refusal}
     from .graph_replay import block_ids, save_bundle
     rollouts = list(read_jsonl(out / 'rollouts.jsonl'))
     if any(block_ids(rollouts)):

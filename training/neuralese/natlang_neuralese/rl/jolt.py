@@ -164,15 +164,20 @@ def root_calls(rollout, turns):
     return {(turns[0].get('graph_turn') or '').rsplit('#turn', 1)[0]}
 
 
-def privileged_source(rollouts, *, cases, rendering, custody, teacher_trajectories=None, command=None,
-                      policy_root=None):
-    """``source(rollout, replay, turns) -> {invocation: PrivilegedBlock}`` over the shared mechanism.
+def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, teacher_trajectories=None):
+    """``source(rollout, replay, turns) -> ({invocation: PrivilegedBlock}, telemetry)``: the episode's verified guidance.
 
-    Raises ``CustodyError`` (or ValueError for unsupported graphs) when the episode gets no privileged teacher.
-    Attempt feedback comes from the same group's earlier scored student attempts.
+    The actor recorded each model turn's guidance (``privileged_context.captured_block``): the policy's own
+    ``writeGuidance`` state imported after the leading system turn (teacher attempts), the same writer's state
+    written but not imported (student attempts, for the OPSD twin), or the recorded text fallback. The learner
+    re-verifies custody, every credited fact (this world's ``case_facts`` with the group's ``group_feedback``),
+    visibility to the consuming invocation (root/child from ``root_calls``), the declared rendering and that the
+    in-graph writer's own prompt carried those facts. Raises ``CustodyError``/``ValueError`` when an episode has no
+    verified guidance. ``fetch_text(state_id)`` reads a written state's text for the verbatim telemetry.
     """
-    from .privileged_context import CustodyError, privileged_blocks
-    from .privileged_scoring import graph_invocations
+    from .privileged_context import (CustodyError, captured_block, case_facts, reproduces_reference,
+                                     verify_captured_block, writer_saw)
+    from .privileged_scoring import graph_invocations, writer_span
     students = {}
     for row in rollouts:
         if row.get('jolt_role', 'student') == 'student':
@@ -183,16 +188,41 @@ def privileged_source(rollouts, *, cases, rendering, custody, teacher_trajectori
         if case is None:
             raise CustodyError('episode has no bound training world')
         group = students.get((rollout['task_id'], json.dumps(rollout.get('group'), sort_keys=True)), [])
-        invocations = graph_invocations(replay, turns, root_calls=root_calls(rollout, turns))
-        return privileged_blocks(rendering, case, invocations,
-            custody=custody, teacher_trajectories=(teacher_trajectories or {}).get(rollout['task_id'], ()),
-            attempt_feedback=group_feedback(case, group, rollout.get('sample')), command=command,
-            policy_root=policy_root)
+        receipt, facts = case_facts(case, custody=custody,
+            teacher_trajectories=(teacher_trajectories or {}).get(rollout['task_id'], ()),
+            attempt_feedback=group_feedback(case, group, rollout.get('sample')))
+        invocations = {item['name']: item for item in graph_invocations(replay, turns,
+                                                                         root_calls=root_calls(rollout, turns))}
+        by_turn = {turn.get('graph_turn'): turn for turn in turns}
+        blocks, telemetry = {}, {'blocks': 0, 'writer_blocks': 0, 'text_fallbacks': 0, 'verbatim_reference': 0,
+                                 'fallback_reasons': []}
+        for name, turn in by_turn.items():
+            block = captured_block(turn)
+            if block is None:
+                continue
+            used = verify_captured_block(block, rendering, custody_receipt=receipt, facts=facts,
+                                         invocation=invocations[name])
+            telemetry['blocks'] += 1
+            if block.receipt['mode'] == 'text':
+                telemetry['text_fallbacks'] += 1
+                telemetry['fallback_reasons'].append(block.receipt['fallback'])
+            elif block.state_id is not None:
+                writer, _, _ = writer_span(replay, block)
+                writer_saw(used, '\n'.join(message['content'] for message in by_turn[writer].get('messages') or []
+                                          if isinstance(message.get('content'), str)))
+                telemetry['writer_blocks'] += 1
+                if fetch_text is not None and reproduces_reference(fetch_text(block.state_id), used):
+                    telemetry['verbatim_reference'] += 1
+            blocks[name] = block
+        if not blocks:
+            raise CustodyError('the actor recorded no guidance for this episode')
+        return blocks, telemetry
+    build.rendering = rendering
     return build
 
 
 def _renamed(invocations, suffix):
-    """The same invocations under twin names; imports from graph invocations follow their twins."""
+    """The same invocations under twin names; imports from twinned invocations follow their twins."""
     from dataclasses import replace
     names = {node.name for node in invocations}
     return [replace(node, name=node.name + suffix,
@@ -201,82 +231,67 @@ def _renamed(invocations, suffix):
             for node in invocations]
 
 
-def _captured_blocks(turns):
-    """Blocks a native-engine actor flagged as 'privileged' in its capture, keyed by graph turn."""
-    from .privileged_context import PrivilegedBlock
-    blocks = {}
-    for turn in turns:
-        own = 0
-        for segment in (turn.get('sampling') or {}).get('prompt') or []:
-            if segment.get('kind') != 'tokens':
-                continue
-            if segment.get('privileged'):
-                blocks[turn['graph_turn']] = PrivilegedBlock(turn['graph_turn'], own, tuple(segment['token_ids']),
-                                                             '', {})
-                break
-            own += len(segment['token_ids'])
-    return blocks
-
-
-def _before_itself(block):
+def _as_insertion(block, rendering_turn):
+    """A student turn's write-only guidance as the import block its OPSD twin inserts."""
     from dataclasses import replace
-    if not block.token_ids or block.receipt.get('placement') != 'after_leading_system_turn':
-        return block
-    at = block.insert_at - len(block.token_ids)
-    if at < 0:
-        return block
-    return replace(block, insert_at=at, receipt={**block.receipt, 'insert_at': at,
-                                                  'placement': 'after_bos' if at else 'start'})
+    tokens, offset = rendering_turn
+    return replace(block, token_ids=tuple(tokens), import_offset=offset)
 
 
 def add_privileged_twin(replay, rollout, graph, source, *, turns):
     """Append the episode's whole-graph twin to ``graph``; bind every sampled action to its twin query.
 
-    Returns (actions, the row's JOLT+ record). A student episode refused by custody (or on an unsupported graph)
-    keeps its plain outcome term: actions are unchanged and the record names the refusal. A teacher attempt must
-    carry exactly the blocks the learner rebuilds for its student form.
+    Returns (actions, the row's JOLT+ record). The in-run guidance policy's turns (``selectGuidanceFacts`` and the
+    ``writeGuidance`` producer) stay in the sampled view, are imported by name from the twin and have no twin.
+
+    * Teacher attempt: the twin is ``student_form`` (guidance turns and their imports removed). The policy turns
+      keep the teacher outcome term (whole-graph RL through the producer/consumer import) with no KL twin.
+    * Student episode: the twin is ``teacher_form`` with the writer's write-only state imported at the declared
+      place (OPSD target, stop-gradient). The policy turns carry no student loss (they do not affect the student's
+      outcome): they are removed from the actions and their target weights.
+
+    A student episode without verified guidance keeps its plain outcome term; the record names the refusal.
     """
     from ..model.native_graph_plan import compile_graph, invocation_dict
     from .privileged_context import CustodyError
-    from .privileged_scoring import student_form, teacher_form
+    from .privileged_scoring import student_form, teacher_form, writer_span
     role = rollout.get('jolt_role', 'student')
     if role not in ('student', 'teacher'):
         raise ValueError('JOLT+ episode role must be student or teacher')
-    captured = _captured_blocks(turns)
-    if role == 'student' and captured:
-        raise ValueError('a student episode was sampled with privileged context; mark it as a teacher attempt')
+    flagged = policy_turns(turns)
     try:
         if source is None:
             raise CustodyError('no privileged source is available to this learner')
+        blocks, telemetry = source(rollout, replay, turns)
+        # Decision readouts are scored without privileged context during teacher attempts.
+        decisions = {turn.get('graph_turn') for turn in turns
+                     if (turn.get('sampling') or {}).get('schema') == 'natlang.native-decision-capture/1'}
+        if any(name in decisions for name in blocks):
+            raise ValueError('a decision readout carries guidance')
+        modes = {block.receipt['mode'] for block in blocks.values()}
         if role == 'teacher':
-            # The declared insertion point (after the leading system turn) and the fact selection (by the
-            # invocation's messages) are the same on the teacher-role tokens, so the learner rebuilds the exact
-            # blocks; student_form verifies the attempt carried them token for token.
-            blocks = source(rollout, replay, turns)
-            # Decision readouts are scored without privileged context during teacher attempts.
-            decisions = {turn.get('graph_turn') for turn in turns
-                         if (turn.get('sampling') or {}).get('schema') == 'natlang.native-decision-capture/1'}
-            blocks = {name: block for name, block in blocks.items() if name not in decisions}
-            if not any(block.token_ids for block in blocks.values()):
-                raise CustodyError('no privileged fact fits any invocation of this teacher attempt')
-            try:
-                twin = student_form(replay, blocks)
-            except ValueError:
-                # Prompts without a leading system turn: on the teacher tokens the inserted block itself is the
-                # leading system turn, so the rebuilt insertion point sits right after it.
-                blocks = {name: _before_itself(block) for name, block in blocks.items()}
-                twin = student_form(replay, blocks)
+            if 'write-only' in modes:
+                raise ValueError('a teacher attempt imports its guidance; write-only guidance belongs to students')
+            blocks = {name: block for name, block in blocks.items() if block.token_ids}
+            if not blocks:
+                raise CustodyError('no guidance entered any invocation of this teacher attempt')
+            twin = student_form(replay, blocks)
         else:
-            blocks = source(rollout, replay, turns)
-            if not any(block.token_ids for block in blocks.values()):
-                raise CustodyError('no privileged fact fits any invocation of this episode')
+            if modes - {'write-only'}:
+                raise ValueError('a student episode was sampled with guidance; mark it as a teacher attempt')
+            turn = source.rendering.state_turn()
+            blocks = {name: _as_insertion(block, turn) for name, block in blocks.items()}
             twin = teacher_form(replay, blocks)
+        writers = {writer_span(replay, block)[0] for block in blocks.values() if block.state_id is not None}
+        if not writers <= flagged:
+            raise ValueError('guidance was imported from a turn not recorded as the guidance policy')
     except (CustodyError, ValueError) as error:
         if role == 'teacher':
-            raise ValueError('JOLT+ teacher attempt carries no verified privileged block: ' + str(error)) from error
-        return list(replay.actions), {'role': role, 'privileged': None, 'refusal': str(error)}
+            raise ValueError('JOLT+ teacher attempt carries no verified guidance: ' + str(error)) from error
+        return _without(replay, graph, flagged), {'role': role, 'privileged': None, 'refusal': str(error),
+                                                  'policy_turns': sorted(flagged)}
     suffix = PRIVILEGED_SUFFIX[role]
-    renamed = _renamed(twin.plan.invocations, suffix)
+    renamed = _renamed([node for node in twin.plan.invocations if node.name not in flagged], suffix)
     used = {edge.source for node in replay.plan.invocations for edge in node.imports}
     external_sizes = {name: len(state.token_ids) for name, state in replay.external_blocks.items() if name in used}
     combined = compile_graph((*replay.plan.invocations, *renamed), external_sizes=external_sizes)
@@ -285,19 +300,45 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
     offsets = {node.name: offset for node, offset in zip(combined.invocations, combined.offsets)}
     if len(twin.actions) != len(replay.actions):
         raise ValueError('JOLT+ twin actions are not aligned with the sampled actions')
+    kept = _without(replay, graph, flagged if role == 'student' else set())
     actions = []
     for action, edited in zip(replay.actions, twin.actions):
         if (edited['turn'], edited['token_id'], edited['sample']) != (action['turn'], action['token_id'],
                                                                      action['sample']):
             raise ValueError('JOLT+ twin actions are not aligned with the sampled actions')
+        if action['turn'] in flagged:
+            if role == 'teacher':
+                actions.append(dict(action))  # outcome term only: the policy turns are the same in both views
+            continue
         actions.append({**action, 'twin_query': offsets[edited['turn'] + suffix] + edited['local_query']})
+    if len(actions) != len(kept):
+        raise ValueError('JOLT+ twin lost a sampled action')
     for node in renamed:
         value = invocation_dict(node)
         value['token_ids'] = list(node.token_ids)
         value['target_weights'] = [0.] * len(node.token_ids)
         graph['nodes'].append(value)
-    return actions, {'role': role, 'twin_turns': [node.name for node in renamed],
+    return actions, {'role': role, 'twin_turns': [node.name for node in renamed], 'policy_turns': sorted(flagged),
+                     'guidance': telemetry,
                      'privileged': {name: block.receipt for name, block in sorted(blocks.items())}}
+
+
+def policy_turns(turns):
+    """Graph turns the actor recorded as in-run guidance policy (``selectGuidanceFacts``/``writeGuidance`` calls)."""
+    return {turn.get('graph_turn') for turn in turns if (turn.get('sampling') or {}).get('guidance_policy')}
+
+
+def _without(replay, graph, writers):
+    """Sampled actions minus the given policy turns' tokens (also removed from the graph's target weights)."""
+    starts = dict(zip((node.name for node in replay.plan.invocations), replay.plan.offsets))
+    nodes = {node['name']: node for node in graph['nodes']}
+    kept = []
+    for action in replay.actions:
+        if action['turn'] in writers:
+            nodes[action['turn']]['target_weights'][action['query'] + 1 - starts[action['turn']]] = 0.
+        else:
+            kept.append(action)
+    return kept
 
 
 def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=128, top_k=None, readout=None):
@@ -356,6 +397,7 @@ def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=1
             sums['outcome'] += float(outcome_loss.sum())
             sums['kl'] += float(kl.sum())
     return torch.stack(terms), {'role': role, 'privileged': privileged, 'positions': len(actions), 'beta': beta,
+                                'guidance': info.get('guidance'),
                                 'advantage': advantage,
                                 'outcome_sum': sums['outcome'], 'kl_sum': sums['kl']}
 
@@ -371,35 +413,98 @@ def summarize_jolt(parts, count):
         result['positions'][role] += part['positions']
         result[role + '_outcome'] += part['outcome_sum'] / count
         result[role + ('_opsd' if role == 'student' else '_kl')] += part['beta'] * part['kl_sum'] / count
+    guidance = [part['guidance'] for part in parts if part.get('guidance')]
+    result['guidance'] = {key: sum(item[key] for item in guidance)
+                          for key in ('blocks', 'writer_blocks', 'text_fallbacks', 'verbatim_reference')}
     result['mean_kl'] = {role: (sum(p['kl_sum'] for p in parts if p['role'] == role) / result['positions'][role]
                                 if result['positions'][role] else None) for role in ('student', 'teacher')}
     return result
 
 
 TEACHER_SEED_OFFSET = 900
+GUIDANCE_RUN_SCHEMA = 'natlang.guidance-run/1'
 
 
-def teacher_entries(student_entries, student_rows, *, cases, config, out, attempts, seed_base, custody=None):
+def guidance_controls(base, *, role, custody_receipt, facts, selection=None):
+    """Run-level chat controls of one JOLT+ episode: the world's custody-checked facts for the in-run guidance writer.
+
+    The natlang runtime (``applications/guidance-writer``) filters them by visibility per invocation, selects with
+    ``selectGuidanceFacts`` (``selection``: the pluggable setting, ``nl`` by default) and runs ``writeGuidance``;
+    a teacher attempt imports the written state, a student attempt writes it without importing it (OPSD twin).
+    """
+    if role not in ('teacher', 'student'):
+        raise ValueError('guidance role is teacher or student')
+    from .privileged_context import fact_request
+    return {**base, 'x_natlang_guidance': {'schema': GUIDANCE_RUN_SCHEMA, 'role': role, 'custody': custody_receipt,
+                                           'facts': [fact_request(fact) for fact in facts],
+                                           **({'selection': selection} if selection is not None else {})}}
+
+
+def _load_custody(custody):
+    if custody is not None:
+        return custody, None
+    from pathlib import Path
+    from .privileged_context import CustodyError, ProtectedWorlds
+    repo = Path(__file__).resolve().parents[4]
+    try:
+        return ProtectedWorlds.from_registry(repo / 'training/neuralese_corpora.json', repo), None
+    except CustodyError as error:
+        return None, str(error)
+
+
+def student_guidance(student_entries, *, ids, cases, config, out, custody=None, selection=None):
+    """Bind each student entry to its world's guidance controls (write-only writer for the OPSD twin).
+
+    ``ids``: the prepared packet's case ids by queue ``index``. A world refused by custody keeps the plain controls;
+    its students then train on their outcome term only.
+    Returns the refusal reason when custody itself is unavailable.
+    """
+    from pathlib import Path
+    from ..common.jsonio import iter_jsonl_rows, write_json_durable
+    from .privileged_context import CustodyError, case_facts
+    custody, refusal = _load_custody(custody)
+    if custody is None:
+        return refusal
+    worlds = {case.get('id'): case for _, case in iter_jsonl_rows(Path(cases))}
+    base = json.loads(Path(config).read_text())
+    out = Path(out)
+    for entry in student_entries:
+        case = worlds.get(ids[int(entry['index'])])
+        if case is None:
+            continue
+        try:
+            receipt, facts = case_facts(case, custody=custody)
+        except CustodyError:
+            continue
+        if not facts:
+            continue
+        path = out / f"row-{entry['group']:03d}" / f"student-{entry['sample']:02d}-chat-request-config.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_json_durable(path, guidance_controls(base, role='student', custody_receipt=receipt, facts=facts,
+                                                   selection=selection))
+        entry['chat_request_config'] = str(path)
+    return None
+
+
+def teacher_entries(student_entries, student_rows, *, cases, config, out, attempts, seed_base, custody=None,
+                    selection=None):
     """JOLT+ teacher-attempt collector entries for the scored student groups of one collection.
 
-    Each attempt samples the same world after its group's students, with the controls ``config`` plus
-    ``x_natlang_privileged_context``: the custody-checked facts of the world (``case_facts`` with the group's
-    ``group_feedback``). The native server renders each invocation's block from its own prompt with the learner's
-    rendering and selection, so the learner rebuilds exactly the blocks the attempt carried. Returns
-    ``{'entries': [...], 'refusal': None | reason}``; a world without custody or facts gets no teacher attempt.
+    Each attempt samples the same world after its group's students with ``guidance_controls`` (role teacher): the
+    custody-checked facts of the world plus the group's ``group_feedback``. The runtime's writer writes each
+    invocation's guidance inside the episode and the engine imports it at the declared place; the learner
+    re-verifies what the actor recorded. Returns ``{'entries': [...], 'refusal': None | reason}``; a world without
+    custody or facts gets no teacher attempt.
     """
     import copy
     from pathlib import Path
     from ..common.jsonio import iter_jsonl_rows, write_json_durable
-    from .privileged_context import CustodyError, ProtectedWorlds, case_facts
+    from .privileged_context import CustodyError, case_facts
     if type(attempts) is not int or attempts < 1:
         raise ValueError('JOLT+ teacher attempts must be a positive integer')
+    custody, refusal = _load_custody(custody)
     if custody is None:
-        repo = Path(__file__).resolve().parents[4]
-        try:
-            custody = ProtectedWorlds.from_registry(repo / 'training/neuralese_corpora.json', repo)
-        except CustodyError as error:
-            return {'entries': [], 'refusal': str(error)}
+        return {'entries': [], 'refusal': refusal}
     worlds = {case.get('id'): case for _, case in iter_jsonl_rows(Path(cases))}
     base = json.loads(Path(config).read_text())
     by_group = {}
@@ -424,12 +529,11 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
             directory = out / f"row-{first['group']:03d}" / f'teacher-{attempt:02d}'
             directory.mkdir(parents=True, exist_ok=True)
             controls = directory / 'chat-request-config.json'
-            write_json_durable(controls, {**base, 'x_natlang_privileged_context': {
-                'schema': 'natlang.privileged-request/1', 'custody': receipt,
-                'facts': [{'id': fact.id, 'kind': fact.kind, 'text': fact.text, 'invocation': fact.invocation,
-                           'match': list(fact.match)} for fact in facts]}})
+            write_json_durable(controls, guidance_controls(base, role='teacher', custody_receipt=receipt,
+                                                           facts=facts, selection=selection))
             entry = copy.deepcopy(first)
             entry.pop('rl_endpoint', None)
+            entry.pop('chat_request_config', None)
             entry.update(key=f"s7-task-{first['group']:03d}-t{attempt:02d}", sample=sample,
                          seed=seed_base + 1000 * first['group'] + TEACHER_SEED_OFFSET + attempt,
                          jobs=str(directory / 'jobs'), log=str(directory / 'collector.log'),
