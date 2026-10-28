@@ -46,7 +46,14 @@ def check(probe: dict, text: str, tokens: list[int], eos: int | list[int]) -> di
     end_ids = {eos} if isinstance(eos, int) else set(eos)
     checks = {"end": bool(tokens) and tokens[-1] in end_ids, "no_loop": not _loops(tokens)}
     convention = probe.get("output_convention", "maple")
-    if convention != "lfm":
+    if convention == "lfm3":
+        # LFM3's generation prompt ends in `<think>` (thinking on) or `<think></think>` (off), so the reply holds
+        # only the closing tag when it reasons and neither tag when it does not.
+        if probe.get("enable_thinking"):
+            checks["think"] = "</think>" in text and "<think>" not in text.split("</think>")[0]
+        else:
+            checks["think"] = "<think>" not in text and "</think>" not in text
+    elif convention != "lfm":
         if probe.get("enable_thinking"):
             open_at, close_at = text.find("<think>"), text.find("</think>")
             checks["think"] = open_at >= 0 and close_at > open_at
@@ -68,7 +75,19 @@ def check(probe: dict, text: str, tokens: list[int], eos: int | list[int]) -> di
                     (expected_names is None or name in expected_names) and
                     (not probe.get("check_argument_types") or _argument_type(arguments, schemas[name])))
         ok = False
-        if convention == "lfm":
+        if convention == "lfm3":
+            from ..serve.chat import parse_xml_calls, scan_xml_calls
+            for call in scan_xml_calls(final):
+                if call.end is None:
+                    continue
+                try:
+                    parsed_calls = parse_xml_calls(final[call.start:call.end], probe["tools"])
+                except ValueError:
+                    continue
+                for name, arguments in parsed_calls:
+                    if acceptable(name, arguments):
+                        ok = True
+        elif convention == "lfm":
             from ..serve.chat import parse_pythonic_calls
             calls = re.findall(r"<\|tool_call_start\|>(.*?)<\|tool_call_end\|>", final, flags=re.S)
             for body in calls:

@@ -127,6 +127,9 @@ class Engine:
         self.native_execution_lock = threading.RLock()
         self.checkpoint_sha256 = checkpoint_sha256
         self.embedding_weight_sha256 = embedding_weight_sha256
+        from .chat import tool_call_format
+        # Declared by the backbone's model_type (chat.TOOL_CALL_FORMATS), never inferred from its vocabulary.
+        self.tool_call_format = tool_call_format(getattr(getattr(backbone, "config", None), "model_type", None))
         self.native_identity = {'checkpoint_sha256': checkpoint_sha256,
             'tokenizer_fingerprint': self.model_config.get('tokenizer_fingerprint'),
             'embedding_weight_sha256': embedding_weight_sha256,
@@ -226,7 +229,8 @@ class Engine:
                                                      keep_supplied_tools=True)
         except ValueError as error:  # the messages do not fit the declared prompt rendering
             raise RequestError("prompt-rendering", str(error)) from error
-        return render_messages(messages, tools, template or self._template, self.specials)
+        return render_messages(messages, tools, template or self._template, self.specials,
+                               call_format=getattr(self, 'tool_call_format', None))
 
     def _tokens(self, text: str) -> list[int]:
         cache = getattr(self, '_token_cache', None)
@@ -535,12 +539,12 @@ class Engine:
             argument = template.get('argument') or 'value'
             if mode == 'decode':
                 prefix, suffix = call_reply(apply, template['call'], arguments, argument,
-                    quoted=False, argument_path=argument_path)
+                    quoted=False, argument_path=argument_path, call_format=getattr(self, "tool_call_format", None))
                 template_prefix, template_suffix = self._tokens(prefix), []
             else:
                 value_type = template.get('value_type', 'string')
                 prefix, suffix = write_reply(apply, template['call'], arguments, argument, value_type,
-                                             argument_path=argument_path)
+                                             argument_path=argument_path, call_format=getattr(self, "tool_call_format", None))
                 template_prefix, template_suffix = self._tokens(prefix), self._tokens(suffix)
                 seq.native_template_value_type = value_type
         plan = list(seq.prompt_plan or ())
@@ -780,7 +784,8 @@ class Engine:
         target=normalize_tool_call_arguments([target])[0][0]
         apply=lambda messages,generation:self.tokenizer.apply_chat_template(messages,tools=tools or None,
             tokenize=False,add_generation_prompt=generation)
-        segments=assistant_reply_segments(apply,target,self.specials,opening=opening)
+        segments=assistant_reply_segments(apply,target,self.specials,opening=opening,
+            call_format=getattr(self,"tool_call_format",None),tools=tools)
         if segments is None:raise RequestError('forced-message','assistant response does not continue this exact actual prompt')
         plan=[];found={marker:0 for marker in markers}
         def append_text(text,escaped):
@@ -1199,7 +1204,8 @@ class Engine:
                 run.append(item)
         if run:
             text.append(self.tokenizer.decode(run, skip_special_tokens=False))
-        message = build_message("".join(text), block_ids, call_prefix=seq.request.request_id)
+        message = build_message("".join(text), block_ids, call_prefix=seq.request.request_id,
+                                tools=seq.request.tools)
 
         for call in message.get("tool_calls") or []:
             try:

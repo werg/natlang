@@ -474,6 +474,14 @@ def tokenizer_fingerprint(tokenizer) -> str:
                             "tokenizer_backend": json.loads(tokenizer.backend_tokenizer.to_str())}).encode("utf-8"))
 
 
+def tokenizer_call_format(tokenizer):
+    """The declared tool-call format (serve.chat.TOOL_CALL_FORMATS) of the backbone a tokenizer is bound to: its
+    bound history-reasoning backbone, else its checkpoint's config.json model_type; None when undeclared."""
+    from ..serve.chat import tokenizer_model_type, tool_call_format
+    bound = getattr(tokenizer, 'natlang_history_reasoning', None) or {}
+    return tool_call_format(bound.get('backbone') or tokenizer_model_type(tokenizer))
+
+
 def _native_gold_segments(tokenizer, turns, tools, *, empty_thought=True, prompt_rendering="full"):
     """Run the shared serving/native renderer and return its escaped segments."""
     from ..serve.chat import bind_history_reasoning, render_messages, render_with_empty_thought
@@ -490,7 +498,8 @@ def _native_gold_segments(tokenizer, turns, tools, *, empty_thought=True, prompt
         return (render_with_empty_thought(lambda m: apply_template(m, schemas), turns)
                 if empty_thought else apply_template(turns, schemas))
     rendered = render_messages(turns, tools, template,
-                               specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
+                               specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"),
+                               call_format=tokenizer_call_format(tokenizer))
     if rendered.blocks:
         raise ValueError("ordinary gold text contains unresolved neuralese blocks")
     return rendered
@@ -1685,10 +1694,12 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
             turns, tools=schemas or None, tokenize=False,
             add_generation_prompt=generation)
 
+    call_format = tokenizer_call_format(tokenizer)
     prompt = render_messages(
         messages, tools,
         lambda turns, schemas: apply_template(turns, schemas, generation=True),
-        specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
+        specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"),
+        call_format=call_format)
     if prompt.blocks:
         raise ValueError("ordinary gold text prompt contains unresolved neuralese blocks")
     reply_target = target
@@ -1757,7 +1768,8 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
             function['arguments'] = json.dumps(arguments, ensure_ascii=False, separators=(',', ':'))
     reply_runs = assistant_reply_segments(
         lambda turns, generation: apply_template(turns, tools, generation=generation),
-        reply_target, specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
+        reply_target, specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"),
+        call_format=call_format, tools=tools)
     if reply_runs is None:
         raise ValueError("assistant target does not continue the serving generation prompt")
     if producer_sentinel is not None:
@@ -1795,12 +1807,26 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
             index, start, _ = found[0]
             run, escaped = reply_runs[index]
             stop = start + len(producer_sentinel)
-            if (start == 0 or stop >= len(run) or run[start - 1] not in {'"', "'"}
-                    or run[stop] != run[start - 1]):
-                raise ValueError('structured producer sentinel is not one quoted rendered value')
-            marker_prefix = run[:start - 1] if producer_span['value_type'] == 'unknown' else run[:start]
-            marker_suffix = run[stop + 1:] if producer_span['value_type'] == 'unknown' else run[stop:]
-            marker_body = producer_span['body']
+            from ..serve.chat import XML_PARAMETER_CLOSE, xml_value, xml_value_representable, xml_value_text
+            if (call_format == 'xml' and re.search(r'<parameter=[^>\n]+>\n$', run[:start])
+                    and run[stop:].startswith(XML_PARAMETER_CLOSE)):
+                # An unquoted XML parameter: the span is the template's own rendering of the value (a string
+                # verbatim, any other value its canonical JSON), between the parameter's own lines.
+                marker_body = (xml_value_text(body_value) if producer_span['value_type'] == 'unknown'
+                               else producer_span['body'])
+                if not xml_value_representable(marker_body):
+                    raise ValueError('structured producer body contains the XML parameter delimiter')
+                if (producer_span['value_type'] == 'unknown' and json.dumps(xml_value(marker_body), ensure_ascii=False)
+                        != json.dumps(body_value, ensure_ascii=False)):
+                    raise ValueError('structured producer body does not keep its type in the XML rendering')
+                marker_prefix, marker_suffix = run[:start], run[stop:]
+            else:
+                if (start == 0 or stop >= len(run) or run[start - 1] not in {'"', "'"}
+                        or run[stop] != run[start - 1]):
+                    raise ValueError('structured producer sentinel is not one quoted rendered value')
+                marker_prefix = run[:start - 1] if producer_span['value_type'] == 'unknown' else run[:start]
+                marker_suffix = run[stop + 1:] if producer_span['value_type'] == 'unknown' else run[stop:]
+                marker_body = producer_span['body']
             marker_parts = [(ROLE_MARKERS[0], True), (marker_body, escaped), (ROLE_MARKERS[1], True)]
             reply_runs[index:index + 1] = [(marker_prefix, escaped), *marker_parts, (marker_suffix, escaped)]
 

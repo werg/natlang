@@ -431,8 +431,13 @@ def _native_ce_sum(model, hidden, query_ids, target_ids, weights, *, chunk_token
 def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=128, objective=None,
                       share_causal_prefixes=False, collect_accuracy=True, allow_communication_prefixes=True):
     """One backbone graph forward for a minibatch; mean the original per-graph losses."""
-    if objective is None and any(not any(weight>0 for weight in example.target_weights) for example in examples):
+    # A graph weighted by the declared own-output objective may have no own
+    # outputs (e.g. only failed actions); it contributes nothing, not an error.
+    targeted = [any(weight>0 for weight in example.target_weights) for example in examples]
+    if objective is None and any(not has and getattr(example, 'objective_categories', None) is None
+                                 for has, example in zip(targeted, examples)):
         raise ValueError('native graph has no ordinary CE targets; its declared offline/policy objective is required')
+    targeted_graphs = sum(targeted)
     from .native_prefix_packing import pack_causal_prefixes
     # Physical raw-context aliasing is qualified for FP32 activations only.
     # BF16 needs per-occurrence adjoint casts; retain its original episode rows.
@@ -484,6 +489,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
             raise FloatingPointError('native policy objective must return a finite scalar loss')
         return loss, details
     hidden = result['h_final'][0]
+    if not targeted_graphs:
+        return hidden.sum() * 0., []
     # BF16 head adjoints round each original use before prefix fan-in. Folding
     # those uses earlier changes that declared law, despite equal scalar CE.
     # Keep its original path; the qualified FP32 case has no such cast boundary.
@@ -491,9 +498,15 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
     readout_index, readout_queries, readout_targets, readout_groups, readout_weights = {}, [], [], [], []
     readout_position = 0
     losses, details, detail_weights, detail_accuracies = [], [], [], []
+    category_sums = []
     boundary_ids = set((*getattr(model, 'marker_ids', ()), *getattr(model, 'token_override_ids', ())))
     for graph_index, example in enumerate(examples):
+        if not targeted[graph_index]:
+            continue
+        categories = getattr(example, 'objective_categories', None)
+        scale = float(getattr(example, 'loss_scale', 1.))
         queries, targets, weights = [], [], []
+        reasoning = []
         boundary_targets = {str(token): {'count': 0, 'weight': 0.} for token in sorted(boundary_ids)}
         for node, offset in zip(example.plan.invocations, example.plan.offsets):
             for local in range(1, len(node.token_ids)):
@@ -504,6 +517,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                     token = int(node.token_ids[local])
                     targets.append(token)
                     weights.append(weight)
+                    if categories is not None:
+                        reasoning.append(categories[target] == 2)
                     if token in boundary_ids:
                         boundary_targets[str(token)]['count'] += 1
                         boundary_targets[str(token)]['weight'] += float(weight)
@@ -523,12 +538,31 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                     readout_groups.append([])
                 readout_groups[readout_index[key]].append(readout_position)
                 readout_position += 1
-            readout_weights.append(token_weights / denominator / len(examples))
+            readout_weights.append(token_weights / denominator / targeted_graphs * scale)
+        elif categories is not None:
+            # Own-output objective: the same weighted CE, summed per category
+            # so reply/action and reasoning learning are reported separately.
+            parts, correct = [], None
+            for selected in (False, True):
+                index = [i for i, value in enumerate(reasoning) if value == selected]
+                if not index:
+                    parts.append((hidden.new_zeros((), dtype=torch.float32), hidden.new_zeros((), dtype=torch.float32)))
+                    continue
+                subset = torch.tensor(index, device=hidden.device)
+                part, part_correct = _native_ce_sum(model, hidden, query_ids[subset], target_ids[subset],
+                    token_weights[subset], chunk_tokens=chunk_tokens, collect_accuracy=collect_accuracy,
+                    unique_queries=len({queries[i] for i in index}) == len(index))
+                parts.append((part, token_weights[subset].sum()))
+                if collect_accuracy:
+                    correct = part_correct if correct is None else correct + part_correct
+            total = parts[0][0] + parts[1][0]
+            category_sums.append(torch.stack((parts[0][1], parts[0][0].detach(), parts[1][1], parts[1][0].detach())))
+            losses.append(total / denominator * scale)
         else:
             total, correct = _native_ce_sum(model, hidden, query_ids, target_ids, token_weights,
                 chunk_tokens=chunk_tokens, collect_accuracy=collect_accuracy,
                 unique_queries=len(set(queries)) == len(queries))
-            losses.append(total / denominator)
+            losses.append(total / denominator * scale)
         detail_weights.append(denominator.detach())
         if collect_accuracy:
             detail_accuracies.append((correct / denominator).detach())
@@ -540,7 +574,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                         'reused_primal_projection_rows': (primal_aliases.forward_input_rows-primal_aliases.forward_unique_rows)
                             if primal_aliases else 0,
                         'original_physical_tokens': sum(item.plan.token_count for item in examples),
-                        'accuracy': None})
+                        'accuracy': None,
+                        **({'own_output': None, 'loss_scale': scale} if categories is not None else {})})
     original_readout_rows = sum(item['supervised_tokens'] for item in details)
     if reuse_readouts:
         combined = torch.cat(readout_weights)
@@ -574,6 +609,13 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         host_metrics = [(weight, None) for weight in host_weights]
     for detail, (weight, accuracy) in zip(details, host_metrics):
         detail['weight'], detail['accuracy'] = float(weight), None if accuracy is None else float(accuracy)
+    if category_sums:
+        values = iter(torch.stack(category_sums).detach().cpu().tolist())
+        for detail in details:
+            if 'own_output' in detail:
+                reply_weight, reply_loss, reasoning_weight, reasoning_loss = next(values)
+                detail['own_output'] = {'reply': {'weight': reply_weight, 'loss_sum': reply_loss},
+                                        'reasoning': {'weight': reasoning_weight, 'loss_sum': reasoning_loss}}
     return torch.stack(losses).mean(), details
 
 
@@ -797,7 +839,8 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
         'quality_policy':'supervisor-task-and-declared-target-evidence' if options.get('ce_supervision_active')
             else 'legacy-raw-ce-optional-export'}
     diloco = options.get('_diloco_learner')
-    options = {key: value for key, value in options.items() if key != '_diloco_learner'}
+    weight_ema = options.get('_weight_ema')
+    options = {key: value for key, value in options.items() if key not in ('_diloco_learner', '_weight_ema')}
     state = {'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model), 'step': global_step,
              'training': {'schema': TRAINING_SCHEMA, 'identity': identity, 'step': step,
                           'global_step': global_step, 'epoch': epoch,
@@ -810,6 +853,8 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
                           'options': options, 'fp8': fp8_state, 'sft_progress': sft_progress or {}}}
     if diloco is not None:
         state['training']['diloco'] = diloco.state_dict()
+    if weight_ema is not None:
+        state['training']['ema'] = weight_ema.state_dict()
     state['training']['sft_progress'] = collect_sft_progress(state['training'])
     if sft_progress is not None:
         sft_progress.clear()
@@ -1063,6 +1108,15 @@ def build_parser():
                         help='Keep MuonSR history on device or page each complete matrix update from CPU storage.')
     parser.add_argument('--preference-beta',type=float)
     parser.add_argument('--preference-margin',type=float)
+    parser.add_argument('--weight-ema', default=None,
+        help='JSON {"decay":0.999,"warmup":10,"eval":"raw|ema|both"}: BF16 stochastic-rounding EMA of the trainable '
+             'weights, part of the full-state checkpoint (train/weight_ema.py); "off" discards a carried EMA')
+    parser.add_argument('--lr-anneal', default=None,
+        help='JSON {"steps":N,"shape":"linear|cosine","floor":0.0}: anneal branch off a --continue-from full state into '
+             'its own --out namespace, then stop (train/lr_anneal.py launches it)')
+    parser.add_argument('--matrix-telemetry', default=None,
+        help='JSON {"every":100,"norms":true,"attention_logits":true,"layers":null}: per-matrix norm growth and max '
+             'attention logit (train/matrix_telemetry.py)')
     return parser
 
 
@@ -1158,6 +1212,16 @@ def _main(argv=None, *, requested_refresh):
                   if args.ce_supervision_policy else None)
     ce_policy = load_policy(ce_binding)
     checkpoint_options['ce_supervision_policy_binding'] = ce_binding
+    from .weight_ema import parse_weight_ema
+    from .lr_anneal import parse_lr_anneal, LrAnneal, SCHEMA as LR_ANNEAL_SCHEMA
+    from .matrix_telemetry import parse_matrix_telemetry
+    ema_spec = parse_weight_ema(args.weight_ema)
+    anneal_spec = parse_lr_anneal(args.lr_anneal)
+    telemetry_spec = parse_matrix_telemetry(args.matrix_telemetry)
+    if anneal_spec is not None and args.continue_from is None:
+        raise ValueError('an lr anneal branch starts from a full-state parent: pass --continue-from and its own --out')
+    if ema_spec and not ema_spec.get('off') and args.diloco is not None:
+        raise ValueError('DiLoCo learners do not keep a local weight EMA; the coordinator keeps the EMA of global versions')
     if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
             args.chunk_tokens, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens, args.held_eval_tokens, args.held_eval_graphs) < 0:
         raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
@@ -1217,6 +1281,9 @@ def _main(argv=None, *, requested_refresh):
             device=args.device, dtype=getattr(torch, args.dtype),
             native_norm_execution=args.native_norm_execution or 'stable-v1',
             history_reasoning_policy=args.history_reasoning_policy)
+    saved_ema = (resume or {}).get('ema')
+    saved_lr_anneal = None if parent_continuation else ((resume or {}).get('options') or {}).get('lr_anneal')
+    saved_norm_reference = ((resume or {}).get('options') or {}).get('matrix_norm_reference')
     if args.history_reasoning_policy is not None:
         previous_history_policy = config.get('history_reasoning_policy')
         if previous_history_policy != args.history_reasoning_policy:
@@ -1578,6 +1645,28 @@ def _main(argv=None, *, requested_refresh):
             'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
             'weights_optimizer_rng_exposure':'preserved', 'held_ce':'original-corpus-weights'})
     checkpoint_options['ce_supervision_policy_history'] = ce_history
+    if objective is None:
+        # The declared supervision objective is part of the exact continuation
+        # identity: a changed objective needs an explicit transition in the policy.
+        from .own_output_supervision import continuation_identity, prepare_policy
+        ce_policy = prepare_policy(ce_policy, train)
+        supervision_objective, objective_transition = continuation_identity(ce_prior_options, ce_policy)
+        from .own_output_supervision import LEGACY
+        if supervision_objective['name'] != LEGACY or 'supervision_objective' in ce_prior_options:
+            # Historical row-weight runs keep their exact option set.
+            checkpoint_options['supervision_objective'] = supervision_objective
+            objective_history = list(ce_prior_options.get('supervision_objective_history') or [])
+            if objective_transition is not None:
+                objective_history.append({**objective_transition, 'at_global_step':
+                    int(saved_training.get('global_step', saved_training.get('step', 0))),
+                    'weights_optimizer_rng_exposure': 'preserved'})
+            checkpoint_options['supervision_objective_history'] = objective_history
+        if ce_policy is not None and ce_policy.get('_family_census') is not None:
+            write_json(args.out / 'supervision-objective-census.json', ce_policy['_family_census'])
+    elif ce_prior_options.get('supervision_objective') is not None:
+        checkpoint_options['supervision_objective'] = ce_prior_options['supervision_objective']
+        checkpoint_options['supervision_objective_history'] = list(
+            ce_prior_options.get('supervision_objective_history') or [])
     train.set_ce_policy(ce_policy if objective is None else None)
     held.set_ce_policy(ce_policy if objective is None else None)
     checkpoint_options['ce_supervision_active'] = ce_policy is not None and objective is None
@@ -1929,6 +2018,51 @@ def _main(argv=None, *, requested_refresh):
     diloco = attach_learner(args, named, parent_continuation=parent_continuation,
                             saved_state=None if parent_continuation else (resume or {}).get('diloco'))
     checkpoint_options['_diloco_learner'] = diloco
+    weight_ema = ema_event = None
+    ema_eval_mode = 'raw'
+    anneal = None
+    lineage_checkpoint_sha = (sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
+                              if parent_continuation or policy.slot.exists() else None)
+    if ema_spec and not ema_spec.get('off'):
+        from .weight_ema import WeightEMA
+        ema_eval_mode = ema_spec['eval']
+        if ema_eval_mode != 'raw' and args.fp8_training != 'off':
+            raise ValueError('EMA evaluation under an FP8 training backend is not qualified: evaluate an exported '
+                             'EMA checkpoint (python -m natlang_neuralese.train.weight_ema export)')
+        ema_event = {'global_step': global_step, 'checkpoint_sha256': lineage_checkpoint_sha}
+        if saved_ema is not None:
+            weight_ema = WeightEMA.restore(named, saved_ema, decay=ema_spec['decay'], warmup=ema_spec['warmup'],
+                                           seed=ema_spec['seed'], event=ema_event)
+        else:
+            weight_ema = WeightEMA(named, decay=ema_spec['decay'], warmup=ema_spec['warmup'],
+                                   seed=ema_spec['seed'], provenance=ema_event)
+        checkpoint_options['_weight_ema'] = weight_ema
+    elif saved_ema is not None and ema_spec is None:
+        raise ValueError('the parent checkpoint carries a weight EMA: declare --weight-ema to continue it, '
+                         'or --weight-ema off to discard it explicitly')
+    saved_ema = None
+    if anneal_spec is not None:
+        start = global_step
+        if saved_lr_anneal is not None:
+            if saved_lr_anneal.get('spec') != anneal_spec:
+                raise ValueError('the rolling anneal branch was declared with a different anneal; start a new branch namespace')
+            start = int(saved_lr_anneal['start_global_step'])
+        anneal = LrAnneal(optimizer, anneal_spec, start_global_step=start)
+        checkpoint_options['lr_anneal'] = {'schema': LR_ANNEAL_SCHEMA, 'spec': anneal_spec,
+            'start_global_step': start, 'branch': True, 'release_candidate': True,
+            'parent_checkpoint_sha256': (saved_lr_anneal or {}).get('parent_checkpoint_sha256') or lineage_checkpoint_sha,
+            'adopt_as_lineage_parent': False}
+    elif saved_lr_anneal is not None:
+        raise ValueError('this rolling checkpoint is an lr anneal branch; resume it with its --lr-anneal declaration')
+    matrix_reference = saved_norm_reference
+    if telemetry_spec is not None and matrix_reference is None:
+        from .matrix_telemetry import frobenius_norms, matrix_inventory, reference_record
+        matrix_reference = reference_record(frobenius_norms(matrix_inventory(model, named)),
+            source='parent-continuation' if (parent_continuation or resume is not None) else 'base-initialization',
+            checkpoint_sha256=lineage_checkpoint_sha, global_step=global_step)
+    if matrix_reference is not None:
+        checkpoint_options['matrix_norm_reference'] = matrix_reference
+    saved_lr_anneal = saved_norm_reference = None
     saved_options = ce_prior_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
@@ -2072,6 +2206,28 @@ def _main(argv=None, *, requested_refresh):
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('pending_source_declarations'))
     eval_at = max(1, args.eval_every)
     started = time.time()
+    ema_side_metrics = {}
+    def held_evaluation(final):
+        """Held cadence on the raw weights, the EMA weights, or both (``--weight-ema`` eval mode)."""
+        def measure(coverage_key='held_coverage', result_key='held'):
+            return _evaluate_cadence(model, held, args=args, coverage=metrics.get(coverage_key),
+                previous_result=metrics.get(result_key), final=final, backend=backend,
+                objective=held_objective, stop_requested=lambda: policy.signaled)
+        if weight_ema is None or ema_eval_mode == 'raw':
+            return measure()
+        if ema_eval_mode == 'ema':
+            with weight_ema.applied():
+                result, coverage = measure()
+            result['evaluated_weights'] = 'ema'
+            result['weight_ema'] = weight_ema.summary()
+            return result, coverage
+        raw = measure()
+        with weight_ema.applied():
+            ema_result, ema_coverage = measure('held_ema_coverage', 'held_ema')
+        ema_result['evaluated_weights'] = 'ema'
+        ema_result['weight_ema'] = weight_ema.summary()
+        ema_side_metrics.update(held_ema=ema_result, held_ema_coverage=ema_coverage)
+        return raw
     def foundation_exposure():
         return communication_foundation(foundation_source, exposure_counts, epochs=args.epochs,
                                         trained_bindings=source_row_bindings)
@@ -2129,7 +2285,9 @@ def _main(argv=None, *, requested_refresh):
                 def packed_candidate_check(candidate_train, candidate_held, payload, candidate_ce, declarations):
                     from .native_packed_capacity import qualify_pending
                     from ..eval.native_memory import capacity_identity
-                    candidate_train.set_ce_policy(candidate_ce[1] if candidate_ce is not None else ce_policy)
+                    from .own_output_supervision import prepare_policy
+                    candidate_train.set_ce_policy(prepare_policy(
+                        candidate_ce[1] if candidate_ce is not None else ce_policy, candidate_train))
                     candidate_counts = dict(exposure_counts)
                     for key in candidate_train.bindings: candidate_counts.setdefault(key,0)
                     candidate_options = {**checkpoint_options, '_pending_native_source_declarations':declarations}
@@ -2162,6 +2320,14 @@ def _main(argv=None, *, requested_refresh):
                     if ce_update is not None:
                         ce_binding, ce_policy = ce_update
                         checkpoint_options['ce_supervision_active'] = objective is None
+                    if objective is None:
+                        # A source append changes the family census, never the objective identity.
+                        from .own_output_supervision import prepare_policy
+                        ce_policy = prepare_policy(ce_policy, train)
+                        census = (ce_policy or {}).get('_family_census')
+                        if census is not None:
+                            checkpoint_options['supervision_objective'] = {
+                                **checkpoint_options['supervision_objective'], 'family_census_sha256': census['sha256']}
                     train.set_ce_policy(ce_policy if objective is None else None)
                     held.set_ce_policy(ce_policy if objective is None else None)
                     args.held_native_graphs = held.path
@@ -2212,6 +2378,9 @@ def _main(argv=None, *, requested_refresh):
                     target_rows = sum(required_visits.values())
                     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
                                                       cohort_ids=urgent_cohort_ids)
+            if anneal is not None:
+                # The branch ends after its declared updates, whatever data remains in the stage.
+                total_end = min(total_end, step + anneal.remaining(global_step))
             if policy.signaled or step >= total_end:
                 break
             update_started = time.monotonic()
@@ -2247,8 +2416,25 @@ def _main(argv=None, *, requested_refresh):
             batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
             cursor = indices[-1] + 1
             exception_boundary_safe = False
-            loss, details = native_training_update(model, optimizer, batch, backend=backend,
-                checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
+            anneal_factor = anneal.scale(global_step) if anneal is not None else None
+            telemetry_due = telemetry_spec is not None and (step + 1) % telemetry_spec['every'] == 0
+            logit_probe = None
+            if telemetry_due and telemetry_spec['attention_logits']:
+                from ..model.attention_probe import AttentionLogitProbe
+                from .matrix_telemetry import choose_attention_layers
+                logit_probe = AttentionLogitProbe(choose_attention_layers(model.port, telemetry_spec['layers']))
+            try:
+                if logit_probe is not None:
+                    from ..model.attention_probe import probing
+                    with probing(logit_probe):
+                        loss, details = native_training_update(model, optimizer, batch, backend=backend,
+                            checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
+                else:
+                    loss, details = native_training_update(model, optimizer, batch, backend=backend,
+                        checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
+            finally:
+                if anneal is not None:
+                    anneal.restore()
             step += 1
             global_step += 1
             for example in batch:
@@ -2261,6 +2447,9 @@ def _main(argv=None, *, requested_refresh):
             if pass_end and all(exposure_counts[key] >= required for key, required in required_visits.items()):
                 cursor = 0
             exception_boundary_safe = True
+            if weight_ema is not None:
+                # Excluded from update credit: neither step, global_step nor exposure moves, and the global RNG is untouched.
+                weight_ema.update()
             # Telemetry is appended after the actual optimizer update. The rolling
             # checkpoint remains the authority for committed resume/exposure; logs
             # can include work subsequently replayed after an uncheckpointed crash.
@@ -2283,6 +2472,30 @@ def _main(argv=None, *, requested_refresh):
                     'completed_graphs': len((foundation_template or {}).get('rows', {})) - len(foundation_missing)}
             if mandatory_objective:progress['offline_preference']=details
             progress['learning_rates']=optimizer.native_learning_rates
+            if anneal is not None:
+                progress['lr_anneal'] = {'multiplier': anneal_factor, 'update': global_step - anneal.start,
+                                         'steps': anneal.spec['steps'], 'branch': True}
+            if weight_ema is not None:
+                progress['weight_ema'] = weight_ema.summary()
+            if telemetry_due:
+                from .matrix_telemetry import norm_report
+                telemetry_record = {'schema': 'natlang.native-matrix-telemetry/1', 'global_step': global_step, 'step': step}
+                if telemetry_spec['norms']:
+                    telemetry_record['norms'] = norm_report(model, named, checkpoint_options.get('matrix_norm_reference'),
+                                                            global_step=global_step)
+                if logit_probe is not None:
+                    telemetry_record['attention_logits'] = {
+                        'layers_observed': sorted(logit_probe.layers or ()),
+                        'layers': {str(layer): value for layer, value in logit_probe.finalize().items()}}
+                if weight_ema is not None:
+                    telemetry_record['weight_ema_distance'] = weight_ema.distance()
+                with (args.out / 'matrix-telemetry.jsonl').open('a') as telemetry_log:
+                    telemetry_log.write(json.dumps(telemetry_record, sort_keys=True) + '\n')
+                progress['matrix_telemetry'] = {
+                    'norm_by_kind': (telemetry_record.get('norms') or {}).get('by_kind'),
+                    'max_attention_logit': {layer: value.get('all') for layer, value in
+                        (telemetry_record.get('attention_logits') or {}).get('layers', {}).items()},
+                    'file': 'matrix-telemetry.jsonl'}
             progress['checkpoint_input_offload'] = {'enabled': args.checkpoint_input_offload,
                 **(model.port.activation_checkpoint.snapshot() if hasattr(model.port.activation_checkpoint, 'snapshot') else {'checkpoint_calls': 0})}
             if getattr(model, 'native_sparse_updates', None):
@@ -2304,6 +2517,9 @@ def _main(argv=None, *, requested_refresh):
                             'objective_weight': sum(item['boundary_targets'][token]['weight'] / item['weight']
                                                     for item in details) / len(details)}
                     for token in details[0]['boundary_targets']}
+                if any('own_output' in item for item in details):
+                    from .own_output_supervision import progress_telemetry
+                    progress['own_output_ce'] = progress_telemetry(details, graphs=len(batch))
             if diloco is not None:
                 diloco.after_step(tokens=batch_tokens, report={'loss': train_loss, 'global_step': global_step})
                 progress['diloco'] = diloco.metrics()
@@ -2332,8 +2548,7 @@ def _main(argv=None, *, requested_refresh):
             if due_eval:
                 evaluation_rng = capture_training_rng_state(args.device)
                 try:
-                    held_metrics, held_coverage = _evaluate_cadence(model, held, args=args,
-                        coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
+                    held_metrics, held_coverage = held_evaluation(step == total_end and not policy_operation)
                 except Exception as error:
                     # This boundary follows a completed optimizer update and exact
                     # exposure accounting. Never checkpoint a partial failed update.
@@ -2358,6 +2573,7 @@ def _main(argv=None, *, requested_refresh):
                         error.add_note(f'Completed-update recovery checkpoint failed: {save_error!r}')
                     raise
                 metrics = {'train_loss': train_loss, 'held': held_metrics, 'held_coverage': held_coverage,
+                           **ema_side_metrics,
                            'step': step, 'epoch': epoch, 'cursor': cursor,
                            'elapsed_seconds': time.time() - started,
                            'fp8': backend.inventory() if backend is not None else {'enabled': False},
@@ -2416,7 +2632,7 @@ def _main(argv=None, *, requested_refresh):
                                         and args.refresh_at_checkpoint and due_checkpoint):
                 refresh_boundary = True
                 break
-        if step == total_end and not policy.signaled:
+        if step == total_end and not policy.signaled and anneal is None:
             try:
                 next(schedule)
             except StopIteration:
@@ -2492,8 +2708,8 @@ def _main(argv=None, *, requested_refresh):
         last_saved_step = step
     if metadata_dirty or ((step != resumed_step or policy.signaled) and last_saved_step != step):
         if not policy.signaled and not metrics.get('held'):
-            metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
+            metrics['held'], metrics['held_coverage'] = held_evaluation(step == total_end and not policy_operation)
+            metrics.update(ema_side_metrics)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
               global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
               source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -2505,8 +2721,8 @@ def _main(argv=None, *, requested_refresh):
     completed = all(exposure_counts[key] >= visits for key, visits in required_visits.items())
     if completed and not policy_operation and not policy.signaled and _full_held_requested(args) and (metrics.get('held', {}).get('scope') != 'full'
             or metrics.get('held', {}).get('source_sha256') != held.file_sha256):
-        metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-            coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=True, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
+        metrics['held'], metrics['held_coverage'] = held_evaluation(True)
+        metrics.update(ema_side_metrics)
         metrics.pop('task_checkpoint_sha256', None)
         metrics.pop('task_native_identity', None)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,

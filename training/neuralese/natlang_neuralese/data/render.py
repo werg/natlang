@@ -33,27 +33,44 @@ class SpecialIds:
     tool_call_end: int
     open: int
     close: int
-    think_open: int | None = None  # Qwen3/Maple: the generation prompt opens a thinking block
+    think_open: int | None = None  # Qwen3/Maple/LFM3: the generation prompt opens a thinking block
     think_close: int | None = None
+    call_format: str = "pythonic"  # serve.chat.TOOL_CALL_FORMATS
+    think_inner: str = "\n\n"      # text inside / after an empty think block (Qwen3: "<think>\n\n</think>\n\n")
+    think_after: str = "\n\n"
+    history_think: bool = False    # LFM3 renders every history assistant turn after an (empty) think block
 
     @staticmethod
-    def from_tokenizer(tokenizer, controls) -> "SpecialIds":
-        vocab = tokenizer.get_vocab()
-        if "<|tool_call_start|>" in vocab:  # LFM2
+    def from_tokenizer(tokenizer, controls, model_type: str | None = None) -> "SpecialIds":
+        """The template's structure tokens, chosen by the backbone's declared `model_type` (default: the tokenizer
+        checkpoint's config.json), never by which tokens the vocabulary holds: LFM3 keeps LFM2's unused
+        `<|tool_call_start|>` but writes XML calls."""
+        from ..serve.chat import tokenizer_model_type, tool_call_format
+        model_type = model_type if model_type is not None else tokenizer_model_type(tokenizer)
+        call_format = tool_call_format(model_type)
+        if call_format is None:
+            raise ValueError(f"backbone {model_type!r} declares no tool-call format (serve.chat.TOOL_CALL_FORMATS)")
+        if call_format == "pythonic":  # LFM2
             ids = tokenizer.convert_tokens_to_ids(
                 ["<|startoftext|>", "<|im_start|>", "<|im_end|>", "<|tool_call_start|>", "<|tool_call_end|>"])
             return SpecialIds(*ids, open=controls.open_id, close=controls.close_id)
-        # Qwen3 / Maple: ChatML without BOS, <tool_call> tags, and a <think> block opened by the generation prompt.
         ids = tokenizer.convert_tokens_to_ids(["<|im_start|>", "<|im_end|>", "<tool_call>", "</tool_call>",
                                                "<think>", "</think>"])
+        if model_type == "lfm3":
+            # LFM3: ChatML after a <|startoftext|> BOS, XML calls, and `<think>` opening the generation prompt; an
+            # unreasoned reply closes it at once (`<think></think>`, no newlines).
+            return SpecialIds(tokenizer.convert_tokens_to_ids("<|startoftext|>"), *ids[:4], open=controls.open_id,
+                              close=controls.close_id, think_open=ids[4], think_close=ids[5], call_format=call_format,
+                              think_inner="", think_after="", history_think=True)
+        # Qwen3 / Maple: ChatML without BOS, <tool_call> tags, and a <think> block opened by the generation prompt.
         return SpecialIds(None, *ids[:4], open=controls.open_id, close=controls.close_id,
-                          think_open=ids[4], think_close=ids[5])
+                          think_open=ids[4], think_close=ids[5], call_format=call_format)
 
 
 class Renderer:
-    def __init__(self, tokenizer, controls):
+    def __init__(self, tokenizer, controls, model_type: str | None = None):
         self.tokenizer = tokenizer
-        self.special = SpecialIds.from_tokenizer(tokenizer, controls)
+        self.special = SpecialIds.from_tokenizer(tokenizer, controls, model_type)
 
     def text(self, value: str) -> list[int]:
         """Content tokens: marker text in content is never a control token."""
@@ -68,18 +85,26 @@ class Renderer:
         return [self.special.im_end, *self.text("\n")]
 
     def assistant_open(self) -> list[int]:
-        """The assistant turn the model answers in. Qwen3/Maple: the generation prompt opens <think>; port answers
-        are unreasoned, so the block is closed empty (the same rule as scripts/render_training_corpus.py)."""
+        """The assistant turn the model answers in. Qwen3/Maple/LFM3: the generation prompt opens <think>; port
+        answers are unreasoned, so the block is closed empty (the same rule as scripts/render_training_corpus.py),
+        in each template's own spelling."""
+        sp = self.special
         ids = self.turn_open("assistant")
-        if self.special.think_open is not None:
-            ids += [self.special.think_open, *self.text("\n\n"), self.special.think_close, *self.text("\n\n")]
+        if sp.think_open is not None:
+            ids += [sp.think_open, *self.text(sp.think_inner), sp.think_close, *self.text(sp.think_after)]
         return ids
 
+    def turn(self, message: dict) -> list[int]:
+        """One complete history turn; LFM3 writes an assistant turn after its (here empty) think block."""
+        think = ([self.special.think_open, self.special.think_close]
+                 if self.special.history_think and message["role"] == "assistant" else [])
+        return self.turn_open(message["role"]) + think + self.text(message["content"]) + self.turn_close()
+
     def chat(self, messages: list[dict], generation_prompt: bool = False) -> list[int]:
-        """The LFM2 or Qwen3/Maple chat template, built from IDs (tested against `apply_chat_template`)."""
+        """The LFM2, LFM3 or Qwen3/Maple chat template, built from IDs (tested against `apply_chat_template`)."""
         ids = [] if self.special.bos is None else [self.special.bos]
         for message in messages:
-            ids += self.turn_open(message["role"]) + self.text(message["content"]) + self.turn_close()
+            ids += self.turn(message)
         if generation_prompt:
             ids += self.assistant_open()
         return ids
@@ -120,8 +145,10 @@ def render_record(renderer: Renderer, record: PortRecord, form: str = "chat") ->
     if form == "chat":
         producer += text(declaration) + [sp.open]
     else:
-        call = (f'[eval(code="{declaration}' if sp.bos is not None  # LFM2: Pythonic call
-                else f'\n{{"name": "eval", "arguments": {{"code": "{declaration}')  # Qwen3/Maple: JSON call
+        call = {"pythonic": f'[eval(code="{declaration}',  # LFM2: Pythonic call
+                "json": f'\n{{"name": "eval", "arguments": {{"code": "{declaration}',  # Qwen3/Maple: JSON call
+                # LFM3/Qwen3.5: XML call, the value unquoted on the line after its parameter tag
+                "xml": f'\n<function=eval>\n<parameter=code>\n{declaration}'}[sp.call_format]
         producer += [sp.tool_call_start] + text(call) + [sp.open]
 
     # Consumer: the block appears as a typed declaration in the opening of its view.
@@ -139,7 +166,7 @@ def render_record(renderer: Renderer, record: PortRecord, form: str = "chat") ->
     after = [sp.close] + text(";\n```\n\n" if form == "natlang" else ";\n\n")
     after += text(user_content) + renderer.turn_close()
     for message in rest[1:]:
-        after += renderer.turn_open(message["role"]) + text(message["content"]) + renderer.turn_close()
+        after += renderer.turn(message)
     after += renderer.assistant_open()
     target = text(record.target) + [sp.im_end]
 
@@ -147,7 +174,7 @@ def render_record(renderer: Renderer, record: PortRecord, form: str = "chat") ->
     teacher = renderer.chat(prior) + renderer.turn_open(rest[0]["role"])
     teacher += text(f"{source}\n\n{user_content}") + renderer.turn_close()
     for message in rest[1:]:
-        teacher += renderer.turn_open(message["role"]) + text(message["content"]) + renderer.turn_close()
+        teacher += renderer.turn(message)
     teacher += renderer.assistant_open()
 
     return RenderedRecord(record.id, record.family, producer, before, after, target, teacher,

@@ -82,7 +82,8 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
                    context_weight: float = 0.05,
                    mask_assistant_history: bool = False,
                    mask_failed_assistant_history: bool = False,
-                   assistant_history_guard: Mapping[str, Any] | None = None) -> dict:
+                   assistant_history_guard: Mapping[str, Any] | None = None,
+                   objective: Mapping[str, Any] | None = None) -> dict:
     """Represent one complete serving-rendered invocation as a one-node graph.
 
     Prompt/history tokens receive the declared lower context weight, while the
@@ -140,6 +141,13 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
                       'masked_tokens': len(masked), 'suffix_start': boundary,
                       'role_labels_sha256': hashlib.sha256(bytes(labels)).hexdigest()}
     weights[0] = 0.
+    objective_policy = None
+    if objective is not None:
+        # Declared own-output objective: only the exact assistant suffix is a
+        # target (its reasoning separately normalized); history is context.
+        from ..train.own_output_supervision import conversion_weights
+        weights, objective_policy = conversion_weights(ids, [weight > 0 for weight in weights], objective,
+            tokenizer=tokenizer, tokenizer_fingerprint=expanded_tokenizer_fingerprint, suffix=boundary)
     twin = row.get("source_twin_id") or row.get("source_record_ids") or [identifier]
     twin_id = canonical_json_sha256_hex(sorted(str(value) for value in twin))
     return {
@@ -157,6 +165,7 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
             "source_text_sha256": _sha_text(text), "source_suffix_start": boundary,
             "context_weight": context_weight,
             **({"assistant_history_target_mask": mask_proof} if mask_proof else {}),
+            **({"supervision_policy": objective_policy} if objective_policy else {}),
             "context_attestations": row.get("neuralese_context_attestations", [])},
     }
 
@@ -164,7 +173,8 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
 def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
                                    tokenizer, expanded_tokenizer_fingerprint: str,
                                    context_weight: float = 0.05,
-                                   feedback_weight: float = 0.25) -> dict:
+                                   feedback_weight: float = 0.25,
+                                   objective: Mapping[str, Any] | None = None) -> dict:
     """Convert a whole chat while keeping context, tool feedback and failed actions distinct.
 
     This view has no single assistant suffix: it retains the entire trajectory.
@@ -386,11 +396,21 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
     # Apply the existing segment policy per assistant turn. Each complete turn
     # gets target mass while intervening prompts and tool feedback remain
     # lower-weight context; rejected assistant turns are excluded everywhere.
-    weights_tensor = segmented_position_weights(
-        torch.ones((1, len(ids)), dtype=torch.float32), target_spans,
-        roles=torch.tensor([context_labels], dtype=torch.long), context_weight=context_weight,
-        feedback_weight=feedback_weight, exclude=torch.tensor([excluded], dtype=torch.bool))[0]
-    weights = weights_tensor.tolist()
+    if objective is None:
+        weights_tensor = segmented_position_weights(
+            torch.ones((1, len(ids)), dtype=torch.float32), target_spans,
+            roles=torch.tensor([context_labels], dtype=torch.long), context_weight=context_weight,
+            feedback_weight=feedback_weight, exclude=torch.tensor([excluded], dtype=torch.bool))[0]
+        weights = weights_tensor.tolist()
+    else:
+        # Declared own-output objective: assistant decisions only; failed,
+        # held, untrained-reasoning and runtime-opening turns stay context.
+        from ..train.own_output_supervision import conversion_weights
+        eligible = [not value for value in excluded]
+        for begin, end in opening_spans:
+            eligible[begin:end] = [False] * (end - begin)
+        weights, objective_policy = conversion_weights(ids, eligible, objective,
+            tokenizer=tokenizer, tokenizer_fingerprint=expanded_tokenizer_fingerprint)
     # Native graph CE predicts from token 0 onward; the schema also requires
     # the first own token to be explicitly non-target.
     weights[0] = 0.0
@@ -415,7 +435,17 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
         role_policy.update(name='whole-trajectory-context-feedback-target-holds-v3',
                            context_only_assistant_turns=held_turns,
                            context_only_assistant_tokens_masked=sum(held_tokens))
-    if reasoning_turns is not None:
+    if objective is not None:
+        role_policy = {**objective_policy,
+                       'runtime_opening_assistant_turns': opening_turns,
+                       'failed_assistant_tokens_masked': sum(bool(value) for value in failed),
+                       'failure_detector': 'natlang_neuralese.train.text_supervision.failed_assistant_mask',
+                       **({'context_only_assistant_turns': held_turns,
+                           'context_only_assistant_tokens_masked': sum(held_tokens)} if held_turns is not None else {}),
+                       **({'context_only_reasoning_turns': reasoning_turns,
+                           'untrained_reasoning_tokens_masked': sum(untrained_reasoning_tokens)}
+                          if reasoning_turns is not None else {})}
+    elif reasoning_turns is not None:
         role_policy.update(name='whole-trajectory-source-reasoning-holds-v4',
                            context_only_reasoning_turns=reasoning_turns,
                            untrained_reasoning_tokens_masked=sum(untrained_reasoning_tokens),

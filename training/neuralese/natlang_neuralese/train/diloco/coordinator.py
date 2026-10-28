@@ -41,6 +41,7 @@ from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.train.diloco.protocol import (
     PROTOCOL,
     Fragment,
+    ema_decay_at,
     load_tensors,
     merge_pseudogradients,
     outer_nesterov,
@@ -107,14 +108,32 @@ def initialize_coordinator(
     lease_seconds: float = 600.0,
     token_budget: int = 0,
     seed_source: Mapping | None = None,
+    ema: Mapping | None = None,
 ) -> dict:
     """Create a new run from the seed masters; never overwrite an existing trajectory.
 
     ``identity`` is the trainer's objective identity (model, recipe, data
     split, objective). Learners must present exactly the same mapping.
     ``seed_source`` records where the seed weights came from (path and sha).
+    ``ema``: ``{"decay": d, "warmup": N}`` keeps an exponential moving average of the *global versions*: each merged
+    fragment version v+1 updates ``ema <- ema + (1 - decay_v) (theta_{v+1} - ema)`` in the same atomic commit as the
+    version itself (``decay_v``: the warmup schedule at v earlier merges), starting from the seed. The coordinator
+    holds its masters and outer momentum in FP32, so its EMA is FP32 too; ``native_diloco export --ema-out`` casts
+    it to each parameter's dtype. Absent, manifests and fragments are exactly as before.
     """
     root = Path(root)
+    if ema is not None:
+        decay, warmup = ema.get("decay"), ema.get("warmup", 0)
+        if (
+            set(ema) - {"decay", "warmup"}
+            or type(decay) not in (int, float)
+            or not 0 < decay < 1
+            or type(warmup) is not int
+            or warmup < 0
+            or warmup == 1
+        ):
+            raise ValueError("Invalid DiLoCo EMA configuration")
+        ema = {"decay": float(decay), "warmup": warmup}
     if (
         not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", run_id)
         or not 1 <= min_quorum <= workers <= 256
@@ -148,6 +167,7 @@ def initialize_coordinator(
         "parameter_dtypes": {name: str(p.dtype).removeprefix("torch.") for name, p in sorted(masters.items())},
         "fragments": [item.to_dict() for item in fragments],
         "seed_source": dict(seed_source or {}),
+        **({"ema": ema} if ema is not None else {}),
     }
     manifest["fingerprint"] = _manifest_fingerprint(manifest)
     try:
@@ -156,7 +176,7 @@ def initialize_coordinator(
             values = pack_fragment(masters, fragment)
             save_tensors(
                 root / "fragments" / f"{fragment.index:05d}.safetensors",
-                {"theta": values, "momentum": torch.zeros_like(values)},
+                {"theta": values, "momentum": torch.zeros_like(values), **({"ema": values.clone()} if ema else {})},
                 metadata={"version": "0", "last_seq": "{}"},
             )
             save_tensors(
@@ -393,11 +413,14 @@ class Coordinator:
         )
         for _, item, _ in proposals:
             last_seq[item["worker"]] = int(item["sequence"])
+        committed = {"theta": theta, "momentum": momentum}
+        settings = self.manifest.get("ema")
+        if settings is not None:
+            weight = 1.0 - ema_decay_at(settings["decay"], settings["warmup"], version)
+            committed["ema"] = torch.lerp(data["ema"], theta, weight)
         # The authoritative fragment with its last_seq is the commit record;
         # proposals replayed after a crash are discarded by the ledger above.
-        save_tensors(
-            path, {"theta": theta, "momentum": momentum}, metadata={"version": str(version + 1), "last_seq": json.dumps(last_seq)}
-        )
+        save_tensors(path, committed, metadata={"version": str(version + 1), "last_seq": json.dumps(last_seq)})
         save_tensors(self._published(index), {"theta": theta}, metadata={"version": str(version + 1)})
         for file, _, _ in proposals:
             file.unlink(missing_ok=True)
@@ -455,6 +478,31 @@ def global_masters(root: str | Path) -> tuple[dict[str, torch.Tensor], dict]:
             )
             cursor += part.length
     return masters, {"versions": versions, "fingerprint": manifest["fingerprint"], "run_id": manifest["run_id"]}
+
+
+def global_ema(root: str | Path) -> tuple[dict[str, torch.Tensor], dict]:
+    """The EMA of the coordinator's global versions, assembled like ``global_masters`` (FP32)."""
+    root = Path(root)
+    manifest = read_manifest(root)
+    if manifest.get("ema") is None:
+        raise ValueError("this DiLoCo run keeps no EMA of its global versions (declare ema at init)")
+    averages = {name: torch.empty(shape, dtype=torch.float32) for name, shape in manifest["parameter_shapes"].items()}
+    versions = []
+    for spec in manifest["fragments"]:
+        fragment = Fragment.from_dict(spec)
+        path = root / "fragments" / f"{fragment.index:05d}.safetensors"
+        versions.append(int(_metadata(path)["version"]))
+        values = load_tensors(path)["ema"]
+        if values.dtype != torch.float32 or values.numel() != fragment.length:
+            raise ValueError("Corrupt coordinator EMA fragment")
+        cursor = 0
+        for part in fragment.slices:
+            averages[part.name].reshape(-1)[part.offset : part.offset + part.length].copy_(
+                values[cursor : cursor + part.length]
+            )
+            cursor += part.length
+    return averages, {"versions": versions, "fingerprint": manifest["fingerprint"], "run_id": manifest["run_id"],
+                      "ema": manifest["ema"]}
 
 
 def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, stop: threading.Event | None = None) -> None:

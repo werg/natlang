@@ -101,11 +101,13 @@ function preservation(final, steps) {
     { kind: 'word_count', min: Math.floor(count * 0.8), max: Math.ceil(count * 1.2) }];
 }
 
-export function editStream(seed, index) {
+export function editStream(seed, index, split = 'train') {
   const rng = new Random(seed, `edit-stream:${index}`);
   for (let attempt = 0; attempt < 40; attempt++) {
     const labels = rng.sample(Object.keys(TOPIC), rng.int(3, 4));
-    const pool = rowsOf('ag_news');
+    // A test-split case draws source paragraphs from the test partition (source-split.mjs), as dataset_workbench does;
+    // before 2026-10-28 test cases drew train-partition rows, which the labeled training families also use.
+    const pool = rowsOf('ag_news', split === 'test' ? 'test' : 'train');
     const paras = labels.map(label => ({ label, text: rng.pick(pool.filter(r => r.label === label && r.text.length > 120)).text }));
     const state = { paras, renamed: new Set(), titled: false, closed: false, noCommas: false, lower: false };
     const steps = [];
