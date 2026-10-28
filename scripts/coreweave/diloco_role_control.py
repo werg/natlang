@@ -76,6 +76,7 @@ def submit(directory, request, *, timeout=60, require_pid1=False, entrypoint_sha
                     (request['action']=='stop' and event.get('pid')!=request.get('expected_pid'))):
                 raise ValueError('recorded role request no longer matches its actual child')
             return {'id':request['id'],'accepted':True,'already_applied':True,'generation':state['generation'],
+                    'scope':'request accepted; readiness or drain is not established',
                     'pid':event['pid'],'boot_id':state['boot_id'],'owner_id':state['owner_id'],
                     'supervisor_pid':state['supervisor_pid'],'supervisor_start_ticks':state['supervisor_start_ticks'],
                     'process_start_ticks':_ticks(event['pid'])}
@@ -123,6 +124,7 @@ def submit(directory, request, *, timeout=60, require_pid1=False, entrypoint_sha
                 pid=result['pid'];ticks=_ticks(pid)
                 if request['action']=='start' and ticks is None:raise ValueError('started role exited before custody')
                 return {**result,'boot_id':current['boot_id'],'owner_id':current['owner_id'],
+                        'scope':'request accepted; readiness or drain is not established',
                         'supervisor_pid':current['supervisor_pid'],'supervisor_start_ticks':current['supervisor_start_ticks'],
                         'process_start_ticks':ticks}
             time.sleep(.05)

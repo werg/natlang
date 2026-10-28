@@ -582,6 +582,7 @@ def health_snapshot(record, ownership, *, read_sandbox=None):
             data['process_identity']={key:role[key] for key in ('pid','boot_id','start_ticks')}
             expected_sha=(ownership.get('runtime') or {}).get('new_module_sha256')
             data['runtime_matches']=bool(expected_sha and data.get('runtime_module_sha256')==expected_sha)
+            data['runtime_check_scope']='one trainer module file; not an attestation of the full loaded process'
             data['state']='live' if status=='running' and data['pid_alive'] and data['runtime_matches'] else 'dead-replaced-or-runtime-mismatch'
             return str(i),data
         except Exception as error:return str(i),{'sandbox_id':ident,'state':'unavailable','error_type':type(error).__name__}

@@ -20,6 +20,7 @@ def test_health_identifies_actual_live_and_dead_owner():
     try:
         value=service.health_snapshot(record,ownership,read_sandbox=lambda ident:Box())
         assert value['0']['state']=='live' and value['0']['progress'] is None
+        assert 'one trainer module' in value['0']['runtime_check_scope']
         p.terminate();p.wait()
         value=service.health_snapshot(record,ownership,read_sandbox=lambda ident:Box())
         assert value['0']['state']=='dead-replaced-or-runtime-mismatch' and not value['0']['pid_alive']
