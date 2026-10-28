@@ -1,0 +1,17 @@
+# Immutable x86 learner image from an exact NGC digest and its bound wheelhouse.
+# Build context: Dockerfile plus wheelhouse.tar.gz, as staged by build_warm_image.sh.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+ARG WHEELHOUSE_SHA256
+COPY wheelhouse.tar.gz /tmp/wheelhouse.tar.gz
+RUN echo "${WHEELHOUSE_SHA256}  /tmp/wheelhouse.tar.gz" | sha256sum -c - \
+ && apt-get update -qq && apt-get install -y -qq --no-install-recommends zstd \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /tmp/prebuilt \
+ && python -c "import tarfile; t=tarfile.open('/tmp/wheelhouse.tar.gz'); t.extractall('/tmp/prebuilt',filter='data')" \
+ && python -m pip install --no-index --no-deps --find-links /tmp/prebuilt/wheelhouse -r /tmp/prebuilt/wheelhouse/added.txt \
+ && mkdir -p /opt/natlang && printf '%s\n' "$WHEELHOUSE_SHA256" > /opt/natlang/wheelhouse.sha256 \
+ && python -m pip freeze > /opt/natlang/pip-freeze.txt \
+ && zstd --version > /opt/natlang/zstd-version.txt \
+ && rm -rf /tmp/prebuilt /tmp/wheelhouse.tar.gz
+ENV PYTHONUNBUFFERED=1 NATLANG_CW_IMAGE_READY=1
