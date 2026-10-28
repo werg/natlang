@@ -271,3 +271,18 @@ test('edit_stream oracles require the edited document, not just absent words', a
       assert.equal(checkConstraints(reply, record.semantics.expected).passed, false, `${seed}:${index} rejects ${JSON.stringify(reply.slice(0, 30))}`);
   }
 });
+
+test('edit_stream test-split cases draw their paragraphs from the test source partition', async t => {
+  const { editStream } = await import('../scripts/inline-curriculum/edit-stream.mjs');
+  const { rowsOf } = await import('../scripts/inline-curriculum/labeled.mjs');
+  let record;
+  try { [record] = editStream(71028, 0, 'test'); }
+  catch (error) { if (!missingDataError(error)) throw error; t.skip(error.message); return; }
+  const test = new Set(rowsOf('ag_news', 'test').map(row => row.text));
+  const document = record.semantics.services.docs.match(/const DOCUMENT = (".*");\n/)[1];
+  const paragraphs = JSON.parse(document).split(/\n\n/);
+  assert.ok(paragraphs.length >= 3);
+  for (const paragraph of paragraphs) assert.ok(test.has(paragraph), `paragraph is a test-partition row: ${paragraph.slice(0, 40)}`);
+  const [train] = editStream(71028, 0);
+  assert.notEqual(train.semantics.services.docs, record.semantics.services.docs);
+});

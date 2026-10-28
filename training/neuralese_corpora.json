@@ -1261,6 +1261,19 @@
       "note": "Held task-success packet v3 (2026-10-12): v2 with content-preservation constraints on the four edit_stream rows (v2 edit_stream oracles only excluded words and checked case, so a reply such as \"ok\" was a task success; found by the LFM2.5-350M base dragnet). Same 64 natlang programs over 16 generated shapes (4 each), split test, seed 61012, ids and documents; all 64 reference-verified through the collector (verifyCases). Executed for real by the in-run task evaluation (eval/task_cadence.py), scored host-exact. Never a training source."
     },
     {
+      "id": "natlang-dev-task-packet-v1-20261028",
+      "owner": "dgx",
+      "path": "runs/natlang-dev-task-packet-v1-20261028",
+      "admission": "evaluation-only-never-training",
+      "training_admission": false,
+      "split": "test (generated); role development",
+      "include": [
+        "cases.jsonl",
+        "provenance.json"
+      ],
+      "note": "Protected DEVELOPMENT task packet for LFM3 checkpoint selection (2026-10-28, plans/neuralese/LFM3_RECIPE_20261028.md): the same 16 shapes as the held packet, 8 cases each (128), generated with ts-host/scripts/inline-curriculum/build.mjs --split test --no-hints at seed 71028 (used by no training build or held packet), one case per distinct world, every case reference-verified through the collector (verifyCases). The held packet natlang-held-task-packet-v3-20261012 stays confirmation-only; this packet is never a training source and its worlds never join the held side. Separation (provenance.json): 0 world/id/source-group/pair-group overlap with held v2/v3; exact content-window scan of the r2, r3, r9, r10, r11 and next-incremental-v2 LFM views found only shape templates and banks; edit_stream paragraphs are AG News test-partition rows (edit-stream.mjs split fix). The 8 edit_stream cases are refused by the runtime (family hold source_review_pending, since 2026-10-26) and are not executable until that hold is lifted; the 120 other cases are."
+    },
+    {
       "id": "static-lambda-heldout-20261005-v1",
       "owner": "pop",
       "path": "data/neuralese/corpora/static-lambda-heldout-20261005-v1",
