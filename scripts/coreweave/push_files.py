@@ -2,7 +2,7 @@
 """Push local files into a running sandbox (file API, streaming) and verify their sha256 there.
 
 For data appended to a long-lived sandbox (hold.sh) after its launch bundle: a new mixture version, an args file.
-Each SOURCE is written to the same repo-relative path under the sandbox checkout (the same path as this checkout: bootstrap.sh NATLANG_REPO), or to DEST
+Each SOURCE is written to the same repo-relative path under the sandbox checkout (bootstrap NATLANG_REPO), or to DEST
 when given as SOURCE=DEST; directories are pushed recursively. Arrival is verified by hashing in the sandbox.
 
   push_files.py SANDBOX_ID SOURCE[=DEST] ...
@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -20,7 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cwctl  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-REMOTE_REPO = str(REPO)  # the sandbox checkout mirrors this path (bootstrap.sh NATLANG_REPO)
+# The sandbox checkout: bootstrap.sh's NATLANG_REPO default (one declaration).
+REMOTE_REPO = re.search(r'NATLANG_REPO=\$\{NATLANG_REPO:-([^}]+)\}',
+                        (Path(__file__).resolve().parent / 'bootstrap.sh').read_text()).group(1)
 
 
 def plan(specs):
