@@ -255,6 +255,88 @@ def compare(ours_dir, theirs_dir, fmt, reference_dir=None):
     return report
 
 
+# The LFM3 points of the quantization component ---------------------------------------------------------------------
+FP8_ACTIVATIONS = {'format': 'fp8_group', 'group': F.FP8_ACT_GROUP}
+LFM3_POINTS = [
+    {'name': 'fp8', 'gate': 'required', 'weight': 0.5, 'ramp': {'start': 0.0, 'end': 0.15},
+     'modules': {'attention': {'format': 'fp8_block', 'block': F.FP8_BLOCK, 'names': ['q_proj', 'k_proj', 'v_proj', 'o_proj'],
+                               'activations': FP8_ACTIVATIONS},
+                 'mlp': {'format': 'fp8_block', 'block': F.FP8_BLOCK, 'names': ['w1', 'w2', 'w3'],
+                         'activations': FP8_ACTIVATIONS}}},
+    {'name': 'nvfp4', 'gate': 'required', 'weight': 1.0, 'ramp': {'start': 0.1, 'end': 0.5},
+     'modules': {'mlp': {'format': 'nvfp4', 'group': F.NVFP4_GROUP, 'names': ['w1', 'w2', 'w3'],
+                         'shared_global': [['w1', 'w3']],
+                         'activations': {'format': 'nvfp4', 'group': F.NVFP4_GROUP,
+                                         'calibration': {'method': 'max', 'refresh': 250, 'batches': 8}}}}}]
+
+
+def lfm3_component(stage='export'):
+    """A one-stage component holding the LFM3 points (for calibration, measurement and export outside a trainer)."""
+    from ..train.quantization import SCHEMA, stage_component
+    spec = {'schema': SCHEMA, 'loss': {'mode': 'sample'}, 'stage_progress': {stage: [0.0, 1.0]},
+            'points': json.loads(json.dumps(LFM3_POINTS))}
+    return stage_component(spec, stage, start=0, end=1)
+
+
+def reference_model(model_dir, device):
+    """Liquid's remote-code LFM3 (the reference forward) in BF16."""
+    from transformers import AutoModelForCausalLM
+    return AutoModelForCausalLM.from_pretrained(str(model_dir), trust_remote_code=True,
+                                                dtype=torch.bfloat16).to(device).eval()
+
+
+def text_windows(model_dir, paths, tokens, count):
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+    ids = []
+    for path in paths:
+        ids.extend(tokenizer(Path(path).read_text(errors='replace'))['input_ids'])
+        if len(ids) >= tokens * count:
+            break
+    windows = [ids[i:i + tokens] for i in range(0, len(ids) - tokens + 1, tokens)][:count]
+    if len(windows) < count:
+        raise ValueError(f'the texts give {len(windows)} windows of {tokens} tokens, {count} wanted')
+    return windows
+
+
+def _installed(model):
+    from ..train.quantization import Quantization
+    quantization = Quantization(lfm3_component())
+    quantization.install(model)
+    return quantization
+
+
+@torch.no_grad()
+def measure(model, quantization, windows, points=('fp8', 'nvfp4')):
+    """Per point at λ = 1: mean next-token KL(BF16 ‖ point) and CE of both, over ``windows``."""
+    device = next(model.parameters()).device
+    totals = {p: {'kl': 0.0, 'ce': 0.0} for p in points}
+    ce_bf16, count = 0.0, 0
+    for window in windows:
+        ids = torch.tensor([window], device=device)
+        reference = torch.log_softmax(model(ids).logits[0, :-1].float(), -1)
+        targets_ = ids[0, 1:]
+        ce_bf16 += float(-reference.gather(-1, targets_[:, None]).sum())
+        for point in points:
+            with quantization.context(point, 1.0):
+                logp = torch.log_softmax(model(ids).logits[0, :-1].float(), -1)
+            totals[point]['kl'] += float((reference.exp() * (reference - logp)).sum())
+            totals[point]['ce'] += float(-logp.gather(-1, targets_[:, None]).sum())
+        count += len(window) - 1
+    return {'tokens': count, 'bf16_ce': ce_bf16 / count,
+            **{p: {'kl': v['kl'] / count, 'ce': v['ce'] / count} for p, v in totals.items()}}
+
+
+def calibration_from_export(nvfp4_dir, quantization):
+    """The component's calibration state holding another NVFP4 export's static input scales (amax = scale·6·448,
+    exact in FP32 for the scales ModelOpt writes from BF16 amaxes)."""
+    from ..train.quantization import CALIBRATION_SCHEMA
+    scales = {k[:-len('.input_scale')]: v for k, v in _read(nvfp4_dir).items() if k.endswith('.input_scale')}
+    amax = {name: float(scales[name].float() * (F.FP4_MAX * F.FP8_MAX)) for name in quantization.inputs
+            if quantization.inputs[name].static}
+    return {'schema': CALIBRATION_SCHEMA, 'step': None, 'batches': 0, 'source': str(nvfp4_dir), 'amax': amax}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     sub = parser.add_subparsers(dest='command', required=True)
@@ -272,7 +354,49 @@ def main(argv=None):
     cmp.add_argument('--format', choices=('nvfp4', 'fp8_block'), required=True)
     cmp.add_argument('--reference', type=Path, help='the BF16 model the exports quantize (relative errors)')
     cmp.add_argument('--report', type=Path)
+    for name, text in (('calibrate', 'ModelOpt max calibration of the NVFP4 input scales on the reference model'),
+                       ('measure', 'KL to BF16 of each LFM3 point at deploy precision on the reference model')):
+        command = sub.add_parser(name, help=text)
+        command.add_argument('--model', type=Path, required=True, help='HF BF16 LFM3 directory')
+        command.add_argument('--text', type=Path, nargs='+', required=True, help='text files for the windows')
+        command.add_argument('--tokens', type=int, default=1024)
+        command.add_argument('--windows', type=int, default=8)
+        command.add_argument('--device', default='cuda')
+        command.add_argument('--out', type=Path, required=True)
+    sub.choices['calibrate'].add_argument('--compare', type=Path, help='an NVFP4 export whose input scales to compare')
+    sub.choices['measure'].add_argument('--calibration', type=Path, nargs='+', required=True,
+                                        help='calibration states (JSON) or NVFP4 export directories to measure with')
     args = parser.parse_args(argv)
+    if args.command in ('calibrate', 'measure'):
+        model = reference_model(args.model, args.device)
+        quantization = _installed(model)
+        windows = text_windows(args.model, args.text, args.tokens, args.windows)
+        device = next(model.parameters()).device
+        if args.command == 'calibrate':
+            quantization.calibrate(lambda w: model(torch.tensor([w], device=device)), windows, step=0,
+                                   source={'text': [str(p) for p in args.text], 'tokens': args.tokens,
+                                           'windows': args.windows})
+            state = quantization.state_dict()
+            result = {'modules': len(state['amax'])}
+            if args.compare:
+                theirs = calibration_from_export(args.compare, quantization)['amax']
+                ratios = {n: state['amax'][n] / theirs[n] for n in state['amax']}
+                state['compare'] = {'export': str(args.compare), 'theirs': theirs, 'ratio_ours_to_theirs': ratios}
+                values = sorted(ratios.values())
+                result.update({'ratio_min': values[0], 'ratio_median': values[len(values) // 2],
+                               'ratio_max': values[-1]})
+            args.out.write_text(json.dumps(state, indent=1) + '\n')
+            print(json.dumps(result))
+            return 0
+        report = {}
+        for source in args.calibration:
+            state = (calibration_from_export(source, quantization) if source.is_dir()
+                     else json.loads(source.read_text()))
+            quantization.load_state_dict({k: v for k, v in state.items() if k != 'compare'})
+            report[str(source)] = measure(model, quantization, windows)
+            print(json.dumps({str(source): report[str(source)]}))
+        args.out.write_text(json.dumps(report, indent=1) + '\n')
+        return 0
     if args.command == 'export':
         amax = scales = None
         if args.calibration:
