@@ -45,8 +45,11 @@ def _load_policy_and_dependencies(binding):
     value = json.loads(path.read_text())
     if sha256_file_hex(path) != digest:
         raise ValueError('CE supervision policy changed while reading')
-    if value.get('schema') != SCHEMA or not isinstance(value.get('sources'), list) or (not value['sources'] and not value.get('failed_history_masks')):
+    if value.get('schema') != SCHEMA or not isinstance(value.get('sources'), list) or (
+            not value['sources'] and not value.get('failed_history_masks') and not value.get('objective')):
         raise ValueError('CE supervision policy requires explicit source declarations')
+    from .own_output_supervision import validate_policy_fields
+    validate_policy_fields(value)
     if type(value.get('require_eligible_sources', True)) is not bool:
         raise ValueError('CE policy eligible-source coverage must be explicitly boolean')
     if not isinstance(value.get('held_sources', []), list):
@@ -104,8 +107,15 @@ def apply_policy(example, row, *, source_sha256, policy):
     """
     if policy is None:
         return example
+    from .own_output_supervision import NAME as OWN_OUTPUTS, policy_objective
+    objective = policy_objective(policy)
+    own_outputs = objective['name'] == OWN_OUTPUTS
     if example.split == 'test':
-        return held_measurements(example, row, source_sha256=source_sha256, policy=policy)
+        held = held_measurements(example, row, source_sha256=source_sha256, policy=policy)
+        if own_outputs:
+            from .own_output_supervision import attach_measurements
+            held = attach_measurements(held, row, objective, source_sha256=source_sha256)
+        return held
     if not isinstance(source_sha256, str) or not re.fullmatch('[0-9a-f]{64}', source_sha256):
         raise ValueError('CE supervision requires an authenticated immutable source SHA')
     if policy.get('_failed_history_rows'):
@@ -118,7 +128,13 @@ def apply_policy(example, row, *, source_sha256, policy):
                     and 'source_suffix_start' in conversion or bool(row.get('source_pairing')))
         if eligible and not conversion.get('supervision_policy') and policy.get('require_eligible_sources', True):
             raise ValueError('eligible native CE source missing from explicit supervision policy: ' + source_sha256)
-        return example
+        if not own_outputs:
+            return example
+    if own_outputs:
+        # The declared objective replaces every row's raw coefficient algebra;
+        # raw zeros (failed/held/forced positions) stay excluded.
+        from .own_output_supervision import apply_to_example
+        return apply_to_example(example, row, objective, family_scales=policy.get('_family_scales'))
     declaration, = declarations
     return _apply_declaration(example, row, declaration)
 

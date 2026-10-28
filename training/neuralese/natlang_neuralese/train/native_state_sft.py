@@ -431,8 +431,13 @@ def _native_ce_sum(model, hidden, query_ids, target_ids, weights, *, chunk_token
 def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=128, objective=None,
                       share_causal_prefixes=False, collect_accuracy=True, allow_communication_prefixes=True):
     """One backbone graph forward for a minibatch; mean the original per-graph losses."""
-    if objective is None and any(not any(weight>0 for weight in example.target_weights) for example in examples):
+    # A graph weighted by the declared own-output objective may have no own
+    # outputs (e.g. only failed actions); it contributes nothing, not an error.
+    targeted = [any(weight>0 for weight in example.target_weights) for example in examples]
+    if objective is None and any(not has and getattr(example, 'objective_categories', None) is None
+                                 for has, example in zip(targeted, examples)):
         raise ValueError('native graph has no ordinary CE targets; its declared offline/policy objective is required')
+    targeted_graphs = sum(targeted)
     from .native_prefix_packing import pack_causal_prefixes
     # Physical raw-context aliasing is qualified for FP32 activations only.
     # BF16 needs per-occurrence adjoint casts; retain its original episode rows.
@@ -484,6 +489,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
             raise FloatingPointError('native policy objective must return a finite scalar loss')
         return loss, details
     hidden = result['h_final'][0]
+    if not targeted_graphs:
+        return hidden.sum() * 0., []
     # BF16 head adjoints round each original use before prefix fan-in. Folding
     # those uses earlier changes that declared law, despite equal scalar CE.
     # Keep its original path; the qualified FP32 case has no such cast boundary.
@@ -491,9 +498,15 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
     readout_index, readout_queries, readout_targets, readout_groups, readout_weights = {}, [], [], [], []
     readout_position = 0
     losses, details, detail_weights, detail_accuracies = [], [], [], []
+    category_sums = []
     boundary_ids = set((*getattr(model, 'marker_ids', ()), *getattr(model, 'token_override_ids', ())))
     for graph_index, example in enumerate(examples):
+        if not targeted[graph_index]:
+            continue
+        categories = getattr(example, 'objective_categories', None)
+        scale = float(getattr(example, 'loss_scale', 1.))
         queries, targets, weights = [], [], []
+        reasoning = []
         boundary_targets = {str(token): {'count': 0, 'weight': 0.} for token in sorted(boundary_ids)}
         for node, offset in zip(example.plan.invocations, example.plan.offsets):
             for local in range(1, len(node.token_ids)):
@@ -504,6 +517,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                     token = int(node.token_ids[local])
                     targets.append(token)
                     weights.append(weight)
+                    if categories is not None:
+                        reasoning.append(categories[target] == 2)
                     if token in boundary_ids:
                         boundary_targets[str(token)]['count'] += 1
                         boundary_targets[str(token)]['weight'] += float(weight)
@@ -523,12 +538,31 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                     readout_groups.append([])
                 readout_groups[readout_index[key]].append(readout_position)
                 readout_position += 1
-            readout_weights.append(token_weights / denominator / len(examples))
+            readout_weights.append(token_weights / denominator / targeted_graphs * scale)
+        elif categories is not None:
+            # Own-output objective: the same weighted CE, summed per category
+            # so reply/action and reasoning learning are reported separately.
+            parts, correct = [], None
+            for selected in (False, True):
+                index = [i for i, value in enumerate(reasoning) if value == selected]
+                if not index:
+                    parts.append((hidden.new_zeros((), dtype=torch.float32), hidden.new_zeros((), dtype=torch.float32)))
+                    continue
+                subset = torch.tensor(index, device=hidden.device)
+                part, part_correct = _native_ce_sum(model, hidden, query_ids[subset], target_ids[subset],
+                    token_weights[subset], chunk_tokens=chunk_tokens, collect_accuracy=collect_accuracy,
+                    unique_queries=len({queries[i] for i in index}) == len(index))
+                parts.append((part, token_weights[subset].sum()))
+                if collect_accuracy:
+                    correct = part_correct if correct is None else correct + part_correct
+            total = parts[0][0] + parts[1][0]
+            category_sums.append(torch.stack((parts[0][1], parts[0][0].detach(), parts[1][1], parts[1][0].detach())))
+            losses.append(total / denominator * scale)
         else:
             total, correct = _native_ce_sum(model, hidden, query_ids, target_ids, token_weights,
                 chunk_tokens=chunk_tokens, collect_accuracy=collect_accuracy,
                 unique_queries=len(set(queries)) == len(queries))
-            losses.append(total / denominator)
+            losses.append(total / denominator * scale)
         detail_weights.append(denominator.detach())
         if collect_accuracy:
             detail_accuracies.append((correct / denominator).detach())
@@ -540,7 +574,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                         'reused_primal_projection_rows': (primal_aliases.forward_input_rows-primal_aliases.forward_unique_rows)
                             if primal_aliases else 0,
                         'original_physical_tokens': sum(item.plan.token_count for item in examples),
-                        'accuracy': None})
+                        'accuracy': None,
+                        **({'own_output': None, 'loss_scale': scale} if categories is not None else {})})
     original_readout_rows = sum(item['supervised_tokens'] for item in details)
     if reuse_readouts:
         combined = torch.cat(readout_weights)
@@ -574,6 +609,13 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         host_metrics = [(weight, None) for weight in host_weights]
     for detail, (weight, accuracy) in zip(details, host_metrics):
         detail['weight'], detail['accuracy'] = float(weight), None if accuracy is None else float(accuracy)
+    if category_sums:
+        values = iter(torch.stack(category_sums).detach().cpu().tolist())
+        for detail in details:
+            if 'own_output' in detail:
+                reply_weight, reply_loss, reasoning_weight, reasoning_loss = next(values)
+                detail['own_output'] = {'reply': {'weight': reply_weight, 'loss_sum': reply_loss},
+                                        'reasoning': {'weight': reasoning_weight, 'loss_sum': reasoning_loss}}
     return torch.stack(losses).mean(), details
 
 
@@ -1578,6 +1620,28 @@ def _main(argv=None, *, requested_refresh):
             'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
             'weights_optimizer_rng_exposure':'preserved', 'held_ce':'original-corpus-weights'})
     checkpoint_options['ce_supervision_policy_history'] = ce_history
+    if objective is None:
+        # The declared supervision objective is part of the exact continuation
+        # identity: a changed objective needs an explicit transition in the policy.
+        from .own_output_supervision import continuation_identity, prepare_policy
+        ce_policy = prepare_policy(ce_policy, train)
+        supervision_objective, objective_transition = continuation_identity(ce_prior_options, ce_policy)
+        from .own_output_supervision import LEGACY
+        if supervision_objective['name'] != LEGACY or 'supervision_objective' in ce_prior_options:
+            # Historical row-weight runs keep their exact option set.
+            checkpoint_options['supervision_objective'] = supervision_objective
+            objective_history = list(ce_prior_options.get('supervision_objective_history') or [])
+            if objective_transition is not None:
+                objective_history.append({**objective_transition, 'at_global_step':
+                    int(saved_training.get('global_step', saved_training.get('step', 0))),
+                    'weights_optimizer_rng_exposure': 'preserved'})
+            checkpoint_options['supervision_objective_history'] = objective_history
+        if ce_policy is not None and ce_policy.get('_family_census') is not None:
+            write_json(args.out / 'supervision-objective-census.json', ce_policy['_family_census'])
+    elif ce_prior_options.get('supervision_objective') is not None:
+        checkpoint_options['supervision_objective'] = ce_prior_options['supervision_objective']
+        checkpoint_options['supervision_objective_history'] = list(
+            ce_prior_options.get('supervision_objective_history') or [])
     train.set_ce_policy(ce_policy if objective is None else None)
     held.set_ce_policy(ce_policy if objective is None else None)
     checkpoint_options['ce_supervision_active'] = ce_policy is not None and objective is None
@@ -2129,7 +2193,9 @@ def _main(argv=None, *, requested_refresh):
                 def packed_candidate_check(candidate_train, candidate_held, payload, candidate_ce, declarations):
                     from .native_packed_capacity import qualify_pending
                     from ..eval.native_memory import capacity_identity
-                    candidate_train.set_ce_policy(candidate_ce[1] if candidate_ce is not None else ce_policy)
+                    from .own_output_supervision import prepare_policy
+                    candidate_train.set_ce_policy(prepare_policy(
+                        candidate_ce[1] if candidate_ce is not None else ce_policy, candidate_train))
                     candidate_counts = dict(exposure_counts)
                     for key in candidate_train.bindings: candidate_counts.setdefault(key,0)
                     candidate_options = {**checkpoint_options, '_pending_native_source_declarations':declarations}
@@ -2162,6 +2228,14 @@ def _main(argv=None, *, requested_refresh):
                     if ce_update is not None:
                         ce_binding, ce_policy = ce_update
                         checkpoint_options['ce_supervision_active'] = objective is None
+                    if objective is None:
+                        # A source append changes the family census, never the objective identity.
+                        from .own_output_supervision import prepare_policy
+                        ce_policy = prepare_policy(ce_policy, train)
+                        census = (ce_policy or {}).get('_family_census')
+                        if census is not None:
+                            checkpoint_options['supervision_objective'] = {
+                                **checkpoint_options['supervision_objective'], 'family_census_sha256': census['sha256']}
                     train.set_ce_policy(ce_policy if objective is None else None)
                     held.set_ce_policy(ce_policy if objective is None else None)
                     args.held_native_graphs = held.path
@@ -2304,6 +2378,9 @@ def _main(argv=None, *, requested_refresh):
                             'objective_weight': sum(item['boundary_targets'][token]['weight'] / item['weight']
                                                     for item in details) / len(details)}
                     for token in details[0]['boundary_targets']}
+                if any('own_output' in item for item in details):
+                    from .own_output_supervision import progress_telemetry
+                    progress['own_output_ce'] = progress_telemetry(details, graphs=len(batch))
             if diloco is not None:
                 diloco.after_step(tokens=batch_tokens, report={'loss': train_loss, 'global_step': global_step})
                 progress['diloco'] = diloco.metrics()
