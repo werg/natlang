@@ -826,6 +826,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
             config = resolve_recipe_data(config_path)
             if config.get('native_state') is not True:
                 raise ValueError('RL production hot reload cannot switch away from the native shared-state actor')
+            config = adopt_policy_loss_defaults(config, state, state_path)
             state_participant=state.get('native_participant')
             if state_participant is not None:
                 if config.get('native_participant') not in (None,state_participant):
@@ -1266,6 +1267,38 @@ def behavior_top_k(policy_loss):
     if policy_loss is None or policy_loss['schema'] == 'clipped-ratio/1':
         return None
     return policy_loss['outcome']['k'] if policy_loss['schema'] == 'jolt-plus/1' else policy_loss['k']
+
+
+TIS_DEFAULT_TRANSITION = 'importance-tis-default-20261028'
+
+
+def adopt_policy_loss_defaults(config, state, state_path):
+    """Continuations adopt the truncated-importance default through a recorded transition.
+
+    A config written before 2026-10-28 stores the then-default ``importance: none``. The next round that is not
+    already updating under that loss runs with ``tis``; the transition is recorded once in the controller state.
+    ``policy_loss_keep_importance_none: true`` in the config opts out.
+    """
+    from .policy_math import policy_loss_declaration
+    loss = policy_loss_declaration(config.get('policy_loss'))
+    if loss is None or loss['schema'] == 'clipped-ratio/1' or config.get('policy_loss_keep_importance_none') is True:
+        return config
+    outcome = loss['outcome'] if loss['schema'] == 'jolt-plus/1' else loss
+    if outcome['importance'] != 'none':
+        return config
+    if state.get('active_update_round') and state.get('update_policy_loss') == loss:
+        return config  # a bound in-flight update keeps its recorded loss; the next round adopts
+    adopted = ({**loss, 'outcome': {**outcome, 'importance': 'tis'}} if loss['schema'] == 'jolt-plus/1'
+               else {**loss, 'importance': 'tis'})
+    adopted = policy_loss_declaration(adopted)
+    record = {'schema': 'natlang.rl-policy-loss-transition/1', 'transition': TIS_DEFAULT_TRANSITION,
+              'from': loss, 'to': adopted, 'round': state.get('round')}
+    transitions = state.setdefault('policy_loss_transitions', [])
+    if not any(item.get('transition') == TIS_DEFAULT_TRANSITION and item.get('from') == loss
+               and item.get('to') == adopted for item in transitions):
+        transitions.append(record)
+        write_json_durable(state_path, state)
+    return {**config, 'policy_loss': adopted}
 
 
 def bind_policy_loss(config, values):

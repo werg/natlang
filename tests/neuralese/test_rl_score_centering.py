@@ -377,3 +377,25 @@ def test_whole_producer_consumer_graph_scores_every_sampled_turn_with_top_k(tmp_
     path.write_text(json.dumps(dict(spec, mode='rft')))
     with pytest.raises(ValueError, match='inapplicable policy loss'):
         NativePolicyObjective(path)
+
+
+def test_continuations_adopt_tis_through_a_recorded_transition(tmp_path):
+    from natlang_neuralese.rl.production import TIS_DEFAULT_TRANSITION, adopt_policy_loss_defaults
+    old = {'schema': 'jolt-plus/1', 'beta_s': 1.0, 'beta_t': 0.5,
+           'outcome': {'schema': 'score-centered/1', 'k': 128, 'importance': 'none', 'eps': 1e-6}}
+    state_path = tmp_path / 'state.json'
+    in_flight = {'round': 3, 'active_update_round': 'r3', 'update_policy_loss': old}
+    assert adopt_policy_loss_defaults({'policy_loss': old}, in_flight, state_path)['policy_loss'] == old
+    state = {'round': 4}
+    adopted = adopt_policy_loss_defaults({'policy_loss': old}, state, state_path)['policy_loss']
+    assert adopted['outcome']['importance'] == 'tis' and adopted['beta_t'] == 0.5
+    adopt_policy_loss_defaults({'policy_loss': old}, state, state_path)  # recorded once
+    assert state['policy_loss_transitions'] == [{'schema': 'natlang.rl-policy-loss-transition/1',
+        'transition': TIS_DEFAULT_TRANSITION, 'from': old, 'to': adopted, 'round': 4}]
+    assert json.loads(state_path.read_text()) == state
+    plain = {'schema': 'score-centered/1', 'k': 128, 'importance': 'none', 'eps': 1e-6}
+    assert adopt_policy_loss_defaults({'policy_loss': plain}, {}, state_path)['policy_loss']['importance'] == 'tis'
+    kept = {'policy_loss': plain, 'policy_loss_keep_importance_none': True}
+    assert adopt_policy_loss_defaults(kept, {}, state_path) is kept
+    clipped = {'policy_loss': {'schema': 'clipped-ratio/1'}}
+    assert adopt_policy_loss_defaults(clipped, {}, state_path) is clipped
