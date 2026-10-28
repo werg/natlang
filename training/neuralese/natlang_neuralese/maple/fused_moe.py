@@ -622,6 +622,9 @@ def invariant_weight_gradient(x, grad):
                      precision='ieee', output_dtype=torch.float32, single_expert=True)
 
 
+ORDERED_DENSE_PACK_LIMIT_BYTES = 512 << 20
+
+
 def ordered_invariant_weight_gradient(records, accumulator):
     """Apply an invocation-ordered sequence of the existing invariant dW GEMMs."""
     if not records:
@@ -645,6 +648,31 @@ def ordered_invariant_weight_gradient(records, accumulator):
         raise RuntimeError('deferred invariant dW activation widths differ')
     if any(gradient.shape[1] != grad_items[0].shape[1] for gradient in grad_items):
         raise RuntimeError('deferred invariant dW output widths differ')
+    n, k = grad_items[0].shape[1], x_items[0].shape[1]
+    if accumulator.shape != (n, k):
+        raise RuntimeError('deferred invariant dW accumulator shape differs')
+    if accumulator.dtype != torch.float32:
+        raise RuntimeError('deferred invariant dW accumulator must be FP32')
+    ieee = record_dtype == torch.float32
+    bm, bk = 64, (32 if ieee else 64)
+    bn = 64 if ieee else 256
+    tuning = dict(num_warps=4, num_stages=2) if ieee else dict(num_warps=8, num_stages=2)
+    packed_bytes = sum((x.numel() + g.numel()) * x.element_size() for x, g in zip(x_items, grad_items))
+    if packed_bytes > ORDERED_DENSE_PACK_LIMIT_BYTES:
+        # Each original invocation contributes one independently rounded dW
+        # and one ordered FP32 addition. Launching one record at a time keeps
+        # that same reduction and addition order without concatenating every
+        # graph invocation into multi-gigabyte temporary operand buffers.
+        offsets = torch.zeros(1, device=device, dtype=torch.int32)
+        for activation, gradient, count in zip(x_items, grad_items, counts):
+            current_x = activation.contiguous()
+            current_grad = gradient.contiguous()
+            current_count = torch.tensor([count], device=device, dtype=torch.int32)
+            _ordered_dense_weight_gradient[(triton.cdiv(n, bm), triton.cdiv(k, bn))](
+                current_grad, current_x, offsets, current_count, accumulator, n, k, 1,
+                accumulator.stride(0), accumulator.stride(1), BM=bm, BN=bn, BK=bk,
+                DOT_PRECISION='ieee' if ieee else 'native', **tuning)
+        return accumulator
     packed_x = torch.cat(x_items, dim=0).contiguous()
     packed_grad = torch.cat(grad_items, dim=0).contiguous()
     offsets = []
@@ -654,15 +682,6 @@ def ordered_invariant_weight_gradient(records, accumulator):
         cursor += count
     offsets = torch.tensor(offsets, device=device, dtype=torch.int32)
     counts = torch.tensor(counts, device=device, dtype=torch.int32)
-    n, k = packed_grad.shape[1], packed_x.shape[1]
-    if accumulator.shape != (n, k):
-        raise RuntimeError('deferred invariant dW accumulator shape differs')
-    if accumulator.dtype != torch.float32:
-        raise RuntimeError('deferred invariant dW accumulator must be FP32')
-    ieee = packed_grad.dtype == torch.float32
-    bm, bk = 64, (32 if ieee else 64)
-    bn = 64 if ieee else 256
-    tuning = dict(num_warps=4, num_stages=2) if ieee else dict(num_warps=8, num_stages=2)
     _ordered_dense_weight_gradient[(triton.cdiv(n, bm), triton.cdiv(k, bn))](
         packed_grad, packed_x, offsets, counts, accumulator, n, k, len(x_items),
         accumulator.stride(0), accumulator.stride(1), BM=bm, BN=bn, BK=bk,
