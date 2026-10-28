@@ -126,7 +126,7 @@ def test_typed_values_reasoning_and_several_calls(tokenizer):
         {'status': 'success', 'value': value}, {'code': 'return 1;'}]
     # Undeclared types: only the template's canonical JSON rendering reads as JSON.
     assert xml_value('{"a": 1}') == {'a': 1} and xml_value('{"a":1}') == '{"a":1}'
-    assert xml_value('"quoted"') == '"quoted"' and xml_value('42') == 42 and xml_value('42', {'type': 'string'}) == '42'
+    assert xml_value('"quoted"') == 'quoted' and xml_value('42') == 42 and xml_value('42', {'type': 'string'}) == '42'
     with pytest.raises(ValueError):
         xml_value('not json', {'type': 'integer'})
 
@@ -137,9 +137,8 @@ def test_unrepresentable_values_fail_loudly(tokenizer):
     assert not xml_value_representable(bad) and xml_value_representable('x</parameter>y')
     assert not xml_value_representable('ends with\n</parameter>')
     with pytest.raises(RequestError, match='delimiter'):
-        check_xml_call('eval', {'code': bad})
-    with pytest.raises(RequestError, match='keep its type'):
-        check_xml_call('eval', {'code': '42'})  # an undeclared string that renders like a number
+        check_xml_call('eval', {'code': bad}, EVAL_TOOLS)
+    check_xml_call('eval', {'code': '42'})  # undeclared strings are JSON quoted
     check_xml_call('eval', {'code': '42'}, EVAL_TOOLS)  # declared string: exact
     check_xml_call('eval', {'code': '42'}, types=False)  # prompts check structure only
     with pytest.raises(RequestError):
@@ -148,11 +147,24 @@ def test_unrepresentable_values_fail_loudly(tokenizer):
         {'type': 'function', 'function': {'name': 'eval', 'arguments': json.dumps({'code': bad})}}]},
                 {'role': 'tool', 'content': 'ok'}]
     with pytest.raises(RequestError, match='delimiter'):
-        render_messages(messages, None, lambda m, t: tokenizer.apply_chat_template(
+        render_messages(messages, EVAL_TOOLS, lambda m, t: tokenizer.apply_chat_template(
             m, tokenize=False, add_generation_prompt=True), call_format='xml')
     from natlang_neuralese.data.text_corpus import native_gold_packet
     with pytest.raises(RequestError, match='delimiter'):
         native_gold_packet(tokenizer, messages[:1], messages[1], EVAL_TOOLS)
+
+
+@needs_lfm3
+@pytest.mark.parametrize('value', ['42', 'true', 'null', '{"a": 1}', '"quoted"', '', 'line\n</parameter>\nmore'])
+def test_ambiguous_xml_string_roundtrips(tokenizer, value):
+    from natlang_neuralese.serve.chat import assistant_reply_segments
+    target = {'role': 'assistant', 'content': '', 'tool_calls': [{'type': 'function', 'function': {
+        'name': 'return_result', 'arguments': {'status': 'success', 'value': value}}}]}
+    apply = lambda messages, generation: tokenizer.apply_chat_template(
+        messages, tools=EVAL_TOOLS, tokenize=False, add_generation_prompt=generation)
+    parts = assistant_reply_segments(apply, target, call_format='xml', tools=EVAL_TOOLS)
+    parsed = build_message(''.join(x for x, _ in parts), [], tools=EVAL_TOOLS)
+    assert json.loads(parsed['tool_calls'][0]['function']['arguments']) == {'status': 'success', 'value': value}
 
 
 @needs_lfm3
@@ -238,7 +250,8 @@ def test_producer_span_keeps_the_complete_response(tokenizer, value_type, body, 
     baseline, (text, ids, boundary, _) = _span_packet(tokenizer, target, span)
     opening = '<|im_start|>assistant\n<think>'
     reply = text[text.rindex(opening) + len(opening):]
-    rendered_value = xml_value_text(value)
+    from natlang_neuralese.serve.chat import xml_wire_arguments
+    rendered_value = xml_value_text(xml_wire_arguments('return_result', {'value': value}, EVAL_TOOLS)['value'])
     assert ROLE_MARKERS[0] + rendered_value + ROLE_MARKERS[1] in reply
     # Removing only the role markers gives the template's own rendering of the complete response.
     assert text.replace(ROLE_MARKERS[0], '').replace(ROLE_MARKERS[1], '') == baseline

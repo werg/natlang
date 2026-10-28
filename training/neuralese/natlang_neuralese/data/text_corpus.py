@@ -1710,6 +1710,7 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
     from .prompt_rendering import apply_prompt_rendering
     bound = getattr(tokenizer, 'natlang_history_reasoning', {})
     bind_history_reasoning(tokenizer, policy=bound.get('policy'))
+    schema_tools = tools
     messages, tools = apply_prompt_rendering(messages, tools, prompt_rendering)
     if list(_message_neuralese_ids(target)):
         raise ValueError("ordinary gold text target contains unresolved neuralese blocks")
@@ -1748,7 +1749,7 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
     marker_tags = {}
     rendered_producer_body = None
     rendered_producer_bodies = [None] * len(producer_spans)
-    typing_tools = tools
+    typing_tools = schema_tools
     for producer_index, producer_span in indexed_spans:
         producer_sentinel = producer_sentinel_close = None
         if producer_span.get('value_type') == 'assistant-text':
@@ -1838,7 +1839,7 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
         marker_tags[close_tag] = (producer_index, False)
         sentinels.append((producer_index, producer_span, producer_sentinel, producer_sentinel_close,
                           body_value, function.get('name'), open_tag, close_tag))
-        if (producer_sentinel is not None and call_format == 'xml' and producer_span['value_type'] == 'unknown'
+        if (producer_sentinel is not None and call_format == 'xml' and producer_span['value_type'] not in ('inline-string', 'assistant-text')
                 and len(producer_span['argument_path']) == 1):
             typing_tools = _string_typed_parameter(typing_tools, function.get('name'), producer_span['argument_path'][0])
     reply_runs = assistant_reply_segments(
@@ -1883,13 +1884,14 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
             index, start, _ = found[0]
             run, escaped = reply_runs[index]
             stop = start + len(producer_sentinel)
-            from ..serve.chat import XML_PARAMETER_CLOSE, xml_value, xml_value_representable, xml_value_text
+            from ..serve.chat import XML_PARAMETER_CLOSE, xml_value, xml_value_representable, xml_value_text, xml_wire_arguments
             if (call_format == 'xml' and re.search(r'<parameter=[^>\n]+>\n$', run[:start])
                     and run[stop:].startswith(XML_PARAMETER_CLOSE)):
                 # An unquoted XML parameter: the span is the template's own rendering of the value (a string
                 # verbatim, any other value its canonical JSON), between the parameter's own lines.
-                marker_body = (xml_value_text(body_value) if producer_span['value_type'] == 'unknown'
-                               else producer_span['body'])
+                parameter = producer_span['argument_path'][0]
+                marker_body = xml_value_text(xml_wire_arguments(
+                    producer_span.get('function_name') or _, {parameter: body_value}, schema_tools)[parameter])
                 if not xml_value_representable(marker_body):
                     raise ValueError('structured producer body contains the XML parameter delimiter')
                 if (producer_span['value_type'] == 'unknown' and json.dumps(xml_value(marker_body), ensure_ascii=False)

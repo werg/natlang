@@ -79,10 +79,18 @@ def xml_value_text(value) -> str:
     return str(value)
 
 
+def xml_wire_arguments(name, arguments, tools):
+    """Encode strings where a parameter's schema also permits JSON values."""
+    properties = _tool_parameter_schemas(tools).get(name, {})
+    return {key: (json.dumps(value, ensure_ascii=False)
+                  if isinstance(value, str) and _schema_types(properties.get(key)) != {"string"}
+                  else value) for key, value in arguments.items()}
+
+
 def check_xml_call(name, arguments, tools=None, *, types: bool = True) -> None:
     """Raise RequestError('tool-call-unrepresentable') when an XML tool call would not parse back exactly: a function
     or parameter name holding `>` or a newline, a value holding the parameter delimiter, or (with `types`) a value
-    whose type the rendering loses under `tools`' schema (e.g. the string "42" of an undeclared parameter).
+    whose type the rendering loses under `tools`' schema.
 
     Prompts check structure only (`types=False`): their tokens are the rendering whatever its parse. Training
     targets check types too, because the model learns the text and the parser decides what it means."""
@@ -94,7 +102,7 @@ def check_xml_call(name, arguments, tools=None, *, types: bool = True) -> None:
     for key, value in arguments.items():
         if not isinstance(key, str) or not key or re.search(r"[>\n]", key):
             raise RequestError("tool-call-unrepresentable", f"parameter name {key!r} cannot be written as <parameter=…>")
-        text = xml_value_text(value)
+        text = xml_value_text(xml_wire_arguments(name, {key: value}, tools)[key])
         if not xml_value_representable(text):
             raise RequestError("tool-call-unrepresentable",
                                f"parameter {key!r} of {name!r} contains the XML parameter delimiter "
@@ -146,15 +154,16 @@ def xml_value(text: str, schema=None):
             raise ValueError(f"parameter value is not JSON of its declared type {sorted(types)}")
         return text
     if types is None:
-        # Undeclared type: the template writes a string verbatim and anything else in its canonical JSON form
-        # (`xml_value_text`), so only text that is exactly such a rendering can have been a non-string. A string whose
-        # text equals a canonical rendering (`42`, `true`, `[1, 2]`) is ambiguous without a schema; it reads as JSON,
-        # as llama.cpp reads it (open item: a parse-only schema channel for program-header serving).
+        # Ambiguous strings are explicitly JSON quoted by the shared renderer;
+        # canonical non-string values retain the template's existing representation.
+        if isinstance(value, str) and json.dumps(value, ensure_ascii=False) == text:
+            return value
         return value if not isinstance(value, str) and xml_value_text(value) == text else text
     allowed = {"object": isinstance(value, dict), "array": isinstance(value, list),
                "number": isinstance(value, (int, float)) and not isinstance(value, bool),
                "integer": isinstance(value, int) and not isinstance(value, bool),
-               "boolean": isinstance(value, bool), "null": value is None, "string": False}
+               "boolean": isinstance(value, bool), "null": value is None,
+               "string": isinstance(value, str) and json.dumps(value, ensure_ascii=False) == text}
     if any(allowed.get(kind) for kind in types):
         return value
     if "string" in types:
@@ -471,6 +480,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
             inlined = inline(arguments)
             if call_format == "xml":
                 check_xml_call(fn.get("name"), inlined, tools, types=False)
+                inlined = xml_wire_arguments(fn.get("name"), inlined, tools)
             fn["arguments"] = _escape_value(inlined, specials, nonce)
             calls.append(call)
         if calls:
@@ -667,10 +677,6 @@ def assistant_reply_segments(apply_template, message: dict, specials=(), opening
         for call in normalize_tool_call_arguments([message])[0][0].get("tool_calls") or []:
             fn = call.get("function", call)
             check_xml_call(fn.get("name"), fn.get("arguments"), tools)
-    if not specials:
-        reply = assistant_reply(apply_template, message, opening)
-        return None if reply is None else [(reply, False)]
-
     supplied = json.dumps(message, ensure_ascii=False)
     nonce = secrets.token_hex(16)
     while nonce in supplied:
@@ -700,6 +706,8 @@ def assistant_reply_segments(apply_template, message: dict, specials=(), opening
         copied = json.loads(json.dumps(call))
         fn = copied.get("function", copied)
         arguments = fn.get("arguments")
+        if call_format == "xml":
+            arguments = xml_wire_arguments(fn.get("name"), arguments, tools)
         fn["arguments"] = escape_value(arguments)
         calls.append(copied)
     if calls:
