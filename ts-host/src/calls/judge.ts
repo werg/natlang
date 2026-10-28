@@ -44,6 +44,7 @@ export function compareBehaviors(reference: Behavior, candidate: Behavior): { eq
 }
 
 /** The comparison judge is the built-in program builtin/compareBehaviors.nl. */
+// model-call-kind: runtime-authored-call (the specializer's behaviour-comparison judge) -- training/model-call-kinds.json
 const judgeDefinition = () => builtinDefinition('compareBehaviors');
 
 const describe = (behavior: Behavior): string => {
