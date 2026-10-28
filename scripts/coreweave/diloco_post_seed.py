@@ -79,7 +79,8 @@ class Cloud:
         raw = self.sandbox().read_file(self.parent + '.seed.json').result()
         value = json.loads(raw)
         if (value.get('checkpoint') != self.parent or value.get('global_step', 0) < value.get('requested_stop', 1)
-                or not value.get('full_optimizer_rng_exposure') or len(value.get('sha256', '')) != 64):
+                or not value.get('full_optimizer_rng_exposure') or not value.get('training_source_receipts')
+                or len(value.get('sha256', '')) != 64):
             raise ValueError('cohost seed receipt does not bind a full earned checkpoint')
         return value
 
@@ -116,6 +117,40 @@ class Cloud:
         subprocess.run([str(repo/'.venv-neuralese/bin/python'),'-c',code,actual['local'],str(receipt['global_step'])],
                        env=env,check=True,capture_output=True,text=True)
         return actual
+
+    def runtime_binding(self):
+        repo = paths.root('repo')
+        script = ("import json,sys; from pathlib import Path; "
+                  "from natlang_neuralese.train.native_resident import code_inventory,digest; "
+                  "from natlang_neuralese.common.hashing import sha256_file_hex; "
+                  "p=Path('/work/diloco-resident/recipe-plan.json'); plan=json.loads(p.read_text()); "
+                  "code=code_inventory(Path(sys.argv[1])/'training/neuralese/natlang_neuralese'); "
+                  "assert code==plan['code'], 'active seed runtime differs from its recipe plan'; "
+                  "print(json.dumps({'code_sha256':digest(code),'plan_sha256':sha256_file_hex(p)}))")
+        result=self.sandbox().exec(['env','PYTHONPATH='+str(repo/'training/neuralese')+os.pathsep+str(repo),
+                                    'python3','-c',script,str(repo)]).result(timeout=1800)
+        if result.returncode:raise RuntimeError('seed runtime binding failed: '+result.stderr[-1000:])
+        return json.loads(result.stdout)
+
+    def private_export(self, receipt, intent):
+        exporter=paths.resolve('data_nvme','dgxops/coreweave-private-runfile-export-20261014.py')
+        self.backup_dir.mkdir(parents=True,exist_ok=True)
+        receipt_path=self.backup_dir/('private-seed-'+receipt['sha256']+'.json')
+        env={**os.environ,'CW_EXPORT_SANDBOX_ID':self.sandbox_id,
+             'CW_EXPORT_EXPECTED_SHA256':receipt['sha256'],'CW_EXPORT_EXPECTED_BYTES':str(receipt['bytes']),
+             'CW_EXPORT_CACHE_BOUNDED_READS':'1','CW_EXPORT_VERIFY_ON_OWNER':'1', 'CW_EXPORT_LOCAL':'0',
+             'CW_EXPORT_TARGET_VERIFIES':'0','CW_EXPORT_RECEIPT_FILE':str(receipt_path)}
+        for key in ('CW_EXPORT_SEALED_PIN', 'CW_EXPORT_VERIFY_EXISTING_ONLY', 'CW_EXPORT_VERIFIED_LEGACY_READER',
+                    'CW_EXPORT_OWNER_DESTINATION'):
+            env.pop(key, None)
+        subprocess.run([sys.executable,str(exporter),intent['role'],self.parent],env=env,check=True)
+        value=json.loads(receipt_path.read_text()); identity=value.get('identity') or {}; checked=value.get('independent_verification') or {}
+        if (value.get('sandbox_id')!=self.sandbox_id or value.get('source')!=self.parent or value.get('private') is not True
+                or identity.get('sha256')!=receipt['sha256'] or identity.get('bytes')!=receipt['bytes']
+                or checked.get('sha256')!=receipt['sha256'] or checked.get('bytes')!=receipt['bytes']
+                or not value.get('verified_at') or not value.get('run') or not value.get('name')):
+            raise ValueError('private export lacks exact independent full-object verification')
+        return value
 
     def verify_restore(self, snapshot, worker, receipt):
         sandbox = self.sandbox(worker)
@@ -191,9 +226,24 @@ def run(record_path, journal_path, cloud, *, wait_seconds=21600, interval=5):
         receipt=cloud.seed_receipt()
         if state.get('seed') and state['seed']!=receipt: raise ValueError('seed receipt changed on resume')
         state['seed']=receipt;state['phase']='seed-verified';save()
-        with ThreadPoolExecutor(max_workers=2) as pool:
+        if not state.get('private_export_intent'):
+            state['private_export_intent']={'schema':'natlang.diloco-seed-private-export-intent/1',
+                'source':cloud.parent,'sandbox_id':cloud.sandbox_id,'global_step':receipt['global_step'],
+                'sha256':receipt['sha256'],'bytes':receipt['bytes'],'runtime':cloud.runtime_binding(),
+                'training_source_receipts':receipt.get('training_source_receipts'),
+                'role':'lfm3-v3-seed-'+receipt['sha256'][:12]}
+            save()  # exact immutable intent precedes any private upload
+        intent=state['private_export_intent']
+        if (intent['source']!=cloud.parent or intent['sandbox_id']!=cloud.sandbox_id
+                or any(intent[key]!=receipt[key] for key in ('global_step','sha256','bytes'))
+                or intent.get('training_source_receipts') != receipt.get('training_source_receipts')):
+            raise ValueError('persisted private export intent differs from the seed')
+        with ThreadPoolExecutor(max_workers=3) as pool:
             future=pool.submit(cloud.download,receipt) if not state.get('download') else None
             ensure_snapshot(state, cloud, save, deadline=deadline, interval=interval)
+            # The exporter writes a scoped PUT capability under /work. Start it only after the snapshot
+            # is READY so no restored learner receives that short-lived write capability.
+            private_future=pool.submit(cloud.private_export,receipt,intent) if not state.get('private_export') else None
             record=json.loads(record_path.read_text())
             if record['state']=='coordinator-ready':
                 old_path=Path(record['run']['learners']['job'])
@@ -225,6 +275,8 @@ def run(record_path, journal_path, cloud, *, wait_seconds=21600, interval=5):
                     restored[str(i)]=cloud.verify_restore(state['snapshot_id'],worker,receipt);save()
             if future:
                 state['download']=future.result();save()
+            if private_future:
+                state['private_export']=private_future.result();save()
         state['phase']='complete';save()
         return state
 

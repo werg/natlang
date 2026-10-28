@@ -1038,7 +1038,9 @@ def test_diloco_post_seed_snapshot_download_and_resume_are_idempotent(tmp_path, 
             'run':{'id':'run','settings':{'workers':4},'learners':{'job':str(original)},
                    'coordinator':{'parent':'/work/parent.pt'}}}
     record_path.write_text(json.dumps(record))
-    counts={'cache':0,'snapshot':0,'download':0,'launch':0,'restore':0}
+    import threading
+    launch_event=threading.Event()
+    counts={'cache':0,'snapshot':0,'download':0,'private':0,'launch':0,'restore':0}
     class FakeCloud:
         sandbox_id='box0'; parent='/work/parent.pt'
         def seed_receipt(self):return {'checkpoint':self.parent,'sha256':seedsha,'bytes':4,'global_step':50,
@@ -1047,9 +1049,17 @@ def test_diloco_post_seed_snapshot_download_and_resume_are_idempotent(tmp_path, 
         def capture(self,request_id):counts['snapshot']+=1;return 'snap-1'
         def inspect(self,snapshot):return {'snapshot_id':snapshot,'status':'READY','source_sandbox_id':'box0','size_bytes':4}
         def download(self,receipt):counts['download']+=1;return {'verified':True,'sha256':seedsha,'bytes':4}
+        def runtime_binding(self):return {'code_sha256':'runtime','plan_sha256':'plan'}
+        def private_export(self,receipt,intent):
+            counts['private']+=1;assert counts['snapshot']==1
+            assert intent['global_step']==50 and intent['runtime']['code_sha256']=='runtime'
+            assert json.loads(journal.read_text())['private_export_intent']==intent
+            assert launch_event.wait(5), 'private verification blocked worker launch'
+            return {'private':True,'identity':{'sha256':seedsha,'bytes':4},'independent_verification':{'sha256':seedsha,'bytes':4}}
         def verify_restore(self,snapshot,worker,receipt):counts['restore']+=1;return {'passed':True,'worker':worker}
     def launch_remaining(run_id):
         counts['launch']+=1
+        launch_event.set()
         value=json.loads(record_path.read_text()); assert value['state']=='coordinator-ready'
         new=json.loads(Path(value['run']['learners']['job']).read_text())
         assert new['scratch']['restore_from_snapshot_id']=='snap-1' and new['lifetime_hours']==720
@@ -1060,9 +1070,9 @@ def test_diloco_post_seed_snapshot_download_and_resume_are_idempotent(tmp_path, 
     journal=tmp_path/'journal.json'
     result=post.run(record_path,journal,FakeCloud(),wait_seconds=3,interval=.01)
     assert result['phase']=='complete' and len(result['restored'])==3
-    assert counts=={'cache':1,'snapshot':1,'download':1,'launch':1,'restore':3}
+    assert counts=={'cache':1,'snapshot':1,'download':1,'private':1,'launch':1,'restore':3}
     post.run(record_path,journal,FakeCloud(),wait_seconds=3,interval=.01)
-    assert counts=={'cache':1,'snapshot':1,'download':1,'launch':1,'restore':3}
+    assert counts=={'cache':1,'snapshot':1,'download':1,'private':1,'launch':1,'restore':3}
 
 
 def test_restored_worker_quarantines_inherited_state_once(tmp_path):
@@ -1169,3 +1179,30 @@ def test_postseed_cache_reads_actual_isolated_cohost_manifest(tmp_path):
     assert result.returncode==0,result.stderr
     assert (global_cw/'cas'/sha).read_bytes()==b'new-data'
     assert json.loads(result.stdout)['objects']==1
+
+
+def test_postseed_private_export_binds_actual_sandbox_and_independent_get(tmp_path, monkeypatch):
+    post=load('diloco_post_seed');sha='a'*64;receipt={'sha256':sha,'bytes':123,'global_step':50}
+    intent={'role':'lfm3-v3-seed-'+sha[:12]};cloud=post.Cloud('actual-box','/work/parent.pt',tmp_path)
+    seen=[]
+    def fake_run(argv,env,check):
+        seen.append((argv,env))
+        value={'sandbox_id':'actual-box','source':'/work/parent.pt','private':True,
+               'identity':{'sha256':sha,'bytes':123},'independent_verification':{'sha256':sha,'bytes':123},
+               'verified_at':1,'run':'private-run','name':'object'}
+        Path(env['CW_EXPORT_RECEIPT_FILE']).write_text(json.dumps(value))
+    monkeypatch.setattr(post.subprocess,'run',fake_run)
+    verified=cloud.private_export(receipt,intent)
+    argv,env=seen[0]
+    assert argv[-2:]==[intent['role'],'/work/parent.pt']
+    assert env['CW_EXPORT_SANDBOX_ID']=='actual-box' and env['CW_EXPORT_EXPECTED_SHA256']==sha
+    assert env['CW_EXPORT_EXPECTED_BYTES']=='123' and env['CW_EXPORT_VERIFY_ON_OWNER']=='1'
+    assert verified['independent_verification']['sha256']==sha
+    def bad_run(argv,env,check):
+        value={'sandbox_id':'actual-box','source':'/work/parent.pt','private':True,
+               'identity':{'sha256':sha,'bytes':123},'independent_verification':{'sha256':'b'*64,'bytes':123},
+               'verified_at':1,'run':'private-run','name':'object'}
+        Path(env['CW_EXPORT_RECEIPT_FILE']).write_text(json.dumps(value))
+    monkeypatch.setattr(post.subprocess,'run',bad_run)
+    with pytest.raises(ValueError,match='independent full-object'):
+        cloud.private_export(receipt,intent)
