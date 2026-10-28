@@ -1,6 +1,6 @@
 """Planted controls (plan "Planted controls"): inexpensive fixtures with known answers, run as telemetry.
 
-* planted mixtures: support evidence demonstrates a known component subset at known strengths;
+* planted mixtures: support evidence demonstrates a known component-token distribution;
 * perturbation recovery: tuned mixtures with dropped or swapped parts (`targets.perturb_mixture`);
 * negative controls: shuffled or irrelevant evidence must not yield query gains; permuting descriptions alone must
   break planted recovery, permuting descriptions together with their tensors and weights must not.
@@ -17,15 +17,16 @@ import torch
 from . import LearnedOptimizerError
 
 
-def planted_mixture(view, *, rng_seed, components=2, max_int=9):
-    """A known integer array over a view's available slots."""
+def planted_mixture(view, *, rng_seed, components=2):
+    """A known component-token distribution (null first) over a view's available slots."""
     rng = random.Random(rng_seed)
     free = [slot for slot, flag in enumerate(view.available) if flag]
     if len(free) < components:
         raise LearnedOptimizerError('the view has too few available slots for the planted mixture')
-    values = [0] * len(view.slots)
-    for slot in rng.sample(free, components):
-        values[slot] = rng.choice([n for n in range(-max_int, max_int + 1) if n])
+    values = [0.] * (1 + len(view.slots))
+    weights = [rng.uniform(.5, 1.) for _ in range(components)]
+    for slot, weight in zip(rng.sample(free, components), weights):
+        values[1 + slot] = weight / sum(weights)
     return values
 
 
@@ -50,14 +51,14 @@ def planted_rows(engine, adapter_id, prompts, *, binding, prefix='planted'):
     return rows
 
 
-def recovery(predicted, planted):
-    """Exact slot agreement and L1 error of a recovered integer array."""
+def recovery(predicted, planted, *, threshold=.05):
+    """Total-variation distance of a recovered distribution and the share of the planted support it puts at least
+    ``threshold`` probability on."""
     if len(predicted) != len(planted):
-        raise LearnedOptimizerError('recovered and planted arrays differ in length')
+        raise LearnedOptimizerError('recovered and planted distributions differ in length')
     support = [slot for slot, value in enumerate(planted) if value]
-    return {'exact': sum(int(a == b) for a, b in zip(predicted, planted)) / len(planted),
-            'supportRecall': sum(int(predicted[slot] != 0 and (predicted[slot] > 0) == (planted[slot] > 0)) for slot in support) / max(1, len(support)),
-            'l1': sum(abs(a - b) for a, b in zip(predicted, planted))}
+    return {'totalVariation': sum(abs(a - b) for a, b in zip(predicted, planted)) / 2,
+            'supportRecall': sum(int(predicted[slot] >= threshold) for slot in support) / max(1, len(support))}
 
 
 def permute_view(view, permutation, *, aligned):

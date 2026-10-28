@@ -1,16 +1,15 @@
 """In-bank fits and hindsight focus labels (plan "Comparable and plentiful targets" tier 2, "How analysis learns").
 
-With a pinned bank snapshot, fit each scope's coefficients and the program's soft states directly on the support
-evidence by gradient through the exact composition. Two phases:
+With a pinned bank snapshot, fit each scope's component-token distribution, its group gains and the program's soft
+states directly on the support evidence by gradient through the exact composition (`mixture`):
 
-1. per-slot mean strengths ``m`` with the head's bounded centered group modulation, ``c_kg = m_k (1 + delta_kg)``,
-   and the soft states, Adam on the support loss (only sign-consistent, executable coefficients are explored);
-2. integers frozen at ``quantize(m)``, then refinement and modulation trained through exactly the head's bounded
-   functions (`head.executed`) from free per-slot ``u, v``.
+1. free logits over [null, view slots] (unavailable slots masked before the softmax) and free gain logits, with
+   ``c_kg = gain_max * sigmoid(gain_logit_g) * softmax(logits)_k``; Adam on the support loss;
+2. the top-p set of that distribution is fixed and the fit continues on the renormalized truncated law, exactly the
+   law the optimizer executes.
 
-The phase-2 result is exactly representable by the token grid plus the coefficient head, with no projection
-residual; its ``(n, rho, delta)`` are the mixture-token and head-regression labels. Refit after each bank
-publication instead of carrying stale labels.
+The phase-2 result is exactly representable by the component tokens and gains; its truncated distribution and gains are
+the KL and gain labels. Refit after each bank publication instead of carrying stale labels.
 """
 from __future__ import annotations
 
@@ -19,10 +18,9 @@ from dataclasses import dataclass
 import torch
 
 from . import LearnedOptimizerError
-from .head import executed, modulation, refinement, shares_from_norms
-from .numbers import quantize
+from .mixture import coefficients, distribution, gain_bias
 
-FIT_SCHEMA = 'natlang.lopt.in-bank-fit/1'
+FIT_SCHEMA = 'natlang.lopt.in-bank-fit/2'
 
 
 class SupportSet:
@@ -100,26 +98,25 @@ def placeholder_adapters(engine, bank, scopes, owner=None):
 
 
 def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, learning_rate=5e-2,
-                state_learning_rate=1e-3, refine_steps=30, beta=.5, init=None, train_states=True, fixed_states=(),
+                state_learning_rate=1e-3, refine_steps=30, init=None, train_states=True, fixed_states=(),
                 fixed_adapters=None):
-    """Fit in the learner's parameterization. ``arrays``: list of `ScopeArray`; ``soft_states``: ``{soft key: state
+    """Fit in the learner's parametrization. ``arrays``: list of `ScopeArray`; ``soft_states``: ``{soft key: state
     id}`` trained jointly when ``train_states`` (except ``fixed_states``, held at their incoming value);
-    ``fixed_adapters``: scope -> adapter that runs unchanged in every stack (scopes outside the fit); ``init``: scope -> (K,) initial mean strengths. Returns labels and
-    history.
-
-    Phase 1 trains a per-slot mean strength ``m`` (in grid-free units) and the head's bounded centered modulation
-    ``c_kg = m_k (1 + delta_kg)``: only sign-consistent coefficients the grid and head can execute are explored.
-    Phase 2 quantizes ``m`` into ``(n, rho)`` and refines ``u, v`` (and the states) through exactly `head.executed`."""
+    ``fixed_adapters``: scope -> adapter that runs unchanged in every stack (scopes outside the fit); ``init``: scope ->
+    a parent mixture ``{'distribution', 'gain'}`` or (M,) projected coefficients (`targets.project_adapter`).
+    Returns labels and history."""
     from ...serve.native_grad import _leaf_block
+    fmt = bank.mixture_format
     G = len(bank.group_labels)
-    shares_all = shares_from_norms(bank.group_norms())
-    means = {array.scope: torch.zeros(len(array.slots), requires_grad=True) for array in arrays}
-    v = {array.scope: torch.zeros(len(array.slots), G, requires_grad=True) for array in arrays}
-    if init:
-        with torch.no_grad():
-            for scope, value in init.items():
-                means[scope].copy_(torch.as_tensor(value, dtype=torch.float32))
-    masks = {array.scope: torch.tensor(array.available, dtype=torch.float32) for array in arrays}
+    logits, gain_logits, masks = {}, {}, {}
+    for array in arrays:
+        masks[array.scope] = torch.tensor([True, *array.available])
+        logits[array.scope] = torch.zeros(1 + len(array.slots))
+        gain_logits[array.scope] = torch.full((G,), gain_bias(fmt))
+    for scope, value in (init or {}).items():
+        logits[scope], gain_logits[scope] = _initial(value, masks[scope], fmt, G)
+    for tensor in (*logits.values(), *gain_logits.values()):
+        tensor.requires_grad_(True)
     states = {}
     for key, state_id in (soft_states or {}).items():
         block, values = _leaf_block(engine.store.get_native_state(state_id).block)
@@ -129,57 +126,65 @@ def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, le
         states[key] = (block, state_id, values)
     soft_blocks = {key: (block, state_id) for key, (block, state_id, _) in states.items()}
     adapters = {**(fixed_adapters or {}), **{array.scope: array.adapter for array in arrays}}
+    keep = {}
+    def masked(scope):
+        return torch.where(masks[scope], logits[scope], torch.full_like(logits[scope], -torch.inf))
+    def law(scope):
+        probs = distribution(masked(scope), fmt.top_p, keep[scope])[0] if scope in keep else torch.softmax(masked(scope), -1)
+        return probs, fmt.gain_max * torch.sigmoid(gain_logits[scope])
+    def executed():
+        return {array.scope: coefficients(*law(array.scope)) for array in arrays}
     def leaves(values):
         return {array.adapter: bank.adapter_tensors(bank.composed_cores(array.slots, values[array.scope], offset=array.offset))
                 for array in arrays}
-    def continuous():
-        return {array.scope: (means[array.scope] * masks[array.scope])[:, None]
-                * (1 + modulation(v[array.scope], shares_all[array.slots], beta)) for array in arrays}
     state_params = [value for _, _, values in states.values() for value in values.values() if value.requires_grad]
-    groups = [{'params': [*means.values(), *v.values()], 'lr': learning_rate}]
-    if state_params:
-        groups.append({'params': state_params, 'lr': state_learning_rate})
-    optimizer = torch.optim.Adam(groups)
-    history = []
-    for _ in range(steps):
-        optimizer.zero_grad(set_to_none=True)
-        history.append(support.accumulate(adapters, lambda: leaves(continuous()), soft_blocks))
-        optimizer.step()
-    labels, u = {}, {}
-    for array in arrays:
-        integers, rhos, saturated = [], [], 0
-        for slot, value in enumerate(means[array.scope].detach().tolist()):
-            n, rho, sat = quantize(value, bank.number_format) if array.available[slot] else (0, 0., False)
-            integers.append(n); rhos.append(rho); saturated += sat
-        u[array.scope] = torch.atanh(torch.tensor(rhos).clamp(-.499, .499) * 2).requires_grad_(True)
-        v[array.scope] = v[array.scope].detach().clone().requires_grad_(True)
-        lost = sum(1 for n, value, free in zip(integers, means[array.scope].tolist(), array.available) if free and n == 0 and value != 0)
-        labels[array.scope] = {'integers': integers, 'shares': shares_all[array.slots], 'saturated': saturated,
-                               'roundedToZero': lost}
-    exact = lambda: {array.scope: executed(labels[array.scope]['integers'], u[array.scope], v[array.scope],
-                                           labels[array.scope]['shares'], step=bank.number_format.step, beta=beta)
-                     for array in arrays}
-    refine = torch.optim.Adam([*u.values(), *v.values(), *state_params], lr=learning_rate)
-    refined = []
-    for _ in range(refine_steps):
-        refine.zero_grad(set_to_none=True)
-        refined.append(support.accumulate(adapters, lambda: leaves(exact()), soft_blocks))
-        refine.step()
+    def run(count):
+        groups = [{'params': [*logits.values(), *gain_logits.values()], 'lr': learning_rate}]
+        if state_params:
+            groups.append({'params': state_params, 'lr': state_learning_rate})
+        optimizer, history = torch.optim.Adam(groups), []
+        for _ in range(count):
+            optimizer.zero_grad(set_to_none=True)
+            history.append(support.accumulate(adapters, lambda: leaves(executed()), soft_blocks))
+            optimizer.step()
+        return history
+    history = run(steps)
     with torch.no_grad():
-        final = exact()
+        for array in arrays:
+            keep[array.scope] = distribution(masked(array.scope), fmt.top_p)[1]
+    refined = run(refine_steps)
+    with torch.no_grad():
+        final = executed()
         fitted_loss = support.accumulate(adapters, lambda: leaves(final), soft_blocks, backward=False)
     out = {}
     for array in arrays:
-        scope = array.scope
-        shares = labels[scope]['shares']
-        out[scope] = {'integers': labels[scope]['integers'], 'rho': refinement(u[scope]).detach(),
-                      'delta': modulation(v[scope], shares, beta).detach(), 'u': u[scope].detach(), 'v': v[scope].detach(),
-                      'executed': final[scope].detach(), 'saturated': labels[scope]['saturated'],
-                      'roundedToZero': labels[scope]['roundedToZero'], 'means': means[scope].detach()}
+        with torch.no_grad():
+            probs, gains = law(array.scope)
+        out[array.scope] = {'distribution': probs.detach(), 'gain': gains.detach(), 'kept': keep[array.scope].tolist(),
+                            'executed': final[array.scope].detach(), 'support': int(keep[array.scope][1:].sum())}
     new_states = {key: _updated_block(block, values) for key, (block, _, values) in states.items()
                   if key not in fixed_states} if train_states else {}
     return {'schema': FIT_SCHEMA, 'bank': bank.snapshot, 'arrays': out, 'states': new_states,
-            'loss': {'continuous': history, 'refined': refined, 'final': fitted_loss}, 'beta': beta}
+            'loss': {'continuous': history, 'refined': refined, 'final': fitted_loss}}
+
+
+def _initial(value, mask, fmt, groups):
+    """Free logits and gain logits from a parent mixture or from projected signed coefficients (their positive part:
+    the bank absorbs signs; a projection without positive mass starts uniform)."""
+    import math
+    logit = lambda share: math.log(share / (1 - share))
+    if isinstance(value, dict):
+        probs = torch.as_tensor(value['distribution'], dtype=torch.float32)
+        gains = torch.as_tensor(value['gain'], dtype=torch.float32)
+        logits = torch.where(probs > 0, probs.clamp_min(1e-12).log(), torch.full_like(probs, -12.))
+        return logits, torch.tensor([logit(min(max(float(g) / fmt.gain_max, 1e-4), 1 - 1e-4)) for g in gains])
+    positive = torch.as_tensor(value, dtype=torch.float32).clamp_min(0) * mask[1:]
+    total = float(positive.sum())
+    if total <= 0:
+        return torch.zeros(len(mask)), torch.full((groups,), gain_bias(fmt))
+    probs = torch.cat([torch.zeros(1), positive / total])
+    share = min(max(total / fmt.gain_max, 1e-4), 1 - 1e-4)
+    return (probs + 1e-3).log(), torch.full((groups,), logit(share))
 
 
 def _updated_block(block, values):

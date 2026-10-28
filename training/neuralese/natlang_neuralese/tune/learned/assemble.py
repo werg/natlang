@@ -28,21 +28,23 @@ def store_fitted_states(engine, states, owner=None):
 
 
 def training_target(engine, bank, *, manifest, rows, contract, view, soft_texts, incoming_states, bank_views,
-                    target_integers, target_adapters, target_states, target_rho=None, target_delta=None,
-                    placeholders, digests=(), focus=None, extra_slots=0, target_factors=None, tier='in-bank-fit',
+                    target_adapters, target_states, target_mixtures=None, placeholders, digests=(), focus=None, extra_slots=0, target_factors=None, tier='in-bank-fit',
                     incoming_adapters=None, program=None, lineage=None, key_evidence=None):
     """``soft_texts``: soft key -> its binding text; ``incoming_states``: soft key -> current state id;
     ``incoming_adapters``: scope -> the adapter the mixture revises (slicing the bank basis; absent: zero);
     ``bank_views``: scope -> `views.BankView`; ``target_*``: scope- or key-indexed target tuple, with
     ``target_factors``: scope -> the adapter whose exact effective update the decoded weight loss approaches;
+    ``target_mixtures``: scope -> ``{'distribution', 'gain'}`` component-token labels (absent: no mixture label);
     ``tier``: one of `TIERS`, or None for a request context without labels."""
     if tier is not None and tier not in TIERS:
         raise LearnedOptimizerError(f'unknown target tier {tier}')
     for scope, bank_view in bank_views.items():
         if bank_view.snapshot != bank.snapshot:
             raise LearnedOptimizerError(f'view of {scope} is bound to another bank snapshot')
-        if len(target_integers[scope]) != len(bank_view.slots):
-            raise LearnedOptimizerError(f'target array of {scope} differs from its view length')
+        label = (target_mixtures or {}).get(scope)
+        if label is not None and (len(label['distribution']) != 1 + len(bank_view.slots)
+                                  or len(label['gain']) != len(bank.group_labels)):
+            raise LearnedOptimizerError(f'mixture label of {scope} differs from its view length or group count')
     focus = focus if focus is not None else focus_baseline(view)
     if key_evidence is None:
         key_evidence = key_evidence_rule(view, focus)
@@ -61,10 +63,11 @@ def training_target(engine, bank, *, manifest, rows, contract, view, soft_texts,
                'target_state': target_states.get(key)} for key in sorted(soft_texts)]
     arrays = []
     for scope in sorted(bank_views):
-        item = {'view': bank_views[scope].as_json(), 'integers': [int(x) for x in target_integers[scope]]}
-        if target_rho is not None and scope in target_rho:
-            item['rho'] = [float(x) for x in target_rho[scope]]
-            item['delta'] = [[float(x) for x in row] for row in target_delta[scope]]
+        item = {'view': bank_views[scope].as_json()}
+        label = (target_mixtures or {}).get(scope)
+        if label is not None:
+            item['distribution'] = [float(x) for x in label['distribution']]
+            item['gain'] = [float(x) for x in label['gain']]
         arrays.append(item)
     scales = field_scales([engine.store.get_native_state(state).block for state in target_states.values()]) if target_states else {}
     scales = {f'{index}.{name}': value for (index, name), value in scales.items()}  # JSON-serializable

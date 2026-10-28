@@ -1,13 +1,11 @@
 """LFM3-1.7B support of the tuner and the joint learned optimizer: the native target table and bank groups on the LFM3
-layer inventory, the deploy-quantized targets, and the number grid's spelling in the real LFM3 tokenizer."""
-import glob
+layer inventory, the deploy-quantized targets and the native LFM3 port's target matrices."""
 import json
 from pathlib import Path
 
 import pytest
 
 from natlang_neuralese.tune import targets as T
-from natlang_neuralese.tune.learned import numbers as N
 from natlang_neuralese.tune.learned.bank import target_groups
 
 PINNED = Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
@@ -90,17 +88,25 @@ def test_lfm3_bank_groups_are_depth_quarters_by_matrix_family():
     assert labels[index['port.hf.model.layers.23.feed_forward.w3.weight']] == 'q3:mlp'
 
 
-def test_real_lfm3_tokenizer_spells_the_grid_as_sign_then_digit():
-    paths = glob.glob(str(PINNED / 'tokenizer.json'))
-    if not paths:
-        pytest.skip('pinned LFM3-1.7B tokenizer is not cached here')
-    from tokenizers import Tokenizer
-    tokenizer = Tokenizer.from_file(paths[0])
-    encode = lambda text: tokenizer.encode(text, add_special_tokens=False).ids
-    tokens = N.GridTokens.from_encoder(encode)
-    assert (tokens.open, tokens.close, tokens.separator, tokens.positive, tokens.negative) == (67, 69, 20, 229, 640)
-    assert tokens.digits == tuple(range(24, 34))
-    for values in ([3, 0, -2], [-9, 9, 0, 1], [0]):
-        assert encode(N.text(values)) == tokens.spell(values)
-    # The forced template parses back exactly.
-    assert N.parse(tokens, tokens.spell([4, -1, 0]), [True, True, False]) == [4, -1, 0]
+def test_native_lfm3_port_inventory_is_the_lfm3_table(tmp_path):
+    """The actual native LFM3 port's target matrices (tiny vendored model through the native loader)."""
+    import torch
+    from tokenizers import Tokenizer, models, pre_tokenizers
+    from transformers import PreTrainedTokenizerFast
+    from test_lfm3_port import LFM3_TINY_TEMPLATE, tiny_lfm3_hf
+    from natlang_neuralese.model.native_adapters import target_parameters
+    from natlang_neuralese.model.native_model import load_native_model
+    tiny_lfm3_hf().save_pretrained(tmp_path, safe_serialization=True)
+    tokenizer = Tokenizer(models.WordLevel({'[UNK]': 0, 'sample': 1, '<think>': 2, '</think>': 3}, unk_token='[UNK]'))
+    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+    hf_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer, unk_token='[UNK]')
+    hf_tokenizer.chat_template = LFM3_TINY_TEMPLATE
+    hf_tokenizer.save_pretrained(tmp_path)
+    model, _, _, config = load_native_model(tmp_path, rank=4, dtype=torch.float32)
+    names = sorted(target_parameters(model))
+    layer_types = model.port.layer_types
+    assert config['architecture'] == 'lfm3' and names == lfm3_inventory(layer_types)
+    assert T.student_family(names) == 'lfm3'
+    mapped, kinds = T.module_map(names)
+    labels, _ = target_groups(names, kinds, len(layer_types))
+    assert set(mapped) == set(names) and {label.split(':')[1] for label in labels} == {'attention', 'convolution', 'mlp'}

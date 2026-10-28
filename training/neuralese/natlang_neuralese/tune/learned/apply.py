@@ -8,7 +8,7 @@ state.json, "store": operation artifact store, "scopes": {level: view size}, "st
 Services (one implementation, used by the crisp episode here and by the Natlang `adapt` program through
 ``python -m natlang_neuralese.tune.learned service``): ``evidence`` (the permitted view), ``propose`` (a complete
 learned bundle), ``evaluate`` (exact support loss of a bundle), ``refine`` (local in-bank refinement from a bundle),
-``retrieve`` (gradient-free mixing over the bank view, the retrieval baseline). The crisp operator policy (the
+``retrieve`` (the best single component token per scope on the support loss, the retrieval baseline). The crisp operator policy (the
 pluggable default) proposes, deterministically first and then by sampling, keeps the better bundle on the support
 evidence and stops after ``patience`` steps without improvement or after ``K`` steps (structural measure).
 """
@@ -21,6 +21,7 @@ from pathlib import Path
 import torch
 
 from . import LearnedOptimizerError
+from . import mixture as M
 from ..build import export_release_nodes, load_plan, persist_artifacts, _write
 
 
@@ -35,7 +36,6 @@ class Context:
         from .bank import load_bank
         from .program import ProgramContext, read_build
         from .trainer import OuterRecipe, OuterTrainer
-        from .__main__ import _grid
         self.plan, _, _, _ = load_plan(plan_path)
         self.plan_path = str(Path(plan_path).resolve())
         self.learned = self.plan.get('learned')
@@ -51,8 +51,7 @@ class Context:
         learned, engine = self.learned, self.engine
         self.bank = load_bank(engine, json.loads(Path(learned['bank']).read_text())['bank'])
         state = json.loads(Path(learned['state']).read_text())
-        self.trainer = OuterTrainer(engine, self.bank, _grid(engine, {**config, **learned}),
-                                    OuterRecipe.from_json(state['recipe']), [], state=state)
+        self.trainer = OuterTrainer(engine, self.bank, OuterRecipe.from_json(state['recipe']), [], state=state)
         incoming = learned.get('incoming')
         self.pc = ProgramContext(engine, self.bank, plan_path, out=out, scopes=learned['scopes'], build=incoming)
         pc = self.pc
@@ -134,12 +133,10 @@ class Context:
         all_adapters = {**self._parent_adapters(parent), **adapters}
         all_mixtures = {**(parent or {}).get('loraMixtures', {}), **mixtures}
         for scope in self.scopes:
-            if scope not in all_mixtures:  # an unrevised scope of the incoming bundle: an all-zero mixture over it
-                from .views import mixture_encoding
+            if scope not in all_mixtures:  # an unrevised scope of the incoming bundle: the null token, no change
                 view = self.views[scope]
-                all_mixtures[scope] = mixture_encoding(view, [0] * len(view.slots), None,
-                                                       torch.zeros(len(view.slots), len(self.bank.group_labels)),
-                                                       self.incoming_adapters.get(scope))
+                all_mixtures[scope] = self._encoding(scope, M.one_hot(len(view.slots), M.NULL),
+                                                     torch.zeros(len(self.bank.group_labels)), chosen=M.NULL)
                 all_adapters[scope] = self.bank.compose_adapter(self.engine, self.bank.composed_cores(
                     list(view.slots), torch.zeros(len(view.slots), len(self.bank.group_labels)),
                     offset=self.bank.incoming(self.engine, self.context, scope))).id
@@ -164,21 +161,26 @@ class Context:
         context = dict(context, parent=parent or self.incoming_bundle(), program=context['program'],
                        writes=[w for w in context['writes'] if w['key'] in keys],
                        arrays=[a for a in context['arrays'] if a['view']['scope'] in scopes])
-        return propose(self.trainer, context, sample=sample, seed=seed)
+        return propose(self.trainer, context, choose='sample' if sample else None, seed=seed)
+
+    def _encoding(self, scope, probs, gains, *, chosen=None):
+        """The bundle mixture of one scope executing ``probs`` (null first) with ``gains``."""
+        from .views import mixture_encoding
+        executed = M.coefficients(probs, gains)
+        receipt = M.receipt(None, list(self.views[scope].component_ids), None, probs, probs > 0, gains, executed, chosen=chosen)
+        return mixture_encoding(self.views[scope], receipt, executed, self.incoming_adapters.get(scope))
 
     def refine(self, parent, *, steps=10, operations=None):
         """Local in-bank refinement of the selection from ``parent``'s mixtures and states (a gradient operator inside
         the episode); everything else runs at its parent value."""
         from .fit import fit_in_bank
-        from .views import mixture_encoding
-        from .head import receipt as head_receipt
         keys, scopes = self.selection(operations)
         parents = self._parent_adapters(parent)
         arrays = [array for array in self.pc.scope_arrays(self.incoming_adapters) if array.scope in scopes]
         init = None
         if parent is not None:
-            init = {array.scope: torch.tensor([int(w) * self.bank.number_format.step
-                                               for w in parent['loraMixtures'][array.scope]['weights']]) for array in arrays}
+            init = {array.scope: {'distribution': parent['loraMixtures'][array.scope]['distribution'],
+                                  'gain': parent['loraMixtures'][array.scope]['gains']} for array in arrays}
         soft = {key: state for key, (_, state) in self._states_of(parent).items()}
         result = fit_in_bank(self.engine, self.bank, self.support, arrays, soft_states=soft, steps=steps,
                              refine_steps=max(1, steps // 2), init=init, fixed_states=set(soft) - keys,
@@ -188,31 +190,28 @@ class Context:
             fitted = result['arrays'][array.scope]
             adapters[array.scope] = self.bank.compose_adapter(self.engine, self.bank.composed_cores(
                 array.slots, fitted['executed'], offset=array.offset)).id
-            mixtures[array.scope] = mixture_encoding(self.views[array.scope], fitted['integers'],
-                                                     head_receipt(None, fitted['integers'], fitted['u'], fitted['v'], fitted['executed'], mode='head'),
-                                                     fitted['executed'], self.incoming_adapters.get(array.scope))
+            mixtures[array.scope] = self._encoding(array.scope, fitted['distribution'], fitted['gain'])
         states = {key: self.engine.store.put_native_state(block).id for key, block in result['states'].items()}
         return self._carry(parent, adapters, mixtures, states, actor='in-bank-refinement', extra={'loss': result['loss']['final']})
 
     def retrieve(self, parent, *, rounds=1, operations=None):
-        """Gradient-free mixing over each selected scope's view (the retrieval baseline): coordinate search over grid
-        integers on the exact support loss, from the parent's integers; other scopes run at their parent adapters."""
-        from .head import executed, shares_from_norms
-        from .views import mixture_encoding
+        """The retrieval baseline without gradients: per selected scope, the single best component token (or the
+        null token) at its parent's gains (or the format's initial gain) on the exact support loss; ``rounds``
+        coordinate passes over the scopes; other scopes run at their parent adapters."""
         _, scopes = self.selection(operations)
         selected = [scope for scope in self.scopes if scope in scopes]
         parents = self._parent_adapters(parent)
-        shares = shares_from_norms(self.bank.group_norms())
-        current = {scope: list((parent or {}).get('loraMixtures', {}).get(scope, {}).get('weights', [0] * len(self.views[scope].slots)))
-                   for scope in selected}
-        def coefficients_for(values, scope):
-            slots = list(self.views[scope].slots)
-            return executed(values[scope], torch.zeros(len(slots)), torch.zeros(len(slots), len(self.bank.group_labels)),
-                            shares[slots], step=self.bank.number_format.step, beta=.5, head=False)
-        def loss_of(values):
+        fmt, G = self.bank.mixture_format, len(self.bank.group_labels)
+        gains = {scope: torch.tensor((parent or {}).get('loraMixtures', {}).get(scope, {}).get('gains')
+                                     or [fmt.gain_max * fmt.gain_init] * G) for scope in selected}
+        current = {scope: M.NULL for scope in selected}
+        def cores(scope, token):
+            view = self.views[scope]
+            return self.bank.composed_cores(list(view.slots), M.coefficients(M.one_hot(len(view.slots), token), gains[scope]),
+                                            offset=self.bank.incoming(self.engine, self.context, scope))
+        def loss_of(choice):
             # Trials run through live leaves on the placeholder adapters; only the selected mixture is stored.
-            leaves = {self.placeholders[scope]: self.bank.adapter_tensors(self.bank.composed_cores(list(self.views[scope].slots),
-                      coefficients_for(values, scope), offset=self.bank.incoming(self.engine, self.context, scope))) for scope in selected}
+            leaves = {self.placeholders[scope]: self.bank.adapter_tensors(cores(scope, choice[scope])) for scope in selected}
             adapters = {scope: self.placeholders[scope] if scope in scopes else parents[scope] for scope in self.scopes}
             with torch.no_grad():
                 return self.support.accumulate(adapters, lambda: leaves, self._states_of(parent), backward=False)
@@ -220,21 +219,17 @@ class Context:
         for _ in range(rounds):
             for scope in selected:
                 for slot, free in enumerate(self.views[scope].available):
-                    if not free:
-                        continue
-                    for delta in (1, -1):
-                        trial = {s: list(v) for s, v in current.items()}
-                        trial[scope][slot] = max(-self.bank.number_format.max_int, min(self.bank.number_format.max_int, trial[scope][slot] + delta))
+                    if free:
+                        trial = {**current, scope: slot}
                         loss = loss_of(trial)
                         if loss < best_loss:
                             best_loss, current = loss, trial
         adapters, mixtures = {}, {}
         for scope in selected:
-            coefficients = coefficients_for(current, scope)
-            adapters[scope] = self.bank.compose_adapter(self.engine, self.bank.composed_cores(
-                list(self.views[scope].slots), coefficients, offset=self.bank.incoming(self.engine, self.context, scope))).id
-            mixtures[scope] = mixture_encoding(self.views[scope], current[scope], None, coefficients, self.incoming_adapters.get(scope))
-        return self._carry(parent, adapters, mixtures, {}, actor='gradient-free-mixing'), best_loss
+            adapters[scope] = self.bank.compose_adapter(self.engine, cores(scope, current[scope])).id
+            mixtures[scope] = self._encoding(scope, M.one_hot(len(self.views[scope].slots), current[scope]), gains[scope],
+                                             chosen=current[scope])
+        return self._carry(parent, adapters, mixtures, {}, actor='single-component-retrieval'), best_loss
 
 
 def episode(context, *, steps, patience, seed):

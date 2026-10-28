@@ -26,7 +26,6 @@ DOMAINS = ['access-request', 'refund-decision', 'dock-assignment']
 
 def build(out):
     from test_native_serving_adapters import engine_fixture
-    from test_learned_optimizer_writer import GRID
     from natlang_neuralese.tune import supply
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -44,8 +43,7 @@ def build(out):
             (directory / '.natlang' / 'tune').mkdir(parents=True, exist_ok=True)
             (directory / '.natlang' / 'tune' / 'splits.json').write_text(json.dumps({'schema': 'natlang.tune-split/v1', 'components': {
                 group: ('train', 'train', 'development', 'confirmation')[index % 4] for index, group in enumerate(groups)}}))
-    fixture = {'checkpoint': str(out / 'model' / 'native.pt'), 'programs': str(programs),
-               'grid_tokens': {**GRID.__dict__, 'digits': list(GRID.digits)}}
+    fixture = {'checkpoint': str(out / 'model' / 'native.pt'), 'programs': str(programs)}
     (out / 'fixture.json').write_text(json.dumps(fixture, indent=1))
     print(json.dumps({'command': 'fixture', **fixture}))
 

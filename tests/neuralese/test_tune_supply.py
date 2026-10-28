@@ -73,7 +73,8 @@ def test_privileged_references_cover_training_roots_only_with_shared_facts(tmp_p
             example = examples[json.dumps([row['group'], row['input']], sort_keys=True)]
             assert row['result'] == example['expected']
             kinds = [fact['kind'] for fact in row['facts']]
-            assert kinds.count('expected_result') == 1 and json.dumps(example['expected']) in row['facts'][0]['text']
+            expected = example['expected'] if isinstance(example['expected'], str) else json.dumps(example['expected'])
+            assert kinds.count('expected_result') == 1 and expected in row['facts'][0]['text']
             # Every natural-language child gets its verified value bound to a match string from its own instruction.
             children = [fact for fact in row['facts'] if fact['kind'] == 'child_value']
             assert len(children) == 1 + bool(program.classify)

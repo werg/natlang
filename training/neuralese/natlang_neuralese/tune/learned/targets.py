@@ -37,7 +37,7 @@ def tuner_boundary(trainer, *, before_state, label):
 def project_adapter(bank, engine, adapter):
     """Basis coordinates of any adapter's exact effective update, with the share of its relative energy the bank
     basis captures and (with components) the least-squares mixture and its residual share. Weight-space projection
-    initializes fits and grows the bank; it is never a mixture-token label. An adapter slicing the bank basis is
+    initializes fits and grows the bank; it is never a component-token label. An adapter slicing the bank basis is
     captured exactly."""
     from ..trainer import adapter_factors
     factors = {name: value for name, value in adapter_factors(engine, adapter).items() if name in bank.basis.left}
@@ -52,8 +52,8 @@ def project_adapter(bank, engine, adapter):
 
 # -- target builders over `program.ProgramContext` ----------------------------------------------------------------
 def fit_labels(pc, *, incoming_states, incoming_adapters=None, init=None, fit=None, train_states=True):
-    """An in-bank fit of the context's support rows from the incoming bundle: mixture-token and head labels and the
-    fitted states, composed into stored target adapters."""
+    """An in-bank fit of the context's support rows from the incoming bundle: component-token distribution and gain
+    labels and the fitted states, composed into stored target adapters."""
     from .assemble import store_fitted_states
     from .fit import fit_in_bank
     arrays = pc.scope_arrays(incoming_adapters)
@@ -62,11 +62,10 @@ def fit_labels(pc, *, incoming_states, incoming_adapters=None, init=None, fit=No
     states = store_fitted_states(pc.engine, result['states'])
     adapters = {array.scope: pc.bank.compose_adapter(pc.engine, pc.bank.composed_cores(
         array.slots, result['arrays'][array.scope]['executed'], offset=array.offset)).id for array in arrays}
-    labels = {'integers': {s: result['arrays'][s]['integers'] for s in pc.scopes}, 'adapters': adapters, 'states': states,
-              'rho': {s: result['arrays'][s]['rho'].tolist() for s in pc.scopes},
-              'delta': {s: result['arrays'][s]['delta'].tolist() for s in pc.scopes}}
-    report = {'loss': result['loss'], 'saturated': {s: result['arrays'][s]['saturated'] for s in pc.scopes},
-              'roundedToZero': {s: result['arrays'][s]['roundedToZero'] for s in pc.scopes}}
+    labels = {'mixtures': {s: {'distribution': result['arrays'][s]['distribution'].tolist(),
+                               'gain': result['arrays'][s]['gain'].tolist()} for s in pc.scopes},
+              'adapters': adapters, 'states': states}
+    report = {'loss': result['loss'], 'support': {s: result['arrays'][s]['support'] for s in pc.scopes}}
     return labels, report
 
 
@@ -83,7 +82,7 @@ def free_tune_targets(pc, *, fit=None, incremental=True, lineage=None, increment
     """Tier 1 from the context's tuner build: the final residual from the common incoming bundle and, when the fit
     sliced this bank's basis and recorded its update boundaries, each committed update as a revision of the partly
     tuned bundle before it. The tuned bundle is the behavior target (distillation, soft states and exact decoded
-    weights); mixture labels are an in-bank fit of the same support rows started from its weight projection.
+    weights); component-token labels are an in-bank fit of the same support rows started from its weight projection.
     ``incremental_max`` keeps that many evenly spaced update boundaries (each is one more labeled fit)."""
     from .program import read_build
     if pc.build is None:
@@ -125,7 +124,7 @@ def free_tune_targets(pc, *, fit=None, incremental=True, lineage=None, increment
                 init[scope] = [mixture[slot] if free else 0. for slot, free in zip(pc.views[scope].slots, pc.views[scope].available)]
         labels, report = fit_labels(pc, incoming_states=episode['incomingStates'], incoming_adapters=incoming_adapters,
                                     init=init or None, fit=fit)
-        # The free tune itself is the behavior and weight target; the in-bank fit supplies the mixture tokens.
+        # The free tune itself is the behavior and weight target; the in-bank fit supplies the component tokens.
         labels.update(adapters=target_adapters, states=episode['targetStates'], factors=target_adapters)
         out.append(pc.request(tier='free-tune', incoming_states=episode['incomingStates'], incoming_adapters=incoming_adapters,
                               labels=labels, lineage={**source, 'episode': {k: v for k, v in episode.items() if k == 'kind' or k == 'boundary'},
@@ -170,15 +169,18 @@ def episode_variants(problem, *, rng_seed, subsets=4, include_empty=True, starts
     return episodes
 
 
-def perturb_mixture(integers, available, *, mode, rng_seed):
-    """Drop or swap parts of a tuned mixture (recovery episodes); unavailable slots stay zero."""
+def perturb_mixture(probs, available, *, mode, rng_seed):
+    """Drop or swap parts of a tuned component-token distribution (null first; recovery episodes): ``dropped`` moves
+    one used component's mass to the null token, ``swapped`` exchanges two available components' mass. Unavailable
+    slots stay zero."""
     rng = random.Random(rng_seed)
-    values = list(integers)
-    used = [slot for slot, value in enumerate(values) if value]
+    values = list(probs)
+    used = [slot for slot, value in enumerate(values[1:], 1) if value]
     if mode == 'dropped' and used:
-        values[rng.choice(used)] = 0
+        slot = rng.choice(used)
+        values[0], values[slot] = values[0] + values[slot], 0.
     elif mode == 'swapped':
-        free = [slot for slot, flag in enumerate(available) if flag]
+        free = [slot + 1 for slot, flag in enumerate(available) if flag]
         if len(free) >= 2:
             a, b = rng.sample(free, 2)
             values[a], values[b] = values[b], values[a]

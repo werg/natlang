@@ -19,7 +19,7 @@
 # Rerunning the same operation id skips succeeded stages; an operation stays bound to its checkpoint SHA.
 # Environment: LANE_ROOT (operations root), PROGRAMS (prepared supply), EXTRA_PROGRAMS (file: one further tune program
 # directory per line, e.g. the operational tuning programs, whose earlier verified teacher rows are reused),
-# PY, NODE, TUNE_BUDGET_GB/STAGE_BUDGET_GB (ledger claims).
+# PROTECTED_ROOT (checkout with the protected packets' cases, default this one), PY, NODE, TUNE_BUDGET_GB/STAGE_BUDGET_GB.
 set -euo pipefail
 HERE=$(dirname "$(realpath "$0")")
 REPO=$(realpath "$HERE/../../..")
@@ -119,7 +119,10 @@ json.dump({'defaultProfile': 'lfm3-lane', 'profiles': {'lfm3-lane': {'native': {
 PY
 fi
 
-stage supply "$STAGE_BUDGET_GB" privileged $ENV $PY -m natlang_neuralese.tune.supply privileged --programs "$PROGRAMS"
+# Privileged facts through the shared JOLT+ mechanism; custody against every registered evaluation-only packet of
+# this checkout's registry, read under PROTECTED_ROOT (the checkout holding runs/<packet>/cases.jsonl; fails closed).
+stage supply "$STAGE_BUDGET_GB" privileged $ENV $PY -m natlang_neuralese.tune.supply privileged --programs "$PROGRAMS" \
+  --registry "$REPO/training/neuralese_corpora.json" --root "${PROTECTED_ROOT:-$REPO}"
 
 # Program tunes, one ledger unit per program (CoreWeave sandboxes can run disjoint program shards of this loop).
 mapfile -t TUNE_PROGRAMS < <(python3 -c 'import json,sys; [print(sys.argv[1] + "/" + item["program"]) for item in json.load(open(sys.argv[1] + "/programs-prepared.json"))["programs"]]' "$PROGRAMS")
@@ -143,36 +146,43 @@ $ENV $PY -m natlang_neuralese.tune.learned.lane tune-result --program $program -
 done
 
 EXTRA=''
-[ $DRY = 1 ] && EXTRA=$(python3 -c 'import json,sys; g=json.load(open(sys.argv[1]))["grid_tokens"]; print(json.dumps({
- "*": {"device": "cpu", "dtype": "float32", "grid_tokens": g},
- "bank-init": {"rank": 4, "per_source_rank": 2, "component_rank": 2, "component_steps": 2, "step": 0.08},
+[ $DRY = 1 ] && EXTRA=$(python3 -c 'import json; print(json.dumps({
+ "*": {"device": "cpu", "dtype": "float32"},
+ "bank-init": {"rank": 4, "per_source_rank": 2, "component_rank": 2, "component_steps": 2},
  "corpus": {"fit": {"steps": 2, "refine_steps": 1}, "subsets": 2, "max_support": 4, "incremental_max": 1, "recipe": {"batch_rows": 4}},
  "train": {"steps": 3, "recipe": {"writer": {"kind": "free-lora", "rank": 2, "alpha": 2.0}, "batch_targets": 1, "publish_every": 2}},
  "meta": {"steps": 2, "refine_steps": 1, "fit": {"steps": 2, "refine_steps": 1},
-          "learned": {"grid_tokens": g, "scopes": {"tree": 3, "folder": 3, "lambda": 3}, "steps": 2, "patience": 2}}}))' "$O/fixture/fixture.json")
+          "learned": {"scopes": {"tree": 3, "folder": 3, "lambda": 3}, "steps": 2, "patience": 2}}}))')
 stage specs "$STAGE_BUDGET_GB" specs $ENV $PY -m natlang_neuralese.tune.learned.lane specs --op "$O" --checkpoint "$CK" \
   --templates "$HERE" $([ $DRY = 1 ] && echo "--held-fraction 0") ${EXTRA:+--extra "'$EXTRA'"}
 stage bank-init "$STAGE_BUDGET_GB" bank-init $ENV $PY -m natlang_neuralese.tune.learned bank-init --spec "$O/bank-init-spec.json"
 stage corpus "$STAGE_BUDGET_GB" corpus $ENV $PY -m natlang_neuralese.tune.learned corpus --spec "$O/corpus-spec.json"
 
-# Outer training cycles: train to each bank publication, adopt it, refit the labels against it, continue.
-while :; do
-  NEXT=$($ENV $PY -m natlang_neuralese.tune.learned.lane outer-next --op "$O" | tail -1)
-  field() { python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get(sys.argv[2], ""))' "$NEXT" "$1"; }
-  case $(field action) in
-    train) stage "outer-train-c$(field cycle)-s$(field step)" "$STAGE_BUDGET_GB" train \
-             $ENV $PY -m natlang_neuralese.tune.learned train --spec "$(field spec)" ;;
-    adopt) stage "adopt-c$(field cycle)" "$STAGE_BUDGET_GB" adopt-bank $ENV $PY -m natlang_neuralese.tune.learned adopt-bank --spec "$(field adopt)"
-           stage "corpus-c$(field cycle)" "$STAGE_BUDGET_GB" corpus $ENV $PY -m natlang_neuralese.tune.learned corpus --spec "$(field corpus)"
-           touch "$(field complete)" ;;
-    done)  echo "outer training: done at step $(field step) after $(field cycle) adopted publication(s)"; break ;;
-    *)     echo "outer-next gave no action: $NEXT" >&2; exit 1 ;;
-  esac
-done
+# Outer training cycles: train to each bank publication, adopt it, refit the labels against it, continue. They run
+# again after the meta-RL round: its policy update can publish a bank, which is adopted and refit before meta-examples.
+outer_cycles() {
+  local NEXT
+  while :; do
+    NEXT=$($ENV $PY -m natlang_neuralese.tune.learned.lane outer-next --op "$O" | tail -1)
+    field() { python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get(sys.argv[2], ""))' "$NEXT" "$1"; }
+    case $(field action) in
+      train) stage "outer-train-c$(field cycle)-s$(field step)" "$STAGE_BUDGET_GB" train \
+               $ENV $PY -m natlang_neuralese.tune.learned train --spec "$(field spec)" ;;
+      adopt) stage "adopt-c$(field cycle)" "$STAGE_BUDGET_GB" adopt-bank $ENV $PY -m natlang_neuralese.tune.learned adopt-bank --spec "$(field adopt)"
+             stage "corpus-c$(field cycle)" "$STAGE_BUDGET_GB" corpus $ENV $PY -m natlang_neuralese.tune.learned corpus --spec "$(field corpus)"
+             touch "$(field complete)" ;;
+      done)  echo "outer training: done at step $(field step) after $(field cycle) adopted publication(s)"; return 0 ;;
+      *)     echo "outer-next gave no action: $NEXT" >&2; exit 1 ;;
+    esac
+  done
+}
+outer_cycles
 
 # Outer meta-RL with real task outcomes (dry runs: shaping reward only), then the optimizer's own stage labels.
-stage outer-rl "$STAGE_BUDGET_GB" '' $ENV PY=$PY "NATLANG='$NATLANG'" $([ $DRY = 1 ] && echo SCORE=skip) $HERE/outer-rl-round.sh "$O"
+stage outer-rl "$STAGE_BUDGET_GB" '' $ENV PY=$PY "NATLANG='$NATLANG'" PER_CONTEXT=$([ $DRY = 1 ] && echo 2 || echo 4) \
+  $([ $DRY = 1 ] && echo SCORE=skip) $HERE/outer-rl-round.sh "$O"
 result_line "$O/outer-rl/policy.log" train || { echo "outer-rl: the policy update did not finish; see $O/outer-rl/policy.log" >&2; exit 1; }
+outer_cycles
 stage meta-examples "$STAGE_BUDGET_GB" meta-examples $ENV $PY -m natlang_neuralese.tune.learned meta-examples --spec "$O/meta-spec.json"
 $ENV $PY -m natlang_neuralese.tune.learned.lane summary --op "$O" | tee "$O/summary.json"
 # Then: tune the optimizer program itself with $O/meta/tune.examples.jsonl, and measure natlang tune --learned on the

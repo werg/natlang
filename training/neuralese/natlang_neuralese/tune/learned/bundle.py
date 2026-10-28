@@ -19,7 +19,7 @@ IDENTITY_KEYS = ('architecture', 'checkpoint_sha256', 'embedding_weight_sha256',
 
 def representation_ref(bank):
     return {'bank': bank.snapshot, 'basis': bank.basis_artifact, 'rank': bank.basis.rank,
-            'numberFormat': bank.number_format.id, 'groups': list(bank.group_labels),
+            'mixtureFormat': bank.mixture_format.id, 'groups': list(bank.group_labels),
             'keys': [component.key for component in bank.components]}
 
 
@@ -65,12 +65,12 @@ def verify_bundle(engine, bundle, bank):
         if expected is not None and any(not torch.allclose(stored[name], expected[name].cpu(), rtol=1e-6, atol=1e-7)
                                         for name in expected):
             raise LearnedOptimizerError(f'adapter of scope {scope} differs from the composition of its mixture')
-        for slot, (weight, free) in enumerate(zip(mixture['weights'],
-                                                   [e and r for e, r in zip(mixture['eligible'], mixture['dropoutMask'])])):
-            if not free and weight != 0:
-                raise LearnedOptimizerError(f'scope {scope} slot {slot} is unavailable but nonzero')
-            if weight == 0 and any(float.fromhex(x) != 0 for x in mixture['effective'][slot]):
-                raise LearnedOptimizerError(f'scope {scope} slot {slot} executes a coefficient its visible zero denies')
+        free = [e and r for e, r in zip(mixture['eligible'], mixture['dropoutMask'])]
+        for slot, (probability, available) in enumerate(zip(mixture['distribution'][1:], free)):
+            if not available and probability != 0:
+                raise LearnedOptimizerError(f'scope {scope} slot {slot} is unavailable but has probability')
+            if probability == 0 and any(float.fromhex(x) != 0 for x in mixture['effective'][slot]):
+                raise LearnedOptimizerError(f'scope {scope} slot {slot} executes a coefficient its zero probability denies')
     return bundle
 
 

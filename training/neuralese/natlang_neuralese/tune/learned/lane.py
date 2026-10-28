@@ -175,7 +175,7 @@ def outer_next(op):
     if state.get('labels_stale'):
         directory = op / 'cycles' / str(index + 1)
         nxt = _cycle(op, index + 1)
-        adopt = {key: template[key] for key in ('checkpoint', 'store', 'device', 'dtype', 'state', 'recipe', 'grid_tokens') if key in template}
+        adopt = {key: template[key] for key in ('checkpoint', 'store', 'device', 'dtype', 'state', 'recipe') if key in template}
         _write(directory / 'adopt.json', {**adopt, 'out': nxt['bank']})
         corpus = json.loads((op / 'corpus-spec.json').read_text())
         _write(directory / 'corpus-spec.json', {**corpus, 'bank': nxt['bank'], 'work': nxt['corpus'], 'out': nxt['targets']})

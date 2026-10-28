@@ -1,7 +1,7 @@
 # Learned optimizer: decomposition, part by part
 
 Status: the Natlang program of [plans/neuralese/JOINT_LEARNED_OPTIMIZER.md](../../plans/neuralese/JOINT_LEARNED_OPTIMIZER.md).
-Its crisp mechanism (bank, writer, head, composition, fits, objectives, trainers) is
+Its crisp mechanism (bank, writer, mixture head, composition, fits, objectives, trainers) is
 [`training/neuralese/natlang_neuralese/tune/learned/`](../../training/neuralese/natlang_neuralese/tune/learned/DECOMPOSITION.md).
 Every natural-language function runs on the executor's own base (LFM2.5-350M) with the optimizer's adapters; the
 self-hosted teacher is only a measured fallback (plan "Everything on the 350M").
@@ -20,7 +20,7 @@ implementations behind one interface; the setting selects).
 | Choose operator (learned proposal, retrieval, local refinement, keep) | pluggable fn | `adapt/chooseOperator.nl` | The memetic strategy learns; the crisp baseline is `apply.episode` |
 | Stop | fn behind the structural measure | `adapt/shouldStop.nl` | Benefit/cost judgement; the host measures cost exactly |
 | Exact evidence facts and permitted view | service `optimizer.evidence` | `evidence.py` | Causal visibility and failure facts are exact |
-| Write states and weight arrays | service `optimizer.propose` | `writer.py`, `head.py`, `episode.py` | The native writer and the token/coefficient heads; composition and validation are exact |
+| Write states and LoRA mixtures | service `optimizer.propose` | `writer.py`, `mixture.py`, `episode.py` | The native writer and the component-token mixture head (distribution over bank components plus null, group gains); composition and validation are exact |
 | Score a bundle on support evidence | service `optimizer.evaluate` | `apply.Context.evaluate` | Exact loss; no model judges it |
 | Local in-bank refinement | service `optimizer.refine` | `fit.py` | Gradient operator inside the loop |
 | Gradient-free retrieval over the bank | service `optimizer.retrieve` | `apply.Context.retrieve` | The LoraHub-style baseline, same interface |

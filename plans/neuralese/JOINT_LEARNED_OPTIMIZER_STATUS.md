@@ -13,20 +13,18 @@ outcome, ladder gap or lift has been measured. Saved artifacts and passing tests
 
 | Plan area | Where | Evidence |
 | --- | --- | --- |
-| Number grid (signed single digits, forced template, verified tokenizer spelling; real LFM2.5 tokenizer checked) | `numbers.py` | `test_learned_optimizer_bank.py` |
-| `token-expectation-v1` (exact with the other-sign branch; declared realized-magnitude approximation otherwise) | `numbers.py`, `writer.py` | exact enumeration test; branch logits equal the teacher-forced flipped sign |
-| `coefficient-head-v1` (zero init, bounded refinement, centered group modulation, sign/mean/zero invariants, head-off) | `head.py` | invariants and finite-difference gradients |
+| Component-token mixture (untied BF16 rows plus null, key-initialized rows, masked softmax, top-p truncation, bounded group gains, KL/gain labels, load balance, exact expected-score loss) | `mixture.py` | law, row initialization/resize/round trip, exact expected-score gradient (`test_learned_optimizer_bank.py`) |
 | Shared basis (orthonormal, learned method `bank-shared-basis-v1`), component bank (low-rank cores, normalization in relative weight energy), snapshots, coordinate transforms, projections, residuals | `bank.py` | composed adapter executes its exact dense update through the real adapter path; planted mixture recovered by projection; snapshot round trip |
 | `resolve_adapters` accepts bank-basis slices (`bank-basis-slice-v1`) with live trainable basis leaves | `model/native_adapters.py` | basis gradients exactly where cores are nonzero |
 | Gradient subspaces (current-loss-weighted, equal-weight pooling with weight-SVD) and the gradient probe | `subspace.py` | probe equals autograd through the composition (1e-3) and finite differences |
 | Bank views (probe/key/full selection, recorded dropout masks, array contract, view recall) | `views.py` | used throughout; contract failures raise |
 | Bundle manifest, exact composition check, proposals, edits | `bundle.py` | `verify_bundle` on proposed, refined and retrieved bundles |
 | Exact evidence facts, whitelisted proposer view, compact rows, crisp key-evidence/focus baselines | `evidence.py` | apply/service tests |
-| Writer: one differentiable incremental native computation (contextual re-encoding with extra slots, cued arrays, decision hidden states, greedy/sampled/teacher-forced decoding) | `writer.py` | equals one exact graph forward; cotangent replay equals the connected computation (1e-4) |
-| Objectives: distillation KL, gold-action CE, field-normalized state loss with exact alignment, balanced mixture CE, decoded weight loss from factors, head regression, gradient shares | `objectives.py` | distillation direction test; trainer tests |
-| In-bank fits in the learner's parameterization; leave-one-binding-out focus labels | `fit.py` | lowers support loss; labels execute exactly through the head |
-| Outer trainer: one snapshot, three-phase cotangent replay, writer adapter (immutable lineage), head (AdamW FP32), keys (`optimize_state`), optional bank/basis training with publication cadence, per-route cotangent telemetry, resume | `trainer.py` | writer/head/keys update; resume restores head and lineage; behavior reaches sign/digit logits only through the expectation estimator |
-| Meta-RL: paired reward with separate shaping, leave-one-out advantages, SNR, filtered BC selection, `joint-ratio-v1` with regenerated bundle, returns-to-go | `meta_rl.py`, `trainer.policy_step`, `episode.py` | proposal replays at ratio 1 at the proposing snapshot; policy update moves the writer |
+| Writer: one differentiable incremental native computation (contextual re-encoding with extra slots, available components' keys, one decision hidden state per scope) | `writer.py` | equals one exact graph forward; cotangent replay equals the connected computation (1e-4) |
+| Objectives: distillation KL, gold-action CE, field-normalized state loss with exact alignment, component-token KL and gain labels, decoded weight loss from factors, load balance, gradient shares | `objectives.py`, `mixture.py` | distillation direction test; trainer tests |
+| In-bank fits in the learner's parametrization (free logits and gains, then the truncated law); leave-one-binding-out focus labels | `fit.py` | two planted programs fit to below half their start loss; composition gradients equal finite differences; labels execute exactly |
+| Outer trainer: one snapshot, three-phase cotangent replay, writer adapter (immutable lineage), mixture head (AdamWSR, BF16 rows), keys (`optimize_state`), base dropout per step, optional bank/basis training with publication only when changed, per-route cotangent telemetry, resume | `trainer.py` | writer/head/keys update; behavior reaches the decision state at step 0; resume restores head and lineage |
+| Meta-RL: paired reward with separate shaping, leave-one-out advantages, SNR, filtered BC selection, `expected-score-v1` over each scope's kept tokens, returns-to-go | `meta_rl.py`, `trainer.policy_step`, `episode.py` | every candidate executes one kept token exactly; the update moves mass toward the better-scored token |
 | Proposal collection with shaping rewards and contrast accounting | `__main__.collect` | CLI test |
 | Target records (three tiers), tuner boundary export after each committed update, episode variants, exposure ledger | `targets.py`, `tune/build.py` (`emitBoundaries`) | boundary test through the real `tune.build` entry |
 | Bank growth: source components, free-tune components, residual basis growth, merge/retire, coverage, saturation | `growth.py` | `bank-init` via CLI test (source components) |
@@ -144,21 +142,32 @@ cross-model dependence. Prepared on the worktree branch, nothing run on real mod
   pinned config; 12 bank groups). `DEPLOY_QUANTIZED`: the required NVFP4 point quantizes w1/w2/w3; `bank-init`
   records those targets, and folded writes there must be measured at NVFP4. Partial inventories that LFM2 and LFM3 both
   cover resolve when both tables map them identically.
-- **Number grid.** The real LFM3 tokenizer spells `[ 3, 0, -2]` exactly like LFM2.5 (sign-bearing space token, one
-  digit); `GridTokens.from_encoder` verifies it (`test_learned_optimizer_lfm3.py`).
+- **Component-token mixtures** (owner decision 2026-10-28, item 13 of `LFM3_COMMITTED_DECISIONS_20261028.md`): the
+  integer grid and coefficient head are removed (`numbers.py`, `head.py` and their paths). Each bank component has a
+  learned untied BF16 row (AdamWSR, stochastic rounding) plus a null row; a row starts from its key's hidden state in
+  a real rendered request. Per scope: masked softmax over the available components and null (dropout and eligibility
+  are the mask), top-p truncation in execution and training, bounded per-group gains, `c = g * p`; signs live in the
+  trainable bank. In-bank fits label distributions and gains through the exact composition; the outer trainer
+  distills them by KL beside the behavior losses, with a batch load-balance term and base dropout per step. Meta-RL
+  is the exact expected score over each scope's kept tokens (`expected-score-v1`; the joint-ratio estimator is
+  removed); the `proposals`/`collect` phases score the mixture and each kept token executed alone. The retrieval
+  baseline is the best single component per scope. Bank publication now happens only when the bank changed.
 - **Teacher-free supply.** `supply privileged` writes exact per-stage oracle references for training-partition roots;
   `natlang tune` defaults to `tune.teacher: "self"` (`ts-host/src/tune/selfteach.ts`): earlier verified data is reused
   first, then the student runs each remaining training root with the reference as privileged context; rows record
   the plain task, need the root oracle and admissible actions, and roots that echo the reference are excluded.
   Development roots are never collected by the self teacher; a reference naming a non-training root is an error. RL
-  rounds then train on oracle rewards. This is sequence-level privileged self-teaching; the dense per-token JOLT+
-  term (reverse KL to the privileged-context scoring of student samples) is not implemented (item 2 below).
+  rounds then train on oracle rewards. The facts and their rendering are the shared JOLT+ mechanism
+  (`rl/privileged_context.py`: `case_facts`, `ProtectedWorlds` custody against every registered evaluation-only
+  packet, `PrivilegedRendering`). This is sequence-level privileged self-teaching; the dense per-token term in the
+  tune trainer is not wired (item 2 below).
 - **Bank adoption.** `adopt-bank` (`trainer.adopt_published_bank`): after a publication and a label refit the trainer
   continues on the published snapshot (keys follow their components; bank moments continue exactly without basis
   training, else restart with a recorded transition, never reinterpreted through the QR change of coordinates). Before
   this, a publication left the operation stale with no continuation (`refitLabels` relabeled against the old bank file).
 - **Lane.** `training/neuralese/learned-optimizer/run-lfm3-lane.sh <checkpoint> [op]` and `--dry-run`, replacing
-  `run-after-lfm-main.sh` and the LFM2.5 specs (README beside it).
+  the LFM2.5 lane script and specs (README beside it). Outer cycles run again after the meta-RL round, so a bank its
+  policy update publishes is adopted and refit before meta-examples.
 
 ### Compute estimate (LFM3-1.7B; assumptions to replace with the first program's measured numbers)
 
@@ -192,9 +201,9 @@ label-only refits after publications instead of full corpus refits (item 4).
    server for `lfm3`): first one program to measure per-root time, row yield of self-teaching and the RL/development
    outcomes, then the full lane (`run-lfm3-lane.sh`), sharded across sandboxes for the tunes. The first real
    bank-init validates BF16 numerics of the lane engine (the shared paths were tested in FP32 fixtures).
-2. **Dense JOLT+ term**: per-token reverse KL of student samples to the same policy scored with the privileged
-   reference, as an objective of the shared whole-graph learner (trainer `objectives`), plus the teacher-role update.
-   The supply and custody it needs (privileged references for training roots only) exist.
+2. **Dense JOLT+ term in the tune trainer**: reuse the shared `rl/privileged_scoring.teacher_scores` (stop-gradient
+   privileged-context targets aligned to the replay's actions) as an objective of program-tune RL rounds; no second
+   teacher-scoring path. The supply and custody it needs (privileged references for training roots only) exist.
 3. **Planted controls run continuously** as a scheduled worker (`controls` command exists; no scheduled job).
 4. **Label-only refits** after bank publications (`targets` against the published bank from the cycle-0 builds) to
    avoid full corpus refits; needs a check that meta-examples and apply bind the adopted basis correctly.
@@ -207,14 +216,14 @@ label-only refits after publications instead of full corpus refits (item 4).
    (`plans/MODEL_FACING_CHANGES.md`).
 10. **llama.cpp soft-state export for LFM3** (`tune/soft_export.py` writes LFM2 spans only); the lane serves through
     the native backend meanwhile.
-11. Coefficient head readout on the native HTTP server (the Python engine path has it; serving the executor never
-    needs it).
+11. Mixture-head readout (decision hidden state) on the native HTTP server (the Python engine path has it; serving
+    the executor never needs it).
 
 ## Notes from implementation
 
 - Backward must run inside `run_native` (its precision carriers depend on it): a reference that backpropagated
   outside gave ~1e-3 relative adapter-gradient errors on an FP32 fixture.
-- Unconstrained continuous fits can give a component opposite signs across groups, which grid + bounded modulation
-  cannot execute; fits therefore optimize in the learner's own parameterization from the start.
-- Component units: relative weight energy (`q_m = 1/(numel ms(W_m))`); a grid step of 0.005 saturated where useful
-  coefficients were ~0.6 on the fixture. The step must be sized from fits.
+- Fits optimize in the learner's own parametrization (distribution and gains) from the start, so every label is
+  executable by the learner.
+- Component units: relative weight energy (`q_m = 1/(numel ms(W_m))`); useful coefficients were ~0.6 on the fixture,
+  so `g_max` 2 leaves headroom. Size it from the fitted-gain saturation rate.

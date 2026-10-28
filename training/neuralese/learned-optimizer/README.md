@@ -9,7 +9,7 @@ state, gaps and the compute estimate: [JOINT_LEARNED_OPTIMIZER_STATUS.md](../../
 
 It is a lane beside the production recipe, not a stage inside its JSON: it trains no backbone weights and never
 advances production lineage exposure. Its exposure is the tuned programs' adapters/soft states and the optimizer's
-own parameters (writer adapter, coefficient head, keys, shared bank and basis).
+own parameters (writer adapter, component-token mixture head, keys, shared bank and basis).
 
 ## Run
 

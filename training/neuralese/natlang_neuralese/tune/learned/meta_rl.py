@@ -6,15 +6,14 @@ correct) is reported as its own component and enters the objective only under it
 
 Estimators:
 
-* `filtered-bc-v1` (default start): imitate proposals whose paired reward clears a threshold, with their in-bank
-  refinements. Low variance; no score function.
-* `joint-ratio-v1`: ``r = pi(z|x)/pi_old(z|x) * p_exec(tau|A(x,z))/p_exec(tau|A_old(x,z))``. The executor factor is
-  recomputed under the bundle regenerated from the same recorded optimizer actions (same tokens, mask and view; the
-  coefficient head, keys and bank at current parameters). The clipped surrogate is the shared
-  `rl.policy_math.clipped_token_loss` applied to the summed joint log-ratio.
+* `filtered-bc-v1`: imitate proposals whose paired reward clears a threshold, with their in-bank refinements.
+* `expected-score-v1` (`trainer.OuterTrainer.policy_step`): the optimizer's action space is finite (the component
+  tokens of each scope, null included), so the expected score ``sum_k p_k R_k`` over the scored kept tokens is
+  differentiated exactly (`mixture.expected_score_loss`); ``p`` is recomputed under current parameters from the same
+  context, view and mask. No score-function sampling and no importance ratio.
 
-The baseline depends only on the incoming context: a leave-one-out mean over the other proposals of the same
-context (never the scored proposal's own reward).
+Leave-one-out advantages over a context's proposals (never the scored proposal's own reward) are kept as the recorded
+contrast signal (`advantage_snr`).
 """
 from __future__ import annotations
 
@@ -22,10 +21,9 @@ import math
 
 import torch
 
-from ...rl.policy_math import clipped_token_loss
 from . import LearnedOptimizerError
 
-ESTIMATORS = ('filtered-bc-v1', 'joint-ratio-v1')
+ESTIMATORS = ('filtered-bc-v1', 'expected-score-v1')
 
 
 def paired_reward(quality_new, quality_before, *, adaptation_cost=0., execution_cost=0., lambda_adapt=0.,
@@ -63,8 +61,7 @@ def leave_one_out_advantages(rewards):
 
 
 def advantage_snr(groups):
-    """Signal-to-noise of contrasting groups' advantages: ``|mean group spread| / std``; the schedule switches from
-    filtered BC to the joint-ratio estimator as this measured signal supports it."""
+    """Signal-to-noise of contrasting groups' advantages: ``|mean group spread| / std`` (reported per round)."""
     spreads = [info['spread'] for _, info in groups if info.get('contrast')]
     if len(spreads) < 2:
         return {'groups': len(groups), 'contrasting': len(spreads), 'snr': 0.}
@@ -80,26 +77,6 @@ def filtered_bc(proposals, threshold):
     return [proposal for proposal in proposals if proposal['reward']['total'] >= threshold]
 
 
-def joint_log_ratio(optimizer_logps, old_optimizer_logps, executor_logps, old_executor_logps):
-    """Summed log-ratio of every trained stochastic action: the optimizer's free tokens (numbers included) and the
-    executor's actions under the regenerated bundle. Forced tokens are excluded by their callers (no sampling score)."""
-    for a, b in ((optimizer_logps, old_optimizer_logps), (executor_logps, old_executor_logps)):
-        if a.shape != b.shape:
-            raise LearnedOptimizerError('replayed actions differ from the recorded ones; recollect instead of reusing')
-    return (optimizer_logps.float() - old_optimizer_logps.float()).sum() + (executor_logps.float() - old_executor_logps.float()).sum()
-
-
-def joint_ratio_loss(log_ratio, advantage, *, clip_low=.2, clip_high=.28):
-    """The shared clipped surrogate applied once to the whole joint action (`joint-ratio-v1`)."""
-    return clipped_token_loss(log_ratio.reshape(1), torch.zeros(1, device=log_ratio.device), advantage,
-                              clip_low=clip_low, clip_high=clip_high)[0]
-
-
-def score_function_loss(optimizer_logps, executor_logps, advantage):
-    """On-policy ``-(R - b)(log pi(z|x) + log p_exec(tau|A_theta(x,z)))``; the advantage is detached by construction."""
-    return -float(advantage) * (optimizer_logps.float().sum() + executor_logps.float().sum())
-
-
 def returns_to_go(gains):
     """Stepwise credit for a multi-step episode from per-step paired gains, without double counting: each step's
     return is the sum of its own and later gains (the terminal total equals the sum of the gains)."""
@@ -111,7 +88,7 @@ def returns_to_go(gains):
 
 
 def check_replay(record, current):
-    """Replay compatibility: same view, mask, action spellings, tokenizer and native layout; otherwise recollect."""
+    """Replay compatibility: same view, mask, tokenizer and native layout; otherwise recollect."""
     for key in ('view', 'mask', 'tokens', 'tokenizer', 'layout', 'graph'):
         if record.get(key) != current.get(key):
             raise LearnedOptimizerError(f'replay differs in {key}; this rollout needs fresh collection')
