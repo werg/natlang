@@ -178,6 +178,7 @@ def finish(record: dict, s: dict, *, verified, approved, failed, held, child) ->
     if held:
         reasons.append(held)
     family = ' '.join(str(record.get(k) or '') for k in ('family', 'curriculum_family'))
+    record.update(reducer_features(record, record.get('task_modality'), record.get('task_kind'), s))
     record.update(scores=s, child=child, verified=verified, row_approved=approved, category=category(s, child=child, family=family),
                   positive=not reasons, exclusions=reasons)
     return record
@@ -199,6 +200,8 @@ def iter_rows(path: Path):
 CALL_LINE = re.compile(r'You are inside this call:\s*([^\n]+)')
 NEURALESE_MARK = re.compile(r'<\|neuralese\|>')
 FOLDER = re.compile(r'\bfolders?\.[A-Za-z_$]|\bcallFolder\b|\.folder\s*\(')
+FOLDER_APPLY = re.compile(r'\b\w*[fF]older\w*\.apply\s*\(')
+FOLDER_PARAM = re.compile(r'\(\s*\w+\s*:\s*Folder\b')
 NATLANG_TOOLS = frozenset(('eval', 'return_result', 'read_code', 'execution_plan'))
 
 
@@ -232,13 +235,16 @@ def action_shape(calls, content) -> dict:
     natlang runtime tools) versus generic tool use and plain chat text; text-emulated Neuralese markers and callable
     folder use (a character proxy for the assistant-token share, recorded as such)."""
     natlang = other = 0
-    tools, markers, folders = [], 0, 0
+    tools, markers, folders, applies, file_tools = [], 0, 0, 0, 0
     for name, arguments in call_list(calls):
         size = len(json.dumps(arguments, ensure_ascii=False))
         tools.append(name)
         code = arguments.get('code') if isinstance(arguments.get('code'), str) else ''
         markers += len(NEURALESE_MARK.findall(json.dumps(arguments, ensure_ascii=False)))
         folders += bool(FOLDER.search(code))
+        applies += len(FOLDER_APPLY.findall(code))
+        if name not in NATLANG_TOOLS and name:
+            file_tools += 1
         if name in NATLANG_TOOLS:
             natlang += size
         else:
@@ -247,7 +253,17 @@ def action_shape(calls, content) -> dict:
     total = natlang + other + chat
     return {'tools': sorted(set(t for t in tools if t)), 'natlang_chars': natlang, 'generic_tool_chars': other,
             'chat_chars': chat, 'natlang_action_share': natlang / total if total else 0.,
-            'text_neuralese_markers': markers + len(NEURALESE_MARK.findall(_text(content))), 'folder_calls': folders}
+            'text_neuralese_markers': markers + len(NEURALESE_MARK.findall(_text(content))), 'folder_calls': folders,
+            'folder_apply_calls': applies, 'rooted_tool_calls': file_tools}
+
+
+def reducer_features(record: dict, modality, kind, scores: dict) -> dict:
+    """Directory-reducer use (kind/modality directory-reducer, a Folder first parameter, folder.apply commits, an
+    iterateOn folder cursor carrying typed prior findings)."""
+    reducer = (modality == 'directory-reducer' or kind == 'directory-reducer'
+               or bool(FOLDER_PARAM.search(record.get('signature') or '')))
+    return {'reducer': reducer, 'reducer_folder_param': bool(FOLDER_PARAM.search(record.get('signature') or '')),
+            'reducer_iterate_cursor': bool(reducer and scores.get('iterate'))}
 
 
 def turn_scores(row: dict, corpus: str, holds: Holds) -> dict:
@@ -269,6 +285,7 @@ def turn_scores(row: dict, corpus: str, holds: Holds) -> dict:
                   domain=curriculum.get('domain'), task_kind=row.get('task_kind'),
                   decision_index=decision.get('index'), **call_identity(row.get('messages')),
                   **action_shape(target.get('tool_calls'), target.get('content')))
+    record['task_modality'] = row.get('task_modality')
     approved = (row.get('training_admission') or {}).get('approved')
     failed = bool(decision.get('failed_action'))
     return finish(record, s, verified=outcome_verified(row.get('outcome')), approved=approved, failed=failed,
