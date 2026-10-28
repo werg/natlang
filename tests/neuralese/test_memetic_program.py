@@ -1,3 +1,4 @@
+import copy
 import json
 import threading
 from argparse import Namespace
@@ -325,6 +326,24 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
             server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64)
         assert fit['rollouts'] == 2 and fit['native_import_reached_model'] is True
         assert memetic.rollouts_reached(tmp_path / 'evals/actual', identity, written['id'])
+        # The production collector must retain sampled decision captures as policy turns, including their
+        # native input state and request accounting, rather than falling back to a generated tool turn.
+        decision_task = copy.deepcopy(task)
+        decision_task['semantics']['expected'] = 'yes'
+        decision_task['semantics']['files']['task/verdict.nl'] = (
+            '---\nargs: {}\nreturns: "yes" | "no"\nreadout: decision\n---\nChoose yes or no.\n')
+        decision_task['curriculum']['reference']['root'][0][1]['code'] = (
+            'return (await decide(verdict)).value;')
+        decision_args = Namespace(**{**vars(args), 'samples': 2})
+        decision_fit = memetic.evaluate(decision_args, tmp_path, 'decision', memetic.state_guidance('guide', written['id']),
+            [decision_task], base_system=memetic.runner.default_system_prompt(), actor=identity,
+            server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64)
+        assert decision_fit['rollouts'] == 2
+        from natlang_neuralese.common.jsonio import iter_jsonl_rows
+        decision_rows = [row for _, row in iter_jsonl_rows(tmp_path / 'evals/decision/rollouts.jsonl')]
+        decisions = [turn['sampling'] for row in decision_rows for turn in row['turns']
+                     if (turn.get('sampling') or {}).get('schema') == 'natlang.native-decision-capture/1']
+        assert len(decisions) == 2 and all(value['decision_sample']['temperature'] > 0 for value in decisions)
         development, confirmation = tmp_path / 'dev.jsonl', tmp_path / 'confirmation.jsonl'
         for path, ids in ((development, ('a', 'b')), (confirmation, ('c', 'd'))):
             path.write_text(''.join(json.dumps({**task, 'id': name, 'curriculum': {**task['curriculum'],

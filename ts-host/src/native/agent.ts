@@ -1138,7 +1138,7 @@ export class NativeToolAgent {
    * Answer a finite-typed call by scoring each allowed value as the reply to its opening (native/decision.ts).
    * Returns false when the readout does not apply, so the tool loop runs; a string is a failure, as from run.
    */
-  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[], guidance: string): Promise<false | string | void> {
+  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[]): Promise<false | string | void> {
     const lam = session.lam;
     const wanted = lam.readout === 'decision' || this.options.decisionReadout === 'finite-returns';
     if (!wanted || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
@@ -1151,7 +1151,8 @@ export class NativeToolAgent {
       return false;
     }
     const replies = values.map(value => JSON.stringify(value));
-    const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + guidance;
+    const inherited = typeof opening[0]?.content === 'string' ? opening[0].content : '';
+    const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + '\n\n' + inherited;
     const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: decisionPrompt(replies) }];
     const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
     const training = this.options.trainingGuidance;
@@ -1180,7 +1181,8 @@ export class NativeToolAgent {
     if (scores.log_probs.length !== replies.length || scores.log_probs.some(value => !Number.isFinite(value)))
       throw new Error('decision readout returned no finite score for every option');
     // A decision readout is a model turn of its call's execution graph, like a generated turn.
-    const turnNode=await this.modelTurnNode(session,encoded.messages,{},1,'decision');
+    const turnNode=await this.modelTurnNode(session,encoded.messages,
+      scores.native_decision_capture ? {raw_response:{x_natlang_rl_capture:scores.native_decision_capture}} : {},1,'decision');
     if(turnNode&&scores.x_natlang_native_recorded_turn)activeRecorder()?.linkNativeTurn?.(scores.x_natlang_native_recorded_turn,turnNode);
     const probabilities = softmax(scores.log_probs);
     if (scores.chosen !== undefined && !(Number.isSafeInteger(scores.chosen) && scores.chosen >= 0 && scores.chosen < replies.length))
@@ -1325,8 +1327,7 @@ export class NativeToolAgent {
     const guidancePolicy = trainingGuidance?.policyOf(session.lam, session.runtime.currentCallId ?? null);
     const guidanceConsumer = !!trainingGuidance && !guidancePolicy && !trainingGuidance.insidePolicy(session);
     let guidanceRequest: Record<string, unknown> | undefined, guidanceReady = false;
-    const decided = await this.decisionReadout(session, messages,
-      renderAuthoredTextGuidance(this.options.authoredTextGuidance) + nativeGuidance);
+    const decided = await this.decisionReadout(session, messages);
     if (decided !== false) return decided;
     const openingLength = messages.length;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.
