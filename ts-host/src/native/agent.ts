@@ -16,6 +16,7 @@ import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, SCOPE_VALUE_CHARS, shownCharsFor, note as cutNote } from './cutoff.js';
+import type { TrainingGuidance } from './training-guidance.js';
 
 /** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
 const scopeValueChars = (session: NativeSession) => Math.max(SCOPE_VALUE_CHARS, session.pages.budget);
@@ -462,6 +463,12 @@ export class NativeToolAgent {
        * (`{ repeat?, syntax?, retries?, tools? }`); off by default.
        */
       guidance?: boolean | { repeat?: number; syntax?: boolean; retries?: number; tools?: string[] };
+      /**
+       * In-run training guidance (native/training-guidance.ts): each consumer call's first model turn selects the facts it
+       * may see and has `writeGuidance` write them as Neuralese, in-process; its turns then carry the guidance request,
+       * and the policy calls' own turns carry their policy identity. Collection only, on a native-state server.
+       */
+      trainingGuidance?: TrainingGuidance;
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
       fileTools?: FileToolSurface;
       /**
@@ -1306,6 +1313,11 @@ export class NativeToolAgent {
       return failures.length ? { code: failures[0]!.code, message: failures.map(failure => failure.message).join(' ') } : undefined;
     };
     const messages = openingMessages();
+    // Training guidance: the policy's own calls (and calls below them) carry its identity and get none themselves.
+    const trainingGuidance = this.options.trainingGuidance;
+    const guidancePolicy = trainingGuidance?.policyOf(session.lam, session.runtime.currentCallId ?? null);
+    const guidanceConsumer = !!trainingGuidance && !guidancePolicy && !trainingGuidance.insidePolicy(session);
+    let guidanceRequest: Record<string, unknown> | undefined, guidanceReady = false;
     const decided = await this.decisionReadout(session, messages,
       renderAuthoredTextGuidance(this.options.authoredTextGuidance) + nativeGuidance);
     if (decided !== false) return decided;
@@ -1407,6 +1419,12 @@ export class NativeToolAgent {
       }
       const sentChars = requestChars(availableTools);
       const callId = session.runtime.currentCallId ?? null;
+      // The consumer's guidance is written on its first model turn, from that turn's request text, before it is sent.
+      if (guidanceConsumer && callId && !guidanceReady) {
+        guidanceRequest = await trainingGuidance!.requestFor(session, callId,
+          encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering))).messages);
+        guidanceReady = true;
+      }
       const started = performance.now();
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: turns + 1,
         tool_schema_bytes: new TextEncoder().encode(JSON.stringify(this.options.promptRendering === 'program-header' ? [] : availableTools)).length,
@@ -1444,11 +1462,12 @@ export class NativeToolAgent {
               throw error;
             }
           } } : {}) } : undefined;
-        const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId,
-          invocation_role: callId === session.runtime.options.runId ? 'root' as const : 'child' as const } : {}), ...(adapters.length ? { adapters } : {}),
+        const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           ...(session.executionOccurrence() ? { native_execution_occurrence: session.executionOccurrence() } : {}),
           ...(template ? { template } : {}),
           ...(this.options.guidance && supportsGuidance(this.driver) ? { guidance: this.options.guidance } : {}),
+          ...(guidanceRequest ? { privileged_context: guidanceRequest } : {}),
+          ...(guidancePolicy ? { guidance_policy: guidancePolicy } : {}),
           messages: encoded.messages, tools: this.options.promptRendering === 'program-header' ? [] : availableTools,
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools && this.options.promptRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),

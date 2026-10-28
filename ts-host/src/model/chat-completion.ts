@@ -24,7 +24,7 @@ export type ChatTransport = (body: Json, signal?: AbortSignal, meta?: ChatReques
  * What a scheduling transport (model/scheduler.ts) may know about a request without reading its body: the call it
  * belongs to, and a hook for what the scheduler decided. Never sent to the model. A plain transport ignores it.
  */
-export type ChatRequestMeta = { invocation_id?: string; invocation_role?: 'root' | 'child'; /** Re-sends of one turn count up from 0. */ retry?: number;
+export type ChatRequestMeta = { invocation_id?: string; /** Re-sends of one turn count up from 0. */ retry?: number;
   /** Turn number within the invocation, when the caller knows it (the scheduler counts requests otherwise). */ turn?: number;
   /** Requests with the same group are sent next to each other (default: the request's system message). */ group?: string;
   onScheduled?: (info: ScheduledInfo) => void;
@@ -269,6 +269,13 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         wireRequest.x_natlang_adapters = request.adapters;
       }
       if (request.guidance) wireRequest.guidance = request.guidance;
+      // Training guidance and its policy turns are rendered and recorded by the native engine only.
+      if (request.privileged_context || request.guidance_policy) {
+        if (!options.adapters) throw Object.assign(new Error('training-guidance-unavailable: training guidance runs on a ' +
+          'native-state model server; collect this run through that server'), { code: 'training-guidance-unavailable' });
+        if (request.privileged_context) wireRequest.x_natlang_privileged_context = request.privileged_context;
+        if (request.guidance_policy) wireRequest.x_natlang_guidance_policy = request.guidance_policy;
+      }
       if (request.native_teacher_forced_turn) {
         wireRequest.x_natlang_forced_message = request.native_teacher_forced_turn;
         wireRequest.x_natlang_native_recording = true;
@@ -290,7 +297,6 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       await options.onRequestStart?.(request, retries);
       if (onDelta && emitted) { onDelta({ type: 'reset' }); emitted = false; }
       const reply = await transport(wireRequest, signal, { ...(request.invocation_id ? { invocation_id: request.invocation_id } : {}),
-        ...(request.invocation_role ? { invocation_role: request.invocation_role } : {}),
         retry: retries, onScheduled: info => { scheduling = { ...info, queue_wait_ms: (scheduling?.queue_wait_ms ?? 0) + info.queue_wait_ms }; },
         ...(onDelta ? { onDelta } : {}) });
       const body = isStream(reply) ? await assembleChatCompletion(reply, onDelta) : reply;

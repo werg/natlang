@@ -14,6 +14,8 @@ import { createManagedModelSession } from '../model/local-server.js';
 import { resolveModelChoice } from '../model/config.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { NativeToolAgent } from '../native/agent.js';
+import type { GuidanceRun } from '../native/training-guidance.js';
+import { trainingGuidance } from './guidance-writer.js';
 import type { PromptRendering } from '../native/system-prompts.js';
 import { GENERATION_GUIDANCE, TOOLS_PROMPT } from '../native/prompt.js';
 import { NodeNativeRuntime } from '../node-runtime.js';
@@ -92,6 +94,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   provider?: string; piOptions?: Record<string, unknown>;
   providerRequestControls?: ProviderRequestControls;
   chatRequestControls?: Record<string, unknown>;
+  /** In-run training guidance (`x_natlang_guidance` of the chat controls), handed to the agent, never sent on the wire. */
+  trainingGuidance?: GuidanceRun;
   /** Native value-channel transport to an explicitly configured Neuralese server. */
   neuraleseServer?: boolean;
   /** Optional collection-specific maximum wall time for one Pi provider request. */
@@ -1402,6 +1406,8 @@ export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   /** Explicit library service for the non-learned text-provider read implementation. */
   neuraleseService?: object;
   judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }>;
+  /** In-run training guidance (native/training-guidance.ts): every consumer call gets its guidance written in-run. */
+  trainingGuidance?: GuidanceRun;
   /** Persist observed native trace prefixes when execution aborts; snapshots never imply a completed result. */
   onPartialExecution?: (snapshot: PartialExecutionSnapshot) => Promise<void> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[];
@@ -1495,6 +1501,7 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     ...(options.promptRendering ? { promptRendering: options.promptRendering } : {}),
     ...(options.fileTools ? { fileTools: options.fileTools } : {}),
     ...(options.neuralese ? { neuralese: options.neuralese } : {}),
+    ...(options.trainingGuidance ? { trainingGuidance: trainingGuidance(options.trainingGuidance) } : {}),
     contextTokens: options.contextTokens, maxTurns: options.maxTurns,
     ...(bindingSpec ? { refinement: { checker: new RefinementChecker(),
       returnGuard: async (runId: string): Promise<RefinementFailure[]> => {

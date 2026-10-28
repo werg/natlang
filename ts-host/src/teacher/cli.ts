@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { chatRequestControls } from './chat-request-controls.js';
+import { chatRequestControls, wireControls } from './chat-request-controls.js';
+import type { GuidanceRun } from '../native/training-guidance.js';
 import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
@@ -87,6 +88,8 @@ async function main(): Promise<void> {
   if (flags.has('--chat-request-config') && provider) throw new Error('--chat-request-config requires an OpenAI-compatible server');
   const chatControls = flags.has('--chat-request-config') ? chatRequestControls(JSON.parse(
     await readFile(resolve(flags.get('--chat-request-config')!), 'utf8'))) : undefined;
+  if (chatControls?.x_natlang_guidance && !flags.has('--neuralese-server'))
+    throw new Error('training-guidance-unavailable: x_natlang_guidance runs on a native-state server; add --neuralese-server');
   const judgeModelId = flags.get('--judge-model-id');
   if ([judgeModelId, flags.get('--judge-server'), flags.get('--judge-provider')].some(Boolean) &&
       (!judgeModelId || Number(flags.has('--judge-server')) + Number(flags.has('--judge-provider')) !== 1))
@@ -116,6 +119,8 @@ async function main(): Promise<void> {
     ...(flags.has('--provider-action-cycle-timeout-ms') ?
       { providerActionCycleTimeoutMs: integer(flags, '--provider-action-cycle-timeout-ms', 0) } : {}),
     ...(chatControls ? { chatRequestControls: chatControls } : {}),
+    // Run-level training guidance goes to the agent, never on the wire (native/training-guidance.ts).
+    ...(chatControls?.x_natlang_guidance ? { trainingGuidance: chatControls.x_natlang_guidance as GuidanceRun } : {}),
     transportRetries: integer(flags, '--transport-retries', 0),
     requestRetries: integer(flags, '--request-retries', 1),
     ...(flags.has('--worker-stagger') ? { workerStaggerMs: integer(flags, '--worker-stagger', 0) * 1000 } : {}),
@@ -146,7 +151,7 @@ async function main(): Promise<void> {
     // request budget ends a turn at it, so a small default cut every turn of a verbose reasoner short of its tool call.
     request: { ...(flags.has('--thinking-tokens') ? { thinking_budget_tokens: integer(flags, '--thinking-tokens', 0) } : {}),
       ...(flags.has('--chat-completions-url') ? {} : { top_p: 0.95, top_k: 20,
-        chat_template_kwargs: { reasoning_effort: flags.get('--reasoning-effort') ?? 'low' } }), ...chatControls } };
+        chat_template_kwargs: { reasoning_effort: flags.get('--reasoning-effort') ?? 'low' } }), ...(chatControls ? wireControls(chatControls) : {}) } };
   // A call is compacted as it nears its context budget, so the server must accept a request of that size; a server
   // with a smaller context would reject the call's later requests. llama.cpp reports its per-request context in /props.
   if (config.endpoint && !config.chatCompletionsUrl) {
