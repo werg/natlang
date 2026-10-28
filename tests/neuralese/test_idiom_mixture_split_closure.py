@@ -9,6 +9,19 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 
+def test_mixture_content_identity_retains_decision_targets_and_state_dependencies():
+    import copy
+    graph = {'tokenizer_fingerprint': 'fixture', 'nodes': [{'name': 'n', 'token_ids': [1, 2], 'target_weights': [0, 0]}],
+             'decisions': [{'name': 'd', 'options': ['n'], 'label': 0}], 'external_states': {'s': {'id': 'one'}}}
+    changed_label = copy.deepcopy(graph)
+    changed_label['decisions'][0]['label'] = 1
+    changed_state = copy.deepcopy(graph)
+    changed_state['external_states']['s']['id'] = 'two'
+    assert mod.content_key(graph) != mod.content_key(changed_label)
+    assert mod.content_key(graph) != mod.content_key(changed_state)
+    assert mod.content_key(graph) == mod.content_key(copy.deepcopy(graph))
+
+
 def put(path, rows):
     path.write_text(''.join(json.dumps(row)+'\n' for row in rows))
 

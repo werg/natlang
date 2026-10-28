@@ -39,6 +39,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
 sys.path.insert(0, str(REPO / 'scripts' / 'neuralese_data'))
 from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
+from build_verified_teacher_trajectory_graphs import graph_content_sha256  # noqa: E402
 
 SCHEMA = 'natlang.idiom-mixture/2'
 ORDER = ('iteration', 'delegation', 'exact', 'scope', 'broad')  # rarest first: a document's category
@@ -244,10 +245,7 @@ def graph_files(render: str, split: str):
 
 
 def content_key(row) -> str:
-    digest = hashlib.sha256()
-    for node in row['nodes']:
-        digest.update(json.dumps([node['token_ids'], node['target_weights']], separators=(',', ':')).encode())
-    return digest.hexdigest()
+    return graph_content_sha256(row)
 
 
 def carved(groups, carve) -> bool:
