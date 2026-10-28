@@ -1,6 +1,7 @@
 """Group existing train invocations by exact natlang program and iterate every ready group.
 
-The grouping and split mechanism is exact. Guidance revision remains the natural-
+The grouping and split mechanism is exact: related worlds and protected-world custody are the shared
+``common.custody`` mechanism; the balancing allocation of whole components is this module's policy. Guidance revision remains the natural-
 language author policy in memetic_program; this module never inspects held gold.
 """
 from __future__ import annotations
@@ -12,6 +13,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from ..common import custody
 from ..common.hashing import canonical_json_sha256_hex
 from ..common.jsonio import canonical_json_bytes, write_bytes_durable, write_json_durable
 from . import memetic_program
@@ -35,47 +37,6 @@ def program_identity(row: dict) -> tuple[str, dict]:
         if key in semantics:
             program[key] = semantics[key]
     return 'natlang-program-sha256:' + canonical_json_sha256_hex(program), program
-
-
-def world_bindings(row: dict) -> list[str]:
-    bindings = {'source:' + value for field in ('source_groups', 'source_ids')
-                for value in row.get(field) or [] if isinstance(value, str) and value}
-    curriculum = row.get('curriculum') or {}
-    evidence = curriculum.get('evidence') or {}
-    for field in ('world', 'retrieved', 'background'):
-        for item in evidence.get(field) or []:
-            bindings.add('evidence:' + canonical_json_sha256_hex(item))
-    services = (row.get('semantics') or {}).get('services')
-    if services:
-        bindings.add('service-world:' + canonical_json_sha256_hex(services))
-    inputs = (row.get('semantics') or {}).get('inputs')
-    if inputs not in (None, {}, []):
-        bindings.add('inputs:' + canonical_json_sha256_hex(inputs))
-    if not bindings:
-        if inputs is None:
-            raise ValueError('invocation has no source or world binding for a safe split')
-        bindings.add('inputs:' + canonical_json_sha256_hex(inputs))
-    return sorted(bindings)
-
-
-def _components(rows: list[dict]):
-    parents = list(range(len(rows)))
-    def find(index):
-        while parents[index] != index:
-            parents[index] = parents[parents[index]]
-            index = parents[index]
-        return index
-    first = {}
-    for index, row in enumerate(rows):
-        for binding in row['memetic_source']['world_bindings']:
-            if binding in first:
-                parents[find(index)] = find(first[binding])
-            else:
-                first[binding] = index
-    groups = defaultdict(list)
-    for index in range(len(rows)):
-        groups[find(index)].append(index)
-    return sorted(groups.values(), key=lambda indices: min(rows[index]['id'] for index in indices))
 
 
 def _allocation(rows: list[dict], components: list[list[int]], min_each: int):
@@ -105,7 +66,7 @@ def _allocation(rows: list[dict], components: list[list[int]], min_each: int):
     return tuple(bits)
 
 
-def select(source: Path, out: Path, *, min_each: int = 2) -> dict:
+def select(source: Path, out: Path, *, min_each: int = 2, protected=None) -> dict:
     if min_each < 2:
         raise ValueError('development and confirmation need at least two invocations each')
     raw = source.read_bytes()
@@ -126,9 +87,12 @@ def select(source: Path, out: Path, *, min_each: int = 2) -> dict:
                                  'source_sha256': source_sha, 'row_index': index,
                                  'row_sha256': canonical_json_sha256_hex(original),
                                  'program_sha256': canonical_json_sha256_hex(program),
-                                 'world_bindings': world_bindings(original)}
+                                 'world_bindings': custody.world_bindings(original)}
         rows.append(row)
-    components = _components(rows)
+    protected = protected if protected is not None else custody.ProtectedWorlds.load()
+    for row in rows:
+        protected.check(row)  # a protected-related world never selects or confirms
+    components = custody.related_components(rows)
     bits = _allocation(rows, components, min_each)
     by_program = defaultdict(lambda: {'development': [], 'confirmation': []})
     for bit, indices in zip(bits, components):
@@ -151,6 +115,11 @@ def select(source: Path, out: Path, *, min_each: int = 2) -> dict:
                 path = directory / (name + '.jsonl')
                 write_bytes_durable(path, b''.join(canonical_json_bytes(row) + b'\n' for row in part))
                 entry[name] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+            receipt = custody.verify_slices({name: [json.loads(line) for line in Path(entry[name]['path']).read_bytes()
+                                                    .splitlines()] for name in parts}, protected=protected)
+            write_json_durable(directory / 'custody.json', receipt)
+            entry['custody'] = {'path': str(directory / 'custody.json'),
+                                'sha256': hashlib.sha256((directory / 'custody.json').read_bytes()).hexdigest()}
         else:
             entry['pending'] = 'fewer than two independent train invocations in a split'
         jobs.append(entry)
@@ -184,7 +153,6 @@ def main(argv=None):
     parser.add_argument('--generations', type=int, default=3)
     parser.add_argument('--samples', type=int, default=2)
     parser.add_argument('--shards', type=int, default=2)
-    parser.add_argument('--temperature', type=float, default=1.)
     parser.add_argument('--case-seconds', type=int, default=900)
     parser.add_argument('--max-model-requests', type=int, default=32)
     parser.add_argument('--max-turns', type=int, default=20)
@@ -208,11 +176,12 @@ def main(argv=None):
         program_id = job['program_id']
         directory = args.out / ('program-' + program_id.rsplit(':', 1)[1][:16])
         arguments = ['--program-id', program_id, '--development', job['development']['path'],
-                     '--confirmation', job['confirmation']['path'], '--out', str(directory / 'learning'),
+                     '--confirmation', job['confirmation']['path'], '--custody', job['custody']['path'],
+                     '--out', str(directory / 'learning'),
                      '--server', args.server, '--model-id', args.model_id,
                      '--foundation-id', args.foundation_id, '--generations', str(args.generations),
                      '--samples', str(args.samples), '--shards', str(args.shards),
-                     '--temperature', str(args.temperature), '--case-seconds', str(args.case_seconds),
+                     '--case-seconds', str(args.case_seconds),
                      '--max-model-requests', str(args.max_model_requests), '--max-turns', str(args.max_turns),
                      '--seed-base', str(args.seed_base), '--min-gain-fraction', str(args.min_gain_fraction)]
         if args.baseline_only:
