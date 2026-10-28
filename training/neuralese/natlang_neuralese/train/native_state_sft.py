@@ -3005,6 +3005,35 @@ def _main(argv=None, *, requested_refresh):
                               and args.refresh_at_checkpoint and due_checkpoint)))
                 last_saved_step = step
                 metadata_dirty = False
+            if diloco is not None:
+                # A recovery fence pauses only at a completed update. Other workers keep heartbeating while
+                # their independently committed checkpoints and the coordinator are pinned as one cohort.
+                from .diloco import recovery_fence
+                fence_request = None
+                try:
+                    fence_request = recovery_fence.request(args.out, diloco.worker, diloco.manifest['fingerprint'])
+                    if fence_request is not None:
+                        if not diloco.finish():
+                            raise RuntimeError('in-flight DiLoCo updates did not drain')
+                        _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                            global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                            source_hash=source_hash, source_row_bindings=source_row_bindings,
+                            held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                            rng=capture_training_rng_state(args.device), metrics=metrics,
+                            architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
+                            fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                        last_saved_step = step
+                        metadata_dirty = False
+                        recovery_fence.checkpoint_ready(args.out, fence_request, policy.slot,
+                            global_step=global_step, local_step=step, worker_state=diloco.state_dict())
+                        recovery_fence.wait_release(args.out, fence_request, stopping=lambda: policy.signaled)
+                except Exception as error:
+                    if fence_request is not None:
+                        directory=args.out/'diloco/recovery-fence'
+                        write_json(directory/(fence_request['id']+'.failed.json'), {'schema':recovery_fence.SCHEMA,
+                            'id':fence_request['id'],'worker':diloco.worker,'error_type':type(error).__name__,
+                            'error':str(error)[:1000]})
+                    print(json.dumps({'event':'diloco_recovery_fence_failed','error_type':type(error).__name__}),flush=True)
             if requested_refresh.requested or relative_refresh_due or (args.refresh_after_updates is None
                                         and args.refresh_at_checkpoint and due_checkpoint):
                 refresh_boundary = True

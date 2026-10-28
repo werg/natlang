@@ -506,6 +506,7 @@ def test_weight_ema_and_telemetry_are_on_by_default_and_a_continuation_without_a
 
 def test_full_parent_resumes_as_diloco_with_explicit_ema_handoff(tmp_path, monkeypatch):
     import socket, threading, time
+    from pathlib import Path
     from natlang_neuralese.train import native_diloco, native_state_sft
     from natlang_neuralese.train.diloco.coordinator import serve_coordinator, read_manifest
     from natlang_neuralese.train.diloco.worker import DilocoSettings
@@ -525,6 +526,21 @@ def test_full_parent_resumes_as_diloco_with_explicit_ema_handoff(tmp_path, monke
              '--trainer-argv',json.dumps(args),'--settings',json.dumps(settings),'--quorum','1',
              '--ema','{"decay":0.88,"warmup":0}']) is None
     assert read_manifest(coord)['ema']=={'decay':0.88,'warmup':0}
+    from natlang_neuralese.train.diloco.recovery_fence import SCHEMA as FENCE_SCHEMA
+    fence_dir=worker/'diloco/recovery-fence';fence_dir.mkdir(parents=True)
+    fence_id='a'*32
+    (fence_dir/'request.json').write_text(json.dumps({'schema':FENCE_SCHEMA,'id':fence_id,'worker':0,
+        'fingerprint':read_manifest(coord)['fingerprint'],'deadline':time.time()+60}))
+    ready=[]
+    def release_fence():
+        path=fence_dir/(fence_id+'.ready.json')
+        for _ in range(600):
+            if path.exists():
+                ready.append(json.loads(path.read_text()))
+                (fence_dir/(fence_id+'.release.json')).write_text(json.dumps({'schema':FENCE_SCHEMA,'id':fence_id}))
+                return
+            time.sleep(.05)
+    releaser=threading.Thread(target=release_fence,daemon=True);releaser.start()
     token='test-diloco-ema-token-at-least-32-characters'
     monkeypatch.setenv('NATLANG_DILOCO_TOKEN',token)
     stop=threading.Event();thread=threading.Thread(target=serve_coordinator,args=(coord,'127.0.0.1',port,token),
@@ -538,6 +554,10 @@ def test_full_parent_resumes_as_diloco_with_explicit_ema_handoff(tmp_path, monke
         assert native_state_sft.main(args)==0
     finally:
         stop.set();thread.join(timeout=5)
+    releaser.join(timeout=5);assert ready and ready[0]['worker']==0
+    fenced=_load(Path(ready[0]['checkpoint']))['training']
+    assert fenced['optimizer'] and fenced['rng'] and fenced['exposure_counts'] and fenced['diloco']['worker']==0
+    assert json.loads((fence_dir/(fence_id+'.complete.json')).read_text())['reason']=='released'
     trained=_load(worker/'checkpoint.pt')['training']
     assert trained['global_step']>parent_before['training']['global_step']
     assert trained['options']['weight_ema']=='off' and 'ema' not in trained

@@ -28,8 +28,13 @@ from natlang_neuralese.common import paths
 from natlang_neuralese.common.hashing import sha256_file_hex
 
 
+class FenceUnavailable(RuntimeError):
+    pass
+
+
 class Backend:
-    def __init__(self,record,storage):
+    def __init__(self,record,storage,parent_local):
+        self.parent_local=Path(parent_local)
         self.record,self.storage=record,Path(storage).resolve()
         external=paths.root('data_hdd').resolve()
         if not external.is_mount() or not self.storage.is_relative_to(external):
@@ -60,11 +65,11 @@ class Backend:
         if result.returncode:raise RuntimeError(f'recovery pin {sandbox_id} failed: {result.stderr[-2000:]}')
         return json.loads(result.stdout)
 
-    def pin_worker(self,worker,cycle):
+    def pin_worker(self,worker,cycle,source=None):
         pin=f'/work/.coreweave/recovery-pins/{cycle}/worker-{worker}-{uuid.uuid4().hex}/checkpoint.pt'
         package=self.repo/'training/neuralese/natlang_neuralese'
-        result=self._exec(self.workers[worker],['worker',self.out+'/checkpoint.pt',pin,worker,self.fingerprint,package])
-        return {**result,'sandbox_id':self.workers[worker],'source':self.out+'/checkpoint.pt'}
+        result=self._exec(self.workers[worker],['worker',source or self.out+'/checkpoint.pt',pin,worker,self.fingerprint,package])
+        return {**result,'sandbox_id':self.workers[worker],'source':source or self.out+'/checkpoint.pt'}
 
     def pin_resident(self,worker,cycle):
         pin=f'/work/.coreweave/recovery-pins/{cycle}/resident-{worker}-{uuid.uuid4().hex}/resident.tar'
@@ -75,6 +80,55 @@ class Backend:
         pin=f'/work/.coreweave/recovery-pins/{cycle}/coordinator-{uuid.uuid4().hex}/coordinator.tar'
         result=self._exec(self.coordinator,['coordinator',self.root,pin,self.repo/'training/neuralese/natlang_neuralese'])
         return {**result,'sandbox_id':self.coordinator,'source':self.root}
+
+    def capture_fenced(self, cycle, *, timeout=600):
+        """Fence all learners at completed updates, pin controls and coordinator, then release."""
+        fence=uuid.uuid4().hex;deadline=time.time()+timeout
+        directory=self.out+'/diloco/recovery-fence'
+        boxes=[cwctl.read_sandbox(ident) for ident in self.workers]
+        # Fail quickly before requesting anything if the actual learner runtime lacks the fence mechanism.
+        for box in boxes:
+            check=box.exec(['test','-f',str(self.repo/'training/neuralese/natlang_neuralese/train/diloco/recovery_fence.py')],timeout_seconds=30).result()
+            if check.returncode:raise FenceUnavailable('worker runtime has no recovery-fence support; explicit runtime handoff required')
+        try:
+            for worker,box in enumerate(boxes):
+                made=box.exec(['mkdir','-p',directory]).result()
+                if made.returncode:raise RuntimeError('worker fence directory unavailable')
+                value={'schema':'natlang.diloco-recovery-fence/1','id':fence,'worker':worker,
+                       'fingerprint':self.fingerprint,'deadline':deadline}
+                pending=directory+'/request-'+fence+'.pending'
+                box.write_file(pending,json.dumps(value).encode()).result()
+                moved=box.exec(['mv',pending,directory+'/request.json']).result()
+                if moved.returncode:raise RuntimeError('worker fence request publication failed')
+            ready={}
+            while len(ready)<len(boxes):
+                if time.time()>=deadline:raise TimeoutError('worker recovery fence expired')
+                for worker,box in enumerate(boxes):
+                    if worker in ready:continue
+                    try:
+                        value=json.loads(box.read_file(directory+'/'+fence+'.ready.json').result())
+                    except Exception:
+                        try:failure=json.loads(box.read_file(directory+'/'+fence+'.failed.json').result())
+                        except Exception:continue
+                        raise RuntimeError('worker fence failed: '+str(failure.get('error_type')))
+                    if (value.get('id')!=fence or value.get('worker')!=worker
+                            or value.get('fingerprint')!=self.fingerprint or value.get('deadline')!=deadline
+                            or value.get('checkpoint')!=directory+'/pins/'+fence+'/checkpoint.pt'):
+                        raise ValueError('worker fence readiness binding differs')
+                    ready[worker]=value
+                if len(ready)<len(boxes):time.sleep(1)
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                coordinator=pool.submit(self.pin_coordinator,cycle)
+                residents={i:pool.submit(self.pin_resident,i,cycle) for i in range(len(boxes))}
+                components={'coordinator':coordinator.result()}
+                for i,future in residents.items():components['resident-'+str(i)]=future.result()
+            if time.time()>=deadline:raise TimeoutError('coordinator pin finished after fence deadline')
+            return {'id':fence,'deadline':deadline,'ready':ready,'components':components}
+        finally:
+            release=json.dumps({'schema':'natlang.diloco-recovery-fence/1','id':fence}).encode()
+            for box in boxes:
+                try:box.write_file(directory+'/'+fence+'.release.json',release).result()
+                except Exception:pass  # Each trainer also has the bounded deadline.
 
     def export(self,name,intent):
         dest=self.storage/'objects'/intent['sha256']/Path(intent['path']).name
@@ -141,6 +195,27 @@ class Backend:
             raise ValueError('dependency export lacks independent complete-object GET')
         return value
 
+    def verify_parent(self):
+        from private_export_guard import validate_receipt
+        transfer=self.record['run'].get('parent_transfer') or {}
+        pin_path=Path(transfer['pin']);receipt_path=Path(transfer['receipt'])
+        if (sha256_file_hex(pin_path)!=transfer['pin_sha256'] or
+                sha256_file_hex(receipt_path)!=transfer['receipt_sha256']):
+            raise ValueError('original parent pin or private receipt changed')
+        pin=json.loads(pin_path.read_text());receipt=json.loads(receipt_path.read_text())
+        identity={'sha256':pin['sha256'],'bytes':pin['bytes']};validate_receipt(receipt,identity)
+        if (not receipt.get('verified_at') or pin['path']!=self.parent or
+                self.manifest['identity']['parent_checkpoint_sha256']!=pin['sha256'] or not self.present(receipt)):
+            raise ValueError('original parent private object or coordinator binding differs')
+        path=self.parent_local
+        if (not path.resolve().is_relative_to(self.external) or not path.is_file() or
+                path.stat().st_size!=pin['bytes'] or sha256_file_hex(path,drop_cache=True)!=pin['sha256']):
+            raise ValueError('original parent local full-state recovery copy differs')
+        return {'pin':{'path':str(pin_path),'sha256':transfer['pin_sha256']},
+                'receipt':{'path':str(receipt_path),'sha256':transfer['receipt_sha256']},
+                'local':{'path':str(path),'sha256':pin['sha256'],'bytes':pin['bytes']},
+                'global_step':pin['global_step']}
+
     def present(self, receipt):
         import wandb
         identity=receipt['identity']
@@ -170,6 +245,22 @@ def compatibility(components):
     versions=coord['versions']
     if any(len(w['versions'])!=len(versions) or any(a>b for a,b in zip(w['versions'],versions)) for w in workers):
         return {'compatible':False,'reason':'a worker checkpoint is ahead of the pinned coordinator'}
+    ledgers=coord.get('last_seq');queued=coord.get('queued')
+    if not isinstance(ledgers,list) or not isinstance(queued,list) or len(ledgers)!=len(versions) or len(queued)!=len(versions):
+        return {'compatible':False,'reason':'coordinator sequence ledger is missing'}
+    for worker, state in enumerate(workers):
+        if len(state.get('sequences',[]))!=len(versions):
+            return {'compatible':False,'reason':'worker sequence ledger is missing'}
+        for index,sequence in enumerate(state['sequences']):
+            merged=int(ledgers[index].get(str(worker),0));entry=queued[index].get(str(worker))
+            held=max(merged,entry['sequence'] if entry else 0)
+            if held>sequence:
+                return {'compatible':False,'reason':f'coordinator has uncheckpointed worker {worker} fragment {index} sequence'}
+            pending=state.get('pending',{}).get(str(index))
+            if index in state.get('awaiting_global',[]) and held<sequence:
+                return {'compatible':False,'reason':f'coordinator lacks accepted worker {worker} fragment {index} sequence'}
+            if entry and pending and entry['sequence']==pending['sequence'] and entry['delta_sha256']!=pending['delta_sha256']:
+                return {'compatible':False,'reason':f'queued worker {worker} fragment {index} payload differs'}
     return {'compatible':True,'scope':'separate exact worker full states and stable coordinator state; '
             'not a consolidated global checkpoint; replay and staleness remain subject to normal DiLoCo checks'}
 
@@ -187,14 +278,26 @@ def run_once(record,state_path,backend):
         if cycle is None:
             cycle={'id':uuid.uuid4().hex,'phase':'pinning','components':{},'receipts':{},'errors':{}}
             state['pending']=cycle;save()
+        if 'fenced' not in cycle and not cycle.get('unfenced') and hasattr(backend,'capture_fenced'):
+            try:
+                captured=backend.capture_fenced(cycle['id'])
+                cycle['fenced']={'id':captured['id'],'deadline':captured['deadline'],
+                                 'ready':{str(k):v for k,v in captured['ready'].items()}}
+                cycle['components'].update(captured['components']);cycle['errors'].pop('fence',None);save()
+            except FenceUnavailable as error:
+                cycle['unfenced']={'reason':str(error),'scope':'opportunistic sequence-checked component pins'};save()
+            except Exception as error:
+                cycle['phase']='incomplete';cycle['errors']['fence']=str(error);save();return state
         missing=[i for i in range(len(backend.workers)) if 'worker-'+str(i) not in cycle['components']]
         if missing:
             # A later worker checkpoint requires a newer coordinator pin; keep any old artifacts, but do not
             # bind them into this candidate as though they followed the newly pinned checkpoint.
-            old=cycle['components'].pop('coordinator',None); old_receipt=cycle['receipts'].pop('coordinator',None)
+            old=cycle['components'].pop('coordinator',None) if 'fenced' not in cycle else None
+            old_receipt=cycle['receipts'].pop('coordinator',None) if old else None
             if old:cycle.setdefault('superseded_coordinator_pins',[]).append({'pin':old,'receipt':old_receipt})
             with ThreadPoolExecutor(max_workers=len(missing)) as pool:
-                futures={i:pool.submit(backend.pin_worker,i,cycle['id']) for i in missing}
+                futures={i:pool.submit(backend.pin_worker,i,cycle['id'],cycle['fenced']['ready'][str(i)]['checkpoint'])
+                         if 'fenced' in cycle else pool.submit(backend.pin_worker,i,cycle['id']) for i in missing}
                 for i,future in futures.items():
                     name='worker-'+str(i)
                     try:cycle['components'][name]=future.result();cycle['errors'].pop(name,None)
@@ -211,6 +314,9 @@ def run_once(record,state_path,backend):
         for name in list(cycle['receipts']):
             if str(cycle['errors'].get(name,'')).startswith('presence: '):cycle['errors'].pop(name)
         cycle['compatibility']=compatibility(cycle['components']);cycle['phase']='exporting';save()
+        if (len(cycle['components'])==2*len(backend.workers)+1 and not cycle['compatibility']['compatible']):
+            cycle['phase']='incompatible-pins';cycle['recovery_blocker']=cycle['compatibility']['reason']
+            state['cycles'].append(cycle);state.pop('pending');save();return state
         # Each pin and actual step/source/runtime identity is durably recorded before its external PUT.
         with ThreadPoolExecutor(max_workers=5) as pool:
             futures={name:pool.submit(backend.export,name,intent) for name,intent in cycle['components'].items()
@@ -232,6 +338,8 @@ def run_once(record,state_path,backend):
         all_exported = all_components and set(cycle['receipts'])==set(cycle['components']) and not cycle['errors']
         if all_exported and cycle['compatibility']['compatible']:
             try:
+                if hasattr(backend,'verify_parent'):
+                    cycle['parent_reference']=backend.verify_parent();save()
                 if 'dependency_intent' not in cycle:
                     cycle['dependency_intent']=backend.prepare_dependencies(cycle);save()
                 if 'dependency_receipt' not in cycle:
@@ -262,13 +370,13 @@ def run_once(record,state_path,backend):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('run_id');p.add_argument('--state',type=Path,required=True)
-    p.add_argument('--storage',type=Path,required=True);p.add_argument('--interval',type=float,default=1800)
+    p.add_argument('--storage',type=Path,required=True);p.add_argument('--parent-local',type=Path,required=True);p.add_argument('--interval',type=float,default=1800)
     p.add_argument('--once',action='store_true');args=p.parse_args()
     if args.interval <= 0:p.error('interval must be positive')
     cwctl.load_env_file()
     import diloco
     record=json.loads((diloco.RUNS/(args.run_id+'.json')).read_text())
-    backend=Backend(record,args.storage)
+    backend=Backend(record,args.storage,args.parent_local)
     while True:
         try:
             state=run_once(record,args.state,backend)

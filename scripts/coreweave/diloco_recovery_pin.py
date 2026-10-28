@@ -6,6 +6,7 @@ This is a topology component, not a consolidated global model or a claim of reco
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,11 @@ from natlang_neuralese.train.diloco.coordinator import read_manifest, _metadata
 def _hash(path): return sha256_file_hex(path, drop_cache=True)
 
 
+def _delta_hash(tensor):
+    value=tensor.detach().float().cpu().contiguous()
+    return hashlib.sha256(value.numpy().tobytes()).hexdigest()
+
+
 def worker_pin(checkpoint, destination, worker, expected_fingerprint, package):
     checkpoint, destination = Path(checkpoint), Path(destination)
     destination.parent.mkdir(parents=True,exist_ok=True)
@@ -42,11 +48,20 @@ def worker_pin(checkpoint, destination, worker, expected_fingerprint, package):
         if (not isinstance(version,list) or not isinstance(sequences,list) or len(version)!=len(sequences)
                 or not all(type(x) is int and x>=0 for x in [*version,*sequences])):
             raise ValueError('worker checkpoint has malformed fragment progress')
+        pending={}
+        for key, entry in (dl.get('pending') or {}).items():
+            index=int(key);payload=(dl.get('pending_payloads') or {}).get(str(index))
+            if index<0 or index>=len(sequences) or entry.get('sequence')!=sequences[index] or payload is None:
+                raise ValueError('worker pending upload lacks exact checkpoint payload and sequence')
+            pending[str(index)]={'sequence':entry['sequence'],'delta_sha256':_delta_hash(payload)}
+        awaiting=[int(index) for index in dl.get('awaiting_global',[])]
+        if any(index<0 or index>=len(sequences) for index in awaiting):
+            raise ValueError('worker awaiting-global fragment is invalid')
         from scripts.coreweave.recovery_readiness import required_bindings
         dependencies=required_bindings({'training':training,'model_config':state['model_config']})
         return {'path':str(destination),'sha256':_hash(destination),'bytes':destination.stat().st_size,
                 'global_step':training['global_step'],'worker':worker,'fingerprint':dl['fingerprint'],
-                'versions':version,'sequences':sequences,'pending_fragments':sorted(dl.get('pending',{})),
+                'versions':version,'sequences':sequences,'pending':pending,'awaiting_global':awaiting,
                 'exposure_sha256':canonical_json_sha256_hex(training['exposure_counts']),
                 'source_hash':training.get('source_hash'),
                 'required_dependencies':dependencies,
@@ -124,15 +139,25 @@ def coordinator_pin(root, archive, package, *, attempts=5):
             after=_inventory(root)
             if before!=after:
                 continue
-            versions=[];ledgers=[]
+            from safetensors.torch import load_file
+            versions=[];ledgers=[];queued=[]
             for fragment in manifest['fragments']:
                 index=fragment['index'];meta=_metadata(staging/'fragments'/f'{index:05d}.safetensors')
                 versions.append(int(meta['version']));ledgers.append(json.loads(meta.get('last_seq','{}')))
+                items={}
+                folder=staging/'pending'/f'{index:05d}'
+                if folder.is_dir():
+                    for path in sorted(folder.glob('*.safetensors')):
+                        entry=_metadata(path);worker=str(int(entry['worker']))
+                        if worker in items:raise ValueError('duplicate coordinator pending worker')
+                        items[worker]={'sequence':int(entry['sequence']),
+                                       'delta_sha256':_delta_hash(load_file(path)['delta'])}
+                queued.append(items)
             temp=archive.with_name(archive.name+'.tmp')
             with tarfile.open(temp,'x',dereference=True) as tar:tar.add(staging,arcname='diloco-coordinator')
             os.link(temp,archive);temp.unlink()
             return {'path':str(archive),'sha256':_hash(archive),'bytes':archive.stat().st_size,
-                    'fingerprint':manifest['fingerprint'],'versions':versions,'last_seq':ledgers,
+                    'fingerprint':manifest['fingerprint'],'versions':versions,'last_seq':ledgers,'queued':queued,
                     'manifest':manifest,'captured_at':time.time(),
                     'runtime_code_sha256':canonical_json_sha256_hex(code_inventory(package)),
                     'scope':'stable coordinator files; separate worker checkpoints retain local optimizer and pending updates'}
