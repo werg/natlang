@@ -65,6 +65,7 @@ def continuation_graph(row, split, source_tokenizer, expanded_tokenizer, source_
 
 
 def main():
+    from natlang_neuralese.common import line_backbones
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--source-sha256', required=True)
@@ -73,7 +74,7 @@ def main():
     parser.add_argument('--acquisition-sha256', required=True)
     parser.add_argument('--protection-manifest', type=Path, required=True)
     parser.add_argument('--base-tokenizer', type=Path, required=True)
-    parser.add_argument('--model-key', choices=('lfm25', 'mellum21'), required=True)
+    parser.add_argument('--model-key', choices=tuple(line_backbones.BACKBONES), required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     import pyarrow.parquet as pq

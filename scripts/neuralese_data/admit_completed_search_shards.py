@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 
+from natlang_neuralese.common import line_backbones
 from natlang_neuralese.common.hashing import sha256_file_hex as sha
 from natlang_neuralese.common.jsonio import iter_jsonl_rows,write_json_durable
 from natlang_neuralese.data.native_sources import NativeGraphSource
@@ -22,9 +23,11 @@ from scripts.neuralese_data.verify_completed_search_parent import verify as veri
 ROOT=Path(__file__).resolve().parents[2]
 PARENT='external-expansion-search-owl-native-20261015-v1'
 PREFIX='external-expansion-search-owl-native-graphs-20261016-v3-shard'
-MODELS={
-    'lfm25':'lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6',
-    'mellum21':'mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f'}
+# The running Search/OWL render job was launched with these two student views (its done/<alias> markers are
+# named by them); their model ids come from the shared line-backbone declaration. An LFM3 view of the same
+# source is a new render job with its own aliases, not an edit of this one.
+SEARCH_JOB_BACKBONES=('lfm25','mellum21')
+MODELS={key:line_backbones.model_id(key) for key in SEARCH_JOB_BACKBONES}
 
 
 def eligible(done,expected_renderer):

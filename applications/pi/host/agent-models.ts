@@ -44,7 +44,7 @@ export function agentModels(settings: AgentModelSettings): AgentModels {
   // One natlang driver per thinking setting, sent as the template argument `enable_thinking`; for a Neuralese server
   // also one per owner (the conversation's provider session ID), whose blocks its requests hold. No `preserve_thinking`:
   // earlier turns' reasoning renders by the served backbone's declared history-reasoning policy, its template default
-  // (training/neuralese/natlang_neuralese/serve/chat.py BACKBONE_HISTORY_REASONING: LFM2.5 last turn only, Mellum kept).
+  // (training/neuralese/natlang_neuralese/serve/chat.py BACKBONE_HISTORY_REASONING: LFM2.5 last turn only, Mellum kept, LFM3 as declared there).
   const drivers = new Map<string, ModelDriver>();
   const driver = (reasoning: boolean, owner?: string): ModelDriver => {
     const request = { endpoint: root, model: modelId, apiKey,

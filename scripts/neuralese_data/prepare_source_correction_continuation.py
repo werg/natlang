@@ -17,6 +17,7 @@ from pathlib import Path
 from natlang_neuralese.common.hashing import (canonical_json_sha256_hex, sha256_file_hex,
                                                sha256_file_hex_cached)
 
+from natlang_neuralese.common import line_backbones
 from natlang_neuralese.common.paths import root as machine_root
 
 ROOT = machine_root('data_nvme')
@@ -24,6 +25,10 @@ REPAIRS = machine_root('data_hdd') / 'natlang-data-repair-20261026-v4b'
 LUNA = ROOT / 'luna-generation-20261026'
 PACKAGE = LUNA / 'registered-packages'
 CORRECTION_SCHEMA = 'natlang.native-source-correction/1'
+# This preparer applies one historical correction to the lineage whose sources, repairs and packages are named
+# below, so its backbones are fixed: LFM2.5 for the lfm role (those inputs are LFM2.5 views). It is not retargeted
+# at LFM3; an LFM3 append resolves its own sources and backbone.
+CORRECTED_BACKBONES = {'lfm': 'lfm25', 'mellum': 'mellum21'}
 MELLUM_REMOTE_ROOT = Path('/work/resume/training/native-source-correction-continuation-20261026-v5/mellum')
 
 BAD_TRAIN = {
@@ -331,7 +336,7 @@ def _registered_sources(model, role):
         if (archive.stat().st_size != identity.get('bytes')
                 or sha256_file_hex_cached(archive) != identity.get('sha256')):
             raise ValueError(f'{corpus} actual private archive differs from its independent proof')
-        package_role = 'lfm25' if model == 'lfm' else 'mellum21'
+        package_role = CORRECTED_BACKBONES[model]
         graph = package / package_role / role / 'native-graphs.jsonl.zst'
         _validate_registered_role(entry, package_role, role, graph,
                                   model_id=cfg['model_id'], fingerprint=cfg['fingerprint'])
@@ -358,10 +363,8 @@ def _validate_registered_role(entry, package_role, split, graph, *, model_id, fi
 
 
 def _current_config(model):
-    role = 'lfm25' if model == 'lfm' else 'mellum21'
-    model_id = ('lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6'
-                if model == 'lfm' else
-                'mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f')
+    role = CORRECTED_BACKBONES[model]
+    model_id = line_backbones.model_id(role)
     fingerprints = set()
     role_id_sets = set()
     for name in ('rest27-reviewed', 'big2-offload-1000', 'big2-offload-5000'):

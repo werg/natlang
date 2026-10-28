@@ -6,10 +6,11 @@ import type { TuneExecution } from './execution.js';
  *
  * {
  *   "tune": {
- *     "student": "lfm2.5-350m",
- *     "students": { "lfm2.5-350m": { "base": { native identity }, "checkpoint": "/path", "engine": { "device": "cuda" },
- *                                     "trainer": ["python", "-m", "natlang_neuralese.tune.build"], "hfConfigDir": "/path",
- *                                     "env": { ... }, "baseGgufSha256": "...", "moduleMap": "lfm2" } },
+ *     "student": "lfm3-1.7b",
+ *     "students": { "lfm3-1.7b": { "base": { native identity }, "checkpoint": "/path", "engine": { "device": "cuda" },
+ *                                   "trainer": ["python", "-m", "natlang_neuralese.tune.build"], "hfConfigDir": "/path",
+ *                                   "env": { ... }, "baseGgufSha256": "...", "moduleMap": "lfm3" } },
+ *     // a student of the LFM2.5 line is "lfm2.5-350m" with "moduleMap": "lfm2"; moduleMap is the base's architecture
  *     "teacher": "teacher-profile-name",
  *     "backend": "managed-local"
  *   }

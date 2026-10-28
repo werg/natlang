@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse, hashlib, json, shutil, subprocess, sys
 from pathlib import Path
+from natlang_neuralese.common import line_backbones as lb
 from natlang_neuralese.common.paths import resolve
 from scripts.coreweave.teacher_tranche_admission import file_binding, read_bound
 
@@ -33,7 +34,10 @@ def publish(batch:int,number:int,conversion:Path,attempt:int=0,*,suffix:str='',s
         or converted.get('source',{}).get('sha256')!=file_binding(source_path)['sha256']
         or source_proof.get('current_protection',{}).get('sha256')!=PROTECTION_SHA):
         raise ValueError('source or conversion proofs do not agree on exact non-admission inputs')
-    models={m:None for m in ('lfm25','mellum21')}
+    declared=frozenset(row.get('model')for row in converted.get('models',[]))
+    if declared not in lb.model_key_pairs(): raise ValueError('both native model views are required')
+    # The conversion's own receipts name its (lfm backbone, mellum) pair; lfm line first as in earlier packages.
+    models={m:None for m in sorted(declared,key=lambda key:lb.LINES.index(lb.line_of(key)))}
     for row in converted.get('models',[]):
         model=row['model']; receipt=read_bound(row['receipt']); output_root=conversion/model
         if (model not in models or receipt.get('status')!='passed' or receipt.get('model_key')!=model
@@ -65,8 +69,7 @@ def publish(batch:int,number:int,conversion:Path,attempt:int=0,*,suffix:str='',s
         'both-port-conversion.json':conversion_path,
         'tokenizer-relocation.json':SPOOL/'assets/tokenizers/tokenizer-relocation.json',
         'predecessor-relocations.json':SPOOL/'assets/qwen36-predecessor-relocations.json',
-        'base-inventory-lfm25.json':conversion/'base-inventory-lfm25.json',
-        'base-inventory-mellum21.json':conversion/'base-inventory-mellum21.json'}
+        **{f'base-inventory-{m}.json':conversion/f'base-inventory-{m}.json' for m in models}}
     for rel,path in evidence.items():
         if not path.is_file(): raise ValueError(f'missing required admission evidence: {path}')
         _copy(path,package/'evidence'/rel)

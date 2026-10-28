@@ -17,6 +17,7 @@ import sys
 
 ROOT=Path(__file__).resolve().parents[2]
 sys.path[:0]=[str(ROOT/'training/neuralese'),str(ROOT/'scripts/coreweave')]
+from natlang_neuralese.common import line_backbones
 from natlang_neuralese.common.hashing import sha256_file_hex_cached
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
@@ -318,7 +319,7 @@ def build_role_declarations(role_inputs):
             source_recipe_sha=identity['checkpoint_recipe'].get('sha256')
         if checkpoint_sha!=owner_cursor.get('checkpoint',{}).get('sha256'):
             raise ValueError('source identity evidence is not for the current owner checkpoint')
-        if not isinstance(model_id,str)or ':' not in model_id or model_id.split(':',1)[0]!=('lfm2' if role=='lfm' else 'mellum'):
+        if not isinstance(model_id,str)or ':' not in model_id or model_id.split(':',1)[0]not in line_backbones.model_id_architectures(role):
             raise ValueError('owner receipt model identity does not match the requested role')
         recipe=resolve_recipe_data(recipe_path);policy_sha=recipe_identity_sha256(recipe_path)
         recipe_relation=({'kind':'metadata-only-source-identity','current':binding(recipe_path)}

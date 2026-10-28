@@ -6,8 +6,8 @@ Registry: training/neuralese_artifacts.json; immutable manifests: training/artif
 data/neuralese/artifacts/<id>/ (gitignored, moved between machines by `push`/`pull`, never by Git). Library:
 training/neuralese/natlang_neuralese/artifacts.py.
 
-    scripts/neuralese_artifacts.py register --id ID --kind prompt-bank --dialect native-state/lfm2 \\
-        --backbone-model LiquidAI/LFM2.5-350M --backbone-revision REV --init-method text \\
+    scripts/neuralese_artifacts.py register --id ID --kind prompt-bank --dialect native-state/lfm3 \\
+        --backbone-model LiquidAI/LFM3-1.7B --backbone-revision 40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd --init-method text \\
         --init-source ts-host/src/native/system-prompts.ts --file bank.nz=/path/to/bank.nz
     scripts/neuralese_artifacts.py register-run --id ID --run-dir RUN [--backbone-revision REV]
     scripts/neuralese_artifacts.py verify [--id ID]

@@ -274,6 +274,18 @@ def packet_references(ready_reference, collection):
     return matches[0]
 
 
+def _predecessor_models(cache_contracts, by_path):
+    """The declared student views a predecessor must supply: the converting pair, else every view it carries."""
+    from natlang_neuralese.common import line_backbones
+    if cache_contracts is not None:
+        unknown = set(cache_contracts) - set(line_backbones.BACKBONES)
+        if unknown:
+            raise ValueError('registered cache contracts name undeclared student views: ' + ', '.join(sorted(unknown)))
+        return tuple(cache_contracts)
+    return tuple(model for model in line_backbones.BACKBONES
+                 if model + '/train/native-graphs.jsonl.zst' in by_path)
+
+
 def admitted_predecessors(root, corpus_id, *, namespaces=(LEGACY_TEACHER_NAMESPACE,), relocation_manifest=None,
                           cache_contracts=None):
     """Return the registered positive corpus closure in registry order.
@@ -332,7 +344,7 @@ def admitted_predecessors(root, corpus_id, *, namespaces=(LEGACY_TEACHER_NAMESPA
             # train member and model/tokenizer/policy contract.
             from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import registered_cached_content_index
             outputs = {}
-            for model in ('lfm25', 'mellum21'):
+            for model in _predecessor_models(cache_contracts, by_path):
                 contract = cache_contracts.get(model) or {}
                 fingerprint, policy = contract.get('tokenizer_fingerprint'), contract.get('policy_sha256')
                 if not isinstance(fingerprint, str) or not isinstance(policy, str):
@@ -371,8 +383,10 @@ def admitted_predecessors(root, corpus_id, *, namespaces=(LEGACY_TEACHER_NAMESPA
         if (validation.get('status') != 'passed' or validation.get('training_admission') is not True):
             raise ValueError('teacher predecessor lacks actual admission')
         outputs = {}
-        for model in ('lfm25', 'mellum21'):
+        for model in _predecessor_models(cache_contracts, by_path):
             relative = model + '/train/native-graphs.jsonl.zst'
+            if relative not in by_path:
+                raise ValueError(f'teacher predecessor {ident} has no {model} view; register its exact twin first')
             reference = {**by_path[relative], 'path': str(folder / relative)}
             actual = file_binding(reference['path'])
             if (any(actual[key] != reference[key] for key in ('sha256', 'bytes'))

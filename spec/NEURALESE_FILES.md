@@ -30,7 +30,7 @@ Standard safetensors tooling can open the file.
 | Field | Meaning |
 | --- | --- |
 | `format` | `"natlang.neuralese-file/1"`. |
-| `dialect` | The default dialect tag of the file's values, e.g. `"native-state/lfm2"`. |
+| `dialect` | The default dialect tag of the file's values, e.g. `"native-state/lfm2"` or `"native-state/lfm3"`. |
 | `types` | Natlang type declarations (`type X = …;`) available to the export types. |
 | `exports` | Map from export name to `{ type, value, description? }`. `type` is in natlang type syntax. |
 | `native_states` | Map from `nzs1_` ID to `{ bytes }`, one per native state tensor. |

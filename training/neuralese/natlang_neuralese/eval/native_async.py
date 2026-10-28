@@ -9,6 +9,7 @@ import sys
 import time
 from ..common.hashing import canonical_json_sha256_hex,sha256_file_hex_cached
 from ..common.jsonio import write_json_durable
+from ..common.line_backbones import all_architectures
 from ..common.runtime_inventory import task_runtime_inventory, snapshot_task_runtime
 
 
@@ -185,7 +186,7 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
         raise ValueError('native eval checkpoint differs from independently verified export')
     state=CheckpointPolicy.load(checkpoint)
     config=state.get('model_config') or {}
-    if state.get('schema')!=CHECKPOINT_SCHEMA or config.get('architecture') not in {'lfm2','lfm2_moe','maple','mellum'}:
+    if state.get('schema')!=CHECKPOINT_SCHEMA or config.get('architecture') not in set(all_architectures()):
         raise ValueError('native async export path requires a supported native student checkpoint')
     inference_source=state.get('inference_source')
     if state.get('optimizer_pruned'):

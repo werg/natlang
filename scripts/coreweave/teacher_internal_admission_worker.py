@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import argparse, json, os, subprocess, sys, time, traceback
 from pathlib import Path
+from natlang_neuralese.common import line_backbones as lb
 from natlang_neuralese.common.paths import resolve
 from scripts.coreweave.teacher_tranche_admission import Tranche, file_binding, read_bound
 from scripts.coreweave.teacher_internal_conversion import _verified_zero_conversion
@@ -27,6 +28,15 @@ ORIGINAL_SETTINGS_SHA='7572d88ad494c03448c27081abeba95c1bb2430859a846ca17fdccf71
 PUBLISHER_SHA='121a590664c484325ad4bf34087e25cb9614f74b78ffb892d4c7785c817d9308'
 DEPLOYMENT_SHA='6772cabd89be7b6d5cbdcc27e5be49c52ea3a2a900f8e82beeed2500fedffe8a'
 BAD_82='qwen36-verified-positive-native-graphs-20261023-internal-batch0082-tranche0000'
+
+
+def _model_keys()->tuple[str,...]:
+    """The two declared line-backbone views this worker's tokenizer relocation carries (lfm line first)."""
+    rows=read_bound(file_binding(TOKENIZERS)).get('models')
+    declared=frozenset(row.get('model')for row in rows)if isinstance(rows,list)else frozenset()
+    if declared not in lb.model_key_pairs():
+        raise ValueError('tokenizer relocation does not declare an admissible pair of native student views')
+    return tuple(sorted(declared,key=lambda key:lb.LINES.index(lb.line_of(key))))
 
 
 def _run(args:list[str],log:Path,env:dict|None=None)->None:
@@ -95,9 +105,9 @@ def _conversion_is_current(path:Path,ctx:Tranche)->bool:
     if any(row.get('corpus_id')==BAD_82 for row in result.get('same_actor_source_boundary_inputs',[])):
         return False
     policies={row['model']:read_bound(row['receipt']) for row in result.get('models',[])}
-    if set(policies)!={'lfm25','mellum21'}: return False
-    return (policies['lfm25'].get('explicit_history_reasoning_policy')=='keep'
-        and policies['mellum21'].get('explicit_history_reasoning_policy') is None
+    if frozenset(policies)not in lb.model_key_pairs(): return False
+    return (all(row.get('explicit_history_reasoning_policy')==lb.backbone(model)['explicit_history_reasoning_policy']
+                for model,row in policies.items())
         and all(row.get('failed_assistant_history_policy')=='mask-runtime-failures'
                 for row in policies.values()))
 
@@ -176,11 +186,10 @@ def _publish_if_new_delta(ctx:Tranche,conversion:Path)->dict|None:
     for row in proof['models']:
         receipt=read_bound(row['receipt']); row_counts[row['model']]=receipt['outputs']['train']['rows']
     if not any(row_counts.values()):
-        if set(row_counts)!={'lfm25','mellum21'}:
+        if frozenset(row_counts)not in lb.model_key_pairs():
             raise ValueError('zero-row disposition requires both exact native model receipts')
         source_proof=read_bound(proof['source_proof'])
-        contracts={'lfm25':{'tokenizer_fingerprint':'be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105'},
-                   'mellum21':{'tokenizer_fingerprint':'fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f'}}
+        contracts={model:{'tokenizer_fingerprint':lb.backbone(model)['expanded_fingerprint']}for model in row_counts}
         verified=_verified_zero_conversion(ROOT,conversion/'both-port-conversion.json',ctx,
                                            source_proof,contracts)
         return {'status':'verified-zero-delta','conversion':conversion_ref,
@@ -311,7 +320,7 @@ def _process_verified_boundary(ctx:Tranche)->dict:
                 or result.get('training_exposure')is not False):
             raise ValueError('zero-positive boundary lacks its exact completed source execution')
         return {**empty,'source_proof':source_ref,'source_result':result_ref,
-                'new_registration':False,'row_counts':{'lfm25':0,'mellum21':0}}
+                'new_registration':False,'row_counts':{model:0 for model in _model_keys()}}
     conversion=_next_conversion(ctx)
     if conversion is None:raise RuntimeError('conversion did not produce a durable both-port receipt')
     result=_publish_if_new_delta(ctx,conversion)

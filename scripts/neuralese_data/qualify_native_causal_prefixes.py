@@ -18,6 +18,7 @@ import time
 import torch
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'training'/'neuralese'))
+from natlang_neuralese.common import line_backbones
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_file_hex_cached
 from natlang_neuralese.common.jsonio import open_jsonl_text,write_json_durable
 from natlang_neuralese.data.native_graph import parse_graph
@@ -177,8 +178,7 @@ def load_qualification_model(args, *, device='cuda'):
         del state,training,options
         if config.get('native_linear_precision','ieee')!=args.linear_precision:
             raise ValueError('qualification arithmetic differs from the exact trained parent')
-    allowed={'lfm':{'lfm2','lfm2_moe'},'mellum':{'mellum','maple'}}
-    if config['architecture'] not in allowed[args.model]:
+    if config['architecture'] not in line_backbones.architectures(args.model):
         raise ValueError('qualification model family differs from the actual loaded checkpoint')
     for parameter in model.parameters():parameter.requires_grad_(False)
     model.train()

@@ -13,6 +13,7 @@ import math
 import re
 from pathlib import Path
 
+from natlang_neuralese.common import line_backbones
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.train.native_resident import binding, bound as _resident_bound, code_inventory, same_geometry_identity
@@ -140,6 +141,19 @@ def _policy_gate_sft_contract(review):
             or any((review['old_code'].get(name), review['new_code'].get(name)) != pair
                    for name, pair in POLICY_GATE_SFT_COMPOSITION.items())):
         raise ValueError('ordinary SFT continuation requires the exact five-file frozen policy-gate composition')
+
+
+# The pinned module-hash compositions below (attention index, KEEP history profile) were independently reviewed
+# against these backbones' frozen runtimes and are keyed by role as their recorded reviews are. A continuation whose
+# identity carries another backbone's architecture (LFM3) is not covered by them: it needs its own review and its
+# own composition entries; nothing is inferred or carried over.
+REVIEWED_BACKBONES = {'lfm': 'lfm25', 'mellum': 'mellum21'}
+
+
+def _composition_applies(role, architecture):
+    """True when ``role``'s pinned composition was reviewed for the identity's backbone (or none is declared)."""
+    return (not isinstance(architecture, str)
+            or architecture in line_backbones.backbone(REVIEWED_BACKBONES[role])['architectures'])
 
 
 ATTENTION_INDEX_POLICY = 'native-graph-attention-index-reuse-v1'
@@ -310,7 +324,8 @@ def _history_profile_contract(review):
             or not any(changes <= set(composition) | {HISTORY_PROFILE_VERIFIER} and all(
                 old.get(name) in pair and new.get(name)==pair[1]
                 for name,pair in composition.items())
-                for composition in HISTORY_PROFILE_COMPOSITIONS.values())
+                for role,composition in HISTORY_PROFILE_COMPOSITIONS.items()
+                if _composition_applies(role,config.get('architecture')))
             or any(not old.get(name) or old.get(name)!=new.get(name)
                    for name in HISTORY_PROFILE_SOURCE_POLICY_FILES)):
         raise ValueError('KEEP profile continuation needs exact reviewed module pairs and unchanged source parser; policy capacity stays fresh')
@@ -342,6 +357,11 @@ def _attention_index_contract(review, limits):
         return
     basis = review.get('attention_index_basis') or {}
     composition = ATTENTION_INDEX_COMPOSITIONS.get(basis.get('model'))
+    architecture = ((review.get('identity') or {}).get('model_config') or {}).get('architecture')
+    if composition is not None and not _composition_applies(basis['model'], architecture):
+        raise ValueError('attention index continuation composition was reviewed for '
+                         + REVIEWED_BACKBONES[basis['model']] + ', not architecture ' + str(architecture)
+                         + '; this backbone needs its own independently reviewed composition')
     reference = basis.get('review') or {}
     if composition is None or reference.get('sha256') != ATTENTION_INDEX_REVIEW_SHA256:
         raise ValueError('attention index continuation requires its exact independently approved frozen review')
