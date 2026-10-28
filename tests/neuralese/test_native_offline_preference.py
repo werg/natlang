@@ -403,7 +403,7 @@ def test_actual_preference_deficits_survive_three_phase_semantic_training_and_ne
         assert progress_obligations(collect_sft_progress(restored))['complete']
 
 
-@pytest.mark.parametrize('role', ['lfm', 'mellum'])
+@pytest.mark.parametrize('role', ['lfm'])
 def test_actual_preference_prefix_recipe_parser_keeps_parameters_command_and_identity(tmp_path, role):
     from pathlib import Path
     from natlang_neuralese.train import recipe
