@@ -329,6 +329,28 @@ def handle(context, request):
     restricts what an operator may change (`Context.selection`)."""
     op, parent, operations = request['op'], request.get('parent'), request.get('operations')
 
+    if op == 'import-artifacts':
+        import base64
+        from ...serve.store import decode_native_state
+        from ...model.native_artifact import decode_native_tensor_artifact
+        for item in request.get('artifacts', []):
+            ident, body = item['id'], base64.b64decode(item['bytes'], validate=True)
+            if ident.startswith('nzs1_'):
+                block, actual = decode_native_state(body)
+                if actual != ident:
+                    raise LearnedOptimizerError('native evidence identity mismatch')
+                record = context.engine.store.put_native_state(block)
+            elif ident.startswith('nnt1_'):
+                artifact, actual = decode_native_tensor_artifact(body)
+                if actual != ident:
+                    raise LearnedOptimizerError('native evidence identity mismatch')
+                record = context.engine.store.put_native_tensor_artifact(artifact)
+            else:
+                raise LearnedOptimizerError('unknown native evidence artifact kind')
+            if record.id != ident:
+                raise LearnedOptimizerError('native evidence changed during import')
+        return {'imported': len(request.get('artifacts', []))}
+
     def persist(bundle, loss):
         # Artifacts for the release, and the measured bundle under its id: a root's verifier checks the bundle an
         # episode reports against what the services actually measured (`tune.reward.mjs`).
@@ -387,8 +409,8 @@ def serve(stream_in, stream_out, *, commands=None, limit=8):
     """The persistent service: one JSON request per input line, one JSON reply per output line (``{"id", "result"}``
     or ``{"id", "error"}``). A request is an adaptation service call (``{"id", "plan", "out", "op", ...}``, as
     `service`) or, with ``commands``, any command of the package (``{"id", "command", "spec"}``). Adaptation contexts
-    stay loaded per (plan, out) while the plan, bank and optimizer state files are unchanged, at most ``limit`` at a time (least recently used first out), so an episode's calls and
-    many episodes of one program pay the model and context preparation once. Ends at end of input."""
+    stay loaded per (plan, out) while the plan, bank and optimizer state files are unchanged. The current context
+    closes before switching because its TensorStore owns an exclusive lock. Ends at end of input."""
     import contextlib
     import sys
     contexts = {}
@@ -407,7 +429,14 @@ def serve(stream_in, stream_out, *, commands=None, limit=8):
                     key = _context_key(request)
                     for stale in [k for k in contexts if k[:2] == key[:2] and k != key]:
                         contexts.pop(stale).close()
-                    context = contexts.pop(key, None) or Context(request['plan'], request['out'])
+                    context = contexts.pop(key, None)
+                    if context is None:
+                        # TensorStore owns an exclusive process lock. Contexts commonly share one operation store;
+                        # close the old context before opening the next instead of attempting two simultaneous owners.
+                        for old in contexts.values():
+                            old.close()
+                        contexts.clear()
+                        context = Context(request['plan'], request['out'])
                     contexts[key] = context
                     while len(contexts) > limit:
                         contexts.pop(next(iter(contexts))).close()

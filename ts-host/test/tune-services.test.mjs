@@ -41,4 +41,9 @@ test('a program\'s tune services bind its teacher data; programs without them ke
   assert.notEqual(first, without);
   writeFileSync(join(root, 'tune.services.mjs'), 'export default () => ({ clock: {} });\n');
   assert.notEqual(sharedSourceHash(program, root), first);
+  writeFileSync(join(root, 'helper.mjs'), 'export const value = 1;\n');
+  writeFileSync(join(root, 'tune.services.mjs'), "import { value } from './helper.mjs'; export default () => ({ value });\n");
+  const bound = servicesDigest(root);
+  writeFileSync(join(root, 'helper.mjs'), 'export const value = 2;\n');
+  assert.notEqual(servicesDigest(root), bound);
 });

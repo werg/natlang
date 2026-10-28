@@ -11,7 +11,7 @@
  */
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Services } from '../runtime/runtime.js';
 import type { SplitExample } from './collect.js';
@@ -25,7 +25,21 @@ const loaded = new Map<string, Promise<Provided | null>>();
  * teacher data (`keys.sharedSourceHash`), rollout groups and round journals, so changed services never reuse runs. */
 export function servicesDigest(root: string): string | null {
   const path = join(root, SERVICES_FILE);
-  return existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : null;
+  if (!existsSync(path)) return null;
+  const seen = new Set<string>(), parts: { path: string; text: string }[] = [];
+  const visit = (file: string) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const text = readFileSync(file, 'utf8');
+    parts.push({ path: file, text });
+    for (const match of text.matchAll(/(?:from\s*|import\s*)["'](\.\.?\/[^"']+\.mjs)["']/g))
+      visit(resolve(dirname(file), match[1]!));
+  };
+  visit(path);
+  const hash = createHash('sha256');
+  if (parts.length === 1) return hash.update(parts[0]!.text).digest('hex');
+  for (const part of parts) hash.update(JSON.stringify([part.path.slice(root.length), part.text]));
+  return hash.digest('hex');
 }
 
 async function providedBy(root: string): Promise<Provided | null> {

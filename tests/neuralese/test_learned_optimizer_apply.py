@@ -83,6 +83,18 @@ def test_services_propose_evaluate_refine_retrieve_and_release(tmp_path):
     engine.store.close()
     engine.store = TensorStore(store)
     try:
+        import base64
+        from natlang_neuralese.serve.store import encode_native_state
+        evidence_state = engine.native_write_text('t40 t50')['id']
+        wire = encode_native_state(engine.store.get_native_state(evidence_state).block)
+        engine.store.close()
+        assert service({**common, 'op': 'import-artifacts', 'artifacts': [
+            {'id': evidence_state, 'bytes': base64.b64encode(wire).decode()}]}) == {'imported': 1}
+        import pytest
+        with pytest.raises(Exception, match='identity mismatch'):
+            service({**common, 'op': 'import-artifacts', 'artifacts': [
+                {'id': 'nzs1_' + 'a' * 52, 'bytes': base64.b64encode(wire).decode()}]})
+        engine.store = TensorStore(store)
         for bundle in (proposed['bundle'], retrieved['bundle'], refined['bundle']):
             verify_bundle(engine, bundle, bank)
     finally:
@@ -147,7 +159,8 @@ def test_the_persistent_service_keeps_contexts_and_runs_commands(tmp_path):
              {'id': 2, 'plan': plan, 'out': out, 'op': 'refine', 'parent': None, 'steps': 1, 'operations': {'bx': 'weights'}},
              {'id': 3, 'plan': plan, 'out': out, 'op': 'refine', 'parent': None, 'operations': {'bx': 'keep'}},
              {'id': 4, 'command': 'ladder', 'spec': {'x': 1}},
-             {'id': 5, 'plan': plan, 'out': out, 'op': 'nonsense'}]
+             {'id': 5, 'plan': plan, 'out': out, 'op': 'nonsense'},
+             {'id': 6, 'plan': plan, 'out': str(tmp_path / 'other'), 'op': 'evidence'}]
     output = io.StringIO()
     def commands(name, spec):
         calls.append((name, spec))
@@ -165,8 +178,8 @@ def test_the_persistent_service_keeps_contexts_and_runs_commands(tmp_path):
     finally:
         apply.Context.__init__ = original
     replies = [json.loads(line) for line in output.getvalue().splitlines()]
-    assert [reply['id'] for reply in replies] == [1, 2, 3, 4, 5]
-    assert len(opened) == 1  # one loaded context served every call of this plan
+    assert [reply['id'] for reply in replies] == [1, 2, 3, 4, 5, 6]
+    assert len(opened) == 2  # reuse one context, then release its exclusive store before switching
     assert replies[0]['result']['incomingLoss'] > 0
     refined = replies[1]['result']
     measured = json.loads((tmp_path / 'svc' / 'bundles' / f"{refined['bundle']['id']}.json").read_text())
@@ -174,3 +187,4 @@ def test_the_persistent_service_keeps_contexts_and_runs_commands(tmp_path):
     assert 'choose the operator "keep"' in replies[2]['error']
     assert replies[3]['result'] == {'ran': 'ladder'} and calls == [('ladder', {'x': 1})]
     assert 'unknown adaptation service' in replies[4]['error']
+    assert replies[5]['result']['incomingLoss'] > 0

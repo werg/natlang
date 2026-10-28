@@ -13,7 +13,7 @@ export declare class PythonService {
 export type Bundle = { id: string; parent: string | null; provenance?: { actor?: string } };
 
 export declare class AdaptationServices {
-  constructor(python: PythonService, plan: string, out: string);
+  constructor(python: PythonService, plan: string, out: string, bridge?: (digests: unknown[]) => Promise<void>);
   bundle(id: string): Bundle;
   readonly optimizer: {
     evidence(): Promise<{ view: EvidenceView; scopes: string[]; incomingLoss: number }>;

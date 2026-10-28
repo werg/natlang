@@ -79,8 +79,8 @@ const neuraleseId = value => {
  * revision plan's `operations` select what each operator may change; the services carry everything else over.
  * Bundles stay host-side; the program sees their identities and exact support losses. */
 export class AdaptationServices {
-  #python; #plan; #out; #bundles = new Map();
-  constructor(python, plan, out) { this.#python = python; this.#plan = plan; this.#out = out; }
+  #python; #plan; #out; #bridge; #bundles = new Map();
+  constructor(python, plan, out, bridge) { this.#python = python; this.#plan = plan; this.#out = out; this.#bridge = bridge; }
   bundle(id) { const found = this.#bundles.get(id); if (!found) throw new Error(`unknown bundle ${id}`); return found; }
   #call(op, extra) { return this.#python.request({ plan: this.#plan, out: this.#out, op, ...extra }); }
   #summary(result, actor) {
@@ -93,9 +93,13 @@ export class AdaptationServices {
       const result = await this.#call('evidence', {});
       return { view: result.view, scopes: result.scopes, incomingLoss: result.incomingLoss };
     },
-    propose: async request => this.#summary(await this.#call('propose', { parent: this.#parent(request.parent), sample: request.sample,
+    propose: async request => { if (request.digests?.length) {
+      if (!this.#bridge) throw new Error('native evidence bridge is required for digest imports');
+      await this.#bridge(request.digests);
+    }
+      return this.#summary(await this.#call('propose', { parent: this.#parent(request.parent), sample: request.sample,
       seed: request.seed, operations: request.operations, focus: request.focus, keyEvidence: request.keyEvidence,
-      digests: (request.digests ?? []).map(item => [item.binding, neuraleseId(item.digest)]) }), 'learned-optimizer'),
+      digests: (request.digests ?? []).map(item => [item.binding, neuraleseId(item.digest)]) }), 'learned-optimizer'); },
     refine: async request => this.#summary(await this.#call('refine', { parent: this.#parent(request.parent), steps: request.steps,
       operations: request.operations }), 'in-bank-refinement'),
     retrieve: async request => this.#summary(await this.#call('retrieve', { parent: this.#parent(request.parent),

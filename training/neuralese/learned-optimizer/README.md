@@ -60,7 +60,8 @@ The 51 supplied programs carry exact oracle values; the lane never generates tea
 
 Custody: references exist only for training-partition roots (`supply privileged` filters by the persisted split, the
 tuner refuses a reference that names a development or confirmation root), the self teacher never runs development
-roots, confirmation is never touched by the lane, and family variants stay on one side of every program split.
+roots, confirmation is measured only after the held program's learned release is selected, and family variants stay
+on one side of every program split.
 
 ## Parallel placement
 

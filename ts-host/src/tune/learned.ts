@@ -22,7 +22,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readRelease, releaseFile } from '../adaptation/weights/release.js';
 import { WeightBinding } from '../adaptation/weights/binding.js';
 import { createNatlangRuntime } from '../runtime/runtime.js';
@@ -74,14 +74,16 @@ export function learnedSelector(options: TuneOptions, settings: LearnedSettings,
           !(manifest.artifacts.length || manifest.families.length || manifest.softStates.length))
         throw new Error('controller release must contain trained adaptation for the named controller program');
       const directory = dirname(releaseFile(controller.root, controller.release));
-      const served = await controllerOptions.serve({ manifest, directory });
       const entry = options.student.trainer, moduleIndex = entry.indexOf('-m');
       if (moduleIndex < 0) throw new Error('controller service requires a Python -m trainer');
       const module = await import(pathToFileURL(resolve(controller.root, 'python.mjs')).href);
+      const bridge = await import(pathToFileURL(resolve(controller.root, 'native-bridge.mjs')).href);
       const python = new module.PythonService({ argv: entry.slice(0, moduleIndex + 1), cwd: options.student.workdir,
         env: options.student.env });
+      const served = await controllerOptions.serve({ manifest, directory });
       try {
-        const services = new module.AdaptationServices(python, plan, out);
+        const services = new module.AdaptationServices(python, plan, out,
+          bridge.nativeBridge(fileURLToPath(new URL('../../..', import.meta.url)), python, plan, out));
         const weights = [new WeightBinding(manifest, { program: controllerOptions.program, executor: controllerOptions.student.base, available: served.loaded,
           nativeState: !!served.nativeState, strict: true })];
         const runtime = createNatlangRuntime({ program: controllerOptions.program,
