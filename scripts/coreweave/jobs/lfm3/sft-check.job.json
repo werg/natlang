@@ -1,0 +1,42 @@
+{
+ "schema": "natlang.coreweave-job/1",
+ "id": "lfm3-sft-check-20261028a",
+ "kind": "train",
+ "placement": {
+  "where": "coreweave",
+  "reason": "LFM3 joint-SFT bounded local check on one sandbox GPU (owner 2026-10-28, LFM3_COMMITTED_DECISIONS #6): step-0 identity/parity, real updates incl. learned rows, save/SIGTERM/restore/continue, reply CE, step time and host RAM peak to size the DiLoCo learners. DGX memory is contended. ~200 updates, 2 h lifetime, stopped after collection."
+ },
+ "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+ "resources": {
+  "gpu": 1,
+  "memory": "64Gi"
+ },
+ "lifetime_hours": 2,
+ "scratch": {
+  "path": "/work",
+  "size": "100Gi"
+ },
+ "env": {
+  "NATLANG_CW_COLLECT_WAIT": "1800",
+  "HF_HUB_CACHE": "/work/hf",
+  "TORCHINDUCTOR_CACHE_DIR": "/work/.cache/inductor",
+  "TRITON_CACHE_DIR": "/work/.cache/triton"
+ },
+ "outputs": [
+  "runs/lfm3-sft-check-20261028/out"
+ ],
+ "command": [
+  "bash",
+  "scripts/coreweave/lfm3_sft_check.sh",
+  "runs/lfm3-sft-check-20261028/out",
+  "runs/lfm3-sft-check-20261028/in/args.json",
+  "100"
+ ],
+ "needs": {
+  "gpu_memory_gb": 40,
+  "hours": 1.5,
+  "teacher": false,
+  "lineage_owner": "dgx",
+  "moves_active_lineage": false
+ }
+}
