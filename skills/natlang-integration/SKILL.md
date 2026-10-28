@@ -95,6 +95,12 @@ configuration with a native profile: student, trainer and teacher (`escalate`) c
 [--program DIR]` shows the pin, newer checkpoints, the server, the tuning setup and pending examples. See
 [docs/NATIVE_MODELS.md](../../docs/NATIVE_MODELS.md).
 
+Decision readouts (`readout: decision`, `decide(fn, ...)`) are trainable model outputs: SFT supervises the choice over
+the option set, and tuning rollouts (`natlang tune`) sample the answer from the scored distribution at the rollout
+temperature for exploration (recorded with the capture) instead of taking the most probable option. Ordinary runs keep
+the most probable option. A tuning rollout needs a native server for decisions (`rollout-capture-unavailable`
+otherwise: serve the student with `natlang serve` or a native profile).
+
 ## Student prompt rendering
 
 Use `promptRendering: "program-header"` in the model profile (or runtime `model`

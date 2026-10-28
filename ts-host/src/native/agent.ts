@@ -1156,8 +1156,8 @@ export class NativeToolAgent {
       if (adapters.length && !supportsNeuralese(this.driver))
         throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
       // model-call-kind: decision-readout -- training/model-call-kinds.json
-      scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies, ...(adapters.length ? { adapters } : {}) },
-        session.runtime.signal));
+      scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies,
+        ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}) }, session.runtime.signal));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.startsWith('decision-unsupported')) throw error;
@@ -1166,12 +1166,13 @@ export class NativeToolAgent {
     }
     if (scores.log_probs.length !== replies.length || scores.log_probs.some(value => !Number.isFinite(value)))
       throw new Error('decision readout returned no finite score for every option');
-    if(scores.x_natlang_native_recorded_turn){
-      const turnNode=await this.modelTurnNode(session,encoded.messages,{},1,'decision');
-      if(turnNode)activeRecorder()?.linkNativeTurn?.(scores.x_natlang_native_recorded_turn,turnNode);
-    }
+    // A decision readout is a model turn of its call's execution graph, like a generated turn.
+    const turnNode=await this.modelTurnNode(session,encoded.messages,{},1,'decision');
+    if(turnNode&&scores.x_natlang_native_recorded_turn)activeRecorder()?.linkNativeTurn?.(scores.x_natlang_native_recorded_turn,turnNode);
     const probabilities = softmax(scores.log_probs);
-    const chosen = probabilities.indexOf(Math.max(...probabilities));
+    if (scores.chosen !== undefined && !(Number.isSafeInteger(scores.chosen) && scores.chosen >= 0 && scores.chosen < replies.length))
+      throw new Error('decision readout sampled an option outside its option set');
+    const chosen = scores.chosen ?? probabilities.indexOf(Math.max(...probabilities));
     session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', options: replies,
       log_probs: scores.log_probs, probabilities, tokens: scores.tokens ?? null, chosen,
       duration_ms: Math.round(performance.now() - started),

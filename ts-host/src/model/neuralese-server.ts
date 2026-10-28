@@ -652,7 +652,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeNativeAdapters(), nativeStates: activeNativeStates() });
   const scopeOf = (item: object): Scope => scopes.get(item) ?? here();
   const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined,
-      scope: Scope = here()):Promise<Item> => {
+      scope: Scope = here(), record = false):Promise<Item> => {
     const adapters = await adapterParts(bound ?? [], scope.adapters);
     const info = await serverInfo(scope.nativeStates.length > 0);
     const native=info?.native_state as {enabled?:boolean}|undefined;
@@ -661,7 +661,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     if(!native?.enabled)scope.recorder?.record({messages:structuredClone(messages),reply:{role:'assistant',content:null},blocks:[],
       decision:{options:[...replies]},...(adapters.length?{adapters:[...adapters]}:{}),...(modes?{native_state_modes:modes}:{})});
     return {messages:preparedMessages,options:[...replies],...(adapters.length?{adapters:[...adapters]}:{}),
-      ...(modes?{native_state_modes:modes}:{}),...(native?.enabled&&(scope.recorder||scope.nativeStates.length)?{native_recording:true}:{})};
+      ...(modes?{native_state_modes:modes}:{}),...(native?.enabled&&(record||scope.recorder||scope.nativeStates.length)?{native_recording:true}:{})};
   };
   const finish = async (item:Item,scope:Scope,scores:DecisionScores):Promise<DecisionScores> => {
     if(!item.native_recording)return scores;
@@ -695,7 +695,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     return await response.json() as DecisionScores;
   });
   const decide:DecisionScorer=async(request,signal)=>{
-    const scope=scopeOf(request),item=await prepare(request.messages,request.options,request.adapters,scope);
+    const scope=scopeOf(request),item=await prepare(request.messages,request.options,request.adapters,scope,request.native_recording===true);
     return finish(item,scope,await issue(item,signal));
   };
   const perItem=(items:Item[],signal?:AbortSignal)=>Promise.allSettled(items.map(item=>issue(item,signal)));
@@ -704,7 +704,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const prepared:({index:number;item:Item;scope:Scope;key:string}|undefined)[]=[],results:Settled[]=new Array(items.length);
     await Promise.all(items.map(async(original,index)=>{
       try{
-        const scope=scopeOf(original),item=await prepare(original.messages,original.options,original.adapters,scope);
+        const scope=scopeOf(original),item=await prepare(original.messages,original.options,original.adapters,scope,original.native_recording===true);
         await restore(item,async()=>({log_probs:[]}));
         prepared[index]={index,item,scope,key:JSON.stringify([item.messages,item.adapters])};
       }catch(error){results[index]={status:'rejected',reason:error};}

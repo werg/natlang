@@ -102,8 +102,13 @@ export type ModelTurnOptions = { onDelta?: (delta: ModelTurnDelta) => void;
  */
 export type DecisionRequest = { messages: unknown[]; options: string[]; adapters?: { id: string; scale: number }[];
   /** Exact native input contracts/capture; transport metadata, never model instructions. */
-  native_state_modes?: Record<string,'same-base-adapter-state'>; native_recording?: boolean };
+  native_state_modes?: Record<string,'same-base-adapter-state'>; native_recording?: boolean;
+  /** The call this readout answers (host metadata: rollout turn identity), never model input. */
+  invocation_id?: string };
 export type DecisionScores = { log_probs: number[]; tokens?: number[];
+  /** Set only by an RL collection scorer that samples the readout for exploration: the option the call returns
+   * instead of the most probable one (its sampling receipt is recorded with the capture). */
+  chosen?: number;
   native_decision_capture?: Record<string,unknown>;
   /** Host-only association to the active learning recorder. */
   x_natlang_native_recorded_turn?: string;
