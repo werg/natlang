@@ -35,6 +35,9 @@ class FenceUnavailable(RuntimeError):
     pass
 
 
+def _filesystem_id(path):return Path(path).stat().st_dev
+
+
 class Backend:
     def __init__(self,record,storage,parent_local=None,parent_qualification=None,parent_copy_receipt=None,runtime_bundle=None,direct_control=None):
         self.parent_local=Path(parent_local) if parent_local else None
@@ -52,6 +55,11 @@ class Backend:
                 raise ValueError('direct recovery storage must be on the declared NVMe or mounted external data root')
             self.storage.mkdir(parents=True,exist_ok=True)
             self.storage_reserve_bytes=self.direct['storage_reserve_bytes']
+            for placement in self.direct['component_placement'].values():
+                path=Path(placement['root']).resolve()
+                if not (path.is_relative_to(nvme) or (external.is_mount() and path.is_relative_to(external))):
+                    raise ValueError('component storage must be on declared NVMe or mounted external root')
+                path.mkdir(parents=True,exist_ok=True)
         elif not external.is_mount() or not self.storage.is_relative_to(external):
             raise ValueError('recovery storage must be on the mounted external data root')
         self.external=external
@@ -75,7 +83,9 @@ class Backend:
         self.fingerprint=self.manifest['fingerprint']
 
     def verify_ownership(self):
-        if self.storage.is_relative_to(self.external) and not self.external.is_mount():
+        roots=[self.storage]
+        if self.direct:roots.extend(Path(x['root']).resolve() for x in self.direct['component_placement'].values())
+        if any(root.is_relative_to(self.external) for root in roots) and not self.external.is_mount():
             raise ValueError('external recovery storage is no longer mounted')
         if self.direct:
             if load_control(self.direct_control,self.record)!=self.direct:
@@ -262,14 +272,15 @@ class Backend:
                 except Exception:pass  # Each trainer also has the bounded deadline.
 
     def export(self,name,intent):
-        dest=self.storage/'objects'/intent['sha256']/Path(intent['path']).name
+        root,reserve=self.component_storage(name)
+        dest=root/'objects'/intent['sha256']/Path(intent['path']).name
         receipt=self.storage/'receipts'/(name+'-'+intent['sha256']+'.json'); receipt.parent.mkdir(parents=True,exist_ok=True)
         exporter=paths.resolve('data_nvme','dgxops/coreweave-private-runfile-export-20261014.py')
         env={**os.environ,'CW_EXPORT_SANDBOX_ID':intent['sandbox_id'],'CW_EXPORT_EXPECTED_SHA256':intent['sha256'],
              'CW_EXPORT_EXPECTED_BYTES':str(intent['bytes']),'CW_EXPORT_CACHE_BOUNDED_READS':'1',
              'CW_EXPORT_VERIFY_ON_OWNER':'1','CW_EXPORT_OWNER_DESTINATION':str(dest),
              'CW_EXPORT_RECEIPT_FILE':str(receipt),'CW_EXPORT_LOCAL':'0','CW_EXPORT_TARGET_VERIFIES':'0'}
-        if self.direct:env['CW_EXPORT_OWNER_RESERVE_BYTES']=str(self.storage_reserve_bytes)
+        if self.direct:env['CW_EXPORT_OWNER_RESERVE_BYTES']=str(reserve)
         for key in ('CW_EXPORT_SEALED_PIN','CW_EXPORT_VERIFY_EXISTING_ONLY','CW_EXPORT_VERIFIED_LEGACY_READER'):
             env.pop(key,None)
         sandbox=cwctl.read_sandbox(intent['sandbox_id']);made=sandbox.exec(['mkdir','-p','/work/production'],timeout_seconds=30).result(timeout=40)
@@ -289,6 +300,10 @@ class Backend:
             raise ValueError('local full-state readback differs')
         return value
 
+    def component_storage(self,name):
+        item=(self.direct.get('component_placement') or {}).get(name) if self.direct else None
+        return (Path(item['root']).resolve(),item['reserve_bytes']) if item else (self.storage,getattr(self,'storage_reserve_bytes',80<<30))
+
     def release_remote_pins(self,cycle):
         """Release only cycle-owned pins after private GET and local copy verification."""
         self.verify_ownership()
@@ -301,7 +316,8 @@ class Backend:
             if not self.present(external['receipt']):raise ValueError('external dependency private object disappeared')
         for name,intent in components.items():
             if not self.present(receipts[name]):raise ValueError('private recovery component disappeared: '+name)
-            local=self.storage/'objects'/intent['sha256']/Path(intent['path']).name
+            root,_=self.component_storage(name)
+            local=root/'objects'/intent['sha256']/Path(intent['path']).name
             if not local.is_file() or local.stat().st_size!=intent['bytes']:
                 raise ValueError('local recovery component is absent: '+name)
         deps=cycle['dependency_intent']
@@ -410,15 +426,22 @@ class Backend:
         # Tar framing and the serialized index are included in addition to all object bytes.
         archive=sum(((size+511)//512)*512+2048 for size in objects.values())+len(json.dumps(bindings))*4+(1<<20)
         if cycle.get('dependency_intent') and Path(cycle['dependency_intent']['path']).is_file():archive=0
-        components=0
+        groups={}
+        def group(root,reserve):
+            dev=_filesystem_id(root)
+            value=groups.setdefault(dev,{'root':str(root),'reserve_bytes':reserve,'component_bytes':0,'dependency_upper_bound_bytes':0})
+            value['reserve_bytes']=max(value['reserve_bytes'],reserve)
+            return value
+        group(self.storage,self.storage_reserve_bytes)['dependency_upper_bound_bytes']=archive
         for name,item in cycle['components'].items():
-            path=self.storage/'objects'/item['sha256']/Path(item['path']).name
+            root,reserve=self.component_storage(name);path=root/'objects'/item['sha256']/Path(item['path']).name
             if not path.is_file() or path.stat().st_size!=item['bytes'] or sha256_file_hex(path,drop_cache=True)!=item['sha256']:
-                components+=item['bytes']
-        free=shutil.disk_usage(self.storage).free;needed=components+archive
-        result={'available_bytes':free,'reserve_bytes':self.storage_reserve_bytes,'component_bytes':components,
-                'dependency_upper_bound_bytes':archive,'needed_bytes':needed,'scope':'one recovery storage filesystem'}
-        if free<self.storage_reserve_bytes+needed:
+                group(root,reserve)['component_bytes']+=item['bytes']
+        for value in groups.values():
+            value['available_bytes']=shutil.disk_usage(value['root']).free
+            value['needed_bytes']=value['component_bytes']+value['dependency_upper_bound_bytes']
+        result={'filesystems':list(groups.values()),'scope':'all declared recovery storage filesystems'}
+        if any(v['available_bytes']<v['reserve_bytes']+v['needed_bytes'] for v in groups.values()):
             raise OSError('direct recovery storage preflight: '+json.dumps(result,sort_keys=True))
         return result
 
@@ -669,6 +692,8 @@ def run_once(record,state_path,backend):
             try:
                 if 'parent_reference' not in cycle:cycle['parent_reference']=backend.verify_parent()
                 cycle['storage_preflight']=backend.direct_storage_preflight(cycle)
+                cycle['component_local_paths']={name:str(backend.component_storage(name)[0]/'objects'/item['sha256']/Path(item['path']).name)
+                                                for name,item in cycle['components'].items()}
                 cycle['errors'].pop('storage-preflight',None);save()
             except Exception as error:
                 cycle['errors']['storage-preflight']=str(error);cycle['phase']='incomplete';save();return state

@@ -37,7 +37,7 @@ def _extract(archive,destination,*,prefix):
                     raise ValueError('staged dependency object differs from its name')
 
 
-def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,target,*,present,reserve_bytes=80*2**30,external_required=True):
+def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,target,*,present,reserve_bytes=80*2**30,external_required=True,direct_control=None):
     state=json.loads(Path(state_path).read_text());cycles=[item for item in state['cycles'] if item['id']==cycle_id]
     if len(cycles)!=1:raise ValueError('recovery cycle is absent or duplicated')
     cycle=cycles[0]
@@ -45,8 +45,17 @@ def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,tar
         raise ValueError('recovery cycle is not a compatible exported cohort')
     components=cycle['components'];receipts=cycle['receipts'];storage=Path(storage);target=Path(target)
     from scripts.coreweave.diloco_periodic_recovery import compatibility
-    if not compatibility(components)['compatible']:raise ValueError('recovery sequence or component identities no longer match')
-    names={'coordinator',*(f'worker-{i}' for i in range(4)),*(f'resident-{i}' for i in range(4))}
+    direct=None
+    if direct_control:
+        from scripts.coreweave.diloco_direct_recovery import record_from_control,load_control
+        record=record_from_control(direct_control,state['coordinator_run_id']);direct=load_control(direct_control,record)
+        if state.get('recovery_contract')!={'mode':'direct','control_sha256':direct['control_sha256']}:
+            raise ValueError('direct recovery control does not match exported cycle')
+    elif (state.get('recovery_contract') or {}).get('mode')=='direct':
+        raise ValueError('direct recovery requires its exact control descriptor')
+    if not compatibility(components,direct=direct)['compatible']:raise ValueError('recovery sequence or component identities no longer match')
+    names={'coordinator',*(f'worker-{i}' for i in range(4))}
+    if not direct:names.update(f'resident-{i}' for i in range(4))
     if set(components)!=names or set(receipts)!=names:raise ValueError('topology components are incomplete')
     if external_required:
         from natlang_neuralese.common import paths
@@ -65,7 +74,11 @@ def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,tar
         intent=components[name];identity={'sha256':intent['sha256'],'bytes':intent['bytes']}
         validate_receipt(receipts[name],identity)
         if not receipts[name].get('verified_at') or not present(receipts[name]):raise ValueError('private recovery component is absent: '+name)
-        inputs[name]=_check(storage/'objects'/identity['sha256']/Path(intent['path']).name,identity)
+        root=Path((direct['component_placement'].get(name) or {}).get('root',str(storage))).resolve() if direct else storage
+        expected=root/'objects'/identity['sha256']/Path(intent['path']).name
+        if direct and (cycle.get('component_local_paths') or {}).get(name)!=str(expected):
+            raise ValueError('direct local component placement differs: '+name)
+        inputs[name]=_check(expected,identity)
     dependency=cycle['dependency_intent'];dependency_identity={'sha256':dependency['sha256'],'bytes':dependency['bytes']}
     validate_receipt(cycle['dependency_receipt'],dependency_identity)
     if not cycle['dependency_receipt'].get('verified_at') or not present(cycle['dependency_receipt']):raise ValueError('private dependency archive is absent')
@@ -81,22 +94,36 @@ def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,tar
             worker=temp/'workers'/str(i);worker.mkdir(parents=True)
             shutil.copyfile(inputs['worker-'+str(i)],worker/'checkpoint.pt')
             _check(worker/'checkpoint.pt',{'sha256':components['worker-'+str(i)]['sha256'],'bytes':components['worker-'+str(i)]['bytes']})
-            _extract(inputs['resident-'+str(i)],worker,prefix='diloco-resident')
+            if not direct:_extract(inputs['resident-'+str(i)],worker,prefix='diloco-resident')
         _extract(inputs['coordinator'],temp,prefix='diloco-coordinator')
         shutil.copyfile(parent_local,temp/'parent.pt');_check(temp/'parent.pt',parent_identity)
         _extract(inputs['dependencies'],temp/'dependencies',prefix='objects')
         index=json.loads((temp/'dependencies/dependency-index.json').read_text())
         if index.get('schema')!='natlang.diloco-recovery-dependencies/1':raise ValueError('invalid dependency index')
-        bindings={}
+        if direct and not any(item.get('sha256')==direct['control_sha256'] and
+                              item.get('object')=='objects/'+direct['control_sha256'] for item in index['bindings']):
+            raise ValueError('sealed dependencies omit the exact direct control')
+        bindings={};external_objects={}
         for item in index['bindings']:
             path=item['path'];sha=item['sha256']
-            if item['object']!='objects/'+sha or (path in bindings and bindings[path]!=sha):
+            if path in bindings and bindings[path]!=sha:
                 raise ValueError('conflicting dependency identity')
-            _check(temp/'dependencies'/item['object'],{'sha256':sha,'bytes':item['bytes']})
+            if 'external' in item and direct:
+                ext=item['external'];identity={'sha256':sha,'bytes':item['bytes']}
+                if any(ext.get(k)!=v for k,v in identity.items()):raise ValueError('external dependency identity differs')
+                receipt_ref=ext['receipt'];stored=temp/'dependencies'/'objects'/receipt_ref['sha256']
+                _check(stored,{'sha256':receipt_ref['sha256'],'bytes':stored.stat().st_size})
+                external_receipt=json.loads(stored.read_text());validate_receipt(external_receipt,identity)
+                if not external_receipt.get('verified_at') or not present(external_receipt):raise ValueError('external private dependency is absent')
+                _check(ext['local_path'],identity);external_objects[path]=ext
+            else:
+                if item.get('object')!='objects/'+sha:raise ValueError('invalid dependency object')
+                _check(temp/'dependencies'/item['object'],{'sha256':sha,'bytes':item['bytes']})
             bindings[path]=sha
         manifest={'schema':'natlang.diloco-staged-recovery/1','cycle':cycle_id,'run_id':state['run_id'],
                   'coordinator_run_id':state['coordinator_run_id'],'parent':{**pin,'staged':'parent.pt'},'components':components,
                   'coordinator_staged':'diloco-coordinator','worker_staged':{str(i):f'workers/{i}' for i in range(4)},
+                  **({'direct_control_sha256':direct['control_sha256'],'external_dependencies':external_objects} if direct else {}),
                   'scope':'separate worker optimizer/RNG/exposure and coordinator state; not a consolidated checkpoint',
                   'recovery_restore_qualified':False}
         write_json_durable(temp/'staging.json',manifest)
@@ -110,7 +137,7 @@ def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,tar
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--state',required=True);parser.add_argument('--cycle',required=True)
     parser.add_argument('--storage',required=True);parser.add_argument('--parent-pin',required=True);parser.add_argument('--parent-receipt',required=True)
-    parser.add_argument('--parent-local',required=True);parser.add_argument('--out',required=True);args=parser.parse_args()
+    parser.add_argument('--parent-local',required=True);parser.add_argument('--out',required=True);parser.add_argument('--direct-control');args=parser.parse_args()
     from scripts.coreweave import cwctl
     cwctl.load_env_file()
     import wandb
@@ -118,7 +145,7 @@ def main():
     def present(receipt):
         files=list(api.run(receipt['run']).files(names=[receipt['name']]))
         return len(files)==1 and files[0].name==receipt['name'] and files[0].size==receipt['identity']['bytes']
-    print(json.dumps(stage(args.state,args.cycle,args.storage,args.parent_pin,args.parent_receipt,args.parent_local,args.out,present=present),sort_keys=True))
+    print(json.dumps(stage(args.state,args.cycle,args.storage,args.parent_pin,args.parent_receipt,args.parent_local,args.out,present=present,direct_control=args.direct_control),sort_keys=True))
 
 
 if __name__=='__main__':main()

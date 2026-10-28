@@ -5,7 +5,7 @@ from pathlib import Path
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
 
 REQUIRED=('plan','recipe','worker_argv','coordinator_argv','settings','owner_journal','launch_code','recovery_code',
-          'pin_code','direct_code','dependencies_code','archive_code','guard_code','readiness_code','inputs_code')
+          'pin_code','direct_code','dependencies_code','archive_code','guard_code','readiness_code','inputs_code','stage_code')
 
 
 def _flag(argv,name):
@@ -26,7 +26,8 @@ def load_control(path, record):
     for key,name in [('recovery_code','diloco_periodic_recovery.py'),('pin_code','diloco_recovery_pin.py'),
                      ('direct_code','diloco_direct_recovery.py'),('dependencies_code','diloco_recovery_dependencies.py'),
                      ('archive_code','cache_bounded_archive.py'),('guard_code','private_export_guard.py'),
-                     ('readiness_code','recovery_readiness.py'),('inputs_code','recovery_inputs.py')]:
+                     ('readiness_code','recovery_readiness.py'),('inputs_code','recovery_inputs.py'),
+                     ('stage_code','diloco_stage_recovery.py')]:
         if sha256_file_hex(local/name,drop_cache=True)!=bindings[key]['sha256']:
             raise ValueError('executing recovery helper differs: '+key)
     def data(name):return json.loads(Path(bindings[name]['path']).read_text())
@@ -34,6 +35,13 @@ def load_control(path, record):
     paths=control['paths'];out=paths['worker_out'];root=paths['coordinator_root'];runtime=paths['runtime_repo']
     reserve=control.get('storage_reserve_bytes')
     if type(reserve) is not int or reserve<0:raise ValueError('direct storage needs an explicit nonnegative reserve')
+    placement=control.get('component_placement',{})
+    if placement and set(placement)!={'coordinator',*(f'worker-{i}' for i in range(len(record['learners'])))}:
+        raise ValueError('direct storage placement must declare every component')
+    for item in placement.values():
+        if (not isinstance(item,dict) or not isinstance(item.get('root'),str) or not item['root'].startswith('/')
+                or os.path.normpath(item['root'])!=item['root'] or type(item.get('reserve_bytes')) is not int or item['reserve_bytes']<0):
+            raise ValueError('invalid direct component storage placement')
     for value in (out,root,runtime):
         if not isinstance(value,str) or not value.startswith('/work/') or os.path.normpath(value)!=value:
             raise ValueError('direct recovery paths must be canonical /work paths')
@@ -73,7 +81,7 @@ def load_control(path, record):
     for flag,key,parse in [('--quorum','min_quorum',int),('--max-staleness','max_staleness',int),
                            ('--ema','ema',json.loads),('--outer-schedule','outer_schedule',json.loads)]:
         if flag in coord:manifest_checks[key]=parse(_flag(coord,flag))
-    result={'paths':paths,'storage_reserve_bytes':reserve,'control_sha256':sha256_file_hex(path,drop_cache=True),'manifest_checks':manifest_checks,
+    result={'paths':paths,'storage_reserve_bytes':reserve,'component_placement':placement,'control_sha256':sha256_file_hex(path,drop_cache=True),'manifest_checks':manifest_checks,
             'helper_sha256':{key:bindings[key]['sha256'] for key in ('pin_code','archive_code','guard_code','readiness_code','inputs_code')},
             'plan_path':bindings['plan']['path'],'parent':_flag(coord,'--parent'),
             'parent_transfer':control.get('parent_transfer'),

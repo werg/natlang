@@ -36,7 +36,8 @@ def fixture(tmp_path):
     for key,name in [('recovery_code','diloco_periodic_recovery.py'),('pin_code','diloco_recovery_pin.py'),
                      ('direct_code','diloco_direct_recovery.py'),('dependencies_code','diloco_recovery_dependencies.py'),
                      ('archive_code','cache_bounded_archive.py'),('guard_code','private_export_guard.py'),
-                     ('readiness_code','recovery_readiness.py'),('inputs_code','recovery_inputs.py')]:
+                     ('readiness_code','recovery_readiness.py'),('inputs_code','recovery_inputs.py'),
+                     ('stage_code','diloco_stage_recovery.py')]:
         path=helper/name;bindings[key]={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
     control={'schema':'natlang.diloco-direct-recovery-control/1','bindings':bindings,
              'runtime_code_sha256':canonical_json_sha256_hex(code),'storage_reserve_bytes':1024,
@@ -79,7 +80,7 @@ def test_direct_fenced_five_component_cycle_has_no_fake_residents(tmp_path):
         def __init__(self):self.direct=direct
         def capture_fenced(self,cycle):
             return {'id':'fence','deadline':1,'ready':{str(i):{'checkpoint':f'/f/{i}'} for i in range(4)},
-                    'components':{'coordinator':{'path':'/coord','fingerprint':'f','versions':[1],
+                    'components':{'coordinator':{'path':'/coord','sha256':'a'*64,'bytes':1,'fingerprint':'f','versions':[1],
                         'last_seq':[{'0':1,'1':1,'2':1,'3':1}],'queued':[{}],
                         'runtime_code_sha256':direct['runtime_code_sha256']}}}
         def pin_worker(self,i,cycle,source):
@@ -87,12 +88,13 @@ def test_direct_fenced_five_component_cycle_has_no_fake_residents(tmp_path):
             return {'fingerprint':'f','versions':[1],'sequences':[1],'pending':{},'awaiting_global':[],
                 'source_hash':'same','runtime_code_sha256':direct['runtime_code_sha256'],'resident_generation':None,
                 'recipe_binding':json.dumps(recipe),'source_receipt_sha256':direct['source_receipt_sha256'],
-                'ce_supervision_policy_binding':{'sha256':direct['ce_sha256']},'global_step':2,'path':f'/w{i}'}
+                'ce_supervision_policy_binding':{'sha256':direct['ce_sha256']},'global_step':2,'path':f'/w{i}','sha256':str(i)*64,'bytes':1}
         def pin_resident(self,*args):raise AssertionError('direct mode has no resident control')
         def export(self,name,intent):return {'name':name}
         def progress(self,i):return {'global_step':3}
         def verify_parent(self):return {'verified':True}
         def direct_storage_preflight(self,cycle):return {'available_bytes':100,'needed_bytes':20}
+        def component_storage(self,name):return (tmp_path,0)
         def prepare_dependencies(self,cycle):assert len(cycle['components'])==5;return {'path':'deps'}
         def export_dependencies(self,intent):return {'name':'deps'}
         def present(self,receipt):return True
@@ -229,6 +231,70 @@ def test_direct_preflight_accounts_for_all_components_and_dependency_archive(tmp
     cycle={'components':components,'parent_reference':parents}
     monkeypatch.setattr(service.shutil,'disk_usage',lambda path:SimpleNamespace(free=1<<30))
     result=backend.direct_storage_preflight(cycle)
-    assert result['component_bytes']==600 and result['dependency_upper_bound_bytes']>0
+    assert result['filesystems'][0]['component_bytes']==600 and result['filesystems'][0]['dependency_upper_bound_bytes']>0
+    other=tmp_path/'other-disk';other.mkdir()
+    direct['component_placement']={'worker-0':{'root':str(other),'reserve_bytes':2000}}
+    monkeypatch.setattr(service,'_filesystem_id',lambda path:2 if Path(path)==other else 1)
+    result=backend.direct_storage_preflight(cycle)
+    by_root={v['root']:v for v in result['filesystems']}
+    assert by_root[str(other)]['component_bytes']==100 and by_root[str(other)]['reserve_bytes']==2000
+    assert by_root[str(tmp_path)]['component_bytes']==500 and by_root[str(tmp_path)]['dependency_upper_bound_bytes']>0
     monkeypatch.setattr(service.shutil,'disk_usage',lambda path:SimpleNamespace(free=1000))
     with pytest.raises(OSError,match='storage preflight'):backend.direct_storage_preflight(cycle)
+
+
+def test_stage_direct_split_components_and_verified_external_history(tmp_path):
+    import io
+    stage=load('diloco_stage_recovery');mod=load('diloco_direct_recovery');descriptor,control,recipe,roles=fixture(tmp_path)
+    disk_a=tmp_path/'disk-a';disk_b=tmp_path/'disk-b';disk_a.mkdir();disk_b.mkdir()
+    control['component_placement']={name:{'root':str(disk_b if name=='worker-0' else disk_a),'reserve_bytes':10}
+                                    for name in ('worker-0','worker-1','worker-2','worker-3','coordinator')}
+    descriptor.write_text(json.dumps(control));direct=mod.load_control(descriptor,mod.record_from_control(descriptor,'run'))
+    def sha(data):return hashlib.sha256(data).hexdigest()
+    def archive(path,members):
+        with tarfile.open(path,'w') as tar:
+            for name,data in members.items():
+                item=tarfile.TarInfo(name);item.size=len(data);tar.addfile(item,io.BytesIO(data))
+        return path
+    def receipt(identity,name):return {'private':True,'identity':identity,'independent_verification':identity,'verified_at':1,'run':'run','name':name,'source':'/pin'}
+    components={};receipts={};localpaths={}
+    def add(name,path):
+        identity={'sha256':sha(path.read_bytes()),'bytes':path.stat().st_size}
+        root=Path(direct['component_placement'][name]['root']);dest=root/'objects'/identity['sha256']/path.name
+        dest.parent.mkdir(parents=True);dest.write_bytes(path.read_bytes());localpaths[name]=str(dest)
+        components[name]={'path':'/work/'+path.name,**identity};receipts[name]=receipt(identity,name)
+    for i in range(4):
+        p=tmp_path/f'worker{i}.pt';p.write_bytes(f'worker{i}'.encode());add(f'worker-{i}',p)
+        components[f'worker-{i}'].update(fingerprint='f',source_hash='s',runtime_code_sha256=direct['runtime_code_sha256'],
+            recipe_binding=json.dumps(recipe),ce_supervision_policy_binding={'sha256':direct['ce_sha256']},resident_generation=None,
+            source_receipt_sha256=direct['source_receipt_sha256'],versions=[0],sequences=[0],pending={},awaiting_global=[])
+    add('coordinator',archive(tmp_path/'coordinator.tar',{'diloco-coordinator/manifest.json':b'coordinator'}))
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'parent');pid={'sha256':sha(parent.read_bytes()),'bytes':parent.stat().st_size}
+    components['coordinator'].update(fingerprint='f',runtime_code_sha256=direct['runtime_code_sha256'],versions=[0],last_seq=[{}],queued=[{}],
+        manifest={'run_id':'run','identity':{'parent_checkpoint_sha256':pid['sha256']}})
+    history=tmp_path/'history.pt';history.write_bytes(b'history');hid={'sha256':sha(history.read_bytes()),'bytes':history.stat().st_size}
+    historical_receipt=json.dumps(receipt(hid,'history')).encode();rh=sha(historical_receipt)
+    control_bytes=descriptor.read_bytes();ch=sha(control_bytes)
+    index={'schema':'natlang.diloco-recovery-dependencies/1','bindings':[
+       {'path':str(descriptor),'sha256':ch,'bytes':len(control_bytes),'object':'objects/'+ch},
+       {'path':'/receipt','sha256':rh,'bytes':len(historical_receipt),'object':'objects/'+rh},
+       {'path':'/work/history','sha256':hid['sha256'],'bytes':hid['bytes'],
+        'external':{**hid,'local_path':str(history),'receipt':{'path':'/receipt','sha256':rh}}}]}
+    dep=archive(tmp_path/'deps.tar',{'objects/'+ch:control_bytes,'objects/'+rh:historical_receipt,'dependency-index.json':json.dumps(index).encode()})
+    depid={'sha256':sha(dep.read_bytes()),'bytes':dep.stat().st_size}
+    cycle={'id':'cycle','phase':'verified-components-and-dependencies','compatibility':{'compatible':True},'components':components,
+           'component_local_paths':localpaths,'receipts':receipts,'dependency_intent':{'path':str(dep),**depid},'dependency_receipt':receipt(depid,'deps')}
+    state=tmp_path/'state.json';state.write_text(json.dumps({'run_id':'run','coordinator_run_id':'run','cycles':[cycle],
+        'recovery_contract':{'mode':'direct','control_sha256':ch}}))
+    pin=tmp_path/'parent-pin.json';pin.write_text(json.dumps({'path':'/work/parent',**pid,'global_step':1}))
+    parent_receipt=tmp_path/'parent-receipt.json';parent_receipt.write_text(json.dumps(receipt(pid,'parent')))
+    result=stage.stage(state,'cycle',disk_a,pin,parent_receipt,parent,tmp_path/'restore',present=lambda _:True,
+                       reserve_bytes=0,external_required=False,direct_control=descriptor)
+    assert result['recovery_restore_qualified'] is False
+    manifest=json.loads((tmp_path/'restore/staging.json').read_text())
+    assert manifest['external_dependencies']['/work/history']['sha256']==hid['sha256']
+    assert (tmp_path/'restore/workers/0/checkpoint.pt').read_bytes()==b'worker0'
+    history.write_bytes(b'corrupt')
+    with pytest.raises(ValueError,match='local recovery component differs'):
+        stage.stage(state,'cycle',disk_a,pin,parent_receipt,parent,tmp_path/'bad-restore',present=lambda _:True,
+                    reserve_bytes=0,external_required=False,direct_control=descriptor)
