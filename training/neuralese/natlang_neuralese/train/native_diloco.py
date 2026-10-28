@@ -214,6 +214,16 @@ def _checkpoint_surface(path, base):
     return masters
 
 
+def _coordinator_surface(path, base):
+    """Stream LFM3 full checkpoints; retain the generic loader for other architectures."""
+    from .checkpoint_policy import CheckpointPolicy
+    state=CheckpointPolicy.load(path)
+    if (state.get('model_config') or {}).get('architecture')=='lfm3':
+        return _checkpoint_surface(path, base)
+    _, named=_trainable(path, base)
+    return {name:parameter.detach() for name,parameter in named}
+
+
 DEFAULT_COORDINATOR_EMA = {'decay': 0.99, 'warmup': 0}
 
 
@@ -229,7 +239,7 @@ def parse_coordinator_ema(text):
 
 def init(args):
     settings = DilocoSettings.from_dict(json.loads(args.settings))
-    masters = _checkpoint_surface(args.parent, args.base)
+    masters = _coordinator_surface(args.parent, args.base)
     manifest = initialize_coordinator(
         args.root, run_id=settings.run_id, masters=masters,
         identity=identity(args.parent, json.loads(args.trainer_argv), settings),
