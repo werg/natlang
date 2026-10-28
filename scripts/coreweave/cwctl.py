@@ -294,6 +294,10 @@ def run_keywords(request: dict) -> dict:
 def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, bundle_file: Path | None = None,
            secrets: dict[str, bytes] | None = None) -> dict:
     request = jobs.sandbox_request(job, bootstrap_text())
+    if bundle_file is not None:
+        import prebuilt  # an image-bound prebuilt artifact must match the job's image
+        prebuilt.check_job(job, json.loads(bundle_file.read_text()),
+                           json.loads(bundle_file.with_suffix('.sources.json').read_text()))
     summary = {'job': job['id'], 'kind': job['kind'], 'placement': job['placement'],
                'cost': jobs.cost_estimate(job, gpu_hour_price), 'request': describe_request(request)}
     if dry_run:
@@ -337,7 +341,41 @@ def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, b
             sandbox.wait(timeout=float(os.environ.get('NATLANG_CW_START_TIMEOUT', '5400')))
         entry['push'] = push_inputs(sandbox, job, bundle_file, secrets=secrets)
         record({'event': 'inputs_pushed', 'sandbox_id': entry['sandbox_id'], **entry['push']})
+    if job.get('recovery'):
+        entry['snapshots'] = start_snapshot_operator(entry['sandbox_id'], job)
     return {**entry, 'cost': summary['cost']}
+
+
+def snapshot_unit(sandbox_id: str) -> str:
+    return f'natlang-cw-snapshots-{sandbox_id[:8]}'
+
+
+def start_snapshot_operator(sandbox_id: str, job: dict) -> dict:
+    """The job's declared snapshot schedule: recovery_snapshots.py as a ledger service on this machine (state under
+    STATE/snapshots/<sandbox id>). Supplemental recovery: a failure is recorded, never fatal to the launch, and never
+    replaces the private full-state exports."""
+    state_dir = STATE / 'snapshots' / sandbox_id
+    command = ['/usr/bin/python3', str(HERE.parents[1] / 'scripts' / 'memory_ledger.py'), 'run',
+               '--unit', snapshot_unit(sandbox_id), '--budget-gb', '1', '--class', 'service', '--priority', 'medium',
+               '--wait', '300', '--detach', '--', str(VENV / 'bin' / 'python'), str(HERE / 'recovery_snapshots.py'),
+               '--sandbox-id', sandbox_id, '--state-dir', str(state_dir),
+               '--interval', str(job['recovery']['snapshot_interval_seconds']), '--keep', str(job['recovery']['keep'])]
+    result = subprocess.run(command, capture_output=True, text=True)
+    facts = {'unit': snapshot_unit(sandbox_id), 'state_dir': str(state_dir), 'started': result.returncode == 0,
+             'interval_seconds': job['recovery']['snapshot_interval_seconds'], 'keep': job['recovery']['keep']}
+    if result.returncode:
+        facts['error'] = (result.stderr or result.stdout)[-500:]
+    record({'event': 'snapshot_operator', 'sandbox_id': sandbox_id, **facts})
+    return facts
+
+
+def stop_snapshot_operator(sandbox_id: str) -> None:
+    """Stop the snapshot operator of a stopped sandbox (an operator on a stopped sandbox only records errors)."""
+    unit = snapshot_unit(sandbox_id)
+    if (STATE / 'snapshots' / sandbox_id).is_dir():
+        subprocess.run(['systemctl', '--user', 'stop', f'{unit}.service', f'{unit}-waiter.service'],
+                       capture_output=True)
+        record({'event': 'snapshot_operator_stopped', 'sandbox_id': sandbox_id, 'unit': unit})
 
 
 def place(job_path: Path, mode: str | None, model: str | None, write: bool) -> dict:
@@ -583,7 +621,11 @@ def passthrough(argv: list[str]) -> int:
         record({'event': 'stop', 'args': argv[1:]})
     # The CLI reads CWSANDBOX_AUTH and the key from this environment; nothing is put on its command line.
     os.environ['CWSANDBOX_AUTH'] = auth_strategy()
-    return subprocess.call([str(cli), *argv])
+    status = subprocess.call([str(cli), *argv])
+    if argv[0] == 'stop':
+        for sandbox_id in (a for a in argv[1:] if not a.startswith('-') and not a.isdigit()):
+            stop_snapshot_operator(sandbox_id)
+    return status
 
 
 def main(argv=None) -> int:
@@ -675,6 +717,6 @@ if __name__ == '__main__':
         reexec_in_venv()
     try:
         sys.exit(main())
-    except (ControllerError, jobs.JobError) as error:
+    except (ControllerError, jobs.JobError, ValueError) as error:
         print(f'cwctl: {error}', file=sys.stderr)
         sys.exit(2)

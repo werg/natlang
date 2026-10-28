@@ -71,7 +71,8 @@ def file_identity(path: Path) -> dict:
 def render_binding(sources: list[Path], corpus_id: str, cpus: int, budget_gb: int, docker_gb: int,
                    part_decisions: int, compress_all: bool, protected: Path | None, reserved: Path | None,
                    held_text: list[Path] | None, decision_exclude_ids: list[Path] | None,
-                   exclude_programs: list[Path] | None, target_exclude_ids: list[Path] | None = None) -> dict:
+                   exclude_programs: list[Path] | None, target_exclude_ids: list[Path] | None = None,
+                   students: str | None = None) -> dict:
     """Identity of every semantic input/control used by a resumable render output."""
     effective_protected = protected or REPO / PROTECTED
     effective_reserved = reserved or REPO / 'training/source-split-reservations.json'
@@ -94,7 +95,9 @@ def render_binding(sources: list[Path], corpus_id: str, cpus: int, budget_gb: in
             'renderer_code': [file_identity(path) for path in code],
             'options': {'part_decisions': part_decisions, 'compress_all': compress_all,
                         'full_sample': 0.05, 'shards': 32, 'program_header_as_full': False,
-                        'cpus': cpus, 'budget_gb': budget_gb, 'docker_gb': docker_gb}}
+                        'cpus': cpus, 'budget_gb': budget_gb, 'docker_gb': docker_gb,
+                        # Only a non-default student set is bound, so existing (default-pair) outputs keep resuming.
+                        **({'students': students} if students else {})}}
 
 
 def validate_binding(path: Path, expected: dict, *, legacy_description: str) -> str:
@@ -244,7 +247,7 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
                 protected: Path | None = None, reserved: Path | None = None,
                 held_text: list[Path] | None = None, decision_exclude_ids: list[Path] | None = None,
                 exclude_programs: list[Path] | None = None, policy_binding_sha256: str | None = None,
-                target_exclude_ids: list[Path] | None = None) -> None:
+                target_exclude_ids: list[Path] | None = None, students: str | None = None) -> None:
     part = out / 'parts' / f'p{k:02d}'
     if (part / 'receipt.json').exists():
         if policy_binding_sha256 is not None:
@@ -292,7 +295,8 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
             cmd = ['python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb',
                    str(budget_gb), '--priority', 'low', '--resumable', '--wait', '86400', '--workdir', str(REPO),
                    '--container', container, '--stop-seconds', '90', '--',
-                   'env', f'MEM={docker_gb}g', f'CPUS={cpus}', 'nice', '-n', '10',
+                   'env', f'MEM={docker_gb}g', f'CPUS={cpus}', *([f'STUDENTS={students}'] if students else []),
+                   'nice', '-n', '10',
                    'scripts/neuralese_data/render_native_turn_corpus.sh', str(part), '--corpus-id', corpus_id,
                    '--source', str(plain), '--workers', str(cpus), '--shards', '32', '--full-sample', '0.05',
                    '--protected', str(protected), '--reserved', str(reserved),
@@ -485,7 +489,7 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
            protected: Path | None = None, reserved: Path | None = None,
            held_text: list[Path] | None = None, decision_exclude_ids: list[Path] | None = None,
            exclude_programs: list[Path] | None = None, stream_source_parts: bool = False,
-           target_exclude_ids: list[Path] | None = None) -> dict:
+           target_exclude_ids: list[Path] | None = None, students: str | None = None) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     custom_policy_requested = any(value is not None for value in
                                    (protected, reserved, held_text, decision_exclude_ids, exclude_programs, target_exclude_ids))
@@ -511,7 +515,8 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
         binding_sha256 = None
     else:
         binding = render_binding(sources, corpus_id, cpus, budget_gb, docker_gb, part_decisions, compress_all,
-                                 protected, reserved, held_text, decision_exclude_ids, exclude_programs, target_exclude_ids)
+                                 protected, reserved, held_text, decision_exclude_ids, exclude_programs, target_exclude_ids,
+                                 students)
         binding_sha256 = validate_binding(binding_path, binding, legacy_description='render output')
     if (out / 'receipt.json').exists():
         receipt = load(out / 'receipt.json')
@@ -524,7 +529,7 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
                     compress_all=compress_all, protected=protected, reserved=reserved,
                     held_text=held_text, decision_exclude_ids=decision_exclude_ids,
                     exclude_programs=exclude_programs, policy_binding_sha256=binding_sha256,
-                    target_exclude_ids=target_exclude_ids)
+                    target_exclude_ids=target_exclude_ids, students=students)
         if compress_all:
             compress_part_views(out / 'parts' / f'p{k:02d}')
         receipts.append(load(out / 'parts' / f'p{k:02d}' / 'receipt.json'))
@@ -549,7 +554,7 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
     else:
         completed_binding = render_binding(sources, corpus_id, cpus, budget_gb, docker_gb, part_decisions,
                                            compress_all, protected, reserved, held_text,
-                                           decision_exclude_ids, exclude_programs, target_exclude_ids)
+                                           decision_exclude_ids, exclude_programs, target_exclude_ids, students)
         completed_sha = hashlib.sha256(json.dumps(completed_binding, sort_keys=True,
                                                    separators=(',', ':')).encode()).hexdigest()
         if completed_sha != binding_sha256:
@@ -626,6 +631,8 @@ def main() -> None:
                    help='JSONL {id} quality target holds, context retained with zero native target loss; repeatable')
     p.add_argument('--exclude-programs', type=Path, action='append',
                    help='reviewed JSONL {id, reason_code?} whole-program exclusions; repeatable')
+    p.add_argument('--students', help='render_native_turn_corpus.sh STUDENTS (student_tokenizers.py names, space separated); '
+                   'default the wrapper\'s production pair, e.g. "lfm3" for an LFM3-1.7B render of the same parts')
     p.add_argument('--link', action='store_true',
                    help='with --register: create the REL_PATH symlink to OUT in the shared checkout')
     args = ap.parse_args()
@@ -633,7 +640,8 @@ def main() -> None:
                      args.cpus, args.budget_gb, args.docker_gb, compress_all=args.compress_all,
                      protected=args.protected, reserved=args.reserved, held_text=args.held_text,
                      decision_exclude_ids=args.decision_exclude_ids, exclude_programs=args.exclude_programs,
-                     stream_source_parts=args.stream_source_parts, target_exclude_ids=args.target_exclude_ids)
+                     stream_source_parts=args.stream_source_parts, target_exclude_ids=args.target_exclude_ids,
+                     students=args.students)
     print(json.dumps({'rendered': args.corpus_id, 'parts': receipt['parts']}), flush=True)
     if args.register:
         sys.path.insert(0, str(Path(__file__).resolve().parent))

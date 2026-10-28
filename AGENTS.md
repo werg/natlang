@@ -1,5 +1,22 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## LFM3 focus: one joint SFT stage, no cross-model dependence, metalearner (owner, 2026-10-28)
+
+The LFM3 line trains natlang execution and native Neuralese together in one
+joint SFT stage; do not train natlang capability first and defer Neuralese.
+Strike all dependence on and interaction with another model: no cross-model
+VAE/shared-dialect stage and no waiting for Mellum. The objective after the
+backbone stages is everything the tuning system needs (program tunes, native
+soft states, LoRA mixtures/bases), the training corpus for the learned
+optimizer (metalearner), and training the metalearner itself. No additional
+teacher generation: prioritize the parts of existing data that fit, and use
+exact oracles with RL/JOLT+ self-teaching where demonstrations are missing.
+Optimize throughput for the target sandboxes and DGX in time-boxed passes, start
+real training soon, and keep optimizing while training. Parallelize all
+preparation (builds, data conversion, sandbox images, syncs). This supersedes
+earlier cross-model VAE, Mellum-readiness and teacher-generation instructions
+for the LFM3 line.
+
 ## Improvements ship on by default (owner, 2026-10-28)
 
 Functionality that could move the needle is enabled by default in new

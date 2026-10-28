@@ -1,0 +1,19 @@
+{
+ "schema": "natlang.coreweave-job/1",
+ "id": "lfm3-prebuilt-build-20261028",
+ "kind": "render",
+ "placement": {"where": "coreweave", "reason": "x86_64 prebuilt artifacts (llama.cpp-neuralese CUDA binaries, exact pip wheelhouse) for LFM3 sandboxes: DGX is aarch64 and cannot produce them, and compiling on a 2-CPU GPU sandbox cost ~45 min per launch (lfm3-1p7b-heldv3-20261027). CPU-only, bounded lifetime, stopped right after collection (owner: no idle sandboxes)."},
+ "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+ "resources": {"cpu": "32", "memory": "64Gi"},
+ "lifetime_hours": 1.5,
+ "scratch": {"path": "/work", "size": "60Gi", "storage": "root"},
+ "env": {"NATLANG_CW_IMAGE_READY": "1", "NATLANG_CW_COLLECT_WAIT": "3600",
+         "NATLANG_CW_IMAGE_DIGEST": "sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+         "PREBUILT_FAT_SECONDS": "1500"},
+ "outputs": ["runs/coreweave-prebuilt-build-20261028"],
+ "command": ["bash", "scripts/coreweave/prebuilt_build.sh", "runs/coreweave-prebuilt-build-20261028",
+             "/home/werg/data/coreweave-prebuilt/staging/llama.cpp-neuralese-85a2e7167.tar.gz",
+             "85a2e7167fcf578e7823f639971ff51b79549a96"],
+ "needs": {"hours": 1, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": false},
+ "bundle_plan": "scripts/coreweave/bundle.py plan --code-sha HEAD --extra /home/werg/data/coreweave-prebuilt/staging/llama.cpp-neuralese-85a2e7167.tar.gz -o BUNDLE.json (llama source: git archive --prefix=llama.cpp/ of the neuralese-lfm3 commit)"
+}

@@ -108,3 +108,5 @@ our drive, all the time".
   project's dataset sweep), moved to `/mnt/external/megatoken-job-workspaces/claude-job-86f8d5f1-tmp` with a symlink.
 - **Not touched (other projects):** bgkit data/checkpoints, hindsight-kb-recovery, megatoken-runs, ComfyUI/SparkyUI.
 - **Continuous sweep:** `scripts/storage_sweep.sh` via `natlang-storage-sweep.timer` every 30 min (84c200d39).
+
+Closure follow-up (09:50): the Mellum step-39257 local copy (`/mnt/external/natlang-active-lineage/mellum-resume-20261025/mellum-8e2fcae1….pt`, 48.3 GB) verified against its sha256, so `current-local-recovery.json` now records it as passed and the older step-37632 copy has been deleted. The 86 GB megatoken job tmp finished moving to `/mnt/external/megatoken-job-workspaces/claude-job-86f8d5f1-tmp`, and a symlink remains at the old path. Disk free space is 142 GB on root and 433 GB on external.

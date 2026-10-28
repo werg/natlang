@@ -5,14 +5,18 @@
 # Steps (each logged as one JSON line, so `cwsandbox logs` shows where a job is):
 #   1. python deps: boto3 >= 1.42.5 (container-credential exchange against api.coreweave.com) and the training
 #      requirements shared with the Docker image (training/neuralese/docker/requirements.txt, read from the code
-#      snapshot, so image and bootstrap install one list). Skipped when NATLANG_CW_IMAGE_READY=1 (prebuilt image).
+#      snapshot, so image and bootstrap install one list). Skipped when NATLANG_CW_IMAGE_READY=1 (prebuilt image)
+#      or when the bundle carries the prebuilt wheelhouse (step 4b installs the exact wheels offline).
 #   2. mirror roots: the DGX absolute roots (NATLANG_CW_MIRROR_ROOTS, default "/home/werg /mnt/external") become
 #      symlinks into the scratch volume, so recipe plans, staged inputs and checkpoints that record absolute paths
 #      resolve unchanged and NATLANG_REPO is the same path as on DGX.
 #   3. code: the bundle manifest's code snapshot (git archive of one commit) is downloaded, its sha256 verified, and
 #      unpacked at $NATLANG_REPO. No GitHub credential enters the sandbox.
 #   4. inputs: scripts/coreweave/bundle.py fetch materializes and verifies every bundle file.
-#   5. optional: NATLANG_CW_BUILD_TSHOST=1 builds ts-host (task-success evals run node ts-host/dist/...).
+#   4b. prebuilt artifacts in the bundle (scripts/coreweave/prebuilt.py: llama.cpp-neuralese CUDA binaries -> PATH and
+#      NATLANG_LLAMA_SERVER, the exact wheelhouse, a ts-host build); nothing is compiled when they are present.
+#   5. optional: NATLANG_CW_BUILD_TSHOST=1 builds ts-host (task-success evals run node ts-host/dist/...); a prebuilt
+#      ts-host only needs node.
 #   6. run the job command in $NATLANG_REPO/$NATLANG_CW_WORKDIR. On exit (or SIGTERM from `stop`, which gives the
 #      job graceful_shutdown_seconds), every directory in NATLANG_CW_OUTPUTS is published to
 #      $NATLANG_CW_BUCKET/$NATLANG_CW_OUTPUT_PREFIX<dir name>/ (content-addressed, verified on fetch).
@@ -29,11 +33,23 @@ die() { log failed "\"step\":\"$1\""; exit 0; }  # exit 0: see the end of this f
 
 log start "\"sandbox\":\"${CW_SANDBOX_ID:-}\""
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>/dev/null | sed 's/^/gpu: /'
+# Assigned resources (AGENTS.md: requests omit GPU type/CPU; adapt to what was assigned): CPUs and cgroup memory limit.
+log host "\"nproc\":$(nproc),\"memory_max\":\"$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo unknown)\",\"mem_total_kb\":$(awk '/MemTotal/{print $2}' /proc/meminfo)"
 
 # 1. client deps for object storage (the code snapshot's requirements come after step 3)
 mkdir -p "$WORK"
 if [ -n "${NATLANG_CW_BUCKET:-}" ] && ! python3 -c "import boto3, sys; sys.exit(tuple(map(int, boto3.__version__.split('.')[:2])) < (1, 42))" 2>/dev/null; then
   python3 -m pip install -q --no-cache-dir 'boto3>=1.42.5' || die pip-boto3
+fi
+
+# 1b. the zstd command line (the shared text reader verifies zstd streams through it; the training Dockerfile installs
+# it, the public NGC image lacks it: measured 2026-10-28 in lfm3-prebuilt-build-20261028). In the background; waited
+# for before the job command.
+zstd_install=
+if ! command -v zstd >/dev/null 2>&1; then
+  { (apt-get update -qq && apt-get install -y -qq --no-install-recommends zstd) >/dev/null 2>&1 && log zstd \
+      || log zstd-unavailable; } &
+  zstd_install=$!
 fi
 
 # 2. mirror the DGX absolute roots onto scratch
@@ -85,16 +101,25 @@ if code:
         tar.extractall(repo, filter='data')
     print(json.dumps({'bootstrap': 'code', 'git_sha': code['git_sha'], 'sha256': digest}))
 PY
-  if [ "${NATLANG_CW_IMAGE_READY:-0}" != 1 ] && [ -f "$NATLANG_REPO/training/neuralese/docker/requirements.txt" ]; then
-    python3 -m pip install -q --no-cache-dir -r "$NATLANG_REPO/training/neuralese/docker/requirements.txt" || die pip-requirements
-  fi
   # 4. inputs, verified (pushed inbox objects first, then public URLs, then the bucket)
   python3 "$NATLANG_REPO/scripts/coreweave/bundle.py" fetch ${NATLANG_CW_BUCKET:+--bucket "$NATLANG_CW_BUCKET"} \
     --manifest "$CW/bundle.json" --inbox "$CW/inbox" --root "$NATLANG_REPO" || die fetch
+  log fetched
+  # 4b. prebuilt artifacts (the exports name the binaries and say what is already installed)
+  if [ -d "$NATLANG_REPO/.coreweave-prebuilt" ]; then
+    exports=$(python3 "$NATLANG_REPO/scripts/coreweave/prebuilt.py" install --root "$NATLANG_REPO" --work "$WORK") \
+      || die prebuilt
+    eval "$exports"
+    log prebuilt "\"llama_server\":\"${NATLANG_LLAMA_SERVER:-}\",\"wheelhouse\":${NATLANG_CW_WHEELHOUSE_INSTALLED:-0},\"ts_host\":${NATLANG_CW_TSHOST_PREBUILT:-0}"
+  fi
+  if [ "${NATLANG_CW_IMAGE_READY:-0}" != 1 ] && [ "${NATLANG_CW_WHEELHOUSE_INSTALLED:-0}" != 1 ] \
+     && [ -f "$NATLANG_REPO/training/neuralese/docker/requirements.txt" ]; then
+    python3 -m pip install -q --no-cache-dir -r "$NATLANG_REPO/training/neuralese/docker/requirements.txt" || die pip-requirements
+  fi
 fi
 
 # 5. ts-host for task-success evals
-if [ "${NATLANG_CW_BUILD_TSHOST:-0}" = 1 ]; then
+if [ "${NATLANG_CW_BUILD_TSHOST:-0}" = 1 ] || [ "${NATLANG_CW_TSHOST_PREBUILT:-0}" = 1 ]; then
   if ! node -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)' 2>/dev/null; then
     # Node >= 22 from nodejs.org, checked against the release's SHASUMS256.txt (NATLANG_CW_NODE_VERSION pins it).
     NODE_VERSION=${NATLANG_CW_NODE_VERSION:-v24.0.1}; ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
@@ -104,8 +129,10 @@ if [ "${NATLANG_CW_BUILD_TSHOST:-0}" = 1 ]; then
     export PATH="$WORK/node-$NODE_VERSION-linux-$ARCH/bin:$PATH"; export NATLANG_NODE_DIR="$WORK/node-$NODE_VERSION-linux-$ARCH/bin"
     log node "\"version\":\"$NODE_VERSION\""
   fi
-  (cd "$NATLANG_REPO/ts-host" && npm ci --no-audit --no-fund && npm run build) >/dev/null || die ts-host
-  log ts-host
+  if [ "${NATLANG_CW_TSHOST_PREBUILT:-0}" != 1 ]; then
+    (cd "$NATLANG_REPO/ts-host" && npm ci --no-audit --no-fund && npm run build) >/dev/null || die ts-host
+  fi
+  log ts-host "\"prebuilt\":${NATLANG_CW_TSHOST_PREBUILT:-0}"
 fi
 
 BUNDLE="$NATLANG_REPO/scripts/coreweave/bundle.py"
@@ -132,6 +159,8 @@ publish() {
       || log publish-failed "\"dir\":\"$dir\""
   done
 }
+
+if [ -n "$zstd_install" ]; then wait "$zstd_install"; fi
 
 # 6. the job; forward TERM so the trainer writes its final state, then publish outputs
 cd "$NATLANG_REPO/${NATLANG_CW_WORKDIR:-}" || die workdir

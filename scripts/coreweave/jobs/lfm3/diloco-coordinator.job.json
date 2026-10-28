@@ -1,0 +1,16 @@
+{
+ "schema": "natlang.coreweave-job/1",
+ "id": "@@RUN_ID@@-coordinator",
+ "kind": "train",
+ "placement": {"where": "coreweave", "reason": "LFM3 DiLoCo coordinator (CPU): durable fragment merges, FP32 global weights, outer momentum and global-version EMA (owner 2026-10-28 exception, LFM3_RECIPE_20261028.md). Serves one HTTPS port behind the share token; its root is collected and exported to the continuation checkpoint on DGX."},
+ "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+ "resources": {"cpu": "8", "memory": "48Gi"},
+ "lifetime_hours": 26,
+ "scratch": {"path": "/work", "size": "200Gi"},
+ "recovery": {"snapshot_interval_seconds": 3600, "keep": 2},
+ "env": {"NATLANG_CW_COLLECT_WAIT": "7200"},
+ "command": ["true"],
+ "needs": {"hours": 26, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": true},
+ "resource_notes": "CPU-only, so cpu and memory are declared (job.py requires both). FP32 global copy, outer momentum and EMA of 1.7B parameters are ~6.8 GB each, plus the parent load at init and fragment buffers: 48Gi. Its command is replaced by diloco.py (native_diloco init + diloco serve). Lifetime exceeds the learners' so it can merge the last rounds.",
+ "bundle_plan": "bundle.py plan --code-sha SHA --prebuilt wheelhouse --extra @@PARENT@@ -o COORDINATOR_BUNDLE.json"
+}

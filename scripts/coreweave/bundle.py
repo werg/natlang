@@ -13,7 +13,8 @@ writes a receipt. Outputs travel the same way back: ``publish`` builds a manifes
 uploads it and names it under the job's output prefix; DGX or Pop ``fetch``es that manifest (optionally remapping a
 path prefix). Copies are not training admission (AGENTS.md): a bundle moves bytes, the recipe's pinned hashes decide.
 
-  plan     --recipe R [--stage S ...] [--corpus ID ...] [--extra PATH ...] [--code-sha SHA] -o manifest.json
+  plan     --recipe R [--stage S ...] [--corpus ID ...] [--extra PATH ...] [--prebuilt NAME ...] [--code-sha SHA]
+           -o manifest.json
   upload   manifest.json --bucket B [--dry-run]
   fetch    --bucket B (--manifest-key K | --pointer-key outputs/<job>/<dir>/latest.json | --manifest FILE) [--map OLD=NEW ...] [--dry-run]
   publish  DIR --bucket B --prefix outputs/<job>/ [--dry-run]     pointer: <prefix><DIR name>/latest.json
@@ -628,6 +629,8 @@ def main(argv=None) -> int:
     p.add_argument('--hf', action='append', default=[], metavar='REPO@REV=LOCAL_DIR',
                    help='public Hugging Face files as verified URL entries materialized at LOCAL_DIR')
     p.add_argument('--code-sha', help='commit to package as the code snapshot (git archive)')
+    p.add_argument('--prebuilt', action='append', default=[], metavar='NAME',
+                   help='prebuilt artifact from scripts/coreweave/prebuilt-artifacts.json (prebuilt.py)')
     p.add_argument('--note', default='')
     p.add_argument('-o', '--out', type=Path, required=True)
     p = sub.add_parser('upload')
@@ -699,6 +702,9 @@ def main(argv=None) -> int:
             pairs += extra_entries(extra)
         for spec in args.hf:
             pairs += hf_entries(spec)
+        if args.prebuilt:
+            import prebuilt
+            pairs += prebuilt.bundle_entries(args.prebuilt, args.code_sha)
         code, code_source = None, None
         staging = Path(tempfile.mkdtemp(prefix='cw-bundle-'))
         if args.code_sha:
@@ -777,6 +783,6 @@ if __name__ == '__main__':
     try:
         load_env_file()
         sys.exit(main())
-    except (BundleError, ControllerError) as error:
+    except (BundleError, ControllerError, ValueError) as error:
         print(f'bundle: {error}', file=sys.stderr)
         sys.exit(2)

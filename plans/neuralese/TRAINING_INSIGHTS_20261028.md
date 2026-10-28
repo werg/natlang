@@ -111,3 +111,31 @@ into student behaviour is limited because the student only learns preferences ov
 beta_T untested at our scale.
 **Plan:** implement as an option of the shared whole-graph RL learner (JOLT+ with score-centered outcome terms), pilot
 on the development curriculum against score-centered GRPO at equal tokens, then use it in phase 3.
+
+## 8. Softmax/cross-entropy numerics near saturation and near agreement (Barron et al., jonbarron.info/softmaxfix; owner-supplied summary figure by @brandondamos)
+
+Two failure modes of standard log-softmax/CE implementations:
+- **Softmax collapse (hard targets):** when the target logit leads by margin m, its gradient rounds to zero while
+  non-target gradients stay positive, so the gradient no longer sums to zero. Cliff at m ~ 5.5 (bf16), 16.6 (fp32),
+  36.7 (fp64). Fix: shift so the max logit is exactly 0, m = -LSE(non-target shifted logits), L = softplus(-m),
+  g_j = e^{z_j - z_t}/(1 + e^{-m}) (j != t), g_t = -e^{-m}/(1 + e^{-m}); exact zero-sum down to exp underflow.
+  Reported: removes grokking "slingshot" spikes (100.0% vs 94.3% test accuracy at the fp32 cliff; 85% vs 23% without
+  weight decay); with AdamW + weight decay the margin settles near log(1/eps).
+- **Softmax cancellation (soft targets, near agreement):** subtracting nearly equal probabilities loses precision, and
+  forward softmax and backward log-softmax use different operation sequences, so equal logits still give a nonzero
+  gradient (~1e-3 in bf16, ~1e-8 in fp32). Fixed gradients, with delta = z_S - z_T, p = softmax(z_T),
+  q = softmax(z_S):
+  - forward KL / soft CE: d = delta - E_p[delta]; r = d - log1p(E_p[expm1(d)]); u = p expm1(r); g = u - q sum(u)
+  - reverse KL: g = q (delta - E_q[delta])  (centering under q cancels the log-normalizer before rounding)
+  - generalized JSD (0 < beta < 1): h = -log1p(beta expm1(-r)); g = (1 - beta) q (h - E_q[h])
+  Reported: a student initialized at the teacher drifts under standard soft CE in bf16 and has a ~1e-6 KL floor in
+  fp32; the fixed version keeps KL = 0 in all precisions, without upcasting.
+
+**Why it matters for us now:** the LFM3 line is BF16 everywhere, where the hard-target cliff is a 5.5-logit margin
+(confident next tokens exceed that routinely unless logits are upcast), and our new objectives are near-agreement
+by construction: JOLT's OPSD reverse KL (teacher = the same model with extra context), the JOLT teacher's KL to the
+student, score centering's q_v - rho p_v coefficients, QAT multi-precision distillation and gates against the BF16
+teacher, Cortex-style consolidation KL, the learned optimizer's distillation KL, and held-KL/drift telemetry.
+**Apply:** one shared numerics module (hard CE, soft CE/forward KL, reverse KL, generalized JSD, score-centering
+coefficients) with these gradients, verified against fp64 references, used by default in every trainer, RL loss and
+distillation path, including chunked/fused CE paths.

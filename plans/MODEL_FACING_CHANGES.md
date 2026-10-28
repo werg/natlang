@@ -1577,6 +1577,21 @@ over varied calibration tables) in `shadow` mode and compare with the crisp
 choice. Only measured teachers meeting the minimum are ever offered, and an
 answer naming anything else falls back to the crisp rule.
 
+## JOLT+ privileged teacher turn and fact policy (2026-10-28, unmeasured debt)
+
+`training/neuralese/natlang_neuralese/rl/privileged_context.py` renders a
+privileged ChatML turn (role `system`, header "Verified reference for this call
+(training only):", fact sentences such as "The verified result of this program
+is ...", "The verified answer of this call is ...", "A verified reference
+solution: ...") after the leading system turn of each training invocation when
+the policy scores in the teacher role. Only the teacher role sees it; the
+student learns preferences over its own tokens. Before relying on beta_S/beta_T
+tuning, sample teacher-role attempts (~48 per variant) for the header/role
+wording and fact phrasing, and measure teacher success with and without the
+block. `applications/curriculum-advisor/selectPrivilegedFacts.nl` is the NL side
+of the fact-selection policy; the crisp kind order is the default, so nothing
+serves that prompt until a `command` is configured and measured in shadow.
+
 ## Tuner family proposal policy (2026-10-26, unmeasured debt)
 
 `applications/tuner/proposeFamilies.nl` is the natural-language side of the

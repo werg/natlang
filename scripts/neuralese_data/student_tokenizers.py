@@ -37,11 +37,15 @@ STUDENTS = {
     'lfm3': {'path': HF_CACHE / 'models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd',
              # Snapshot files are symlinks into the repository's blobs: mount the whole model repository.
              'mount': HF_CACHE / 'models--LiquidAI--LFM3-1.7B', 'model_type': 'lfm3',
+             # base_inventory of the pinned snapshot (common/line_backbones.py declares the same id).
+             'model_id': 'lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5',
              'tokenizer_sha256': '7e226e34bface23ccf6e495d157bf77186c1c30a7659880e1a8994db528c3701',
              'chat_template_sha256': 'f45005c50cd2a97329722bf3a2dee9f16c04cdf825a589b280fb7e99e6827818'},
 }
 DEFAULT_STUDENTS = ('lfm25', 'mellum21')
-MOUNTED = (REPO, machine_path('data_nvme'), machine_path('data_hdd'))  # the wrappers' standard read-only mounts
+TOKENIZER_FILES = ('tokenizer.json', 'tokenizer_config.json', 'chat_template.jinja', 'special_tokens_map.json',
+                   'config.json', 'generation_config.json')
+MOUNTED = (REPO,machine_path('data_nvme'), machine_path('data_hdd'))  # the wrappers' standard read-only mounts
 
 
 def _sha(path: Path) -> str:
@@ -84,8 +88,18 @@ def main(argv):
     if command == 'args':
         print(' '.join(f'--tokenizer {name}={row["path"]}' for name, row in rows))
     elif command == 'mounts':
-        mounts = {str(row.get('mount', row['path'])) for _, row in rows
-                  if not any(Path(row.get('mount', row['path'])).is_relative_to(root) for root in MOUNTED)}
+        # The model repository, plus the real directories its tokenizer files resolve to: HF snapshot files are
+        # symlinks into the repository's blobs, which may themselves link into a shared hub blob store
+        # (~/.cache/huggingface/hub/blobs/xx/, LFM3 2026-10-28); a mount of the repository alone leaves them dangling.
+        candidates = set()
+        for _, row in rows:
+            candidates.add(Path(row.get('mount', row['path'])))
+            for filename in TOKENIZER_FILES:
+                if (row['path'] / filename).exists():
+                    candidates.add((row['path'] / filename).resolve(strict=True).parent)
+        mounts = {str(path) for path in candidates
+                  if not any(path.is_relative_to(root) for root in MOUNTED)
+                  and not any(path != other and path.is_relative_to(other) for other in candidates)}
         print(' '.join(f'-v {path}:{path}:ro' for path in sorted(mounts)))
     elif command == 'path':
         print(rows[0][1]['path'])
