@@ -1182,9 +1182,14 @@ def test_postseed_cache_reads_actual_isolated_cohost_manifest(tmp_path):
 
 
 def test_postseed_private_export_binds_actual_sandbox_and_independent_get(tmp_path, monkeypatch):
+    from types import SimpleNamespace
     post=load('diloco_post_seed');sha='a'*64;receipt={'sha256':sha,'bytes':123,'global_step':50}
     intent={'role':'lfm3-v3-seed-'+sha[:12]};cloud=post.Cloud('actual-box','/work/parent.pt',tmp_path)
     seen=[]
+    class Result:
+        returncode=0
+        def result(self):return self
+    monkeypatch.setattr(cloud,'sandbox',lambda: SimpleNamespace(exec=lambda args: Result()))
     def fake_run(argv,env,check):
         seen.append((argv,env))
         value={'sandbox_id':'actual-box','source':'/work/parent.pt','private':True,

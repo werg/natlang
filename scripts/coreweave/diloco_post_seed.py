@@ -136,6 +136,8 @@ class Cloud:
         exporter=paths.resolve('data_nvme','dgxops/coreweave-private-runfile-export-20261014.py')
         self.backup_dir.mkdir(parents=True,exist_ok=True)
         receipt_path=self.backup_dir/('private-seed-'+receipt['sha256']+'.json')
+        made=self.sandbox().exec(['mkdir','-p','/work/production']).result()
+        if made.returncode:raise RuntimeError('cannot prepare private-export capability directory')
         env={**os.environ,'CW_EXPORT_SANDBOX_ID':self.sandbox_id,
              'CW_EXPORT_EXPECTED_SHA256':receipt['sha256'],'CW_EXPORT_EXPECTED_BYTES':str(receipt['bytes']),
              'CW_EXPORT_CACHE_BOUNDED_READS':'1','CW_EXPORT_VERIFY_ON_OWNER':'1', 'CW_EXPORT_LOCAL':'0',
