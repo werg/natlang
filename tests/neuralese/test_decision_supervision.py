@@ -17,6 +17,17 @@ PROMPT = [7, 8, 9, 10]
 OPTIONS = [[11, 12], [13], [14, 15, 16]]
 
 
+def test_indexed_decision_labels_bind_source_row_identity():
+    from natlang_neuralese.data.native_sources import _row_bindings
+    from natlang_neuralese.data.native_graph_schema import indexed_graph_metadata
+    first = decision_row(label=0)
+    second = decision_row(label=1)
+    indexed_first = indexed_graph_metadata(first, tokenizer_fingerprint=FINGERPRINT)
+    indexed_second = indexed_graph_metadata(second, tokenizer_fingerprint=FINGERPRINT)
+    assert _row_bindings([indexed_first]) != _row_bindings([indexed_second])
+    assert _row_bindings([indexed_first]) == _row_bindings([parse_graph(first, tokenizer_fingerprint=FINGERPRINT)])
+
+
 def model_for(family):
     port = tiny(family)
     vocab = port.embedding_weight.shape[0]
