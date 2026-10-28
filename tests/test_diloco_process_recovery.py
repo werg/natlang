@@ -41,6 +41,10 @@ def _worker(conn, worker, url, directory, restored):
                 exposure+=1;learner.after_step(tokens=3);conn.send(('step',exposure,learner.local_steps))
             elif command in ('queue0','queue1'):
                 learner._queue(int(command[-1]));assert learner.quiesce_for_checkpoint(timeout_seconds=5);conn.send(('queued',))
+            elif command=='settle':
+                assert learner.quiesce_for_checkpoint(timeout_seconds=5)
+                assert learner._collect_uploads(learner.local_steps)==0 and not learner.pending
+                conn.send(('settled',))
             elif command=='checkpoint':
                 assert learner.quiesce_for_checkpoint(timeout_seconds=5)
                 saved={'model':model.state_dict(),'optimizer':optimizer.state_dict(),'rng':torch.get_rng_state(),
@@ -106,8 +110,11 @@ def test_four_real_processes_recover_pending_worker_and_restart_coordinator(tmp_
         p,peer,result=start(0,path)
         assert result==('restored',1,1,1,True)
         assert _call(peer,'step')[1:]==(2,2)
-        _wait_status(transport,lambda s:s['versions'][0]>=1)
+        assert _call(peer,'settle')==('settled',)
+        after=_wait_status(transport,lambda s:len(s['worker_progress'])==4 and
+                           all(w['tokens']==6 for w in s['worker_progress'].values()))
         assert json.loads(_metadata(root/'fragments'/'00000.safetensors')['last_seq'])['0']==1
+        assert after['global_tokens']==24
         _call(peer,'queue1')
         for _,other in children[1:3]:_call(other,'queue1')
         _wait_status(transport,lambda s:s['versions'][1]>=1)
