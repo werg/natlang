@@ -22,6 +22,25 @@ import `scripts/coreweave/{private_export_guard,recovery_inputs,source_archive,c
 | Decision-pool and Pop one-offs | Visible-decision pilot, variants and toxicity pool; decision-children materializer with its `scripts/lib` modules and ad hoc tests; Step 5 packet validator; dev-sync partials and verifier; Pop container Python wrapper | Gemini decision pools, the OpenCode Step 5 collector, and the closed Pop machine | None |
 | Cross-model role exchange (coordinator request) | `rl/native_role_release.py` (2,133 lines), `rl/local_cycle_semantic_return.py`, `scripts/coreweave/{native_role_exchange,native_role_exchange_io,native_shared_participant_export,prepare_native_scheduler_adoption,prepare_local_cycle_shared_semantic,compose_native_actor_runtime,verify_native_actor_runtime,prepare_native_actor_role,install_native_actor_layout}.py`, `native_deployment.prepare_role_scheduler`, `validate_joint_task_specs` and the `role-scheduler` CLI, and their tests | Source-host role ownership, release and exchange between the LFM and Mellum owners, feeding the shared VAE consumer | See the next section |
 
+### Coverage-audit items (`plans/neuralese/TRAINING_DATA_COVERAGE_AUDIT_20261028.md`)
+
+- **G4, careful review: removed.** The removal covers `NativeReviewOptions`, the review fork, the `review_write`
+  tool and the withdrawal path in `NativeToolAgent`, the `review` runtime and kernel option, the `careful-review`
+  call kind in `training/model-call-kinds.json`, and its docs. A profile that still sets `runtime.review` now fails
+  with an explicit removal error.
+- **G5, the `view` server write path: not removed. The premise does not hold.** `applications/pi/host/views.ts`
+  `forceView` constructs `serverViewer` and posts to `/v1/neuralese/view`. That is the pi companion's delivery of
+  stored long tool outputs to a configured `native-state` (Neuralese) reader, reached through
+  `applications/pi/host/ai.ts` `forceStoredViews` and `extensions/companion/index.ts`. What is unused is the
+  runtime's opening-listing hook `NeuraleseRuntimeOptions.view` (`native/agent.ts` `views()`): no host sets it.
+  Deleting the server path deletes pi's Neuralese-reader feature, so this is left for a decision. The options are:
+  - wire the view writes as recorded model turns (the audit's alternative);
+  - retire pi's native-state reader together with `serverViewer`, `/v1/neuralese/view`, the write path in
+    `view.py` and the listing hook.
+
+  `view.py`'s `INSTRUCTIONS`, `view_note` and `reject_digest_part` stay either way: `data/trajectory_text.py`,
+  `harness_bench/records.py` and `digest_to_view.py` read existing data with them.
+
 ### Single-model behaviour kept in the role-exchange migration
 
 Every role-exchange function short-circuits when a plan has no `role_exchange`. The callers keep exactly that path:
