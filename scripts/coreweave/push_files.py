@@ -2,7 +2,7 @@
 """Push local files into a running sandbox (file API, streaming) and verify their sha256 there.
 
 For data appended to a long-lived sandbox (hold.sh) after its launch bundle: a new mixture version, an args file.
-Each SOURCE is written to the same repo-relative path under the sandbox checkout (/home/werg/natlang), or to DEST
+Each SOURCE is written to the same repo-relative path under the sandbox checkout (the same path as this checkout: bootstrap.sh NATLANG_REPO), or to DEST
 when given as SOURCE=DEST; directories are pushed recursively. Arrival is verified by hashing in the sandbox.
 
   push_files.py SANDBOX_ID SOURCE[=DEST] ...
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cwctl  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-REMOTE_REPO = '/home/werg/natlang'
+REMOTE_REPO = str(REPO)  # the sandbox checkout mirrors this path (bootstrap.sh NATLANG_REPO)
 
 
 def plan(specs):
