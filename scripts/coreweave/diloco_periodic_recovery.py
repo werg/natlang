@@ -33,8 +33,10 @@ class FenceUnavailable(RuntimeError):
 
 
 class Backend:
-    def __init__(self,record,storage,parent_local):
-        self.parent_local=Path(parent_local)
+    def __init__(self,record,storage,parent_local=None,parent_qualification=None,parent_copy_receipt=None):
+        self.parent_local=Path(parent_local) if parent_local else None
+        self.parent_qualification=Path(parent_qualification) if parent_qualification else None
+        self.parent_copy_receipt=Path(parent_copy_receipt) if parent_copy_receipt else None
         self.record,self.storage=record,Path(storage).resolve()
         external=paths.root('data_hdd').resolve()
         if not external.is_mount() or not self.storage.is_relative_to(external):
@@ -233,6 +235,32 @@ class Backend:
             raise ValueError('dependency export lacks independent complete-object GET')
         return value
 
+    def download_parent(self,receipt,identity,destination):
+        """Retain one independently verified parent GET when no local copy was supplied."""
+        import requests, wandb
+        from urllib.parse import urlparse
+        from verified_download import verify_download_blocks
+        remote=wandb.Api().run(receipt['run']).file(receipt['name'])
+        if remote.size!=identity['bytes']:raise ValueError('private original parent size changed')
+        url=remote.url
+        if urlparse(url).hostname=='api.wandb.ai':
+            response=requests.get(url,auth=('api',os.environ['WANDB_API_KEY']),stream=True,timeout=60)
+            try:response.raise_for_status();url=response.url
+            finally:response.close()
+        parsed=urlparse(url)
+        if parsed.scheme!='https' or parsed.hostname!='storage.googleapis.com':
+            raise ValueError('original parent scoped GET unavailable')
+        destination.parent.mkdir(parents=True,exist_ok=True)
+        try:
+            with requests.get(url,stream=True,timeout=1800) as response:
+                response.raise_for_status()
+                result=verify_download_blocks(response.iter_content(8<<20),identity,destination=destination,
+                                              reserve_bytes=80<<30)
+        except requests.RequestException:
+            raise RuntimeError('original parent private GET failed') from None
+        if result.get('local_copy',{}).get('committed') is not True:
+            raise ValueError('original parent GET did not commit its external local copy')
+
     def verify_parent(self):
         from private_export_guard import validate_receipt
         transfer=self.record['run'].get('parent_transfer') or {}
@@ -245,13 +273,27 @@ class Backend:
         if (not receipt.get('verified_at') or pin['path']!=self.parent or
                 self.manifest['identity']['parent_checkpoint_sha256']!=pin['sha256'] or not self.present(receipt)):
             raise ValueError('original parent private object or coordinator binding differs')
-        path=self.parent_local
-        if (not path.resolve().is_relative_to(self.external) or not path.is_file() or
+        path=self.parent_local or self.storage/'original-parent'/pin['sha256']/'checkpoint.pt'
+        if self.parent_qualification is None or self.parent_copy_receipt is None:
+            raise ValueError('original parent local copy and full-state qualification receipts are required')
+        qualified=json.loads(self.parent_qualification.read_text())
+        copied=json.loads(self.parent_copy_receipt.read_text());local=copied.get('local_copy') or {}
+        if (qualified.get('schema')!='natlang.lfm3-seed-independent-full-state/1' or qualified.get('passed') is not True
+                or qualified.get('sha256')!=pin['sha256'] or qualified.get('bytes')!=pin['bytes']
+                or qualified.get('global_step')!=pin['global_step'] or Path(qualified.get('checkpoint','')).resolve()!=path.resolve()
+                or copied.get('sha256')!=pin['sha256'] or copied.get('bytes')!=pin['bytes']
+                or local.get('committed') is not True or Path(local.get('path','')).resolve()!=path.resolve()):
+            raise ValueError('original parent local copy or full-state qualification receipt differs')
+        if not path.resolve().is_relative_to(self.external):raise ValueError('original parent copy must be on external storage')
+        if not path.exists():self.download_parent(receipt,identity,path)
+        if (not path.is_file() or
                 path.stat().st_size!=pin['bytes'] or sha256_file_hex(path,drop_cache=True)!=pin['sha256']):
             raise ValueError('original parent local full-state recovery copy differs')
         return {'pin':{'path':str(pin_path),'sha256':transfer['pin_sha256']},
                 'receipt':{'path':str(receipt_path),'sha256':transfer['receipt_sha256']},
                 'local':{'path':str(path),'sha256':pin['sha256'],'bytes':pin['bytes']},
+                'qualification':{'path':str(self.parent_qualification),'sha256':sha256_file_hex(self.parent_qualification)},
+                'copy_receipt':{'path':str(self.parent_copy_receipt),'sha256':sha256_file_hex(self.parent_copy_receipt)},
                 'global_step':pin['global_step']}
 
     def present(self, receipt):
@@ -422,13 +464,14 @@ def run_once(record,state_path,backend):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('run_id');p.add_argument('--state',type=Path,required=True)
-    p.add_argument('--storage',type=Path,required=True);p.add_argument('--parent-local',type=Path,required=True);p.add_argument('--interval',type=float,default=1800)
+    p.add_argument('--storage',type=Path,required=True);p.add_argument('--parent-local',type=Path,required=True);
+    p.add_argument('--parent-qualification',type=Path,required=True);p.add_argument('--parent-copy-receipt',type=Path,required=True);p.add_argument('--interval',type=float,default=1800)
     p.add_argument('--once',action='store_true');args=p.parse_args()
     if args.interval <= 0:p.error('interval must be positive')
     cwctl.load_env_file()
     import diloco
     record=json.loads((diloco.RUNS/(args.run_id+'.json')).read_text())
-    backend=Backend(record,args.storage,args.parent_local)
+    backend=Backend(record,args.storage,args.parent_local,args.parent_qualification,args.parent_copy_receipt)
     while True:
         try:
             state=run_once(record,args.state,backend)

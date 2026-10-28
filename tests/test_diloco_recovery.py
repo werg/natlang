@@ -379,6 +379,10 @@ def test_original_parent_requires_exact_local_private_and_coordinator_binding(tm
     backend.record={'run':{'parent_transfer':transfer}};backend.parent='/work/parent.pt'
     backend.manifest={'identity':{'parent_checkpoint_sha256':sha}};backend.parent_local=parent;backend.external=tmp_path
     backend.present=lambda value:True
+    qualification=tmp_path/'qualification.json';qualification.write_text(json.dumps({'schema':'natlang.lfm3-seed-independent-full-state/1',
+        'passed':True,'sha256':sha,'bytes':len(payload),'global_step':750,'checkpoint':str(parent)}))
+    copy_receipt=tmp_path/'copy.json';copy_receipt.write_text(json.dumps({**identity,'local_copy':{'committed':True,'path':str(parent)}}))
+    backend.parent_qualification=qualification;backend.parent_copy_receipt=copy_receipt
     assert backend.verify_parent()['global_step']==750
     parent.write_bytes(b'wrong')
     with pytest.raises(ValueError,match='local full-state recovery copy differs'):backend.verify_parent()
@@ -486,3 +490,42 @@ def test_unfenced_incompatible_cohort_is_retained_without_unbounded_retries(tmp_
     assert first['cycles'][-1]['phase']=='incompatible-pins' and len(calls)==4
     second=service.run_once(record,path,backend)
     assert len(calls)==4 and 'live fence runtime required' in second['recovery_blocker']
+
+
+def test_missing_parent_is_downloaded_once_and_retained_as_verified_external_copy(tmp_path,monkeypatch):
+    import hashlib,sys
+    from types import SimpleNamespace
+    import requests,verified_download
+    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend)
+    data=b'independent exact parent';identity={'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)}
+    remote=SimpleNamespace(size=len(data),url='https://storage.googleapis.com/private/object?token=secret')
+    monkeypatch.setitem(sys.modules,'wandb',SimpleNamespace(Api=lambda:SimpleNamespace(run=lambda _:SimpleNamespace(file=lambda _:remote))))
+    class Response:
+        def __enter__(self):return self
+        def __exit__(self,*args):return False
+        def raise_for_status(self):pass
+        def iter_content(self,size):yield data[:4];yield data[4:]
+    monkeypatch.setattr(requests,'get',lambda *args,**kwargs:Response())
+    original=verified_download.verify_download_blocks
+    monkeypatch.setattr(verified_download,'verify_download_blocks',lambda blocks,identity,**kwargs:original(blocks,identity,destination=kwargs['destination'],reserve_bytes=0))
+    dest=tmp_path/'parent/checkpoint.pt'
+    backend.download_parent({'run':'e/p/r','name':'file'},identity,dest)
+    assert dest.read_bytes()==data
+
+
+def test_recovery_wait_requires_four_owned_workers_and_qualified_local_parent(tmp_path):
+    import hashlib
+    wait=load('diloco_recovery_wait');parent=tmp_path/'parent.pt';parent.write_bytes(b'parent')
+    sha=hashlib.sha256(parent.read_bytes()).hexdigest();identity={'sha256':sha,'bytes':parent.stat().st_size}
+    def write(name,value):path=tmp_path/name;path.write_text(json.dumps(value));return path
+    pin=write('pin',{'path':'/work/parent.pt',**identity,'global_step':750})
+    copy=write('copy',{**identity,'local_copy':{'committed':True,'path':str(parent)}})
+    qualified=write('qualified',{'schema':'natlang.lfm3-seed-independent-full-state/1','passed':True,
+                                  **identity,'global_step':750,'checkpoint':str(parent)})
+    record=write('record',{'state':'running','coordinator':'s0','learners':['s0','s1','s2','s3'],
+        'ownership':{'s0':['coordinator','learner-0'],'s1':['learner-1'],'s2':['learner-2'],'s3':['learner-3']}})
+    assert wait.ready(record,pin,parent,copy,qualified)
+    bad=json.loads(record.read_text());bad['learners'][3]=None;record.write_text(json.dumps(bad))
+    assert not wait.ready(record,pin,parent,copy,qualified)
+    bad['learners'][3]='s3';bad['ownership']['s3']=[];record.write_text(json.dumps(bad))
+    assert not wait.ready(record,pin,parent,copy,qualified)
