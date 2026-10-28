@@ -17,16 +17,13 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-HELD = Path('/home/werg/data/e2e-current-protection-bundle-20261015-v1/held-union/full/source-groups/text-data.jsonl')
-QUALITY = Path('/home/werg/data/e2e-current-protection-bundle-20261015-v1/quality-groups.jsonl')
+sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha_file  # noqa: E402
+from natlang_neuralese.common.paths import resolve  # noqa: E402
 
-
-def sha_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open('rb') as stream:
-        for block in iter(lambda: stream.read(1 << 20), b''):
-            h.update(block)
-    return h.hexdigest()
+BUNDLE = resolve('data_nvme', 'e2e-current-protection-bundle-20261015-v1')
+HELD = BUNDLE / 'held-union/full/source-groups/text-data.jsonl'
+QUALITY = BUNDLE / 'quality-groups.jsonl'
 
 
 def group_set(path: Path) -> set[str]:
