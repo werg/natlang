@@ -164,7 +164,8 @@ def coordinator_pin(root, archive, package, *, attempts=5, tree_only=False):
                     for path in sorted(folder.glob('*.safetensors')):
                         entry=_metadata(path);worker=str(int(entry['worker']))
                         if worker in items:raise ValueError('duplicate coordinator pending worker')
-                        items[worker]={'sequence':int(entry['sequence']),
+                        items[worker]={'sequence':int(entry['sequence']), 'base_version':int(entry['base_version']),
+                                       'steps':int(entry['steps']),'tokens':int(entry['tokens']),
                                        'delta_sha256':_delta_hash(load_file(path)['delta'])}
                 queued.append(items)
             if tree_only:
