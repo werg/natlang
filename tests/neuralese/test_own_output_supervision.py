@@ -266,7 +266,7 @@ def test_trainer_loss_matches_objective_reference_with_category_telemetry_and_sk
     assert len(details) == 1 and details[0]['own_output'] is not None
     reasoning = torch.tensor([weighted.objective_categories[i + 1] == own.REASONING for i in queries])
     telemetry = details[0]['own_output']
-    assert telemetry['reasoning']['weight'] == pytest.approx(.1)
+    assert telemetry['reasoning']['weight'] == pytest.approx(.1 / 3)   # three decisions, one with reasoning
     assert telemetry['reasoning']['loss_sum'] == pytest.approx(float((ce * weights)[reasoning].sum()), rel=1e-5)
     assert telemetry['reply']['loss_sum'] == pytest.approx(float((ce * weights)[~reasoning].sum()), rel=1e-5)
     report = own.progress_telemetry(details, graphs=2)

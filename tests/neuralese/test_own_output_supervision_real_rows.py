@@ -39,8 +39,26 @@ def rows():
 def tokenizer(path):
     if not (path / 'tokenizer.json').exists():
         pytest.skip(f'{path.name} tokenizer is not available')
-    from transformers import AutoTokenizer
-    return AutoTokenizer.from_pretrained(str(path))
+    from transformers import PreTrainedTokenizerFast
+    # The exact tokenizer.json; no repository code is executed.
+    return PreTrainedTokenizerFast(tokenizer_file=str(path / 'tokenizer.json'))
+
+
+def token_offsets(tok, ids, text):
+    """Character span of each stored token (rows are rendered segment-wise, so re-tokenizing differs).
+
+    Tokens that only decode together (split UTF-8) share their group's span."""
+    offsets, position, buffer = [], 0, []
+    for token in ids:
+        buffer.append(token)
+        piece = tok.decode(buffer, skip_special_tokens=False)
+        if piece.endswith('\ufffd') or not text.startswith(piece, position):
+            continue
+        offsets.extend([(position, position + len(piece))] * len(buffer))
+        position += len(piece)
+        buffer = []
+    assert not buffer and position == len(text)
+    return offsets
 
 
 def template_classes(text, offsets):
@@ -65,8 +83,7 @@ def template_classes(text, offsets):
 
 def check_row(source, tok, fingerprint, share=.1):
     ids = source['token_ids']
-    encoded = tok(source['text'], add_special_tokens=False, return_offsets_mapping=True)
-    assert encoded['input_ids'] == ids and tok.decode(ids, skip_special_tokens=False) == source['text']
+    assert tok.decode(ids, skip_special_tokens=False) == source['text']
     tokens = own.role_tokens_from_tokenizer(tok, tokenizer_fingerprint=EXPANDED)
     objective = own.resolve({'name': own.NAME, 'reasoning_share': share, 'role_tokens': tokens})
     graph = whole_trajectory_text_row_graph(source, source_tokenizer_fingerprint=fingerprint, tokenizer=tok,
@@ -74,7 +91,7 @@ def check_row(source, tok, fingerprint, share=.1):
     weights = graph['nodes'][0]['target_weights']
     labels = own.label_roles(ids, tokens)
     # Role labels agree with the rendered template spans, token by token.
-    classes = template_classes(source['text'], encoded['offset_mapping'])
+    classes = template_classes(source['text'], token_offsets(tok, ids, source['text']))
     for label, cls in zip(labels, classes):
         if label == ROLE_CODES.index('assistant_reasoning'):
             assert cls == 'reasoning'
