@@ -11,6 +11,7 @@ are embedded in ``state_dict`` so a replaced sandbox can resend them.
 from __future__ import annotations
 
 import json
+import http.client
 import os
 import tempfile
 import threading
@@ -26,6 +27,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import torch
+from safetensors import SafetensorError
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
 from natlang_neuralese.train.diloco.coordinator import TOKEN_ENV, TOKEN_SECRET, credential
@@ -184,8 +186,13 @@ class Transport:
                 if output is not None and response.status == 200:
                     output.parent.mkdir(parents=True, exist_ok=True)
                     with output.open("wb") as handle:
+                        received = 0
                         for block in iter(lambda: response.read(4 << 20), b""):
                             handle.write(block)
+                            received += len(block)
+                        expected = response.headers.get("Content-Length")
+                        if expected is not None and received != int(expected):
+                            raise OSError(f"Incomplete fragment download: {received}/{expected} bytes")
                         handle.flush()
                         os.fsync(handle.fileno())
                     return response.status, output, response.headers
@@ -194,6 +201,8 @@ class Transport:
                 return response.status, value, response.headers
         except urllib.error.HTTPError as error:
             raise RemoteError(error.code, error.read(4096).decode(errors="replace")) from error
+        except http.client.HTTPException as error:
+            raise OSError("Incomplete HTTP response") from error
 
     def json(self, method: str, path: str, value: dict | None = None) -> dict:
         _, result, _ = self.request(method, path, json_body=value)
@@ -479,7 +488,10 @@ class DilocoLearner:
         if path is None:
             return None
         try:
-            vector = load_tensors(path)["theta"]
+            try:
+                vector = load_tensors(path)["theta"]
+            except SafetensorError as exc:
+                raise OSError("Invalid or incomplete global fragment") from exc
             if (
                 vector.shape != (self.fragments[index].length,)
                 or vector.dtype not in (torch.bfloat16, torch.float32)
