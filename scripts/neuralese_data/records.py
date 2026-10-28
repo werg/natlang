@@ -39,6 +39,10 @@ _MARKUP = [
     "<|tool_list_start|>", "<|tool_list_end|>", "<|neuralese|>", "<|/neuralese|>",
 ]
 _MARKUP_RE = re.compile(r"<\|(?:reserved_\d+|im_start|im_end|startoftext|endoftext|pad|fim_\w+|tool_\w+|/?neuralese)\|>")
+# XML tool-call envelopes (LFM3, Qwen3.5/Qwen3-Coder templates: serve.chat.TOOL_CALL_FORMATS "xml"). Their tags are
+# ordinary words in prose and code, so only a call's envelope counts as leaked markup (`residual_markup`), and
+# `strip_markup` leaves them: removing tags would corrupt content that discusses them.
+_XML_CALL_RE = re.compile(r"<tool_call>\s*<function=[^>\n]+>\n|</parameter>\s*</function>\s*</tool_call>")
 _EMPTY_THINK_RE = re.compile(r"<think>\s*</think>\s*")
 _ANSWER_RE = re.compile(r"^\s*ANSWER:\s*", re.IGNORECASE)
 
@@ -55,7 +59,7 @@ def strip_answer_prefix(text: str) -> str:
 
 
 def residual_markup(text: str) -> list[str]:
-    return sorted(set(_MARKUP_RE.findall(text)))
+    return sorted(set(_MARKUP_RE.findall(text)) | set(_XML_CALL_RE.findall(text)))
 
 
 def normalize_text(text: str) -> str:

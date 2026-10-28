@@ -6,9 +6,11 @@ Hard constraints only where errors are pure form, check-and-backtrack where the 
 Guidance is off unless a request asks for it (`"guidance": true` or an object of settings).
 
 - **Envelope.** With `require_call` (default: the request's `tool_choice` is "required") the reply is forced to open a tool call; the call's
-  name must be one of the offered tools, checked when its `(` arrives.
-- **Eval code, line by line.** Inside an `eval(code=…)` string (decoded from the call's quoted form), every line is
-  checked when it completes:
+  name must be one of the offered tools, checked when its `(` arrives. Under the XML call format (LFM3, declared by
+  the backbone's model_type) the reply opens with reasoning, so nothing is forced: the text after `</think>` must open
+  `<tool_call>` (checked, `no-call`), and a name is checked when its `<function=NAME>` line completes.
+- **Eval code, line by line.** Inside an `eval(code=…)` string (decoded from the call's quoted form; under XML the
+  verbatim `<parameter=code>` value up to its delimiter), every line is checked when it completes:
   - repetition: the line (stripped, at least `MIN_REPEAT_CHARS` long) occurs `repeat` times among the code's lines;
   - redeclaration: the line declares (`const`/`let`/`var`) a name already declared at the same indentation, with no
     line of smaller indentation (a closed block) in between;
@@ -73,8 +75,12 @@ class Settings:
     syntax: bool = True
     retries: int = 4
 
+    # The backbone's declared tool-call format (serve.chat.TOOL_CALL_FORMATS). `pythonic` keeps the original checks;
+    # `xml` (LFM3) reads `<function=NAME>` names and the verbatim `<parameter=code>` value of eval calls.
+    call_format: str = "pythonic"
+
     @staticmethod
-    def of(body: dict | None, tools: list | None, tool_choice=None) -> "Settings | None":
+    def of(body: dict | None, tools: list | None, tool_choice=None, call_format: str | None = None) -> "Settings | None":
         """The request's guidance (`{"require_call"?, "tools"?, "repeat"?, "syntax"?, "retries"?}`, or true), or None.
         `tools` narrows the call names allowed below the offered tools."""
         # `true` or an object turns guidance on (an empty object: every default); absent, null or false leaves it off.
@@ -84,7 +90,8 @@ class Settings:
         names = body.get("tools") or [t.get("function", t).get("name") for t in tools or [] if isinstance(t, dict)]
         return Settings(require_call=bool(body.get("require_call", tool_choice == "required")),
                         tools=[n for n in names if n] or None, repeat=int(body.get("repeat", 3)), run=int(body.get("run", 4)),
-                        syntax=bool(body.get("syntax", True)), retries=int(body.get("retries", 4)))
+                        syntax=bool(body.get("syntax", True)), retries=int(body.get("retries", 4)),
+                        call_format="xml" if call_format == "xml" else "pythonic")
 
 
 def ends_in_run(line: str, times: int) -> bool:
@@ -104,8 +111,28 @@ class _Code:
     closed: bool
 
 
-def code_strings(reply: str) -> list[_Code]:
+def xml_code_strings(reply: str) -> list[_Code]:
+    """Every XML eval call's `code` parameter in the reply (LFM3: written verbatim, ending at the parameter delimiter),
+    with where each line starts in the reply; a value still being written is open."""
+    from .chat import scan_xml_calls
+    out = []
+    for call in scan_xml_calls(reply):
+        if call.name != "eval":
+            continue
+        for parameter in call.parameters:
+            if parameter.key != "code":
+                continue
+            stop = len(reply) if parameter.value_end is None else parameter.value_end
+            text = reply[parameter.value_start:stop]
+            lines = [parameter.value_start] + [parameter.value_start + i + 1 for i, c in enumerate(text) if c == "\n"]
+            out.append(_Code(parameter.value_start, text, lines, parameter.value_end is not None))
+    return out
+
+
+def code_strings(reply: str, call_format: str = "pythonic") -> list[_Code]:
     """Every eval call's code in the reply, decoded from its quoted form, with where each line starts in the reply."""
+    if call_format == "xml":
+        return xml_code_strings(reply)
     out = []
     for match in _EVAL_CODE.finditer(reply):
         quote, i = match.group(1), match.end()
@@ -141,14 +168,18 @@ class Guide:
     rejections: list = field(default_factory=list)
 
     def forced_prefix(self) -> str:
+        # XML (LFM3) replies open with the model's reasoning (the generation prompt ends in `<think>`), so a required
+        # call cannot be a forced prefix there; `_envelope` checks it where the reasoning closes.
+        if self.settings.call_format == "xml":
+            return ""
         return _CALL_START + "[" if self.settings.require_call else ""
 
     def check(self, reply: str) -> tuple[str, int] | None:
         """None, or (reason, reply offset to roll back to)."""
-        verdict = self._names(reply)
+        verdict = self._envelope(reply) or self._names(reply)
         if verdict:
             return verdict
-        for code in code_strings(reply):
+        for code in code_strings(reply, self.settings.call_format):
             verdict = self._code(code)
             if verdict:
                 return verdict
@@ -163,9 +194,34 @@ class Guide:
         """Retries at `at` are exhausted: what is there stands."""
         self.checked.add(("at", at))
 
+    def _envelope(self, reply: str):
+        """XML with `require_call`: what follows the closed reasoning (`</think>`) opens a tool call."""
+        if self.settings.call_format != "xml" or not self.settings.require_call:
+            return None
+        at = reply.find("</think>")
+        if at < 0:
+            return None
+        start = at + len("</think>")
+        after = reply[start:]
+        body = after.lstrip(" \t\r\n")
+        if body.startswith("<tool_call>") or "<tool_call>".startswith(body):
+            return None
+        if ("at", start) in self.checked:
+            return None
+        return ("no-call", start)
+
     def _names(self, reply: str):
         tools = self.settings.tools
         if not tools:
+            return None
+        if self.settings.call_format == "xml":
+            from .chat import scan_xml_calls
+            for call in scan_xml_calls(reply):
+                if call.name is None or call.name_start in self.names_checked:
+                    continue
+                self.names_checked.add(call.name_start)
+                if call.name not in tools and ("at", call.name_start) not in self.checked:
+                    return ("unknown-tool", call.name_start)
             return None
         # Tool arguments contain code and prose strings. A call-like fragment
         # inside a quoted argument is not a transport tool call.

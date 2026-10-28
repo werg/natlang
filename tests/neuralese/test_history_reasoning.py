@@ -37,7 +37,7 @@ class Template:
 
 
 def test_declarations_and_switches():
-    assert BACKBONE_HISTORY_REASONING == {'lfm2': 'last_turn_only', 'mellum': 'keep'}
+    assert BACKBONE_HISTORY_REASONING == {'lfm2': 'last_turn_only', 'mellum': 'keep', 'lfm3': 'keep'}
     switch = 'set preserve_thinking = preserve_thinking | default(false)'
     assert history_reasoning_kwargs(switch, 'keep') == {'preserve_thinking': True}
     assert history_reasoning_kwargs(switch, 'last_turn_only') == {'preserve_thinking': False}

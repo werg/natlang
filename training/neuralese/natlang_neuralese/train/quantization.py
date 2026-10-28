@@ -104,7 +104,7 @@ def validate_spec(spec, stages=None):
         if (not isinstance(gate, dict) or set(gate) - {'probes', 'held_rows', 'prompt_weight', 'max_gate_drop',
                                                        'max_held_kl', 'held_kl_bound', 'reference', 'column_held_documents',
                                                        'output_convention'}
-                or gate.get('output_convention', 'maple') not in ('maple', 'lfm')
+                or gate.get('output_convention', 'maple') not in ('maple', 'lfm', 'lfm3')
                 or gate.get('held_kl_bound', 'combined') not in ('combined', 'response')
                 or not isinstance(gate.get('reference', {}), dict) or set(gate.get('reference', {})) - {'gate_pass', 'source', 'gate_signal'}
                 or gate.get('reference', {}).get('gate_signal') not in {None, 'ordinary_competence'}
@@ -115,7 +115,7 @@ def validate_spec(spec, stages=None):
                 or type(gate.get('column_held_documents', 1)) is not int or gate.get('column_held_documents', 1) < 1):
             raise ValueError('quantization.gate is {probes: {path, sha256}, held_rows, prompt_weight, max_gate_drop, '
                              'max_held_kl, held_kl_bound (combined|response), column_held_documents, '
-                             'output_convention (maple|lfm)}')
+                             'output_convention (maple|lfm|lfm3)}')
         if 'max_held_kl' in gate and preserve is None:
             raise ValueError('quantization.gate.max_held_kl needs the preserve teacher (its held records)')
     points = spec.get('points')

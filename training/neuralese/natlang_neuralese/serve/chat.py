@@ -36,6 +36,221 @@ _CALLS = re.compile(r"<\|tool_call_start\|>(.*?)<\|tool_call_end\|>", re.S)
 _THINK = re.compile(r"<think>(.*?)</think>", re.S)
 _JSON_CALLS = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.S)  # Qwen-family templates (Maple)
 
+TOOL_CALL_FORMATS = {"lfm2": "pythonic", "lfm2_moe": "pythonic", "lfm3": "xml", "qwen3_5": "xml",
+                     "mellum": "json", "maple": "json", "qwen3": "json", "qwen2": "json"}
+"""Declared tool-call serialization of each backbone's chat template (`config.model_type`), never inferred from the
+vocabulary (LFM3 keeps LFM2's unused `<|tool_call_start|>` token):
+
+- `pythonic` (LFM2/LFM2.5): `<|tool_call_start|>[name(key='value', …)]<|tool_call_end|>`; string values are quoted
+  Python literals, so a write site's value sits between two quotes.
+- `json` (Qwen3/Mellum/Maple): `<tool_call>\\n{"name": …, "arguments": {…}}\\n</tool_call>`; quoted JSON strings.
+- `xml` (LFM3, Qwen3.5; the Qwen3-Coder form): `<tool_call>\\n<function=NAME>\\n<parameter=KEY>\\nVALUE\\n</parameter>\\n…
+  </function>\\n</tool_call>`. VALUE is unquoted: a string verbatim, anything else its JSON text. A value ends at the
+  first `XML_PARAMETER_CLOSE` after its opening line (the rule of llama.cpp's Qwen3-Coder/LFM3 parser), so a string
+  is representable exactly when that delimiter does not occur in `VALUE + XML_PARAMETER_CLOSE` before its end
+  (`xml_value_representable`). Types come from the tool schema: a string-only parameter is verbatim text, any other
+  declared type is JSON first, and an undeclared parameter is JSON when its text parses as JSON, else a string."""
+XML_PARAMETER_CLOSE = "\n</parameter>\n"
+_XML_FUNCTION_OPEN = re.compile(r"<function=([^>\n]+)>\n")
+_XML_PARAMETER_OPEN = re.compile(r"<parameter=([^>\n]+)>\n")
+
+
+def tool_call_format(model_type) -> str | None:
+    """The declared tool-call serialization of a backbone (`config.model_type`), or None when undeclared."""
+    return TOOL_CALL_FORMATS.get(model_type) if isinstance(model_type, str) else None
+
+
+def xml_value_representable(text: str) -> bool:
+    """`text` as an XML parameter value parses back to itself: the first `XML_PARAMETER_CLOSE` in the rendered
+    `text + XML_PARAMETER_CLOSE` is the one the template wrote."""
+    return (text + XML_PARAMETER_CLOSE).find(XML_PARAMETER_CLOSE) == len(text)
+
+
+def xml_value_text(value) -> str:
+    """The text the LFM3 / Qwen3-Coder templates render for a parameter value (`render_value`, jinja `tojson`)."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "null"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, separators=(", ", ": "))
+    return str(value)
+
+
+def check_xml_call(name, arguments, tools=None, *, types: bool = True) -> None:
+    """Raise RequestError('tool-call-unrepresentable') when an XML tool call would not parse back exactly: a function
+    or parameter name holding `>` or a newline, a value holding the parameter delimiter, or (with `types`) a value
+    whose type the rendering loses under `tools`' schema (e.g. the string "42" of an undeclared parameter).
+
+    Prompts check structure only (`types=False`): their tokens are the rendering whatever its parse. Training
+    targets check types too, because the model learns the text and the parser decides what it means."""
+    if not isinstance(name, str) or not name or re.search(r"[>\n]", name):
+        raise RequestError("tool-call-unrepresentable", f"function name {name!r} cannot be written as <function=…>")
+    if not isinstance(arguments, dict):
+        raise RequestError("tool-call-unrepresentable", f"arguments of {name!r} are not an object")
+    properties = _tool_parameter_schemas(tools).get(name, {})
+    for key, value in arguments.items():
+        if not isinstance(key, str) or not key or re.search(r"[>\n]", key):
+            raise RequestError("tool-call-unrepresentable", f"parameter name {key!r} cannot be written as <parameter=…>")
+        text = xml_value_text(value)
+        if not xml_value_representable(text):
+            raise RequestError("tool-call-unrepresentable",
+                               f"parameter {key!r} of {name!r} contains the XML parameter delimiter "
+                               f"{XML_PARAMETER_CLOSE!r}; the template has no escape for it")
+        if not types:
+            continue
+        try:
+            parsed = xml_value(text, properties.get(key))
+        except ValueError:
+            parsed = _UNPARSED
+        if parsed is _UNPARSED or json.dumps(parsed, ensure_ascii=False) != json.dumps(value, ensure_ascii=False):
+            raise RequestError("tool-call-unrepresentable",
+                               f"parameter {key!r} of {name!r} does not keep its type in the XML rendering")
+
+
+_UNPARSED = object()
+
+
+def _schema_types(schema) -> set[str] | None:
+    """JSON-schema types a parameter declares, or None when it declares none (unknown)."""
+    if not isinstance(schema, dict):
+        return None
+    kind = schema.get("type")
+    if isinstance(kind, str):
+        return {kind}
+    if isinstance(kind, list) and all(isinstance(k, str) for k in kind):
+        return set(kind)
+    for key in ("anyOf", "oneOf"):
+        if isinstance(schema.get(key), list):
+            found = set()
+            for option in schema[key]:
+                types = _schema_types(option)
+                if types is None:
+                    return None
+                found |= types
+            return found or None
+    return None
+
+
+def xml_value(text: str, schema=None):
+    """An XML parameter's text → its value, typed by the parameter's schema (see TOOL_CALL_FORMATS)."""
+    types = _schema_types(schema)
+    if types == {"string"}:
+        return text
+    try:
+        value = json.loads(text)
+    except ValueError:
+        if types is not None and "string" not in types:
+            raise ValueError(f"parameter value is not JSON of its declared type {sorted(types)}")
+        return text
+    if types is None:
+        # Undeclared type: the template writes a string verbatim and anything else in its canonical JSON form
+        # (`xml_value_text`), so only text that is exactly such a rendering can have been a non-string. A string whose
+        # text equals a canonical rendering (`42`, `true`, `[1, 2]`) is ambiguous without a schema; it reads as JSON,
+        # as llama.cpp reads it (open item: a parse-only schema channel for program-header serving).
+        return value if not isinstance(value, str) and xml_value_text(value) == text else text
+    allowed = {"object": isinstance(value, dict), "array": isinstance(value, list),
+               "number": isinstance(value, (int, float)) and not isinstance(value, bool),
+               "integer": isinstance(value, int) and not isinstance(value, bool),
+               "boolean": isinstance(value, bool), "null": value is None, "string": False}
+    if any(allowed.get(kind) for kind in types):
+        return value
+    if "string" in types:
+        return text
+    raise ValueError(f"parameter value is not of its declared type {sorted(types)}")
+
+
+def _tool_parameter_schemas(tools) -> dict:
+    """{function name: {parameter: schema}} of OpenAI-style tool declarations."""
+    out = {}
+    for tool in tools or ():
+        fn = tool.get("function", tool) if isinstance(tool, dict) else None
+        if isinstance(fn, dict) and isinstance(fn.get("name"), str):
+            properties = (fn.get("parameters") or {}).get("properties")
+            out[fn["name"]] = properties if isinstance(properties, dict) else {}
+    return out
+
+
+@dataclass
+class XmlParameter:
+    key: str
+    value_start: int
+    value_end: int | None  # None: the value is still open (partial reply)
+
+
+@dataclass
+class XmlCall:
+    start: int  # offset of `<tool_call>`
+    name: str | None  # None: the function line is not complete yet
+    name_start: int
+    parameters: list
+    end: int | None  # offset after `</tool_call>`; None: incomplete
+
+
+def scan_xml_calls(text: str) -> list[XmlCall]:
+    """Every `<tool_call>` of `text` scanned structurally (no value escapes, a value ends at its first
+    `XML_PARAMETER_CLOSE`). A call that is malformed or still being written has `end` None and stops the scan of that
+    call; complete calls are what `parse_xml_calls` returns. Guidance reads the partial structure while generating."""
+    calls, at = [], 0
+    while True:
+        start = text.find("<tool_call>", at)
+        if start < 0:
+            return calls
+        i = start + len("<tool_call>")
+        while i < len(text) and text[i] in " \t\r\n":
+            i += 1
+        function = _XML_FUNCTION_OPEN.match(text, i)
+        call = XmlCall(start, function.group(1) if function else None, i + len("<function="), [], None)
+        calls.append(call)
+        if function is None:
+            at = i
+            continue
+        i = function.end()
+        while True:
+            parameter = _XML_PARAMETER_OPEN.match(text, i)
+            if parameter is None:
+                break
+            close = text.find(XML_PARAMETER_CLOSE, parameter.end())
+            call.parameters.append(XmlParameter(parameter.group(1), parameter.end(), None if close < 0 else close))
+            if close < 0:
+                return calls
+            i = close + len(XML_PARAMETER_CLOSE)
+        tail = re.compile(r"</function>\s*</tool_call>").match(text, i)
+        if tail is None:
+            at = i
+            continue
+        call.end = tail.end()
+        at = tail.end()
+
+
+def parse_xml_calls(text: str, tools=None) -> list[tuple[str, dict]]:
+    """XML tool calls (`<tool_call>` … `</tool_call>`, one or more) → [(name, arguments)], typed by `tools`' schemas.
+    Raises ValueError unless `text` is exactly complete calls separated by whitespace."""
+    schemas = _tool_parameter_schemas(tools)
+    calls, last = [], 0
+    for call in scan_xml_calls(text):
+        if call.end is None or call.name is None or text[last:call.start].strip():
+            raise ValueError("not a complete XML tool call")
+        properties = schemas.get(call.name, {})
+        arguments = {}
+        for parameter in call.parameters:
+            if parameter.key in arguments:
+                raise ValueError(f"parameter {parameter.key!r} repeats")
+            raw = text[parameter.value_start:parameter.value_end]
+            try:
+                arguments[parameter.key] = xml_value(raw, properties.get(parameter.key))
+            except ValueError:
+                if not _PH.search(raw):
+                    raise
+                arguments[parameter.key] = raw  # a written block stands for the value (native write sites)
+        calls.append((call.name, arguments))
+        last = call.end
+    if not calls or text[last:].strip():
+        raise ValueError("not a complete XML tool call")
+    return calls
+
 
 class RequestError(ValueError):
     """A malformed request (HTTP 400). `code` is a stable diagnostic name."""
@@ -154,11 +369,14 @@ def normalize_tool_call_arguments(messages: list[dict]) -> tuple[list[dict], lis
     return normalized, conversions
 
 
-def render_messages(messages: list[dict], tools: list | None, apply_template, specials=()) -> Rendered:
+def render_messages(messages: list[dict], tools: list | None, apply_template, specials=(),
+                    call_format: str | None = None) -> Rendered:
     """Messages with native-state parts → template text cut into text runs and state references.
 
     `apply_template(messages, tools)` renders plain messages with the model's chat template and the generation prompt.
     `specials` are the tokenizer's special-token strings; occurrences inside content are escaped (spec §3.3).
+    `call_format` is the backbone's declared tool-call format (`tool_call_format`); under `xml` every history call
+    must be structurally representable (`check_xml_call`), since the template writes values unescaped.
     """
     blocks: list[str] = []
     block_stop_gradients: list[bool] = []
@@ -250,7 +468,10 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                     return {key: inline(item) for key, item in value.items()}
                 return value
 
-            fn["arguments"] = _escape_value(inline(arguments), specials, nonce)
+            inlined = inline(arguments)
+            if call_format == "xml":
+                check_xml_call(fn.get("name"), inlined, tools, types=False)
+            fn["arguments"] = _escape_value(inlined, specials, nonce)
             calls.append(call)
         if calls:
             message["tool_calls"] = calls
@@ -304,14 +525,21 @@ def render_with_empty_thought(render, messages: list[dict]) -> str:
 
 
 HISTORY_REASONING_POLICIES = ("keep", "last_turn_only")
-BACKBONE_HISTORY_REASONING = {"lfm2": "last_turn_only", "mellum": "keep"}
+BACKBONE_HISTORY_REASONING = {"lfm2": "last_turn_only", "mellum": "keep", "lfm3": "keep"}
 """Declared, backbone-inherent history-reasoning policy per backbone (`config.model_type`; owner 2026-10-10). The
 reasoning of the turn being trained or generated is rendered for every line; what differs is earlier assistant
 turns' reasoning in the history. Legacy runs use each backbone's default: LFM2.5 drops earlier reasoning
 (`last_turn_only`) and Mellum2.1 keeps it (`keep`). A checkpoint or recipe may explicitly opt in to KEEP on a
 switch-capable template. Training text and serving prompts render through `bind_history_reasoning`, which pins the
 template switch to the checkpoint's declared policy and asserts with a rendering probe that the template behaves as
-declared."""
+declared.
+
+LFM3 (2026-10-28) declares `keep`, pinning its template's `preserve_thinking=true`. Its default keeps the reasoning
+of assistant turns after the last user message and rewrites every earlier assistant turn to `<think></think>` plus
+its content, so a new user message changes the tokens of the history before it; with `preserve_thinking` every
+assistant turn renders `<think>R</think>` (`<think></think>` when it has none) exactly as it was generated after the
+`<think>` generation prompt, and every rendering is a token prefix of the next (tests/neuralese/test_lfm3_format.py).
+Natlang invocations (one user message, then a tool loop) render identically under both settings."""
 _HISTORY_REASONING_SWITCHES = ("preserve_thinking", "keep_past_thinking")
 _PROBE_EARLIER, _PROBE_LATEST = "natlang-history-reasoning-probe-earlier", "natlang-history-reasoning-probe-latest"
 _PROBE_EXPECTED = {"keep": "keep", "last_turn_only": "drops-history"}
@@ -423,15 +651,22 @@ def assistant_reply(apply_template, message: dict, opening=None) -> str | None:
     return full[len(prompt):] if full.startswith(prompt) else None
 
 
-def assistant_reply_segments(apply_template, message: dict, specials=(), opening=None) -> list[tuple[str, bool]] | None:
+def assistant_reply_segments(apply_template, message: dict, specials=(), opening=None, *,
+                             call_format: str | None = None, tools=None) -> list[tuple[str, bool]] | None:
     """Render an assistant reply after its serving generation prompt.
 
     Special-token spellings in assistant-authored content are escaped before
     applying the template, then returned as ``(text, escaped)`` runs so callers
     can tokenize structure and quoted content with their respective policies.
     ``apply_template(messages, add_generation_prompt)`` is the same contract as
-    :func:`assistant_reply`.
+    :func:`assistant_reply`. Under the declared ``xml`` call format every call
+    of the reply must parse back exactly, types included (``check_xml_call``
+    with ``tools``' schemas): the reply is a training target.
     """
+    if call_format == "xml":
+        for call in normalize_tool_call_arguments([message])[0][0].get("tool_calls") or []:
+            fn = call.get("function", call)
+            check_xml_call(fn.get("name"), fn.get("arguments"), tools)
     if not specials:
         reply = assistant_reply(apply_template, message, opening)
         return None if reply is None else [(reply, False)]
@@ -497,8 +732,14 @@ def _replace_value_path(value, path, replacement):
     raise RequestError("neuralese-template", "the selected write value path is absent or ambiguous")
 
 
+def _xml_whole_parameter(prefix: str, suffix: str) -> bool:
+    """The cut sits on a whole unquoted XML parameter value: `<parameter=KEY>\n` | value | `\n</parameter>\n`."""
+    return bool(re.search(r"<parameter=[^>\n]+>\n$", prefix)) and suffix.startswith(XML_PARAMETER_CLOSE)
+
+
 def call_reply(apply_template, name: str, arguments: dict, argument: str = "value", quoted: bool = True,
-               argument_path: tuple[str | int, ...] | list[str | int] | None = None) -> tuple[str, str]:
+               argument_path: tuple[str | int, ...] | list[str | int] | None = None,
+               call_format: str | None = None) -> tuple[str, str]:
     """The model's own rendering of an assistant reply that calls `name` with `arguments` and then `argument`, cut at
     that argument's value: (prefix, suffix). `apply_template(messages, add_generation_prompt)` is the chat template.
 
@@ -506,7 +747,13 @@ def call_reply(apply_template, name: str, arguments: dict, argument: str = "valu
     and the suffix starts with the closing one and runs through the end of the turn. Without, the prefix ends where
     the value starts (for decoding the value) and the suffix is empty. Template readout (the `neuralese_template`
     request field) and the trajectory trainer's write sites both force replies cut this way, so what runs is what
-    is trained."""
+    is trained.
+
+    XML templates (`call_format` "xml": LFM3, Qwen3.5) write a whole parameter value unquoted, so its boundary is the
+    parameter's own lines: the prefix ends with `<parameter=KEY>\n` and the suffix starts with `XML_PARAMETER_CLOSE`,
+    for a string and for any other value alike. A value nested inside a JSON-valued parameter (`argument_path` below
+    the parameter) is a quoted JSON string as in the other formats. A declared format must match what the template
+    renders; without one the boundary the template renders decides."""
     if argument_path is None:
         call_arguments = {**arguments, argument: _VALUE}
     else:
@@ -516,26 +763,40 @@ def call_reply(apply_template, name: str, arguments: dict, argument: str = "valu
         call_arguments = _replace_value_path(arguments, path, _VALUE)
     call = {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
         "name": name, "arguments": call_arguments}}]}
+    if call_format == "xml":
+        check_xml_call(name, call_arguments, types=False)
     reply = assistant_reply(apply_template, call)
     if reply is None or _VALUE not in reply:
         raise RequestError("neuralese-template", "the chat template renders the call's reply differently")
     at = reply.index(_VALUE)
     prefix, suffix = reply[:at], reply[at + len(_VALUE):]
+    whole_xml = _xml_whole_parameter(prefix, suffix)
+    if call_format == "xml" and not whole_xml and (argument_path is None or len(tuple(argument_path)) == 1):
+        raise RequestError("neuralese-template", "the chat template does not write the declared XML parameter lines")
+    if call_format in ("pythonic", "json") and whole_xml:
+        raise RequestError("neuralese-template", f"the chat template writes XML parameters, not {call_format} calls")
     if quoted:
         return prefix, suffix
+    if whole_xml:
+        return prefix, ""
     if not prefix or prefix[-1] not in "'\"":
         raise RequestError("neuralese-template", "the chat template does not quote string arguments")
     return prefix[:-1], ""
 
 
 def write_reply(apply_template, name: str, arguments: dict, argument: str = "value",
-                value_type: str = "string", argument_path: tuple[str | int, ...] | list[str | int] | None = None) -> tuple[str, str]:
-    """Keep native typed-value syntax in the model cache; opaque wire placeholders are quoted separately."""
-    prefix, suffix = call_reply(apply_template, name, arguments, argument, argument_path=argument_path)
+                value_type: str = "string", argument_path: tuple[str | int, ...] | list[str | int] | None = None,
+                call_format: str | None = None) -> tuple[str, str]:
+    """Keep native typed-value syntax in the model cache; opaque wire placeholders are quoted separately. An XML
+    parameter value has no quotes, so its string and `unknown` (any JSON value) write sites share one boundary."""
+    prefix, suffix = call_reply(apply_template, name, arguments, argument, argument_path=argument_path,
+                                call_format=call_format)
     if value_type == "string":
         return prefix, suffix
     if value_type != "unknown":
         raise RequestError("neuralese-template", "write value_type must be string or unknown")
+    if _xml_whole_parameter(prefix, suffix):
+        return prefix, suffix
     if not prefix or prefix[-1] not in "\"'" or not suffix.startswith(prefix[-1]):
         raise RequestError("neuralese-template", "the chat template does not quote string arguments")
     return prefix[:-1], suffix[1:]
@@ -543,14 +804,25 @@ def write_reply(apply_template, name: str, arguments: dict, argument: str = "val
 
 
 def write_value_text(apply_template, name: str, arguments: dict, argument: str,
-                     value, value_type: str = "string", argument_path: tuple[str | int, ...] | list[str | int] | None = None) -> str:
+                     value, value_type: str = "string", argument_path: tuple[str | int, ...] | list[str | int] | None = None,
+                     call_format: str | None = None) -> str:
     """Gold value span in the same native template as generated writing.
 
     Source serialization is not the output syntax: JSON spacing and quoted string
     escaping can change its token count. Require the exact write boundary instead
     of assuming a textual representation or silently clipping the gold value.
+    An unquoted XML parameter value must also parse back to the gold value
+    (no parameter delimiter inside it; a string value stays a string).
     """
-    prefix, suffix = write_reply(apply_template, name, arguments, argument, value_type, argument_path)
+    prefix, suffix = write_reply(apply_template, name, arguments, argument, value_type, argument_path, call_format)
+    if _xml_whole_parameter(prefix, suffix):
+        text = xml_value_text(value)
+        if not xml_value_representable(text):
+            raise RequestError("neuralese-template", "gold value contains the XML parameter delimiter")
+        if value_type == "string" and not isinstance(value, str):
+            raise RequestError("neuralese-template", "a string write site's gold value is not a string")
+        if value_type == "unknown" and json.dumps(xml_value(text), ensure_ascii=False) != json.dumps(value, ensure_ascii=False):
+            raise RequestError("neuralese-template", "gold value does not keep its type in the XML rendering")
     call_arguments = ({**arguments, argument: value} if argument_path is None else
                       _replace_value_path(arguments, tuple(argument_path), value))
     call = {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
@@ -639,8 +911,27 @@ def arguments_text(arguments) -> str:
     return json.dumps(arguments, ensure_ascii=False, separators=(",", ":"))
 
 
-def build_message(text: str, block_ids: list[str], call_prefix: str = "call") -> dict:
-    """Model output (with block placeholders) → an assistant message with parts where blocks are."""
+def _take_xml_calls(text: str, tools=None) -> tuple[list[tuple[str, dict]], str]:
+    """Complete, well-typed XML calls of `text` (in order) and the text without them. A malformed or ill-typed call
+    stays in the text, where the runtime treats leaked markup as a malformed call."""
+    calls, kept, last = [], [], 0
+    for call in scan_xml_calls(text):
+        if call.end is None or call.name is None:
+            continue
+        try:
+            parsed = parse_xml_calls(text[call.start:call.end], tools)
+        except ValueError:
+            continue
+        calls.extend(parsed)
+        kept.append(text[last:call.start])
+        last = call.end
+    kept.append(text[last:])
+    return calls, "".join(kept)
+
+
+def build_message(text: str, block_ids: list[str], call_prefix: str = "call", tools=None) -> dict:
+    """Model output (with block placeholders) → an assistant message with parts where blocks are. `tools` (the
+    request's declarations) type the values of XML calls (`xml_value`)."""
     text = text.replace("<|im_end|>", "").replace("<|endoftext|>", "")
     reasoning = None
     think = _THINK.search(text)
@@ -651,6 +942,12 @@ def build_message(text: str, block_ids: list[str], call_prefix: str = "call") ->
         head, _, text = text.partition("</think>")
         reasoning = head.strip()
     tool_calls = []
+    xml_calls, text = _take_xml_calls(text, tools)
+    for name, arguments in xml_calls:
+        tool_calls.append({
+            "id": f"{call_prefix}_{len(tool_calls)}", "type": "function",
+            "function": {"name": name, "arguments": arguments_text(_restore(arguments, block_ids))},
+        })
     for pattern, parse in ((_CALLS, parse_pythonic_calls), (_JSON_CALLS, parse_json_call)):
         for match in pattern.finditer(text):
             try:
