@@ -31,6 +31,8 @@ export type ProgramSemantics = {
   expected_files?: Record<string, string>;
   /** Default: structural JSON content, exact text for other files. `exact` opts into byte equality. */
   files_oracle?: import('./oracle.js').FilesOracle;
+  /** A required repair or forbidden edit of one program function, judged on its final source (function-effects.ts). */
+  function_checks?: import('./function-effects.js').FunctionEffectSpec;
 };
 export type ProgramRecord = { version: string; id: string; kind: string; semantics: ProgramSemantics; [key: string]: unknown };
 

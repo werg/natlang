@@ -162,7 +162,7 @@ export function contractDiagnosis(seed, index) {
         replace_with: 'return Math.max(0, line.quantity * line.unit_cents - line.discount_cents);' }],
       evalCall('lines.reduce((sum, l) => sum + line_total(l), 0)'), returnCall(clampTotal)] :
       [evalCall('lines.map(l => line_total(l))'), evalCall('lines.reduce((sum, l) => sum + line_total(l), 0)'), returnCall(clampTotal)];
-    return curriculumCase({ family: 'contract_diagnosis', shape, variant, pairGroup: `contract:${shape}`,
+    const record = curriculumCase({ family: 'contract_diagnosis', shape, variant, pairGroup: `contract:${shape}`,
       slice: 'folder_failure', domain: 'other', mode: variant === 'defect' ? 'followup' : 'single_call', edits: v.edits,
       evidence: { world: [doc], retrieved: ['line totals'], background: [] },
       decisive: variant === 'defect' ? [{ marker: 'line.quantity * line.unit_cents - line.discount_cents;', source: 'function_source', note: 'the source misses the clamp' }] : [],
@@ -174,7 +174,34 @@ export function contractDiagnosis(seed, index) {
         instructions: 'Return the invoice total in cents: the sum of line_total over lines. line_total must follow its documented contract; if it does not, fix line_total itself.' },
       files: { 'invoice_total/line_total.ts': v.source, 'types.ts': 'export type Line = { sku: string, quantity: number, unit_cents: number, discount_cents: number };\n' },
       inputs: { lines }, expected: clampTotal });
+    record.semantics.function_checks = lineTotalChecks(lines, v.edits === 'required' ? 'required' : 'forbidden');
+    return record;
   });
+}
+
+/**
+ * The function-effect oracle of contract_diagnosis (teacher/function-effects.ts, 2026-10-28): the returned total alone
+ * accepted a hard-coded answer with no repair on a held case (2026-10-26 audit). line_total as the run left it must be
+ * repaired (defect) or unchanged (sound), meet its documented contract on hidden lines (the case's own lines and fixed
+ * boundary lines: no discount, a discount equal to, one cent above and one cent below the line, a large discount, an
+ * empty quantity), and the returned total must be its sum over the case's lines. Derived from the drawn lines only; no
+ * random draws (the generated lines, sources and openings are unchanged).
+ */
+const LINE_TOTAL_BOUNDARIES = [
+  { sku: 'H1', quantity: 3, unit_cents: 250, discount_cents: 0 },
+  { sku: 'H2', quantity: 2, unit_cents: 400, discount_cents: 800 },
+  { sku: 'H3', quantity: 1, unit_cents: 999, discount_cents: 1000 },
+  { sku: 'H4', quantity: 4, unit_cents: 1250, discount_cents: 4999 },
+  { sku: 'H5', quantity: 5, unit_cents: 300, discount_cents: 150000 },
+  { sku: 'H6', quantity: 7, unit_cents: 1499, discount_cents: 299 },
+  { sku: 'H7', quantity: 0, unit_cents: 820, discount_cents: 15 },
+];
+function lineTotalChecks(lines, change) {
+  const contract = line => Math.max(0, line.quantity * line.unit_cents - line.discount_cents);
+  // The case's lines under fresh SKUs too, so a lookup keyed by the visible SKUs fails.
+  const hidden = [...lines, ...lines.map((line, i) => ({ ...line, sku: `Q${i + 1}` })), ...LINE_TOTAL_BOUNDARIES];
+  return { schema: 'natlang.function-effect-oracle/1', function: 'line_total', change,
+    runs: hidden.map(line => ({ args: [line], expected: contract(line) })), value_from: { input: 'lines', combine: 'sum' } };
 }
 
 const TICKET_FILES = {
