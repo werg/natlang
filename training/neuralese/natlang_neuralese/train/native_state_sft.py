@@ -2339,13 +2339,21 @@ def _main(argv=None, *, requested_refresh):
             'outer_history':'historical-only', 'standalone_outer_credit':False})
     elif args.standalone_diloco_parent is not None:
         pin = args.standalone_diloco_parent.resolve(strict=True)
-        if (args.diloco is not None or not prior_outer_history or
+        if ((args.diloco is not None and not parent_continuation) or not prior_outer_history or
                 (prior_outer_history[-1].get('checkpoint') or {}).get('path') != str(pin) or
                 (prior_outer_history[-1].get('checkpoint') or {}).get('sha256') != sha256_file_hex_cached(pin) or
                 (prior_outer_history[-1].get('checkpoint') or {}).get('bytes') != pin.stat().st_size):
             raise ValueError('standalone DiLoCo custody pin does not match committed history')
     if prior_outer_history:
         checkpoint_options['standalone_diloco_history'] = prior_outer_history
+        if args.diloco is not None and parent_continuation:
+            checkpoint_options['standalone_diloco_rejoin'] = {
+                'schema':'natlang.diloco-standalone-rejoin/1',
+                'parent':{'path':str(args.continue_from.resolve()),
+                          'sha256':sha256_file_hex_cached(args.continue_from),
+                          'bytes':args.continue_from.stat().st_size},
+                'global_step':global_step,'outer_history':'new',
+                'historical_outer_checkpoint':prior_outer_history[-1]['checkpoint']}
     from .native_diloco import attach_learner
     diloco_identity_transition = None
     if args.diloco is not None and not parent_continuation and (source_correction_result.get('changed') or diloco_withdrawal_changed or diloco_append_changed):
