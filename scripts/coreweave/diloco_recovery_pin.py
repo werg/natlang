@@ -11,7 +11,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import tarfile
 import tempfile
 import time
 
@@ -21,6 +20,7 @@ from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
 from natlang_neuralese.train.native_state_sft import TRAINING_SCHEMA
 from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
 from natlang_neuralese.train.diloco.coordinator import read_manifest, _metadata
+from scripts.coreweave.cache_bounded_archive import open_recovery_tar
 
 
 def _hash(path): return sha256_file_hex(path, drop_cache=True)
@@ -101,7 +101,7 @@ def resident_pin(directory, archive):
             if not state and initial_state['plan_sha256'] != canonical_json_sha256_hex(active_plan):
                 raise ValueError('resident initial generation and active plan differ')
         temp = archive.with_name(archive.name + '.tmp')
-        with tarfile.open(temp, 'x', dereference=True) as tar: tar.add(staging, arcname='diloco-resident')
+        with open_recovery_tar(temp) as tar: tar.add(staging, arcname='diloco-resident')
         os.link(temp, archive); temp.unlink()
         return {'path': str(archive), 'sha256': _hash(archive), 'bytes': archive.stat().st_size,
                 'generation': state['generation'] if state else initial_state['plan_sha256'],
@@ -171,7 +171,7 @@ def coordinator_pin(root, archive, package, *, attempts=5, tree_only=False):
                         'runtime_code_sha256':canonical_json_sha256_hex(code_inventory(package)),
                         'scope':'stable coordinator hardlinks; separate worker checkpoints retain local optimizer and pending updates'}
             temp=archive.with_name(archive.name+'.tmp')
-            with tarfile.open(temp,'x',dereference=True) as tar:tar.add(staging,arcname='diloco-coordinator')
+            with open_recovery_tar(temp) as tar:tar.add(staging,arcname='diloco-coordinator')
             os.link(temp,archive);temp.unlink()
             return {'path':str(archive),'sha256':_hash(archive),'bytes':archive.stat().st_size,
                     'fingerprint':manifest['fingerprint'],'versions':versions,'last_seq':ledgers,'queued':queued,
@@ -200,7 +200,7 @@ def archive_coordinator_tree(tree, archive, identity):
     if archive.exists():archive.unlink()  # unsealed interrupted preparation was never published
     temp=archive.with_name(archive.name+'.tmp');temp.unlink(missing_ok=True)
     try:
-        with tarfile.open(temp,'x',dereference=True) as tar:tar.add(tree,arcname='diloco-coordinator')
+        with open_recovery_tar(temp) as tar:tar.add(tree,arcname='diloco-coordinator')
         if _inventory(tree)!=expected:raise ValueError('coordinator hardlink tree changed during archive')
         os.link(temp,archive);temp.unlink()
         result={'path':str(archive),'sha256':_hash(archive),'bytes':archive.stat().st_size}

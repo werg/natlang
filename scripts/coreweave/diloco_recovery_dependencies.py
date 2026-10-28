@@ -8,6 +8,7 @@ import os
 import shutil
 from pathlib import Path
 import tarfile
+from scripts.coreweave.cache_bounded_archive import open_recovery_tar
 
 from natlang_neuralese.common.hashing import sha256_file_hex, canonical_json_sha256_hex
 
@@ -84,7 +85,7 @@ def seal(bindings, candidates, bundle, sources, output, *, runtime_code_sha256, 
         raise OSError('dependency archive would consume the 60 GiB disk reserve')
     temp=output.with_name(output.name+'.tmp')
     try:
-        with tarfile.open(temp,'x',dereference=True) as tar:
+        with open_recovery_tar(temp) as tar:
             for sha,path in sorted(resolved.items()):
                 before=path.stat();tar.add(path,arcname='objects/'+sha,recursive=False)
                 after=path.stat()
