@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import threading
@@ -48,6 +49,9 @@ def validate(record, manifest):
         raise ValueError('resident update needs explicit immutable files')
     targets = set()
     for item in files:
+        if (type(item.get('bytes')) is not int or item['bytes'] < 0 or
+                not isinstance(item.get('sha256'), str) or not re.fullmatch(r'[0-9a-f]{64}', item['sha256'])):
+            raise ValueError('file inventory needs a nonnegative byte count and SHA-256')
         source = Path(item['source'])
         target = Path(item['target'])
         if not source.is_absolute() or not target.is_absolute() or str(target) in targets:
