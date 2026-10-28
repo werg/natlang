@@ -46,3 +46,21 @@ def test_ordered_dense_gradient_reads_beyond_32bit_element_offset():
     assert acc[0, 0].item() == 6 and torch.count_nonzero(acc).item() == 1
     del gradient, x
     gc.collect(); torch.cuda.empty_cache()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='requires actual CUDA kernels')
+@pytest.mark.parametrize('dtype', [torch.bfloat16, torch.float32])
+def test_streamed_dense_gradients_equal_packed_order_bitwise(monkeypatch, dtype):
+    from natlang_neuralese.maple import fused_moe
+
+    torch.manual_seed(9107)
+    records = [(torch.randn((n, 64), device='cuda', dtype=dtype),
+                torch.randn((n, 48), device='cuda', dtype=dtype)) for n in (33, 17, 65)]
+    initial = torch.randn((48, 64), device='cuda', dtype=torch.float32)
+    packed = initial.clone(); streamed = initial.clone()
+    monkeypatch.setattr(fused_moe, 'ORDERED_DENSE_PACK_LIMIT_BYTES', 1 << 60)
+    fused_moe.ordered_invariant_weight_gradient(records, packed)
+    monkeypatch.setattr(fused_moe, 'ORDERED_DENSE_PACK_LIMIT_BYTES', 0)
+    fused_moe.ordered_invariant_weight_gradient(records, streamed)
+    torch.cuda.synchronize()
+    assert torch.equal(packed, streamed)
