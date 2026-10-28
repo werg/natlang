@@ -76,6 +76,16 @@ the learners' total updates. Production training continues from it with
   Nesterov 0.7/0.9 over 4 rounds ended at 2.6. Watch the outer settings on
   short stages.
 
+- (2026-10-28) A merge committed by `submit` was reported in heartbeat `versions` only after the next 1 s
+  reconcile tick (`published_versions` was refreshed there, not at the merge). The learner whose upload did not
+  complete the quorum kept training against its upload point and could not send its next round, so rounds became
+  unequal (one learner's 72-step window merged with the other's 8-step one, then the other's 64-step window alone
+  at full weight): displacements were summed instead of averaged and the global overshot. The CPU test ended at
+  0.23-2.06 (initial 4.20) while both learners were at 0.07; it failed since the port (39e9868a0: 0.376), not a
+  later regression. The merge now updates the reported version at once: five runs ended at 0.066-0.075 with
+  balanced 8-step rounds (10 merges at 20 ms/step instead of 3-5). Unequal windows can still arise from real
+  network delays; per-round window balance is worth watching in the 2-learner CoreWeave smoke.
+
 ## Not yet measured
 
 - No CoreWeave run has been made. Learner step time on the assigned GPU, WAN
