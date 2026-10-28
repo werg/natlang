@@ -69,8 +69,11 @@ def verify_pair(row, *, records, edges, tokenizer, model_id, fingerprint, roles,
     occurrence=source_occurrences(writer,reader,edge['write_name'],body,edge['body_sha256'],
         writer_occurrence_id=edge.get('writer_occurrence_id'),reader_occurrence_id=edge.get('reader_occurrence_id'))
     witness=json.loads(c['occurrence'])
-    if (witness.get('payload_sha256')!=edge['body_sha256'] or witness.get('reader_json_pointers')!=occurrence['reader_json_pointers']
-            or witness.get('reader_occurrence_ids')!=occurrence['reader_occurrence_ids']):raise ValueError('source occurrence differs')
+    if (any(witness.get(k)!=v for k,v in occurrence.items()) or witness.get('edge_id')!=c['source_id']
+            or witness.get('trajectory')!=edge.get('trajectory')
+            or witness.get('writer_source_row_sha256')!=(writer.get('source_ref') or {}).get('source_row_sha256')
+            or witness.get('reader_source_row_sha256')!=(reader.get('source_ref') or {}).get('source_row_sha256')):
+        raise ValueError('source occurrence differs')
     view=row['models'][model_id];graph=view['graph'];parsed=parse_graph(graph,tokenizer_fingerprint=fingerprint)
     derivations=(graph.get('source_pairing') or {}).get('authenticated_static_derivations') or {}
     for key,record in (('writer',writer),('reader',reader)):
