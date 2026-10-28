@@ -382,6 +382,13 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
             features['near_duplicate_cluster'] = (f'{features["near_duplicate_cluster"]}|'
                                                   f'{min(row.get("source_groups") or [""])}')
             tier, reason = classify(features, policy)
+            coding = policy.get('coding_mix') or {}
+            if tier is None and coding and any(m in str(path) for m in coding.get('sources', [])):
+                # Generic coding rows (no natlang structure) of the declared coding sources: the bounded coding mix.
+                if features['verified']:
+                    tier, reason = coding['tier'], None
+                else:
+                    reason = 'coding mix: unverified'
             if tier is None:
                 omitted['dropped: ' + reason] += 1
                 continue
@@ -389,15 +396,51 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
             covered.update(ids)
             category = min((k['category'] for k in known), key=ORDER.index)
             fit = sum(k['fit'] for k in known) / len(known)
+            target_tokens = sum(sum(1 for w in node.get('target_weights') or () if w) for node in row['nodes'])
             out.append({'tier': tier, 'category': category, 'fit': fit, 'id': row['id'], 'file': str(path),
+                        'target_tokens': target_tokens,
                         'trajectory': trajectory,
                         'line': number, 'decisions': len(ids), 'view': view, 'features': features})
     return out, omitted
 
 
+def coding_sample(cands, policy, dropped):
+    """The declared coding mix (policy ``coding_mix``): verified generic coding rows, one per near-duplicate cluster,
+    round-robin over families (repositories/tasks) until their target tokens reach ``share`` of the mixture's."""
+    coding = policy.get('coding_mix')
+    if not coding:
+        return cands
+    tier = coding['tier']
+    natlang = [c for c in cands if c['tier'] != tier]
+    pool = sorted((c for c in cands if c['tier'] == tier), key=lambda c: hashlib.sha256(c['id'].encode()).hexdigest())
+    budget = coding['share'] / (1 - coding['share']) * sum(c['target_tokens'] for c in natlang)
+    clusters, families = set(), collections.defaultdict(list)
+    for c in pool:
+        key = c['features']['near_duplicate_cluster']
+        if key in clusters:
+            dropped['coding mix: near-duplicate'] += 1
+            continue
+        clusters.add(key)
+        families[c['features']['family']].append(c)
+    chosen, used, queues = [], 0, [list(v) for v in families.values()]
+    while used < budget and any(queues):
+        for q in queues:
+            if q and used < budget:
+                c = q.pop(0)
+                chosen.append(c)
+                used += c['target_tokens']
+    dropped['coding mix: beyond the declared share'] += sum(len(q) for q in queues)
+    return natlang + chosen
+
+
 def apply_caps(cands, policy):
-    """Per tier: near-duplicate cluster cap, then family share caps (reducer families have their own)."""
-    caps, kept, dropped = policy['caps'], [], collections.Counter()
+    """Per tier: near-duplicate cluster cap, then family share caps (reducer families have their own). A policy
+    without ``caps`` (v2, owner 2026-10-28: tiers order and weight, they do not filter) keeps every eligible row;
+    the coding mix is sampled to its declared share."""
+    dropped = collections.Counter()
+    if not policy.get('caps'):
+        return coding_sample(cands, policy, dropped), dropped
+    caps, kept = policy['caps'], []
     for tier in sorted({c['tier'] for c in cands}):
         rows = sorted((c for c in cands if c['tier'] == tier),
                       key=lambda c: (-c['fit'], hashlib.sha256(c['id'].encode()).hexdigest()))

@@ -30,7 +30,7 @@ from natlang_neuralese.common import line_backbones  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
 
 PY = str(REPO / '.venv-neuralese/bin/python')
-POLICY = 'training/neuralese/mixtures/lfm3-joint-sft-mixture-policy-v1.json'
+POLICY = 'training/neuralese/mixtures/lfm3-joint-sft-mixture-policy-v2.json'
 SCORES = REPO / 'runs/lfm3-mixture/scores'
 QUEUE = REPO / 'runs/lfm3-renders/queue.json'
 TEACHERS = REPO / 'runs/lfm3-teacher-graphs'
