@@ -919,7 +919,8 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
                           'optimizer': optimizer.state_dict(), 'rng': rng, 'metrics': metrics,
                           'options': options, 'fp8': fp8_state, 'sft_progress': sft_progress or {}}}
     if diloco is not None:
-        state['training']['diloco'] = diloco.state_dict()
+        state['training']['diloco'] = diloco.state_dict(
+            clone_baselines=bool(async_allowed and getattr(policy, 'async_checkpoint', False)))
     if weight_ema is not None:
         state['training']['ema'] = weight_ema.state_dict()
     if quantization is not None:
@@ -3122,7 +3123,7 @@ def _main(argv=None, *, requested_refresh):
                         last_saved_step = step
                         metadata_dirty = False
                         recovery_fence.checkpoint_ready(args.out, fence_request, policy.slot,
-                            global_step=global_step, local_step=step, worker_state=diloco.state_dict())
+                            global_step=global_step, local_step=step, worker_state=diloco.cursors())
                         recovery_fence.wait_release(args.out, fence_request, stopping=lambda: policy.signaled)
                 except Exception as error:
                     if fence_request is not None:
