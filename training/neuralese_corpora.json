@@ -731343,6 +731343,1067 @@
           }
         }
       }
+    },
+    {
+      "id": "mellum-train-only-recovery-proxy-render-20261014-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/mellum-train-only-recovery-proxy-render-20261014-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render mellum-train-only-recovery-proxy-render-20261014-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "mellum-train-only-recovery-proxy-render-20261014-v1",
+        "mellum-train-only-recovery-proxy-20261014-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 495,
+                "supervised_tokens": 76286,
+                "tokens": 3284895,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 31326784,
+            "decoded_text_data_sha256": "86a4585a8587744a03f3c2e3fd16d2ecfa3e190354e871b8e29472ffa4dab36c",
+            "documents": 495,
+            "max_document_tokens": 12095,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "73b3bf44bf64346c5b11faa71c14e06402d3a39cd4595e55034956ae73afdd40"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 495,
+                "supervised_tokens": 76286,
+                "tokens": 1261944,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 11907370,
+            "decoded_text_data_sha256": "254348207d4bc2946020235e8bb8a8f2239a24a5da6ccde65b5098a22878abb6",
+            "documents": 495,
+            "max_document_tokens": 8009,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "f12471da7fb6744664154ab06df110b2d564d2248b2552bce332f8c457591b2d"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 160408,
+                "documents": 233,
+                "opening_tokens": 81385,
+                "supervised_tokens": 79023,
+                "tokens": 552807,
+                "tool_tokens": 97867
+              }
+            },
+            "decoded_text_data_bytes": 5456930,
+            "decoded_text_data_sha256": "bb7ae1fb66b37e6426e3a9320ae964dc40982d66baf4f85205cdf8a0cb82c8fe",
+            "documents": 233,
+            "max_document_tokens": 8009,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "479f84334a7badf6eb048394a202402e371a8d5220df689066c7165cd9172c69"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "mellum-train-only-recovery-proxy-render-20261014-v1",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 495,
+            "reference_documents": 495,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 495,
+            "reference_documents": 495,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 233,
+            "reference_documents": 233,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {
+          "full:exact": 495,
+          "program-header:exact": 495
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 495,
+            "whole-trajectory": 233
+          },
+          "detail": {
+            "program-header": {
+              "train": 495,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/mellum-train-only-recovery-proxy-render-20261014-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 495,
+                  "bytes": 204795,
+                  "sha256": "d121dbeadbee9d02aa9c8bb397feb598f08d221b2bba6891d4f412585b60e9b2"
+                },
+                {
+                  "path": "runs/lfm3-renders/mellum-train-only-recovery-proxy-render-20261014-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 233,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/mellum-train-only-recovery-proxy-render-20261014-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 233,
+                  "bytes": 233239,
+                  "sha256": "0dbb9d9513f91d05a1d11b1b64cd87c6beb9e2f698b64e23a04bfe7494406306"
+                },
+                {
+                  "path": "runs/lfm3-renders/mellum-train-only-recovery-proxy-render-20261014-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-harness-bench-v4-wholetraj-render-20261012-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-harness-bench-v4-wholetraj-render-20261012-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-harness-bench-v4-wholetraj-render-20261012-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-harness-bench-v4-wholetraj-render-20261012-v1",
+        "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+      ],
+      "renders": {
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "test": {
+                "assistant_tokens": 1066238,
+                "documents": 110,
+                "opening_tokens": 0,
+                "supervised_tokens": 1066238,
+                "tokens": 3352248,
+                "tool_tokens": 2156751
+              },
+              "train": {
+                "assistant_tokens": 3109809,
+                "documents": 379,
+                "opening_tokens": 0,
+                "supervised_tokens": 3109809,
+                "tokens": 9938856,
+                "tool_tokens": 6433198
+              }
+            },
+            "decoded_text_data_bytes": 139271526,
+            "decoded_text_data_sha256": "6331bfb8f78dbbee4c6ff86e4bd73a6314b439f858836adcb2a383817bdaab7a",
+            "documents": 489,
+            "max_document_tokens": 90296,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "69211aa6aacdaf89b0a76df3cbcd6b225ae8193f38be5df6a1c38a33c68b7aab"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-harness-bench-v4-wholetraj-render-20261012-v1",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "whole-trajectory": {
+            "documents": 489,
+            "reference_documents": 489,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {}
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "whole-trajectory": 489
+          },
+          "detail": {
+            "whole-trajectory": {
+              "train": 379,
+              "test": 110,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-harness-bench-v4-wholetraj-render-20261012-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 379,
+                  "bytes": 8270534,
+                  "sha256": "aa79ea75be99be99636e1fb8927e23652b13d56a0637fc8638721a180c0444fa"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-harness-bench-v4-wholetraj-render-20261012-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 110,
+                  "bytes": 2754331,
+                  "sha256": "095cca6bf0864cda803719fb2644ebc571ffbccb1b2d980fc425a92708a7b2ac"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-native-turns-clef-new-render-20261011-v2-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-clef-new-render-20261011-v2",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-clef-new-render-20261011-v2 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-clef-new-render-20261011-v2",
+        "clef-new-rationalized-20261006-v2"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 124,
+                "supervised_tokens": 8975,
+                "tokens": 335120,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 3245506,
+            "decoded_text_data_sha256": "881a37a84895ea0d144672ff20ad5158033f6808dfe98cffc67ae8eeabd5f009",
+            "documents": 124,
+            "max_document_tokens": 3105,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "cea46e661763cf15b56beff6a5697412e3309032e719081f8f67715cbd909818"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2599,
+                "supervised_tokens": 185501,
+                "tokens": 1245997,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 13058842,
+            "decoded_text_data_sha256": "d78b4799334e3cb8de710f074f50093840e3a6a0c74dc2153b666f6a629b58b2",
+            "documents": 2599,
+            "max_document_tokens": 977,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "be99e82c5de31b778b8d1cac8ea1fdeee5ef9f40f2ce4bf964fd52395384eb3c"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 464870,
+                "documents": 2199,
+                "opening_tokens": 271572,
+                "supervised_tokens": 193298,
+                "tokens": 1066707,
+                "tool_tokens": 299186
+              }
+            },
+            "decoded_text_data_bytes": 12101205,
+            "decoded_text_data_sha256": "0a95158c4179bd0d38f6eb994c0ce3e6385c27cc394523c4f42b05b548ff2c38",
+            "documents": 2199,
+            "max_document_tokens": 977,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "b4efcc4aa3e1fd60a8a5f1a3b41fa8807b14f5241698df8f2d3abeda817e1139"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-clef-new-render-20261011-v2",
+        "student": "lfm3",
+        "identical_documents": false,
+        "views": {
+          "full": {
+            "documents": 124,
+            "reference_documents": 2564,
+            "same_order": 0,
+            "only_reference": 2440,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 2599,
+            "reference_documents": 2564,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 35
+          },
+          "whole-trajectory": {
+            "documents": 2199,
+            "reference_documents": 2164,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 35
+          }
+        },
+        "target_parse": {
+          "full:exact": 124,
+          "program-header:exact": 2599
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 2599,
+            "whole-trajectory": 2199
+          },
+          "detail": {
+            "program-header": {
+              "train": 2599,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-clef-new-render-20261011-v2/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 2599,
+                  "bytes": 520702,
+                  "sha256": "0642686e2aa95705249838142c9af322005ba7b83efafa8fa526ed54d5925491"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-clef-new-render-20261011-v2/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 2199,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-clef-new-render-20261011-v2/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 2199,
+                  "bytes": 809459,
+                  "sha256": "42098e664d21006482986e6d5ce8e7b9c2b2108c299651875115ff5622b1c24c"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-clef-new-render-20261011-v2/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-native-turns-clef-new-render-20261011-v3-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-clef-new-render-20261011-v3",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-clef-new-render-20261011-v3 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-clef-new-render-20261011-v3",
+        "clef-new-rationalized-20261006-v2"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 124,
+                "supervised_tokens": 8975,
+                "tokens": 335120,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 3245506,
+            "decoded_text_data_sha256": "881a37a84895ea0d144672ff20ad5158033f6808dfe98cffc67ae8eeabd5f009",
+            "documents": 124,
+            "max_document_tokens": 3105,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "cea46e661763cf15b56beff6a5697412e3309032e719081f8f67715cbd909818"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2599,
+                "supervised_tokens": 185501,
+                "tokens": 1245997,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 13058842,
+            "decoded_text_data_sha256": "d78b4799334e3cb8de710f074f50093840e3a6a0c74dc2153b666f6a629b58b2",
+            "documents": 2599,
+            "max_document_tokens": 977,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "be99e82c5de31b778b8d1cac8ea1fdeee5ef9f40f2ce4bf964fd52395384eb3c"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 464870,
+                "documents": 2199,
+                "opening_tokens": 271572,
+                "supervised_tokens": 193298,
+                "tokens": 1066707,
+                "tool_tokens": 299186
+              }
+            },
+            "decoded_text_data_bytes": 12101205,
+            "decoded_text_data_sha256": "0a95158c4179bd0d38f6eb994c0ce3e6385c27cc394523c4f42b05b548ff2c38",
+            "documents": 2199,
+            "max_document_tokens": 977,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "b4efcc4aa3e1fd60a8a5f1a3b41fa8807b14f5241698df8f2d3abeda817e1139"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-clef-new-render-20261011-v3",
+        "student": "lfm3",
+        "identical_documents": false,
+        "views": {
+          "full": {
+            "documents": 124,
+            "reference_documents": 124,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 2599,
+            "reference_documents": 2564,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 35
+          },
+          "whole-trajectory": {
+            "documents": 2199,
+            "reference_documents": 2164,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 35
+          }
+        },
+        "target_parse": {
+          "full:exact": 124,
+          "program-header:exact": 2599
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 2599,
+            "whole-trajectory": 2199
+          },
+          "detail": {
+            "program-header": {
+              "train": 2599,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-clef-new-render-20261011-v3/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 2599,
+                  "bytes": 520702,
+                  "sha256": "0642686e2aa95705249838142c9af322005ba7b83efafa8fa526ed54d5925491"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-clef-new-render-20261011-v3/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 2199,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-clef-new-render-20261011-v3/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 2199,
+                  "bytes": 809459,
+                  "sha256": "42098e664d21006482986e6d5ce8e7b9c2b2108c299651875115ff5622b1c24c"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-clef-new-render-20261011-v3/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-native-turns-luna-clinc-v5-render-20261012-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-luna-clinc-v5-render-20261012-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-luna-clinc-v5-render-20261012-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-luna-clinc-v5-render-20261012-v1",
+        "luna-clinc-v5-selected-child-actions-20261012-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 16,
+                "supervised_tokens": 1289,
+                "tokens": 104600,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 1002365,
+            "decoded_text_data_sha256": "a9190beeb40acaa8a54283bc54c3c2c1026645078d4865361976c544e6d9ee5e",
+            "documents": 16,
+            "max_document_tokens": 6889,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "b2bc5016d32c51898096e23a460a0149839911cbc468cd0c5c5fd2612598f2d4"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 261,
+                "supervised_tokens": 23617,
+                "tokens": 674805,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 6430566,
+            "decoded_text_data_sha256": "04566d93abb2623a19f328f20416bb7a0684acaf753b523e2acb2521d0d9edca",
+            "documents": 261,
+            "max_document_tokens": 3789,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "b177cb3c7a2d944ba94e450c30c8bf11052860bce423e9a75f908517193d1fc3"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 137841,
+                "documents": 261,
+                "opening_tokens": 110329,
+                "supervised_tokens": 27512,
+                "tokens": 674805,
+                "tool_tokens": 216180
+              }
+            },
+            "decoded_text_data_bytes": 6566025,
+            "decoded_text_data_sha256": "90f1fcec53a01d598a2fdefe23063dd2ad34f1ffaab885d98dd6b0d2edbf6e20",
+            "documents": 261,
+            "max_document_tokens": 3789,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "161d7a570e41a7240718a73bb5d7f6f2d24c29a2b8cae875de6a910f8440cc96"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-luna-clinc-v5-render-20261012-v1",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 16,
+            "reference_documents": 16,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 261,
+            "reference_documents": 261,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 261,
+            "reference_documents": 261,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {
+          "full:exact": 16,
+          "program-header:exact": 261
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 261,
+            "whole-trajectory": 261
+          },
+          "detail": {
+            "program-header": {
+              "train": 261,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-clinc-v5-render-20261012-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 261,
+                  "bytes": 93920,
+                  "sha256": "de01f80163904202deaed3bf5c3518795bf31de861695d45848813a31cabb8fe"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-clinc-v5-render-20261012-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 261,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-clinc-v5-render-20261012-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 261,
+                  "bytes": 141320,
+                  "sha256": "418e4c40e3d5c3c89021c2073cffe3741422ca7976938f77d562174b9c149398"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-clinc-v5-render-20261012-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-native-turns-luna-clinc-v6-render-20261012-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-luna-clinc-v6-render-20261012-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-luna-clinc-v6-render-20261012-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-luna-clinc-v6-render-20261012-v1",
+        "luna-clinc-v6-selected-child-actions-20261012-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 13,
+                "supervised_tokens": 1228,
+                "tokens": 84727,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 812414,
+            "decoded_text_data_sha256": "9b7775d2058c93c212e4ce39f7d5955a7547d73e8935c3c2f5333808b57c6f2a",
+            "documents": 13,
+            "max_document_tokens": 6804,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "d7e82d32874bee978976173a4757446f446035edc4b7499d3aebcdcffc48e8bd"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 244,
+                "supervised_tokens": 22582,
+                "tokens": 635992,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 6055364,
+            "decoded_text_data_sha256": "bf425137a40d0762580a6667ffdf942250acaa51562dc3dcf879e4af4c1df6f2",
+            "documents": 244,
+            "max_document_tokens": 3585,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "6b73b65d5d0b98677a0baff0a61a8427236f61c43a8df484e2bb8460e40405f1"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 132966,
+                "documents": 244,
+                "opening_tokens": 105712,
+                "supervised_tokens": 27254,
+                "tokens": 635992,
+                "tool_tokens": 205194
+              }
+            },
+            "decoded_text_data_bytes": 6182000,
+            "decoded_text_data_sha256": "182f4f859644aafc6e14feffd889fbee3bd27d48634d1c7304afa1de0c29b1bb",
+            "documents": 244,
+            "max_document_tokens": 3585,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "4d3779a343ed3c780ff9176f0a4affbad3b2b9d68a119bbbd37e5c8d940ce976"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-luna-clinc-v6-render-20261012-v1",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 13,
+            "reference_documents": 13,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 244,
+            "reference_documents": 244,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 244,
+            "reference_documents": 244,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {
+          "full:exact": 13,
+          "program-header:exact": 244
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 244,
+            "whole-trajectory": 244
+          },
+          "detail": {
+            "program-header": {
+              "train": 244,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-clinc-v6-render-20261012-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 244,
+                  "bytes": 92508,
+                  "sha256": "e83e2036a1c532641c01ddaa45c96bc5421818002a92b7216529b9a520fa24e1"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-clinc-v6-render-20261012-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 244,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-clinc-v6-render-20261012-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 244,
+                  "bytes": 136769,
+                  "sha256": "10531f2a0940146580b82c8ddf96c6e5cf35b0669ee62150f9b3434c9aebcff4"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-clinc-v6-render-20261012-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
