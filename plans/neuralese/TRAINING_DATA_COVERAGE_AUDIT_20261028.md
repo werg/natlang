@@ -189,6 +189,18 @@ worlds define divergence exactly. Those references are exact-oracle labels for t
 trajectory) fills the SFT side without teacher generation. RL episodes on unbounded `iterateOn` training worlds
 train the judge's actions through the outcome.
 
+<a id="guidance-writer-data"></a>
+### In-run guidance writer and attempt planner
+
+`selectGuidanceFacts` and `writeGuidance` are separately identified runtime-authored model calls. Their
+sampled policy turns are retained in teacher-attempt JOLT outcome learning; student policy turns are excluded
+from the student outcome loss and their written native state conditions the privileged twin. The writer's
+actual in-graph producer and imports are checked by the guidance and JOLT tests. Existing mechanisms do not
+establish admitted SFT examples for these exact call prompts; obtain exact-oracle supervision or self-teach
+and record real exposure. The `planTeacherAttempts` CLI call is currently outside the episode collector:
+its actual prompt parity, SFT targets and policy-action learning remain unqualified. Its validated plan and
+crisp fallback do not constitute training evidence. Keep these gaps visible until measured and repaired.
+
 ## 4. Other data defects checked
 
 | Class | Check | Result |

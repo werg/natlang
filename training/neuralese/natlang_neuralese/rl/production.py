@@ -410,16 +410,21 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
-            behavior_top_k=None, teacher_attempts=0):
+            behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
+            system_prompt=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
-    ``teacher_attempts`` JOLT+ teacher attempts per group follow the scored student attempts: the same actor samples
-    with each invocation's privileged block (rl.jolt.teacher_entries); rows are tagged ``jolt_role: teacher``."""
+    ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
+    planTeacherAttempts skip or add attempts) follow the scored student attempts: the same actor samples with
+    in-run guidance written and imported per invocation (rl.jolt.teacher_entries); rows are tagged
+    ``jolt_role: teacher``. Students write guidance without importing it (rl.jolt.student_guidance).
+    ``system_prompt`` (text) replaces the collector's default system prompt for every entry (e.g. stored program
+    guidance measured by the memetic learner); it is bound by digest into the collection binding."""
     if control is not None and control.stop.requested:
         raise InterruptedError('collection stop requested')
     if not endpoints or workers < 1:
         raise ValueError('RL needs served endpoints and positive worker concurrency')
-    from ..common.hashing import sha256_file_hex
+    from ..common.hashing import sha256_file_hex, sha256_hex
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     runtime = Path(runtime or root('repo') / 'ts-host')
@@ -433,7 +438,9 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                     for p in sorted((runtime / 'dist').rglob('*.js'))},
         'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py'),
         **({'expected_native_actor': expected_native} if expected_native is not None else {}),
-        **({'behavior_top_k': behavior_top_k} if behavior_top_k is not None else {})}
+        **({'behavior_top_k': behavior_top_k} if behavior_top_k is not None else {}),
+        **({'guided': True, 'system_prompt_sha256': sha256_hex(system_prompt.encode())}
+           if system_prompt is not None else {})}
     coefficient_runtime=None
     if coefficient_policy is not None:
         from ..model.native_coefficient_policy import runtime_binding
@@ -443,7 +450,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     receipt = out / 'collection-binding.json'
     if teacher_attempts and not (receipt.exists() and json.loads(receipt.read_text()) == binding):
         # A collection bound before teacher attempts existed keeps its recorded behaviour.
+        if teacher_plan not in ('nl', 'crisp'):
+            raise ValueError("jolt_teacher_plan is 'nl' (planTeacherAttempts) or 'crisp'")
         binding['jolt_teacher_attempts'] = teacher_attempts
+        binding['jolt_guidance'] = {'schema': 'natlang.guidance-run/1', 'teacher_plan': teacher_plan}
     elif receipt.exists():
         teacher_attempts = 0
     if receipt.exists():
@@ -469,12 +479,23 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         seed_base=seed_base, root_mode=root_mode, match_seeds_from=None,
         policy_checkpoint_sha256=policy_id))
     entries = list(read_jsonl(out / 'queue.jsonl'))
+    if system_prompt is not None:
+        system = out / 'system.md'
+        system.write_text(system_prompt)
+        for entry in entries:
+            entry['system_file'] = str(system)
     directory = out / 'workers'
     directory.mkdir(exist_ok=True)
     config = out / 'sampling-config.json'
     write_json_durable(config, {'guidance': False, 'x_natlang_rl_capture': True,
         **({'x_natlang_rl_top_k': behavior_top_k} if behavior_top_k is not None else {}),
         **({'x_natlang_native_coefficient_policy':coefficient_runtime} if coefficient_runtime is not None else {})})
+    guidance_refusal = None
+    if teacher_attempts:
+        # JOLT+ students write (without importing) their guidance for the OPSD twin.
+        from .jolt import student_guidance
+        guidance_refusal = student_guidance(entries, ids=preparation['ids'], cases=Path(cases), config=config,
+                                            out=directory)
     runtime = Path(runtime or root('repo') / 'ts-host')
     if not (runtime / 'dist/teacher/cli.js').is_file():
         raise FileNotFoundError('RL requires the built natlang collector runtime')
@@ -521,9 +542,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             from .jolt import teacher_entries
             write_journal_and_queue()
             score(out, out / 'student-rollouts.jsonl')
+            from .jolt import plan_command
             teachers = teacher_entries(entries, list(read_jsonl(out / 'student-rollouts.jsonl')),
                                        cases=Path(cases), config=config, out=out, attempts=teacher_attempts,
-                                       seed_base=seed_base)
+                                       seed_base=seed_base, plan_command=(plan_command(endpoints[0])
+                                                                          if teacher_plan == 'nl' else None))
             if teachers['entries']:
                 entries.extend(teachers['entries'])
                 phase.update(entries=teachers['entries'], name='teacher-')
@@ -543,7 +566,9 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     report = score(out, out / 'rollouts.jsonl')
     if teacher_attempts:
         report['jolt_teacher_attempts'] = {'requested_per_group': teacher_attempts,
-                                           'entries': len(teachers['entries']), 'refusal': teachers['refusal']}
+                                           'entries': len(teachers['entries']), 'refusal': teachers['refusal'],
+                                           'plan': teachers.get('plan'),
+                                           'student_guidance_refusal': guidance_refusal}
     from .graph_replay import block_ids, save_bundle
     rollouts = list(read_jsonl(out / 'rollouts.jsonl'))
     if any(block_ids(rollouts)):
@@ -666,7 +691,6 @@ def collect_with_actor(config, values, **kwargs):
             raise ValueError('managed actor view must come from its exact selected full-source controls')
         command += ['--native-actor-view', view['path'], '--native-actor-view-sha256', view['sha256']]
     from .actor_client import NativeActorClient
-    from ..common.hashing import sha256_file_hex_cached
     with (Path(values['out']) / 'actor.log').open('a') as log:
         environment = config.get('actor_environment')
         if environment is not None:
@@ -1010,7 +1034,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native,
                     **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
                     teacher_attempts=(config.get('jolt_teacher_attempts', 1)
-                                      if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else 0))
+                                      if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else 0),
+                    teacher_plan=config.get('jolt_teacher_plan', 'nl'))
             except InterruptedError:
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)
@@ -1383,13 +1408,12 @@ def configure_native(args):
     policy_loss = declared_loss or recipe_loss
     if policy_loss is None:
         # Improvements ship on by default (owner 2026-10-28): new configs get JOLT+ with score-centered
-        # outcome terms; per-invocation coefficient actors and semantic codec graphs do not have privileged
-        # twins yet and get score-centered/1.
+        # outcome terms (per-invocation coefficient actors included: a twin runs its sampled invocation's
+        # actor); semantic codec graphs do not have privileged twins yet and get score-centered/1.
         from .policy_math import default_policy_loss, DEFAULT_SCORE_CENTERED
-        policy_loss = (dict(DEFAULT_SCORE_CENTERED) if (getattr(args, 'coefficient_policy', None) is not None or semantic)
-                       else default_policy_loss())
-    elif policy_loss['schema'] == 'jolt-plus/1' and (getattr(args, 'coefficient_policy', None) is not None or semantic):
-        raise ValueError('JOLT+ privileged twins are not yet supported for coefficient or semantic actors')
+        policy_loss = dict(DEFAULT_SCORE_CENTERED) if semantic else default_policy_loss()
+    elif policy_loss['schema'] == 'jolt-plus/1' and semantic:
+        raise ValueError('JOLT+ privileged twins are not yet supported for semantic codec actors')
     parameters = {key: value for key, value in parameters.items()
                   if key in HANDLERS['native_offline_preference' if stages[0]['kind']=='native_offline_preference' else 'native_state_sft']['parameters'] and value is not None}
     parameters.pop('memory_qualification',None)  # one-time source-capacity probe already bound to the SFT parent

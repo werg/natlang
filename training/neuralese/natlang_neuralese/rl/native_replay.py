@@ -835,12 +835,19 @@ class NativePolicyObjective:
                     or canonical_json_sha256_hex(graph_identity(example))!=row['graph_sha256']):
                 raise ValueError('native invocation policy needs its exact source graph and actual actor bank')
             before=row['invocation_actors']
+            from .jolt import actor_sources
+            sources=actor_sources(row)
             names=getattr(bank,'source_names',{name:name for name in bank.actors})
-            if set(names)!=set(before['invocations']) or set(names.values())!=set(bank.actors):
+            if set(names)!=set(sources) or set(names.values())!=set(bank.actors):
                 raise ValueError('native invocation current actor inventory differs from its behavior graph')
             current_receipt=bank.receipt()
-            for name,actor in before['invocations'].items():
+            current_by_source = {}
+            for name,source in sources.items():
+                actor = before['invocations'][source]
                 after=current_receipt['invocations'][names[name]]
+                if source in current_by_source and current_by_source[source] != after:
+                    raise ValueError('native invocation twin or decision option runs another actor than its sampled invocation')
+                current_by_source[source] = after
                 _validate_adapter_transition(engine,actor['native_identity'],actor['adapter_binding'],
                     after['native_identity'],after['adapter_binding'],self.bundle,self.archive_owner)
             self.bound_example=example.id
@@ -868,20 +875,30 @@ class NativePolicyObjective:
         bank=invocation_actor_bank(self.engine.shared_model.port)
         if bank is None or bank.receipt()!=self.evaluation_invocation_actors:
             raise ValueError('native invocation external state requires the exact current actor bank')
+        from .jolt import actor_sources, twin_sources
+        sources=actor_sources(self.rows[example.id])
+        twins=twin_sources(self.rows[example.id])
         captured=self.rows[example.id].get('external_invocations',{}).get(name)
-        actual=[(node,span) for node in example.plan.invocations for span in node.imports if span.source==name]
-        if (not isinstance(captured,list) or len(captured)!=len(actual) or not captured):
+        occurrences=[(node,span) for node in example.plan.invocations for span in node.imports if span.source==name]
+        # A JOLT+ twin's import is the stop-gradient target of its sampled occurrence, not another behavior
+        # observation: it runs its sampled invocation's actor at its own (block-shifted) position.
+        sampled_count=sum(node.name not in twins for node,_ in occurrences)
+        if (not isinstance(captured,list) or len(captured)!=sampled_count or not captured):
             raise ValueError('native invocation external observation lost its exact consumer occurrence inventory')
         mode=self.native_state_modes.get(binding['id'])
+        if mode is not None and mode!=SAME_BASE_STATE_MODE:
+            raise ValueError('same-base adapter-state evaluation requires its actual behavior consumption receipt')
         before_actors=self.rows[example.id]['invocation_actors']['invocations']
-        for occurrence,(node,span) in zip(captured,actual):
-            if (set(occurrence)!={'invocation','at','receipt'} or occurrence['invocation']!=node.name
+        remaining=list(captured)
+        for node,span in occurrences:
+            occurrence=None if node.name in twins else remaining.pop(0)
+            if occurrence is not None and (set(occurrence)!={'invocation','at','receipt'} or occurrence['invocation']!=node.name
                     or occurrence['at']!=span.at or span.start!=0 or span.stop!=len(block.token_ids)):
                 raise ValueError('native invocation external observation changed its exact consumer or imported span')
-            before=before_actors[node.name]
+            before=before_actors[sources[node.name]]
             packed_name=self.invocation_source_names[node.name]
             after=self.evaluation_invocation_actors['invocations'][packed_name]
-            receipt=occurrence['receipt']
+            receipt=occurrence['receipt'] if occurrence is not None else None
             # Import order, including earlier spans at the same own-token
             # position, is the causal logical position used by the Engine.
             position=span.at
@@ -892,12 +909,12 @@ class NativePolicyObjective:
                 validate_adapter_state_receipt(block,receipt,target_identity=before['native_identity'],target_binding=before['adapter_binding'])
                 if receipt['target_position_start']!=position:
                     raise ValueError('native invocation external observation changed its actual logical position')
-            else:
+            elif occurrence is not None:
                 block.require_native(**before['native_identity'])
                 if block.adapter_binding!=before['adapter_binding']:
                     raise ValueError('native invocation strict behavior observation changed its adapter binding')
             if mode is not None:
-                if mode!=SAME_BASE_STATE_MODE or receipt is None:
+                if occurrence is not None and receipt is None:
                     raise ValueError('same-base adapter-state evaluation requires its actual behavior consumption receipt')
                 current=bank.execute(packed_name,lambda:adapter_state_input_receipt(self.engine,block,binding['id'],target_position_start=position))
                 self.evaluation_external_contracts[f'{example.id}:{name}:{len(self.evaluation_external_contracts)}']={
@@ -1149,8 +1166,6 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
         raise ValueError('declared stale actors and per-invocation coefficient actors cannot be mixed yet')
     policy_loss = objective_policy_loss(policy_loss_declaration(policy_loss)) if mode == 'grpo' else None
     jolt = policy_loss if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else None
-    if jolt is not None and behavior_policy is not None:
-        raise ValueError('JOLT+ privileged twins of per-invocation coefficient actors are not supported yet')
     from ..model.native_graph_plan import invocation_dict
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex

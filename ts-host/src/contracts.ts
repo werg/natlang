@@ -1,9 +1,7 @@
 /** Model-turn contract shared by model transports and the interpreter's tool agent. */
 /** temperature is omitted unless the application configures one; the model's server keeps its own sampling. */
 /** Invocation identity is collector metadata; transports do not send it as model input. */
-export type ModelTurnRequest = { invocation_id?: string;
-  /** Collector metadata: whether the invocation is the run's root call or a child call (JOLT+ privileged context). */
-  invocation_role?: 'root' | 'child'; messages: unknown[]; tools: unknown[]; temperature?: number;
+export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; tools: unknown[]; temperature?: number;
   seed: number | null; max_tokens: number | null;
   /** "required": the reply must be a tool call (a turn that offers exactly the tool it must use). Default "auto". */
   tool_choice?: 'auto' | 'required';
@@ -22,6 +20,13 @@ export type ModelTurnRequest = { invocation_id?: string;
     value_type?: 'string' | 'unknown' };
   /** Guided generation (natlang's servers only): see the agent's `guidance` option. */
   guidance?: boolean | Record<string, unknown>;
+  /**
+   * Training guidance for this turn's call (native servers only; `x_natlang_privileged_context`): the
+   * `natlang.guidance-request/1` built by native/training-guidance.ts, which the engine renders into the prompt.
+   */
+  privileged_context?: Record<string, unknown>;
+  /** This turn belongs to the in-run guidance policy (native servers only; `x_natlang_guidance_policy`). */
+  guidance_policy?: { function: 'selectGuidanceFacts' | 'writeGuidance'; sha256: string };
   /** Host-side exact teacher target for native forced replay; sent only as transport metadata, never in messages. */
   native_teacher_forced_turn?: { schema:'natlang.native-teacher-forced-turn/1'; assistant: Record<string,unknown>;
     source_receipt: Record<string,unknown>; native_text_spans?: { path:(string|number)[]; marker:string; text:string }[] };

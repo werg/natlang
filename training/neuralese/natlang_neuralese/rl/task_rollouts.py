@@ -74,6 +74,8 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                       "tools": copy.deepcopy(step.get("tools_offered") or None), "target": target,
                       "invocation_id": step.get("invocation_id"),
                       **({'sampling': copy.deepcopy(response['rl_sampling'])} if response.get('rl_sampling') else {}),
+                      **({'native_state_imports': copy.deepcopy(response['native_state_imports'])}
+                         if response.get('native_state_imports') else {}),
                       "replay": {"raw_calls_retained": "raw_calls" in response,
                                  "request_sha256": step.get("request_sha256"),
                                  "raw_response_sha256": step.get("raw_response_sha256")}})

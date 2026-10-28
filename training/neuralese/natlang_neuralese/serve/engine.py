@@ -29,17 +29,15 @@ def derive_seed(*parts) -> int:
     return int.from_bytes(digest[:8], "little") % (2**31)
 
 
-def _insert_privileged(plan, block):
-    """Split the prompt plan's token segments at the block's own-token index (never at a native-state import)."""
-    at, tokens = block.get('insert_at'), block.get('token_ids')
-    if (type(at) is not int or at < 0 or not isinstance(tokens, list) or not tokens
-            or any(type(token) is not int or token < 0 for token in tokens)):
-        raise RequestError('bad-request', 'a privileged block needs its own-token insert_at and token_ids')
+def _insert_privileged(plan, at, pieces):
+    """Split the prompt plan's token segments at own-token index ``at`` and insert ``pieces`` (never at an import)."""
+    if type(at) is not int or at < 0 or not pieces:
+        raise RequestError('bad-request', 'guidance needs its own-token insertion index and pieces')
     result, own, inserted = [], 0, False
     for number, (kind, value) in enumerate(plan):
         if kind != 'tokens':
             if not inserted and own == at:
-                raise RequestError('bad-request', 'a privileged block cannot share a native-state import boundary')
+                raise RequestError('bad-request', 'guidance cannot share a native-state import boundary')
             result.append((kind, value))
             continue
         ids = list(value)
@@ -47,15 +45,14 @@ def _insert_privileged(plan, block):
             cut = at - own
             following = plan[number+1][0] if number+1 < len(plan) else None
             if cut == len(ids) and following not in (None, 'tokens'):
-                raise RequestError('bad-request', 'a privileged block cannot share a native-state import boundary')
-            result.extend(piece for piece in (('tokens', ids[:cut]), ('privileged', tokens), ('tokens', ids[cut:]))
-                          if piece[1])
+                raise RequestError('bad-request', 'guidance cannot share a native-state import boundary')
+            result.extend(piece for piece in (('tokens', ids[:cut]), *pieces, ('tokens', ids[cut:])) if piece[1])
             inserted = True
         else:
             result.append((kind, value))
         own += len(ids)
     if not inserted:
-        raise RequestError('bad-request', 'privileged insertion point is outside the rendered prompt')
+        raise RequestError('bad-request', 'guidance insertion point is outside the rendered prompt')
     return result
 
 
@@ -79,10 +76,13 @@ class GenerationRequest:
     # Score-centered RL: also record the sampler's top-k log-probs per sampled
     # position (common.sampling behaviour top-k receipt). None records none.
     rl_top_k: int | None = None
-    # JOLT+ teacher attempt: {'schema': 'natlang.privileged-request/1', 'custody', 'facts', 'invocation': {name,
-    # role}}. The engine renders this invocation's rl.privileged_context block from its own prompt (the learner's
-    # rendering and selection), inserts it at its declared own-token index and marks it 'privileged' in the capture.
+    # Guidance for this model turn (rl.privileged_context REQUEST_SCHEMA): the runtime's selection and the in-run
+    # writeGuidance state. The engine renders the declared guidance turn, inserts it at its declared own-token index
+    # (import/text) or only records it (write-only), and binds the receipt in the capture.
     privileged_context: dict | None = None
+    # This turn belongs to the in-run guidance policy (selectGuidanceFacts or writeGuidance: {function, sha256});
+    # recorded in the capture so the learner gives it the right loss (rl.jolt.policy_turns).
+    guidance_policy: dict | None = None
     native_recording: bool = False
     native_state_modes: dict | None = None
 
@@ -135,6 +135,7 @@ class Sequence:
     native_item_positions: list[int] = field(default_factory=list)
     native_guidance_anchor: dict | None = None
     native_guidance_flushing: bool = False
+    native_guidance_receipt: dict | None = None
 
 
 class Engine:
@@ -297,33 +298,21 @@ class Engine:
             renderer = Renderer(self.tokenizer, SimpleNamespace(open_id=self.role_tokens.produce_open,
                                                                 close_id=self.role_tokens.produce_close))
             rendering = PrivilegedRendering.from_renderer(renderer, template=tokenizer_model_type(self.tokenizer),
-                tokenizer_fingerprint=self.native_identity['tokenizer_fingerprint'])
+                tokenizer_fingerprint=self.native_identity['tokenizer_fingerprint'],
+                consume_open=self.role_tokens.consume_open, consume_close=self.role_tokens.consume_close)
             self._privileged_rendering_cache = rendering
         return rendering
 
-    def _privileged_block(self, request, plan):
-        """This invocation's JOLT+ privileged block, rendered exactly as the learner rebuilds it (None: no fact fits)."""
-        from ..rl.privileged_context import Fact, render_block
-        context = request.privileged_context
-        invocation = context.get('invocation') if isinstance(context, dict) else None
-        if (not isinstance(context, dict) or set(context) != {'schema', 'custody', 'facts', 'invocation'}
-                or context['schema'] != 'natlang.privileged-request/1' or not isinstance(context['custody'], dict)
-                or not isinstance(context['facts'], list) or not isinstance(invocation, dict)
-                or set(invocation) != {'name', 'role'} or not isinstance(invocation['name'], str)
-                or invocation['role'] not in ('root', 'child')):
-            raise RequestError('bad-request', 'x_natlang_privileged_context needs schema, custody, facts and the '
-                               'invocation {name, role}')
-        try:
-            facts = tuple(Fact(item['id'], item['kind'], item['text'], item.get('invocation'),
-                               tuple(item.get('match') or ())) for item in context['facts'])
-        except (KeyError, TypeError) as error:
-            raise RequestError('bad-request', 'privileged facts are {id, kind, text, invocation?, match?}') from error
+    def _guidance(self, request, plan):
+        """This turn's guidance (rl.privileged_context.guidance_plan): (insert_at, pieces, receipt)."""
+        from ..rl.privileged_context import guidance_plan
         own = [token for kind, value in plan if kind == 'tokens' for token in value]
         text = '\n'.join(message['content'] for message in request.messages or []
                          if isinstance(message, dict) and isinstance(message.get('content'), str))
-        block = render_block(self._privileged_rendering(), invocation={**invocation, 'text': text}, token_ids=own,
-                             facts=facts, custody_receipt=context['custody'])
-        return {'insert_at': block.insert_at, 'token_ids': list(block.token_ids)} if block.token_ids else None
+        try:
+            return guidance_plan(self._privileged_rendering(), request.privileged_context, token_ids=own, text=text)
+        except ValueError as error:
+            raise RequestError('bad-request', f'x_natlang_privileged_context: {error}') from error
 
     def _prompt_plan(self, messages, tools) -> list:
         """Render and tokenize on the caller's CPU thread; preserve segment boundaries."""
@@ -618,13 +607,15 @@ class Engine:
                 seq.native_template_value_type = value_type
         plan = list(seq.prompt_plan or ())
         if seq.request.privileged_context is not None:
-            block = self._privileged_block(seq.request, plan)
-            if block is not None:
-                plan = _insert_privileged(plan, block)
+            insert_at, pieces, seq.native_guidance_receipt = self._guidance(seq.request, plan)
+            if pieces:
+                plan = _insert_privileged(plan, insert_at, pieces)
         for kind, value in plan:
-            privileged = kind == 'privileged'
-            if privileged:
+            privileged = kind in ('privileged', 'privileged_state')
+            if kind == 'privileged':
                 kind = 'tokens'
+            elif kind == 'privileged_state':
+                kind = 'native_state'
             if kind == "tokens":
                 if capture_enabled(seq) and value:
                     seq.native_rl_prompt.append({"kind": "tokens", "token_ids": list(value),
@@ -636,8 +627,12 @@ class Engine:
                     seq.cache = output["cache"]
                     seq.logits = self._native_logits(output["h_final"])
             elif kind in ("native_state","native_state_constant"):
+                begin = len(seq.native_rl_prompt)
                 self._native_consume(seq, value['id'] if isinstance(value,dict) else value,stop_gradient=kind=='native_state_constant',
                     source_occurrence=value.get('source_occurrence') if isinstance(value,dict) else None)
+                if privileged and capture_enabled(seq):
+                    for segment in seq.native_rl_prompt[begin:]:
+                        segment['privileged'] = True
             else:
                 raise ValueError(f"unsupported native prompt segment {kind!r}")
         if seq.cache is None or seq.logits is None:
@@ -1329,6 +1324,8 @@ class Engine:
                 **({'teacher_source_receipt':seq.native_forced_source} if seq.native_forced_source is not None else {}),
                 **({'replay_prompt_sha256':seq.native_forced_replay_prompt_sha256} if seq.native_forced_replay_prompt_sha256 else {}),
                 **({'adapter_binding': seq.native_rl_adapter_binding} if seq.native_rl_adapter_binding else {}),
+                **({'privileged': seq.native_guidance_receipt} if seq.native_guidance_receipt is not None else {}),
+                **({'guidance_policy': seq.request.guidance_policy} if seq.request.guidance_policy is not None else {}),
                 "prompt": seq.native_rl_prompt, "samples": seq.rl_samples,
                 "generated_inputs": seq.native_rl_inputs, "writes": seq.native_rl_writes,
                 "finish_reason": seq.finish_reason,

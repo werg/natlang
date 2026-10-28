@@ -14,10 +14,12 @@ A `natlang.tune-rollout/v1` record is one student execution of one training root
 
 Admission reuses the production recorded-policy path unchanged: `invocation_behavior_policy` binds every actual
 per-invocation actor, `save_bundle` archives the exact behavior artifacts and states, and `prepare_objective` emits
-the GRPO graphs and the registered `native-policy` objective. The trainer evaluates each episode through
+the policy graphs and the registered `native-policy` objective under the shared RL policy loss (default JOLT+ with
+score-centered/TIS outcome terms; every sampled position needs its sampler top-k, which the native server records
+with `x_natlang_rl_capture` by default). The trainer evaluates each episode through
 `serve.native_grad.native_graph_gradient` with the CURRENT node coefficients and soft states substituted for the
 behavior versions (same bases, recorded lineage), so every model turn of the actual graph, its producer/consumer
-dependencies and the clipped importance-weighted policy loss are exactly the production ones.
+dependencies and the policy loss are exactly the production ones.
 """
 from __future__ import annotations
 
@@ -64,10 +66,12 @@ def call_of(node_name):
 class RLEpisodes:
     """Admitted RL episodes for one trainer input: graphs, the registered objective and their rollouts."""
 
-    def __init__(self, engine, rollouts, workdir, *, mode='grpo', min_quality=1.):
-        """``mode`` 'grpo': the clipped group-relative policy objective (groups whose rewards differ); 'rft': global
-        supervision of whole successful episodes (quality >= ``min_quality``) through every producer/consumer
-        dependency, Neuralese included, whatever the group's spread."""
+    def __init__(self, engine, rollouts, workdir, *, mode='grpo', min_quality=1., policy_loss=None, privileged=None):
+        """``mode`` 'grpo': the group-relative policy objective under ``policy_loss`` (rl.policy_math declaration;
+        clipped-ratio/1 keeps the historical clipped objective; JOLT+ admits every scored group and, with a
+        ``privileged`` source, adds each episode's privileged twin); 'rft': global supervision of whole successful
+        episodes (quality >= ``min_quality``) through every producer/consumer dependency, Neuralese included,
+        whatever the group's spread."""
         from ..rl.native_replay import invocation_behavior_policy, prepare_objective
         from ..rl.graph_replay import save_bundle
         from ..model.native_artifact import encode_native_tensor_artifact
@@ -90,11 +94,13 @@ class RLEpisodes:
         save_bundle(episodes, workdir / 'bundle', policy_id=owner, fetch=fetch)
         graphs, spec = prepare_objective(episodes, identity=identity, roles=roles, fetch_block=fetch_block,
                                          block_bundle=workdir / 'bundle' / 'manifest.json', behavior_policy=policy,
-                                         mode=mode, min_quality=min_quality)
+                                         mode=mode, min_quality=min_quality,
+                                         policy_loss=policy_loss if mode == 'grpo' else None, privileged=privileged)
         path = workdir / 'objective.json'
         path.write_text(json.dumps(spec, sort_keys=True))
         self.objective = {'kind': 'native-policy', 'path': str(path), 'sha256': sha256_file_hex_cached(path)}
-        # GRPO admits only groups whose rewards differ, RFT only successful episodes; the rest are recorded as skipped.
+        # Clipped/score-centered GRPO admits only groups whose rewards differ (JOLT+ every scored group), RFT only
+        # successful episodes; the rest are recorded as skipped.
         self.graphs = graphs
         self.advantages = {graph['id']: spec['rows'][graph['id']]['advantage'] for graph in graphs}
         self.skipped = len(self.rollouts) - len(graphs)

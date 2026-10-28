@@ -1,7 +1,9 @@
-"""JOLT+ in the whole-graph RL objective: shared privileged blocks/graph edits, per-term gradients, custody fallback.
+"""JOLT+ in the whole-graph RL objective: in-run guidance twins, per-term gradients, custody fallback.
 
-Privileged context, custody and teacher scoring are the shared mechanism (rl/privileged_context.py,
-rl/privileged_scoring.py, tests in test_jolt_privileged_context.py); these tests bind it to the objective.
+Guidance, custody and teacher scoring are the shared mechanism (rl/privileged_context.py, rl/privileged_scoring.py,
+tests in test_jolt_privileged_context.py); these tests bind it to the objective. Student episodes carry the
+policy's write-only guidance (its OPSD twin imports it); teacher attempts import it, and its writer is trained
+through that import by the teacher outcome term.
 """
 import copy
 import json
@@ -12,16 +14,16 @@ import torch
 from natlang_neuralese.common.sampling import behavior_top_k_declaration, encode_top_k
 from natlang_neuralese.rl.jolt import DEFAULT_JOLT, jolt_declaration, privileged_source, root_calls
 from natlang_neuralese.rl.policy_math import default_policy_loss, policy_loss_declaration
-from natlang_neuralese.rl.privileged_context import ProtectedWorlds
-from test_jolt_privileged_context import (TEMPERATURE, custody, load, protected_case, rendering, run_episode,
-                                          train_case)
+from natlang_neuralese.common.custody import ProtectedWorlds
+from test_jolt_privileged_context import (CONSUMERS, TEMPERATURE, WRITERS, custody, insertion_blocks, load,
+                                          protected_case, rendering, run_episode, train_case)
 
 K = 8
 DECLARATION = {'schema': 'jolt-plus/1', 'beta_s': 0.7, 'beta_t': 0.3,
                'outcome': {'schema': 'score-centered/1', 'k': K, 'importance': 'tis'}}
 
 
-def episode_with_top_k(model, roles, identity, blocks=None):
+def episode_with_top_k(model, roles, identity, mode='write-only', **options):
     """The shared fixture episode with the sampler's top-k recorded at every sampled position."""
     seen, original = [], model.logits
     def recording(hidden):
@@ -30,11 +32,11 @@ def episode_with_top_k(model, roles, identity, blocks=None):
         return value
     model.logits = recording
     try:
-        episode = run_episode(model, roles, identity, blocks)
+        episode = run_episode(model, roles, identity, mode, **options)
     finally:
         del model.logits
     by_name = {turn['graph_turn']: turn for turn in episode.turns}
-    ordered = [sample for name in ('child#turn1', 'root#turn1') for sample in by_name[name]['sampling']['samples']]
+    ordered = [sample for name in episode.order for sample in by_name[name]['sampling']['samples']]
     assert len(seen) == len(ordered)
     for sample, log_probs in zip(ordered, seen):
         sample['top_k'] = encode_top_k(log_probs, K)
@@ -54,15 +56,15 @@ def rollouts(turns, *, role='student', rewards=(1, 0)):
     return rows
 
 
-def source_for(rows, protected=None):
+def source_for(rows, episode, protected=None):
     return privileged_source(rows, cases={train_case()['id']: train_case()}, rendering=rendering(),
-                             custody=protected or custody())
+                             custody=protected or custody(), fetch_text=lambda key: episode.states[key].text)
 
 
 def prepare(rows, episode, roles, identity, *, declaration=DECLARATION, protected=None):
     from natlang_neuralese.rl.native_replay import prepare_objective
-    return prepare_objective(rows, identity=identity, roles=roles, fetch_block=lambda key: episode.block,
-                             policy_loss=declaration, privileged=source_for(rows, protected))
+    return prepare_objective(rows, identity=identity, roles=roles, fetch_block=episode.states.__getitem__,
+                             policy_loss=declaration, privileged=source_for(rows, episode, protected))
 
 
 def objective_for(tmp_path, spec, name='objective'):
@@ -94,6 +96,7 @@ def test_declarations_default_to_jolt_plus_and_keep_explicit_opt_outs():
         bind_policy_loss({'policy_loss': default_policy_loss(), 'learner_command': ['{rl_policy_loss}']}, {})
 
 
+
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
 def test_packed_twin_rows_equal_shared_teacher_scores(family):
     """The twin appended to the packed graph scores exactly what privileged_scoring.teacher_scores scores."""
@@ -103,32 +106,42 @@ def test_packed_twin_rows_equal_shared_teacher_scores(family):
     model, roles, identity = load(family)
     episode = episode_with_top_k(model, roles, identity)
     rows = rollouts(episode.turns)
-    graph = {'nodes': []}
-    actions, record = add_privileged_twin(episode.replay, rows[0], graph, source_for(rows), turns=episode.turns)
+    weights = [0.] * episode.replay.plan.token_count  # as prepare_objective: 1 at each sampled action's target
+    for action in episode.replay.actions:
+        weights[action['query'] + 1] = 1.
+    graph = {'nodes': [{'name': node.name, 'target_weights': weights[offset:offset + len(node.token_ids)]}
+                       for node, offset in zip(episode.replay.plan.invocations, episode.replay.plan.offsets)]}
+    actions, record = add_privileged_twin(episode.replay, rows[0], graph, source_for(rows, episode),
+                                          turns=episode.turns)
     assert record['privileged'] and set(record['twin_turns']) == {'root#turn1#privileged', 'child#turn1#privileged'}
+    assert set(record['policy_turns']) == set(WRITERS.values()) and record['guidance']['writer_blocks'] == 2
+    assert {action['turn'] for action in actions} == set(CONSUMERS)  # the writer carries no student loss
+    weights = {node['name']: node['target_weights'] for node in graph['nodes'][:len(episode.replay.plan.invocations)]}
+    assert all(not any(weights[name]) for name in WRITERS.values())
     twins = [Invocation(n['name'], tuple(n['token_ids']), tuple(ImportSpan(**edge) for edge in n['imports']),
                         tuple(map(tuple, n['producing'])), tuple(map(tuple, n.get('logical_producing', ()))))
-             for n in graph['nodes']]
+             for n in graph['nodes'][len(episode.replay.plan.invocations):]]
     plan = compile_graph((*episode.replay.plan.invocations, *twins))
-    blocks = source_for(rows)(rows[0], episode.replay, episode.turns)
     with torch.no_grad():
         hidden = model(plan, retain_states=False)['h_final'][0]
         packed = torch.stack([processed_logits(model.logits(hidden[a['twin_query']]).float(), a).log_softmax(-1)
                               for a in actions])
-        shared = teacher_scores(model, episode.replay, blocks)
-        expected = torch.stack([processed_logits(row, a).log_softmax(-1) for row, a in zip(shared.logits, actions)])
+        shared = teacher_scores(model, episode.replay, insertion_blocks(episode))
+        rows_of = {(a['turn'], a['sample']): row for row, a in enumerate(episode.replay.actions)}
+        expected = torch.stack([processed_logits(shared.logits[rows_of[(a['turn'], a['sample'])]], a).log_softmax(-1)
+                                for a in actions])
     torch.testing.assert_close(packed, expected, rtol=1e-4, atol=1e-4)
 
 
 def literal_reference(model, hidden, row, declaration):
-    """Direct float64 transcription of loss_t = -A U_t + beta KL(p || sg p~)."""
+    """Direct float64 transcription of loss_t = -A U_t + beta KL(p || sg p~) (no twin: KL 0)."""
     from natlang_neuralese.rl.native_replay import behavior_top_k_tensors
     from test_rl_score_centering import literal_surrogate
     actions = row['actions']
     role = row['jolt']['role']
     beta = declaration['beta_s'] if role == 'student' else declaration['beta_t']
     queries = torch.tensor([a['query'] for a in actions])
-    twin_queries = torch.tensor([a['twin_query'] for a in actions])
+    twin_queries = torch.tensor([a.get('twin_query', a['query']) for a in actions])
     log_p = torch.log_softmax(model.logits(hidden[queries]).double() / TEMPERATURE, -1)
     log_q = torch.log_softmax(model.logits(hidden[twin_queries]).double() / TEMPERATURE, -1).detach()
     kl = (log_p.exp() * (log_p - log_q)).sum(1)
@@ -150,13 +163,7 @@ def gradient_vector(model, loss):
 @pytest.mark.parametrize('role', ['student', 'teacher'])
 def test_each_jolt_term_matches_its_reference_gradient(tmp_path, role):
     model, roles, identity = load('lfm')
-    student = episode_with_top_k(model, roles, identity)
-    if role == 'teacher':
-        student_rows = rollouts(student.turns)
-        blocks = source_for(student_rows)(student_rows[0], student.replay, student.turns)
-        episode = episode_with_top_k(model, roles, identity, blocks)
-    else:
-        episode = student
+    episode = episode_with_top_k(model, roles, identity, 'write-only' if role == 'student' else 'import')
     rows = rollouts(episode.turns, role=role)
     graphs, spec = prepare(rows, episode, roles, identity)
     canonical = policy_loss_declaration(DECLARATION)
@@ -168,9 +175,12 @@ def test_each_jolt_term_matches_its_reference_gradient(tmp_path, role):
         assert {n['name'] for n in graph['nodes']} == set(row['episode_turns']) | set(row['jolt']['twin_turns'])
         example, context, result = forward(model, graph, identity)
         loss, details = objective(model, result, context)
-        assert details['policy_loss'] == 'jolt-plus/1' and details['sampled_tokens'] == 8
+        # Students: the consumers' 8 tokens; teachers also train the two writers' 6 tokens each.
+        assert details['policy_loss'] == 'jolt-plus/1' and details['sampled_tokens'] == (8 if role == 'student' else 20)
         parts = details['jolt']
         assert parts['privileged_episodes'] == 1 and parts['unprivileged_episodes'] == 0
+        assert parts['guidance']['writer_blocks'] == 2 and parts['guidance']['text_fallbacks'] == 0
+        assert parts['guidance']['verbatim_reference'] == 1  # the root hint copies a reference line
         outcome_ref, kl_ref = literal_reference(model, result['h_final'][0], row, canonical)
         term = 'student_opsd' if role == 'student' else 'teacher_kl'
         assert parts[role + '_outcome'] != 0  # the surrogate value is estimator-specific; gradients compared below
@@ -178,32 +188,68 @@ def test_each_jolt_term_matches_its_reference_gradient(tmp_path, role):
         torch.testing.assert_close(gradient_vector(model, loss), gradient_vector(model, outcome_ref + kl_ref),
                                    rtol=2e-3, atol=1e-7)
         hidden_grad = torch.autograd.grad(loss, result['h_final'], retain_graph=True)[0][0]
-        assert hidden_grad[torch.tensor([a['twin_query'] for a in row['actions']])].abs().max() == 0
+        twinned = [a for a in row['actions'] if 'twin_query' in a]
+        assert hidden_grad[torch.tensor([a['twin_query'] for a in twinned])].abs().max() == 0
         assert hidden_grad[torch.tensor([a['query'] for a in row['actions']])].abs().max() > 0
+        if role == 'teacher':
+            # The teacher outcome reaches the writer's payload through the consumers' import.
+            writer = [a for a in row['actions'] if a['turn'] in WRITERS.values()]
+            assert len(writer) == 12 and all('twin_query' not in a for a in writer)
 
 
 def test_teacher_twin_is_the_student_graph_and_zero_spread_groups_still_teach(tmp_path):
     model, roles, identity = load('lfm')
-    student = episode_with_top_k(model, roles, identity)
-    student_rows = rollouts(student.turns)
-    blocks = source_for(student_rows)(student_rows[0], student.replay, student.turns)
-    teacher = episode_with_top_k(model, roles, identity, blocks)
+    student = episode_with_top_k(model, roles, identity, 'write-only')
+    teacher = episode_with_top_k(model, roles, identity, 'import')
     student_graphs, student_spec = prepare(rollouts(student.turns, rewards=(1, 1)), student, roles, identity)
     teacher_graphs, _ = prepare(rollouts(teacher.turns, role='teacher'), teacher, roles, identity)
     strip = lambda name: name.rsplit('#', 1)[0] if name.endswith(('#privileged', '#unprivileged')) else name
     actual = lambda graph: {n['name']: n for n in graph['nodes'] if n['name'] == strip(n['name'])}
     twin = lambda graph: {strip(n['name']): n for n in graph['nodes'] if n['name'] != strip(n['name'])}
-    for name in ('child#turn1', 'root#turn1'):
+    for name in CONSUMERS:
         assert actual(student_graphs[0])[name]['token_ids'] == twin(teacher_graphs[0])[name]['token_ids']
         assert twin(student_graphs[0])[name]['token_ids'] == actual(teacher_graphs[0])[name]['token_ids']
-        assert ([(e['at'], e['start'], e['stop']) for e in twin(student_graphs[0])[name]['imports']]
-                == [(e['at'], e['start'], e['stop']) for e in actual(teacher_graphs[0])[name]['imports']])
+        edges = lambda node: [(e['source'].split('#privileged')[0].split('#unprivileged')[0], e['at'], e['start'],
+                               e['stop']) for e in node['imports']]
+        assert edges(twin(student_graphs[0])[name]) == edges(actual(teacher_graphs[0])[name])
+    assert set(twin(student_graphs[0])) == set(CONSUMERS)  # writers are imported by name, never twinned
     row = student_spec['rows'][student_graphs[0]['id']]
     assert row['advantage'] == 0
     objective = objective_for(tmp_path, student_spec)
     _, context, result = forward(model, student_graphs[0], identity)
     loss, details = objective(model, result, context)
     assert details['jolt']['student_outcome'] == 0 and details['jolt']['student_opsd'] > 0
+    loss.backward()
+    assert model.adapter.up.weight.grad.abs().sum() > 0
+
+
+def test_coefficient_actor_sources_cover_decision_options_and_twins():
+    from natlang_neuralese.rl.jolt import actor_sources, PRIVILEGED_SUFFIX
+    suffix = PRIVILEGED_SUFFIX['student']
+    row = {'invocation_actors': {'invocations': {'decision': {}, 'writer': {}}},
+           'decision_actions': [{'turn': 'decision', 'option_nodes': ['option0', 'option1']}],
+           'jolt': {'role': 'student', 'twin_turns': ['option0' + suffix, 'option1' + suffix, 'writer' + suffix]}}
+    assert actor_sources(row) == {'option0': 'decision', 'option1': 'decision', 'writer': 'writer',
+        'option0' + suffix: 'decision', 'option1' + suffix: 'decision', 'writer' + suffix: 'writer'}
+
+
+def test_captured_guidance_decision_twins_train_through_option_nodes(tmp_path):
+    model, roles, identity = load('lfm')
+    episode = episode_with_top_k(model, roles, identity, 'write-only')
+    root = next(turn for turn in episode.turns if turn['graph_turn'] == 'root#turn1')
+    old = root['sampling']
+    root['sampling'] = {'schema': 'natlang.native-decision-capture/1', 'policy': old['policy'],
+        'prompt': old['prompt'], 'privileged': old['privileged'], 'continuations': [[11, 2], [13, 2]],
+        'decision_sample': {'schema': 'natlang.decision-sample/1', 'log_probs': [-1., -2.],
+                            'chosen': 0, 'temperature': 1., 'seed': 3}}
+    graphs, spec = prepare(rollouts(episode.turns), episode, roles, identity)
+    row = spec['rows'][graphs[0]['id']]
+    assert len(row['decision_actions'][0]['twin_options']) == 2
+    assert row['jolt']['privileged'] is not None
+    objective = objective_for(tmp_path, spec)
+    _, context, result = forward(model, graphs[0], identity)
+    loss, details = objective(model, result, context)
+    assert details['sampled_decisions'] == 1 and torch.isfinite(loss)
     loss.backward()
     assert model.adapter.up.weight.grad.abs().sum() > 0
 
@@ -220,88 +266,93 @@ def test_custody_refusal_keeps_the_episode_on_its_outcome_term(tmp_path):
     assert len(graphs) == 2
     for graph in graphs:
         row = spec['rows'][graph['id']]
-        assert row['jolt']['privileged'] is None and 'protected packet' in row['jolt']['refusal']
+        assert row['jolt']['privileged'] is None and 'protected world' in row['jolt']['refusal']
         assert {n['name'] for n in graph['nodes']} == set(row['episode_turns'])  # no twin
         assert all('twin_query' not in action for action in row['actions'])
+        assert {action['turn'] for action in row['actions']} == set(CONSUMERS)
     objective = objective_for(tmp_path, spec)
     _, context, result = forward(model, graphs[0], identity)
     loss, details = objective(model, result, context)
     assert details['jolt']['unprivileged_episodes'] == 1 and details['jolt']['student_opsd'] == 0
     assert details['jolt']['student_outcome'] != 0 and torch.isfinite(loss)
-    # A teacher attempt without verified blocks is refused outright (no unverified teacher data).
-    blocks = source_for(rows)(rows[0], episode.replay, episode.turns)
-    teacher = episode_with_top_k(model, roles, identity, blocks)
+    # A teacher attempt without verified guidance is refused outright (no unverified teacher data).
+    teacher = episode_with_top_k(model, roles, identity, 'import')
     with pytest.raises(ValueError, match='teacher attempt'):
         prepare(rollouts(teacher.turns, role='teacher'), teacher, roles, identity, protected=protected)
 
 
-def test_opt_out_keeps_historical_objective_and_student_privileged_capture_is_refused():
+def test_opt_out_keeps_historical_objective_and_student_guidance_capture_is_refused():
     from natlang_neuralese.rl.native_replay import prepare_objective
     model, roles, identity = load('lfm')
-    episode = episode_with_top_k(model, roles, identity)
-    kwargs = dict(identity=identity, roles=roles, fetch_block=lambda key: episode.block)
+    episode = episode_with_top_k(model, roles, identity, 'none')
+    kwargs = dict(identity=identity, roles=roles, fetch_block=episode.states.__getitem__)
     _, clipped = prepare_objective(rollouts(episode.turns), policy_loss={'schema': 'clipped-ratio/1'}, **kwargs)
     _, historical = prepare_objective(rollouts(episode.turns), **kwargs)
     assert clipped == historical and 'policy_loss' not in clipped
-    flagged = copy.deepcopy(episode.turns)
-    flagged[0]['sampling']['prompt'][0]['privileged'] = True
+    imported = episode_with_top_k(model, roles, identity, 'import')
     with pytest.raises(ValueError, match='teacher attempt'):
-        prepare(rollouts(flagged), episode, roles, identity)
+        prepare(rollouts(imported.turns), imported, roles, identity)
 
 
-def test_engine_teacher_attempt_renders_each_invocations_block_at_the_declared_place(tmp_path):
+def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
     from test_native_serving_adapters import engine_fixture
-    from natlang_neuralese.rl.privileged_context import Fact, render_block
+    from natlang_neuralese.rl.privileged_context import REQUEST_SCHEMA, captured_block
     from natlang_neuralese.serve.engine import GenerationRequest
     engine = engine_fixture(tmp_path, 'lfm')
     facts = [{'id': 'expected_result:0', 'kind': 'expected_result', 'text': 'The verified result is t6.'},
              {'id': 'child_value:0', 'kind': 'child_value', 'text': 'The answer is t9.', 'match': ['t5']}]
-    custody = {'split': 'train', 'protected_sha256': 'c' * 64}
+    custody_receipt = {'schema': 'natlang.jolt-privileged-custody/1', 'case_id': 'c', 'split': 'train',
+                       'world_sha256': 'd' * 64, 'protected_sha256': 'c' * 64}
     messages = [{'role': 'system', 'content': 't7'}, {'role': 'user', 'content': 't4 t5'}]
-    def context(role):
-        return {'schema': 'natlang.privileged-request/1', 'custody': custody, 'facts': facts,
-                'invocation': {'name': 'run-1#turn1', 'role': role}}
+    writer = {'function': 'writeGuidance', 'sha256': 'a' * 64}
+    def request(role, mode, state=None):
+        value = {'schema': REQUEST_SCHEMA, 'invocation': {'name': 'run-1', 'role': role}, 'mode': mode,
+                 'custody': custody_receipt, 'facts': [facts[0] if role == 'root' else facts[1]],
+                 'selection': {'implementation': 'nl', 'sha256': 'b' * 64}}
+        if mode == 'text':
+            value['fallback'] = 'writer failed'
+        else:
+            value.update(writer=writer, state={'id': state})
+        return value
+    def generate(**options):
+        return engine.generate(GenerationRequest(messages=messages, temperature=.9, seed=5, max_tokens=4,
+                                                 rl_capture=True, **options))
     engine.start()
     try:
-        replies = {role: engine.generate(GenerationRequest(messages=messages, temperature=.9, seed=5, max_tokens=4,
-                   rl_capture=True, rl_top_k=8, privileged_context=context(role))) for role in ('root', 'child')}
-        plain = engine.generate(GenerationRequest(messages=messages, temperature=.9, seed=5, max_tokens=4,
-                                                  rl_capture=True))
-        with pytest.raises(Exception, match='invocation'):
-            engine.generate(GenerationRequest(messages=messages, temperature=.9, seed=5, max_tokens=4,
-                rl_capture=True, privileged_context={**context('root'), 'invocation': {'name': 'x'}}))
+        state = engine.native_write_text('t8 t9')['id']
+        replies = {mode: generate(privileged_context=request('root', mode, state))
+                   for mode in ('import', 'write-only', 'text')}
+        policy = generate(guidance_policy=writer)
+        plain = generate()
+        from natlang_neuralese.serve.native_learning import decide_native
+        decision_plain = decide_native(engine, {'messages': messages, 'options': ['t8', 't9'], 'native_recording': True})
+        decision_guided = decide_native(engine, {'messages': messages, 'options': ['t8', 't9'], 'native_recording': True,
+            'x_natlang_privileged_context': request('root', 'import', state)})
+        with pytest.raises(Exception, match='not visible'):
+            generate(privileged_context={**request('root', 'import', state), 'facts': [facts[1]]})
     finally:
         engine.stop()
+    assert policy['x_natlang_rl_capture']['guidance_policy'] == writer
     own = lambda segments: [t for s in segments if s['kind'] == 'tokens' for t in s['token_ids']]
     expected = own(plain['x_natlang_rl_capture']['prompt'])
-    for role, reply in replies.items():
-        # The learner's rebuild (shared rendering, selection and insertion point) on the student tokens.
-        block = render_block(engine._privileged_rendering(), invocation={'name': 'run-1#turn1', 'role': role,
-            'text': 't7\nt4 t5'}, token_ids=expected, facts=tuple(Fact(f['id'], f['kind'], f['text'], None,
-            tuple(f.get('match') or ())) for f in facts), custody_receipt=custody)
-        prompt = reply['x_natlang_rl_capture']['prompt']
-        flagged = [segment for segment in prompt if segment.get('privileged')]
-        assert len(flagged) == 1 and tuple(flagged[0]['token_ids']) == block.token_ids
-        assert own(prompt) == expected[:block.insert_at] + list(block.token_ids) + expected[block.insert_at:]
-        assert [fact['id'] for fact in block.receipt['facts']] == (
-            ['expected_result:0'] if role == 'root' else ['child_value:0'])
-    # A decision readout in the same teacher attempt gets its own block, inside its captured decision prompt.
-    from natlang_neuralese.serve.native_learning import decide_native
-    plain = decide_native(engine, {'messages': messages, 'options': ['t8', 't9'], 'native_recording': True})
-    taught = decide_native(engine, {'messages': messages, 'options': ['t8', 't9'], 'native_recording': True,
-                                    'x_natlang_privileged_context': context('child')})
-    with pytest.raises(Exception, match='native_recording'):
-        decide_native(engine, {'messages': messages, 'options': ['t8', 't9'],
-                               'x_natlang_privileged_context': context('child')})
-    expected = own(plain['native_decision_capture']['prompt'])
-    block = render_block(engine._privileged_rendering(), invocation={'name': 'run-1#turn1', 'role': 'child',
-        'text': 't7\nt4 t5'}, token_ids=expected, facts=tuple(Fact(f['id'], f['kind'], f['text'], None,
-        tuple(f.get('match') or ())) for f in facts), custody_receipt=custody)
-    prompt = taught['native_decision_capture']['prompt']
-    assert [tuple(s['token_ids']) for s in prompt if s.get('privileged')] == [block.token_ids]
-    assert own(prompt) == expected[:block.insert_at] + list(block.token_ids) + expected[block.insert_at:]
-    assert taught['native_decision_capture']['continuations'] == plain['native_decision_capture']['continuations']
-    engine.store.close()
+    spec = engine._privileged_rendering()
+    decision = decision_guided['native_decision_capture']
+    assert decision['privileged']['mode'] == 'import'
+    assert decision['continuations'] == decision_plain['native_decision_capture']['continuations']
+    assert any(s.get('id') == state for s in decision['prompt'] if s['kind'] == 'native_state')
+    for mode, reply in replies.items():
+        capture = reply['x_natlang_rl_capture']
+        block = captured_block({'graph_turn': 'run-1#turn1', 'sampling': capture})
+        assert block.receipt['mode'] == mode and capture['privileged'] == block.receipt
+        if mode == 'write-only':
+            assert own(capture['prompt']) == expected and block.state_id == state
+            continue
+        tokens = spec.state_turn()[0] if mode == 'import' else spec.turn([facts[0]['text']])
+        assert list(block.token_ids) == tokens and block.insert_at == block.receipt['insert_at']
+        assert own(capture['prompt']) == expected[:block.insert_at] + tokens + expected[block.insert_at:]
+        imports = [s for s in capture['prompt'] if s['kind'] == 'native_state']
+        assert [s['id'] for s in imports] == ([state] if mode == 'import' else [])
+
 
 
 @pytest.mark.parametrize('scale', [1.0, 1e-4])
@@ -346,8 +397,9 @@ def test_root_calls_come_from_the_execution_graph_not_turn_order():
         root_calls({'execution_graph': cyclic}, turns)
 
 
-def test_teacher_attempt_entries_carry_the_worlds_facts_and_the_groups_feedback(tmp_path):
-    from natlang_neuralese.rl.jolt import group_feedback, teacher_entries
+
+def test_teacher_and_student_entries_carry_the_worlds_guidance_controls(tmp_path):
+    from natlang_neuralese.rl.jolt import GUIDANCE_RUN_SCHEMA, group_feedback, student_guidance, teacher_entries
     from natlang_neuralese.rl.privileged_context import case_facts
     from natlang_neuralese.rl.task_rollouts import build_queue
     case = train_case()
@@ -367,8 +419,18 @@ def test_teacher_attempt_entries_carry_the_worlds_facts_and_the_groups_feedback(
     assert (entry['jolt_role'], entry['group'], entry['sample'], entry['key']) == ('teacher', 0, 2, 's7-task-000-t00')
     assert entry['seed'] not in {e['seed'] for e in entries}
     controls = json.loads(open(entry['chat_request_config']).read())
-    assert controls['x_natlang_rl_capture'] is True
-    context = controls['x_natlang_privileged_context']
+    assert controls['x_natlang_rl_capture'] is True and 'x_natlang_privileged_context' not in controls
+    run = controls['x_natlang_guidance']
     receipt, facts = case_facts(case, custody=custody(), attempt_feedback=group_feedback(case, students[:2], 2))
-    assert context['custody'] == receipt and [f['id'] for f in context['facts']] == [f.id for f in facts]
-    assert any(f['kind'] == 'attempt_feedback' for f in context['facts'])
+    assert run['schema'] == GUIDANCE_RUN_SCHEMA and run['role'] == 'teacher' and run['custody'] == receipt
+    assert [f['id'] for f in run['facts']] == [f.id for f in facts]
+    assert any(f['kind'] == 'attempt_feedback' for f in run['facts'])
+    # Students of the training world write guidance for their OPSD twin; the protected world's do not.
+    ids = [case['id'], protected_case()['id']]
+    assert student_guidance(entries, ids=ids, cases=cases, config=config, out=tmp_path, custody=custody()) is None
+    for item in entries:
+        if ids[int(item['index'])] == case['id']:
+            student = json.loads(open(item['chat_request_config']).read())['x_natlang_guidance']
+            assert student['role'] == 'student' and not any(f['kind'] == 'attempt_feedback' for f in student['facts'])
+        else:
+            assert 'chat_request_config' not in item

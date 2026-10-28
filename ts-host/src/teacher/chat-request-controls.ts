@@ -1,11 +1,15 @@
 import {validateCoefficientRuntime} from '../model/native-coefficient-policy.js';
+import { guidanceRun } from '../native/training-guidance.js';
 
-/** Collection-specific OpenAI-compatible wire settings. No messages, tools or credentials. */
+/**
+ * Collection-specific OpenAI-compatible wire settings. No messages, tools or credentials. `x_natlang_guidance` is the one
+ * run-level control that is not a wire setting: the collector hands it to the agent (`wireControls` leaves it out).
+ */
 export function chatRequestControls(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('chat request controls must be an object');
   const controls = value as Record<string, unknown>;
   const allowed = ['max_tokens', 'top_p', 'top_k', 'min_p', 'chat_template_kwargs', 'repetition_penalty', 'reasoning_effort',
-    'x_natlang_adapters', 'x_natlang_rl_capture', 'x_natlang_rl_top_k', 'x_natlang_privileged_context', 'x_natlang_native_protocol_recovery', 'guidance',
+    'x_natlang_adapters', 'x_natlang_rl_capture', 'x_natlang_rl_top_k', 'x_natlang_guidance', 'x_natlang_native_protocol_recovery', 'guidance',
     'x_natlang_native_coefficient_policy'];
   if (Object.keys(controls).some(key => !allowed.includes(key))) throw new Error('unsupported chat request control');
   if (controls.x_natlang_rl_capture !== undefined && typeof controls.x_natlang_rl_capture !== 'boolean')
@@ -15,13 +19,13 @@ export function chatRequestControls(value: unknown): Record<string, unknown> {
   if (controls.x_natlang_rl_top_k !== undefined && (!Number.isSafeInteger(controls.x_natlang_rl_top_k) ||
       Number(controls.x_natlang_rl_top_k) < 0 || Number(controls.x_natlang_rl_top_k) > 4096 || controls.x_natlang_rl_capture !== true))
     throw new Error('x_natlang_rl_top_k must be an integer in [0, 4096] alongside x_natlang_rl_capture: true');
-  // JOLT+ teacher attempts: the world's custody-checked privileged facts (rl/privileged_context). The native server
-  // renders each invocation's block from its own prompt; the transport adds the invocation's name and root/child role.
-  const context = controls.x_natlang_privileged_context as { schema?: unknown; custody?: unknown; facts?: unknown } | undefined;
-  if (context !== undefined && (!context || typeof context !== 'object' || context.schema !== 'natlang.privileged-request/1' ||
-      !context.custody || typeof context.custody !== 'object' || !Array.isArray(context.facts) || !context.facts.length ||
-      Object.keys(context).length !== 3 || controls.x_natlang_rl_capture !== true))
-    throw new Error('x_natlang_privileged_context must be {schema: natlang.privileged-request/1, custody, facts} alongside x_natlang_rl_capture: true');
+  // JOLT+ (and memetic) training guidance: the world's custody-checked facts (rl/jolt.py guidance_controls). The agent
+  // writes each call's guidance in-run (native/training-guidance.ts); the engine records it in the RL capture.
+  if (controls.x_natlang_guidance !== undefined) {
+    guidanceRun(controls.x_natlang_guidance);
+    if (controls.x_natlang_rl_capture !== true)
+      throw new Error('guidance-run-invalid: x_natlang_guidance is recorded training guidance; set x_natlang_rl_capture: true');
+  }
   if (controls.x_natlang_native_protocol_recovery !== undefined && typeof controls.x_natlang_native_protocol_recovery !== 'boolean')
     throw new Error('x_natlang_native_protocol_recovery must be boolean');
   if (controls.guidance !== undefined && controls.guidance !== false)
@@ -41,4 +45,10 @@ export function chatRequestControls(value: unknown): Record<string, unknown> {
   const serialized = JSON.stringify(controls);
   if (/"(?:apiKey|api_key|authorization|headers|messages|tools|endpoint)"\s*:/i.test(serialized)) throw new Error('credentials and conversation content are forbidden in chat controls');
   return JSON.parse(serialized);
+}
+
+/** The controls that go on the wire: everything but the run-level `x_natlang_guidance`. */
+export function wireControls(controls: Record<string, unknown>): Record<string, unknown> {
+  const { x_natlang_guidance: _guidance, ...wire } = controls;
+  return wire;
 }

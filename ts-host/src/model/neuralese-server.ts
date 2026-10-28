@@ -521,13 +521,6 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const recorder=activeRecorder();
     const nativeRecording=(!!recorder||scopedNativeStates.length>0)&&(capabilities?.native_state as {enabled?:boolean}|undefined)?.enabled===true;
     if(nativeRecording)body={...body,x_natlang_native_recording:true};
-    if(body.x_natlang_privileged_context){
-      // JOLT+ teacher attempt: the server renders this invocation's block; it needs the invocation's root/child role.
-      if(!meta?.invocation_id||!meta.invocation_role)
-        throw new Error('privileged-context-invocation: a JOLT+ teacher attempt needs each model turn\'s invocation and its root/child role');
-      body={...body,x_natlang_privileged_context:{...(body.x_natlang_privileged_context as Json),
-        invocation:{name:meta.invocation_id,role:meta.invocation_role}}};
-    }
     if(Array.isArray(capabilities?.capabilities)&&capabilities.capabilities.includes('native.protocol-recovery'))body={...body,x_natlang_native_protocol_recovery:true};
     if (body.guidance && capabilities && !serves(capabilities, 'guidance'))
       throw Object.assign(new Error('neuralese-guidance-unavailable: this model server does not implement the requested guidance; use a server with guidance support'), { code: 'neuralese-guidance-unavailable' });
@@ -618,7 +611,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         throw Object.assign(new Error(`neuralese-native-state-import: ${expected.length} prepared occurrence(s) for ${id} differ from the server prompt and import receipts`),
           { code: 'neuralese-native-state-import' });
     }
-    const archived = await archiveNeuraleseReplyArtifacts(reply, remote, store);
+    const archived = await archiveNeuraleseReplyArtifacts(reply, remote, store, [preparedMessages]);
     const archiveIds = archived.native;
     for (const id of archiveIds) nativeUploaded.add(id);
     if(recorder){
@@ -665,7 +658,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   };
   // JOLT+ teacher attempt: a decision readout gets its invocation's privileged block like a generated turn.
   const privileged = (item:Item,request:Item):Item => {
-    const context=extra?.x_natlang_privileged_context as Json|undefined;
+    const context=(request.x_natlang_privileged_context ?? extra?.x_natlang_privileged_context) as Json|undefined;
     if(!context)return item;
     if(!request.invocation_id||!request.invocation_role)
       throw new Error('privileged-context-invocation: a JOLT+ teacher attempt needs each decision readout\'s invocation and its root/child role');

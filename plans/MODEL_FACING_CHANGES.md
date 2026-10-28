@@ -1588,9 +1588,21 @@ the policy scores in the teacher role. Only the teacher role sees it; the
 student learns preferences over its own tokens. Before relying on beta_S/beta_T
 tuning, sample teacher-role attempts (~48 per variant) for the header/role
 wording and fact phrasing, and measure teacher success with and without the
-block. `applications/curriculum-advisor/selectPrivilegedFacts.nl` is the NL side
-of the fact-selection policy; the crisp kind order is the default, so nothing
-serves that prompt until a `command` is configured and measured in shadow.
+block. The fact selection and the guidance itself are now written in-run (next
+entry).
+
+## In-run guidance writer (2026-10-28, unmeasured debt)
+
+`applications/guidance-writer/selectGuidanceFacts.nl` (moved from
+curriculum-advisor's selectPrivilegedFacts.nl, generalized to memetic and
+learned-optimizer facts) and `writeGuidance.nl` (template producer write of a
+`Neuralese<string>`) run in-process on the policy model for every consumer call
+of a JOLT+ episode (ts-host/src/native/training-guidance.ts). The selection
+default is `nl`; an invalid answer falls back to the crisp kind order. Both
+prompts, the guidance header the engine renders before the imported state, and
+the fact inputs rendered as untrusted data blocks are unmeasured: sample each
+(~48 per variant) on the live executor in `shadow` selection, and measure
+teacher success with writer guidance, with the text fallback and without.
 
 ## Tuner family proposal policy (2026-10-26, unmeasured debt)
 

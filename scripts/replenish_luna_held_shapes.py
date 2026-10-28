@@ -16,6 +16,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'training/neuralese'))
+from natlang_neuralese.common.custody import visible_world_key
 from natlang_neuralese.common.hashing import sha256_file_hex
 from neuralese_data.prepare_recovery_teacher_queue import prepare as prepare_recovery_queue
 from neuralese_data.select_repair_handoffs import select as select_repair_handoffs
@@ -102,15 +103,7 @@ def rows(path):
         return [json.loads(line) for line in stream if line.strip()]
 
 
-def world(row):
-    semantics = row.get('semantics', {})
-    # Folder reducers expose their decisive contents through folder_files;
-    # operations and other future visible fields also belong to the world.
-    # Gold expectations and oracles are the only semantics fields omitted.
-    visible = {key: value for key, value in semantics.items()
-               if key not in ('expected', 'expected_files', 'oracle', 'files_oracle')}
-    return json.dumps([row['family'], visible],
-                      sort_keys=True, separators=(',', ':'))
+world = visible_world_key  # the shared visible-world identity (common.custody)
 
 
 def active(unit):
@@ -655,7 +648,7 @@ def write_queues(campaign, seed, selected):
 
 def prepare(campaign, seed, source, excluded, excluded_groups):
     source_rows = rows(source)
-    report = verified_source_report(source)
+    verified_source_report(source)  # raises on an unverified source
     selected = []
     seen = set()
     used_groups = set()

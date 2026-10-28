@@ -1,3 +1,4 @@
+import copy
 import json
 import threading
 from argparse import Namespace
@@ -8,26 +9,41 @@ import pytest
 
 from natlang_neuralese.rl import memetic_program as memetic
 from natlang_neuralese.rl import memetic_batch
-from natlang_neuralese.rl import memetic_task_runner
+from natlang_neuralese.common import custody as world_custody
 
 
 def case(ident, program='p', split='train'):
-    return {'id': ident, 'program_id': program, 'split': split,
+    return {'id': ident, 'program_id': program, 'split': split, 'semantics': {'inputs': {'invocation': ident}},
         'curriculum': {'reference': {'root': [['eval', {'code': 'return 1'}]]}}}
 
 
-def test_repeated_program_slices_are_disjoint_train_only(tmp_path):
+PROTECTED = world_custody.ProtectedWorlds.from_cases({'held': ('0' * 64, [
+    {'id': 'held-0', 'split': 'test', 'source_groups': ['held-group'], 'semantics': {'inputs': {'held': 0}}}])})
+
+
+def write_custody(dev, confirmation, out):
+    rows = {'development': [json.loads(line) for line in dev.read_text().splitlines()],
+            'confirmation': [json.loads(line) for line in confirmation.read_text().splitlines()]}
+    out.write_text(json.dumps(world_custody.verify_slices(rows, protected=PROTECTED)))
+    return out
+
+
+def test_repeated_program_slices_need_their_custody_receipt(tmp_path):
     dev, confirmation = tmp_path / 'dev.jsonl', tmp_path / 'confirm.jsonl'
     dev.write_text(''.join(json.dumps(case(i)) + '\n' for i in ('a', 'b')))
     confirmation.write_text(''.join(json.dumps(case(i)) + '\n' for i in ('c', 'd')))
-    left, right = memetic.prepare_slices(dev, confirmation, 'p')
-    assert [item['id'] for item in left + right] == ['a', 'b', 'c', 'd']
+    receipt = write_custody(dev, confirmation, tmp_path / 'custody.json')
+    left, right, bound = memetic.load_slices(dev, confirmation, 'p', receipt)
+    assert [item['id'] for item in left + right] == ['a', 'b', 'c', 'd'] and bound['protected_sha256']
+    confirmation.write_text(''.join(json.dumps(case(i)) + '\n' for i in ('c', 'e')))
+    with pytest.raises(ValueError, match='custody receipt'):
+        memetic.load_slices(dev, confirmation, 'p', receipt)
     confirmation.write_text(''.join(json.dumps(case(i)) + '\n' for i in ('a', 'd')))
-    with pytest.raises(ValueError, match='overlap'):
-        memetic.prepare_slices(dev, confirmation, 'p')
+    with pytest.raises(ValueError, match='repeats|share related'):
+        write_custody(dev, confirmation, tmp_path / 'other.json')
     confirmation.write_text(''.join(json.dumps(case(i, split='test')) + '\n' for i in ('c', 'd')))
-    with pytest.raises(ValueError, match='non-train'):
-        memetic.prepare_slices(dev, confirmation, 'p')
+    with pytest.raises(ValueError, match='split'):
+        write_custody(dev, confirmation, tmp_path / 'other.json')
 
 
 def test_batch_derives_program_from_code_and_keeps_worlds_disjoint(tmp_path):
@@ -43,12 +59,12 @@ def test_batch_derives_program_from_code_and_keeps_worlds_disjoint(tmp_path):
         row['source_groups'] = [f'world-{index // 2}']
         rows.append(row)
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
-    manifest = memetic_batch.select(source, tmp_path / 'batch')
+    manifest = memetic_batch.select(source, tmp_path / 'batch', protected=PROTECTED)
     assert manifest['world_components'] == 3
     assert len(manifest['jobs']) == 1 and manifest['jobs'][0]['ready']
     job = manifest['jobs'][0]
-    dev, confirmation = memetic.prepare_slices(Path(job['development']['path']),
-                                                Path(job['confirmation']['path']), job['program_id'])
+    dev, confirmation, _ = memetic.load_slices(Path(job['development']['path']),
+        Path(job['confirmation']['path']), job['program_id'], Path(job['custody']['path']))
     assert len(dev) >= 2 and len(confirmation) >= 2
     assert {item['memetic_source']['world_bindings'][0] for item in dev}.isdisjoint(
         {item['memetic_source']['world_bindings'][0] for item in confirmation})
@@ -56,7 +72,7 @@ def test_batch_derives_program_from_code_and_keeps_worlds_disjoint(tmp_path):
     with pytest.raises(ValueError, match='resume changed'):
         extra = {**rows[0], 'id': 'new-case'}
         source.write_text(source.read_text() + json.dumps(extra) + '\n')
-        memetic_batch.select(source, tmp_path / 'batch')
+        memetic_batch.select(source, tmp_path / 'batch', protected=PROTECTED)
 
 
 def test_batch_baseline_runs_without_author_credentials(tmp_path, monkeypatch):
@@ -74,10 +90,11 @@ def test_batch_baseline_runs_without_author_credentials(tmp_path, monkeypatch):
         seen.append(arguments)
         return {'status': 'baseline_complete'}
     monkeypatch.setattr(memetic_batch.memetic_program, 'main', fake_program)
+    monkeypatch.setattr(memetic_batch.custody.ProtectedWorlds, 'load', classmethod(lambda cls, *a, **k: PROTECTED))
     memetic_batch.main(['--source', str(source), '--out', str(tmp_path / 'batch'),
         '--server', 'http://student', '--model-id', 'lfm', '--baseline-only',
         '--runtime-continuation-from', str(tmp_path / 'frozen-runtime')])
-    assert len(seen) == 1 and '--baseline-only' in seen[0] and '--author' not in seen[0]
+    assert len(seen) == 1 and '--baseline-only' in seen[0] and '--author' not in seen[0] and '--custody' in seen[0]
     assert seen[0][seen[0].index('--runtime-continuation-from') + 1] == str(tmp_path / 'frozen-runtime')
     progress = json.loads((tmp_path / 'batch/progress.json').read_text())
     assert progress['results'][0]['status'] == 'baseline_complete'
@@ -88,26 +105,12 @@ def test_binding_requires_actual_native_id_and_oracle_gain(tmp_path):
     assert memetic.state_guidance('Check the contract.', ident) == '\ue002' + ident + '\ue003'
     with pytest.raises(ValueError):
         memetic.state_guidance('Check.', 'nz1_' + 'a' * 52)
-    assert memetic.acceptance({'scored': 4, 'successes': 1}, {'scored': 4, 'successes': 2})
-    assert not memetic.acceptance({'scored': 4, 'successes': 1}, {'scored': 3, 'successes': 3})
-    assert not memetic.acceptance({'scored': 4, 'successes': 1}, {'scored': 4, 'successes': 1})
-    baseline = {'development': {'scored': 4, 'successes': 1},
-                'confirmation': {'scored': 4, 'successes': 1}}
-    assert memetic.qualification(baseline, {'development': {'scored': 4, 'successes': 2},
-                                             'confirmation': {'scored': 4, 'successes': 2}}, .1)
-    assert not memetic.qualification(baseline, {'development': {'scored': 4, 'successes': 2},
-                                                 'confirmation': {'scored': 4, 'successes': 1}}, .1)
-    output = tmp_path / 'row-000' / 'sample-00'
-    output.mkdir(parents=True)
-    (output / 'results.jsonl').write_text(json.dumps({'trajectory': [
-        {'model_response': {'native_state_imports': [{'id': ident}]}}]}) + '\n')
-    packet = tmp_path / 'packet.jsonl'; packet.write_text(json.dumps(case('one'))+'\n')
-    (tmp_path/'queue.jsonl').write_text(json.dumps({'output':str(output/'results.jsonl'),
-        'key':'one','index':0})+'\n')
-    (tmp_path/'preparation.json').write_text(json.dumps({'packet_sha256':hashlib.sha256(packet.read_bytes()).hexdigest()}))
-    (tmp_path/'journal.jsonl').write_text('')
-    assert memetic.native_import_reached(tmp_path, ident)
-    assert not memetic.native_import_reached(tmp_path, 'nzs1_' + 'b' * 52)
+    actor = {key: 'actor-' + key for key in memetic.IDENTITY}
+    turn = {'sampling': {'policy': actor}, 'native_state_imports': [{'id': ident}]}
+    (tmp_path / 'rollouts.jsonl').write_text(json.dumps({'task_id': 'one', 'turns': [turn]}) + '\n')
+    assert memetic.rollouts_reached(tmp_path, actor, ident)
+    assert not memetic.rollouts_reached(tmp_path, actor, 'nzs1_' + 'b' * 52)
+    assert not memetic.rollouts_reached(tmp_path, {**actor, 'checkpoint_sha256': 'other'})
 
 
 def test_author_requires_exact_self_hosted_source_receipt(tmp_path):
@@ -316,21 +319,38 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         # only replay reference code and never exercise the server.
         task['curriculum']['reference']['root'][0][1]['code'] = (
             'const f = nl<() => Promise<number>>`Return 1.`; return await f();')
-        packet = tmp_path / 'packet.jsonl'; packet.write_text(json.dumps(task) + '\n')
-        args = Namespace(out=tmp_path, rows=1, samples=2, shards=1, temperature=1.,
-            case_seconds=40, max_model_requests=2, max_turns=2, seed_base=7,
-            server=url, model_id='lfm', policy_checkpoint_sha256=identity['checkpoint_sha256'])
-        fit = memetic_task_runner.evaluate(args, {'id': 'actual',
-            'guidance': memetic.state_guidance('guide', written['id'])}, packet,
-            memetic_task_runner.default_system_prompt())
-        assert fit['rollouts'] == 2
-        assert memetic.native_import_reached(tmp_path / 'evals/actual', written['id'])
-        assert memetic.student_capture_reached(tmp_path / 'evals/actual', identity)
+        args = Namespace(samples=2, shards=1, case_seconds=40, max_model_requests=2, max_turns=2, seed_base=7,
+            server=url)
+        fit = memetic.evaluate(args, tmp_path, 'actual', memetic.state_guidance('guide', written['id']), [task],
+            base_system=memetic.runner.default_system_prompt(), actor=identity,
+            server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64)
+        assert fit['rollouts'] == 2 and fit['native_import_reached_model'] is True
+        assert memetic.rollouts_reached(tmp_path / 'evals/actual', identity, written['id'])
+        # The production collector must retain sampled decision captures as policy turns, including their
+        # native input state and request accounting, rather than falling back to a generated tool turn.
+        decision_task = copy.deepcopy(task)
+        decision_task['semantics']['expected'] = 'yes'
+        decision_task['semantics']['files']['task/verdict.nl'] = (
+            '---\nargs: {}\nreturns: "yes" | "no"\nreadout: decision\n---\nChoose yes or no.\n')
+        decision_task['curriculum']['reference']['root'][0][1]['code'] = (
+            'return (await decide(verdict)).value;')
+        decision_args = Namespace(**{**vars(args), 'samples': 2})
+        decision_fit = memetic.evaluate(decision_args, tmp_path, 'decision', memetic.state_guidance('guide', written['id']),
+            [decision_task], base_system=memetic.runner.default_system_prompt(), actor=identity,
+            server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64)
+        assert decision_fit['rollouts'] == 2
+        from natlang_neuralese.common.jsonio import iter_jsonl_rows
+        decision_rows = [row for _, row in iter_jsonl_rows(tmp_path / 'evals/decision/rollouts.jsonl')]
+        decisions = [turn['sampling'] for row in decision_rows for turn in row['turns']
+                     if (turn.get('sampling') or {}).get('schema') == 'natlang.native-decision-capture/1']
+        assert len(decisions) == 2 and all(value['decision_sample']['temperature'] > 0 for value in decisions)
         development, confirmation = tmp_path / 'dev.jsonl', tmp_path / 'confirmation.jsonl'
         for path, ids in ((development, ('a', 'b')), (confirmation, ('c', 'd'))):
-            path.write_text(''.join(json.dumps({**task, 'id': name}) + '\n' for name in ids))
+            path.write_text(''.join(json.dumps({**task, 'id': name, 'curriculum': {**task['curriculum'],
+                'evidence': {'world': [name]}}}) + '\n' for name in ids))
+        receipt = write_custody(development, confirmation, tmp_path / 'custody.json')
         baseline = memetic.main(['--program-id', 'p', '--development', str(development),
-            '--confirmation', str(confirmation), '--out', str(tmp_path / 'memetic-baseline'),
+            '--confirmation', str(confirmation), '--custody', str(receipt), '--out', str(tmp_path / 'memetic-baseline'),
             '--server', url, '--model-id', 'lfm', '--baseline-only', '--samples', '2',
             '--shards', '1', '--case-seconds', '40', '--max-model-requests', '2', '--max-turns', '2'])
         assert baseline['status'] == 'baseline_complete'
@@ -382,7 +402,9 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     development, confirmation = tmp_path / 'dev.jsonl', tmp_path / 'confirmation.jsonl'
     development.write_text(''.join(json.dumps(case(index)) + '\n' for index in ('a', 'b')))
     confirmation.write_text(''.join(json.dumps(case(index)) + '\n' for index in ('c', 'd')))
+    receipt_path = write_custody(development, confirmation, tmp_path / 'custody.json')
     common = ['--program-id', 'p', '--development', str(development), '--confirmation', str(confirmation),
+              '--custody', str(receipt_path),
               '--out', str(tmp_path / 'run'), '--server', 'http://student', '--model-id', 'lfm',
               '--samples', '2', '--generations', '1']
     baseline = memetic.main([*common, '--baseline-only'])
@@ -410,6 +432,13 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     fail_candidate_write['enabled'] = False
     result = memetic.main([*common, *author])
     assert result['status'] == 'qualified'
+    # Selection used development only; confirmation was measured once, for the selected state.
+    names = [name for name, _, _ in calls]
+    assert names.count('selected-confirm-' + written['id'][5:21]) == 1
+    assert not any(name.endswith('-confirm') and name.startswith(('seed', 'candidate')) for name in names)
+    assert result['acceptance']['selected']['confirmation'] == {'successes': 2, 'scored': 4}
+    ledger = json.loads((tmp_path / 'confirmation-ledger.json').read_text())
+    assert [item['artifact'] for item in ledger['spent'].values()] == [written['id']]
     assert [name for name, _, _ in calls].count('write') == 3
     assert len(authored_calls) == 2, 'resuming the candidate must retain its pending teacher answer and request ID'
     state = json.loads((tmp_path / 'run/state.json').read_text())
@@ -441,32 +470,6 @@ def test_cached_baseline_fitness_requires_exact_evaluation_receipt(tmp_path):
     with pytest.raises(ValueError, match='cached guidance fitness'):
         memetic.evaluate(args, tmp_path, 'unguided-dev', '', [case('a'), case('b')],
             base_system='exact-system', actor={}, server_info_sha256='f'*64)
-
-
-def test_memetic_budget_capture_uses_exact_shared_prefix_verifier(tmp_path,monkeypatch):
-    from natlang_neuralese.rl import task_rollouts
-    packet=tmp_path/'packet.jsonl';packet.write_text(json.dumps(case('one'))+'\n')
-    entry={'output':str(tmp_path/'empty.jsonl'),'key':'one','index':0,'jobs':str(tmp_path/'jobs')}
-    (tmp_path/'queue.jsonl').write_text(json.dumps(entry)+'\n')
-    (tmp_path/'preparation.json').write_text(json.dumps({'packet_sha256':hashlib.sha256(packet.read_bytes()).hexdigest()}))
-    finish={'event':'finish','key':'one','resource_limit_reason':'model_request_budget'}
-    (tmp_path/'journal.jsonl').write_text(json.dumps(finish)+'\n')
-    actor={key:'actor-'+key for key in memetic.IDENTITY}
-    prefix={'trajectory':[{'model_response':{'rl_sampling':{'policy':actor},
-        'native_state_imports':[{'id':'nzs1_'+'a'*52}]}}]}
-    calls=[]
-    def verified(e,t,f,**kwargs):
-        calls.append((e,t,f,kwargs));return prefix
-    monkeypatch.setattr(task_rollouts,'_budget_terminated_prefix',verified)
-    assert memetic.student_capture_reached(tmp_path,actor)
-    assert calls[0][0]==entry and calls[0][1]['id']=='one' and calls[0][2]==finish
-    assert calls[0][3]['packet_source_sha256']==hashlib.sha256(packet.read_bytes()).hexdigest()
-    assert memetic.native_import_reached(tmp_path,'nzs1_'+'a'*52)
-    prefix['trajectory'][0]['model_response']['rl_sampling']['policy']={**actor,'checkpoint_sha256':'wrong'}
-    assert not memetic.student_capture_reached(tmp_path,actor)
-    monkeypatch.setattr(task_rollouts,'_budget_terminated_prefix',lambda *a,**k:None)
-    assert not memetic.student_capture_reached(tmp_path,actor)
-    assert not memetic.native_import_reached(tmp_path,'nzs1_'+'a'*52)
 
 
 def test_runtime_continuation_preserves_origin_and_requires_exact_nonruntime_inputs(tmp_path, monkeypatch):
@@ -575,6 +578,8 @@ def test_runtime_continuation_reuses_only_score_equivalent_exact_actor_fits(tmp_
         finishes.append({'event': 'finish', 'key': entry['key'], 'status': 'complete'})
     (target / 'queue.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in entries))
     (target / 'journal.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in finishes))
+    (target / 'rollouts.jsonl').write_text(''.join(json.dumps({'task_id': 'one', 'turns': [
+        {'sampling': {'policy': actor}}]}) + '\n' for _ in entries))
     old_sha = '1' * 64
     fit_path = out / 'unguided-dev-fit.json'
     fit_path.write_text(json.dumps({'evaluation_inputs_sha256': old_sha, 'actor_capture_reached_model': True,

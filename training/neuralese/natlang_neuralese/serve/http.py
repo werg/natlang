@@ -415,8 +415,15 @@ def make_handler(engine: Engine):
                     raise RequestError('bad-request', 'x_natlang_rl_top_k records sampler top-k log-probs inside x_natlang_rl_capture; request both')
             privileged_context=body.get('x_natlang_privileged_context')
             if privileged_context is not None and body.get('x_natlang_rl_capture') is not True:
-                raise RequestError('bad-request', 'x_natlang_privileged_context renders a captured JOLT+ teacher '
-                                   'attempt; request x_natlang_rl_capture too')
+                raise RequestError('bad-request', 'x_natlang_privileged_context renders captured training guidance; '
+                                   'request x_natlang_rl_capture too')
+            guidance_policy=body.get('x_natlang_guidance_policy')
+            if guidance_policy is not None and (not isinstance(guidance_policy, dict)
+                    or set(guidance_policy) != {'function', 'sha256'}
+                    or guidance_policy['function'] not in ('writeGuidance', 'selectGuidanceFacts')
+                    or not isinstance(guidance_policy['sha256'], str) or body.get('x_natlang_rl_capture') is not True):
+                raise RequestError('bad-request', 'x_natlang_guidance_policy is {function: writeGuidance|'
+                                   'selectGuidanceFacts, sha256} alongside x_natlang_rl_capture')
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"),
                 max_tokens=completion_limit(body),
@@ -427,7 +434,7 @@ def make_handler(engine: Engine):
                 native_store_owner=self._owner,
                 rl_capture=bool(body.get('x_natlang_rl_capture', False) or body.get('x_natlang_native_recording', False)),
                 rl_top_k=rl_top_k,
-                privileged_context=privileged_context,
+                privileged_context=privileged_context, guidance_policy=guidance_policy,
                 native_recording=bool(body.get('x_natlang_native_recording', False)),
                 native_state_modes=body.get('x_natlang_native_state_modes'),
                 # Resolve this exact binding in Engine._native_run. Passing

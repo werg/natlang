@@ -95,6 +95,22 @@ configuration with a native profile: student, trainer and teacher (`escalate`) c
 [--program DIR]` shows the pin, newer checkpoints, the server, the tuning setup and pending examples. See
 [docs/NATIVE_MODELS.md](../../docs/NATIVE_MODELS.md).
 
+## In-run training guidance
+
+A collection's `--chat-request-config` may carry `x_natlang_guidance`
+(`natlang.guidance-run/1`, from rl/jolt.py `guidance_controls`, with
+`x_natlang_rl_capture: true`). The collector hands it to the agent and never sends
+it on the wire. On each call's first model turn the runtime keeps the facts that
+call may see (`applications/guidance-writer/visibility.ts`), selects them
+(`selectGuidanceFacts`, crisp or NL by `selection`; a failed or invalid NL
+selection falls back to crisp and is recorded) and runs `writeGuidance` in-process
+as a child call on the same model and recorder. A teacher imports the written
+state after the leading system turn, a student only writes it, and a failed writer
+gives a teacher its facts as text. Recovery: `guidance-run-invalid` names the bad
+field (regenerate the control); `training-guidance-unavailable` means use a
+native-state server (`--neuralese-server`); `guidance-writer-missing` means set
+`NATLANG_GUIDANCE_WRITER` to the package directory.
+
 Decision readouts (`readout: decision`, `decide(fn, ...)`) are trainable model outputs: SFT supervises the choice over
 the option set, and tuning rollouts (`natlang tune`) sample the answer from the scored distribution at the rollout
 temperature for exploration (recorded with the capture) instead of taking the most probable option. Ordinary runs keep

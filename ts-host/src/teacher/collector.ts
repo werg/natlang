@@ -14,6 +14,8 @@ import { createManagedModelSession } from '../model/local-server.js';
 import { resolveModelChoice } from '../model/config.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { NativeToolAgent } from '../native/agent.js';
+import type { GuidanceRun } from '../native/training-guidance.js';
+import { trainingGuidance } from './guidance-writer.js';
 import type { PromptRendering } from '../native/system-prompts.js';
 import { GENERATION_GUIDANCE, TOOLS_PROMPT } from '../native/prompt.js';
 import { NodeNativeRuntime } from '../node-runtime.js';
@@ -35,7 +37,9 @@ import { quarantineReason, retiredFamily, generationHoldReason } from './curricu
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
 import { ANSWER_COMPARISON_VERSION } from '../evaluation/oracles.js';
-import type { ModelStreamProgress, ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, DecisionScores, ModelStreamProgress, ModelTurn, ModelTurnRequest } from '../contracts.js';
+import { activeRecorder } from '../native/model-recording.js';
+import { sampleOption, derivedSeed } from '../tune/rollouts.js';
 import { closeProviderSession, ProviderActionCycleTimeoutError, ProviderRequestTimeoutError,
   withProviderActionCycle, withProviderRequestDeadline } from './provider-deadline.js';
 import type { CollectionLivenessSnapshot } from './collection-liveness.js';
@@ -92,6 +96,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   provider?: string; piOptions?: Record<string, unknown>;
   providerRequestControls?: ProviderRequestControls;
   chatRequestControls?: Record<string, unknown>;
+  /** In-run training guidance (`x_natlang_guidance` of the chat controls), handed to the agent, never sent on the wire. */
+  trainingGuidance?: GuidanceRun;
   /** Native value-channel transport to an explicitly configured Neuralese server. */
   neuraleseServer?: boolean;
   /** Optional collection-specific maximum wall time for one Pi provider request. */
@@ -694,6 +700,7 @@ class ProviderRequestRetriesExhaustedError extends Error {
 type PartialEvidenceSnapshot = { schema: 'natlang.teacher_partial_evidence/1'; path: string; attempt_id: string;
   status: 'in_progress' | 'execution_interrupted'; records: number; bytes: number; sha256: string };
 type PartialJob = { version: string; program_id: string; provenance: Record<string, unknown>; turns: PartialTurn[];
+  decisions?: { request_sha256: string; scores: DecisionScores }[];
   /** Retained while resuming this partial job; renewed after a completed job is removed. */
   execution_attempt_id?: string;
   evidence_snapshots?: PartialEvidenceSnapshot[]; request_starts?: CollectorRequestStart[]; request_attempt_ids?: string[] };
@@ -1313,9 +1320,73 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           throw new AuthoredRootDidNotFinishError();
         } else response = await transport(request, persist);
       }
+      // Synthetic and handoff turns can bypass the server transport, but their
+      // input state still needs an exact local artifact for graph provenance.
+      if (nativeStore && replayRemote)
+        await archiveNeuraleseReplyArtifacts(response.raw_response ?? {}, replayRemote, nativeStore,
+          [request.messages, response.calls, response.text]);
       trajectory.push(trajectoryTurn(request, response));
       return response;
     }, valueRuntime ? { neuralese: true } : {});
+    const decisionTransport = (rawSend as unknown as { decide?: (request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores> }).decide;
+    if (decisionTransport) {
+      const savedDecisions = new Map<string, DecisionScores[]>();
+      for (const saved of partial.decisions ?? [])
+        savedDecisions.set(saved.request_sha256, [...savedDecisions.get(saved.request_sha256) ?? [], saved.scores]);
+      const counts = new Map<string, number>();
+      (driver as typeof driver & { decide: typeof decisionTransport }).decide = async (request, signal) => {
+        if (!request.invocation_id) throw new Error('decision readout needs its invocation identity');
+        const call = request.invocation_id;
+        const ordinal = (counts.get(call) ?? 0) + 1;
+        counts.set(call, ordinal);
+        const requestSha = sha256(canonical(request));
+        let scores = savedDecisions.get(requestSha)?.shift();
+        if (scores) {
+          scores = structuredClone(scores);
+          const capture = scores.native_decision_capture;
+          if (!capture) throw new Error('saved decision lost its native capture');
+          if (nativeStore && replayRemote) await archiveNeuraleseReplyArtifacts({x_natlang_rl_capture:capture}, replayRemote, nativeStore,
+            [request.messages, capture]);
+          const id = `native-turn:${randomUUID()}`;
+          activeRecorder()?.record({ messages: structuredClone(request.messages), reply: {role:'assistant',content:null},
+            blocks: [], decision: {options: [...request.options]},
+            native: {schema:'natlang.native-recorded-turn/1',kind:'decision',id,retry:0,decision:structuredClone(capture)} });
+          scores.x_natlang_native_recorded_turn = id;
+        } else {
+          const pseudo: ModelTurnRequest = { invocation_id: call, messages: request.messages, tools: [], seed: null, max_tokens: 0 };
+          if (slots) await slots.acquire(1);
+          try {
+            const reply = await admittedSend(pseudo, async () => {
+              await recordHttpTransportStart(pseudo, activeSendEntries.get(pseudo)?.request_retry_index ?? 0);
+              return {raw_response: { decision: await decisionTransport(
+                {...request, native_recording: true}, signal ?? providerParentSignal()) }};
+            }, true, signal ?? providerParentSignal());
+            scores = reply.raw_response?.decision as DecisionScores;
+            const capture = scores.native_decision_capture;
+            if (!capture) throw new Error('decision collection needs its exact native capture');
+            const temperature = config.temperature ?? 0;
+            if (config.request?.x_natlang_rl_capture && temperature > 0) {
+              const seed = derivedSeed(config.rootSeed, call, ordinal);
+              const chosen = sampleOption(scores.log_probs, temperature, seed);
+              capture.decision_sample = {schema:'natlang.decision-sample/1', log_probs:[...scores.log_probs], chosen, temperature, seed};
+              scores.chosen = chosen;
+            }
+            (partial.decisions ??= []).push({request_sha256: requestSha, scores: structuredClone(scores)});
+            await appendEvidence([{kind:'decision_action_frame', request_sha256:requestSha, invocation_id:call,
+              request:structuredClone(request), scores:structuredClone(scores)}]);
+          } finally { if (slots) slots.release(1); }
+        }
+        const chosen = scores.chosen ?? scores.log_probs.indexOf(Math.max(...scores.log_probs));
+        const capture = scores.native_decision_capture!;
+        trajectory.push({phase:'action', invocation_id:call, context:structuredClone(request.messages),
+          request_sha256:requestSha, tools_offered:[],
+          model_response:{calls:[],text:request.options[chosen],raw_calls:[],rl_sampling:structuredClone(capture),
+            ...(Array.isArray(capture.native_state_imports) ? {native_state_imports:structuredClone(capture.native_state_imports)} : {})},
+          assistant:{content:request.options[chosen],reasoning:null,calls:[]},
+          raw_response_sha256:sha256(canonical(scores))});
+        return scores;
+      };
+    }
     let run: ProgramRun;
     try { run = await (config.execution?.run ?? executeProgram)(item.record, driver,
       { ...config, systemPrompt: effectiveSystemPrompt(config), runId: executionRunId, signal: providerParentSignal(),
@@ -1402,6 +1473,8 @@ export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   /** Explicit library service for the non-learned text-provider read implementation. */
   neuraleseService?: object;
   judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }>;
+  /** In-run training guidance (native/training-guidance.ts): every consumer call gets its guidance written in-run. */
+  trainingGuidance?: GuidanceRun;
   /** Persist observed native trace prefixes when execution aborts; snapshots never imply a completed result. */
   onPartialExecution?: (snapshot: PartialExecutionSnapshot) => Promise<void> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[];
@@ -1495,6 +1568,7 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     ...(options.promptRendering ? { promptRendering: options.promptRendering } : {}),
     ...(options.fileTools ? { fileTools: options.fileTools } : {}),
     ...(options.neuralese ? { neuralese: options.neuralese } : {}),
+    ...(options.trainingGuidance ? { trainingGuidance: trainingGuidance(options.trainingGuidance) } : {}),
     contextTokens: options.contextTokens, maxTurns: options.maxTurns,
     ...(bindingSpec ? { refinement: { checker: new RefinementChecker(),
       returnGuard: async (runId: string): Promise<RefinementFailure[]> => {

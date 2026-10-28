@@ -2,6 +2,7 @@
 import copy
 import json
 import math
+from pathlib import Path
 
 import pytest
 import torch
@@ -9,6 +10,7 @@ import torch
 from test_native_serving_adapters import engine_fixture
 from test_rl_episode_graph import attach_execution_graph
 from test_tune_trainer import manifest_for, rows_for, tensors
+from natlang_neuralese.rl.policy_math import default_policy_loss
 from natlang_neuralese.serve.engine import GenerationRequest
 from natlang_neuralese.tune import TuneMathError
 from natlang_neuralese.tune.rl import ROLLOUT_SCHEMA
@@ -98,7 +100,7 @@ def sample(engine, monkeypatch, tokens, entries, messages, seed, **options):
         return value, float(seq.logits[0].float().div(seq.request.temperature).log_softmax(-1)[value])
     monkeypatch.setattr(engine, '_native_token', token)
     return engine.generate(GenerationRequest(messages=messages, adapters=entries, temperature=.8, seed=seed,
-                                             max_tokens=8, rl_capture=True, **options))
+                                             max_tokens=8, rl_capture=True, rl_top_k=128, **options))
 
 
 def stack(trainer, binding):
@@ -156,10 +158,74 @@ def test_rl_base_producer_stays_in_whole_graph_with_tuned_consumer(tmp_path, mon
     assert any(trainer.state['node_artifacts'][node] != before[node] for node in update['updated_nodes'])
 
 
-def ratios(trainer):
-    """Mean importance ratio of each episode: the unclipped policy loss is -advantage * mean ratio."""
-    losses = trainer.rl_losses()
-    return {ident: -loss / trainer.rl.advantages[ident] for ident, loss in losses.items()}
+def ratios(engine, records, state, workdir):
+    """Mean current/behavior likelihood ratio of each episode under ``state``: a clipped-ratio probe fit continued
+    from it (its unclipped policy loss is -advantage * mean ratio)."""
+    probe = JointTrainer(engine, manifest_for(engine), records,
+                         Recipe(objectives=['rl'], batch_rows=2, rl_policy_loss={'schema': 'clipped-ratio/1'}, **NEUTRAL),
+                         workdir=workdir, parent=copy.deepcopy(state))
+    losses = probe.rl_losses()
+    return {ident: -loss / probe.rl.advantages[ident] for ident, loss in losses.items()}
+
+
+def test_coefficient_update_with_captured_guidance_and_decision(tmp_path):
+    from natlang_neuralese.model.native_adapters import run_native, execution_identity, execution_binding, SCHEMA
+    from test_rl_jolt import episode_with_top_k, rollouts as graph_rollouts, source_for, DECLARATION
+    from test_jolt_privileged_context import train_case
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    parent = parent_fit(engine)
+    entries = stack(parent, 'bx')
+    def capture():
+        identity = execution_identity(engine)
+        binding = {'schema': SCHEMA, 'base_native_identity': dict(engine.native_identity),
+                   'adapters': execution_binding(engine)}
+        episode = episode_with_top_k(engine.shared_model, engine.role_tokens, identity, 'write-only',
+                                     adapter_binding=binding, compile_fixture=False)
+        for turn in episode.turns:
+            receipt = turn['sampling']
+            receipt['policy'] = identity
+            receipt['adapter_binding'] = binding
+            receipt['schema'] = 'natlang.native-rl-sampling/3'
+            prompt_length = sum(len(segment['token_ids']) for segment in receipt['prompt'] if segment['kind'] == 'tokens')
+            receipt['generated_inputs'] = []
+            for sample in receipt['samples']:
+                sample['query_own_position'] = prompt_length + sample['index'] - 1
+                if not sample['terminal']:
+                    receipt['generated_inputs'].append({'token_id':sample['token_id'],'input_role':sample['input_role'],
+                                                        'sample_index':sample['index']})
+            for write in receipt['writes']:
+                for name, old in (('own_begin','begin_sample'),('own_end','end_sample'),
+                                  ('payload_own_begin','payload_begin'),('payload_own_end','payload_end')):
+                    write[name] = prompt_length + write[old]
+        root = next(turn for turn in episode.turns if turn['graph_turn'] == 'root#turn1')
+        old = root['sampling']
+        root['sampling'] = {'schema':'natlang.native-decision-capture/1','policy':identity,'adapter_binding':binding,
+            'prompt':old['prompt'],'privileged':old['privileged'],'continuations':[[11,2],[13,2]],
+            'decision_sample':{'schema':'natlang.decision-sample/1','log_probs':[-1.,-2.],
+                               'chosen':0,'temperature':1.,'seed':3}}
+        return episode
+    episode = run_native(engine, capture, entries)
+    for block in episode.states.values():
+        engine.store.put_native_state(block)
+    episodes = graph_rollouts(episode.turns)
+    records = []
+    for index, item in enumerate(episodes):
+        item['policy']['checkpoint_sha256'] = engine.native_identity['checkpoint_sha256']
+        records.append({'schema':ROLLOUT_SCHEMA, 'root':train_case()['id'], 'component':'c','partition':'train',
+            'group':item['group'],'sample':index,'reward':{'quality':item['reward']['quality'],'source':'root-oracle'},
+            'behavior':{'release':None,'node_artifacts':dict(parent.state['node_artifacts']),'gates':{},
+                        'soft_states':{},'temperature':.8,'seed':21+index},
+            'bindings':{turn['invocation_id']:'bx' for turn in item['turns']},'episode':item})
+    trainer = JointTrainer(engine, manifest_for(engine), records,
+        Recipe(objectives=['rl'],batch_rows=2,optimizer={'name':'sgd','learning_rate':.5},
+               rl_policy_loss=DECLARATION,**NEUTRAL), workdir=tmp_path/'joint', parent=copy.deepcopy(parent.state),
+        privileged=source_for(episodes,episode))
+    objective = json.loads(Path(trainer.rl.objective['path']).read_text())
+    assert all(row['jolt']['privileged'] is not None and row['decision_actions'][0]['twin_options']
+               for row in objective['rows'].values())
+    before = dict(trainer.state['node_artifacts'])
+    update = trainer.step()
+    assert update['updated_nodes'] and any(trainer.state['node_artifacts'][key] != value for key,value in before.items())
 
 
 def test_rl_sign_and_whole_graph_coverage(tmp_path, monkeypatch):
@@ -170,10 +236,15 @@ def test_rl_sign_and_whole_graph_coverage(tmp_path, monkeypatch):
     trainer = JointTrainer(engine, manifest_for(engine), records,
                            Recipe(objectives=['rl'], batch_rows=2, optimizer={'name': 'sgd', 'learning_rate': .5}, **NEUTRAL),
                            workdir=tmp_path / 'rl', parent=copy.deepcopy(parent.state))
+    # The shared default: JOLT+ with score-centered/TIS outcome terms over per-invocation tuning actors.
+    assert trainer.state['recipe_rl_policy_loss'] == default_policy_loss()
+    spec = json.loads(Path(trainer.rl.objective['path']).read_text())
+    assert spec['policy_loss'] == default_policy_loss() and 'recipe_transitions' not in trainer.state
+    assert all(row['jolt']['privileged'] is None for row in spec['rows'].values())  # no privileged source here
     assert len(trainer.rl.graphs) == 2 and trainer.rl.skipped == 0
     positive = next(graph['id'] for graph in trainer.rl.graphs if trainer.rl.advantages[graph['id']] > 0)
     negative = next(graph['id'] for graph in trainer.rl.graphs if trainer.rl.advantages[graph['id']] < 0)
-    before = ratios(trainer)
+    before = ratios(engine, records, trainer.state, tmp_path / 'probe-before')
     assert all(value == pytest.approx(1., abs=1e-4) for value in before.values()), 'current equals behavior at first'
     start = dict(trainer.state['node_artifacts'])
     record = trainer.step()
@@ -184,7 +255,8 @@ def test_rl_sign_and_whole_graph_coverage(tmp_path, monkeypatch):
         old, new = tensors(engine, start[node]), tensors(engine, trainer.state['node_artifacts'][node])
         assert any(not torch.equal(old[key], new[key]) for key in new), node
         assert trainer.state['node_history'][node][-2:] == [start[node], trainer.state['node_artifacts'][node]]
-    after = ratios(trainer)
+    assert all(math.isfinite(value) for value in record['row_losses'])
+    after = ratios(engine, records, trainer.state, tmp_path / 'probe-after')
     assert after[positive] > before[positive] and after[negative] < before[negative]
     assert trainer.receipt()['exposure']['rl_episodes_seen'] == 2
     # Rollouts sampled from the updated release are recorded-lineage behavior of the same continued fit.
@@ -199,6 +271,19 @@ def test_rl_sign_and_whole_graph_coverage(tmp_path, monkeypatch):
     adopted = JointTrainer(engine, manifest_for(engine), newer + records,
                            Recipe(objectives=['rl'], batch_rows=4, **NEUTRAL), workdir=tmp_path / 'rl3', parent=legacy)
     assert adopted.state['recipe_transitions'][-1]['prompt_weight'] == {'from': .1, 'to': 0.}
+    # A parent that trained RL before the JOLT+ default (implicit clipped ratio) adopts it with a recorded transition;
+    # resuming that parent's own in-flight state keeps its bound loss.
+    legacy.pop('recipe_rl_policy_loss')
+    assert any(key.startswith('rl:') for key in legacy['exposure'])
+    transitioned = JointTrainer(engine, manifest_for(engine), newer + records,
+                                Recipe(objectives=['rl'], batch_rows=4, **NEUTRAL), workdir=tmp_path / 'rl4', parent=legacy)
+    assert transitioned.state['recipe_transitions'][-1]['rl_policy_loss'] == {
+        'from': {'schema': 'clipped-ratio/1'}, 'to': default_policy_loss()}
+    assert transitioned.state['recipe_rl_policy_loss'] == default_policy_loss()
+    from natlang_neuralese.tune.trainer import resolve_rl_policy_loss
+    assert resolve_rl_policy_loss(Recipe(**NEUTRAL), legacy) == {'schema': 'clipped-ratio/1'}
+    with pytest.raises(TuneMathError, match='bound RL policy loss'):
+        resolve_rl_policy_loss(Recipe(rl_policy_loss=default_policy_loss(), **NEUTRAL), legacy)
     record = continued.step()
     assert record['updated_nodes'] == sorted(start)
     assert sorted(record['optimizer_restarted']) == sorted(start), 'SGD history is not reinterpreted as Adam moments'

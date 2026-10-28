@@ -16,6 +16,7 @@ import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, SCOPE_VALUE_CHARS, shownCharsFor, note as cutNote } from './cutoff.js';
+import type { TrainingGuidance } from './training-guidance.js';
 
 /** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
 const scopeValueChars = (session: NativeSession) => Math.max(SCOPE_VALUE_CHARS, session.pages.budget);
@@ -462,6 +463,12 @@ export class NativeToolAgent {
        * (`{ repeat?, syntax?, retries?, tools? }`); off by default.
        */
       guidance?: boolean | { repeat?: number; syntax?: boolean; retries?: number; tools?: string[] };
+      /**
+       * In-run training guidance (native/training-guidance.ts): each consumer call's first model turn selects the facts it
+       * may see and has `writeGuidance` write them as Neuralese, in-process; its turns then carry the guidance request,
+       * and the policy calls' own turns carry their policy identity. Collection only, on a native-state server.
+       */
+      trainingGuidance?: TrainingGuidance;
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
       fileTools?: FileToolSurface;
       /**
@@ -1131,7 +1138,7 @@ export class NativeToolAgent {
    * Answer a finite-typed call by scoring each allowed value as the reply to its opening (native/decision.ts).
    * Returns false when the readout does not apply, so the tool loop runs; a string is a failure, as from run.
    */
-  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[], guidance: string): Promise<false | string | void> {
+  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[]): Promise<false | string | void> {
     const lam = session.lam;
     const wanted = lam.readout === 'decision' || this.options.decisionReadout === 'finite-returns';
     if (!wanted || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
@@ -1144,9 +1151,14 @@ export class NativeToolAgent {
       return false;
     }
     const replies = values.map(value => JSON.stringify(value));
-    const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + guidance;
+    const inherited = typeof opening[0]?.content === 'string' ? opening[0].content : '';
+    const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + '\n\n' + inherited;
     const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: decisionPrompt(replies) }];
     const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
+    const training = this.options.trainingGuidance;
+    const guidancePolicy = training?.policyOf(session.lam, callId);
+    const capturedGuidance = training && callId && !guidancePolicy && !training.insidePolicy(session)
+      ? await training.requestFor(session, callId, encoded.messages) : undefined;
     if (encoded.blocks && !supportsNeuralese(this.driver))
       throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
     const started = performance.now();
@@ -1157,7 +1169,8 @@ export class NativeToolAgent {
         throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
       // model-call-kind: decision-readout -- training/model-call-kinds.json
       scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies,
-        ...(callId ? { invocation_id: callId, invocation_role: callId === session.runtime.options.runId ? 'root' as const : 'child' as const } : {}),
+        ...(callId ? { invocation_id: callId, invocation_role: (session.runtime.frame?.chain.length ?? 0) > 0 ? 'child' as const : 'root' as const } : {}),
+        ...(capturedGuidance ? { x_natlang_privileged_context: capturedGuidance } : {}),
         ...(adapters.length ? { adapters } : {}) }, session.runtime.signal));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1168,7 +1181,8 @@ export class NativeToolAgent {
     if (scores.log_probs.length !== replies.length || scores.log_probs.some(value => !Number.isFinite(value)))
       throw new Error('decision readout returned no finite score for every option');
     // A decision readout is a model turn of its call's execution graph, like a generated turn.
-    const turnNode=await this.modelTurnNode(session,encoded.messages,{},1,'decision');
+    const turnNode=await this.modelTurnNode(session,encoded.messages,
+      scores.native_decision_capture ? {raw_response:{x_natlang_rl_capture:scores.native_decision_capture}} : {},1,'decision');
     if(turnNode&&scores.x_natlang_native_recorded_turn)activeRecorder()?.linkNativeTurn?.(scores.x_natlang_native_recorded_turn,turnNode);
     const probabilities = softmax(scores.log_probs);
     if (scores.chosen !== undefined && !(Number.isSafeInteger(scores.chosen) && scores.chosen >= 0 && scores.chosen < replies.length))
@@ -1308,8 +1322,12 @@ export class NativeToolAgent {
       return failures.length ? { code: failures[0]!.code, message: failures.map(failure => failure.message).join(' ') } : undefined;
     };
     const messages = openingMessages();
-    const decided = await this.decisionReadout(session, messages,
-      renderAuthoredTextGuidance(this.options.authoredTextGuidance) + nativeGuidance);
+    // Training guidance: the policy's own calls (and calls below them) carry its identity and get none themselves.
+    const trainingGuidance = this.options.trainingGuidance;
+    const guidancePolicy = trainingGuidance?.policyOf(session.lam, session.runtime.currentCallId ?? null);
+    const guidanceConsumer = !!trainingGuidance && !guidancePolicy && !trainingGuidance.insidePolicy(session);
+    let guidanceRequest: Record<string, unknown> | undefined, guidanceReady = false;
+    const decided = await this.decisionReadout(session, messages);
     if (decided !== false) return decided;
     const openingLength = messages.length;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.
@@ -1409,6 +1427,12 @@ export class NativeToolAgent {
       }
       const sentChars = requestChars(availableTools);
       const callId = session.runtime.currentCallId ?? null;
+      // The consumer's guidance is written on its first model turn, from that turn's request text, before it is sent.
+      if (guidanceConsumer && callId && !guidanceReady) {
+        guidanceRequest = await trainingGuidance!.requestFor(session, callId,
+          encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering))).messages);
+        guidanceReady = true;
+      }
       const started = performance.now();
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: turns + 1,
         tool_schema_bytes: new TextEncoder().encode(JSON.stringify(this.options.promptRendering === 'program-header' ? [] : availableTools)).length,
@@ -1446,11 +1470,12 @@ export class NativeToolAgent {
               throw error;
             }
           } } : {}) } : undefined;
-        const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId,
-          invocation_role: callId === session.runtime.options.runId ? 'root' as const : 'child' as const } : {}), ...(adapters.length ? { adapters } : {}),
+        const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           ...(session.executionOccurrence() ? { native_execution_occurrence: session.executionOccurrence() } : {}),
           ...(template ? { template } : {}),
           ...(this.options.guidance && supportsGuidance(this.driver) ? { guidance: this.options.guidance } : {}),
+          ...(guidanceRequest ? { privileged_context: guidanceRequest } : {}),
+          ...(guidancePolicy ? { guidance_policy: guidancePolicy } : {}),
           messages: encoded.messages, tools: this.options.promptRendering === 'program-header' ? [] : availableTools,
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools && this.options.promptRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),

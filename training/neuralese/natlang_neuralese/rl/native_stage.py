@@ -65,7 +65,10 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
             raise ValueError('immutable invocation admission archive changed its source binding')
         write_json_durable(destination,rebound)
         return prepare_objective(rollouts,identity=identity,roles=RoleTokens(*marker_ids),fetch_block=fetch,
-                                 block_bundle=destination,mode=mode,behavior_policy=behavior,policy_loss=policy_loss)
+                                 block_bundle=destination,mode=mode,behavior_policy=behavior,policy_loss=policy_loss,
+                                 privileged=_jolt_source(policy_loss,mode,rows=rollouts,tokenizer=tokenizer,cases=jolt_cases,
+                                                         roles=RoleTokens(*marker_ids),tokenizer_fingerprint=fingerprint,
+                                                         fetch_text=lambda state_id: fetch(state_id).text))
     policies = [turn['sampling']['policy'] for row in rollouts if row.get('reward') is not None
                 for turn in row.get('turns', []) if (turn.get('sampling') or {}).get('policy')]
     actor_decl = json.loads(Path(actors).read_text()) if actors is not None else None
@@ -100,19 +103,25 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
     def fetch(block_id):
         if reader is None:raise ValueError('native RL state requires its durable actor bundle')
         return reader.state(block_id)
-    from .policy_math import policy_loss_declaration
-    declared = policy_loss_declaration(policy_loss)
-    privileged = None
-    if declared is not None and declared['schema'] == 'jolt-plus/1' and mode == 'grpo':
-        privileged = jolt_privileged_source(rows=rollouts, tokenizer=tokenizer, cases=jolt_cases, roles=roles,
-                                            tokenizer_fingerprint=fingerprint)
+    privileged = _jolt_source(policy_loss, mode, rows=rollouts, tokenizer=tokenizer, cases=jolt_cases, roles=roles,
+                              tokenizer_fingerprint=fingerprint, fetch_text=lambda state_id: fetch(state_id).text)
+
     return prepare_objective(rollouts, identity=identity, roles=roles, fetch_block=fetch,
         block_bundle=Path(bundle).resolve() if bundle else None, mode=mode, policy_loss=policy_loss,
         privileged=privileged, actors=actor_decl)
 
 
-def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerprint, registry=None):
-    """Shared privileged blocks (rl.privileged_context) for JOLT+; custody fails closed per episode.
+def _jolt_source(policy_loss, mode, **options):
+    from .policy_math import policy_loss_declaration
+    declared = policy_loss_declaration(policy_loss)
+    if declared is None or declared['schema'] != 'jolt-plus/1' or mode != 'grpo':
+        return None
+    return jolt_privileged_source(**options)
+
+
+def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerprint, registry=None, fetch_text=None):
+    """Verified captured guidance for JOLT+; custody fails closed per episode.
+
 
     Without readable protected packets or bound training cases every student episode is refused a privileged
     teacher (recorded per row) and keeps its outcome term; nothing is dropped from RL.
@@ -122,12 +131,12 @@ def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerpri
     from ..data.render import Renderer
     from ..serve.chat import tokenizer_model_type
     from .jolt import privileged_source
-    from .privileged_context import CustodyError, PrivilegedRendering, ProtectedWorlds
-    repo = Path(__file__).resolve().parents[4]
+    from ..common.custody import CustodyError, ProtectedWorlds
+    from .privileged_context import PrivilegedRendering
     try:
         if cases is None:
             raise CustodyError('no training cases are bound to this learner (--jolt-cases)')
-        custody = ProtectedWorlds.from_registry(registry or repo / 'training/neuralese_corpora.json', repo)
+        custody = ProtectedWorlds.load(registry=registry)
     except CustodyError as error:
         reason = error
         def refused(rollout, replay, turns):
@@ -140,8 +149,9 @@ def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerpri
         worlds[case.get('id')] = case
     renderer = Renderer(tokenizer, SimpleNamespace(open_id=roles.produce_open, close_id=roles.produce_close))
     rendering = PrivilegedRendering.from_renderer(renderer, template=tokenizer_model_type(tokenizer),
-                                                  tokenizer_fingerprint=tokenizer_fingerprint)
-    return privileged_source(rows, cases=worlds, rendering=rendering, custody=custody)
+                                                  tokenizer_fingerprint=tokenizer_fingerprint,
+                                                  consume_open=roles.consume_open, consume_close=roles.consume_close)
+    return privileged_source(rows, cases=worlds, rendering=rendering, custody=custody, fetch_text=fetch_text)
 
 
 def main(argv=None):
@@ -153,7 +163,7 @@ def main(argv=None):
     # '{"schema":"score-centered/1","k":128,"importance":"tis"}'. Omitted: clipped ratio loss.
     parser.add_argument('--rl-policy-loss')
     # JOLT+ privileged context: the exact train-split cases of the rollouts; custody against every registered
-    # evaluation-only packet (rl.privileged_context.ProtectedWorlds).
+    # declared protected source (common.custody.ProtectedWorlds, training/protected-worlds.json).
     parser.add_argument('--jolt-cases', type=Path)
     parser.add_argument('--rl-actors', type=Path, help='natlang.rl-actors/1 declaration admitting stale or quantized '
                         'actors of earlier lineage checkpoints (importance-corrected)')
