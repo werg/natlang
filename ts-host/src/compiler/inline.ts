@@ -846,8 +846,19 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     'await nl<{ amount: number }>`Read the amount paid on receipt.`(receipt). read_code("nl") shows more.';
   const misuse = (node: ts.Identifier): void => {
     const parent = node.parent;
-    if (ts.isCallExpression(parent) && parent.expression === node)
-      report(parent, 'nl-not-tag', `nl is a template tag, not a function taking a string: ${TAG_FORM}`);
+    if (ts.isCallExpression(parent) && parent.expression === node) {
+      // Show the model's own call rewritten in the tag form when its intent is plain: nl<T>(`...`(args)) or nl<T>(`...`).
+      const file = node.getSourceFile();
+      const typeArgs = parent.typeArguments ? `<${parent.typeArguments.map(arg => arg.getText(file)).join(', ')}>` : '';
+      const only = parent.arguments.length === 1 ? parent.arguments[0]! : undefined;
+      const isTemplate = (expr: ts.Expression) => ts.isNoSubstitutionTemplateLiteral(expr) || ts.isTemplateExpression(expr);
+      const rewritten = only && ts.isCallExpression(only) && isTemplate(only.expression) ?
+        `nl${typeArgs}${only.expression.getText(file)}(${only.arguments.map(arg => arg.getText(file)).join(', ')})` :
+        only && isTemplate(only) ? `nl${typeArgs}${only.getText(file)}(...)` : undefined;
+      report(parent, 'nl-not-tag', rewritten && rewritten.length <= 240 ?
+        `nl is a template tag, not a function taking a string: put the template right after nl and the arguments after it, as in ${rewritten}. read_code("nl") shows more.` :
+        `nl is a template tag, not a function taking a string: ${TAG_FORM}`);
+    }
     else report(node, 'nl-not-tag', `nl is a template tag with no value of its own to inspect or pass around: ${TAG_FORM}`);
   };
   for (const file of files) {

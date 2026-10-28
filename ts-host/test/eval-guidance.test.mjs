@@ -236,3 +236,32 @@ test('a reply that only writes out return_result({...}) is carried out as the to
   assert.deepEqual(await run('return_result({ status: "success", value: name })'), { value: 'return_result({ status: "success", value: name })' });
   assert.deepEqual(await run('Hello, Ada'), { value: 'Hello, Ada' });
 });
+
+test('read_code names the executing call, scope values and source file names for what they are', async () => {
+  const own = await script([['read_code', { name: 'root' }], ['read_code', { name: 'name' }],
+    ['return_result', { status: 'success', value: 'hi' }]]);
+  assert.match(own.results[0], /root is the call you are executing: the opening message has all of its signature and instructions/);
+  assert.match(own.results[1], /name is a value in this call's eval scope: inspect it with eval, for example console\.log\(name\)/);
+  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: async request => {
+    const last = request.messages.at(-1);
+    if (last.role === 'tool' && last.tool_call_id !== 'scope_0') return { calls: [['return_result', { status: 'success', value: String(last.content) }]] };
+    return { calls: [['read_code', { name: 'helper.nl' }]] };
+  } });
+  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: {}\nreturns: string\n---\nUse helper.\n',
+    'root/helper.nl': '---\nargs: { x: string }\nreturns: string\n---\nEcho x.\n' }, 'root.nl');
+  const shown = await runtime.run(() => fn());
+  assert.match(shown, /Echo x\./);
+});
+
+test('calling the executing call by name says it is the call being executed', async () => {
+  const { results } = await script([['eval', { code: 'root(name)' }], ['return_result', { status: 'success', value: 'hi' }]]);
+  assert.match(results[0], /root is the call you are executing, not a function in its scope/);
+  assert.doesNotMatch(results[0], /template interpolation/);
+});
+
+
+test('nl called as a function is shown its own call in the tag form', async () => {
+  const { results } = await script([['eval', { code: 'const v = await nl<boolean>(`Decide whether name is short.`(name));' }],
+    ['return_result', { status: 'success', value: 'hi' }]]);
+  assert.match(results[0], /nl-not-tag: nl is a template tag, not a function taking a string: put the template right after nl and the arguments after it, as in nl<boolean>`Decide whether name is short\.`\(name\)\./);
+});
