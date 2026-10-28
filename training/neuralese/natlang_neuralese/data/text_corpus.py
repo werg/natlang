@@ -1849,7 +1849,7 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
         call_format=call_format, tools=typing_tools)
     if reply_runs is None:
         raise ValueError("assistant target does not continue the serving generation prompt")
-    for producer_index, producer_span, producer_sentinel, producer_sentinel_close, body_value, _, open_tag, close_tag in sentinels:
+    for producer_index, producer_span, producer_sentinel, producer_sentinel_close, body_value, function_name, open_tag, close_tag in sentinels:
         rendered_producer_body = None
         from ..model.shared_state import ROLE_MARKERS
         if producer_span['value_type'] in ('inline-string', 'assistant-text'):
@@ -1892,7 +1892,7 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
                 # verbatim, any other value its canonical JSON), between the parameter's own lines.
                 parameter = producer_span['argument_path'][0]
                 marker_body = xml_value_text(xml_wire_arguments(
-                    producer_span.get('function_name') or _, {parameter: body_value}, schema_tools)[parameter])
+                    function_name, {parameter: body_value}, schema_tools)[parameter])
                 if not xml_value_representable(marker_body):
                     raise ValueError('structured producer body contains the XML parameter delimiter')
                 if (producer_span['value_type'] == 'unknown' and json.dumps(xml_value(marker_body), ensure_ascii=False)

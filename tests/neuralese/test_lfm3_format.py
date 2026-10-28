@@ -261,6 +261,32 @@ def test_producer_span_keeps_the_complete_response(tokenizer, value_type, body, 
 
 
 @needs_lfm3
+@pytest.mark.parametrize('prompt_rendering', ['full', 'program-header'])
+def test_typed_string_producer_preserves_full_wrapper(tokenizer, prompt_rendering):
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    tools = copy.deepcopy(EVAL_TOOLS)
+    tools[1]['function']['parameters']['properties']['value'] = {'type': 'string'}
+    value = 'true and "quoted"'
+    target = {'role': 'assistant', 'content': 'Complete.', 'tool_calls': [{'type': 'function', 'function': {
+        'name': 'return_result', 'arguments': json.dumps({'status': 'success', 'value': value, 'sibling': 7})}}]}
+    span = {'call_index': 0, 'argument_path': ['value'], 'body': value, 'value_type': 'string',
+            'payload_sha256': hashlib.sha256(value.encode()).hexdigest()}
+    messages = [{'role': 'user', 'content': 'run the program'}]
+    baseline = native_gold_packet(tokenizer, messages, target, tools, prompt_rendering=prompt_rendering)[0]
+    marked, _, _, binding = native_gold_packet(tokenizer, messages, target, tools, producer_span=span,
+        prompt_rendering=prompt_rendering, return_producer_span=True)
+    assert binding['rendered_body'] == value
+    assert ROLE_MARKERS[0] + value + ROLE_MARKERS[1] in marked
+    clean = marked.replace(ROLE_MARKERS[0], '').replace(ROLE_MARKERS[1], '')
+    assert clean == baseline
+    reply = clean[clean.rindex('<|im_start|>assistant\n<think>') + len('<|im_start|>assistant\n<think>'):]
+    parsed = build_message(reply, [], tools=tools)
+    assert parsed['content'] == 'Complete.'
+    assert json.loads(parsed['tool_calls'][0]['function']['arguments']) == {'status': 'success', 'value': value, 'sibling': 7}
+
+
+@needs_lfm3
 def test_whole_parameter_producer_under_a_typed_object_schema(tokenizer):
     """A Neuralese<unknown> write into a parameter the schema declares an object (return_result value of a typed
     result): the sentinel stand-in does not trip the target's type check, the span is the template's canonical JSON
