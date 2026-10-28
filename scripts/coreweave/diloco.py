@@ -111,7 +111,8 @@ def learner_job(run: dict, worker: int, url: str) -> dict:
     job = copy.deepcopy(_template(run['learners']['job']))
     settings = {**run['settings'], 'coordinator_url': url}
     ident = f"{run['id']}-learner-{worker}"
-    environment = {**job['env'], 'NATLANG_DILOCO_WORKER_ID': str(worker)}
+    environment = {**job['env'], 'NATLANG_DILOCO_WORKER_ID': str(worker),
+                   'NATLANG_DILOCO_ROLE_SUPERVISION': '1'}
     if job['scratch'].get('restore_from_snapshot_id') or run.get('parent_transfer'):
         environment['NATLANG_CW_INSTANCE'] = ident
     command = [*trainer_command(run, job), '--diloco', json.dumps(settings, sort_keys=True)]
