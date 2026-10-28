@@ -524,6 +524,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const injectedNames = new Set([...inputNames, ...localNames, ...helperNames, ...opaqueNames, ...captureNames, ...serviceNames]);
   const redundantAliases: ScopeSourceSpan[] = [];
   const bindings: ScopeBinding[] = [];
+  // Names bound by a lowered `import` (`const { name } = await import(...)`), for the invalid-binding message.
+  const importedNames = new Set<string>();
   const helperCandidates: { statement: ts.Statement; helper: NonNullable<ReturnType<typeof helperFunction>> }[] = [];
   for (const statement of fn.body.statements) {
     if (statement.getStart(file) < userStart) continue;
@@ -555,6 +557,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
           ((options.allowModules && initial.expression.kind === ts.SyntaxKind.ImportKeyword) ||
            (options.allowNetwork && ts.isIdentifier(initial.expression) && initial.expression.text === 'fetch'))) ||
           false));
+        if (initial && ts.isCallExpression(initial) && initial.expression.kind === ts.SyntaxKind.ImportKeyword) importedNames.add(name.text);
         bindings.push({ name: name.text, kind, mutable: kind !== 'const',
           ...(transient ? { transient: true } : {}),
           ...(ts.isIdentifier(declaration.name) && declaration.type && portableAnnotation(declaration.type, file) ?
@@ -716,12 +719,19 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       // Name the kind of binding the declaration collides with, and the fix for that kind. An input redeclared is
       // usually test data about to replace the caller's real values; a function's or service's name stays theirs, and
       // what they return goes in a variable of another name (`plan` -> `planResult`).
-      const message = options.inputBindings?.includes(name) ?
+      // An import of a scope name (lowered to `const { name } = await import(...)`): the name needs no import.
+      const imported = importedNames.has(name);
+      // A replacement definition (a stub object or function that does not use the name) rather than a result of it.
+      const replacement = !imported && !!binding.initializer && !new RegExp(`(?<![\\w$.])${name}(?![\\w$])`).test(binding.initializer);
+      const message = imported ? `${name} is already in this eval's scope; use it directly instead of importing it.` :
+        options.inputBindings?.includes(name) ?
         `${name} is this call's input and already holds the caller's value; use it directly instead of declaring it again.` :
         helperNames.includes(name) ?
           `${name} is already a function in this scope; call ${name}(...) directly and keep its result in a variable with another name, such as ${name}Result.` :
         // Measured 2026-10-13 (LFM2.5-2.6B, 120 replays each; plans/MODEL_FACING_CHANGES.md): the declaration rewritten
         // under a new name recovered 71/120, against 57/120 for "already a function" and 53/120 for "already a service".
+        serviceNames.includes(name) && replacement ?
+          `${name} is already this scope's live ${name} service; call its methods directly instead of defining a replacement.` :
         serviceNames.includes(name) ?
           `${name} names this scope's ${name} service, so it cannot also name a result; give the result its own name, ` +
             (binding.initializer && binding.initializer.length <= 160 && !binding.initializer.includes('\n') ?

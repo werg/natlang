@@ -227,4 +227,9 @@ test('redeclaring an injected name names its kind and the fix for that kind', ()
   assert.match(message('const transcript = 1;', { opaqueBindings: ['transcript'] }), /^transcript is already a built-in of this scope/);
   assert.match(message('const total = 1;', { captureBindings: [{ name: 'total', mutable: false }] }),
     /^total is already a variable of the enclosing code, captured by this call/);
+  // A stub standing in for the live service, and an import of a scope name, are told the name is already live.
+  assert.match(message('const shipments = { page: (n) => [] };', { serviceBindings: ['shipments'] }),
+    /^shipments is already this scope's live shipments service; call its methods directly instead of defining a replacement\.$/);
+  assert.match(message("import { shipments } from 'shipments';", { serviceBindings: ['shipments'], allowModules: true }),
+    /^shipments is already in this eval's scope; use it directly instead of importing it\.$/);
 });

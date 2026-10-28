@@ -1201,10 +1201,14 @@ export class NativeSession {
     const tool = /\b(\w+) is not defined/.exec(message)?.[1];
     const toolNote = tool && NATIVE_TOOLS.includes(tool) && tool !== 'return_result' ?
       `\n${tool} is one of your tools: call it as a tool, not from eval code.` : '';
-    const bindingNote = tool && !NATIVE_TOOLS.includes(tool) ?
-      `\n${tool} must be bound in this eval's scope before you use it. Mentioning it in instructions does not declare it. ` +
-      'JavaScript template interpolation runs when the template is created: create an item-specific template inside the callback or loop that binds the item, ' +
-      'or mention a future child parameter by name in literal instructions and pass its value when calling the child.' : '';
+    // The call's own name is not a function in its scope: the model is executing it (it tries to call itself).
+    const bindingNote = tool && tool === this.lam.functionName ?
+      `\n${tool} is the call you are executing, not a function in its scope: carry out its instructions here with eval and return the result.` :
+      tool && !NATIVE_TOOLS.includes(tool) ?
+      `\n${tool} must be bound in this eval's scope before you use it. Mentioning it in instructions does not declare it.` +
+      // Only an interpolated template can be the cause of the template advice.
+      (code.includes('${') ? ' JavaScript template interpolation runs when the template is created: create an item-specific template inside the callback or loop that binds the item, ' +
+        'or mention a future child parameter by name in literal instructions and pass its value when calling the child.' : '') : '';
     const repeatNote = repeated ? '\nThis is the code of your previous eval, and it failed the same way: change it before running it again.' : '';
     return toolNote + bindingNote + repeatNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
@@ -1720,12 +1724,36 @@ export class NativeSession {
           `These members are available to this call under its current service scope. Inspect the value in eval when needed.`;
         return { kind: 'ok', text: declaration, value: declaration };
       }
-      // Say what the name is when it is not the program's: a model asks for the source of its tools and built-ins.
+      // A type alias of this call (`Schedule`) is shown as its definition.
+      if (name === 'read_code' && Object.hasOwn(this.lam.typesSrc ?? {}, requested)) {
+        const alias = `type ${requested} = ${this.lam.typesSrc[requested]};`;
+        return { kind: 'ok', text: alias, value: alias };
+      }
+      // A bare method name of a scope service (`certificate` of greenhouse) is read as that service's declaration.
+      const owner = name === 'read_code' && /^[A-Za-z_$][\w$]*$/.test(requested) ? Object.entries(availableServices)
+        .find(([service, value]) => Object.hasOwn(this.runtime.declarations, service) && value !== null && typeof value === 'object' &&
+          requested in (value as object))?.[0] : undefined;
+      if (owner) {
+        const declaration = this.runtime.declarations[owner]!;
+        const text = `${requested} is a function of the ${owner} service; call it in eval as ${owner}.${requested}(...).\n${declaration}`;
+        return { kind: 'ok', text, value: declaration };
+      }
+      // A source file name (`resolve.js`, `ticket_kind.nl`) names the function it defines: show that function.
+      const stem = /^(?:\.\/)?(.+?)(?:\.(?:nl|ts|js|mjs|mts))?$/.exec(requested)?.[1];
+      if (stem && stem !== requested && findCodebaseItem(this.lam.codebase, stem)) return this.functionTool(name, { ...args, name: stem });
+      // Say what the name is when it is not the program's: a model asks for the source of its tools and built-ins,
+      // of the very call it is executing, and of the values in its scope.
       const own = listCodebase(this.lam.codebase);
       const readable = own.length ? `a function of this program: ${own.join(', ')}` : 'a function of this program, and this program has none of its own';
+      const inScope = (this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [])
+        .concat(Object.keys(this.lam.captures ?? {}), Object.keys(this.lam.let));
       const what = NATIVE_TOOLS.includes(requested) ? this.offeredToolDocs.has(requested) ?
         `${requested} is one of your currently offered tools, not a function of this program; call it directly` :
-        `${requested} is a native tool name but is not offered in this call` : undefined;
+        `${requested} is a native tool name but is not offered in this call` :
+        requested === this.lam.functionName ? `${requested} is the call you are executing: the opening message has all of its ` +
+          'signature and instructions. Carry them out here with eval and return the result' :
+        inScope.includes(requested) ? `${requested} is a value in this call's eval scope: inspect it with eval, for example console.log(${requested})` :
+        undefined;
       throw new Reject([{ path: requested, code: 'no-such-function', expected: what ? `${readable}. ${what}` : readable }]);
     }
     const view = this.runtime.frame?.task.programView;
