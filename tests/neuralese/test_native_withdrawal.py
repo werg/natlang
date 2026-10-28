@@ -178,6 +178,23 @@ def test_recipe_can_retire_only_the_exact_prior_withdrawal(tmp_path):
     assert '--retired-native-withdrawal' in args and '--withdrawn-native-graphs' not in args
 
 
+
+def test_recipe_retires_complete_prior_proof_set_without_dropping_history(tmp_path):
+    from natlang_neuralese.train.recipe import _data_continuation,_bind_native_source_dependencies,stage_input_args
+    first=proof(tmp_path,[{'id':'first','binding':'a','source_sha256':'physical','reason':'held'}])
+    second=tmp_path/'second.json';second.write_text(json.dumps({'schema':'natlang.native-graph-withdrawal/1','model_id':'m','evidence':{'path':'audit.json','sha256':sha(tmp_path/'audit.json')},'rows':[{'id':'second','binding':'b','source_sha256':'physical','reason':'held'}]}))
+    manifest=tmp_path/'proof-set.json';manifest.write_text(json.dumps({'schema':'natlang.native-retired-withdrawal-set/1','proofs':[{'path':str(first),'sha256':sha(first)},{'path':str(second),'sha256':sha(second)}]}))
+    bind=lambda path,digest:{'path':str(path),'sha256':digest,'binding':'named'}
+    old={'native_graphs':bind('old','old-sha'),'held_native_graphs':bind('held','held-sha'),'retired_native_withdrawal':bind(first,sha(first)),'withdrawn_native_graphs':bind(second,sha(second))}
+    new={'native_graphs':bind('new','new-sha'),'held_native_graphs':old['held_native_graphs'],'continued_native_graphs':old['native_graphs'],'retired_native_withdrawal_set':bind(manifest,sha(manifest))}
+    assert _data_continuation(old,new)
+    resolved=_bind_native_source_dependencies({'retired_native_withdrawal_set':new['retired_native_withdrawal_set']})
+    assert len(resolved['retired_native_withdrawal_set']['dependencies'])==4
+    assert '--retired-native-withdrawal-set' in stage_input_args(resolved,'native_state_sft')
+    manifest.write_text(json.dumps({'schema':'natlang.native-retired-withdrawal-set/1','proofs':[{'path':str(second),'sha256':sha(second)}]}))
+    assert not _data_continuation(old,new)
+
+
 def test_recipe_withdrawal_keeps_exact_predecessor_and_evidence_closure(tmp_path):
     from natlang_neuralese.train.recipe import _data_continuation, _bind_native_source_dependencies, stage_input_args
     path=proof(tmp_path,[{'id':'bad','binding':'b','source_sha256':'physical','reason':'rejected'}])
