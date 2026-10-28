@@ -315,4 +315,26 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
         assert not _data_continuation(previous,successor)
         assert trainer.main(resumed)==0
         assert len(torch.load(out/'checkpoint.pt',weights_only=False)['training']['options']['standalone_diloco_history'])==1
+        # Rejoin from the earned standalone state under an honestly new coordinator.
+        later=tmp_path/'rejoin-source.jsonl';later.write_text(new.read_text()+json.dumps(dict(graph('rejoin'),tokenizer_fingerprint=fp))+'\n')
+        latest=out/'checkpoint.pt';new_out=tmp_path/'rejoined';new_root=tmp_path/'new-coordinator'
+        with socket.socket() as sock:sock.bind(('127.0.0.1',0));new_port=sock.getsockname()[1]
+        new_url=f'http://127.0.0.1:{new_port}';new_settings={**settings,'run_id':'rejoin','coordinator_url':new_url}
+        rejoin=list(resumed)
+        for flag in ('--withdrawn-native-graphs','--continue-from','--out','--native-graphs','--continued-native-graphs'):
+            n=rejoin.index(flag);del rejoin[n:n+2]
+        rejoin += ['--native-graphs',str(later),'--continued-native-graphs',str(new),'--continue-from',str(latest),'--out',str(new_out),'--diloco',json.dumps(new_settings)]
+        _,new_named=native_diloco._trainable(latest,str(base));new_identity=native_diloco.identity(latest,rejoin,DilocoSettings.from_dict(new_settings))
+        initialize_coordinator(new_root,run_id='rejoin',masters={name:p.detach() for name,p in new_named},identity=new_identity,workers=1,min_quorum=1,fragment_bytes=1024,grace_seconds=0)
+        new_stop=threading.Event();new_server=threading.Thread(target=serve_coordinator,args=(new_root,'127.0.0.1',new_port,token),kwargs={'stop':new_stop},daemon=True);new_server.start()
+        try:
+            for _ in range(100):
+                try:Transport(new_url,token,5).json('GET','/v1/status');break
+                except OSError:time.sleep(.02)
+            assert trainer.main(rejoin)==0
+            final=torch.load(new_out/'checkpoint.pt',weights_only=False)['training']
+            assert final['diloco'] and final['options']['standalone_diloco_rejoin']['outer_history']=='new'
+            assert final['options']['standalone_diloco_history'][0]['checkpoint']['sha256']==sha(pin)
+            assert final['global_step']>result['global_step'] and final['exposure_counts']['rejoin']==1
+        finally:new_stop.set();new_server.join(timeout=3)
     finally:stop.set();server.join(timeout=3)
