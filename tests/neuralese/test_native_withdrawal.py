@@ -240,11 +240,11 @@ def test_real_diloco_full_checkpoint_withdrawal_and_append_keeps_coordinator_ide
         retired=list(resumed)
         for flag in ('--withdrawn-native-graphs','--continued-native-graphs'):
             n=retired.index(flag);del retired[n:n+2]
+        retired += ['--retired-native-withdrawal',str(withdrawal)]
         assert trainer.main(retired)==0  # Consumed proof switches may be retired without new exposure.
         later=tmp_path/'later.jsonl';later.write_text(new.read_text()+json.dumps(dict(graph('later'),tokenizer_fingerprint=fp))+'\n')
-        appended=list(resumed);appended[appended.index('--native-graphs')+1]=str(later)
-        appended[appended.index('--continued-native-graphs')+1]=str(new)
-        n=appended.index('--withdrawn-native-graphs');del appended[n:n+2]
+        appended=list(retired);appended[appended.index('--native-graphs')+1]=str(later)
+        appended += ['--continued-native-graphs',str(new)]
         assert trainer.main(appended)==0
         final=torch.load(out/'checkpoint.pt',weights_only=False)['training']
         assert final['exposure_counts']=={'good':1,'extra':1,'later':1} and final['global_step']>result['global_step']
