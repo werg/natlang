@@ -35,6 +35,12 @@ def tiny_lfm3_hf(seed=31, *, window=4, layer_types=None, sandwich=True):
     return model
 
 
+# LFM3 declares history_reasoning=keep: the twin's template renders every assistant turn's reasoning.
+LFM3_TINY_TEMPLATE = ("{% for message in messages %}{% if message['role'] == 'assistant' and "
+                      "message.get('reasoning_content') %}{{ message['reasoning_content'] }}{% endif %}"
+                      "{{ message['content'] }}\\n{% endfor %}")
+
+
 def tiny_lfm3(seed=31, *, fast=False, markers=True, window=4, **kwargs):
     from natlang_neuralese.model.lfm3_port import Lfm3PortBackbone
     return Lfm3PortBackbone(tiny_lfm3_hf(seed, window=window, **kwargs), ControlTokens(62, 63), fast=fast,
@@ -239,7 +245,7 @@ def test_native_loader_dispatches_lfm3_and_restores_saved_backbone(tmp_path):
     tokenizer = Tokenizer(models.WordLevel({'[UNK]': 0, 'sample': 1, '<think>': 2, '</think>': 3}, unk_token='[UNK]'))
     tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
     hf_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer, unk_token='[UNK]')
-    hf_tokenizer.chat_template = "{% for message in messages %}{{ message['content'] }}\\n{% endfor %}"
+    hf_tokenizer.chat_template = LFM3_TINY_TEMPLATE
     hf_tokenizer.save_pretrained(tmp_path)
 
     # FP32 is a full-precision diagnostic load (no profile); LFM3 has no FP32-master profile (owner 2026-10-28).
@@ -348,7 +354,7 @@ def test_all_bf16_native_optimizer_moves_small_sparse_row_updates_with_stochasti
     tokenizer = Tokenizer(models.WordLevel({'[UNK]': 0, 'sample': 1, '<think>': 2, '</think>': 3}, unk_token='[UNK]'))
     tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
     hf_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer, unk_token='[UNK]')
-    hf_tokenizer.chat_template = "{% for message in messages %}{{ message['content'] }}\\n{% endfor %}"
+    hf_tokenizer.chat_template = LFM3_TINY_TEMPLATE
     hf_tokenizer.save_pretrained(tmp_path)
     raw = {'schema': SCHEMA, 'id': 'lfm3-bf16-rows', 'split': 'train', 'source_groups': ['lfm3-bf16-rows'],
            'tokenizer_fingerprint': '1' * 64,
