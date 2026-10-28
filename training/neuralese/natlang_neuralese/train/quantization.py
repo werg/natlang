@@ -384,9 +384,13 @@ class Quantization:
         PRECISION['groups'], PRECISION['point'] = self.resolve(name, mix), (None if name == 'bf16' else name)
 
     def context(self, name, mix):
-        """Context manager running forwards at point ``name`` with mix ``mix`` (``bf16``: unquantized)."""
-        from ..maple.ternary import active_precision
-        return active_precision(self.resolve(name, mix), None if name == 'bf16' else name)
+        """Context manager running forwards at point ``name`` with mix ``mix`` (``bf16``: unquantized). Inline
+        modules (the native trainer) get their pass operands resolved once on entry (``maple.ternary.
+        inline_precision``): the ramped weights of the current latents and a device λ."""
+        from ..maple.ternary import active_precision, inline_precision
+        context = active_precision(self.resolve(name, mix), None if name == 'bf16' else name)
+        modules = getattr(self, 'inline_modules', None)
+        return inline_precision(context, modules) if modules else context
 
     def gated_points(self):
         return [name for name, point in self.points.items() if point.get('gate', 'report') != 'none']
@@ -406,12 +410,20 @@ class Quantization:
                    if self.calibration_config() else {})}
 
     # Installation ----------------------------------------------------------------------------------------------------
-    def install(self, module, layer_count=None):
+    def install(self, module, layer_count=None, *, inline=False):
         """Route every selected module's weight through the active precision point: a ``PrecisionSTE``
         parametrization on linear/embedding weights, ``precision_group`` on dense MoE experts. Weights stay the same
-        trainable parameters (latents); with no active point they are untouched."""
+        trainable parameters (latents); with no active point they are untouched.
+
+        ``inline`` (the native trainer): selected ``nn.Linear`` modules keep their plain ``weight`` Parameter (names,
+        optimizer routing, checkpoints and DiLoCo surfaces unchanged); they carry their group key and peers, and every
+        linear execution path (``maple.ternary.linear_precision``: the module's own forward, the native cotangent
+        carriers and the shared-state direct projections) applies the active point. Only linear modules are
+        supported inline."""
         from ..maple.model import DenseExperts
         from ..maple.ternary import PrecisionSTE
+        if inline:
+            return self._install_inline(module, layer_count)
 
         wanted = {}
         for name, point in self.points.items():
@@ -461,6 +473,56 @@ class Quantization:
             ste.peers = [(n, parametrized[f'{parent}.{n}'][2]) for n in sorted(shared) if f'{parent}.{n}' in parametrized]
         return self.installed
 
+    def _install_inline(self, module, layer_count=None):
+        import types
+        from ..maple.ternary import InputPrecision, precision_linear_forward
+
+        wanted = {group for point in self.points.values() for group in point['modules']}
+        if layer_count is None:
+            layer_count = 1 + max((layer_of(n) or 0) for n, _ in module.named_modules())
+        for name, point in self.points.items():
+            self.layers[name] = selected_layers(point, layer_count, root=self.root)
+        configs = {}
+        for point in self.points.values():
+            for group, config in point['modules'].items():
+                configs.setdefault(group, []).append(config)
+        selected, seen = {}, set()
+        for name, child in module.named_modules():
+            group = classify(name, child)
+            if group not in wanted:
+                continue
+            if type(child) is not nn.Linear:
+                raise ValueError(f'inline precision supports plain nn.Linear modules only: {name} is '
+                                 f'{type(child).__qualname__}')
+            leaf = name.rsplit('.', 1)[-1]
+            if all(c.get('names') is not None and leaf not in c['names'] for c in configs[group]):
+                continue
+            if id(child.weight) in seen:
+                continue
+            if 'forward' in child.__dict__ or parametrize.is_parametrized(child, 'weight'):
+                raise ValueError('inline precision needs a plain Linear (no instance forward or parametrization): '
+                                 + name)
+            seen.add(id(child.weight))
+            key = self._group_key(group, layer_of(name), leaf)
+            child.native_precision_key = key
+            child.native_precision_peers = []
+            child.native_precision_input = None
+            if any(c.get('activations') for c in configs[group]):
+                holder = InputPrecision(key)
+                holder.static = any((c.get('activations') or {}).get('format') == 'nvfp4' for c in configs[group])
+                child.native_precision_input = holder
+                self.inputs[name] = holder
+            child.forward = types.MethodType(precision_linear_forward, child)
+            selected[name] = (group, leaf, child)
+            self.installed[group] = self.installed.get(group, 0) + 1
+        for name, (group, leaf, child) in selected.items():
+            parent = name.rsplit('.', 1)[0]
+            shared = {n for c in configs[group] for s in c.get('shared_global', []) if leaf in s for n in s} - {leaf}
+            child.native_precision_peers = [(n, selected[f'{parent}.{n}'][2]) for n in sorted(shared)
+                                            if f'{parent}.{n}' in selected]
+        self.inline_modules = [child for _, _, child in selected.values()]
+        return self.installed
+
     def _install_input(self, name, key, child, configs):
         from ..maple.ternary import InputPrecision
         holder = InputPrecision(key)
@@ -491,6 +553,41 @@ class Quantization:
             return False
         last = self.calibration.get('step')
         return last is None or step - last >= config['refresh']
+
+    def begin_calibration(self):
+        """Start observing the static activation ranges (BF16 forwards follow, then ``commit_calibration``)."""
+        holders = [h for h in self.inputs.values() if h.static]
+        for holder in holders:
+            holder.observe, holder.observed = True, None
+        self._observed_batches = 0
+        return bool(holders)
+
+    @torch.no_grad()
+    def observe_calibration(self, forward, batch):
+        """One BF16 calibration forward of ``batch`` while observing (an incremental ``calibrate``)."""
+        with self.context('bf16', 0.0):
+            forward(batch)
+        self._observed_batches = getattr(self, '_observed_batches', 0) + 1
+
+    def commit_calibration(self, step, source=None):
+        """Set each static input's ``amax`` from the observed forwards since ``begin_calibration``."""
+        holders = {n: h for n, h in self.inputs.items() if h.static}
+        for holder in holders.values():
+            holder.observe = False
+        count = getattr(self, '_observed_batches', 0)
+        missing = [n for n, h in holders.items() if h.observed is None]
+        if count == 0 or missing:
+            raise ValueError('calibration forwards reached no input of: ' + ', '.join(missing or sorted(holders)))
+        for holder in holders.values():
+            holder.amax, holder.observed = holder.observed.detach().float(), None
+        self.calibration = {'step': int(step), 'batches': count, 'source': source}
+        self._observed_batches = 0
+        return {n: float(h.amax) for n, h in holders.items()}
+
+    def cancel_calibration(self):
+        for holder in self.inputs.values():
+            holder.observe, holder.observed = False, None
+        self._observed_batches = 0
 
     @torch.no_grad()
     def calibrate(self, forward, batches, step, source=None):
@@ -662,6 +759,35 @@ class Behaviour:
         if report.get('held_coverage', {}).get('response_complete') is False:
             ok = False
         return bool(ok)
+
+
+def parse_native_component(value):
+    """The native trainer's ``--quantization`` (recipe stage parameter ``quantization``): None (absent), ``'off'``
+    (drop a carried calibration explicitly), or (recipe spec, bind). The value is JSON text, a path, a dict, or a
+    checkpoint's recorded ``natlang.native-inline-qat/1`` declaration; ``bind`` = {stage, start, end} names the stage
+    of ``stage_progress`` and the global update range its progress runs over. One precision pass per update, so the
+    loss mode must be ``sample``."""
+    if value in (None, ''):
+        return None
+    if value == 'off':
+        return 'off'
+    if isinstance(value, dict):
+        spec = json.loads(json.dumps(value))
+    else:
+        text = value if value.lstrip().startswith('{') else Path(value).read_text()
+        spec = json.loads(text)
+    if spec.get('schema') == 'natlang.native-inline-qat/1':  # a checkpoint's recorded declaration (anneal branches)
+        spec = {**spec['spec'], 'bind': spec['bind']}
+    bind = spec.pop('bind', None)
+    if (not isinstance(bind, dict) or set(bind) != {'stage', 'start', 'end'} or type(bind['start']) is not int
+            or type(bind['end']) is not int or not 0 <= bind['start'] < bind['end']):
+        raise ValueError('--quantization needs "bind": {"stage": ID, "start": U0, "end": U1} with 0 <= U0 < U1')
+    if (spec.get('loss') or {}).get('mode', 'sum') != 'sample':
+        raise ValueError('the native trainer takes one precision pass per update: declare loss mode "sample"')
+    validate_spec(spec)
+    if bind['stage'] not in spec.get('stage_progress', {}):
+        raise ValueError('--quantization bind.stage is not named in stage_progress: ' + str(bind['stage']))
+    return spec, bind
 
 
 def load_component(value, *, root=None):

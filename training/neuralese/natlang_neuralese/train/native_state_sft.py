@@ -316,8 +316,12 @@ def pack_native_graphs(examples):
 
 
 def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_layers=True,
-                           chunk_tokens=128, objective=None):
-    """One shared complete production update, also used by throughput diagnostics."""
+                           chunk_tokens=128, objective=None, precision=None):
+    """One shared complete production update, also used by throughput diagnostics.
+
+    ``precision``: (Quantization, point, λ, loss weight) of this update's QAT pass (``--quantization``); the forward
+    and the backward (including checkpoint recomputation) run under that point and the loss is scaled by the weight.
+    The returned loss is the unscaled objective."""
     if backend is not None:
         backend.reset_row_counts()
     optimizer.zero_grad(set_to_none=True)
@@ -329,6 +333,10 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     else:
         from contextlib import nullcontext
         context = nullcontext()
+    from contextlib import nullcontext as _nullcontext
+    precision_context = (precision[0].context(precision[1], precision[2]) if precision is not None
+                         else _nullcontext())
+    loss_weight = None if precision is None or precision[3] == 1.0 else float(precision[3])
     try:
         from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
         if getattr(model, 'native_cotangent_accumulator_backend', 'cpu_file') == 'plain':
@@ -337,7 +345,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
             scope.finish = lambda: None
         else:
             scope = ParameterCotangentScope.for_model(model, mode='vjp')
-        with scope as cotangents, context:
+        with precision_context, scope as cotangents, context:
             if backend is not None:
                 with backend.autocast():
                     loss, details = packed_graph_loss(model, batch,
@@ -349,7 +357,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                     checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
                     objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
                     collect_accuracy=False, allow_communication_prefixes=backend is None)
-            loss.backward()
+            (loss if loss_weight is None else loss * loss_weight).backward()
             cotangents.finish()
         if optimizer.latent is not None:
             optimizer.latent._armed = None
@@ -853,7 +861,9 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
             else 'legacy-raw-ce-optional-export'}
     diloco = options.get('_diloco_learner')
     weight_ema = options.get('_weight_ema')
-    options = {key: value for key, value in options.items() if key not in ('_diloco_learner', '_weight_ema')}
+    quantization = options.get('_quantization')
+    options = {key: value for key, value in options.items()
+               if key not in ('_diloco_learner', '_weight_ema', '_quantization')}
     state = {'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model), 'step': global_step,
              'training': {'schema': TRAINING_SCHEMA, 'identity': identity, 'step': step,
                           'global_step': global_step, 'epoch': epoch,
@@ -868,6 +878,8 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
         state['training']['diloco'] = diloco.state_dict()
     if weight_ema is not None:
         state['training']['ema'] = weight_ema.state_dict()
+    if quantization is not None:
+        state['training']['quantization'] = quantization.state_dict()
     state['training']['sft_progress'] = collect_sft_progress(state['training'])
     if sft_progress is not None:
         sft_progress.clear()
@@ -1138,6 +1150,11 @@ def build_parser():
     parser.add_argument('--lr-warmup', type=int, default=0,
         help='linear learning-rate warmup over the lineage\'s first N optimizer updates (by global step), then the '
              'declared constant rate (train/lr_anneal.LrWarmup); 0 = none')
+    parser.add_argument('--quantization', default=None,
+        help='QAT component (JSON text or a path): the recipe quantization spec (train/quantization.py) plus '
+             '"bind": {"stage": ID, "start": U0, "end": U1}, the update range over which that stage\'s progress '
+             'runs (global optimizer updates). Loss mode "sample": one precision pass per update. "off" drops a '
+             'carried calibration explicitly')
     parser.add_argument('--matrix-telemetry', default=None,
         help='JSON {"every":100,"norms":true,"attention_logits":true,"layers":null}: per-matrix norm growth and max '
              'attention logit (train/matrix_telemetry.py); on by default at matrix_telemetry.DEFAULT, "off" opts out')
@@ -1198,6 +1215,99 @@ def _cotangent_transition_capacity_request(args):
         # before the training loop. A request itself grants no capacity credit.
         return request
     raise ValueError('cotangent accumulator transition requires fresh exact-parent capacity qualification')
+
+
+def default_lfm3_quantization(bind):
+    """The LFM3 recipe's QAT component (owner 2026-10-28; LFM3_RECIPE_20261028.md): FP8 (attention q/k/v/o and FFN,
+    128x128 blocks, dynamic per-128 activations) ramping over 0-0.15 and NVFP4 (FFN w1/w2/w3, static calibrated
+    activations, w1/w3 shared global) over 0.1-0.5 of the stage's updates, one sampled pass per update."""
+    from ..export.lfm3_quantized import LFM3_POINTS
+    from .quantization import SCHEMA
+    return ({'schema': SCHEMA, 'loss': {'mode': 'sample', 'bf16_weight': 1.0, 'seed': 0},
+             'stage_progress': {bind['stage']: [0.0, 1.0]}, 'points': json.loads(json.dumps(LFM3_POINTS))},
+            dict(bind))
+
+
+def _setup_quantization(args, model, saved_state, checkpoint_options, saved_options=None, default_bind=None):
+    """Install the inline QAT points on the backbone linears and restore their calibration (or record dropping it).
+    ``saved_options``: the parent's recorded ``quantization`` declaration and ``quantization_history``.
+    Omitted ``--quantization``: a parent's recorded declaration continues; otherwise ``default_bind`` (LFM3 SFT)
+    adopts the LFM3 recipe component over the remaining planned updates, recorded as a transition at that update
+    (``--quantization off`` opts out)."""
+    from .quantization import parse_native_component
+    parsed = parse_native_component(getattr(args, 'quantization', None))
+    saved_options = saved_options or {}
+    history = list(saved_options.get('quantization_history') or [])
+    previous = saved_options.get('quantization')
+    if parsed is None and previous:
+        parsed = previous['spec'], previous['bind']
+    elif parsed is None and default_bind is not None and saved_state is None:
+        parsed = default_lfm3_quantization(default_bind)
+        history.append({'event': 'default-adopted', 'at_global_step': default_bind['start'],
+                        'weights_optimizer_rng_exposure': 'preserved'})
+    if parsed in (None, 'off'):
+        if saved_state is not None:
+            if parsed is None:
+                raise ValueError('the parent checkpoint carries QAT calibration state: declare --quantization to '
+                                 'continue it, or --quantization off to drop it explicitly')
+            history.append({'event': 'dropped', 'calibration': saved_state})
+        checkpoint_options['quantization'] = None
+        if history:
+            checkpoint_options['quantization_history'] = history
+        return None
+    if args.fp8_training != 'off':
+        raise ValueError('inline QAT is not qualified with an FP8 training backend')
+    from .quantization import Quantization, stage_component
+    from ..common.hashing import canonical_json_sha256_hex
+    spec, bind = parsed
+    component = stage_component(spec, bind['stage'], start=bind['start'], end=bind['end'])
+    quantization = Quantization(component)
+    installed = quantization.install(model, inline=True)
+    if not installed:
+        raise ValueError('--quantization selected no backbone linear module')
+    declaration = {'schema': 'natlang.native-inline-qat/1', 'spec': spec, 'bind': bind,
+                   'sha256': canonical_json_sha256_hex({'spec': spec, 'bind': bind}), 'installed': installed}
+    previous = saved_options.get('quantization')
+    if saved_state is not None:
+        quantization.load_state_dict(saved_state)
+    if not previous or previous.get('sha256') != declaration['sha256']:
+        history.append({'event': 'declared', 'sha256': declaration['sha256'],
+                        'previous_sha256': (previous or {}).get('sha256'),
+                        'calibration_restored': saved_state is not None})
+    checkpoint_options['quantization'] = declaration
+    checkpoint_options['quantization_history'] = history
+    checkpoint_options['_quantization'] = quantization
+    return quantization
+
+
+def _point_has_static_inputs(quantization, name):
+    return any((c.get('activations') or {}).get('format') == 'nvfp4'
+               for c in quantization.points[name]['modules'].values())
+
+
+def _quantization_pass(quantization, *, global_step, batch, forward, cursor):
+    """Calibrate the static activation ranges when due (BF16 forwards over this and the following updates' batches,
+    as ModelOpt ``max``) and choose this update's precision pass: (point, λ, loss weight). A point that needs a
+    static range before the window has its declared batches commits the window early."""
+    config = quantization.calibration_config()
+    if config is not None:
+        window = getattr(quantization, '_calibration_window', None)
+        if window is None and quantization.calibration_due(global_step):
+            quantization.begin_calibration()
+            window = quantization._calibration_window = {'start': global_step}
+        if window is not None:
+            quantization.observe_calibration(forward, batch)
+            uncalibrated = any(h.static and h.amax is None for h in quantization.inputs.values())
+            needs_now = uncalibrated and any(name != 'bf16' and _point_has_static_inputs(quantization, name)
+                                             for name, _, _ in quantization.plan(global_step))
+            if quantization._observed_batches >= config['batches'] or needs_now:
+                quantization.commit_calibration(global_step, source={'start_global_step': window['start'],
+                                                                     'cursor': cursor})
+                quantization._calibration_window = None
+    name, mix, weight = quantization.plan(global_step)[0]
+    if name != 'bf16':
+        quantization.check_calibrated(name)
+    return name, mix, weight
 
 
 def main(argv=None):
@@ -1311,6 +1421,9 @@ def _main(argv=None, *, requested_refresh):
             native_norm_execution=args.native_norm_execution or 'stable-v1',
             history_reasoning_policy=args.history_reasoning_policy)
     saved_ema = (resume or {}).get('ema')
+    saved_quantization = (resume or {}).get('quantization')
+    saved_quantization_options = {key: ((resume or {}).get('options') or {}).get(key)
+                                  for key in ('quantization', 'quantization_history')}
     saved_lr_anneal = None if parent_continuation else ((resume or {}).get('options') or {}).get('lr_anneal')
     saved_norm_reference = ((resume or {}).get('options') or {}).get('matrix_norm_reference')
     if args.share_causal_prefixes is None:
@@ -2236,6 +2349,12 @@ def _main(argv=None, *, requested_refresh):
     total_end = step + len(pending_batches)
     if step > total_end:
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
+    quantization = _setup_quantization(args, model, saved_quantization, checkpoint_options,
+        saved_options=saved_quantization_options,
+        default_bind={'stage': args.stage_id or 'native-graph-ce', 'start': global_step,
+                      'end': global_step + max(1, len(pending_batches))}
+        if config.get('source_architecture') == 'lfm3' and objective is None else None)
+    saved_quantization = saved_quantization_options = None
     resumed_step = step
     last_saved_step = step if policy.slot.is_file() and not parent_continuation else -1
     refresh_boundary = False
@@ -2513,15 +2632,28 @@ def _main(argv=None, *, requested_refresh):
                 from ..model.attention_probe import AttentionLogitProbe
                 from .matrix_telemetry import choose_attention_layers
                 logit_probe = AttentionLogitProbe(choose_attention_layers(model.port, telemetry_spec['layers']))
+            precision_pass = None
+            if quantization is not None:
+                calibration_rng = capture_training_rng_state(args.device)
+                try:
+                    precision_pass = (quantization,) + _quantization_pass(quantization, global_step=global_step,
+                        batch=batch, cursor=cursor, forward=lambda examples: packed_graph_loss(model, examples,
+                            checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens,
+                            objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
+                            collect_accuracy=False, allow_communication_prefixes=backend is None))
+                finally:
+                    restore_training_rng_state(calibration_rng, args.device)
             try:
                 if logit_probe is not None:
                     from ..model.attention_probe import probing
                     with probing(logit_probe):
                         loss, details = native_training_update(model, optimizer, batch, backend=backend,
-                            checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
+                            checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective,
+                            precision=precision_pass)
                 else:
                     loss, details = native_training_update(model, optimizer, batch, backend=backend,
-                        checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
+                        checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective,
+                        precision=precision_pass)
             finally:
                 if warmup is not None:
                     warmup.restore()
@@ -2571,6 +2703,12 @@ def _main(argv=None, *, requested_refresh):
                 progress['lr_warmup'] = {'multiplier': warmup_factor, 'updates': warmup.updates}
             if weight_ema is not None:
                 progress['weight_ema'] = weight_ema.summary()
+            if precision_pass is not None:
+                progress['quantization'] = {'point': precision_pass[1], 'mix': precision_pass[2],
+                    'loss_weight': precision_pass[3], 'update': global_step - 1,
+                    'progress': quantization.progress(global_step - 1),
+                    'mixes': quantization.mixes(global_step - 1),
+                    'calibration_step': quantization.calibration.get('step')}
             if telemetry_due:
                 from .matrix_telemetry import norm_report
                 telemetry_record = {'schema': 'natlang.native-matrix-telemetry/1', 'global_step': global_step, 'step': step}

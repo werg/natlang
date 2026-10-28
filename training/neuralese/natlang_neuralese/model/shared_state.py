@@ -258,6 +258,15 @@ def _plain_compiled(function):
                 or not any(isinstance(value, torch.Tensor) and value.is_cuda for value in args)):
             return function(*args, **kwargs)
         if not compiled:
+            # One graph per layer kind, precision pass and per-layer module guards (QAT reads each module's pass
+            # operands): the default limit of 8 sent later layers back to eager under QAT.
+            import torch._dynamo.config as dynamo_config
+            for name in ('recompile_limit', 'cache_size_limit'):
+                if getattr(dynamo_config, name, 0) < 256:
+                    setattr(dynamo_config, name, 256)
+            # Default Inductor numerics: QAT activation codecs may round a division tie differently from the eager
+            # rule, as the deploy kernels do (approximate reciprocals, train/qformats.py); eager-numerics emulation
+            # cost 1.2x per NVFP4 pass. Weights keep exact eager numerics (maple/ternary._ramped_weight).
             compiled.append(torch.compile(function, dynamic=True))
         return compiled[0](*args, **kwargs)
     return run
@@ -1404,7 +1413,11 @@ def _linear(module, x):
     # Preserve custom adapter/quantization forwards rather than bypassing them.
     if type(module) is not nn.Linear:
         return module(x)
-    out = _linear_weight(x, module.weight, precision=getattr(module, "native_linear_precision", "ieee"))
+    weight = module.weight
+    if 'native_precision_key' in module.__dict__ or module.__dict__.get('native_precision_input') is not None:
+        from ..maple.ternary import linear_precision
+        x, weight = linear_precision(module, x)
+    out = _linear_weight(x, weight, precision=getattr(module, "native_linear_precision", "ieee"))
     return out if module.bias is None else out + module.bias
 
 
