@@ -275,12 +275,18 @@ class InputPrecision:
 
     def __call__(self, module, args):
         x = args[0]
+        value = self.apply(x)
+        return None if value is x else (value,) + tuple(args[1:])
+
+    def apply(self, x):
+        """``x`` under the active point (observing it for calibration when ``observe`` is set); ``x`` itself when the
+        active point leaves this module's input unquantized."""
         if self.observe:
             current = x.detach().abs().amax().float()
             self.observed = current if self.observed is None else torch.maximum(self.observed, current)
         selected = _selected(self.key)
         if selected is None or not selected[2].get("activations"):
-            return None
+            return x
         _, mix, options = selected
         from ..train.qformats import activation_value, nvfp4_global_scale
         config = options["activations"]
@@ -292,7 +298,39 @@ class InputPrecision:
                 self.amax = self.amax.to(x.device)
             scale = nvfp4_global_scale(self.amax)
         value = activation_value(x.detach(), config, scale)
-        return (_PrecisionRamp.apply(x, value, float(mix)),) + tuple(args[1:])
+        return _PrecisionRamp.apply(x, value, float(mix))
+
+
+# Inline linear precision (native trainer): the module keeps its plain ``weight`` Parameter (no parametrization, so
+# parameter names, optimizer routing and checkpoints are unchanged); every linear execution path reads its effective
+# operands through ``linear_precision``. Attributes set by ``Quantization.install(..., inline=True)``:
+# ``native_precision_key`` (group key), ``native_precision_peers`` ([(leaf, module)] sharing a scale) and
+# ``native_precision_input`` (an ``InputPrecision`` or None).
+
+
+def linear_precision(module, x):
+    """(input, weight) of a linear ``module`` under the active precision point. Without an installed key, or with
+    no active point selecting it, returns ``x`` and ``module.weight`` themselves (the unquantized path, unchanged)."""
+    state = module.__dict__
+    holder = state.get("native_precision_input")
+    if holder is not None:
+        x = holder.apply(x)
+    key = state.get("native_precision_key")
+    weight = module.weight
+    if key is None or PRECISION["groups"] is None:
+        return x, weight
+    peers = [(leaf, peer.weight) for leaf, peer in state.get("native_precision_peers", ())]
+    return x, precision_value(weight, key, peers)
+
+
+def precision_linear_forward(self, x):
+    """Instance ``forward`` of an inline-quantized ``nn.Linear`` (marked so native carriers may replace it; they apply
+    ``linear_precision`` themselves)."""
+    x, weight = linear_precision(self, x)
+    return torch.nn.functional.linear(x, weight, self.bias)
+
+
+precision_linear_forward.natlang_precision_forward = True
 
 
 # Global switches read by every adapter: which nested member is running (its private deltas apply) and whether

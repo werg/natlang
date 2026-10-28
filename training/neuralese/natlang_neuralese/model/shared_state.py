@@ -1404,7 +1404,11 @@ def _linear(module, x):
     # Preserve custom adapter/quantization forwards rather than bypassing them.
     if type(module) is not nn.Linear:
         return module(x)
-    out = _linear_weight(x, module.weight, precision=getattr(module, "native_linear_precision", "ieee"))
+    weight = module.weight
+    if 'native_precision_key' in module.__dict__ or module.__dict__.get('native_precision_input') is not None:
+        from ..maple.ternary import linear_precision
+        x, weight = linear_precision(module, x)
+    out = _linear_weight(x, weight, precision=getattr(module, "native_linear_precision", "ieee"))
     return out if module.bias is None else out + module.bias
 
 
