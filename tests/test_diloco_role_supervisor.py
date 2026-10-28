@@ -17,7 +17,7 @@ def test_persistent_role_replacement_and_orderly_shutdown(tmp_path):
         raise AssertionError('timed out waiting for supervisor')
     def state():return json.loads((control/'state.json').read_text())
     def request(n,action,role,pid=None):
-        value={'schema':'natlang.diloco-role-request/1','id':str(n),'expected_generation':n-1,'action':action,'role':role}
+        value={'schema':'natlang.diloco-role-request/1','id':str(n),'expected_generation':n-1,'owner_id':state()['owner_id'],'action':action,'role':role}
         if action=='start':value['argv']=[sys.executable,str(rolefile),str(tmp_path),role]
         else:value['expected_pid']=pid
         temp=control/'request.tmp';temp.write_text(json.dumps(value));os.replace(temp,control/'request.json')
@@ -59,7 +59,7 @@ def test_real_bootstrap_handoff_waits_for_role_owner(tmp_path):
         state = json.loads((control / 'state.json').read_text())
         assert state['generation'] == 0 and state['roles'] == {}
         request = {'schema': 'natlang.diloco-role-request/1', 'id': 'replacement',
-                   'expected_generation': 0, 'role': 'worker', 'action': 'start',
+                   'expected_generation': 0, 'owner_id': state['owner_id'], 'role': 'worker', 'action': 'start',
                    'argv': [sys.executable, '-c', 'import time;time.sleep(30)']}
         temp = control / 'request.tmp'; temp.write_text(json.dumps(request)); os.replace(temp, control / 'request.json')
         while time.monotonic() < end and not (control / 'result.json').exists(): time.sleep(.05)
@@ -68,3 +68,34 @@ def test_real_bootstrap_handoff_waits_for_role_owner(tmp_path):
         proc.terminate(); assert proc.wait(timeout=8) == 0
     finally:
         if proc.poll() is None: proc.kill(); proc.wait()
+
+
+def test_restarted_owner_rejects_stale_requests(tmp_path):
+    supervisor = Path(__file__).parents[1] / 'scripts/coreweave/diloco_role_supervisor.py'
+    control = tmp_path / 'control'
+    def wait_for(predicate):
+        end = time.monotonic() + 8
+        while time.monotonic() < end:
+            try:
+                if predicate(): return
+            except (OSError, ValueError, KeyError): pass
+            time.sleep(.03)
+        raise AssertionError('supervisor timed out')
+    def state(): return json.loads((control / 'state.json').read_text())
+    first = subprocess.Popen([sys.executable, str(supervisor), str(control)])
+    second = None
+    try:
+        wait_for(lambda: (control / 'state.json').exists())
+        old = state(); first.terminate(); assert first.wait(timeout=8) == 0
+        second = subprocess.Popen([sys.executable, str(supervisor), str(control)])
+        wait_for(lambda: state()['owner_id'] != old['owner_id'])
+        request = {'schema':'natlang.diloco-role-request/1', 'id':'stale', 'owner_id':old['owner_id'],
+                   'expected_generation':old['generation'], 'role':'worker', 'action':'start',
+                   'argv':[sys.executable, '-c', 'pass']}
+        tmp=control/'request.tmp'; tmp.write_text(json.dumps(request)); os.replace(tmp, control/'request.json')
+        wait_for(lambda: (control/'result.json').exists())
+        assert not json.loads((control/'result.json').read_text())['accepted']
+        assert not state()['roles']
+    finally:
+        if first.poll() is None: first.kill(); first.wait()
+        if second and second.poll() is None: second.terminate(); second.wait(timeout=8)

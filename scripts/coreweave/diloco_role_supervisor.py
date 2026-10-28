@@ -6,26 +6,29 @@ A controller publishes one atomic request.json; this process starts/stops and
 reaps its own replacement children, retaining an auditable role journal.
 """
 from __future__ import annotations
-import json, os, signal, subprocess, sys, time
+import hashlib, json, os, signal, subprocess, sys, time, uuid
+from natlang_neuralese.common.jsonio import write_json_durable
 from pathlib import Path
 
 
 def _atomic(path: Path, value: dict) -> None:
-    tmp=path.with_name(path.name+'.pending')
-    with tmp.open('w') as f:
-        json.dump(value,f,sort_keys=True);f.write('\n');f.flush();os.fsync(f.fileno())
-    os.replace(tmp,path)
-    fd=os.open(path.parent,os.O_DIRECTORY)
-    try:os.fsync(fd)
-    finally:os.close(fd)
+    write_json_durable(path, value)
 
 
 def main(directory: Path) -> None:
     directory.mkdir(parents=True,exist_ok=True,mode=0o700)
     boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
-    roles={};generation=0;seen=set();stopping=False
+    roles={};stopping=False
+    path=directory/'state.json'
+    previous=json.loads(path.read_text()) if path.exists() else {}
+    generation=previous.get('generation',0)
+    events=previous.get('events',[])
+    seen={event['request_id'] for event in events if 'request_id' in event}
+    owner_id=str(uuid.uuid4())
+    ticks=Path(f'/proc/{os.getpid()}/stat').read_text().rsplit(')',1)[1].split()[19]
     state={'schema':'natlang.diloco-role-supervisor/1','boot_id':boot,'supervisor_pid':os.getpid(),
-           'generation':0,'roles':{},'events':[]}
+           'supervisor_start_ticks':ticks,'owner_id':owner_id,'generation':generation,'roles':{},'events':events}
+    state['events'].append({'event':'owner_started','owner_id':owner_id,'boot_id':boot,'pid':os.getpid(),'start_ticks':ticks})
     def save():
         state['generation']=generation
         state['roles']={role:{'pid':p.pid,'alive':p.poll() is None,'returncode':p.poll()} for role,p in roles.items()}
@@ -42,11 +45,13 @@ def main(directory: Path) -> None:
         request=directory/'request.json'
         if request.exists():
             claimed=directory/'request.claimed.json'
+            v=None
             try:
                 os.replace(request,claimed);v=json.loads(claimed.read_text())
                 if v.get('schema')!='natlang.diloco-role-request/1' or not isinstance(v.get('id'),str) or not v['id']:
                     raise ValueError('invalid request identity')
                 if v['id'] in seen:raise ValueError('duplicate request')
+                if v.get('owner_id')!=owner_id:raise ValueError('stale supervisor owner')
                 if v.get('expected_generation')!=generation:raise ValueError('stale supervisor generation')
                 role=v.get('role');action=v.get('action')
                 if role not in ('coordinator','worker'):raise ValueError('invalid role')
@@ -67,10 +72,12 @@ def main(directory: Path) -> None:
                     prior.terminate()
                 else:raise ValueError('invalid action')
                 seen.add(v['id']);generation+=1
-                state['events'].append({'event':action,'role':role,'request_id':v['id'],'pid':roles[role].pid})
+                event={'event':action,'role':role,'request_id':v['id'],'pid':roles[role].pid}
+                if action=='start':event['argv_sha256']=hashlib.sha256(json.dumps(argv,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+                state['events'].append(event)
                 save();_atomic(directory/'result.json',{'id':v['id'],'accepted':True,'generation':generation,'pid':roles[role].pid})
             except Exception as e:
-                _atomic(directory/'result.json',{'id':v.get('id') if 'v' in locals() else None,'accepted':False,'error':str(e)[:500],'generation':generation})
+                _atomic(directory/'result.json',{'id':v.get('id') if isinstance(v,dict) else None,'accepted':False,'error':str(e)[:500],'generation':generation})
             finally:claimed.unlink(missing_ok=True)
         time.sleep(.2)
     # Preserve final updates: wait for the learner to drain before stopping the coordinator.
