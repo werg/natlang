@@ -658,7 +658,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   };
   // JOLT+ teacher attempt: a decision readout gets its invocation's privileged block like a generated turn.
   const privileged = (item:Item,request:Item):Item => {
-    const context=extra?.x_natlang_privileged_context as Json|undefined;
+    const context=(request.x_natlang_privileged_context ?? extra?.x_natlang_privileged_context) as Json|undefined;
     if(!context)return item;
     if(!request.invocation_id||!request.invocation_role)
       throw new Error('privileged-context-invocation: a JOLT+ teacher attempt needs each decision readout\'s invocation and its root/child role');

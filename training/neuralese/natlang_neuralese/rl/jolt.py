@@ -192,9 +192,7 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
         receipt, facts = case_facts(case, custody=custody,
             teacher_trajectories=(teacher_trajectories or {}).get(rollout['task_id'], ()),
             attempt_feedback=group_feedback(case, group, rollout.get('sample')))
-        invocations = {item['name']: {'name': item['name'].rsplit('#turn', 1)[0], 'role': item['role'],
-                                      'text': item['text']}
-                       for item in graph_invocations(replay, turns, root_calls=root_calls(rollout, turns))}
+        descriptors = {item['name']: item for item in graph_invocations(replay, turns, root_calls=root_calls(rollout, turns))}
         by_turn = {turn.get('graph_turn'): turn for turn in turns}
         blocks, telemetry = {}, {'blocks': 0, 'writer_blocks': 0, 'text_fallbacks': 0, 'verbatim_reference': 0,
                                  'fallback_reasons': []}
@@ -202,8 +200,10 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
             block = captured_block(turn)
             if block is None:
                 continue
-            used = verify_captured_block(block, rendering, custody_receipt=receipt, facts=facts,
-                                         invocation=invocations[name])
+            nodes = (replay.turn_nodes or {}).get(name, [name])
+            descriptor = descriptors[nodes[0]]
+            invocation = {'name': name.rsplit('#turn', 1)[0], 'role': descriptor['role'], 'text': descriptor['text']}
+            used = verify_captured_block(block, rendering, custody_receipt=receipt, facts=facts, invocation=invocation)
             telemetry['blocks'] += 1
             if block.receipt['mode'] == 'text':
                 telemetry['text_fallbacks'] += 1
@@ -215,7 +215,9 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
                 telemetry['writer_blocks'] += 1
                 if fetch_text is not None and reproduces_reference(fetch_text(block.state_id), used):
                     telemetry['verbatim_reference'] += 1
-            blocks[name] = block
+            from dataclasses import replace
+            for node in nodes:
+                blocks[node] = replace(block, invocation=node)
         if not blocks:
             raise CustodyError('the actor recorded no guidance for this episode')
         return blocks, telemetry
@@ -283,8 +285,6 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
         mode = (capture.get('privileged') or {}).get('mode')
         if role == 'student' and (sampled or mode not in (None, 'write-only')):
             raise ValueError('a student episode was sampled with guidance; mark it as a teacher attempt')
-        if (sampled or mode is not None) and capture.get('schema') == 'natlang.native-decision-capture/1':
-            raise ValueError('a decision readout carries guidance')
         if (sampled or mode is not None) and turn.get('graph_turn') in flagged:
             raise ValueError('a guidance policy turn carries guidance itself')
     try:

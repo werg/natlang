@@ -293,6 +293,10 @@ def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
                    for mode in ('import', 'write-only', 'text')}
         policy = generate(guidance_policy=writer)
         plain = generate()
+        from natlang_neuralese.serve.native_learning import decide_native
+        decision_plain = decide_native(engine, {'messages': messages, 'options': ['t8', 't9'], 'native_recording': True})
+        decision_guided = decide_native(engine, {'messages': messages, 'options': ['t8', 't9'], 'native_recording': True,
+            'x_natlang_privileged_context': request('root', 'import', state)})
         with pytest.raises(Exception, match='not visible'):
             generate(privileged_context={**request('root', 'import', state), 'facts': [facts[1]]})
     finally:
@@ -301,6 +305,10 @@ def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
     own = lambda segments: [t for s in segments if s['kind'] == 'tokens' for t in s['token_ids']]
     expected = own(plain['x_natlang_rl_capture']['prompt'])
     spec = engine._privileged_rendering()
+    decision = decision_guided['native_decision_capture']
+    assert decision['privileged']['mode'] == 'import'
+    assert decision['continuations'] == decision_plain['native_decision_capture']['continuations']
+    assert any(s.get('id') == state for s in decision['prompt'] if s['kind'] == 'native_state')
     for mode, reply in replies.items():
         capture = reply['x_natlang_rl_capture']
         block = captured_block({'graph_turn': 'run-1#turn1', 'sampling': capture})

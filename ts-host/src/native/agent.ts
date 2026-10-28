@@ -1154,6 +1154,10 @@ export class NativeToolAgent {
     const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + guidance;
     const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: decisionPrompt(replies) }];
     const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
+    const training = this.options.trainingGuidance;
+    const guidancePolicy = training?.policyOf(session.lam, callId);
+    const capturedGuidance = training && callId && !guidancePolicy && !training.insidePolicy(session)
+      ? await training.requestFor(session, callId, encoded.messages) : undefined;
     if (encoded.blocks && !supportsNeuralese(this.driver))
       throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
     const started = performance.now();
@@ -1164,7 +1168,8 @@ export class NativeToolAgent {
         throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
       // model-call-kind: decision-readout -- training/model-call-kinds.json
       scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies,
-        ...(callId ? { invocation_id: callId, invocation_role: callId === session.runtime.options.runId ? 'root' as const : 'child' as const } : {}),
+        ...(callId ? { invocation_id: callId, invocation_role: (session.runtime.frame?.chain.length ?? 0) > 0 ? 'child' as const : 'root' as const } : {}),
+        ...(capturedGuidance ? { x_natlang_privileged_context: capturedGuidance } : {}),
         ...(adapters.length ? { adapters } : {}) }, session.runtime.signal));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
