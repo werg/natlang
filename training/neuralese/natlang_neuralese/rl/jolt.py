@@ -253,10 +253,6 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
             # invocation's messages) are the same on the teacher-role tokens, so the learner rebuilds the exact
             # blocks; student_form verifies the attempt carried them token for token.
             blocks = source(rollout, replay, turns)
-            # Decision readouts are scored without privileged context during teacher attempts.
-            decisions = {turn.get('graph_turn') for turn in turns
-                         if (turn.get('sampling') or {}).get('schema') == 'natlang.native-decision-capture/1'}
-            blocks = {name: block for name, block in blocks.items() if name not in decisions}
             if not any(block.token_ids for block in blocks.values()):
                 raise CustodyError('no privileged fact fits any invocation of this teacher attempt')
             try:
@@ -291,13 +287,31 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
                                                                      action['sample']):
             raise ValueError('JOLT+ twin actions are not aligned with the sampled actions')
         actions.append({**action, 'twin_query': offsets[edited['turn'] + suffix] + edited['local_query']})
+    # Sampled decision readouts (rl.decision_policy): each option's continuation queries in its twin option node.
+    # The privileged edit lies in the shared prompt, so a continuation keeps its tokens and moves by the edit delta.
+    originals = {node.name: node for node in replay.plan.invocations}
+    edited = {node.name: node for node in twin.plan.invocations}
+    decision_twins = []
+    for action in replay.decision_actions:
+        per_option = []
+        for name, option in zip(action['option_nodes'], action['options']):
+            before, after = originals[name], edited[name]
+            delta = len(after.token_ids) - len(before.token_ids)
+            continuation = before.token_ids[action['prompt_tokens']:]
+            if (action['prompt_tokens'] + delta < 1
+                    or tuple(after.token_ids[action['prompt_tokens'] + delta:]) != tuple(continuation)):
+                raise ValueError('JOLT+ twin edit crosses a decision option continuation')
+            per_option.append([{**item, 'query': offsets[name + suffix] + item['local_query'] + delta}
+                               for item in option])
+        decision_twins.append(per_option)
     for node in renamed:
         value = invocation_dict(node)
         value['token_ids'] = list(node.token_ids)
         value['target_weights'] = [0.] * len(node.token_ids)
         graph['nodes'].append(value)
     return actions, {'role': role, 'twin_turns': [node.name for node in renamed],
-                     'privileged': {name: block.receipt for name, block in sorted(blocks.items())}}
+                     'privileged': {name: block.receipt for name, block in sorted(blocks.items())},
+                     **({'decision_twin_queries': decision_twins} if decision_twins else {})}
 
 
 def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=128, top_k=None, readout=None):

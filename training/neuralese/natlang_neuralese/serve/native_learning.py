@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import torch
 
+from ..common import stable_softmax
 from .chat import RequestError
 from .engine import GenerationRequest, Sequence
 from .targets import target_items
@@ -34,7 +35,10 @@ def _native_plan(engine, items):
     return plan
 
 
-def _decision_render(engine, messages, tools, options):
+def decision_items(renderer, messages, tools, options):
+    """The decision prompt items and each option's complete closed continuation token IDs (end of message
+    included). ``renderer`` is a serving engine or ``data.decision_graph.tokenizer_renderer`` (CPU conversion):
+    one rendering for serving, training rows and recorded captures."""
     if not isinstance(options, list) or not options:
         raise RequestError("neuralese-decision", "a decision needs at least one option")
     prompt = None
@@ -43,7 +47,7 @@ def _decision_render(engine, messages, tools, options):
         if not isinstance(option, str):
             raise RequestError("neuralese-decision", "options are reply texts")
         try:
-            before, rest = target_items(engine, messages, tools, {"role": "assistant", "content": option})
+            before, rest = target_items(renderer, messages, tools, {"role": "assistant", "content": option})
         except RequestError as error:
             raise RequestError("neuralese-decision", str(error).removeprefix(f"{error.code}: ")) from error
         if prompt is not None and before != prompt:
@@ -52,6 +56,11 @@ def _decision_render(engine, messages, tools, options):
             raise RequestError("neuralese-decision", "options must be ordinary assistant text")
         prompt = before
         continuations.append([int(value) for _, value in rest])
+    return prompt, continuations
+
+
+def _decision_render(engine, messages, tools, options):
+    prompt, continuations = decision_items(engine, messages, tools, options)
     return _native_plan(engine, prompt), continuations
 
 
@@ -59,7 +68,7 @@ def _score_from_cache(engine, cache, logits, continuation):
     score = torch.zeros((), dtype=torch.float32, device=logits.device)
     with torch.no_grad():
         for token in continuation:
-            score = score + torch.log_softmax(logits.float(), dim=-1)[0, token]
+            score = score + stable_softmax.token_logprobs(logits[:1], torch.tensor([token], device=logits.device))[0]
             output = engine._native_forward([token], cache)
             cache, logits = output["cache"], engine._native_logits(output["h_final"])
     return float(score), len(continuation)
@@ -75,9 +84,14 @@ def _score_item(engine, item, adapters=None):
 
 
 def _score_rendered(engine, item, plan, continuations, bindings):
+    privileged = item.get('x_natlang_privileged_context')
+    if privileged is not None and not item.get('native_recording'):
+        raise RequestError('bad-request', 'x_natlang_privileged_context renders a captured JOLT+ teacher decision; '
+                           'request native_recording')
     request = GenerationRequest(messages=item.get("messages") or [], tools=item.get("tools"), max_tokens=0,
                                 adapters=bindings, native_state_modes=item.get('native_state_modes'),
-                                rl_capture=bool(item.get('native_recording')),native_recording=bool(item.get('native_recording')))
+                                rl_capture=bool(item.get('native_recording')),native_recording=bool(item.get('native_recording')),
+                                privileged_context=privileged)
     sequence = Sequence(request, None, prompt_plan=plan)
     engine._native_prefill(sequence)
     base_cache, base_logits = sequence.cache, sequence.logits
@@ -96,7 +110,9 @@ def decide_native(engine, body: dict) -> dict:
     """Score candidate replies from a single exact native prompt cache."""
     return _score_item(engine, {"messages": body.get("messages") or [], "tools": body.get("tools"),
                                 "options": body.get("options") or [], "native_state_modes": body.get("native_state_modes"),
-                                "native_recording":body.get("native_recording",False)}, body.get('adapters'))
+                                "native_recording":body.get("native_recording",False),
+                                **({'x_natlang_privileged_context': body['x_natlang_privileged_context']}
+                                   if body.get('x_natlang_privileged_context') is not None else {})}, body.get('adapters'))
 
 
 def decide_many_native(engine, body: dict) -> dict:

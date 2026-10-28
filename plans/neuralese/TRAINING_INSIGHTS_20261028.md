@@ -139,3 +139,13 @@ teacher, Cortex-style consolidation KL, the learned optimizer's distillation KL,
 **Apply:** one shared numerics module (hard CE, soft CE/forward KL, reverse KL, generalized JSD, score-centering
 coefficients) with these gradients, verified against fp64 references, used by default in every trainer, RL loss and
 distillation path, including chunked/fused CE paths.
+
+**Implemented (2026-10-28):** `training/neuralese/natlang_neuralese/common/stable_softmax.py`, policy identity
+`stable-softmax-barron2026-v1` (default everywhere; `torch-native-v0` is the explicit opt-out/replay policy via
+`--softmax-numerics`, `NATLANG_SOFTMAX_NUMERICS` or `use_numerics_policy`). API: `cross_entropy`, `token_logprobs`,
+`selected_log_softmax` (RL/policy log-probs, head sets), `log_softmax`/`softmax`, `forward_kl`, `soft_cross_entropy`,
+`reverse_kl` (JOLT OPSD student term), `generalized_jsd`, `topk_forward_kl` (truncated teachers),
+`score_centering_coefficients` and `score_centered_surrogate` (section 5), `cross_entropy_value_and_grad` /
+`divergence_value_and_grad` for hand-written fused kernels. Teachers are detached constants. Bind the policy
+(`active_policy()`) outside a checkpointed closure and pass `policy=`, because recomputation runs in backward.
+The native SFT entry records `softmax_numerics` and a `softmax_numerics_history` transition in checkpoint options.

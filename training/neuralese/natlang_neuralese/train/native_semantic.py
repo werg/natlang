@@ -11,7 +11,6 @@ import itertools
 import math
 
 import torch
-import torch.nn.functional as F
 
 from ..data.native_graph import NativeGraphExample, parse_graph, graph_loss_from_result
 from ..model.shared_state import (Invocation, ImportSpan, compile_graph, capture_block,
@@ -177,14 +176,16 @@ def distillation_loss(model, student, teacher, consumer, *, temperature=1., chun
     selected = torch.tensor(weights, dtype=torch.float32, device=device)
     total = selected.new_zeros(())
     from torch.utils.checkpoint import checkpoint
+    from ..common import stable_softmax
+    numerics = stable_softmax.active_policy()  # bound now: checkpoint recomputation runs in backward
     for start in range(0, len(weights), chunk_tokens):
         stop = start + chunk_tokens
         def chunk(learned, fixed, weight):
             learned_logits = model.logits(learned).float() / temperature
             with torch.no_grad():
-                fixed_probs = (model.logits(fixed).float() / temperature).softmax(-1)
-            return (F.kl_div(learned_logits.log_softmax(-1), fixed_probs, reduction='none').sum(-1)
-                    * weight).sum() * temperature ** 2
+                fixed_logits = model.logits(fixed).float() / temperature
+            return ((stable_softmax.forward_kl(learned_logits, fixed_logits, policy=numerics) * weight).sum()
+                    * temperature ** 2)
         total = total + checkpoint(chunk, student['h_final'][0, sq[start:stop]],
             teacher['h_final'][0, tq[start:stop]].detach(), selected[start:stop], use_reentrant=False)
     return total / selected.sum()

@@ -163,7 +163,8 @@ def capture_reference(model, tokenizer, prompts: list[dict], render, eos: int, *
         hidden = model.model(input_ids=sequence).last_hidden_state[0, :-1]
         top_ids, top_logp = [], []
         for start in range(0, hidden.shape[0], 512):
-            logp = torch.log_softmax(model.lm_head(hidden[start:start + 512]).float(), -1)
+            from ..common import stable_softmax
+            logp = stable_softmax.log_softmax(model.lm_head(hidden[start:start + 512]).float(), -1)
             values, indices = logp.topk(k, -1)
             top_ids.append(indices.to(torch.int32).cpu())
             top_logp.append(values.to(torch.float16).cpu())

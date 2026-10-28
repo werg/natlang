@@ -167,8 +167,9 @@ def parse(tokens, ids, available):
 # -- grammar-restricted distributions --------------------------------------------------------------------------
 def sign_logprobs(tokens, logits):
     """log p(+), log p(-) over the two sign tokens at a slot's decision position."""
+    from ...common.stable_softmax import log_softmax
     pair = torch.stack([logits[..., tokens.positive], logits[..., tokens.negative]], -1).float()
-    return torch.log_softmax(pair, -1)
+    return log_softmax(pair, -1)
 
 
 def magnitude_logprobs(tokens, logits, *, negative, max_int):
@@ -179,7 +180,8 @@ def magnitude_logprobs(tokens, logits, *, negative, max_int):
     if negative:
         chosen = chosen.clone()
         chosen[..., 0] = -math.inf
-    return torch.log_softmax(chosen, -1)
+    from ...common.stable_softmax import log_softmax
+    return log_softmax(chosen, -1)
 
 
 def value_logprobs(tokens, fmt, sign_logits, positive_digit_logits, negative_digit_logits):

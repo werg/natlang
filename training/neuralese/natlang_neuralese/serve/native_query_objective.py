@@ -127,17 +127,20 @@ class NativeQueryObjective:
                     for option,ident in zip(term['options'],term['readouts'])])
                 with torch.no_grad():
                     teacher=torch.stack([token_action_logps(model,hidden.detach(),option,readout=self.readouts.get(ident)).sum()
-                        for option,ident in zip(term['teacher_options'],term['teacher_readouts'])]).softmax(0)
+                        for option,ident in zip(term['teacher_options'],term['teacher_readouts'])])
+                    from ..common.stable_softmax import softmax
+                    teacher=softmax(teacher,0)
                 value=decision_loss_to_goal(scores,teacher,rule=term['rule'])
             else:
                 from torch.utils.checkpoint import checkpoint
                 student_read=self.readouts.get(term.get('readout'),model.logits)
                 teacher_read=self.readouts.get(term.get('teacher_readout'),model.logits)
-                def distill(student, teacher,student_read=student_read,teacher_read=teacher_read):
+                from ..common import stable_softmax
+                def distill(student, teacher,student_read=student_read,teacher_read=teacher_read,
+                            numerics=stable_softmax.active_policy()):
                     with torch.no_grad():
-                        goal = teacher_read(teacher).float().log_softmax(-1)
-                    predicted = student_read(student).float().log_softmax(-1)
-                    return (goal.exp()*(goal-predicted)).sum()
+                        goal = teacher_read(teacher).float()
+                    return stable_softmax.forward_kl(student_read(student).float(), goal, policy=numerics).sum()
                 from ..common.native_higher_order import capture_reference_execution,active_reference_arithmetic
                 if active_reference_arithmetic() is not None:
                     from ..model.native_adapters import capture_native_execution

@@ -296,14 +296,17 @@ def graph_invocations(replay, turns, *, root_calls):
     invocation ids. Text is the turn's actual message contents.
     """
     by_name = {turn.get('graph_turn'): turn for turn in turns}
+    # A sampled decision's option nodes (``<turn>:option:<i>``) belong to its decision turn.
+    owners = {option: name for name, options in (replay.turn_nodes or {}).items() for option in options}
     result = []
     for node in replay.plan.invocations:
-        turn = by_name.get(node.name)
+        owner = owners.get(node.name, node.name)
+        turn = by_name.get(owner)
         if turn is None:
             raise ValueError('privileged scoring needs every graph invocation\'s captured turn')
         text = '\n'.join(message['content'] for message in turn.get('messages') or []
                          if isinstance(message.get('content'), str))
-        call = node.name.rsplit('#turn', 1)[0]
+        call = owner.rsplit('#turn', 1)[0]
         result.append({'name': node.name, 'role': 'root' if call in root_calls else 'child', 'text': text,
                        'token_ids': node.token_ids})
     return result

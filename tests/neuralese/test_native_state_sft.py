@@ -456,7 +456,7 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     held_path.write_text(json.dumps(row_held) + '\n')
 
     def run(out, epochs, continue_from=None, batch_tokens=0, weight_decay=0, latent_ns='quintic',
-            history_reasoning_policy=None):
+            history_reasoning_policy=None, softmax_numerics=None):
         argv = ['--native-graphs', str(train_path), '--held-native-graphs', str(held_path),
             '--out', str(out), '--base', str(base), '--device', 'cpu', '--rank', '2',
             '--epochs', str(epochs), '--eval-every', '1', '--batch-graphs', '1',
@@ -466,6 +466,8 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
             argv += ['--continue-from', str(continue_from)]
         if history_reasoning_policy is not None:
             argv += ['--history-reasoning-policy', history_reasoning_policy]
+        if softmax_numerics is not None:
+            argv += ['--softmax-numerics', softmax_numerics]
         assert main(argv) == 0
 
     split_out, continuous_out = tmp_path / 'split', tmp_path / 'continuous'
@@ -528,6 +530,22 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     previous_optimizer_steps = [float(state['step']) for section in transition_optimizer.values()
         if isinstance(section, dict) for state in section.get('state', {}).values() if 'step' in state]
     assert optimizer_step_values and min(optimizer_step_values) > min(previous_optimizer_steps)
+
+    # Softmax numerics: the stable policy is the default from the first run; an
+    # explicit opt-out and the return to the default are recorded transitions.
+    from natlang_neuralese.common import stable_softmax
+    assert continued['options']['softmax_numerics'] == stable_softmax.POLICY
+    assert continued['options']['softmax_numerics_history'] == []
+    run(split_out, 6, slot, history_reasoning_policy='keep', softmax_numerics=stable_softmax.LEGACY_POLICY)
+    opted_out = torch.load(slot, map_location='cpu', weights_only=False)['training']
+    assert opted_out['options']['softmax_numerics'] == stable_softmax.LEGACY_POLICY
+    run(split_out, 7, slot, history_reasoning_policy='keep')
+    readopted = torch.load(slot, map_location='cpu', weights_only=False)['training']
+    assert readopted['options']['softmax_numerics'] == stable_softmax.POLICY
+    assert [(item['from'], item['to']) for item in readopted['options']['softmax_numerics_history']] == [
+        (stable_softmax.POLICY, stable_softmax.LEGACY_POLICY), (stable_softmax.LEGACY_POLICY, stable_softmax.POLICY)]
+    assert readopted['global_step'] == continued['global_step'] + 2
+    stable_softmax.set_numerics_policy(None)
 
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])

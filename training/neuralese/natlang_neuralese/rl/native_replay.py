@@ -30,6 +30,10 @@ class NativeReplay:
     written_sources: tuple = ()
     protocol_failures: dict | None = None
     input_actions: tuple[dict, ...] = ()
+    # Sampled decision readouts (rl.decision_policy): one action over each decision's option set.
+    decision_actions: tuple[dict, ...] = ()
+    # Episode turn -> its graph nodes (a sampled decision expands into its option nodes).
+    turn_nodes: dict | None = None
 
 
 def _tokens(ids):
@@ -162,10 +166,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         forced_capture=capture.get('schema')=='natlang.native-teacher-forced-capture/1'
         greedy = capture.get('schema') in ('natlang.native-structural-capture/1','natlang.native-structural-capture/2')
         decision = capture.get('schema') == 'natlang.native-decision-capture/1'
-        schemas = {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3','natlang.native-rl-sampling/4'}
+        schemas = {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3','natlang.native-rl-sampling/4',
+                   'natlang.native-decision-capture/1'}
         if structural:
             schemas.update(('natlang.native-structural-capture/1','natlang.native-structural-capture/2'))
-            schemas.add('natlang.native-decision-capture/1')
             schemas.add('natlang.native-teacher-forced-capture/1')
         if (capture.get('schema') not in schemas
                 or capture.get('policy') != actor_identity
@@ -186,9 +190,13 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         adapter_binding, binding_seen = binding, True
         law = capture.get('sampling_law') or {}
         temperature = law.get('temperature')
+        decision_sample = None
         if decision:
             if any(capture.get(key) for key in ('samples','generated_inputs','writes','sampling_law')):
                 raise ValueError('native decision capture cannot declare sampled actions or a sampling law')
+            if not structural and capture.get('decision_sample') is not None:
+                from .decision_policy import validate_decision_sample
+                decision_sample = validate_decision_sample(capture)
         elif forced_capture:
             if law.get('probabilities')!='exact-forced-sequence' or any(sample.get('forced') is not True
                     or sample.get('logp') is not None for sample in capture.get('samples') or []):
@@ -365,11 +373,12 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     raise ValueError('native write occurrence differs from its actual capture')
                 occurrence=item['node']
             writers.setdefault(block_id, []).append((name, *span, occurrence))
-        prepared[name] = {'protocol_failure':failure,'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops, 'read_sources': read_sources, 'read_semantics':read_semantics,
+        prepared[name] = {'decision_sample':decision_sample,'protocol_failure':failure,'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops, 'read_sources': read_sources, 'read_semantics':read_semantics,
                           'events': events,'input_actions':input_actions, 'spans': spans, 'actor_identity':actor_identity,'adapter_binding':binding}
     if not prepared:
         raise ValueError('native RL graph has no captured turns')
     externals, nodes, ordered, external_receipts, external_invocations = {}, [], [], {}, {}
+    turn_nodes = {}
     semantic_dependencies=[]
     pending = dict(prepared)
     while pending:
@@ -470,8 +479,21 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     start = index
                 if not producing and start is not None:
                     spans.append((start, index)); start = None
-            nodes.append(Invocation(name, item['own'], imports=tuple(imports), producing=tuple(spans)))
-            ordered.append(item)
+            if item['decision_sample'] is None:
+                nodes.append(Invocation(name, item['own'], imports=tuple(imports), producing=tuple(spans)))
+                ordered.append(item)
+                turn_nodes[name] = [name]
+            else:
+                # A sampled decision: its option nodes share the exact prompt and imports (data.decision_graph).
+                from ..data.decision_graph import option_node_name
+                turn_nodes[name] = []
+                for index, continuation in enumerate(item['decision_sample']['continuations']):
+                    option = option_node_name(name, index)
+                    if option in prepared:
+                        raise ValueError('native decision option identity collides with an actual episode turn')
+                    nodes.append(Invocation(option, (*item['own'], *continuation), imports=tuple(imports)))
+                    ordered.append({**item, 'events': [], 'input_actions': []})
+                    turn_nodes[name].append(option)
             del pending[name]; progress = True
         if not progress:
             raise ValueError('native RL captured writer graph contains a cycle')
@@ -483,9 +505,23 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         for offset,item in zip(plan.offsets,ordered) for event in item['input_actions'])
     written_sources=tuple({'state_id':ident,'invocation':name,'start':start,'stop':stop,'node':occurrence}
         for ident,values in writers.items() for name,start,stop,occurrence in values)
+    offsets = {node.name: offset for node, offset in zip(plan.invocations, plan.offsets)}
+    decision_actions = []
+    for name, item in prepared.items():
+        sample = item['decision_sample']
+        if sample is None:
+            continue
+        prompt = len(item['own'])
+        decision_actions.append({'kind': 'decision', 'turn': name, 'temperature': sample['temperature'],
+            'chosen': sample['chosen'], 'behavior_logps': sample['behavior_logps'], 'prompt_tokens': prompt,
+            'option_nodes': list(turn_nodes[name]),
+            'options': [[{'query': offsets[option] + prompt + index - 1, 'local_query': prompt + index - 1,
+                          'token_id': token, 'temperature': 1., 'allowed_token_ids': None, 'banned_token_ids': None}
+                         for index, token in enumerate(continuation)]
+                        for option, continuation in zip(turn_nodes[name], sample['continuations'])]})
     return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,tuple(semantic_dependencies),written_sources,
         {name:value['protocol_failure'] for name,value in prepared.items() if value['protocol_failure']},
-        input_actions)
+        input_actions, tuple(decision_actions), turn_nodes)
 
 
 def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128,semantic_channel=None):
@@ -534,10 +570,12 @@ def token_action_logps(model, hidden, actions, *, chunk_tokens=128, readout=None
         groups.setdefault((action['temperature'],tuple(action['allowed_token_ids']) if action['allowed_token_ids'] is not None else None,
                            tuple(action['banned_token_ids']) if action.get('banned_token_ids') is not None else None), []).append(index)
     logps = [None] * len(actions)
+    from ..common.stable_softmax import active_policy
+    numerics=active_policy()  # bound now: checkpoint recomputation runs in backward
     def score(states,labels,temperature,allowed,banned):
-        from ..common.sampling import masked_log_distribution
-        log_probs=masked_log_distribution((readout or model.logits)(states),temperature,allowed=allowed,banned=banned)
-        return log_probs.gather(1,labels[:,None]).squeeze(1)
+        from ..common.sampling import masked_token_logprobs
+        return masked_token_logprobs((readout or model.logits)(states),labels,temperature,allowed=allowed,banned=banned,
+                                     policy=numerics)
     from ..common.native_higher_order import capture_reference_execution,active_reference_arithmetic
     if active_reference_arithmetic() is not None:
         from ..model.native_adapters import capture_native_execution
@@ -967,9 +1005,10 @@ class NativePolicyObjective:
                 raise ValueError('native invocation objective actor names differ from exact packed ownership')
         hidden = result['h_final'][0]
         losses, count, diagnostics, jolt_parts = [], 0, [], []
+        decision_count = 0
         for example in context['examples']:
             row = self.rows[example.id]
-            if set(row['episode_turns']) | set((row.get('jolt') or {}).get('twin_turns', ())) != {
+            if set(row.get('graph_nodes', row['episode_turns'])) | set((row.get('jolt') or {}).get('twin_turns', ())) != {
                     node.name for node in example.plan.invocations}:
                 raise ValueError('native policy graph omits or adds an admitted episode turn')
             # Bind objective coordinates to the exact source graph and masks,
@@ -982,7 +1021,10 @@ class NativePolicyObjective:
                         'allowed_token_ids': tuple(action['allowed_token_ids'])
                             if action['allowed_token_ids'] is not None else None}
                        for action in row['actions']]
-            if self.policy_loss is not None and self.policy_loss['schema'] == 'jolt-plus/1':
+            parts_before = len(jolt_parts)
+            if not actions:
+                terms = hidden.new_zeros((0,), dtype=torch.float32)
+            elif self.policy_loss is not None and self.policy_loss['schema'] == 'jolt-plus/1':
                 from .jolt import jolt_action_loss
                 if example.id not in self._top_k_cache:
                     self._top_k_cache[example.id] = behavior_top_k_tensors(row['actions'],
@@ -1004,11 +1046,28 @@ class NativePolicyObjective:
                                               chunk_tokens=self.spec.get('chunk_tokens', 128))
                 terms = (-logps if self.spec['mode'] == 'rft' else clipped_token_loss(logps, behavior,
                     row['advantage'], clip_low=self.spec.get('clip_low', .2), clip_high=self.spec.get('clip_high', .28)))
-            losses.append(terms.sum()); count += len(actions)
+            decisions = row.get('decision_actions') or ()
+            if decisions:
+                from .decision_policy import decision_policy_terms
+                jolt = self.policy_loss is not None and self.policy_loss['schema'] == 'jolt-plus/1'
+                info = row.get('jolt') or {}
+                beta = ((self.policy_loss['beta_s'] if info.get('role', 'student') == 'student'
+                         else self.policy_loss['beta_t']) if jolt and info.get('privileged') is not None else 0.)
+                decided, kl_sum = decision_policy_terms(model, hidden, decisions, advantage=row['advantage'],
+                    mode=self.spec['mode'], policy_loss=self.policy_loss, offset=offset,
+                    chunk_tokens=self.spec.get('chunk_tokens', 128),
+                    twin=[action.get('twin_options') for action in decisions], beta=beta)
+                terms = torch.cat([terms, decided]) if len(actions) else decided
+                decision_count += len(decisions)
+                if len(jolt_parts) > parts_before:
+                    jolt_parts[-1]['kl_sum'] += kl_sum
+                    jolt_parts[-1]['positions'] += len(decisions)
+            losses.append(terms.sum()); count += len(actions) + len(decisions)
         if count == 0:
             raise ValueError('native objective batch has no actual sampled actions')
         from .jolt import summarize_jolt
-        return torch.stack(losses).sum() / count, {'sampled_tokens': count,
+        return torch.stack(losses).sum() / count, {'sampled_tokens': count - decision_count,
+            'sampled_decisions': decision_count,
             'episodes': len(losses), 'objective': self.spec['mode'],
             **({'policy_loss': self.policy_loss['schema']} if self.policy_loss is not None else {}),
             **({'score_centering': summarize_score_centering(diagnostics)} if diagnostics else {}),
@@ -1143,7 +1202,9 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                                     invocation_actors=invocation_actors,semantic_channel=semantic_channel,actors=actors)
             from .episode_graph import rollout_turn_names
             episode_turns = rollout_turn_names(rollout['turns'])
-            if set(episode_turns) != {node.name for node in replay.plan.invocations}:
+            if (set(episode_turns) != set(replay.turn_nodes) or
+                    {node for name in episode_turns for node in replay.turn_nodes[name]}
+                    != {node.name for node in replay.plan.invocations}):
                 raise ValueError('native replay lost an actual whole-episode model turn')
             if binding_seen and adapter_binding != replay.adapter_binding:
                 raise ValueError('native RL objective cannot mix different adapter-bound actors')
@@ -1169,16 +1230,22 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 'tokenizer_fingerprint': identity['tokenizer_fingerprint'], 'nodes': nodes,
                 'external_states': external}
             actions = list(replay.actions)
+            decisions = [dict(action) for action in replay.decision_actions]
             jolt_row = None
             if jolt is not None:
                 from .jolt import add_privileged_twin
                 actions, jolt_row = add_privileged_twin(replay, rollout, graph, privileged,
                     turns=whole_episode_turns(rollout))
+                for action, queries in zip(decisions, jolt_row.pop('decision_twin_queries', None) or ()):
+                    if queries is not None:
+                        action['twin_options'] = queries
             example = parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint'])
             if policy_loss is not None:
                 require_policy_loss_actions(actions, policy_loss)
             objective_rows[identifier] = {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
                 'episode_turns': episode_turns,
+                **({'decision_actions': decisions,
+                    'graph_nodes': [node.name for node in replay.plan.invocations]} if decisions else {}),
                 'actions': actions, 'advantage': float(advantage or 0.),
                 **({'jolt': jolt_row} if jolt_row is not None else {}),
                 **({'protocol_failures':replay.protocol_failures} if replay.protocol_failures else {}),

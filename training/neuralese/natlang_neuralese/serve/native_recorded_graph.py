@@ -73,10 +73,22 @@ class RecordedGraph:
     decision_actions: dict
     origin_bindings: dict
 
-    def row(self, *, tokenizer_fingerprint, source_id):
+    def row(self, *, tokenizer_fingerprint, source_id, decision_labels=None):
+        """The graph row; ``decision_labels`` ({receipt ID: {label | probabilities, label_source}}) declares the
+        recorded decisions as supervised readouts (data.decision_graph), producers and imports in the same graph."""
         from .store import native_state_id
+        offsets = {node.name: offset for node, offset in zip(self.replay.plan.invocations, self.replay.plan.offsets)}
+        decisions = []
+        for receipt, label in sorted((decision_labels or {}).items()):
+            names, actions = self.invocations[receipt], self.decision_actions.get(receipt)
+            if actions is None:
+                raise ValueError('decision label names no recorded decision receipt')
+            prompt = actions[0][0]['query'] - offsets[names[0]] + 1
+            decisions.append({'name': receipt, 'options': list(names), 'prompt_tokens': prompt,
+                              **{key: label[key] for key in ('label', 'probabilities', 'label_source') if key in label}})
         return json.loads(json.dumps({'schema':'natlang.neuralese-native-graph/1','id':source_id,'split':'train',
             'source_groups':[source_id], 'tokenizer_fingerprint':tokenizer_fingerprint,
+            **({'decisions': decisions} if decisions else {}),
             'recorded_turn_bindings':self.origin_bindings,
             'nodes':[{**invocation_dict(node),'target_weights':[0.] * len(node.token_ids)}
                      for node in self.replay.plan.invocations],
