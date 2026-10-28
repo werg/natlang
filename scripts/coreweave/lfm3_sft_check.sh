@@ -23,7 +23,13 @@ facts
     sleep 5
   done ) >> "$OUT/resources.jsonl" &
 sampler=$!
-trap 'kill $sampler 2>/dev/null || true' EXIT
+pid=''
+cleanup() {
+  if [ -n "$pid" ]; then kill -TERM "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+  kill "$sampler" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 143' TERM INT
 # The pinned base comes from the hub at its exact revision (faster than pushing 3.4 GB from DGX); "@@BASE@@" in
 # ARGS.json is replaced by the snapshot directory (the trainer records and checks its base inventory).
 BASE=$(python3 - <<'PY'
@@ -56,6 +62,7 @@ PY
 done
 wait "$pid"
 rc=$?
+pid=''
 echo "$(date -u +%FT%TZ) phase A exit $rc" >> "$OUT/phases.log"
 if [ "$rc" -ne 0 ]; then
   echo "$(date -u +%FT%TZ) phase A failed; no successful seed or phase B" >> "$OUT/phases.log"

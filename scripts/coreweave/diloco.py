@@ -63,6 +63,12 @@ def validate(run: dict) -> dict:
         raise cwctl.ControllerError('coordinator needs job, bundle_file and parent; learners need job and bundle_file')
     if run.get('placement', 'cohosted') not in ('cohosted', 'separate'):
         raise cwctl.ControllerError('placement must be cohosted or separate')
+    prepare_parent = run['coordinator'].get('prepare_parent')
+    if prepare_parent is not None:
+        if run.get('placement', 'cohosted') != 'cohosted':
+            raise cwctl.ControllerError('prepare_parent requires cohosted placement')
+        if not isinstance(prepare_parent, list) or not prepare_parent or not all(isinstance(x, str) and x for x in prepare_parent):
+            raise cwctl.ControllerError('prepare_parent must be a nonempty argv list')
     run = dict(run)
     resident = run.setdefault('resident', {'directory': '/work/diloco-resident/resident-data',
                                            'geometry_qualification': '/work/diloco-resident/geometry.json'})
@@ -118,19 +124,25 @@ def cohosted_job(run: dict, trainer_args: list[str]) -> dict:
              f"r=urllib.request.Request('http://127.0.0.1:{PORT}/v1/status', "
              "headers={'Authorization':'Bearer '+credential(TOKEN_ENV,TOKEN_SECRET)}); "
              "urllib.request.urlopen(r,timeout=2).read()")
+    prepare = run['coordinator'].get('prepare_parent')
+    seed = (shlex.join(prepare) + ' >' + shlex.quote(logs + '/prepare-parent.log') + ' 2>&1 &\n'
+            "seed_pid=$!\nwait \"$seed_pid\"\nseed_pid=''") if prepare else ':'
     script = f"""set -e
 mkdir -p {shlex.quote(logs)}
-CUDA_VISIBLE_DEVICES='' {shlex.join(init)} >{shlex.quote(logs + '/init.log')} 2>&1
-CUDA_VISIBLE_DEVICES='' {shlex.join(serve)} >{shlex.quote(logs + '/server.log')} 2>&1 &
-coord=$!
+seed_pid=''
+coord=''
 worker=''
 cleanup() {{
+  if [ -n "$seed_pid" ]; then kill "$seed_pid" 2>/dev/null || true; wait "$seed_pid" 2>/dev/null || true; fi
   if [ -n "$worker" ]; then kill "$worker" 2>/dev/null || true; wait "$worker" 2>/dev/null || true; fi
-  kill "$coord" 2>/dev/null || true
-  wait "$coord" 2>/dev/null || true
+  if [ -n "$coord" ]; then kill "$coord" 2>/dev/null || true; wait "$coord" 2>/dev/null || true; fi
 }}
 trap cleanup EXIT
 trap 'exit 143' TERM INT
+{seed}
+CUDA_VISIBLE_DEVICES='' {shlex.join(init)} >{shlex.quote(logs + '/init.log')} 2>&1
+CUDA_VISIBLE_DEVICES='' {shlex.join(serve)} >{shlex.quote(logs + '/server.log')} 2>&1 &
+coord=$!
 ready=0
 for i in $(seq 1 300); do
   if python -c {shlex.quote(probe)} >/dev/null 2>&1; then ready=1; break; fi
@@ -150,8 +162,9 @@ echo 'worker 0 complete; coordinator remains available for other learners'
 wait "$coord"
 exit $?
 """
+    seed_outputs = ([run['coordinator']['parent'], run['coordinator']['parent'] + '.seed.json'] if prepare else [])
     job.update(id=f"{run['id']}-learner-0", resources={**job['resources'], 'gpu': 1, 'cpu': '8', 'memory': '96Gi'},
-               service={'port': PORT}, outputs=list(dict.fromkeys([*job.get('outputs', []), root, logs])),
+               service={'port': PORT}, outputs=list(dict.fromkeys([*job.get('outputs', []), root, logs, *seed_outputs])),
                command=['bash', '-c', script])
     return jobs.validate(job)
 
@@ -163,10 +176,11 @@ def _keep(path: Path, value: str) -> None:
         stream.write(value)
 
 
-def wait_coordinator(url: str, token: str, gateway: bytes, timeout: float = 600) -> None:
+def wait_coordinator(url: str, token: str, gateway: bytes, timeout: float = 600, sandbox_id=None) -> None:
     """Wait for authenticated coordinator HTTP readiness before starting other workers."""
     deadline = time.monotonic() + timeout
     error = None
+    next_status = 0.0
     while time.monotonic() < deadline:
         try:
             request = urllib.request.Request(url.rstrip('/') + '/v1/status', headers={
@@ -178,6 +192,17 @@ def wait_coordinator(url: str, token: str, gateway: bytes, timeout: float = 600)
             return
         except (OSError, ValueError) as exc:
             error = exc
+            if sandbox_id and time.monotonic() >= next_status:
+                try:
+                    sandbox = cwctl.read_sandbox(sandbox_id, patience=1)
+                    state = str(getattr(sandbox.status, 'value', sandbox.status)).lower()
+                    if state in cwctl.TERMINAL:
+                        raise cwctl.ControllerError(f'coordinator sandbox {sandbox_id} ended during startup: {state}')
+                except cwctl.ControllerError:
+                    raise
+                except Exception:
+                    pass  # transient provider status is not evidence that the sandbox stopped
+                next_status = time.monotonic() + 30
             time.sleep(2)
     raise cwctl.ControllerError(f'coordinator HTTP readiness timed out: {error}')
 
@@ -223,8 +248,10 @@ def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: li
     return [results[worker] for worker in range(first_worker, workers)]
 
 
-def launch(run: dict) -> dict:
+def launch(run: dict, *, coordinator_only=False) -> dict:
     run = validate(run)
+    if coordinator_only and run.get('placement', 'cohosted') != 'cohosted':
+        raise cwctl.ControllerError('coordinator-only pause requires cohosted placement')
     record_path = RUNS / f"{run['id']}.json"
     if record_path.exists():
         raise cwctl.ControllerError(f'{record_path} exists: a DiLoCo run id is never reused')
@@ -266,9 +293,15 @@ def launch(run: dict) -> dict:
         record['url'] = coordinator['service_url']
         save_record()
         gateway = cwctl.share_token(coordinator['sandbox_id'])
-        wait_coordinator(coordinator['service_url'], token, gateway)
+        wait_coordinator(coordinator['service_url'], token, gateway,
+                         timeout=21600 if run['coordinator'].get('prepare_parent') else 600,
+                         sandbox_id=coordinator['sandbox_id'])
         record['state'] = 'coordinator-ready'
         save_record()
+        if coordinator_only:
+            if not cohosted:
+                raise cwctl.ControllerError('coordinator-only pause requires cohosted placement')
+            return record
         launch_learners(run, coordinator['service_url'], token, gateway, started,
                         first_worker=1 if cohosted else 0, on_started=assigned)
     except BaseException as error:
@@ -292,6 +325,40 @@ def launch(run: dict) -> dict:
     save_record()
     cwctl.record({'event': 'diloco_launched', 'run': run['id'], 'coordinator': record['coordinator'],
                   'learners': record['learners'], 'placement': placement, 'ownership': record['ownership']})
+    return record
+
+
+def launch_remaining(run_id: str) -> dict:
+    """Resume an explicitly paused cohosted launch after the seed workspace was secured."""
+    path = RUNS / f'{run_id}.json'
+    record = json.loads(path.read_text())
+    run = record['run']
+    if record.get('state') != 'coordinator-ready' or record.get('placement') != 'cohosted':
+        raise cwctl.ControllerError('run is not a paused cohosted coordinator-ready launch')
+    if any(record['learners'][1:]):
+        raise cwctl.ControllerError('remaining learners already assigned; reconcile their actual sandboxes')
+    token = (RUNS / run_id / 'token').read_text()
+    gateway = cwctl.share_token(record['coordinator'])
+    wait_coordinator(record['url'], token, gateway, sandbox_id=record['coordinator'])
+    started = []
+    def save():
+        tmp = path.with_suffix('.tmp')
+        tmp.write_text(json.dumps(record, indent=1) + '\n')
+        os.replace(tmp, path)
+    def assigned(worker, sandbox_id):
+        record['learners'][worker] = sandbox_id
+        record['ownership'][sandbox_id] = [f'learner-{worker}']
+        save()
+    try:
+        launch_learners(run, record['url'], token, gateway, started, first_worker=1, on_started=assigned)
+    except BaseException as error:
+        record['state'] = 'remaining-launch-failed'
+        record['error'] = f'{type(error).__name__}: {error}'
+        save()
+        raise
+    record['state'] = 'running'
+    save()
+    cwctl.record({'event': 'diloco_learners_started', 'run': run_id, 'learners': record['learners']})
     return record
 
 
@@ -323,7 +390,10 @@ def status(run_id: str) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest='command', required=True)
-    commands.add_parser('launch').add_argument('run', type=Path)
+    launch_cmd = commands.add_parser('launch')
+    launch_cmd.add_argument('run', type=Path)
+    launch_cmd.add_argument('--coordinator-only', action='store_true')
+    commands.add_parser('launch-remaining').add_argument('run_id')
     commands.add_parser('status').add_argument('run_id')
     attach = commands.add_parser('attach-eval')
     attach.add_argument('run_id')
@@ -332,7 +402,9 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     cwctl.load_env_file()
     if args.command == 'launch':
-        print(json.dumps(launch(json.loads(args.run.read_text())), indent=1))
+        print(json.dumps(launch(json.loads(args.run.read_text()), coordinator_only=args.coordinator_only), indent=1))
+    elif args.command == 'launch-remaining':
+        print(json.dumps(launch_remaining(args.run_id), indent=1))
     elif args.command == 'attach-eval':
         print(json.dumps(attach_eval(args.run_id, args.job, args.bundle_file), indent=1))
     else:
