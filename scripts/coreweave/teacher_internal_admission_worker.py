@@ -30,13 +30,17 @@ DEPLOYMENT_SHA='6772cabd89be7b6d5cbdcc27e5be49c52ea3a2a900f8e82beeed2500fedffe8a
 BAD_82='qwen36-verified-positive-native-graphs-20261023-internal-batch0082-tranche0000'
 
 
-def _model_keys()->tuple[str,...]:
-    """The two declared line-backbone views this worker's tokenizer relocation carries (lfm line first)."""
-    rows=read_bound(file_binding(TOKENIZERS)).get('models')
-    declared=frozenset(row.get('model')for row in rows)if isinstance(rows,list)else frozenset()
-    if declared not in lb.model_key_pairs():
-        raise ValueError('tokenizer relocation does not declare an admissible pair of native student views')
-    return tuple(sorted(declared,key=lambda key:lb.LINES.index(lb.line_of(key))))
+# The two student views this worker deployment converts and admits (lfm backbone first). The worker was deployed
+# for the LFM2.5 pair; an LFM3 deployment starts it with --lfm-view lfm3 against an LFM3 tokenizer relocation, and
+# every conversion it reads or runs must name exactly this pair.
+MODEL_KEYS=('lfm25','mellum21')
+
+
+def select_lfm_view(lfm_view:str)->tuple[str,...]:
+    global MODEL_KEYS
+    if lfm_view not in lb.keys('lfm'):raise ValueError(f'unknown lfm view {lfm_view!r}')
+    MODEL_KEYS=(lfm_view,lb.current_key('mellum'))
+    return MODEL_KEYS
 
 
 def _run(args:list[str],log:Path,env:dict|None=None)->None:
@@ -105,7 +109,7 @@ def _conversion_is_current(path:Path,ctx:Tranche)->bool:
     if any(row.get('corpus_id')==BAD_82 for row in result.get('same_actor_source_boundary_inputs',[])):
         return False
     policies={row['model']:read_bound(row['receipt']) for row in result.get('models',[])}
-    if frozenset(policies)not in lb.model_key_pairs(): return False
+    if frozenset(policies)!=frozenset(MODEL_KEYS): return False
     return (all(row.get('explicit_history_reasoning_policy')==lb.backbone(model)['explicit_history_reasoning_policy']
                 for model,row in policies.items())
         and all(row.get('failed_assistant_history_policy')=='mask-runtime-failures'
@@ -186,7 +190,7 @@ def _publish_if_new_delta(ctx:Tranche,conversion:Path)->dict|None:
     for row in proof['models']:
         receipt=read_bound(row['receipt']); row_counts[row['model']]=receipt['outputs']['train']['rows']
     if not any(row_counts.values()):
-        if frozenset(row_counts)not in lb.model_key_pairs():
+        if frozenset(row_counts)!=frozenset(MODEL_KEYS):
             raise ValueError('zero-row disposition requires both exact native model receipts')
         source_proof=read_bound(proof['source_proof'])
         contracts={model:{'tokenizer_fingerprint':lb.backbone(model)['expanded_fingerprint']}for model in row_counts}
@@ -320,7 +324,7 @@ def _process_verified_boundary(ctx:Tranche)->dict:
                 or result.get('training_exposure')is not False):
             raise ValueError('zero-positive boundary lacks its exact completed source execution')
         return {**empty,'source_proof':source_ref,'source_result':result_ref,
-                'new_registration':False,'row_counts':{model:0 for model in _model_keys()}}
+                'new_registration':False,'row_counts':{model:0 for model in MODEL_KEYS}}
     conversion=_next_conversion(ctx)
     if conversion is None:raise RuntimeError('conversion did not produce a durable both-port receipt')
     result=_publish_if_new_delta(ctx,conversion)
@@ -387,7 +391,8 @@ def run(*,once:bool,poll_seconds:int,batches:set[int]|None=None,tranches:set[int
         time.sleep(poll_seconds)
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--once',action='store_true');p.add_argument('--poll-seconds',type=int,default=60);p.add_argument('--batch',type=int,action='append');p.add_argument('--tranche',type=int,action='append');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--once',action='store_true');p.add_argument('--poll-seconds',type=int,default=60);p.add_argument('--batch',type=int,action='append');p.add_argument('--tranche',type=int,action='append');p.add_argument('--lfm-view',choices=lb.keys('lfm'),default='lfm25');a=p.parse_args()
+    select_lfm_view(a.lfm_view)
     run(once=a.once,poll_seconds=a.poll_seconds,batches=set(a.batch) if a.batch else None,
         tranches=set(a.tranche) if a.tranche else None)
 if __name__=='__main__':main()

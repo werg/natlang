@@ -278,9 +278,8 @@ def _predecessor_models(cache_contracts, by_path):
     """The declared student views a predecessor must supply: the converting pair, else every view it carries."""
     from natlang_neuralese.common import line_backbones
     if cache_contracts is not None:
-        unknown = set(cache_contracts) - set(line_backbones.BACKBONES)
-        if unknown:
-            raise ValueError('registered cache contracts name undeclared student views: ' + ', '.join(sorted(unknown)))
+        if frozenset(cache_contracts) not in line_backbones.model_key_pairs():
+            raise ValueError('registered cache predecessor lacks both exact model contracts')
         return tuple(cache_contracts)
     return tuple(model for model in line_backbones.BACKBONES
                  if model + '/train/native-graphs.jsonl.zst' in by_path)

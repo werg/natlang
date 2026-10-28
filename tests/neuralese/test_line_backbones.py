@@ -11,12 +11,11 @@ import pytest
 from natlang_neuralese.common import line_backbones as lb
 
 REPO = Path(__file__).resolve().parents[2]
-LFM25_TOKENIZER = [path for path in (
-    REPO / 'models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f',
-    Path('/home/werg/natlang/models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f'),
-) if path.is_dir()]
-LFM3_SNAPSHOT = Path('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/'
-                     '40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+LFM25_SNAPSHOT = 'models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f'
+# A linked worktree has no models/ directory of its own: look in the checkout and each ancestor (the main checkout).
+LFM25_TOKENIZER = [root / LFM25_SNAPSHOT for root in (REPO, *REPO.parents) if (root / LFM25_SNAPSHOT).is_dir()][:1]
+LFM3_SNAPSHOT = (Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/'
+                 '40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
 
 
 def _load(relative):
@@ -208,4 +207,25 @@ def test_teacher_conversion_and_admission_select_views_by_declaration():
     assert admission._predecessor_models(None, by_path) == ('lfm25', 'mellum21')
     assert admission._predecessor_models({'lfm3': {}, 'mellum21': {}}, by_path) == ('lfm3', 'mellum21')
     with pytest.raises(ValueError):
-        admission._predecessor_models({'lfm9': {}}, by_path)
+        admission._predecessor_models({'lfm9': {}, 'mellum21': {}}, by_path)
+
+
+def test_admission_worker_deployment_pair_is_explicit():
+    sys.path.insert(0, str(REPO))
+    worker = importlib.import_module('scripts.coreweave.teacher_internal_admission_worker')
+    assert worker.MODEL_KEYS == ('lfm25', 'mellum21')  # the deployed pair keeps its historical identity
+    try:
+        assert worker.select_lfm_view('lfm3') == ('lfm3', 'mellum21')
+        with pytest.raises(ValueError):
+            worker.select_lfm_view('mellum21')
+    finally:
+        worker.select_lfm_view('lfm25')
+    assert worker.MODEL_KEYS == ('lfm25', 'mellum21')
+
+
+def test_registered_cache_contracts_must_name_an_admissible_pair():
+    admission = importlib.import_module('scripts.coreweave.teacher_tranche_admission')
+    with pytest.raises(ValueError, match='both exact model contracts'):
+        admission._predecessor_models({'lfm25': {}}, {})
+    with pytest.raises(ValueError, match='both exact model contracts'):
+        admission._predecessor_models({'lfm25': {}, 'lfm3': {}}, {})
