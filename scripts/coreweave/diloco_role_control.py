@@ -66,6 +66,9 @@ def submit(directory, request, *, timeout=60, require_pid1=False, entrypoint_sha
                 raise ValueError('recorded role request does not have the exact publisher intent')
             if len(events)!=1:raise ValueError('role request has ambiguous history')
             event=events[0];role=state.get('roles',{}).get(request['role'],{})
+            history=state.get('events',[]);position=history.index(event)
+            if any(item.get('role')==request['role'] and item.get('event') in ('start','stop') for item in history[position+1:]):
+                raise ValueError('recorded role request was superseded by a later operation')
             digest=hashlib.sha256(json.dumps(request.get('argv'),separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
             if (event.get('event')!=request['action'] or event.get('role')!=request['role']
                     or role.get('pid')!=event.get('pid') or

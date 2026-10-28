@@ -39,6 +39,12 @@ def test_concurrent_role_publishers_never_overwrite_or_duplicate(tmp_path):
         assert control.submit(directory,retry,timeout=8)['accepted']
         latest=json.loads((directory/'state.json').read_text())
         assert latest['roles']['worker']['alive'] and latest['roles']['coordinator']['alive']
+        stopped={'schema':'natlang.diloco-role-request/1','id':'stop-first','action':'stop',
+                 'role':applied[1]['role'],'owner_id':state['owner_id'],'expected_generation':latest['generation'],
+                 'expected_pid':applied[2]['pid'],'expected_process_start_ticks':applied[2]['process_start_ticks']}
+        assert control.submit(directory,stopped,timeout=8)['accepted']
+        with pytest.raises(ValueError,match='superseded'):
+            control.submit(directory,applied[1],timeout=8)
         with pytest.raises(ValueError,match='not PID 1'):
             control._owner(directory,require_pid1=True,entrypoint_sha256=None)
     finally:
