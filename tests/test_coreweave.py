@@ -1545,3 +1545,22 @@ def test_create_retry_backoff_releases_cross_process_lock(tmp_path, monkeypatch)
             fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
             fcntl.flock(other, fcntl.LOCK_UN)
     assert cwctl.throttled_create(create, sleep=sleep, attempts=2) == 'ok'
+
+
+def test_ownership_probe_matches_actual_process_and_boot(tmp_path):
+    import subprocess
+    audit = load('diloco_audit_ownership')
+    marker = tmp_path / '.coreweave' / 'instances' / 'run-learner-2'
+    marker.mkdir(parents=True); (marker / 'inputs-ready').touch()
+    probe = audit.PROBE.replace("pathlib.Path('/work/.coreweave')", f'pathlib.Path({str(tmp_path / ".coreweave")!r})')
+    env = {**os.environ, 'NATLANG_CW_JOB': 'run-learner-2', 'NATLANG_CW_INSTANCE': 'run-learner-2', 'NATLANG_DILOCO_WORKER_ID': '2'}
+    process = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(20)', 'natlang_neuralese.train.native_state_sft'], env=env)
+    try:
+        result = subprocess.run([sys.executable, '-c', probe, 'run-learner-2', '2', 'run-learner-2'], capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        value = json.loads(result.stdout)
+        assert value['trainer']['pid'] == process.pid and value['boot_id']
+        wrong = subprocess.run([sys.executable, '-c', probe, 'run-learner-2', '1', 'run-learner-2'], capture_output=True, text=True)
+        assert wrong.returncode != 0
+    finally:
+        process.terminate(); process.wait()
