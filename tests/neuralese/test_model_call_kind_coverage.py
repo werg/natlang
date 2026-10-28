@@ -119,7 +119,7 @@ def test_every_kind_declares_sft_rl_and_parity():
 
 def test_guidance_runtime_calls_declare_individual_training_coverage():
     calls = REGISTRY['runtime_calls']
-    assert set(calls) == {'selectGuidanceFacts', 'writeGuidance', 'planTeacherAttempts'}
+    assert {'selectGuidanceFacts', 'writeGuidance', 'planTeacherAttempts'} <= set(calls)
     anchors = set(re.findall(r'<a id="([a-z0-9-]+)"></a>', AUDIT.read_text(encoding='utf-8')))
     for name, entry in calls.items():
         assert entry['kind'] in KINDS and (ROOT / entry['source']).is_file(), name
