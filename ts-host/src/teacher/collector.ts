@@ -3,6 +3,7 @@ import { checkRequiredActions } from './required-actions.js';
 import { checkRequiredServiceReceipt } from './service-receipt.js';
 import { observeRequiredServiceCalls } from './service-calls.js';
 import { checkRequiredRootIteration } from './required-iteration.js';
+import { observeGreenhouseControl } from './greenhouse-control.js';
 export { trajectoryTurn } from '../runtime/trajectory.js';
 import { nativeStateRuntimeOptions } from '../model/native-state-client.js';
 import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';
@@ -1578,6 +1579,8 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     services.neuralese = options.neuraleseService;
   }
   const requiredServiceCalls = observeRequiredServiceCalls(record.semantics.required_service_calls, services);
+  const requiredGreenhouseControl = observeGreenhouseControl(record.semantics.required_greenhouse_control, services,
+    () => runtime?.trace.events.length ?? 0);
   const serviceScopes = (record.semantics as { service_scopes?: Record<string, string[]> }).service_scopes;
   // The run is recorded in the machine's call store under its run ID, with the driver's model when it names one.
   const driverModel = (driver as { model?: unknown }).model;
@@ -1672,6 +1675,8 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
       ...(record.semantics.required_service_calls ? { required_service_calls: requiredServiceCalls(same) } : {}),
       ...(record.semantics.required_root_iteration ? { required_root_iteration: checkRequiredRootIteration(
         record.semantics.required_root_iteration, runtime.trace.events as unknown as Record<string, unknown>[]) } : {}),
+      ...(record.semantics.required_greenhouse_control ? { required_greenhouse_control: requiredGreenhouseControl(
+        runtime.trace.events as unknown as Record<string, unknown>[]) } : {}),
       ...(functionEffects ? { function_effects: functionEffects.ok } : {}) };
     const rejectionReasons = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
     const accepted = rejectionReasons.length === 0;

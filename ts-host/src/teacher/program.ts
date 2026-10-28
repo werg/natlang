@@ -41,6 +41,8 @@ export type ProgramSemantics = {
   required_service_calls?: import('./service-calls.js').RequiredServiceCall[];
   /** An explicitly required completed root iteration from the task's contract. */
   required_root_iteration?: import('./required-iteration.js').RequiredRootIteration;
+  /** Source-declared temperature control inside the actual root iteration. */
+  required_greenhouse_control?: import('./greenhouse-control.js').RequiredGreenhouseControl;
 };
 export type ProgramRecord = { version: string; id: string; kind: string; semantics: ProgramSemantics; [key: string]: unknown };
 
