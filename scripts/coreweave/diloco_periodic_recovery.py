@@ -34,10 +34,11 @@ class FenceUnavailable(RuntimeError):
 
 
 class Backend:
-    def __init__(self,record,storage,parent_local=None,parent_qualification=None,parent_copy_receipt=None):
+    def __init__(self,record,storage,parent_local=None,parent_qualification=None,parent_copy_receipt=None,runtime_bundle=None):
         self.parent_local=Path(parent_local) if parent_local else None
         self.parent_qualification=Path(parent_qualification) if parent_qualification else None
         self.parent_copy_receipt=Path(parent_copy_receipt) if parent_copy_receipt else None
+        self.runtime_bundle=Path(runtime_bundle) if runtime_bundle else None
         self.record,self.storage=record,Path(storage).resolve()
         external=paths.root('data_hdd').resolve()
         if not external.is_mount() or not self.storage.is_relative_to(external):
@@ -222,7 +223,7 @@ class Backend:
         return {'status':'released','at':time.time(),'scope':'only verified cycle-owned remote pins'}
 
     def prepare_dependencies(self,cycle):
-        bundle=Path(self.record['run']['learners']['bundle_file'])
+        bundle=self.runtime_bundle or Path(self.record['run']['learners']['bundle_file'])
         sources=bundle.with_name(bundle.stem+'.sources.json')
         candidates={}
         for key,value in json.loads(sources.read_text()).items():
@@ -540,7 +541,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('run_id');p.add_argument('--state',type=Path,required=True)
     p.add_argument('--storage',type=Path,required=True);p.add_argument('--parent-local',type=Path,required=True);
     p.add_argument('--parent-qualification',type=Path,required=True);p.add_argument('--parent-copy-receipt',type=Path,required=True);p.add_argument('--interval',type=float,default=1800)
-    p.add_argument('--once',action='store_true');p.add_argument('--ownership-journal',type=Path);p.add_argument('--health-interval',type=float,default=60);p.add_argument('--wait-worker-progress',action='store_true');args=p.parse_args()
+    p.add_argument('--once',action='store_true');p.add_argument('--ownership-journal',type=Path);p.add_argument('--health-interval',type=float,default=60);p.add_argument('--wait-worker-progress',action='store_true');p.add_argument('--runtime-bundle',type=Path);args=p.parse_args()
     if args.interval <= 0:p.error('interval must be positive')
     cwctl.load_env_file()
     import diloco
@@ -557,7 +558,7 @@ def main():
                 if len(workers)==len(record['learners']) and all(v['state']=='live' and isinstance(v.get('progress'),dict) and type(v['progress'].get('global_step')) is int for v in workers.values()):break
             except (OSError,ValueError,KeyError):pass
             time.sleep(args.health_interval)
-    backend=Backend(record,args.storage,args.parent_local,args.parent_qualification,args.parent_copy_receipt)
+    backend=Backend(record,args.storage,args.parent_local,args.parent_qualification,args.parent_copy_receipt,runtime_bundle=args.runtime_bundle)
     while True:
         try:
             state=run_once(record,args.state,backend)
