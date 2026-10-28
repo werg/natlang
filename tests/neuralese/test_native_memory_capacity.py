@@ -642,7 +642,8 @@ def test_capacity_oom_retains_failing_phase_stack_and_actual_offload_state(tmp_p
     assert all(p.grad is None for p in model.parameters())
 
 
-def test_sft_descriptor_qualifies_actual_loaded_source_without_updates(tmp_path, monkeypatch):
+@pytest.mark.parametrize('transport_alias', [False, True])
+def test_sft_descriptor_qualifies_actual_loaded_source_without_updates(tmp_path, monkeypatch, transport_alias):
     from natlang_neuralese.train import native_resident as resident
     from natlang_neuralese.eval import native_memory as memory
     from natlang_neuralese.train.native_packed_capacity import geometry_for_source
@@ -650,6 +651,15 @@ def test_sft_descriptor_qualifies_actual_loaded_source_without_updates(tmp_path,
     _, geometry, _ = geometry_for_source(train, args.out, allow_build=True)
     descriptor = {'schema': 'natlang.native-sft-capacity-cases/1', 'source': resident.binding(train.path),
                   'geometry': geometry}
+    if transport_alias:
+        alias = tmp_path / 'logical-source.json'
+        alias.symlink_to(train.path)
+        descriptor['source'] = {**descriptor['source'], 'path': str(alias)}
+        staged_geometry = json.loads(resident.bound(geometry).read_text())
+        staged_geometry['source'] = descriptor['source']
+        geometry_path = tmp_path / 'logical-geometry.json'
+        geometry_path.write_text(json.dumps(staged_geometry))
+        descriptor['geometry'] = resident.binding(geometry_path)
     path = tmp_path / 'sft-descriptor.json'; path.write_text(json.dumps(descriptor))
     args.memory_qualification = json.dumps(resident.binding(path))
     before=copy.deepcopy(optimizer.state_dict()); weights=copy.deepcopy(model.state_dict()); rng=torch.get_rng_state().clone()
@@ -668,6 +678,11 @@ def test_sft_descriptor_rejects_wrong_source_and_geometry(tmp_path, monkeypatch)
     _, geometry, _ = geometry_for_source(train, args.out, allow_build=True)
     descriptor={'schema':'natlang.native-sft-capacity-cases/1','source':resident.binding(train.path),'geometry':geometry}
     descriptor['source']={'path':str(tmp_path/'wrong'),'sha256':'0'*64}
+    with pytest.raises(ValueError,match='descriptor source differs'):
+        memory._materialize_sft_capacity_request(train, descriptor, identity={}, runtime_code_sha256='x', request_path=tmp_path/'r')
+    same_bytes = tmp_path / 'different-source.json'
+    same_bytes.write_bytes(train.path.read_bytes())
+    descriptor['source'] = resident.binding(same_bytes)
     with pytest.raises(ValueError,match='descriptor source differs'):
         memory._materialize_sft_capacity_request(train, descriptor, identity={}, runtime_code_sha256='x', request_path=tmp_path/'r')
     descriptor['source']=resident.binding(train.path)
