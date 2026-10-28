@@ -346,8 +346,13 @@ def fetch(manifest: dict[str, Any], bucket: str | None, s3, root: Path, mapping:
         finally:
             temp.unlink(missing_ok=True)
         fetched += 1
-    for pushed in used_inbox:  # the placed files hold the bytes now; free the inbox links
-        pushed.unlink(missing_ok=True)
+    for pushed in used_inbox:  # keep the pushed object in the volume's content store for later bundles, else free it
+        store = pushed.parent.parent / 'cas'
+        try:
+            store.mkdir(exist_ok=True)
+            os.replace(pushed, store / pushed.name)
+        except OSError:
+            pushed.unlink(missing_ok=True)
     receipt = {'schema': 'natlang.coreweave-fetch-receipt/1', 'bundle': manifest['id'], 'bucket': bucket,
                'fetched': fetched, 'present': present, 'files': len(manifest['files']), 'verified': not dry_run,
                'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
