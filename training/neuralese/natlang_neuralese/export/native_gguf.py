@@ -94,11 +94,11 @@ def merged_backbone(model):
     return hf, tied
 
 
-def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, python=sys.executable):
+def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, python=sys.executable, base=None):
     from ..model.native_model import load_native_checkpoint, native_tensor_identity
     checkpoint, out_dir = Path(checkpoint).resolve(strict=True), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    model, tokenizer, roles, config, state = load_native_checkpoint(str(checkpoint), device='cpu', dtype=torch.float32,
+    model, tokenizer, roles, config, state = load_native_checkpoint(str(checkpoint), base=base, device='cpu', dtype=torch.float32,
                                                                     allow_weights_only=True)
     if config['architecture'] not in ARCHITECTURES:
         raise ValueError(f"GGUF export supports HF backbones only, not {config['architecture']!r}")
@@ -108,7 +108,7 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
     # bfloat16 one the native server uses on CUDA, so states exchange with that server.
     identities = {'float32': native_tensor_identity(model, config, checkpoint_sha256=checkpoint_sha256)}
     if any(outtype != 'f32' for outtype in outtypes):
-        reduced = load_native_checkpoint(str(checkpoint), device='cpu', dtype=torch.bfloat16, allow_weights_only=True)
+        reduced = load_native_checkpoint(str(checkpoint), base=base, device='cpu', dtype=torch.bfloat16, allow_weights_only=True)
         identities['bfloat16'] = native_tensor_identity(reduced[0], reduced[3], checkpoint_sha256=checkpoint_sha256)
         del reduced
     hf, tied = merged_backbone(model)
@@ -234,8 +234,9 @@ def main(argv=None):
                         help='GGUF tensor type; repeat for several files (default bf16)')
     parser.add_argument('--llama-cpp', type=Path, default=LLAMA_CPP,
                         help='converter snapshot (convert_hf_to_gguf.py, conversion/, gguf-py/); default vendor/llama.cpp')
+    parser.add_argument('--base', type=Path, help='actual local copy of the checkpoint base when its saved path is unavailable')
     args = parser.parse_args(argv)
-    manifest = export(args.checkpoint, args.out_dir, outtypes=tuple(args.outtype or ('bf16',)), llama_cpp=args.llama_cpp.resolve())
+    manifest = export(args.checkpoint, args.out_dir, outtypes=tuple(args.outtype or ('bf16',)), llama_cpp=args.llama_cpp.resolve(), base=args.base)
     print(json.dumps({'manifest': str(Path(args.out_dir) / 'manifest.json'), 'files': manifest['files']}))
     return 0
 
