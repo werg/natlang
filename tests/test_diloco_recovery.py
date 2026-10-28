@@ -541,3 +541,20 @@ def test_initial_resident_requires_exact_plan_recipe_and_source_receipts():
     for replacement in ({'plan_sha256':'other','recipe_sha256':'recipe','roles':[{'train':'train','held':'held'}]}, {'plan_sha256':'plan','recipe_sha256':'other','roles':[{'train':'train','held':'held'}]}, {'plan_sha256':'plan','recipe_sha256':'recipe','roles':[{'train':'other','held':'held'}]}):
         bad={**components,'resident-0':{**components['resident-0'],'initial_binding':replacement}}
         assert not service.compatibility(bad)['compatible']
+
+
+def test_coordinator_hardlink_capture_can_archive_after_live_update(tmp_path):
+    from natlang_neuralese.train.diloco.coordinator import initialize_coordinator
+    from natlang_neuralese.train.diloco.protocol import TensorSurface
+    pin=load('diloco_recovery_pin');package=tmp_path/'package';package.mkdir();(package/'__init__.py').write_text('')
+    root=tmp_path/'coordinator';surface=TensorSurface.from_module(torch.nn.Linear(2,2))
+    initialize_coordinator(root,run_id='test',masters=surface.masters,identity={},workers=1,min_quorum=1,fragment_bytes=1024)
+    tree=tmp_path/'captured'/'tree';value=pin.coordinator_pin(root,tree,package,tree_only=True)
+    assert value['binding_kind']=='immutable-hardlink-tree' and tree.is_dir()
+    old=(tree/'progress.json').read_bytes();replacement=root/'replacement';replacement.write_bytes(b'{"changed":true}');replacement.replace(root/'progress.json')
+    assert (tree/'progress.json').read_bytes()==old
+    identity=tmp_path/'identity.json';identity.write_text(json.dumps(value['file_identity']));archive=tmp_path/'coordinator.tar'
+    result=pin.archive_coordinator_tree(tree,archive,identity);assert result['sha256']==pin._hash(archive)
+    (tree/'progress.json').write_bytes(b'corrupt')
+    with pytest.raises(ValueError,match='hardlink tree changed'):
+        pin.archive_coordinator_tree(tree,tmp_path/'corrupt.tar',identity)

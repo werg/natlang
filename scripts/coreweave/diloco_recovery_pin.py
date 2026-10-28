@@ -133,7 +133,7 @@ def _inventory(root):
     return result
 
 
-def coordinator_pin(root, archive, package, *, attempts=5):
+def coordinator_pin(root, archive, package, *, attempts=5, tree_only=False):
     root,archive=Path(root),Path(archive)
     manifest=read_manifest(root)
     if archive.exists():raise ValueError('coordinator pin already exists')
@@ -160,6 +160,16 @@ def coordinator_pin(root, archive, package, *, attempts=5):
                         items[worker]={'sequence':int(entry['sequence']),
                                        'delta_sha256':_delta_hash(load_file(path)['delta'])}
                 queued.append(items)
+            if tree_only:
+                for directory in sorted([staging, *[p for p in staging.rglob('*') if p.is_dir()]], key=lambda p:len(p.parts), reverse=True):
+                    fd=os.open(directory,os.O_DIRECTORY);os.fsync(fd);os.close(fd)
+                os.rename(staging,archive)
+                fd=os.open(archive.parent,os.O_DIRECTORY);os.fsync(fd);os.close(fd)
+                return {'path':str(archive),'binding_kind':'immutable-hardlink-tree','file_identity':before,
+                        'fingerprint':manifest['fingerprint'],'versions':versions,'last_seq':ledgers,'queued':queued,
+                        'manifest':manifest,'captured_at':time.time(),
+                        'runtime_code_sha256':canonical_json_sha256_hex(code_inventory(package)),
+                        'scope':'stable coordinator hardlinks; separate worker checkpoints retain local optimizer and pending updates'}
             temp=archive.with_name(archive.name+'.tmp')
             with tarfile.open(temp,'x',dereference=True) as tar:tar.add(staging,arcname='diloco-coordinator')
             os.link(temp,archive);temp.unlink()
@@ -174,6 +184,19 @@ def coordinator_pin(root, archive, package, *, attempts=5):
     raise RuntimeError('coordinator changed during each recovery pin attempt')
 
 
+
+def archive_coordinator_tree(tree, archive, identity):
+    tree,archive=Path(tree),Path(archive)
+    expected={k:tuple(v) for k,v in json.loads(Path(identity).read_text()).items()}
+    if _inventory(tree)!=expected:raise ValueError('coordinator hardlink tree changed before archive')
+    if archive.exists():raise ValueError('coordinator archive exists')
+    temp=archive.with_name(archive.name+'.tmp')
+    try:
+        with tarfile.open(temp,'x',dereference=True) as tar:tar.add(tree,arcname='diloco-coordinator')
+        if _inventory(tree)!=expected:raise ValueError('coordinator hardlink tree changed during archive')
+        os.link(temp,archive);temp.unlink()
+        return {'path':str(archive),'sha256':_hash(archive),'bytes':archive.stat().st_size}
+    finally:temp.unlink(missing_ok=True)
 
 def release_pin(primary, expected_sha, expected_bytes, *, recovery_root, fenced_source=None, fence_root=None):
     """Remove only a verified recovery pin, never the learner's live checkpoint."""
@@ -203,11 +226,15 @@ def main():
     w=sub.add_parser('worker');w.add_argument('checkpoint');w.add_argument('destination');w.add_argument('worker',type=int)
     w.add_argument('fingerprint');w.add_argument('package')
     c=sub.add_parser('coordinator');c.add_argument('root');c.add_argument('archive');c.add_argument('package')
+    ct=sub.add_parser('coordinator-tree');ct.add_argument('root');ct.add_argument('archive');ct.add_argument('package')
+    ca=sub.add_parser('coordinator-tree-archive');ca.add_argument('tree');ca.add_argument('archive');ca.add_argument('identity')
     r=sub.add_parser('resident');r.add_argument('directory');r.add_argument('archive')
     d=sub.add_parser('release');d.add_argument('primary');d.add_argument('sha256');d.add_argument('bytes',type=int)
     d.add_argument('recovery_root');d.add_argument('--fenced-source');d.add_argument('--fence-root')
     a=p.parse_args()
-    value=(release_pin(a.primary,a.sha256,a.bytes,recovery_root=a.recovery_root,fenced_source=a.fenced_source,fence_root=a.fence_root) if a.action=='release' else
+    value=(archive_coordinator_tree(a.tree,a.archive,a.identity) if a.action=='coordinator-tree-archive' else
+           coordinator_pin(a.root,a.archive,a.package,tree_only=True) if a.action=='coordinator-tree' else
+           release_pin(a.primary,a.sha256,a.bytes,recovery_root=a.recovery_root,fenced_source=a.fenced_source,fence_root=a.fence_root) if a.action=='release' else
            worker_pin(a.checkpoint,a.destination,a.worker,a.fingerprint,a.package) if a.action=='worker' else
            coordinator_pin(a.root,a.archive,a.package) if a.action=='coordinator' else resident_pin(a.directory,a.archive))
     print(json.dumps(value,sort_keys=True))

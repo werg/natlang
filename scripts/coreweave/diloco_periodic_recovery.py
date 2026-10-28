@@ -85,6 +85,18 @@ class Backend:
         result=self._exec(self.coordinator,['coordinator',self.root,pin,self.repo/'training/neuralese/natlang_neuralese'])
         return {**result,'sandbox_id':self.coordinator,'source':self.root}
 
+    def pin_coordinator_tree(self,cycle):
+        pin=f'/work/.coreweave/recovery-pins/{cycle}/coordinator-tree-{uuid.uuid4().hex}/tree'
+        result=self._exec(self.coordinator,['coordinator-tree',self.root,pin,self.repo/'training/neuralese/natlang_neuralese'])
+        return {**result,'sandbox_id':self.coordinator,'source':self.root}
+
+    def archive_coordinator_tree(self,component):
+        tree=component['path'];identity=tree+'.identity.json';archive=tree+'.tar'
+        box=cwctl.read_sandbox(self.coordinator)
+        box.write_file(identity,json.dumps(component['file_identity'],sort_keys=True).encode()).result()
+        result=self._exec(self.coordinator,['coordinator-tree-archive',tree,archive,identity])
+        return {**component,**result,'binding_kind':'immutable-hardlink-tree-archive','tree':tree}
+
     def capture_fenced(self, cycle, *, timeout=600):
         """Fence all learners at completed updates, pin controls and coordinator, then release."""
         fence=uuid.uuid4().hex;deadline=time.time()+timeout
@@ -154,7 +166,7 @@ class Backend:
                     ready[worker]=value
                 if len(ready)<len(boxes):time.sleep(1)
             with ThreadPoolExecutor(max_workers=5) as pool:
-                coordinator=pool.submit(self.pin_coordinator,cycle)
+                coordinator=pool.submit(self.pin_coordinator_tree,cycle)
                 residents={i:pool.submit(self.pin_resident,i,cycle) for i in range(len(boxes))}
                 components={'coordinator':coordinator.result()}
                 for i,future in residents.items():components['resident-'+str(i)]=future.result()
@@ -450,6 +462,15 @@ def run_once(record,state_path,backend):
         if 'coordinator' not in cycle['components']:
             try:cycle['components']['coordinator']=backend.pin_coordinator(cycle['id']);cycle['errors'].pop('coordinator',None)
             except Exception as error:cycle['errors']['coordinator']=str(error)
+        coordinator=cycle['components'].get('coordinator') or {}
+        if coordinator.get('binding_kind')=='immutable-hardlink-tree':
+            try:
+                cycle['components']['coordinator']=backend.archive_coordinator_tree(coordinator)
+                cycle['errors'].pop('coordinator-archive',None)
+            except Exception as error:
+                cycle['errors']['coordinator-archive']=str(error)
+                cycle['phase']='incomplete';save();return state
+            save()
         for name in list(cycle['receipts']):
             if str(cycle['errors'].get(name,'')).startswith('presence: '):cycle['errors'].pop(name)
         cycle['compatibility']=compatibility(cycle['components']);cycle['phase']='exporting';save()
