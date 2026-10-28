@@ -413,11 +413,11 @@ def make_handler(engine: Engine):
                     raise RequestError('bad-request', f'x_natlang_rl_top_k must be 0 or an integer in [1, {MAX_BEHAVIOR_TOP_K}]')
                 if body.get('x_natlang_rl_capture') is not True:
                     raise RequestError('bad-request', 'x_natlang_rl_top_k records sampler top-k log-probs inside x_natlang_rl_capture; request both')
-            privileged_context=body.get('x_natlang_privileged_context')
-            if privileged_context is not None and (not isinstance(privileged_context, str) or not privileged_context
-                    or body.get('x_natlang_rl_capture') is not True):
-                raise RequestError('bad-request', 'x_natlang_privileged_context is a nonempty training-reference '
-                                   'string for a captured JOLT+ teacher attempt')
+            privileged_block=body.get('x_natlang_privileged_block')
+            if privileged_block is not None and (not isinstance(privileged_block, dict)
+                    or set(privileged_block) != {'insert_at', 'token_ids'} or body.get('x_natlang_rl_capture') is not True):
+                raise RequestError('bad-request', 'x_natlang_privileged_block is {insert_at, token_ids} of a '
+                                   'captured JOLT+ teacher attempt')
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"),
                 max_tokens=completion_limit(body),
@@ -428,7 +428,7 @@ def make_handler(engine: Engine):
                 native_store_owner=self._owner,
                 rl_capture=bool(body.get('x_natlang_rl_capture', False) or body.get('x_natlang_native_recording', False)),
                 rl_top_k=rl_top_k,
-                privileged_context=privileged_context,
+                privileged_block=privileged_block,
                 native_recording=bool(body.get('x_natlang_native_recording', False)),
                 native_state_modes=body.get('x_natlang_native_state_modes'),
                 # Resolve this exact binding in Engine._native_run. Passing

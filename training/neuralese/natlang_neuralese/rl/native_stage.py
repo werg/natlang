@@ -14,7 +14,7 @@ from ..common.hashing import sha256_file_hex_cached
 
 def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coefficient_policy=None,
             expected_history_reasoning_policy=None, expected_history_binding_sha256=None,
-            expected_history_binding_path=None, policy_loss=None, jolt_cases=None, protected_packets=None):
+            expected_history_binding_path=None, policy_loss=None, jolt_cases=None):
     from transformers import AutoTokenizer
     from ..model.shared_state import RoleTokens, ROLE_MARKERS
     from ..data.text_corpus import tokenizer_fingerprint
@@ -94,27 +94,44 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
     declared = policy_loss_declaration(policy_loss)
     privileged = None
     if declared is not None and declared['schema'] == 'jolt-plus/1' and mode == 'grpo':
-        privileged = jolt_privileged_source(rows=rollouts, tokenizer=tokenizer, cases=jolt_cases,
-                                            protected_packets=protected_packets)
+        privileged = jolt_privileged_source(rows=rollouts, tokenizer=tokenizer, cases=jolt_cases, roles=roles,
+                                            tokenizer_fingerprint=fingerprint)
     return prepare_objective(rollouts, identity=identity, roles=roles, fetch_block=fetch,
         block_bundle=Path(bundle).resolve() if bundle else None, mode=mode, policy_loss=policy_loss,
         privileged=privileged)
 
 
-def jolt_privileged_source(*, rows, tokenizer, cases, protected_packets=None):
-    """Training-world privileged blocks for JOLT+, behind the protected-packet leakage guard."""
+def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerprint, registry=None):
+    """Shared privileged blocks (rl.privileged_context) for JOLT+; custody fails closed per episode.
+
+    Without readable protected packets or bound training cases every student episode is refused a privileged
+    teacher (recorded per row) and keeps its outcome term; nothing is dropped from RL.
+    """
+    from types import SimpleNamespace
     from ..common.jsonio import iter_jsonl_rows
-    from .jolt import privileged_source, protected_identifiers, registered_protected_packets
-    if cases is None:
-        raise ValueError('JOLT+ needs the exact training cases (--jolt-cases) for its privileged context')
+    from ..data.render import Renderer
+    from ..serve.chat import tokenizer_model_type
+    from .jolt import privileged_source
+    from .privileged_context import CustodyError, PrivilegedRendering, ProtectedWorlds
+    repo = Path(__file__).resolve().parents[4]
+    try:
+        if cases is None:
+            raise CustodyError('no training cases are bound to this learner (--jolt-cases)')
+        custody = ProtectedWorlds.from_registry(registry or repo / 'training/neuralese_corpora.json', repo)
+    except CustodyError as error:
+        reason = error
+        def refused(rollout, replay, turns):
+            raise CustodyError(str(reason))
+        return refused
     worlds = {}
     for _, case in iter_jsonl_rows(Path(cases)):
         if case.get('id') in worlds:
             raise ValueError('JOLT+ training cases repeat a world id')
         worlds[case.get('id')] = case
-    packets = protected_packets or registered_protected_packets(Path(__file__).resolve().parents[4])
-    return privileged_source(rows, cases=worlds, protected=protected_identifiers(packets),
-        tokenize=lambda text: tokenizer(text, add_special_tokens=False)['input_ids'])
+    renderer = Renderer(tokenizer, SimpleNamespace(open_id=roles.produce_open, close_id=roles.produce_close))
+    rendering = PrivilegedRendering.from_renderer(renderer, template=tokenizer_model_type(tokenizer),
+                                                  tokenizer_fingerprint=tokenizer_fingerprint)
+    return privileged_source(rows, cases=worlds, rendering=rendering, custody=custody)
 
 
 def main(argv=None):
@@ -125,10 +142,9 @@ def main(argv=None):
     # Declared grpo policy loss (rl.policy_math.policy_loss_declaration), e.g.
     # '{"schema":"score-centered/1","k":128,"importance":"tis"}'. Omitted: clipped ratio loss.
     parser.add_argument('--rl-policy-loss')
-    # JOLT+ privileged context: the exact train-split cases of the rollouts and the protected packets whose
-    # worlds may never feed it (default: every registered evaluation-only packet).
+    # JOLT+ privileged context: the exact train-split cases of the rollouts; custody against every registered
+    # evaluation-only packet (rl.privileged_context.ProtectedWorlds).
     parser.add_argument('--jolt-cases', type=Path)
-    parser.add_argument('--protected-packet', action='append', type=Path)
     parser.add_argument('--rl-block-bundle', type=Path)
     parser.add_argument('--coefficient-policy',type=Path)
     parser.add_argument('--history-reasoning-policy', choices=('keep', 'last_turn_only'))
@@ -173,7 +189,7 @@ def _admit_and_train(args,trainer):
         expected_history_reasoning_policy=args.history_reasoning_policy,
         expected_history_binding_sha256=args.history_reasoning_binding_sha256,
         expected_history_binding_path=args.history_reasoning_binding_path,
-        policy_loss=args.rl_policy_loss, jolt_cases=args.jolt_cases, protected_packets=args.protected_packet)
+        policy_loss=args.rl_policy_loss, jolt_cases=args.jolt_cases)
     if not graphs:
         raise ValueError('no useful native policy episodes: route flat failures to verified graph SFT seeding')
     args.out.mkdir(parents=True, exist_ok=True)

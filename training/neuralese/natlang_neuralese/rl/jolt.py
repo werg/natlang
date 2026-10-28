@@ -1,29 +1,26 @@
 """JOLT+ self-teaching (TRAINING_INSIGHTS_20261028.md section 7): one policy as privileged teacher and as student.
 
-Every admitted episode is scored in ONE packed graph forward that holds two views of the whole actual graph:
+Privileged blocks, custody and graph edits are the shared mechanism of ``rl/privileged_context.py`` and
+``rl/privileged_scoring.py``; this module binds them into the whole-graph RL objective. Every admitted episode is
+scored in ONE packed graph forward holding two views of the whole actual graph:
 
 * the sampled view, exactly as the actor executed it (all producer/consumer turns, imports at their recorded
   positions, gradients through the real dependencies), and
-* its twin: the same invocations with the privileged training-world block added (student episodes) or removed
-  (teacher episodes) at the front of every invocation. Import positions, producer export spans and imported
-  source spans are shifted by the actual block lengths, so the twin is itself a positionally exact whole graph
-  (shared positional splice), never a set of detached turns. The twin is a stop-gradient target.
+* its twin: ``teacher_form(replay, blocks)`` for a student episode, ``student_form(replay, blocks)`` for a teacher
+  attempt (blocks inserted/removed per invocation at their declared place; producer spans, import boundaries and
+  spans rebased by the shared graph edit). The twin is a stop-gradient target, so its rows equal ``teacher_scores``
+  of the same edited replay while sharing the student's forward batch.
 
-Per sampled position of a role-r episode (r = student or teacher), with p the sampled view and p~ the twin under
-the actor's exact temperature/mask law:
+Per sampled position of a role-r episode, with p the sampled view and p~ the twin under the actor's exact
+temperature/mask law:
 
     loss_t = -A_r U_t(score-centered/1)  +  beta_r KL(p || sg[p~])
 
-Student episodes (no privileged context): KL(pi(.|s) || sg pi(.|s,c)) is J_OPSD (reverse KL to the self-teacher)
-and A_S is the student group's return minus its mean (JOLT+ outcome term). Teacher episodes (sampled under
-privileged context): A_T is the teacher group's centered return and KL(pi(.|s,c) || sg pi(.|s)) keeps the teacher's
-guidance within reach of the student (target pi_T* proportional to pi_S exp(A/beta_T)). Both outcome terms use the
-score-centered estimator, so quantized/stale actors stay usable; the KL terms are computed by the learner's own
-forward and have no sampler mismatch.
-
-Privileged context comes only from training worlds (split 'train', not sharing any identifier with a protected
-development/held packet): the case's authored reference, expected results and decisive oracle notes, verified
-teacher trajectories of the same world and runtime feedback of the student's earlier attempts in the same group.
+Student episodes: KL(pi(.|s) || sg pi(.|s,c)) is J_OPSD and A_S is the return minus the student group mean (the
+JOLT+ outcome term). Teacher attempts (sampled with the blocks): A_T is the teacher group's centered return and
+KL(pi(.|s,c) || sg pi(.|s)) keeps the guidance within the student's reach. The KL uses logit differences
+(``reverse_kl``). A custody refusal or an unsupported graph (semantic codec) gives a student episode no privileged
+term; it still trains on its outcome term and the refusal is recorded in the objective and metrics.
 """
 from __future__ import annotations
 
@@ -41,7 +38,6 @@ PRIVILEGED_SUFFIX = {'student': '#privileged', 'teacher': '#unprivileged'}
 # measurements tune both; they are recipe parameters.
 DEFAULT_JOLT = {'schema': JOLT_SCHEMA, 'beta_s': 1.0, 'beta_t': 0.5,
                 'outcome': {'schema': 'score-centered/1', 'k': 128, 'importance': 'none', 'eps': 1e-6}}
-PRIVILEGED_SCHEMA = 'natlang.jolt-privileged-context/1'
 MAX_FEEDBACK_ATTEMPTS = 3
 MAX_FEEDBACK_CHARS = 800
 
@@ -66,229 +62,6 @@ def jolt_declaration(value):
         result[name] = float(result[name])
     return result
 
-
-# ---- privileged training-world context and its leakage guard ----
-
-def _identifiers(case):
-    curriculum = case.get('curriculum') if isinstance(case.get('curriculum'), dict) else {}
-    values = {('id', case.get('id')), ('split_group', curriculum.get('split_group')),
-              ('pair_group', curriculum.get('pair_group'))}
-    for key in ('source_groups', 'source_ids', 'dataset_records'):
-        for item in case.get(key) or ():
-            values.add((key.rstrip('s') if key != 'dataset_records' else 'dataset_record', item))
-    return {(kind, value) for kind, value in values if isinstance(value, str) and value}
-
-
-def protected_identifiers(paths):
-    """Identifiers of protected development/held packets (cases.jsonl files); none may feed privileged context."""
-    found = set()
-    for path in paths:
-        with Path(path).open() as handle:
-            for line in handle:
-                if line.strip():
-                    found |= {value for _, value in _identifiers(json.loads(line))}
-    return frozenset(found)
-
-
-def registered_protected_packets(repo):
-    """Every registered evaluation-only packet's cases file (development and held)."""
-    repo = Path(repo)
-    registry = json.loads((repo / 'training/neuralese_corpora.json').read_text())
-    paths = []
-    for entry in registry.get('corpora') or ():
-        if isinstance(entry, dict) and entry.get('admission') == 'evaluation-only-never-training':
-            cases = repo / entry['path'] / 'cases.jsonl'
-            if cases.is_file():
-                paths.append(cases)
-    if not paths:
-        raise ValueError('JOLT+ leakage guard found no registered protected evaluation packet')
-    return paths
-
-
-def require_training_world(case, protected):
-    """Leakage guard: a privileged source is a training world sharing no identity with protected packets."""
-    if not isinstance(case, dict) or case.get('split') != 'train':
-        raise ValueError('JOLT+ privileged context comes only from train-split worlds')
-    if not isinstance(protected, frozenset) or not protected:
-        raise ValueError('JOLT+ privileged context needs the protected development/held identifiers')
-    overlap = sorted(value for _, value in _identifiers(case) if value in protected)
-    if overlap:
-        raise ValueError('JOLT+ privileged context shares identity with a protected evaluation packet: '
-                         + ', '.join(overlap[:4]))
-
-
-def _compact(value):
-    return value if isinstance(value, str) else json.dumps(value, sort_keys=True, ensure_ascii=False)
-
-
-def attempt_feedback(rollout):
-    """Runtime error/repair feedback text of one earlier attempt (scored reward details only)."""
-    reward = rollout.get('reward') or {}
-    parts = []
-    for key in ('feedback', 'diagnosis', 'errors', 'repair', 'failure'):
-        if reward.get(key):
-            parts.append(f'{key}: {_compact(reward[key])}')
-    if not parts and type(reward.get('quality')) in (int, float):
-        parts.append(f"quality: {reward['quality']}")
-    return '; '.join(parts)[:MAX_FEEDBACK_CHARS]
-
-
-def privileged_context(case, *, protected, earlier_attempts=(), verified_trajectories=()):
-    """The privileged block of one training world (text and its exact provenance)."""
-    require_training_world(case, protected)
-    curriculum = case.get('curriculum') if isinstance(case.get('curriculum'), dict) else {}
-    semantics = case.get('semantics') if isinstance(case.get('semantics'), dict) else {}
-    lines, sources = [], []
-    for label, value, source in (
-            ('Reference solution', curriculum.get('reference'), 'authored_reference'),
-            ('Expected results', semantics.get('expected'), 'reference_values'),
-            ('Oracle checks', curriculum.get('decisive'), 'oracle_checks')):
-        if value:
-            lines.append(f'{label}: {_compact(value)}')
-            sources.append(source)
-    for trajectory in verified_trajectories:
-        lines.append(f'Verified solution trajectory: {_compact(trajectory)}')
-        sources.append('verified_teacher_trajectory')
-    feedback = [text for text in (attempt_feedback(row) for row in list(earlier_attempts)[:MAX_FEEDBACK_ATTEMPTS])
-                if text]
-    for number, text in enumerate(feedback, 1):
-        lines.append(f'Earlier attempt {number} feedback: {text}')
-        sources.append('attempt_feedback')
-    if not lines:
-        raise ValueError('JOLT+ training world has no privileged reference material')
-    text = ('<training-reference>\nPrivileged training reference for this exact task; it is not available when the '
-            'task runs.\n' + '\n'.join(lines) + '\n</training-reference>\n')
-    from ..common.hashing import canonical_json_sha256_hex
-    return {'schema': PRIVILEGED_SCHEMA, 'task_id': case['id'], 'text': text, 'sources': sources,
-            'earlier_samples': [row.get('sample') for row in list(earlier_attempts)[:MAX_FEEDBACK_ATTEMPTS]],
-            'sha256': canonical_json_sha256_hex({'text': text, 'task_id': case['id']})}
-
-
-def privileged_source(rollouts, *, cases, protected, tokenize, verified_trajectories=None):
-    """``privileged(rollout, members)`` for prepare_objective: exact training-world blocks behind the leakage guard.
-
-    Student episode: reference material plus feedback of the same group's earlier student attempts. Teacher
-    attempt: its recorded ``privileged_context`` must be exactly what this builder produces for its world and
-    the named earlier student attempts.
-    """
-    if not protected:
-        raise ValueError('JOLT+ needs protected development/held identifiers for its leakage guard')
-    students = {}
-    for row in rollouts:
-        if row.get('jolt_role', 'student') == 'student':
-            students.setdefault((row.get('task_id'), json.dumps(row.get('group'), sort_keys=True)), []).append(row)
-    def build(rollout, members):
-        if rollout.get('split') != 'train':
-            raise ValueError('JOLT+ privileged context is only for train-split episodes')
-        case = cases.get(rollout['task_id'])
-        if case is None:
-            raise ValueError('JOLT+ episode has no bound training world')
-        group = sorted(students.get((rollout['task_id'], json.dumps(rollout.get('group'), sort_keys=True)), []),
-                       key=lambda row: (row.get('sample') is None, row.get('sample')))
-        trajectories = (verified_trajectories or {}).get(rollout['task_id'], ())
-        if rollout.get('jolt_role', 'student') == 'student':
-            earlier = [row for row in group if row.get('sample') is not None and rollout.get('sample') is not None
-                       and row['sample'] < rollout['sample'] and row.get('reward') is not None]
-            context = privileged_context(case, protected=protected, earlier_attempts=earlier,
-                                         verified_trajectories=trajectories)
-        else:
-            recorded = rollout.get('privileged_context')
-            if not isinstance(recorded, dict):
-                raise ValueError('JOLT+ teacher attempt lacks its recorded privileged context')
-            by_sample = {row.get('sample'): row for row in group}
-            if any(sample not in by_sample for sample in recorded.get('earlier_samples') or ()):
-                raise ValueError('JOLT+ teacher context names student attempts outside its admitted group')
-            context = privileged_context(case, protected=protected,
-                earlier_attempts=[by_sample[sample] for sample in recorded.get('earlier_samples') or ()],
-                verified_trajectories=trajectories)
-            if context != recorded:
-                raise ValueError('JOLT+ teacher attempt privileged context differs from its training world')
-        return {'token_ids': list(tokenize(context['text'])), 'record': context}
-    return build
-
-
-# ---- whole-graph twin ----
-
-def privileged_prefix_lengths(turns):
-    """Per graph turn: length of the leading privileged token segment of its capture (0 when absent)."""
-    lengths = {}
-    for number, turn in enumerate(turns):
-        name = turn.get('graph_turn') or f'turn-{number}'
-        prompt = (turn.get('sampling') or {}).get('prompt') or []
-        flagged = [index for index, segment in enumerate(prompt) if segment.get('privileged')]
-        if flagged and (flagged != [0] or prompt[0].get('kind') != 'tokens'):
-            raise ValueError('a privileged block must be the single leading token segment of its invocation')
-        lengths[name] = len(prompt[0]['token_ids']) if flagged else 0
-    return lengths
-
-
-def twin_invocations(invocations, *, role, prefix_ids=None, prefix_lengths=None):
-    """Twin of every invocation of the actual graph, with exact import/export coordinates.
-
-    ``role='student'`` prepends ``prefix_ids`` (the privileged block) to every invocation; ``role='teacher'``
-    removes each invocation's leading privileged block of ``prefix_lengths[name]`` tokens. Imports from graph
-    invocations are remapped to their twins (whole teacher-view graph); external sources keep their names.
-    """
-    from ..model.native_graph_plan import ImportSpan, Invocation
-    suffix = PRIVILEGED_SUFFIX[role]
-    names = {node.name for node in invocations}
-    if any(node.cache_prefix for node in invocations):
-        raise ValueError('JOLT+ twins of raw prefix-cache invocations are not supported')
-    if role == 'student':
-        prefix = tuple(int(token) for token in prefix_ids)
-        if not prefix:
-            raise ValueError('student twin needs a nonempty privileged block')
-        shift = {name: len(prefix) for name in names}
-    else:
-        shift = {name: -int(prefix_lengths.get(name, 0)) for name in names}
-        if not any(shift.values()):
-            raise ValueError('teacher episode has no captured privileged block')
-    result = []
-    for node in invocations:
-        delta = shift[node.name]
-        if delta >= 0:
-            tokens = prefix + tuple(node.token_ids)
-        else:
-            tokens = tuple(node.token_ids)[-delta:]
-        imports = []
-        for edge in node.imports:
-            if edge.at + delta < 0:
-                raise ValueError('an import precedes the privileged block it would remove')
-            internal = edge.source in names
-            source_delta = shift[edge.source] if internal else 0
-            if internal and edge.start + source_delta < 0:
-                raise ValueError('an exported span overlaps a privileged block')
-            imports.append(ImportSpan(edge.at + delta, edge.source + suffix if internal else edge.source,
-                                      edge.start + source_delta, edge.stop + source_delta,
-                                      logical=edge.logical, stop_gradient=edge.stop_gradient))
-        def moved(spans):
-            out = tuple((start + delta, stop + delta) for start, stop in spans)
-            if any(start < 0 for start, _ in out):
-                raise ValueError('a producing span overlaps a privileged block')
-            return out
-        result.append(Invocation(node.name + suffix, tokens, imports=tuple(imports),
-                                 producing=moved(node.producing), logical_producing=moved(node.logical_producing)))
-    return result, shift
-
-
-def twin_queries(actions, plan, twins, shift, external_sizes, *, role):
-    """Query row of each action in the combined (actual + twin) plan, which keeps actual offsets unchanged."""
-    from ..model.native_graph_plan import compile_graph
-    combined = compile_graph((*plan.invocations, *twins), external_sizes=external_sizes)
-    if tuple(combined.offsets[:len(plan.invocations)]) != tuple(plan.offsets):
-        raise ValueError('JOLT+ twin changed actual graph offsets')
-    offsets = {node.name: offset for node, offset in zip(combined.invocations, combined.offsets)}
-    suffix = PRIVILEGED_SUFFIX[role]
-    queries = []
-    for action in actions:
-        local = action['local_query'] + shift[action['turn']]
-        if local < 0:
-            raise ValueError('a sampled position lies inside a privileged block')
-        queries.append(offsets[action['turn'] + suffix] + local)
-    return combined, queries
-
-
-# ---- loss ----
 
 class _ReverseKL(torch.autograd.Function):
     """KL(p || sg q) from logits, gradient g = p (delta - E_p delta) with delta from logit differences.
@@ -340,41 +113,153 @@ def jolt_terms(logits, twin_logits, labels, behavior_logp, top_ids, top_logq, ad
     return outcome_loss, kl, outcome_loss + beta * kl, details
 
 
-def add_privileged_twin(replay, rollout, members, graph, privileged, *, turns):
-    """Append the episode's whole-graph twin to ``graph`` and bind every sampled action to its twin query.
+def attempt_feedback(rollout):
+    """Runtime error/repair feedback text of one scored earlier attempt (its reward details)."""
+    reward = rollout.get('reward') or {}
+    parts = []
+    for key in ('feedback', 'diagnosis', 'errors', 'repair', 'failure'):
+        if reward.get(key):
+            value = reward[key]
+            parts.append(f"{key}: {value if isinstance(value, str) else json.dumps(value, sort_keys=True)}")
+    return '; '.join(parts)[:MAX_FEEDBACK_CHARS]
 
-    Returns (actions with 'twin_query', the row's JOLT+ record). Student episodes get the privileged block that
-    ``privileged`` builds for this exact training world; teacher episodes must carry that same block as the
-    leading privileged segment of every captured invocation, and their twin removes it.
+
+def privileged_source(rollouts, *, cases, rendering, custody, teacher_trajectories=None, command=None,
+                      policy_root=None):
+    """``source(rollout, replay, turns) -> {invocation: PrivilegedBlock}`` over the shared mechanism.
+
+    Raises ``CustodyError`` (or ValueError for unsupported graphs) when the episode gets no privileged teacher.
+    Attempt feedback comes from the same group's earlier scored student attempts.
     """
-    from ..model.native_graph_plan import invocation_dict
+    from .privileged_context import CustodyError, privileged_blocks
+    from .privileged_scoring import graph_invocations
+    students = {}
+    for row in rollouts:
+        if row.get('jolt_role', 'student') == 'student':
+            students.setdefault((row.get('task_id'), json.dumps(row.get('group'), sort_keys=True)), []).append(row)
+
+    def build(rollout, replay, turns):
+        case = cases.get(rollout.get('task_id'))
+        if case is None:
+            raise CustodyError('episode has no bound training world')
+        group = students.get((rollout['task_id'], json.dumps(rollout.get('group'), sort_keys=True)), [])
+        feedback = []
+        for row in sorted(group, key=lambda item: item['sample'] if type(item.get('sample')) is int else -1):
+            if (type(row.get('sample')) is int and type(rollout.get('sample')) is int
+                    and row['sample'] < rollout['sample'] and row.get('reward') is not None):
+                text = attempt_feedback(row)
+                if text:
+                    feedback.append({'case_id': case.get('id'), 'attempt': row['sample'], 'feedback': text})
+        root = (turns[0].get('graph_turn') or '').rsplit('#turn', 1)[0]
+        return privileged_blocks(rendering, case, graph_invocations(replay, turns, root_calls={root}),
+            custody=custody, teacher_trajectories=(teacher_trajectories or {}).get(rollout['task_id'], ()),
+            attempt_feedback=feedback[-MAX_FEEDBACK_ATTEMPTS:], command=command, policy_root=policy_root)
+    return build
+
+
+def _renamed(invocations, suffix):
+    """The same invocations under twin names; imports from graph invocations follow their twins."""
+    from dataclasses import replace
+    names = {node.name for node in invocations}
+    return [replace(node, name=node.name + suffix,
+                    imports=tuple(replace(edge, source=edge.source + suffix) if edge.source in names else edge
+                                  for edge in node.imports))
+            for node in invocations]
+
+
+def _captured_blocks(turns):
+    """Blocks a native-engine actor flagged as 'privileged' in its capture, keyed by graph turn."""
+    from .privileged_context import PrivilegedBlock
+    blocks = {}
+    for turn in turns:
+        own = 0
+        for segment in (turn.get('sampling') or {}).get('prompt') or []:
+            if segment.get('kind') != 'tokens':
+                continue
+            if segment.get('privileged'):
+                blocks[turn['graph_turn']] = PrivilegedBlock(turn['graph_turn'], own, tuple(segment['token_ids']),
+                                                             '', {})
+                break
+            own += len(segment['token_ids'])
+    return blocks
+
+
+def _before_itself(block):
+    from dataclasses import replace
+    if not block.token_ids or block.receipt.get('placement') != 'after_leading_system_turn':
+        return block
+    at = block.insert_at - len(block.token_ids)
+    if at < 0:
+        return block
+    return replace(block, insert_at=at, receipt={**block.receipt, 'insert_at': at,
+                                                  'placement': 'after_bos' if at else 'start'})
+
+
+def add_privileged_twin(replay, rollout, graph, source, *, turns):
+    """Append the episode's whole-graph twin to ``graph``; bind every sampled action to its twin query.
+
+    Returns (actions, the row's JOLT+ record). A student episode refused by custody (or on an unsupported graph)
+    keeps its plain outcome term: actions are unchanged and the record names the refusal. A teacher attempt must
+    carry exactly the blocks the learner rebuilds for its student form.
+    """
+    from ..model.native_graph_plan import compile_graph, invocation_dict
+    from .privileged_context import CustodyError
+    from .privileged_scoring import student_form, teacher_form
     role = rollout.get('jolt_role', 'student')
-    block = privileged(rollout, members)
-    token_ids = [int(token) for token in block['token_ids']]
-    if role == 'student':
-        if any(privileged_prefix_lengths(turns).values()):
-            raise ValueError('a student episode was sampled with privileged context; mark it as a teacher attempt')
-        twins, shift = twin_invocations(replay.plan.invocations, role='student', prefix_ids=token_ids)
-    else:
-        lengths = privileged_prefix_lengths(turns)
-        for number, turn in enumerate(turns):
-            name = turn.get('graph_turn') or f'turn-{number}'
-            prompt = (turn.get('sampling') or {}).get('prompt') or []
-            if not lengths.get(name) or prompt[0]['token_ids'] != token_ids:
-                raise ValueError('teacher attempt invocation lacks the exact privileged block of its training world')
-        twins, shift = twin_invocations(replay.plan.invocations, role='teacher', prefix_lengths=lengths)
+    if role not in ('student', 'teacher'):
+        raise ValueError('JOLT+ episode role must be student or teacher')
+    captured = _captured_blocks(turns)
+    if role == 'student' and captured:
+        raise ValueError('a student episode was sampled with privileged context; mark it as a teacher attempt')
+    try:
+        if source is None:
+            raise CustodyError('no privileged source is available to this learner')
+        if role == 'teacher':
+            # The declared insertion point (after the leading system turn) and the fact selection (by the
+            # invocation's messages) are the same on the teacher-role tokens, so the learner rebuilds the exact
+            # blocks; student_form verifies the attempt carried them token for token.
+            blocks = source(rollout, replay, turns)
+            if not any(block.token_ids for block in blocks.values()):
+                raise CustodyError('no privileged fact fits any invocation of this teacher attempt')
+            try:
+                twin = student_form(replay, blocks)
+            except ValueError:
+                # Prompts without a leading system turn: on the teacher tokens the inserted block itself is the
+                # leading system turn, so the rebuilt insertion point sits right after it.
+                blocks = {name: _before_itself(block) for name, block in blocks.items()}
+                twin = student_form(replay, blocks)
+        else:
+            blocks = source(rollout, replay, turns)
+            if not any(block.token_ids for block in blocks.values()):
+                raise CustodyError('no privileged fact fits any invocation of this episode')
+            twin = teacher_form(replay, blocks)
+    except (CustodyError, ValueError) as error:
+        if role == 'teacher':
+            raise ValueError('JOLT+ teacher attempt carries no verified privileged block: ' + str(error)) from error
+        return list(replay.actions), {'role': role, 'privileged': None, 'refusal': str(error)}
+    suffix = PRIVILEGED_SUFFIX[role]
+    renamed = _renamed(twin.plan.invocations, suffix)
     used = {edge.source for node in replay.plan.invocations for edge in node.imports}
     external_sizes = {name: len(state.token_ids) for name, state in replay.external_blocks.items() if name in used}
-    _, queries = twin_queries(replay.actions, replay.plan, twins, shift, external_sizes, role=role)
-    for twin in twins:
-        value = invocation_dict(twin)
-        value['token_ids'] = list(twin.token_ids)
-        value['target_weights'] = [0.] * len(twin.token_ids)
+    combined = compile_graph((*replay.plan.invocations, *renamed), external_sizes=external_sizes)
+    if tuple(combined.offsets[:len(replay.plan.invocations)]) != tuple(replay.plan.offsets):
+        raise ValueError('JOLT+ twin changed actual graph offsets')
+    offsets = {node.name: offset for node, offset in zip(combined.invocations, combined.offsets)}
+    if len(twin.actions) != len(replay.actions):
+        raise ValueError('JOLT+ twin actions are not aligned with the sampled actions')
+    actions = []
+    for action, edited in zip(replay.actions, twin.actions):
+        if (edited['turn'], edited['token_id'], edited['sample']) != (action['turn'], action['token_id'],
+                                                                     action['sample']):
+            raise ValueError('JOLT+ twin actions are not aligned with the sampled actions')
+        actions.append({**action, 'twin_query': offsets[edited['turn'] + suffix] + edited['local_query']})
+    for node in renamed:
+        value = invocation_dict(node)
+        value['token_ids'] = list(node.token_ids)
+        value['target_weights'] = [0.] * len(node.token_ids)
         graph['nodes'].append(value)
-    actions = [{**action, 'twin_query': query} for action, query in zip(replay.actions, queries)]
-    return actions, {'role': role, 'twin_turns': [twin.name for twin in twins],
-                     'privileged': {key: block['record'][key] for key in ('schema', 'task_id', 'sha256', 'sources')},
-                     'privileged_tokens': len(token_ids)}
+    return actions, {'role': role, 'twin_turns': [node.name for node in renamed],
+                     'privileged': {name: block.receipt for name, block in sorted(blocks.items())}}
 
 
 def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=128, top_k=None, readout=None):
@@ -385,7 +270,8 @@ def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=1
         raise ValueError('native RL loss chunks must be positive')
     info = row['jolt']
     role = info['role']
-    beta = declaration['beta_s'] if role == 'student' else declaration['beta_t']
+    privileged = info.get('privileged') is not None
+    beta = (declaration['beta_s'] if role == 'student' else declaration['beta_t']) if privileged else 0.
     advantage = float(row['advantage'])
     if not math.isfinite(advantage):
         raise ValueError('nonfinite advantage')
@@ -417,7 +303,7 @@ def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=1
             chosen = [actions[i] for i in selected]
             device = hidden.device
             queries = torch.tensor([action['query'] for action in chosen], device=device)
-            twin_queries_ = torch.tensor([action['twin_query'] for action in chosen], device=device)
+            twin_queries_ = torch.tensor([action.get('twin_query', action['query']) for action in chosen], device=device)
             labels = torch.tensor([action['token_id'] for action in chosen], device=device)
             behavior = torch.tensor([action['behavior_logp'] for action in chosen], device=device, dtype=torch.float32)
             if top_k is None:
@@ -431,17 +317,19 @@ def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=1
                 terms[index] = value
             sums['outcome'] += float(outcome_loss.sum())
             sums['kl'] += float(kl.sum())
-    return torch.stack(terms), {'role': role, 'positions': len(actions), 'beta': beta, 'advantage': advantage,
+    return torch.stack(terms), {'role': role, 'privileged': privileged, 'positions': len(actions), 'beta': beta,
+                                'advantage': advantage,
                                 'outcome_sum': sums['outcome'], 'kl_sum': sums['kl']}
 
 
 def summarize_jolt(parts, count):
     """Per-term contributions to the batch loss (each divided by the batch's sampled-token count)."""
-    result = {'positions': {'student': 0, 'teacher': 0}}
+    result = {'positions': {'student': 0, 'teacher': 0}, 'unprivileged_episodes': 0, 'privileged_episodes': 0}
     for name in ('student_outcome', 'student_opsd', 'teacher_outcome', 'teacher_kl'):
         result[name] = 0.
     for part in parts:
         role = part['role']
+        result['privileged_episodes' if part['privileged'] else 'unprivileged_episodes'] += 1
         result['positions'][role] += part['positions']
         result[role + '_outcome'] += part['outcome_sum'] / count
         result[role + ('_opsd' if role == 'student' else '_kl')] += part['beta'] * part['kl_sum'] / count

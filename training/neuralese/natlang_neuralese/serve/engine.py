@@ -29,6 +29,36 @@ def derive_seed(*parts) -> int:
     return int.from_bytes(digest[:8], "little") % (2**31)
 
 
+def _insert_privileged(plan, block):
+    """Split the prompt plan's token segments at the block's own-token index (never at a native-state import)."""
+    at, tokens = block.get('insert_at'), block.get('token_ids')
+    if (type(at) is not int or at < 0 or not isinstance(tokens, list) or not tokens
+            or any(type(token) is not int or token < 0 for token in tokens)):
+        raise RequestError('bad-request', 'a privileged block needs its own-token insert_at and token_ids')
+    result, own, inserted = [], 0, False
+    for number, (kind, value) in enumerate(plan):
+        if kind != 'tokens':
+            if not inserted and own == at:
+                raise RequestError('bad-request', 'a privileged block cannot share a native-state import boundary')
+            result.append((kind, value))
+            continue
+        ids = list(value)
+        if not inserted and own <= at <= own + len(ids):
+            cut = at - own
+            following = plan[number+1][0] if number+1 < len(plan) else None
+            if cut == len(ids) and following not in (None, 'tokens'):
+                raise RequestError('bad-request', 'a privileged block cannot share a native-state import boundary')
+            result.extend(piece for piece in (('tokens', ids[:cut]), ('privileged', tokens), ('tokens', ids[cut:]))
+                          if piece[1])
+            inserted = True
+        else:
+            result.append((kind, value))
+        own += len(ids)
+    if not inserted:
+        raise RequestError('bad-request', 'privileged insertion point is outside the rendered prompt')
+    return result
+
+
 @dataclass
 class GenerationRequest:
     messages: list
@@ -49,9 +79,9 @@ class GenerationRequest:
     # Score-centered RL: also record the sampler's top-k log-probs per sampled
     # position (common.sampling behaviour top-k receipt). None records none.
     rl_top_k: int | None = None
-    # JOLT+ teacher attempt: a privileged training-world block executed as the leading own tokens of this
-    # invocation and marked 'privileged' in the capture, so the learner can build the unprivileged twin.
-    privileged_context: str | None = None
+    # JOLT+ teacher attempt: a rl.privileged_context block {'insert_at', 'token_ids'} inserted at its declared
+    # own-token index of the rendered prompt and marked 'privileged' in the capture (privileged_scoring.student_form).
+    privileged_block: dict | None = None
     native_recording: bool = False
     native_state_modes: dict | None = None
 
@@ -548,8 +578,8 @@ class Engine:
                 template_prefix, template_suffix = self._tokens(prefix), self._tokens(suffix)
                 seq.native_template_value_type = value_type
         plan = list(seq.prompt_plan or ())
-        if seq.request.privileged_context:
-            plan.insert(0, ('privileged', self._tokens(seq.request.privileged_context)))
+        if seq.request.privileged_block is not None:
+            plan = _insert_privileged(plan, seq.request.privileged_block)
         for kind, value in plan:
             privileged = kind == 'privileged'
             if privileged:

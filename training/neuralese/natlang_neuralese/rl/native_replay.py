@@ -967,7 +967,8 @@ class NativePolicyObjective:
                 if example.id not in self._top_k_cache:
                     self._top_k_cache[example.id] = behavior_top_k_tensors(row['actions'],
                         self.policy_loss['outcome']['k'], 'cpu')
-                actions = [{**action, 'twin_query': action['twin_query'] + offset} for action in actions]
+                actions = [{**action, **({'twin_query': action['twin_query'] + offset} if 'twin_query' in action else {})}
+                           for action in actions]
                 terms, parts = jolt_action_loss(model, hidden, actions, row, self.policy_loss,
                     chunk_tokens=self.spec.get('chunk_tokens', 128), top_k=self._top_k_cache[example.id])
                 jolt_parts.append(parts)
@@ -1057,14 +1058,13 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     ``policy_loss`` (policy_math.policy_loss_declaration) selects the grpo policy-gradient loss; None keeps the
     clipped ratio loss and its objective bytes unchanged. It is recorded only for grpo, the mode it changes.
     A ``jolt-plus/1`` loss (rl.jolt) admits every scored group, centers returns per (task, group, role) and adds
-    each episode's whole-graph privileged/unprivileged twin; ``privileged(rollout, members)`` returns the exact
-    training-world block ({'token_ids', 'record'}) after the leakage guard."""
+    each episode's whole-graph privileged/unprivileged twin; ``privileged(rollout, replay, turns)`` returns the
+    shared ``privileged_blocks`` (custody refusal: that episode keeps only its outcome term)."""
     from .policy_math import policy_loss_declaration, objective_policy_loss
     policy_loss = objective_policy_loss(policy_loss_declaration(policy_loss)) if mode == 'grpo' else None
     jolt = policy_loss if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else None
-    if jolt is not None and (behavior_policy is not None or semantic_channel is not None or privileged is None):
-        raise ValueError('JOLT+ needs its privileged training-world source; per-invocation actor and semantic-codec '
-                         'graphs do not support privileged twins yet')
+    if jolt is not None and behavior_policy is not None:
+        raise ValueError('JOLT+ privileged twins of per-invocation coefficient actors are not supported yet')
     from ..model.native_graph_plan import invocation_dict
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex
@@ -1145,7 +1145,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             jolt_row = None
             if jolt is not None:
                 from .jolt import add_privileged_twin
-                actions, jolt_row = add_privileged_twin(replay, rollout, members, graph, privileged,
+                actions, jolt_row = add_privileged_twin(replay, rollout, graph, privileged,
                     turns=whole_episode_turns(rollout))
             example = parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint'])
             if policy_loss is not None:
