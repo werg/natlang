@@ -211,7 +211,10 @@ wait "$coord"
 exit $?
 """
     seed_outputs = ([run['coordinator']['parent'], run['coordinator']['parent'] + '.seed.json'] if prepare else [])
-    job.update(id=f"{run['id']}-learner-0", resources={**job['resources'], 'gpu': 1, 'cpu': '8', 'memory': '96Gi'},
+    resources=copy.deepcopy(run['coordinator'].get('cohost_resources',job['resources']))
+    if not isinstance(resources,dict) or resources.get('gpu')!=1 or set(resources)-{'gpu','cpu','memory'}:
+        raise cwctl.ControllerError('cohost resources must request one GPU and optional CPU/memory only')
+    job.update(id=f"{run['id']}-learner-0", resources=resources,
                service={'port': PORT}, outputs=list(dict.fromkeys([*job.get('outputs', []), root, logs, *seed_outputs])),
                command=['bash', '-c', script])
     return jobs.validate(job)

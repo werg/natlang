@@ -587,11 +587,17 @@ def test_diloco_cohosted_job_uses_one_gpu_and_separate_owned_roots(tmp_path):
     import subprocess
     diloco = load('diloco')
     trainer = ['python', '-m', 'natlang_neuralese.train.native_state_sft', '--continue-from', '/work/in/parent.pt']
-    (tmp_path / 'learner.json').write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer)))
+    (tmp_path / 'learner.json').write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer, resources={'gpu':1,'memory':'64Gi'})))
     run = {'id': 'lfm-dl', 'settings': {'run_id': 'lfm-dl', 'workers': 4},
            'coordinator': {'parent': '/work/in/parent.pt'}, 'learners': {'job': str(tmp_path / 'learner.json')}}
     job = diloco.cohosted_job(run, trainer[3:])
-    assert job['resources'] == {'gpu': 1, 'cpu': '8', 'memory': '96Gi'}
+    assert job['resources'] == {'gpu':1,'memory':'64Gi'}
+    request=diloco.jobs.sandbox_request(job,'bootstrap')
+    assert request['resources']=={'gpu':{'count':1},'memory':'64Gi'}
+    overridden=diloco.cohosted_job({**run,'coordinator':{**run['coordinator'],'cohost_resources':{'gpu':1,'cpu':'8','memory':'96Gi'}}},trainer[3:])
+    assert overridden['resources']=={'gpu':1,'cpu':'8','memory':'96Gi'}
+    with pytest.raises(diloco.cwctl.ControllerError,match='cohost resources'):
+        diloco.cohosted_job({**run,'coordinator':{**run['coordinator'],'cohost_resources':{'gpu':1,'gpu_type':'x'}}},trainer[3:])
     assert job['env']['NATLANG_DILOCO_WORKER_ID'] == '0'
     assert '/work/diloco-coordinator' in job['outputs'] and '/work/diloco-cohost-logs' in job['outputs']
     script = job['command'][2]
