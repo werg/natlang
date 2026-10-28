@@ -41,7 +41,9 @@ def tokenizer(path):
         pytest.skip(f'{path.name} tokenizer is not available')
     from transformers import PreTrainedTokenizerFast
     # The exact tokenizer.json; no repository code is executed.
-    return PreTrainedTokenizerFast(tokenizer_file=str(path / 'tokenizer.json'))
+    tok = PreTrainedTokenizerFast(tokenizer_file=str(path / 'tokenizer.json'))
+    tok.chat_template = (path / 'chat_template.jinja').read_text()   # the pinned template, for its generation prompt
+    return tok
 
 
 def token_offsets(tok, ids, text):
@@ -81,7 +83,7 @@ def template_classes(text, offsets):
     return classes
 
 
-def check_row(source, tok, fingerprint, share=.1):
+def check_row(source, tok, fingerprint, share=.1, *, full_header=True):
     ids = source['token_ids']
     assert tok.decode(ids, skip_special_tokens=False) == source['text']
     tokens = own.role_tokens_from_tokenizer(tok, tokenizer_fingerprint=EXPANDED)
@@ -106,6 +108,25 @@ def check_row(source, tok, fingerprint, share=.1):
     runs = own.assistant_runs(labels)
     for begin, end in runs[:source.get('runtime_opening_assistant_turns', 0)]:
         assert sum(weights[begin:end]) == 0
+    # Template-forced generation prompt tokens are prompt; <|im_end|> is an emitted target; template text after it
+    # is not. With the template's own rendering every header must match the generation prompt exactly.
+    prompt, report = tokens['generation_prompt'], {}
+    own.generated_eligibility(labels, ids, [True] * len(ids), tokens, report=report)
+    assert full_header is False or report == {}
+    targeted_turns = 0
+    for begin, end in runs:
+        if not sum(weights[begin:end]):
+            continue
+        targeted_turns += 1
+        forced = 2
+        while forced < len(prompt) and ids[begin - 1 + forced] == prompt[forced]:
+            forced += 1
+        assert ids[begin - 1:begin - 1 + forced] == prompt[:forced] and forced >= 2
+        assert all(weights[i] == 0 for i in range(begin, begin - 1 + forced))
+        closing = [i for i in range(begin, end) if ids[i] == tokens['end']]
+        assert closing and weights[closing[0]] > 0
+        assert all(weights[i] == 0 for i in range(closing[0] + 1, end))
+    assert targeted_turns
     think = {tokens['think_open'], tokens['think_close']}
     masses = []
     for begin, end in runs:
@@ -147,5 +168,7 @@ def test_real_rows_rerendered_with_the_lfm3_tokenizer_supervise_the_same_actions
         text = source['text'].removeprefix('<|startoftext|>')
         ids = tok3(text, add_special_tokens=False)['input_ids']
         lfm3 = {**source, 'text': text, 'token_ids': ids, 'tokenizer_sha256': fingerprint}
-        _, reply3 = check_row(lfm3, tok3, fingerprint)
-        assert reply3 == reply25          # the same supervised action text under both tokenizers
+        # LFM2.5-rendered text lacks LFM3's forced <think> on turns without reasoning, so headers may be partial.
+        _, reply3 = check_row(lfm3, tok3, fingerprint, full_header=False)
+        # The same supervised action text under both tokenizers, except LFM3's template-forced opening <think>.
+        assert reply3.replace('<think>', '') == reply25.replace('<think>', '')

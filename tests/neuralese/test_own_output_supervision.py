@@ -13,9 +13,12 @@ from natlang_neuralese.train.text_supervision import ROLE_CODES
 FP = 'f' * 64
 # Small in-vocabulary IDs so the tiny backbones can execute these graphs.
 START, SYSTEM, USER, ASSISTANT, TOOL, THINK, UNTHINK, END = 10, 11, 12, 13, 14, 15, 16, 17
-ROLE_TOKENS = {'tokenizer_fingerprint': FP, 'start': START,
+ROLE_TOKENS = {'tokenizer_fingerprint': FP, 'chat_template_sha256': 'd' * 64, 'start': START, 'end': END,
                'roles': {'system': SYSTEM, 'user': USER, 'assistant': ASSISTANT, 'tool': TOOL},
-               'think_open': THINK, 'think_close': UNTHINK, 'tool_response_prefixes': [[30, 31]]}
+               'think_open': THINK, 'think_close': UNTHINK, 'generation_prompt': [START, ASSISTANT],
+               'tool_response_prefixes': [[30, 31]]}
+ASCII_TEMPLATE = ('{% for m in messages %}<|im_start|>{{ m.role }}\n{{ m.content }}<|im_end|>{% endfor %}'
+                  '{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}')
 
 
 def objective(share=.1, **extra):
@@ -42,7 +45,8 @@ T = ROLE_CODES.index('tool')
 def test_context_is_zero_and_reasoning_gets_its_separate_share():
     ids = turn(USER, [40] * 30) + turn(ASSISTANT, [41] * 3, reasoning=[42] * 50) + turn(TOOL, [43] * 20)
     labels = own.label_roles(ids, ROLE_TOKENS)
-    weights, categories = own.sequence_weights(labels, ids, [True] * len(ids), reasoning_share=.1,
+    eligible = own.generated_eligibility(labels, ids, [True] * len(ids), ROLE_TOKENS)
+    weights, categories = own.sequence_weights(labels, ids, eligible, reasoning_share=.1,
                                                think_ids=(THINK, UNTHINK))
     reply = [i for i, c in enumerate(categories) if c == own.REPLY]
     reasoning = [i for i, c in enumerate(categories) if c == own.REASONING]
@@ -50,7 +54,9 @@ def test_context_is_zero_and_reasoning_gets_its_separate_share():
     assert sum(weights[i] for i in reasoning) == pytest.approx(.1)
     assert sum(weights[i] for i in reply) == pytest.approx(.9)
     assert len(reasoning) == 50                      # the long reasoning body cannot dominate
-    assert ids[reply[0]] == ASSISTANT and THINK in [ids[i] for i in reply] and UNTHINK in [ids[i] for i in reply]
+    # The template-forced role header is prompt; <think>, </think> and <|im_end|> are emitted targets here.
+    assert all(weights[i] == 0 for i, t in enumerate(ids) if t == ASSISTANT)
+    assert {THINK, UNTHINK, END} <= {ids[i] for i in reply}
     for i, label in enumerate(labels):
         if label not in (R, A):
             assert weights[i] == 0 and categories[i] == own.CONTEXT
@@ -83,6 +89,24 @@ def test_decisions_are_balanced_and_failed_or_reasoning_only_turns_have_no_posit
     assert masses == pytest.approx([.5, 0., .5, 0.])
     assert all(categories[i] == own.ASSISTANT_CONTEXT for i in range(*runs[1]))
     assert all(weights[i] == 0 for i in range(*runs[3]))
+
+
+def test_template_forced_generation_prompt_is_never_a_target():
+    thinking = {**ROLE_TOKENS, 'generation_prompt': [START, ASSISTANT, THINK]}
+    ids = turn(USER, [40] * 3) + turn(ASSISTANT, [41] * 2, reasoning=[42] * 4) + [18] + [START, ASSISTANT]
+    labels = own.label_roles(ids, thinking)
+    report = {}
+    eligible = own.generated_eligibility(labels, ids, [True] * len(ids), thinking, report=report)
+    weights, categories = own.sequence_weights(labels, ids, eligible, reasoning_share=.1, think_ids=(THINK, UNTHINK))
+    runs = own.assistant_runs(labels)
+    first, truncated = runs
+    assert ids[first[0]:first[0] + 2] == [ASSISTANT, THINK] and weights[first[0]] == weights[first[0] + 1] == 0
+    after_end = ids.index(END, first[0])
+    assert weights[after_end] > 0 and ids[after_end + 1] == 18 and weights[after_end + 1] == 0
+    assert categories[ids.index(UNTHINK)] == own.REPLY and weights[ids.index(UNTHINK)] > 0
+    assert sum(weights[slice(*truncated)]) == 0     # only forced tokens: not a decision
+    assert sum(weights) == pytest.approx(1.) and report == {'partial_generation_prompt_turns': 1}
+    assert own.generation_prompt_text(ASCII_TEMPLATE) == '<|im_start|>assistant\n'
 
 
 def test_windows_follow_suffix_spans_and_windows_without_targets_are_zero_not_errors():
@@ -289,6 +313,7 @@ def test_conversion_time_objective_matches_load_time_and_is_verified():
     from natlang_neuralese.data.native_graph_conversion import whole_trajectory_text_row_graph, text_row_graph
     from natlang_neuralese.train.native_supervision import apply_policy
     tok = ChatRoleAsciiTokenizer()
+    tok.chat_template = ASCII_TEMPLATE
     tokens = own.role_tokens_from_tokenizer(tok, tokenizer_fingerprint='b' * 64)
     declared = own.resolve({'name': own.NAME, 'reasoning_share': .1, 'role_tokens': tokens})
     text = ('<|im_start|>assistant\nruntime input<|im_end|>'

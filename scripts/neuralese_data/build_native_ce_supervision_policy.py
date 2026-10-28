@@ -141,11 +141,17 @@ def build(sources, *, legacy_pair_context_weight, held_sources=(), expected_spli
 
 def own_output_objective(args):
     """The declared own-outputs/1 objective with the tokenizer's exact chat-role token IDs."""
-    from transformers import AutoTokenizer
+    from transformers import PreTrainedTokenizerFast
     from natlang_neuralese.train.own_output_supervision import NAME, resolve, role_tokens_from_tokenizer
     if args.objective_tokenizer is None or args.objective_tokenizer_fingerprint is None:
         raise ValueError('own-output objective needs --objective-tokenizer and its exact fingerprint')
-    tokenizer = AutoTokenizer.from_pretrained(str(args.objective_tokenizer))
+    # Exact tokenizer.json and pinned chat template (its generation prompt is derived from the template);
+    # no repository code is executed.
+    directory = args.objective_tokenizer
+    tokenizer = PreTrainedTokenizerFast(tokenizer_file=str(directory / 'tokenizer.json'))
+    template = directory / 'chat_template.jinja'
+    tokenizer.chat_template = (template.read_text() if template.exists() else
+        json.loads((directory / 'tokenizer_config.json').read_text()).get('chat_template'))
     objective = resolve({'name': NAME, 'reasoning_share': args.objective_reasoning_share,
         'family_balance': args.objective_family_balance,
         'role_tokens': role_tokens_from_tokenizer(tokenizer,

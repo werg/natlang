@@ -12,6 +12,14 @@ window), given per-token chat roles (``text_supervision.chat_roles``) and a
 per-token eligibility mask:
 
 1. A *decision* is a maximal run of assistant-role tokens (reasoning or reply).
+   Targets are exactly the tokens the model emits at generation time. The
+   template's generation prompt (``add_generation_prompt``: ``<|im_start|>``,
+   the ``assistant`` role header and its newline, and for LFM3 also the
+   opening ``<think>``) is prompt, derived per tokenizer by rendering the
+   pinned chat template with and without it and declared in ``role_tokens``
+   (``generation_prompt``); those positions and the template text after the
+   end-of-turn token (``<|im_end|>``, which stays a target) are never targets.
+   A turn whose only eligible tokens were forced is not a decision.
 2. Within a decision, eligible tokens are split into the reasoning class
    (``assistant_reasoning`` role, except the ``<think>``/``</think>`` markers,
    which belong to the reply/action class under ``reasoning_markers='reply'``:
@@ -77,10 +85,13 @@ def _token(value, *, optional=False):
 
 
 def _role_tokens(value):
-    if not isinstance(value, dict) or set(value) != {'tokenizer_fingerprint', 'start', 'roles', 'think_open',
-                                                      'think_close', 'tool_response_prefixes'}:
-        raise ValueError('own-output objective needs exact role_tokens {tokenizer_fingerprint, start, roles, '
-                         'think_open, think_close, tool_response_prefixes}')
+    if not isinstance(value, dict) or set(value) != {'tokenizer_fingerprint', 'chat_template_sha256', 'start',
+                                                      'end', 'roles', 'think_open', 'think_close',
+                                                      'generation_prompt', 'tool_response_prefixes'}:
+        raise ValueError('own-output objective needs exact role_tokens {tokenizer_fingerprint, chat_template_sha256, '
+                         'start, end, roles, think_open, think_close, generation_prompt, tool_response_prefixes}')
+    if not isinstance(value['chat_template_sha256'], str) or not _SHA.fullmatch(value['chat_template_sha256']):
+        raise ValueError('own-output role tokens bind the exact chat template that derived the generation prompt')
     if not isinstance(value['tokenizer_fingerprint'], str) or not _SHA.fullmatch(value['tokenizer_fingerprint']):
         raise ValueError('own-output role tokens need the exact expanded tokenizer fingerprint')
     roles = value['roles']
@@ -92,13 +103,19 @@ def _role_tokens(value):
     if len(set(ids)) != 4 or start in ids or (None in think) != (think[0] is None) or (
             think[0] is not None and (think[0] == think[1] or set(think) & {start, *ids})):
         raise ValueError('own-output role tokens must be distinct')
+    end = _token(value['end'])
+    prompt = value['generation_prompt']
+    if (not isinstance(prompt, list) or len(prompt) < 2 or any(type(t) is not int or t < 0 for t in prompt)
+            or prompt[:2] != [start, roles['assistant']] or end in (start, *ids)):
+        raise ValueError('generation_prompt is the exact forced token list starting <|im_start|> assistant')
     prefixes = value['tool_response_prefixes']
     if not isinstance(prefixes, list) or any(not isinstance(p, list) or not p or any(
             type(t) is not int or t < 0 for t in p) for p in prefixes):
         raise ValueError('own-output tool-response prefixes are nonempty token-ID lists')
-    return {'tokenizer_fingerprint': value['tokenizer_fingerprint'], 'start': start,
+    return {'tokenizer_fingerprint': value['tokenizer_fingerprint'],
+            'chat_template_sha256': value['chat_template_sha256'], 'start': start, 'end': end,
             'roles': {name: roles[name] for name in _ROLE_NAMES}, 'think_open': think[0], 'think_close': think[1],
-            'tool_response_prefixes': [list(p) for p in prefixes]}
+            'generation_prompt': list(prompt), 'tool_response_prefixes': [list(p) for p in prefixes]}
 
 
 def _family_balance(value):
@@ -160,8 +177,28 @@ def policy_objective(policy):
     return resolve(None if policy is None else policy.get('objective'))
 
 
-def role_tokens_from_tokenizer(tokenizer, *, tokenizer_fingerprint):
-    """Exact chat-role token IDs of a ChatML tokenizer (LFM2.5, LFM3, Mellum); never guessed."""
+def generation_prompt_text(chat_template):
+    """The text the template forces for a new assistant turn: its rendering with ``add_generation_prompt``
+    minus its rendering without it (one user message; template defaults otherwise)."""
+    from transformers.utils.chat_template_utils import _compile_jinja_template
+    compiled = _compile_jinja_template(chat_template)
+    messages = [{'role': 'user', 'content': 'x'}]
+    without = compiled.render(messages=messages, add_generation_prompt=False, bos_token='', eos_token='')
+    with_prompt = compiled.render(messages=messages, add_generation_prompt=True, bos_token='', eos_token='')
+    if not with_prompt.startswith(without) or len(with_prompt) == len(without):
+        raise ValueError('chat template generation prompt is not a pure suffix')
+    return with_prompt[len(without):]
+
+
+def role_tokens_from_tokenizer(tokenizer, *, tokenizer_fingerprint, chat_template=None):
+    """Exact chat-role token IDs of a ChatML tokenizer (LFM2.5, LFM3, Mellum); never guessed.
+
+    The forced generation prompt comes from the pinned chat template itself (``chat_template`` or the
+    tokenizer's own)."""
+    import hashlib
+    template = chat_template if chat_template is not None else getattr(tokenizer, 'chat_template', None)
+    if not isinstance(template, str) or not template:
+        raise ValueError('own-output role tokens need the exact chat template to derive the generation prompt')
     def exact(text):
         token = tokenizer.convert_tokens_to_ids(text)
         if type(token) is not int or token == getattr(tokenizer, 'unk_token_id', None):
@@ -176,9 +213,15 @@ def role_tokens_from_tokenizer(tokenizer, *, tokenizer_fingerprint):
         if list(rendered[:2]) != [start, token]:
             raise ValueError(f'rendered <|im_start|>{name} does not start with its exact role token')
     prefixes = [list(tokenizer(prefix, add_special_tokens=False)['input_ids']) for prefix in _TOOL_RESPONSE_PREFIXES]
-    return _role_tokens({'tokenizer_fingerprint': tokenizer_fingerprint, 'start': start, 'roles': roles,
+    end = exact('<|im_end|>')
+    if end is None:
+        raise ValueError('own-output role labelling needs a single-token <|im_end|>')
+    prompt = list(tokenizer(generation_prompt_text(template), add_special_tokens=False)['input_ids'])
+    return _role_tokens({'tokenizer_fingerprint': tokenizer_fingerprint,
+                         'chat_template_sha256': hashlib.sha256(template.encode()).hexdigest(),
+                         'start': start, 'end': end, 'roles': roles,
                          'think_open': exact('<think>'), 'think_close': exact('</think>'),
-                         'tool_response_prefixes': prefixes})
+                         'generation_prompt': prompt, 'tool_response_prefixes': prefixes})
 
 
 def label_roles(ids, role_tokens):
@@ -201,6 +244,34 @@ def assistant_runs(labels):
             index += 1
         runs.append((begin, index))
     return runs
+
+
+def generated_eligibility(labels, ids, eligible, role_tokens, *, report=None):
+    """Remove template-forced positions from each assistant turn: its generation prompt (the role token and
+    the rest of ``generation_prompt`` after the preceding ``<|im_start|>``) and anything after its first
+    end-of-turn token. ``report`` (dict) counts turns whose rendered header differs from the full prompt."""
+    prompt = role_tokens['generation_prompt']
+    eligible = list(eligible)
+    for begin, end in assistant_runs(labels):
+        # The run starts at the role token; the generation prompt starts one earlier at <|im_start|>.
+        # The role token itself is always template-forced, even if the rest of the header differs.
+        if begin > 0 and ids[begin - 1] == prompt[0] and ids[begin] == prompt[1]:
+            matched = 2
+        else:
+            # A window cut inside a turn: its header is outside the window (context there already).
+            matched = 1
+        while matched > 1 and (matched < len(prompt) and begin - 1 + matched < end
+               and ids[begin - 1 + matched] == prompt[matched]):
+            matched += 1
+        forced_stop = begin - 1 + matched if matched > 1 else begin
+        if report is not None and matched > 1 and matched != len(prompt):
+            report['partial_generation_prompt_turns'] = report.get('partial_generation_prompt_turns', 0) + 1
+        eligible[begin:forced_stop] = [False] * (forced_stop - begin)
+        for position in range(begin, end):
+            if ids[position] == role_tokens['end']:
+                eligible[position + 1:end] = [False] * (end - position - 1)
+                break
+    return eligible
 
 
 def sequence_weights(labels, ids, eligible, *, reasoning_share, reasoning_markers='reply', think_ids=()):
@@ -241,13 +312,15 @@ def sequence_weights(labels, ids, eligible, *, reasoning_share, reasoning_marker
 
 
 def window_weights(roles, *, reasoning_share, ids=None, think_ids=(), reasoning_markers='reply',
-                   suffix_starts=None, spans=None, exclude=None):
+                   suffix_starts=None, spans=None, exclude=None, role_tokens=None):
     """``own-outputs/1`` for prepared text windows ([B, S] role codes), the counterpart of
     ``text_supervision.balanced_position_weights``/``segmented_position_weights``.
 
     Positions before a window's ``suffix_starts`` entry, outside its ``spans`` (a list of ``[begin, end)`` lists
     per window) or in ``exclude`` are context. Each window with a decision sums to 1; a window without any
-    eligible assistant target is all zero (never an error). Returns ``(weights [B, S] float32, categories)``."""
+    eligible assistant target is all zero (never an error). With ``role_tokens`` (and ``ids``) the template-forced
+    generation prompt and post-end-of-turn text are removed (``generated_eligibility``); a window that starts
+    inside a turn cannot see that turn's header. Returns ``(weights [B, S] float32, categories)``."""
     import torch
     batch, size = roles.shape
     if ids is not None and ids.shape != roles.shape or exclude is not None and exclude.shape != roles.shape:
@@ -268,6 +341,10 @@ def window_weights(roles, *, reasoning_share, ids=None, think_ids=(), reasoning_
             eligible = [a and b for a, b in zip(eligible, inside)]
         if exclude is not None:
             eligible = [a and not bool(b) for a, b in zip(eligible, exclude[row].tolist())]
+        if role_tokens is not None:
+            if ids is None:
+                raise ValueError('generation-prompt removal needs the window token IDs')
+            eligible = generated_eligibility(roles[row].tolist(), ids[row].tolist(), eligible, role_tokens)
         weights, category = sequence_weights(roles[row].tolist(), ids[row].tolist() if ids is not None
                                              else [-1] * size, eligible, reasoning_share=reasoning_share,
                                              reasoning_markers=reasoning_markers, think_ids=think_ids)
@@ -324,6 +401,7 @@ def graph_weights(row, objective):
                 raise ValueError('runtime-opening assistant turns exceed the source trajectory')
             for begin, end in runs[:opening]:
                 eligible[begin:end] = [False] * (end - begin)
+        eligible = generated_eligibility(labels, ids, eligible, role_tokens)
         node_weights, node_categories = sequence_weights(labels, ids, eligible,
             reasoning_share=objective['reasoning_share'], reasoning_markers=objective['reasoning_markers'],
             think_ids=think)
@@ -494,6 +572,7 @@ def conversion_weights(ids, eligible, objective, *, tokenizer, tokenizer_fingerp
                            for code in labels[suffix:]]
         eligible = [value and position >= suffix for position, value in enumerate(eligible)]
     eligible = [bool(value) and position > 0 for position, value in enumerate(eligible)]
+    eligible = generated_eligibility(labels, ids, eligible, objective['role_tokens'])
     weights, categories = sequence_weights(labels, ids, eligible, reasoning_share=objective['reasoning_share'],
         reasoning_markers=objective['reasoning_markers'], think_ids=_think_ids(objective['role_tokens']))
     declaration = {'name': NAME, 'objective_sha256': identity(objective)['sha256'],
