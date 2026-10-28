@@ -1,5 +1,16 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Improvements ship on by default (owner, 2026-10-28)
+
+Functionality that could move the needle is enabled by default in new
+recipes, trainers, RL learners, serving and tools as soon as it works. Do not
+implement an improvement and then leave it behind an opt-in flag, a
+"pilot later" note or a report-only mode. Opt-out switches are fine; opt-in
+defaults are not. Historical lineages and bound rounds keep the exact
+behaviour they recorded (their identities already prevent silent reuse), but
+every new recipe, stage, round and launch gets the improvement. When a
+default could be harmful, measure and fix it; do not hide it behind a flag.
+
 ## Individual-program tuning (owner, 2026-10-26)
 
 Operate the tuning lane in `plans/TUNING_OPERATIONS_HANDOFF_20261026.md` and
