@@ -1331,6 +1331,14 @@ def test_legacy_snapshot_bootstrap_authenticates_predecessor_archive(tmp_path):
     (package/'retired.py').write_bytes(b'original')
     with tarfile.open(new) as tar, pytest.raises(ValueError,match='manifest does not match'):
         archive.extract_code_archive(tar,repo,work,'b'*64,predecessor_manifest_sha256='a'*64)
+    (cas/oldsha).write_bytes(b'not the bound archive')
+    with tarfile.open(new) as tar, pytest.raises(ValueError,match='archive does not match'):
+        archive.extract_code_archive(tar,repo,work,'b'*64,predecessor_manifest_sha256=manifestsha)
+    (cas/oldsha).write_bytes(old.read_bytes())
+    (package/'unknown.py').write_bytes(b'untracked')
+    with tarfile.open(new) as tar, pytest.raises(ValueError,match='untracked native Python'):
+        archive.extract_code_archive(tar,repo,work,'b'*64,predecessor_manifest_sha256=manifestsha)
+    (package/'unknown.py').unlink()
     with tarfile.open(new) as tar:
         result=archive.extract_code_archive(tar,repo,work,'b'*64,predecessor_manifest_sha256=manifestsha)
     assert result['removed_predecessor_files']==1
