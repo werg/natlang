@@ -823,12 +823,26 @@ def stage_finished(out, stage_id):
 
 
 
+def _shared_foundation_append(old, new):
+    """Only a declared shared input may move foundation with the train role."""
+    old_train, old_foundation = old.get('native_graphs'), old.get('foundation_native_graphs')
+    new_train, new_foundation = new.get('native_graphs'), new.get('foundation_native_graphs')
+    return bool(isinstance(old_train, dict) and isinstance(new_train, dict)
+        and old_foundation == old_train and new_foundation == new_train
+        and old_train.get('binding') and old_train['binding'] == new_train.get('binding')
+        and old_train != new_train)
+
+
 def _data_continuation(old, new):
     """Whether changed train/held graph manifests retain their exact predecessor custody."""
     if 'native_graphs' in old and 'native_graphs' in new:
         foundation = 'foundation_native_graphs'
-        if old.get(foundation) is not None and old[foundation] != new.get(foundation):
-            return False  # New data must not move an already declared finish line.
+        if (old.get(foundation) == old.get('native_graphs') and old['native_graphs'].get('binding')
+                and old['native_graphs'] != new['native_graphs'] and not _shared_foundation_append(old, new)):
+            return False  # A shared named role cannot silently split on append.
+        if (old.get(foundation) is not None and old[foundation] != new.get(foundation)
+                and not _shared_foundation_append(old, new)):
+            return False  # A separately named foundation remains fixed.
         if new.get(foundation) is not None and not all(
                 new[foundation].get(key) for key in ('path', 'sha256', 'binding')):
             return False

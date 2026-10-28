@@ -601,3 +601,18 @@ def test_native_optimizer_history_storage_is_explicit_and_validated(kind):
         recipe.validate_stage_parameters(kind,{'optimizer_state_storage':'automatic'})
     assert 'optimizer_state_storage' in recipe.OPERATIONAL_STAGE_PARAMETERS
     assert 'optimizer_state_storage' in recipe.HANDLERS['native_state_sft']['parameters']
+
+
+def test_started_append_moves_only_the_declared_shared_train_foundation_input():
+    from natlang_neuralese.train.recipe import _data_continuation
+    def ref(name,sha,binding):return {'path':'/data/'+name,'sha256':sha*64,'binding':binding}
+    old_train=ref('old','a','shared');new_train=ref('new','b','shared');held=ref('held','c','held')
+    old={'native_graphs':old_train,'foundation_native_graphs':old_train,'held_native_graphs':held}
+    new={**old,'native_graphs':new_train,'foundation_native_graphs':new_train,
+         'continued_native_graphs':{**old_train,'binding':'prior'}}
+    assert _data_continuation(old,new)
+    assert not _data_continuation(old,{**new,'foundation_native_graphs':old_train})
+    assert not _data_continuation(old,{**new,'foundation_native_graphs':{**new_train,'binding':'separate'}})
+    assert not _data_continuation(old,{**new,'continued_native_graphs':ref('wrong','d','prior')})
+    distinct={**old,'foundation_native_graphs':{**old_train,'binding':'separate'}}
+    assert not _data_continuation(distinct,new)

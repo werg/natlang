@@ -1414,6 +1414,13 @@ def _main(argv=None, *, requested_refresh):
             args.native_graphs = Path(resident_state['payload']['train']['path'])
             args.held_native_graphs = Path(resident_state['payload']['held']['path'])
             args.recipe_binding = json.dumps(resident_state['payload']['recipe'])
+            resident_foundation = resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('foundation_native_graphs')
+            if resident_foundation is not None:
+                args.foundation_native_graphs = resident_bound(resident_foundation)
+            resident_geometry = resident_state['payload'].get('sft_packed_geometry')
+            if resident_geometry is not None:
+                resident_bound(resident_geometry)
+                args.sft_packed_geometry = json.dumps(resident_geometry)
             resident_ce = resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('ce_supervision_policy')
             if resident_ce is not None:
                 args.ce_supervision_policy = resident_bound(resident_ce)
@@ -2606,9 +2613,14 @@ def _main(argv=None, *, requested_refresh):
                         'source_row_order':candidate_train.ordered_ids(), 'exposure_counts':dict(candidate_counts),
                         'options':candidate_options}, pending_frame)
                     candidate_cohorts = source_cohort_ids(candidate_train) if args.urgent_cohort_fairness else None
+                    candidate_foundation_ids = foundation_priority_ids
+                    candidate_foundation = payload['plan']['stage_inputs'][args.stage_id].get('foundation_native_graphs')
+                    if (candidate_foundation and candidate_foundation['sha256'] == candidate_train.file_sha256
+                            and args.foundation_communication_batches is not None):
+                        candidate_foundation_ids = {entry['id'] for entry in candidate_train.entries if entry.get('communication')}
                     _, candidate_batches = pending_exposure_batches(candidate_train.entries,candidate_counts,
                         epochs=args.epochs,batch_graphs=args.batch_graphs,batch_tokens=args.batch_tokens,
-                        foundation_ids=foundation_priority_ids,
+                        foundation_ids=candidate_foundation_ids,
                         foundation_communication_batches=args.foundation_communication_batches or 1,
                         minimum_visits=candidate_frame.get('required_visits'),schedule_offset=global_step,
                         cohort_ids=candidate_cohorts)
@@ -2655,6 +2667,28 @@ def _main(argv=None, *, requested_refresh):
                             {'proof_sha256':proof['sha256'],'graph_visits_created':0})
                     source_row_bindings = train.bindings
                     source_order = train.ordered_ids()
+                    resident_foundation = resident.plan['stage_inputs'][args.stage_id].get('foundation_native_graphs')
+                    prior_foundation_binding = checkpoint_options.get('foundation_native_graphs_binding')
+                    if (resident_foundation and prior_foundation_binding and
+                            resident_foundation['sha256'] != prior_foundation_binding['sha256']):
+                        if (resident_bound(resident_foundation).resolve() != train.path.resolve()
+                                or resident_foundation['sha256'] != train.file_sha256):
+                            raise ValueError('resident shared foundation differs from the adopted train source')
+                        foundation_source = train
+                        args.foundation_native_graphs = train.path
+                        from .native_foundation_recovery import native_graph_bindings
+                        foundation_binding = {'path':str(train.path.resolve()),'sha256':train.file_sha256,
+                                              'bytes':train.path.stat().st_size}
+                        foundation_binding['dependencies'] = [item for item in native_graph_bindings(foundation_binding)
+                            if item['path'] != foundation_binding['path']]
+                        checkpoint_options['foundation_native_graphs_binding'] = foundation_binding
+                        foundation_priority_ids = ({entry['id'] for entry in train.entries if entry.get('communication')}
+                            if args.foundation_communication_batches is not None else None)
+                        foundation_template = foundation_exposure() if args.communication_foundation else None
+                        foundation_missing = {key for key,row in (foundation_template or {}).get('rows',{}).items()
+                            if not row['admitted_to_training'] or row['required_visits']<=0 or row['graph_visits']<row['required_visits']}
+                        refresh_inherited_foundation = bool((args.refresh_foundation_readiness or
+                            args.foundation_readiness_policy == 'on-shared-request') and foundation_template and foundation_template['complete'])
                     source_receipts = [source_receipt(train), source_receipt(held)]
                     source_hash = hashlib.sha256(json.dumps(
                         [source_receipts[0]['sha256'], source_receipts[1]['sha256'],
@@ -2687,6 +2721,11 @@ def _main(argv=None, *, requested_refresh):
                     if args.memory_qualification and objective is None:
                         packed = resident.packed_capacity_update
                         if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
+                        adopted_geometry = resident.state['payload'].get('sft_packed_geometry')
+                        if adopted_geometry is not None:
+                            resident_bound(adopted_geometry)
+                            args.sft_packed_geometry = json.dumps(adopted_geometry)
+                            checkpoint_options['sft_packed_geometry'] = args.sft_packed_geometry
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
                     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,

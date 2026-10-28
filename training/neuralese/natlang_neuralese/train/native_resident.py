@@ -171,7 +171,7 @@ class IndexWitnessValidation:
 
 def _contract(plan, proposed, stage_id):
     """One stage may append active data and/or mandatory pending declarations."""
-    from .recipe import _data_continuation, _pending_source_continuation
+    from .recipe import _data_continuation, _pending_source_continuation, _shared_foundation_append
     from .native_resident_ce import extension_policy
     old_inputs, new_inputs = plan['stage_inputs'], proposed['stage_inputs']
     if plan['code'] != proposed['code'] or plan.get('device') != proposed.get('device'):
@@ -182,7 +182,8 @@ def _contract(plan, proposed, stage_id):
         if sid != stage_id and old_inputs[sid] != new_inputs[sid]:
             raise ValueError('resident append cannot change another stage')
     old, new = old_inputs[stage_id], new_inputs[stage_id]
-    if old.get('foundation_native_graphs') != new.get('foundation_native_graphs'):
+    if (old.get('foundation_native_graphs') != new.get('foundation_native_graphs')
+            and not _shared_foundation_append(old, new)):
         raise ValueError('resident append cannot change fixed foundation')
     if old.get('withdrawn_native_graphs') != new.get('withdrawn_native_graphs'):
         raise ValueError('resident append cannot withdraw graphs')
