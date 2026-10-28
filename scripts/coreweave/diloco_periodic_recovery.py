@@ -89,6 +89,7 @@ class Backend:
         directory=self.out+'/diloco/recovery-fence'
         boxes=[cwctl.read_sandbox(ident) for ident in self.workers]
         # Fail quickly before requesting anything if the actual learner runtime lacks the fence mechanism.
+        completed={}
         for worker,box in enumerate(boxes):
             try:cap=json.loads(box.read_file(directory+'/capabilities.json').result())
             except Exception:raise FenceUnavailable('worker runtime has no active recovery-fence capability') from None
@@ -100,9 +101,31 @@ class Backend:
                 "sys.exit(not (o['boot_id']==(p/'sys/kernel/random/boot_id').read_text().strip() and "
                 "o['start_ticks']==(p/str(o['pid'])/'stat').read_text().split(') ',1)[1].split()[19]))",
                 json.dumps(cap['owner'])],timeout_seconds=30).result()
-            if check.returncode:raise FenceUnavailable('worker recovery-fence owner is no longer alive')
+            if check.returncode:
+                # A dead trainer is eligible only with a new-protocol, exact final report.
+                try: report=json.loads(box.read_file(self.out+'/report.json').result())
+                except Exception:raise FenceUnavailable('worker owner died without a final report') from None
+                delivery=report.get('diloco_final_delivery') or {}
+                if (report.get('active_stage_complete') is not True or
+                    delivery.get('schema')!='natlang.diloco-final-delivery/1' or
+                    delivery.get('worker')!=worker or delivery.get('fingerprint')!=self.fingerprint or
+                    not isinstance(delivery.get('sequences'),list) or
+                    not isinstance(report.get('checkpoint_sha256'),str)):
+                    raise FenceUnavailable('completed worker lacks exact final delivery custody')
+                source=self.out+'/checkpoint.pt';pin=directory+'/pins/'+fence+'/checkpoint.pt'
+                program=("import hashlib,os,pathlib,sys; source,pin,want=sys.argv[1:]; p=pathlib.Path(pin); "
+                         "p.parent.mkdir(parents=True,exist_ok=True); os.link(source,pin); "
+                         "h=hashlib.sha256(); f=p.open('rb'); "
+                         "[h.update(b) for b in iter(lambda:f.read(8388608),b'')]; "
+                         "sys.exit(0 if h.hexdigest()==want else 1)")
+                result=box.exec(['python3','-c',program,source,pin,report['checkpoint_sha256']],timeout_seconds=3600).result(timeout=3660)
+                if result.returncode:raise ValueError('completed worker final checkpoint hash differs from report')
+                completed[worker]={'id':fence,'worker':worker,'fingerprint':self.fingerprint,
+                    'checkpoint':pin,'deadline':deadline,'completed':True,'sequences':delivery['sequences'],
+                    'checkpoint_sha256':report['checkpoint_sha256']}
         try:
             for worker,box in enumerate(boxes):
+                if worker in completed:continue
                 made=box.exec(['mkdir','-p',directory]).result()
                 if made.returncode:raise RuntimeError('worker fence directory unavailable')
                 value={'schema':'natlang.diloco-recovery-fence/1','id':fence,'worker':worker,
@@ -111,7 +134,7 @@ class Backend:
                 box.write_file(pending,json.dumps(value).encode()).result()
                 moved=box.exec(['mv',pending,directory+'/request.json']).result()
                 if moved.returncode:raise RuntimeError('worker fence request publication failed')
-            ready={}
+            ready=dict(completed)
             while len(ready)<len(boxes):
                 if time.time()>=deadline:raise TimeoutError('worker recovery fence expired')
                 for worker,box in enumerate(boxes):
@@ -392,7 +415,13 @@ def run_once(record,state_path,backend):
                          if 'fenced' in cycle else pool.submit(backend.pin_worker,i,cycle['id']) for i in missing}
                 for i,future in futures.items():
                     name='worker-'+str(i)
-                    try:cycle['components'][name]=future.result();cycle['errors'].pop(name,None)
+                    try:
+                        component=future.result()
+                        ready=(cycle.get('fenced',{}).get('ready',{}).get(str(i)) or {})
+                        if ready.get('completed') and (component['sha256']!=ready['checkpoint_sha256'] or
+                                component['sequences']!=ready['sequences'] or component['pending']):
+                            raise ValueError('completed worker checkpoint differs from final delivery report')
+                        cycle['components'][name]=component;cycle['errors'].pop(name,None)
                     except Exception as error:cycle['errors'][name]=str(error)
                     save()
         for i in range(len(backend.workers)):
