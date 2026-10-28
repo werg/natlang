@@ -260,33 +260,48 @@ def carved(groups, carve) -> bool:
 
 
 def carve_groups(config, policy, trained_groups=frozenset()) -> set:
-    """Source groups of the permanent held slice, closed over groups shared by train rows; a component touching any
-    group an earlier version trained on is never carved."""
+    """Source groups of the permanent held slice. Rows sharing a source group form one component (a row touching a
+    held group is held whole); a component is a candidate when one of its groups falls in the declared hash fraction,
+    and never when it touches a group an earlier version trained on. Candidates are taken in hash order while their
+    rows fit ``max_rows``: a component that would overflow stays in training (2026-10-28: v3 left 8,648 rows of
+    over-cap carved components neither held nor trained)."""
     carve = policy.get('held_carve')
     if not carve:
         return set()
-    render_groups = set(trained_groups)
+    parent = {}
+
+    def find(g):
+        while parent.setdefault(g, g) != g:
+            parent[g] = parent[parent[g]]
+            g = parent[g]
+        return g
+
     rows = []
     paths = [path for render in config['renders'] for _, path in graph_files(render, 'train')]
     paths += [REPO / item for item in config.get('teacher_graphs', [])]
     for path in paths:
         for _, raw in iter_lines(path):
-            rows.append(frozenset(json.loads(raw).get('source_groups') or ()))
-    chosen = {g for groups in rows if carved(groups, carve) for g in groups}
-    while True:  # closure: a row touching a held group is held whole
-        grown = {g for groups in rows if groups & chosen for g in groups}
-        if grown <= chosen:
-            break
-        chosen |= grown
-    blocked = {g for g in chosen if g in render_groups}
-    if blocked:  # a component touching render train rows cannot become held
-        component = set(blocked)
-        while True:
-            grown = {g for groups in rows if groups & component for g in groups}
-            if grown <= component:
-                break
-            component |= grown
-        chosen -= component
+            groups = sorted(json.loads(raw).get('source_groups') or ())
+            if not groups:
+                continue
+            rows.append(groups[0])
+            for g in groups[1:]:
+                a, b = find(groups[0]), find(g)
+                if a != b:
+                    parent[max(a, b)] = min(a, b)
+    size = collections.Counter(find(g) for g in rows)
+    members = collections.defaultdict(set)
+    for g in list(parent):
+        members[find(g)].add(g)
+    candidates = [root for root, groups in members.items()
+                  if any(carved([g], carve) for g in groups) and not groups & set(trained_groups)]
+    candidates.sort(key=lambda root: hashlib.sha256((carve['salt'] + root).encode()).hexdigest())
+    chosen, held_rows = set(), 0
+    for root in candidates:
+        if held_rows + size[root] > carve['max_rows']:
+            continue
+        chosen |= members[root]
+        held_rows += size[root]
     return chosen
 
 
