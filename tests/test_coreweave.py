@@ -1402,3 +1402,71 @@ def test_prepare_earned_parent_quarantines_roles_idempotently(tmp_path):
     for name in ('diloco-coordinator','diloco-learner','diloco-resident'):
         assert (quarantine/name/'old').read_text()==name
     assert hashlib.sha256(parent.read_bytes()).hexdigest()==sha
+
+
+def test_private_parent_fetch_verifies_complete_bytes_and_preserves_existing(tmp_path):
+    import io
+    fetch=load('diloco_fetch_parent');body=b'full optimizer rng exposure';sha=hashlib.sha256(body).hexdigest()
+    cap=tmp_path/'cap';cap.write_text(json.dumps({'url':'https://storage.googleapis.com/bucket/scoped?signature=private',
+        'sha256':sha,'bytes':len(body),'global_step':59,'requested_stop':50,'full_optimizer_rng_exposure':True}))
+    target=tmp_path/'parent.pt';calls=[]
+    def opener(url,timeout):calls.append(url);return io.BytesIO(body)
+    assert fetch.fetch(cap,target,opener=opener)['global_step']==59
+    assert target.read_bytes()==body and json.loads(Path(str(target)+'.seed.json').read_text())['sha256']==sha
+    fetch.fetch(cap,target,opener=opener);assert len(calls)==1
+    target.write_bytes(b'wrong')
+    with pytest.raises(ValueError,match='existing parent differs'):fetch.fetch(cap,target,opener=opener)
+    bad=tmp_path/'bad.pt'
+    with pytest.raises(ValueError,match='differs from exact pin'):fetch.fetch(cap,bad,opener=lambda *a,**k:io.BytesIO(b'bad'))
+    assert not bad.exists() and not Path(str(bad)+'.seed.json').exists()
+
+
+def test_parent_transfer_cohost_fetches_before_init_and_workers_fetch_before_verify(tmp_path):
+    diloco=load('diloco')
+    trainer=['python','-m','natlang_neuralese.train.native_state_sft','--continue-from','/work/parent.pt','--out','/work/diloco-learner']
+    job=base_job(id='lfm',kind='train',command=trainer,env={'NATLANG_DILOCO_SEED_SHA256':'a'*64},
+                 scratch={'path':'/work','size':'200Gi'})
+    path=tmp_path/'job.json';path.write_text(json.dumps(job))
+    run={'id':'private-run','settings':{'run_id':'private-run','workers':4},'parent_transfer':{'pin':'pin','receipt':'receipt'},
+         'resident':{'directory':'/work/diloco-resident/resident-data','geometry_qualification':'/work/diloco-resident/geometry.json'},
+         'coordinator':{'parent':'/work/parent.pt','prepare_parent':['true']},'learners':{'job':str(path)}}
+    worker=diloco.learner_job(run,1,'https://coord')
+    assert worker['env']['NATLANG_CW_INSTANCE']=='private-run-learner-1'
+    assert worker['command'][2].index('diloco_fetch_parent')<worker['command'][2].index('sha256_file_hex')
+    cohost=diloco.cohosted_job(run,diloco.trainer_command(run,diloco._template(str(path)))[len(diloco.TRAINER):])
+    script=cohost['command'][2]
+    assert script.index('diloco_fetch_parent')<script.index('native_diloco init')
+
+
+def test_fresh_parent_base_fetch_pins_revision_without_credentials(tmp_path):
+    fetch=load('diloco_fetch_parent');revision='a'*40;cache=tmp_path/'hf'
+    snapshot=cache/'models--org--model/snapshots'/revision
+    observed=[]
+    def download(**kwargs):observed.append(kwargs);snapshot.mkdir(parents=True,exist_ok=True);return str(snapshot)
+    base={'repo_id':'org/model','revision':revision,'cache':str(cache),'path':str(snapshot)}
+    assert fetch.ensure_base(base,download=download)['revision']==revision
+    assert observed==[{'repo_id':'org/model','revision':revision,'cache_dir':str(cache),'token':False}]
+    snapshot.rmdir()
+    with pytest.raises(ValueError,match='different snapshot'):
+        fetch.ensure_base(base,download=lambda **kwargs:str(tmp_path))
+
+
+def test_parent_read_secret_requires_verified_receipt_and_binds_capability(tmp_path,monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    diloco=load('diloco');pin={'path':'/work/parent.pt','sha256':'a'*64,'bytes':123,'global_step':59,
+                              'requested_stop':50,'full_optimizer_rng_exposure':True}
+    identity={'sha256':pin['sha256'],'bytes':pin['bytes']}
+    receipt={'private':True,'identity':identity,'independent_verification':identity,
+             'run':'entity/project/run','name':'object','source':'/work/parent.pt'}
+    pin_path=tmp_path/'pin';pin_path.write_text(json.dumps(pin));receipt_path=tmp_path/'receipt';receipt_path.write_text(json.dumps(receipt))
+    job=base_job(id='lfm',kind='train',env={'NATLANG_DILOCO_SEED_SHA256':pin['sha256']})
+    job_path=tmp_path/'job';job_path.write_text(json.dumps(job))
+    remote=SimpleNamespace(size=123,url='https://storage.googleapis.com/private/object?signature=SECRET')
+    fake=SimpleNamespace(Api=lambda:SimpleNamespace(run=lambda x:SimpleNamespace(file=lambda y:remote)))
+    monkeypatch.setitem(sys.modules,'wandb',fake)
+    run={'parent_transfer':{'pin':str(pin_path),'receipt':str(receipt_path)},'coordinator':{'parent':pin['path']},'learners':{'job':str(job_path)}}
+    cap=json.loads(diloco.parent_read_secret(run)['parent-read'])
+    assert cap['sha256']==pin['sha256'] and cap['global_step']==59 and cap['url']==remote.url
+    receipt['independent_verification']={'sha256':'b'*64,'bytes':123};receipt_path.write_text(json.dumps(receipt))
+    with pytest.raises(ValueError,match='independent verification'):diloco.parent_read_secret(run)

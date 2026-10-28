@@ -112,11 +112,11 @@ def learner_job(run: dict, worker: int, url: str) -> dict:
     settings = {**run['settings'], 'coordinator_url': url}
     ident = f"{run['id']}-learner-{worker}"
     environment = {**job['env'], 'NATLANG_DILOCO_WORKER_ID': str(worker)}
-    if job['scratch'].get('restore_from_snapshot_id'):
+    if job['scratch'].get('restore_from_snapshot_id') or run.get('parent_transfer'):
         environment['NATLANG_CW_INSTANCE'] = ident
     command = [*trainer_command(run, job), '--diloco', json.dumps(settings, sort_keys=True)]
     expected = environment.get('NATLANG_DILOCO_SEED_SHA256')
-    if job['scratch'].get('restore_from_snapshot_id') and expected:
+    if (job['scratch'].get('restore_from_snapshot_id') or run.get('parent_transfer')) and expected:
         import re
         if not re.fullmatch('[0-9a-f]{64}', expected):
             raise cwctl.ControllerError('restored seed needs its exact SHA-256')
@@ -151,7 +151,8 @@ else:
  with marker.open('x') as f:
   json.dump(expected,f,sort_keys=True); f.flush(); os.fsync(f.fileno())
 '''
-        command = ['bash', '-c', f'{shlex.join(["python3", "-c", verify, parent, expected, ident, json.dumps(roots)])} && exec {shlex.join(command)}']
+        fetch = shlex.join(['python3','-m','scripts.coreweave.diloco_fetch_parent',parent]) + ' && ' if run.get('parent_transfer') else ''
+        command = ['bash', '-c', f'{fetch}{shlex.join(["python3", "-c", verify, parent, expected, ident, json.dumps(roots)])} && exec {shlex.join(command)}']
     job.update(id=ident, env=environment, command=command)
     return jobs.validate(job)
 
@@ -171,6 +172,7 @@ def cohosted_job(run: dict, trainer_args: list[str]) -> dict:
              "headers={'Authorization':'Bearer '+credential(TOKEN_ENV,TOKEN_SECRET)}); "
              "urllib.request.urlopen(r,timeout=2).read()")
     prepare = run['coordinator'].get('prepare_parent')
+    fetch = (shlex.join(['python3','-m','scripts.coreweave.diloco_fetch_parent',run['coordinator']['parent']]) + '\n') if run.get('parent_transfer') else ''
     seed = (shlex.join(prepare) + ' >' + shlex.quote(logs + '/prepare-parent.log') + ' 2>&1 &\n'
             "seed_pid=$!\nwait \"$seed_pid\"\nseed_pid=''") if prepare else ':'
     script = f"""set -e
@@ -185,7 +187,7 @@ cleanup() {{
 }}
 trap cleanup EXIT
 trap 'exit 143' TERM INT
-{seed}
+{fetch}{seed}
 CUDA_VISIBLE_DEVICES='' {shlex.join(init)} >{shlex.quote(logs + '/init.log')} 2>&1
 CUDA_VISIBLE_DEVICES='' {shlex.join(serve)} >{shlex.quote(logs + '/server.log')} 2>&1 &
 coord=$!
@@ -259,6 +261,35 @@ def wait_coordinator(url: str, token: str, gateway: bytes, timeout: float = 600,
 LEARNER_CREATE_INTERVAL_SECONDS = 5.0
 
 
+
+def parent_read_secret(run):
+    """Issue a fresh scoped GET only for an independently verified exact private parent."""
+    transfer = run.get('parent_transfer')
+    if not transfer: return {}
+    from private_export_guard import validate_receipt
+    import requests, wandb
+    from urllib.parse import urlparse
+    pin=json.loads(Path(transfer['pin']).read_text());receipt=json.loads(Path(transfer['receipt']).read_text())
+    identity={'sha256':pin['sha256'],'bytes':pin['bytes']}
+    validate_receipt(receipt,identity)
+    expected=_template(run['learners']['job'])['env'].get('NATLANG_DILOCO_SEED_SHA256')
+    if (pin['path']!=run['coordinator']['parent'] or pin['sha256']!=expected
+            or not pin.get('full_optimizer_rng_exposure') or not 0<pin['requested_stop']<=pin['global_step']):
+        raise cwctl.ControllerError('private parent pin does not match run parent')
+    remote=wandb.Api().run(receipt['run']).file(receipt['name'])
+    if remote.size!=identity['bytes']:raise cwctl.ControllerError('private parent object size changed')
+    url=remote.url
+    if urlparse(url).hostname=='api.wandb.ai':
+        response=requests.get(url,auth=('api',os.environ['WANDB_API_KEY']),stream=True,timeout=60)
+        try:
+            response.raise_for_status();url=response.url
+        finally:response.close()
+    parsed=urlparse(url)
+    if parsed.scheme!='https' or parsed.hostname!='storage.googleapis.com' or parsed.username or parsed.password:
+        raise cwctl.ControllerError('private parent scoped read capability is unavailable')
+    cap={**pin,'url':url,**({'base':transfer['base']} if transfer.get('base') else {})}
+    return {'parent-read':json.dumps(cap).encode()}
+
 def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: list[str], *, first_worker=0, on_started=None) -> list[str]:
     """Create every learner sandbox in its own thread; any failure stops all of them (the caller stops ``started``)."""
     import threading
@@ -272,7 +303,7 @@ def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: li
     def one(worker: int) -> None:
         try:
             entry = cwctl.launch(learner_job(run, worker, url), False, True, None, Path(run['learners']['bundle_file']),
-                                 secrets={'diloco-token': token.encode(), 'diloco-gateway': gateway})
+                                 secrets={'diloco-token': token.encode(), 'diloco-gateway': gateway, **parent_read_secret(run)})
             with lock:
                 started.append(entry['sandbox_id'])
                 if on_started is not None:
@@ -327,7 +358,7 @@ def launch(run: dict, *, coordinator_only=False) -> dict:
         cohosted = placement == 'cohosted'
         job = cohosted_job(run, trainer_args) if cohosted else coordinator_job(run, trainer_args)
         bundle = run['learners']['bundle_file'] if cohosted else run['coordinator']['bundle_file']
-        coordinator = cwctl.launch(job, False, True, None, Path(bundle), secrets={'diloco-token': token.encode()})
+        coordinator = cwctl.launch(job, False, True, None, Path(bundle), secrets={'diloco-token': token.encode(), **parent_read_secret(run)})
         started.append(coordinator['sandbox_id'])
         record['coordinator'] = coordinator['sandbox_id']
         record['ownership'][coordinator['sandbox_id']] = ['coordinator', 'learner-0'] if cohosted else ['coordinator']
