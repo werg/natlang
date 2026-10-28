@@ -39,7 +39,7 @@ export type StudentSettings = {
   readonly base: NativeModelIdentity;
   /** The exact native checkpoint the trainer loads, and its engine options. */
   readonly checkpoint: string;
-  readonly engine?: { readonly device?: string; readonly dtype?: string };
+  readonly engine?: { readonly device?: string; readonly dtype?: string; readonly base?: string };
   /** argv of the trainer entry; `--plan <file> --out <dir>` are appended. */
   readonly trainer: readonly string[];
   readonly env?: Readonly<Record<string, string>>;
@@ -152,7 +152,7 @@ export function deriveStudent(environment: NodeJS.ProcessEnv = process.env, name
   const defaults = defaultNativePython(environment);
   const python = native.python ?? defaults.python ?? 'python3', pythonPath = native.pythonPath ?? (native.python ? [] : defaults.pythonPath ?? []);
   return { profile, native, ...(teacher ? { teacher } : {}), student: { base, checkpoint: native.checkpoint,
-    engine: { device: derivedDevice(native), ...(native.dtype ? { dtype: native.dtype } : {}) },
+    engine: { device: derivedDevice(native), ...(native.dtype ? { dtype: native.dtype } : {}), ...(native.base ? { base: native.base } : {}) },
     trainer: [python, '-m', 'natlang_neuralese.tune.build'], ...(pythonPath.length ? { env: { PYTHONPATH: pythonPath.join(':') } } : {}),
     moduleMap: base.architecture, ...ggufBase(config, native) } };
 }

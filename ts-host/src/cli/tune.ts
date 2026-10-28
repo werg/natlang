@@ -339,7 +339,8 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       if (!current) throw new Error('natlang tune --distill exports the active release; run natlang tune first');
       const exported = await exportDistillation(options, await prepareData(options, [], io.err), current, io.err);
       await runStudentModule(options.student, 'natlang_neuralese.tune.distill', ['--export', exported.directory,
-        '--checkpoint', options.student.checkpoint, '--device', options.student.engine?.device ?? 'cpu']);
+        '--checkpoint', options.student.checkpoint, ...(options.student.engine?.base ? ['--base', options.student.engine.base] : []),
+        '--device', options.student.engine?.device ?? 'cpu']);
       return exported;
     });
     io.out(flags.has('--json') ? JSON.stringify(result, null, 2) : `distillation export: ${result.manifest.turns.rows} training rows ` +

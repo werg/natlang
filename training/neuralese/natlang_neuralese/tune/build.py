@@ -181,7 +181,7 @@ def main(argv=None):
     from ..serve import load_native_engine
     config = plan.get('engine') or {'checkpoint': plan['student']['checkpoint'], **plan['student'].get('engine', {})}
     with fit_store_context(config) as store:
-        engine = load_native_engine(config['checkpoint'], device=config.get('device', 'cpu'),
+        engine = load_native_engine(config['checkpoint'], base=config.get('base'), device=config.get('device', 'cpu'),
                                     dtype=getattr(torch, config.get('dtype', 'float32')), store=store)
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)

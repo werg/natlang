@@ -14,6 +14,8 @@ import { defaultNatlangDataDirectory } from '../package/store.js';
 export type NativeModelSettings = {
   /** The pinned complete native checkpoint the server loads. */
   checkpoint: string;
+  /** Local snapshot containing the exact checkpoint base; the native loader verifies its inventory. */
+  base?: string;
   /** Its SHA-256; the running server must report exactly this checkpoint. */
   sha256: string;
   /** Where the pin came from (a checkpoint pointer, a file or a `nativeSources` name) and its training step. */
@@ -50,6 +52,7 @@ const SHA256 = /^[0-9a-f]{64}$/;
 export function validateNativeSettings(native: NativeModelSettings): void {
   if (!native || typeof native !== 'object' || Array.isArray(native)) throw new TypeError('native must be an object');
   if (typeof native.checkpoint !== 'string' || !native.checkpoint) throw new Error('native.checkpoint must name the pinned checkpoint; run natlang setup --native SOURCE');
+  if (native.base !== undefined && (typeof native.base !== 'string' || !native.base)) throw new Error('native.base must name a local base snapshot');
   if (typeof native.sha256 !== 'string' || !SHA256.test(native.sha256)) throw new Error('native.sha256 must be the checkpoint SHA-256');
   if (native.actorView !== undefined && (typeof native.actorView?.path !== 'string' || !SHA256.test(native.actorView.sha256 ?? '')))
     throw new Error('native.actorView must be the {path, sha256, bytes} receipt natlang setup --native wrote');
@@ -94,7 +97,7 @@ export function nativeServerCommand(native: NativeModelSettings, environment: No
   const pythonPath = native.pythonPath ?? (native.python ? [] : defaultNativePython(environment).pythonPath ?? []);
   const server = [python, '-u', '-m', 'natlang_neuralese.serve', '--native-checkpoint', native.checkpoint,
     '--host', '127.0.0.1', '--port', String(nativePort(native)), '--device', native.device ?? 'auto',
-    ...(native.dtype ? ['--dtype', native.dtype] : []), ...(native.memoryGb ? ['--memory-gb', String(native.memoryGb)] : []),
+    ...(native.base ? ['--base', native.base] : []), ...(native.dtype ? ['--dtype', native.dtype] : []), ...(native.memoryGb ? ['--memory-gb', String(native.memoryGb)] : []),
     ...(native.contextTokens ? ['--ctx-size', String(native.contextTokens)] : []),
     ...(native.actorView ? ['--native-actor-view', native.actorView.path, '--native-actor-view-sha256', native.actorView.sha256] : []),
     ...((native.prefixCacheGb ?? 2) > 0 ? ['--prefix-cache-gb', String(native.prefixCacheGb ?? 2)] : []),

@@ -107,7 +107,7 @@ def _merge(base, extra):
     return out
 
 
-def specs(op, checkpoint, templates, *, held_fraction=.25, min_programs=2, extra=None):
+def specs(op, checkpoint, templates, *, base=None, held_fraction=.25, min_programs=2, extra=None):
     op, templates = Path(op).resolve(), Path(templates)
     results = [json.loads(path.read_text()) for path in sorted((op / 'tunes').glob('*.json'))]
     results = [item for item in results if item.get('schema') == RESULT_SCHEMA and item.get('sft_rows', 0) > 0]
@@ -132,6 +132,8 @@ def specs(op, checkpoint, templates, *, held_fraction=.25, min_programs=2, extra
     for name, target in (('bank-init', 'bank-init-spec.json'), ('corpus', 'corpus-spec.json'),
                          ('train', 'train-template.json'), ('meta', 'meta-template.json')):
         spec = _fill(json.loads((templates / f'lfm3-{name}-spec.json').read_text()), mapping)
+        if base and name != 'meta':
+            spec['base'] = str(Path(base).resolve(strict=True))
         for key in ('*', name):
             spec = _merge(spec, (extra or {}).get(key, {}))
         path = op / target
@@ -175,7 +177,7 @@ def outer_next(op):
     if state.get('labels_stale'):
         directory = op / 'cycles' / str(index + 1)
         nxt = _cycle(op, index + 1)
-        adopt = {key: template[key] for key in ('checkpoint', 'store', 'device', 'dtype', 'state', 'recipe') if key in template}
+        adopt = {key: template[key] for key in ('checkpoint', 'base', 'store', 'device', 'dtype', 'state', 'recipe') if key in template}
         _write(directory / 'adopt.json', {**adopt, 'out': nxt['bank']})
         corpus = json.loads((op / 'corpus-spec.json').read_text())
         _write(directory / 'corpus-spec.json', {**corpus, 'bank': nxt['bank'], 'work': nxt['corpus'], 'out': nxt['targets']})
@@ -238,6 +240,7 @@ def main(argv=None):
     many = commands.add_parser('specs')
     many.add_argument('--op', required=True)
     many.add_argument('--checkpoint', required=True)
+    many.add_argument('--base')
     many.add_argument('--templates', required=True)
     many.add_argument('--held-fraction', type=float, default=.25)
     many.add_argument('--min-programs', type=int, default=2)
@@ -254,7 +257,7 @@ def main(argv=None):
     elif args.command == 'summary':
         summary(args.op)
     else:
-        specs(args.op, args.checkpoint, args.templates, held_fraction=args.held_fraction, min_programs=args.min_programs,
+        specs(args.op, args.checkpoint, args.templates, base=args.base, held_fraction=args.held_fraction, min_programs=args.min_programs,
               extra=json.loads(args.extra) if args.extra else None)
     return 0
 

@@ -52,7 +52,7 @@ def _engine(spec):
     import torch
     from ...serve import load_native_engine
     from ...serve.store import TensorStore
-    engine = load_native_engine(spec['checkpoint'], device=spec.get('device', 'cpu'),
+    engine = load_native_engine(spec['checkpoint'], base=spec.get('base'), device=spec.get('device', 'cpu'),
                                 dtype=getattr(torch, spec.get('dtype', 'float32')))
     if spec.get('store'):
         engine.store.close()
@@ -246,7 +246,7 @@ def corpus(spec):
         plan['artifacts'] = [str(exported.resolve())]
         plan['emitBoundaries'], plan['label'], plan['exports'] = True, f"corpus:{program['name']}", []
         plan['student'] = {**source['student'], 'checkpoint': spec['checkpoint'],
-                           'engine': {**source['student'].get('engine', {}), **{k: spec[k] for k in ('device', 'dtype') if k in spec}}}
+                           'engine': {**source['student'].get('engine', {}), **{k: spec[k] for k in ('base', 'device', 'dtype') if k in spec}}}
         plan['recipe'] = {**source.get('recipe', {}), **spec.get('recipe', {}), **program.get('recipe', {}),
                           'basis': bank_manifest['basis']}
         plan_path = directory / 'plan.json'

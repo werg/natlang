@@ -101,12 +101,12 @@ fi
 # The tuner's configuration: the trained checkpoint is the student (native backend) and its own privileged teacher.
 if [ $DRY = 0 ] && [ ! -f "$O/natlang-config/config.json" ]; then
   mkdir -p "$O/natlang-config"
-  python3 - "$O/natlang-config/config.json" "$CK" "$SHA" "$PY" "$REPO" <<'PY'
+  python3 - "$O/natlang-config/config.json" "$CK" "$SHA" "$PY" "$REPO" "${BASE_SNAPSHOT:-}" <<'PY'
 import json, sys
-path, checkpoint, sha, python, repo = sys.argv[1:]
+path, checkpoint, sha, python, repo, base = sys.argv[1:]
 json.dump({'defaultProfile': 'lfm3-lane', 'profiles': {'lfm3-lane': {'native': {
     'checkpoint': checkpoint, 'sha256': sha, 'python': python, 'pythonPath': [f'{repo}/training/neuralese', repo],
-    'device': 'cuda', 'dtype': 'bfloat16'}}},
+    'device': 'cuda', 'dtype': 'bfloat16', **({'base': base} if base else {})}}},
     # Reply/action targets only (LFM3 recipe: prompts are zero-weight context); passes over the admitted rows instead
     # of the trainer's one-step default; RL rounds continue with one pass of sft/rl/rft each.
     # Invocation limits as in the operational tuning lane (PROGRAM_TUNING_RUNS_20261026.md).
@@ -154,7 +154,7 @@ EXTRA=''
  "meta": {"steps": 2, "refine_steps": 1, "fit": {"steps": 2, "refine_steps": 1},
           "learned": {"scopes": {"tree": 3, "folder": 3, "lambda": 3}, "steps": 2, "patience": 2}}}))')
 stage specs "$STAGE_BUDGET_GB" specs $ENV $PY -m natlang_neuralese.tune.learned.lane specs --op "$O" --checkpoint "$CK" \
-  --templates "$HERE" $([ $DRY = 1 ] && echo "--held-fraction 0") ${EXTRA:+--extra "'$EXTRA'"}
+  --templates "$HERE" ${BASE_SNAPSHOT:+--base "$BASE_SNAPSHOT"} $([ $DRY = 1 ] && echo "--held-fraction 0") ${EXTRA:+--extra "'$EXTRA'"}
 stage bank-init "$STAGE_BUDGET_GB" bank-init $ENV $PY -m natlang_neuralese.tune.learned bank-init --spec "$O/bank-init-spec.json"
 stage corpus "$STAGE_BUDGET_GB" corpus $ENV $PY -m natlang_neuralese.tune.learned corpus --spec "$O/corpus-spec.json"
 

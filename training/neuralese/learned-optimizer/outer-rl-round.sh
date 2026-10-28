@@ -16,7 +16,7 @@ mkdir -p "$R"
 import json, sys
 w = sys.argv[1]
 train = json.load(open(f'{w}/train-spec.json'))
-common = {k: train[k] for k in ('checkpoint', 'store', 'device', 'dtype', 'bank', 'targets', 'state') if k in train}
+common = {k: train[k] for k in ('checkpoint', 'base', 'store', 'device', 'dtype', 'bank', 'targets', 'state') if k in train}
 json.dump({**common, 'perContext': int(sys.argv[2]), 'out': f'{w}/outer-rl/proposals.jsonl', 'releases': f'{w}/outer-rl/releases'},
           open(f'{w}/outer-rl/proposals-spec.json', 'w'), indent=1)
 json.dump({'proposals': f'{w}/outer-rl/proposals.jsonl', 'outcomes': f'{w}/outer-rl/outcomes.json',

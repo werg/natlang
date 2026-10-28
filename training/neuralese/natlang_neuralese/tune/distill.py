@@ -20,6 +20,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--export', required=True)
     parser.add_argument('--checkpoint', required=True)
+    parser.add_argument('--base', help='local exact base snapshot for a relocated checkpoint')
     parser.add_argument('--device', default='cpu')
     parser.add_argument('--prompt-weight', type=float, default=0.,
         help='prompt-token supervision weight (default 0: only the model\'s own outputs are targets)')
@@ -34,7 +35,7 @@ def main(argv=None):
         raise TuneMathError('a distillation export holds only training-split tune turns')
     import torch
     from ..serve import load_native_engine
-    engine = load_native_engine(args.checkpoint, device=args.device, dtype=torch.float32)
+    engine = load_native_engine(args.checkpoint, base=args.base, device=args.device, dtype=torch.float32)
     graphs = []
     # Production SFT reads bare native graphs: the tune binding is dropped (the base learns the behavior itself) and
     # the row's evidence weight scales its targets, as the tuner weighs it.
@@ -47,7 +48,7 @@ def main(argv=None):
     out.write_text(''.join(json.dumps(graph, sort_keys=True) + '\n' for graph in graphs))
     (export / 'lowered.json').write_text(json.dumps({'schema': 'natlang.tune-distill-lowered/v1', 'turns_sha256': manifest['turns']['sha256'],
         'native_graphs': {'path': out.name, 'sha256': sha256_file_hex(out), 'rows': len(graphs)},
-        'checkpoint': args.checkpoint, 'prompt_weight': args.prompt_weight}, indent=1, sort_keys=True))
+        'checkpoint': args.checkpoint, 'base': args.base, 'prompt_weight': args.prompt_weight}, indent=1, sort_keys=True))
     return 0
 
 

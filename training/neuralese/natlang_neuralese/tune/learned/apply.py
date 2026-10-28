@@ -43,7 +43,7 @@ class Context:
             raise LearnedOptimizerError('the plan carries no learned optimizer settings')
         config = self.plan.get('engine') or {'checkpoint': self.plan['student']['checkpoint'], **self.plan['student'].get('engine', {})}
         self.config = config
-        self.engine = load_native_engine(config['checkpoint'], device=config.get('device', 'cpu'),
+        self.engine = load_native_engine(config['checkpoint'], base=config.get('base'), device=config.get('device', 'cpu'),
                                          dtype=getattr(torch, config.get('dtype', 'float32')))
         self.engine.store.close()
         self.engine.store = TensorStore(self.learned['store'])

@@ -15,7 +15,7 @@ test('the default native profile (or the native pin behind a GGUF default) is th
   const environment = { ...process.env, NATLANG_CONFIG_HOME: directory, NATLANG_NATIVE_MODELS: models, NATLANG_PROFILE: '' };
   delete environment.NATLANG_PROFILE;
   const write = config => writeFileSync(join(directory, 'config.json'), JSON.stringify(config));
-  const native = { checkpoint: join(models, `${sha}.pt`), sha256: sha, python: '/venv/python', pythonPath: ['/repo/training', '/repo'], device: 'cuda', dtype: 'float32' };
+  const native = { checkpoint: join(models, `${sha}.pt`), sha256: sha, base: '/verified/snapshot', python: '/venv/python', pythonPath: ['/repo/training', '/repo'], device: 'cuda', dtype: 'float32' };
   try {
     mkdirSync(models);
     write({ defaultProfile: 'lfm-latest-gguf', profiles: {
@@ -31,7 +31,7 @@ test('the default native profile (or the native pin behind a GGUF default) is th
     assert.equal(student.checkpoint, native.checkpoint);
     assert.deepEqual(student.trainer, ['/venv/python', '-m', 'natlang_neuralese.tune.build']);
     assert.deepEqual(student.env, { PYTHONPATH: '/repo/training:/repo' });
-    assert.deepEqual(student.engine, { device: 'cuda', dtype: 'float32' });
+    assert.deepEqual(student.engine, { device: 'cuda', dtype: 'float32', base: '/verified/snapshot' });
     assert.equal(student.moduleMap, 'lfm2');
     assert.equal(settings.backend, 'native');
     assert.equal(settings.servingProfile, 'lfm-latest');

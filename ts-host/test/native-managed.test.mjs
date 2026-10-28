@@ -37,6 +37,9 @@ test('a native profile launches its pinned checkpoint on a port derived from it,
   const { command, env } = nativeServerCommand(native, {});
   assert.deepEqual(command.slice(0, 5), ['/venv/python', '-u', '-m', 'natlang_neuralese.serve', '--native-checkpoint']);
   assert.ok(command.includes('--prefix-cache-gb') && env.PYTHONPATH === '/repo/training');
+  const relocated = nativeServerCommand({ ...native, base: '/verified/snapshot' }, {}).command;
+  assert.equal(relocated[relocated.indexOf('--base') + 1], '/verified/snapshot');
+  assert.throws(() => validateNativeSettings({ ...native, base: '' }), /native.base/);
   assert.ok(!nativeServerCommand({ ...native, prefixCacheGb: 0 }, {}).command.includes('--prefix-cache-gb'));
   const launched = nativeServerCommand({ ...native, launcher: ['ledger', 'run', '--unit', '{unit}', '--'], stop: ['stop', '{unit}'] }, {}).command;
   assert.deepEqual(launched.slice(0, 6), ['ledger', 'run', '--unit', `natlang-native-${sha.slice(0, 12)}-${nativePort(native)}`, '--', 'env']);
