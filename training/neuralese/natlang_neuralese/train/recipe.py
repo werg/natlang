@@ -389,11 +389,19 @@ def require_input_decoders(stage_inputs):
                            'plan-only or launch (first input: ' + compressed[0] + ')')
 
 
-def stage_input_args(resolved, kind):
-    """Serialize already-validated file roles to the shared handler CLIs."""
+def stage_input_args(resolved, kind, *, target='local'):
+    """Serialize file roles for a local execution or a portable remote plan.
+
+    Local execution may use this host's verified HDD staging cache. Portable
+    plans retain exact logical paths so another host never receives a path to
+    the preparation machine's private cache.
+    """
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
-    resolved = _staged_inputs(resolved)
+    if target not in {'local', 'portable'}:
+        raise ValueError('stage input argv target must be local or portable')
+    if target == 'local':
+        resolved = _staged_inputs(resolved)
     for role, flag in (('semantic_config', '--config'), ('controller_config', '--config'),
                        ('native_participants', '--participants'), ('resume', '--resume')):
         if role in resolved and role in supported:
