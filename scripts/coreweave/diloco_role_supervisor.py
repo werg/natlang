@@ -15,23 +15,39 @@ def _atomic(path: Path, value: dict) -> None:
     write_json_durable(path, value)
 
 
+def _ticks(pid):
+    try:
+        return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19]
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+
+
 def main(directory: Path) -> None:
     directory.mkdir(parents=True,exist_ok=True,mode=0o700)
     boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     roles={};stopping=False
     path=directory/'state.json'
     previous=json.loads(path.read_text()) if path.exists() else {}
+    if previous.get('boot_id') == boot:
+        for role, info in previous.get('roles', {}).items():
+            if info.get('alive'):
+                current = _ticks(info['pid'])
+                if current is not None and (info.get('start_ticks') is None or current == info['start_ticks']):
+                    raise RuntimeError(f'previous {role} process is still alive; reconcile its ownership first')
+        if (previous.get('supervisor_pid') != os.getpid() and previous.get('supervisor_start_ticks') is not None
+                and _ticks(previous.get('supervisor_pid')) == previous['supervisor_start_ticks']):
+            raise RuntimeError('previous role supervisor is still alive')
     generation=previous.get('generation',0)
     events=previous.get('events',[])
     seen={event['request_id'] for event in events if 'request_id' in event}
     owner_id=str(uuid.uuid4())
-    ticks=Path(f'/proc/{os.getpid()}/stat').read_text().rsplit(')',1)[1].split()[19]
+    ticks=_ticks(os.getpid())
     state={'schema':'natlang.diloco-role-supervisor/1','boot_id':boot,'supervisor_pid':os.getpid(),
            'supervisor_start_ticks':ticks,'owner_id':owner_id,'generation':generation,'roles':{},'events':events}
     state['events'].append({'event':'owner_started','owner_id':owner_id,'boot_id':boot,'pid':os.getpid(),'start_ticks':ticks})
     def save():
         state['generation']=generation
-        state['roles']={role:{'pid':p.pid,'alive':p.poll() is None,'returncode':p.poll()} for role,p in roles.items()}
+        state['roles']={role:{'pid':p.pid,'start_ticks':_ticks(p.pid),'alive':p.poll() is None,'returncode':p.poll()} for role,p in roles.items()}
         _atomic(directory/'state.json',state)
     def stop(*_):
         nonlocal stopping
@@ -54,7 +70,7 @@ def main(directory: Path) -> None:
                 if v.get('owner_id')!=owner_id:raise ValueError('stale supervisor owner')
                 if v.get('expected_generation')!=generation:raise ValueError('stale supervisor generation')
                 role=v.get('role');action=v.get('action')
-                if role not in ('coordinator','worker'):raise ValueError('invalid role')
+                if role not in ('coordinator','worker','actor'):raise ValueError('invalid role')
                 prior=roles.get(role)
                 if action=='start':
                     if prior and prior.poll() is None:raise ValueError('role already alive')
@@ -81,7 +97,7 @@ def main(directory: Path) -> None:
             finally:claimed.unlink(missing_ok=True)
         time.sleep(.2)
     # Preserve final updates: wait for the learner to drain before stopping the coordinator.
-    for role in ('worker','coordinator'):
+    for role in ('worker','actor','coordinator'):
         p=roles.get(role)
         if p and p.poll() is None:
             p.terminate();p.wait()

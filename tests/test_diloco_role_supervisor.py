@@ -99,3 +99,36 @@ def test_restarted_owner_rejects_stale_requests(tmp_path):
     finally:
         if first.poll() is None: first.kill(); first.wait()
         if second and second.poll() is None: second.terminate(); second.wait(timeout=8)
+
+
+def test_actor_owner_refuses_live_orphan_after_owner_crash(tmp_path):
+    supervisor = Path(__file__).parents[1] / 'scripts/coreweave/diloco_role_supervisor.py'
+    control = tmp_path / 'control'
+    proc = subprocess.Popen([sys.executable, str(supervisor), str(control)])
+    child = None
+    def wait(predicate):
+        end = time.monotonic() + 8
+        while time.monotonic() < end:
+            try:
+                if predicate(): return
+            except (OSError, ValueError, KeyError): pass
+            time.sleep(.03)
+        raise AssertionError('supervisor timed out')
+    try:
+        wait(lambda: (control/'state.json').exists())
+        state = json.loads((control/'state.json').read_text())
+        req = {'schema':'natlang.diloco-role-request/1', 'id':'actor', 'owner_id':state['owner_id'],
+               'expected_generation':state['generation'], 'role':'actor', 'action':'start',
+               'argv':[sys.executable, '-c', 'import time;time.sleep(60)']}
+        temp = control/'request.tmp'; temp.write_text(json.dumps(req)); os.replace(temp, control/'request.json')
+        wait(lambda: (control/'result.json').exists())
+        state = json.loads((control/'state.json').read_text()); child = state['roles']['actor']['pid']
+        assert state['roles']['actor']['alive'] and state['roles']['actor']['start_ticks']
+        proc.kill(); proc.wait()
+        again = subprocess.run([sys.executable,str(supervisor),str(control)],capture_output=True,text=True,timeout=8)
+        assert again.returncode != 0 and 'previous actor process is still alive' in again.stderr
+    finally:
+        if proc.poll() is None: proc.kill(); proc.wait()
+        if child:
+            try: os.kill(child, signal.SIGTERM)
+            except ProcessLookupError: pass
