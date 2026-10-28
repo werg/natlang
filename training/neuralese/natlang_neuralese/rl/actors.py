@@ -55,6 +55,10 @@ def validate_capture_export(capture, declaration):
     """Bind a lossy or stale actor to the actual export recorded with each turn."""
     actual = capture.get('actor_export')
     checkpoint = (capture.get('policy') or {}).get('checkpoint_sha256')
+    if actual is not None and (not isinstance(actual, dict) or set(actual) != {'kind', 'format', 'sha256'}
+            or actual['kind'] not in EXPORT_KINDS or not isinstance(actual['format'], str) or not actual['format']
+            or not isinstance(actual['sha256'], str) or not _SHA.fullmatch(actual['sha256'])):
+        raise ValueError('captured RL actor export binding is malformed')
     entry = (declaration or {}).get('actors', {}).get(checkpoint)
     if entry is not None:
         if actual != entry['export']:
