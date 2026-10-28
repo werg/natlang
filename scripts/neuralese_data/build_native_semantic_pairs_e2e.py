@@ -1096,9 +1096,8 @@ def _render_trajectory(task):
                     'transformation': occurrence['transform'],
                 })
             model_views = list(views.values())
-            groups = sorted(set(model_views[0]['graph']['source_groups']) |
-                            set(model_views[1]['graph']['source_groups']))
-            if model_views[0]['export']['text'] != model_views[1]['export']['text']:
+            groups = sorted(set().union(*(set(view['graph']['source_groups']) for view in model_views)))
+            if any(view['export']['text'] != model_views[0]['export']['text'] for view in model_views[1:]):
                 raise ValueError('cross-model payload text differs after rendering')
             row = {'schema': PAIR_SCHEMA, 'id': 'e2e-edge:' + edge_id,
                 'split': edge['split'], 'source_groups': groups,
@@ -1158,14 +1157,50 @@ def _initialize_render_worker(config):
         'pair_only': config.get('pair_only', False)})
 
 
+def students(args, parser):
+    """{name: tokenizer dir}: the original LFM2.5/Mellum pair, or an explicit --tokenizer set (LFM3, 2026-10-28)."""
+    if args.tokenizer:
+        if args.lfm_tokenizer or args.mellum_tokenizer:
+            parser.error('--tokenizer replaces --lfm-tokenizer/--mellum-tokenizer; do not combine them')
+        result = {}
+        for spec in args.tokenizer:
+            name, sep, path = spec.partition('=')
+            if not sep or not name or not path or name in result:
+                parser.error(f'--tokenizer needs distinct NAME=DIR entries: {spec!r}')
+            result[name] = Path(path)
+        return result
+    if not (args.lfm_tokenizer and args.mellum_tokenizer):
+        parser.error('give --lfm-tokenizer and --mellum-tokenizer, or an explicit --tokenizer NAME=DIR set')
+    return {'lfm25': args.lfm_tokenizer, 'mellum21': args.mellum_tokenizer}
+
+
+def check_declared_student(name, model_id, expanded_fingerprint, role_ids):
+    """An explicitly named student that is a declared line backbone must be exactly that backbone."""
+    from natlang_neuralese.common import line_backbones
+    if name not in line_backbones.BACKBONES:
+        return
+    declared = line_backbones.backbone(name)
+    if declared.get('expanded_fingerprint') and expanded_fingerprint != declared['expanded_fingerprint']:
+        raise ValueError(f'{name} expanded tokenizer fingerprint differs from its line-backbone declaration')
+    if declared.get('role_token_ids') and tuple(role_ids) != tuple(declared['role_token_ids']):
+        raise ValueError(f'{name} role token ids differ from its line-backbone declaration')
+    if model_id != line_backbones.model_id(name):
+        raise ValueError(f'{name} model id {model_id} differs from its line-backbone declaration')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--records', type=Path, required=True)
     parser.add_argument('--pieces', type=Path, required=True)
     parser.add_argument('--edges', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--lfm-tokenizer', type=Path, required=True)
-    parser.add_argument('--mellum-tokenizer', type=Path, required=True)
+    parser.add_argument('--lfm-tokenizer', type=Path,
+                        help='LFM2.5 tokenizer of the original two-student build (with --mellum-tokenizer)')
+    parser.add_argument('--mellum-tokenizer', type=Path)
+    parser.add_argument('--tokenizer', action='append', default=[], metavar='NAME=DIR',
+                        help='explicit student set instead of the LFM2.5/Mellum pair, e.g. lfm3=DIR '
+                             '(scripts/neuralese_data/student_tokenizers.py; repeatable). A declared line backbone '
+                             'must reproduce its declared expanded fingerprint, role ids and model id.')
     parser.add_argument('--records-sha256', required=True)
     parser.add_argument('--edges-sha256', required=True)
     parser.add_argument('--source-corpus-id', required=True,
@@ -1210,11 +1245,12 @@ def main():
         parser.error('--selected-edge-ids requires --rebuild-all-pairs')
     if args.excluded_chain_ids is not None and (args.rebuild_all_pairs or args.repair_pair_omissions):
         parser.error('--excluded-chain-ids partitions ordinary-plus-pair builds, not pair repair targets')
+    student_paths = students(args, parser)
     tokenizers, source_fps, expanded_fps, role_ids = {}, {}, {}, {}
     model_ids, base_inventory_shas = {}, {}
     from natlang_neuralese.model.native_model import base_inventory
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-    for name, path in (('lfm25', args.lfm_tokenizer), ('mellum21', args.mellum_tokenizer)):
+    for name, path in student_paths.items():
         tok = AutoTokenizer.from_pretrained(str(path), trust_remote_code=False, local_files_only=True)
         inventory_sha = canonical_json_sha256_hex(base_inventory(path))
         architecture = json.loads((path / 'config.json').read_text())['model_type']
@@ -1224,6 +1260,8 @@ def main():
         role_ids[name] = provision(tok)
         expanded_fps[name] = tokenizer_fingerprint(tok)
         tokenizers[name] = tok
+        if args.tokenizer:
+            check_declared_student(name, model_ids[name], expanded_fps[name], role_ids[name])
     records_digest, pieces_digest, edges_digest = hashlib.sha256(), hashlib.sha256(), hashlib.sha256()
     pieces = {row['name']: row['text'] for row in jsonl(args.pieces, pieces_digest)
               if isinstance(row.get('name'), str) and isinstance(row.get('text'), str)}
@@ -1539,8 +1577,7 @@ def main():
         if completed_since_checkpoint >= args.checkpoint_trajectories:
             close_chunk(next_offset)
 
-    worker_config = {'tokenizer_paths': {'lfm25': str(args.lfm_tokenizer),
-                                         'mellum21': str(args.mellum_tokenizer)},
+    worker_config = {'tokenizer_paths': {model: str(path) for model, path in student_paths.items()},
         'expanded_fps': expanded_fps, 'role_ids': {model: list(ids) for model, ids in role_ids.items()},
         'model_ids': model_ids, 'pair_only': pair_only,
         'source_corpus_id': args.source_corpus_id,

@@ -1668,6 +1668,20 @@ def native_gold_document(tokenizer, messages, target, tools, *, prompt_rendering
     return _native_gold_render(tokenizer,[*messages,target],tools,prompt_rendering=prompt_rendering)
 
 
+def _string_typed_parameter(tools, name, parameter):
+    """A copy of ``tools`` in which ``name``'s ``parameter`` is declared a string (typing of a write-site sentinel)."""
+    import copy
+    result = copy.deepcopy(tools) if tools else []
+    for tool in result:
+        function = tool.get('function', tool) if isinstance(tool, dict) else None
+        if isinstance(function, dict) and function.get('name') == name:
+            parameters = function.setdefault('parameters', {})
+            parameters.setdefault('properties', {})[parameter] = {'type': 'string'}
+            return result
+    return [*result, {'type': 'function', 'function': {'name': name, 'parameters': {
+        'type': 'object', 'properties': {parameter: {'type': 'string'}}}}}]
+
+
 def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="full",
                        return_offsets=False, producer_span=None, return_producer_span=False):
     """Render the exact serving prompt followed by the target assistant reply.
@@ -1766,10 +1780,17 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
             producer_sentinel = '__natlang_native_producer_' + secrets.token_hex(24) + '__'
             parent[key] = producer_sentinel
             function['arguments'] = json.dumps(arguments, ensure_ascii=False, separators=(',', ':'))
+    typing_tools = tools
+    if (producer_sentinel is not None and call_format == 'xml' and producer_span['value_type'] == 'unknown'
+            and len(producer_span['argument_path']) == 1):
+        # A whole-parameter XML write site: the sentinel string temporarily stands in for a non-string value, so
+        # the target's type check reads that one parameter as a string. The real body's type is checked below
+        # against the template's own rendering of it (`xml_value`), after the sentinel is replaced.
+        typing_tools = _string_typed_parameter(tools, function.get('name'), producer_span['argument_path'][0])
     reply_runs = assistant_reply_segments(
         lambda turns, generation: apply_template(turns, tools, generation=generation),
         reply_target, specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"),
-        call_format=call_format, tools=tools)
+        call_format=call_format, tools=typing_tools)
     if reply_runs is None:
         raise ValueError("assistant target does not continue the serving generation prompt")
     if producer_sentinel is not None:
@@ -1820,6 +1841,9 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
                         != json.dumps(body_value, ensure_ascii=False)):
                     raise ValueError('structured producer body does not keep its type in the XML rendering')
                 marker_prefix, marker_suffix = run[:start], run[stop:]
+                # The rendered span is the template's text of the value, which can differ from the compact source
+                # body (canonical JSON separators); consumers bind the producer wrapper by this exact text.
+                rendered_producer_body = marker_body
             else:
                 if (start == 0 or stop >= len(run) or run[start - 1] not in {'"', "'"}
                         or run[stop] != run[start - 1]):
@@ -2184,12 +2208,15 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             producer_span = (derivation or {}).get('producer_span')
             capture_rendered_span = (isinstance(producer_span, Mapping)
                                      and producer_span.get('value_type') == 'inline-string')
+            # XML write sites also report their rendered span (the template's text of the value); other formats
+            # report none, so their rows are unchanged.
+            request_rendered_span = isinstance(producer_span, Mapping)
             rendered = native_gold_packet(tokenizer, messages, target, record.get("tools") or [],
                 prompt_rendering=prompt_rendering, return_offsets=include_token_offsets,
-                producer_span=producer_span, return_producer_span=capture_rendered_span)
+                producer_span=producer_span, return_producer_span=request_rendered_span)
             text, token_ids, suffix_start = rendered[:3]
             token_offsets = rendered[3] if include_token_offsets else None
-            rendered_producer_body = rendered[-1].get('rendered_body') if capture_rendered_span else None
+            rendered_producer_body = rendered[-1].get('rendered_body') if request_rendered_span else None
         except (KeyError, TypeError, ValueError) as exc:
             omitted.append({"id": rid, "reason": "native_chat_render_failed", "detail": str(exc)[:240]})
             continue
@@ -2214,6 +2241,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                 omitted.append({"id": rid, "reason": "inline_producer_rendered_span_missing"})
                 prepared.pop()
                 continue
+            prepared[-1]["producer_rendered_body"] = rendered_producer_body
+        elif isinstance(rendered_producer_body, str):
             prepared[-1]["producer_rendered_body"] = rendered_producer_body
         if include_token_offsets:
             if not isinstance(token_offsets, list) or len(token_offsets) != len(token_ids):

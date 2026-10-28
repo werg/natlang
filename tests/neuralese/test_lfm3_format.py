@@ -248,6 +248,56 @@ def test_producer_span_keeps_the_complete_response(tokenizer, value_type, body, 
 
 
 @needs_lfm3
+def test_whole_parameter_producer_under_a_typed_object_schema(tokenizer):
+    """A Neuralese<unknown> write into a parameter the schema declares an object (return_result value of a typed
+    result): the sentinel stand-in does not trip the target's type check, the span is the template's canonical JSON
+    of the value, and the rendered body is reported for the pair builder's role-marker binding."""
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    tools = copy.deepcopy(EVAL_TOOLS)
+    tools[1]['function']['parameters']['properties']['value'] = {
+        'type': 'object', 'properties': {'decision': {'enum': ['proved', 'unknown']}}, 'required': ['decision']}
+    value = {'decision': 'unknown'}
+    body = '{"decision":"unknown"}'
+    target = {'role': 'assistant', 'content': '', 'tool_calls': [{'type': 'function', 'function': {
+        'name': 'return_result', 'arguments': json.dumps({'status': 'success', 'value': value})}}]}
+    span = {'call_index': 0, 'argument_path': ['value'], 'body': body, 'value_type': 'unknown',
+            'payload_sha256': hashlib.sha256(body.encode()).hexdigest()}
+    messages = [{'role': 'user', 'content': 'run the program'}]
+    baseline = native_gold_packet(tokenizer, messages, copy.deepcopy(target), tools)[0]
+    text, _, _, binding = native_gold_packet(tokenizer, messages, copy.deepcopy(target), tools, producer_span=span,
+                                             return_producer_span=True)
+    assert binding['rendered_body'] == xml_value_text(value) == '{"decision": "unknown"}'
+    assert ROLE_MARKERS[0] + binding['rendered_body'] + ROLE_MARKERS[1] in text
+    assert text.replace(ROLE_MARKERS[0], '').replace(ROLE_MARKERS[1], '') == baseline
+    opening = '<|im_start|>assistant\n<think>'
+    clean = text[text.rindex(opening) + len(opening):].replace(ROLE_MARKERS[0], '').replace(ROLE_MARKERS[1], '')
+    (call,) = build_message(clean, [], tools=tools)['tool_calls']
+    assert json.loads(call['function']['arguments']) == {'status': 'success', 'value': value}
+
+
+@needs_lfm3
+def test_semantic_pair_builder_takes_an_explicit_student_set(tmp_path):
+    """--tokenizer NAME=DIR replaces the LFM2.5/Mellum pair; a declared backbone must match its declaration."""
+    import argparse
+    from scripts.neuralese_data import build_native_semantic_pairs_e2e as builder
+    parser = argparse.ArgumentParser()
+    args = argparse.Namespace(tokenizer=[f'lfm3={LFM3}'], lfm_tokenizer=None, mellum_tokenizer=None)
+    assert builder.students(args, parser) == {'lfm3': LFM3}
+    legacy = argparse.Namespace(tokenizer=[], lfm_tokenizer=Path('a'), mellum_tokenizer=Path('b'))
+    assert builder.students(legacy, parser) == {'lfm25': Path('a'), 'mellum21': Path('b')}
+    with pytest.raises(SystemExit):
+        builder.students(argparse.Namespace(tokenizer=[f'lfm3={LFM3}'], lfm_tokenizer=Path('a'),
+                                            mellum_tokenizer=None), parser)
+    from natlang_neuralese.common import line_backbones
+    declared = line_backbones.backbone('lfm3')
+    builder.check_declared_student('lfm3', line_backbones.model_id('lfm3'), declared['expanded_fingerprint'],
+                                   declared['role_token_ids'])
+    with pytest.raises(ValueError):
+        builder.check_declared_student('lfm3', line_backbones.model_id('lfm3'), 'f' * 64, declared['role_token_ids'])
+
+
+@needs_lfm3
 def test_inline_producer_span_inside_eval_code(tokenizer):
     from natlang_neuralese.model.shared_state import ROLE_MARKERS
     body = 'judge each ticket\'s churn "signal"\nseparately'
