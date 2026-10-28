@@ -14,6 +14,7 @@
 # Consumers must run the same image digest: the CUDA runtime/cuBLAS libraries come from the image (ldd recorded).
 set -euo pipefail
 OUT=$1; LLAMA_TAR=$2; LLAMA_SHA=$3; FAT_ARCHS=${4:-"90a-real;100a-real;120a-real"}
+[[ "$LLAMA_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'LLAMA_GIT_SHA must be an exact full Git commit' >&2; exit 2; }
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 exec > >(tee -a "$OUT/build.log") 2>&1
 B=${NATLANG_CW_WORK:-/work}/prebuilt-build; rm -rf "$B"; mkdir -p "$B"
@@ -34,6 +35,7 @@ build_llama() {  # $1 label, $2 archs
   started=$(now)
   cmake -S "$src/llama.cpp" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON \
     "-DCMAKE_CUDA_ARCHITECTURES=$archs" -DGGML_NATIVE=OFF -DGGML_CUDA_NCCL=OFF -DBUILD_SHARED_LIBS=OFF \
+    "-DLLAMA_BUILD_COMMIT=$LLAMA_SHA" \
     -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF > "$OUT/cmake-$label.log" 2>&1
   cmake --build "$build" -j"$(nproc)" --target llama-server llama-state-span-dump llama-logits-dump llama-bench \
     llama-quantize llama-cli llama-perplexity > "$OUT/ninja-$label.log" 2>&1
@@ -49,6 +51,7 @@ path, sha, archs, seconds = sys.argv[1:]
 json.dump({'source': 'github.com/werg/llama.cpp-neuralese', 'branch': 'neuralese', 'git_sha': sha,
            'cuda_architectures': archs, 'build_seconds': float(seconds),
            'cmake': ['-DGGML_CUDA=ON', f'-DCMAKE_CUDA_ARCHITECTURES={archs}', '-DGGML_NATIVE=OFF', '-DGGML_CUDA_NCCL=OFF',
+                     f'-DLLAMA_BUILD_COMMIT={sha}',
                      '-DBUILD_SHARED_LIBS=OFF', '-DLLAMA_OPENSSL=OFF', '-DCMAKE_BUILD_TYPE=Release']},
           open(path, 'w'), indent=1)
 PY
