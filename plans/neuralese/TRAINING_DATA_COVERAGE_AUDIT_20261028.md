@@ -44,7 +44,7 @@ the LFM3 mixture's scored teacher sources: 129 of their 281 files, 86,528 rows, 
 | Kind | (a) | (b) | (c) | (d) | (e) | (f) | (g) | (h) |
 |---|---|---|---|---|---|---|---|---|
 | tool-loop-turn | yes (linked, `agent.ts:1489-1511`) | yes (renders, `student_rerender`, graph views) | yes (`own_output_supervision.py:277-311`; forced generation prompt 0 since `dd856b7a5`) | yes (sampled positions, `rl/native_replay.py:298`) | **no for program-header rows recorded after 2026-10-25**: stale piece table (gap G1, fixed) | all rows | 128/128 cases | yes |
-| runtime-authored-call | yes, as ordinary calls (`internal: true` only disables specialization, `kernel.ts:383,598,755`) | yes, if present | yes | yes | as tool-loop | **0 progressJudge, `refinement:holds`, ask, delegate or compareBehaviors call turns**; progress verdicts appear only as scripted child references (e.g. `greenhouse-iterated-measured-20261015-v1`, Luna held-shapes parents) (G8) | progress judge in iterateOn cases without a bound (40 cases use iterateOn) | yes |
+| runtime-authored-call | yes, as ordinary calls (`internal: true` only disables specialization, `kernel.ts:383,598,755`) | yes, if present | yes | yes | as tool-loop | **0 files with progressJudge, `refinement:holds`, `natlang-ask`, `nl@python` or `compareBehaviors` calls** (the `delegate` tool name appears in 85 files, mostly as an offered tool; not separated); progress verdicts appear only as scripted child references (e.g. `greenhouse-iterated-measured-20261015-v1`, Luna held-shapes parents) (G8) | progress judge in iterateOn cases without a bound (40 cases use iterateOn) | yes |
 | decision-readout | recorded and linked only under a native recorder (`agent.ts:1168-1171`) | **no** (no generated target) | **no** | **no** (`native_replay.py:184-186` refuses; `tune/rollouts.ts:160` skips the rollout) | untested (no fixture holds `DECISION_SYSTEM_PROMPT`/`decisionPrompt`) | `decide(` appears in 1,196 rows, but teacher collection never scores: decisions appear only as generated turns (`teacher/collector.ts:1315` driver has no `decide`) | 0 (no packet function declares `readout: decision`; no profile sets `finite-returns`) | no (no sampled positions) |
 | refinement-judge-scored | recorded as a decision turn under a native recorder (`neuralese-server.ts:672-677`) but **never linked** to a graph node | exact-oracle rows exist (`refine-judge-exact-20261009-v1`, 1,020 train rows; LFM3 render done, not registered) but the LFM3 mixture's answer-only drop rule removes them (gap G3) | yes when present (target `</think>false<|im_end|>` after the forced `<think>`; matches the scorer's empty-thought continuation) | **no**: silent drop in collector episodes, refusal in recorded objectives (`native_recorded_graph.py:36-37`), rollout skip only when the judge uses the wrapped driver (`rollouts.ts:144-145`) | prompt parity tested at message level (`tests/test_refine_data_judge.py:116`) | `Is<` 0, `refine(` 7, `refinement-unsatisfied` 0 lines; `refinement:holds` call turns 0 (all 281 files) | 0 | no |
 | careful-review | **no graph node, no invocation id** (`agent.ts:1598`) | none | none | none: collector episodes with a review are rejected whole, rollouts skipped | none (no Python counterpart; program-header sends `tools: []` while requiring `review_write`) | 0 `review_write` lines | 0 (opt-in, no profile enables it) | no |
@@ -165,7 +165,7 @@ producer is the RL owner's call; guidance authored outside the episode is legiti
 ### G7. The LFM3 joint-SFT inputs mix full and program-header prompts (mixture owner + supervisor)
 
 `build_idiom_mixture.py:196` takes the program-header and whole-trajectory graph views of the renders (system turn =
-program header, no tool schemas), while the teacher-twin graphs come from
+program header, no tool schemas), while the teacher-twin graphs (204 LFM3 twins registered in `23d77738b`, `teacher_graph_student_twin.py:188`) come from
 `build_verified_teacher_trajectory_graphs.render_teacher_packet` with `prompt_rendering='full'` (line 1034: the
 recorded system prompt and tool schemas of the teacher's runtime, 2026-10-15 to 2026-10-27). Serving uses one mode;
 `checkpoint_prompt_rendering` refuses mixed declared sources without an explicit serving policy, and no LFM3 recipe
@@ -181,8 +181,8 @@ re-render the teacher twins, then pin the serving mode in the recipe.
 The progress judge runs in every `iterateOn` loop without a step bound or measure (`runtime/iterate.ts:256-257`; 40 of 128
 development cases use `iterateOn`), and `refinement:holds`, bash/CLI `ask`, `nl@python`, the `delegate` reducer and
 `compareBehaviors` run as ordinary calls. The generic mechanisms cover them (they are tool-loop turns, captured and
-linked, and RL treats their sampled tokens as actions), but no admitted teacher source contains one of their call
-turns (scan in section 2, column f). Progress verdicts exist only as scripted child references inside parent
+linked, and RL treats their sampled tokens as actions), but no admitted teacher source contains a progress-judge, `refinement:holds`, ask, `nl@python` or `compareBehaviors` call
+(scan in section 2, column f). Progress verdicts exist only as scripted child references inside parent
 trajectories (`greenhouse-iterated-measured-20261015-v1`: 168 lines; Luna held-shapes parents: thousands), whose
 worlds define divergence exactly. Those references are exact-oracle labels for the judge's typed answer
 (`{verdict, reason}`); converting them into progress-judge call rows (the builtin's real prompt over the recorded
