@@ -1559,6 +1559,8 @@ class ResidentAdoption:
         self.state = current(directory)
         self.plan = self.state['payload']['plan'] if self.state else json.loads(
             (self.directory.parent/'recipe-plan.json').read_text())
+        if self.plan.get('code') != code_inventory(self.package):
+            raise ValueError('resident startup runtime differs from its exact recipe plan')
         self.generation = self.state['generation'] if self.state else digest(self.plan)
         self.rejected = set()
         self.ce_policy_update = None

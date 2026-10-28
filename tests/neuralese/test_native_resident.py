@@ -76,6 +76,21 @@ def test_actual_indexes_append_commit_and_crash_projection_recovery(tmp_path,mon
     assert resumed.poll(7) is None
 
 
+def test_startup_rejects_wrong_runtime_before_rewriting_resident_state(tmp_path):
+    _, directory, manager, _ = setup(tmp_path)
+    initial = directory/'initial.json'
+    original = initial.read_bytes()
+    path = directory.parent/'recipe-plan.json'
+    plan = json.loads(path.read_text())
+    plan['code']['train/native_state_sft.py'] = '0' * 64
+    write_json(path, plan)
+    with pytest.raises(ValueError, match='startup runtime differs'):
+        resident.ResidentAdoption(directory, stage_id='sft', recipe_binding=manager.recipe_binding,
+            train=manager.train, held=manager.held)
+    assert initial.read_bytes() == original
+    assert not (directory/'pending.json').exists()
+
+
 def test_resident_append_reuses_loaded_tree_without_reopening_old_leaf(tmp_path,monkeypatch):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
     paths,directory,manager,recipe=setup(tmp_path,manifest_train=True)
