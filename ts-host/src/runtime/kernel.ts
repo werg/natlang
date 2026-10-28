@@ -454,6 +454,14 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   if (adHocDepth > MAX_AD_HOC_NL_DEPTH)
     throw new NatlangCallError(definition.name, 'quiesced',
       `ad hoc nl calls are limited to ${MAX_AD_HOC_NL_DEPTH} nested layers; solve this part here or call an existing named function`, '', []);
+  // An ad hoc nl call inside an ad hoc call with the same instructions hands the same question down again: the
+  // enclosing call already has that responsibility (LFM3-1.7B on the dev packet copied a prompt example into nested
+  // calls until the case budget ran out, plans/neuralese/LFM3_HARNESS_ERGONOMICS_20261028.md).
+  const question = adHoc ? (options.instructions ?? definition.body).replace(/\s+/g, ' ').trim().toLowerCase() : '';
+  if (question && !fileRoot && (frame.adHocQuestions ?? []).includes(question))
+    throw new NatlangCallError(definition.name, 'quiesced',
+      'this call was itself created with these same instructions; make the judgment here from its inputs and return it instead of delegating it again', '', []);
+  const adHocQuestions = fileRoot ? [] : question ? [...(frame.adHocQuestions ?? []), question] : frame.adHocQuestions;
   // Definitions from separate programs may share the same relative source ID.
   // Ownership scopes recursion without changing persisted component identities.
   // A definition bound to another context is another function: calls go down the context graph, so the same
@@ -583,7 +591,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   // A file-backed call owns the files from its own companion folder. Inline calls inherit their
   // caller's bound skill set unless one is explicitly supplied for that inline definition.
   const invocationSkillFiles = options.manifest?.inline ? (options.skillFiles ?? frame.skillFiles) : options.skillFiles;
-  const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, programOwner: owner,
+  const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, adHocQuestions, programOwner: owner,
     signal: frame.signal, abort: frame.abort,
     ...(invocationSkillFiles ? { skillFiles: invocationSkillFiles } : {}),
     ...(weights ? { weights } : {}), invocationTexts: {},

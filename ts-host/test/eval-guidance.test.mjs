@@ -274,3 +274,19 @@ test('read_code of a bare service member shows the service declaration, calling 
   assert.match(results[0], /^price is a function of the shop service; call it in eval as shop\.price\(\.\.\.\)\./);
   assert.match(results[1], /^Cart is declared by the shop service:\n/);
 });
+
+test('an inline nl call that hands its own question down again is told to answer it itself', async () => {
+  const seen = [];
+  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: async request => {
+    const opening = String(request.messages[1].content), last = request.messages.at(-1);
+    const child = opening.startsWith('You are inside this call: nl@');
+    if (last.role === 'tool' && last.tool_call_id !== 'scope_0') {
+      seen.push(String(last.content));
+      return { calls: [['return_result', { status: 'success', value: child ? true : 'done' }]] };
+    }
+    return { calls: [['eval', { code: 'const v = await nl<boolean>`Decide whether name is short.`(name); v' }]] };
+  } });
+  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nJudge name.\n' }, 'root.nl');
+  await runtime.run(() => fn('Ada'));
+  assert.ok(seen.some(text => /this call was itself created with these same instructions; make the judgment here/.test(text)), seen.join('\n---\n'));
+});

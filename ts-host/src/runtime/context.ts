@@ -31,6 +31,8 @@ export type Frame = Readonly<{
   readout?: (scored: DecisionReadout) => void;
   /** Active ad hoc nl/delegate layers since the most recent file-backed .nl root. */
   adHocDepth?: number;
+  /** Normalized instructions of the active ad hoc nl calls above this point (a child asking its own question again). */
+  adHocQuestions?: readonly string[];
   /** System prompt text for the one invocation started in this frame (not inherited by its children). */
   systemAddendum?: string;
   /** The call site the compiler marked for the one call started in this frame (compiler/call-flow.ts, runtime/fusion.ts). */
