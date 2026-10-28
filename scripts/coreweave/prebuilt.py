@@ -31,7 +31,6 @@ Bindings that keep a reused artifact honest:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shutil
@@ -44,27 +43,24 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
+from natlang_neuralese.common import paths  # noqa: E402  (stdlib-only, like hashing: usable before pip)
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
+
 REGISTRY = HERE / 'prebuilt-artifacts.json'
 SCHEMA = 'natlang.coreweave-prebuilt/1'
-CAS = Path(os.environ.get('NATLANG_CW_PREBUILT_CAS', '/home/werg/data/coreweave-prebuilt/cas'))
+CAS = Path(os.environ.get('NATLANG_CW_PREBUILT_CAS') or paths.resolve('data_nvme', 'coreweave-prebuilt', 'cas'))
 BUNDLE_DIR = '.coreweave-prebuilt'
 KINDS = ('llama-cpp', 'wheelhouse', 'ts-host')
 IMAGE_BOUND = ('llama-cpp', 'wheelhouse')
 # Everything the ts-host build reads (package scripts: generate-builtin, bundle-improver, stage-npm-package).
 TSHOST_INPUTS = ('ts-host', 'applications/program-improver', 'scripts/stage-npm-package.mjs', 'examples/adaptation')
-NODE_DIR = Path(os.environ.get('NATLANG_NODE_DIR', '/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin'))
+NODE_DIR = Path(os.environ.get('NATLANG_NODE_DIR')
+                or Path.home() / '.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin')
 
 
 class PrebuiltError(ValueError):
     pass
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, 'rb') as stream:
-        for block in iter(lambda: stream.read(1 << 22), b''):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def load_registry(path: Path = REGISTRY) -> dict:

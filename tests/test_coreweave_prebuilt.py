@@ -137,7 +137,7 @@ def test_lfm3_templates_render_to_valid_jobs_and_run_file(tmp_path):
                                                   'render.py')
     render = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(render)
-    values = {'placeholders': {'RUN_ID': 'lfm3-sft-diloco-test', 'PARENT': '/home/werg/data/p/checkpoint.pt',
+    values = {'placeholders': {'RUN_ID': 'lfm3-sft-diloco-test', 'PARENT': '/data/p/checkpoint.pt',
                                'TRAINER_ARGS': ['--native-graphs', 'g', '--held-native-graphs', 'h', '--out', '/work/l'],
                                'COORDINATOR_BUNDLE': '/b/c.json', 'LEARNER_BUNDLE': '/b/l.json', 'RECIPE': 'r.json',
                                'STAGE': 's', 'EVAL_ID': 'lfm3-dev-eval-test', 'ACTOR_ID': 'lfm3-actor-test',

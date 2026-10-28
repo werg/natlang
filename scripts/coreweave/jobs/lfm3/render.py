@@ -4,9 +4,9 @@
     render.py VALUES.json OUT_DIR        writes every *.json template, filled, to OUT_DIR, then validates the jobs
 
 VALUES.json:
-    {"placeholders": {"RUN_ID": "lfm3-sft-diloco-20261029", "PARENT": "/home/werg/data/.../checkpoint.pt",
+    {"placeholders": {"RUN_ID": "lfm3-sft-diloco-20261029", "PARENT": "<data_nvme>/.../checkpoint.pt",
                       "TRAINER_ARGS": ["--native-graphs", "...", "--held-native-graphs", "...", "--out",
-                                       "/work/diloco-learner", "--continue-from", "/home/werg/data/.../checkpoint.pt"],
+                                       "/work/diloco-learner", "--continue-from", "<data_nvme>/.../checkpoint.pt"],
                       "COORDINATOR_BUNDLE": "...json", "LEARNER_BUNDLE": "...json", "RECIPE": "...", "STAGE": "..."},
      "overrides": {"diloco-learner.job.json": {"resources": {"gpu": 1, "memory": "80Gi"}},
                    "diloco-sft.run.json": {"settings": {"workers": 2}}}}
