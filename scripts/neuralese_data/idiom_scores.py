@@ -160,6 +160,8 @@ def outcome_verified(outcome) -> bool | None:
         return False
     if outcome.get('accepted') is True and (not isinstance(oracle, dict) or oracle.get('accepted') is True):
         return True
+    if outcome.get('resolved') is True:  # SWE-rebench: the instance's tests pass after the trajectory (resolved)
+        return True
     return None
 
 
