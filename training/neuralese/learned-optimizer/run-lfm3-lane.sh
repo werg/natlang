@@ -54,7 +54,7 @@ run_stage() {
   if [ -f "$status" ] && [ "$(cat "$status")" = 0 ]; then echo "$name: already succeeded in $OP"; return 0; fi
   rm -f "$status"
   # The wrapper writes the status only when the command itself ends; a preempted unit is requeued and rewrites it.
-  python3 scripts/memory_ledger.py run --unit "$unit" --budget-gb "$budget" --wait 86400 --resumable --workdir "$REPO" -- \
+  python3 scripts/memory_ledger.py run --unit "$unit" --budget-gb "$budget" --priority "${LANE_PRIORITY:-high}" --wait 86400 --resumable --workdir "$REPO" -- \
     /bin/bash -c "{ $*; } > $log 2>&1; rc=\$?; echo \$rc > $status.pending && mv $status.pending $status; exit \$rc" > /dev/null
   until [ -f "$status" ]; do
     sleep "${POLL_SECONDS:-20}"
