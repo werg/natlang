@@ -555,9 +555,9 @@ p=pathlib.Path('/proc')/str(expected['pid']); alive=False
 try:
  fields=(p/'stat').read_text().split(') ',1)[1].split();alive=boot==expected['boot_id'] and fields[19]==str(expected['start_ticks']) and fields[0]!='Z'
 except (OSError,ValueError,IndexError):pass
-progress=pathlib.Path(expected['progress_path']);value=None
+progress=pathlib.Path(expected['progress_path']);value=None;raw_progress={}
 try:
- value=json.loads(progress.read_text());value={k:value.get(k) for k in ('global_step','step','timestamp','checkpoint_step')}
+ raw_progress=json.loads(progress.read_text());value={k:raw_progress.get(k) for k in ('global_step','step','timestamp','checkpoint_step')}
 except (OSError,ValueError):pass
 module=pathlib.Path(sys.argv[2])
 try: module_sha=hashlib.sha256(module.read_bytes()).hexdigest()
@@ -568,10 +568,16 @@ if 'http_port' in expected:
  result['http_ok']=False
  try:
   token=(pathlib.Path(expected['secrets_directory'])/'diloco-token').read_text().strip()
-  request=urllib.request.Request('http://127.0.0.1:'+str(expected['http_port'])+'/v1/status',headers={'Authorization':'Bearer '+token})
+  request=urllib.request.Request('http://127.0.0.1:'+str(expected['http_port'])+expected.get('http_health_path','/v1/status'),headers={'Authorization':'Bearer '+token})
   with urllib.request.urlopen(request,timeout=3) as response: status=json.load(response)
   result['http_ok']=status.get('run_id')==expected['run_id']
   result['coordinator_status']={k:status.get(k) for k in ('run_id','merges','versions','global_tokens','live_workers')}
+  if expected.get('http_health_path')=='/v1/manifest':
+   # /status waits behind tensor merges. The immutable manifest proves API
+   # responsiveness; atomic progress.json supplies last committed telemetry.
+   result['coordinator_status']['merges']=raw_progress.get('merges')
+   result['coordinator_status']['global_tokens']=sum(w.get('tokens',0) for w in raw_progress.get('workers',{}).values())
+   result['coordinator_status']['live_workers']=sum(w.get('expires',0)>=__import__('time').time() for w in raw_progress.get('leases',{}).values())
  except Exception as error: result['http_error_type']=type(error).__name__
 print(json.dumps(result))"""
 
@@ -613,13 +619,15 @@ def coordinator_health_snapshot(record, ownership, *, read_sandbox=None):
     role=ownership.get('coordinator') or {}
     ident=record.get('coordinator')
     port=role.get('http_port');secrets=role.get('secrets_directory')
+    endpoint=role.get('http_health_path','/v1/manifest')
     run_id=(record.get('run') or {}).get('settings',{}).get('run_id') or ownership.get('run_id')
     if (not ident or not run_id or role.get('sandbox_id')!=ident
             or type(port) is not int or not 1<=port<=65535
             or not isinstance(secrets,str) or not Path(secrets).is_absolute() or os.path.normpath(secrets)!=secrets
+            or endpoint not in ('/v1/manifest','/v1/status')
             or not role.get('module_path') or not role.get('module_sha256') or not role.get('progress_path')):
         return {'sandbox_id':ident,'state':'coordinator-configuration-unavailable'}
-    configured={**ownership,'workers':{'0':{**role,'run_id':run_id}}}
+    configured={**ownership,'workers':{'0':{**role,'run_id':run_id,'http_health_path':endpoint}}}
     return health_snapshot({'learners':[ident]},configured,read_sandbox=read_sandbox)['0']
 
 def observe_optimizer_progress(workers, previous, now):

@@ -53,8 +53,8 @@ def test_coordinator_health_checks_authenticated_http_and_exact_run(tmp_path):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             assert self.headers['Authorization']=='Bearer '+token
-            assert self.path=='/v1/status'
-            data=json.dumps(status).encode();self.send_response(200)
+            assert self.path in ('/v1/status','/v1/manifest')
+            data=json.dumps(status if self.path=='/v1/status' else {'run_id':status['run_id']}).encode();self.send_response(200)
             self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
         def log_message(self,*args):pass
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
@@ -64,7 +64,8 @@ def test_coordinator_health_checks_authenticated_http_and_exact_run(tmp_path):
     role={'sandbox_id':'one','pid':p.pid,'boot_id':open('/proc/sys/kernel/random/boot_id').read().strip(),
           'start_ticks':open(f'/proc/{p.pid}/stat').read().rsplit(')',1)[1].split()[19],
           'module_path':str(module),'module_sha256':hashlib.sha256(module.read_bytes()).hexdigest(),
-          'progress_path':str(tmp_path/'absent-progress.json'),'http_port':server.server_port,'secrets_directory':str(tmp_path)}
+          'progress_path':str(tmp_path/'coordinator-progress.json'),'http_port':server.server_port,'secrets_directory':str(tmp_path)}
+    (tmp_path/'coordinator-progress.json').write_text(json.dumps({'merges':3,'workers':{'0':{'tokens':123}},'leases':{}}))
     record={'coordinator':'one','run':{'settings':{'run_id':'current-run'}}}
     class Future:
         def __init__(self,result):self.value=result
@@ -75,7 +76,7 @@ def test_coordinator_health_checks_authenticated_http_and_exact_run(tmp_path):
         def exec(self,args,**kwargs):return Future(subprocess.run(args,capture_output=True,text=True))
     try:
         value=service.coordinator_health_snapshot(record,{'coordinator':role},read_sandbox=lambda _:Box())
-        assert value['state']=='live' and value['http_ok'] and value['progress'] is None
+        assert value['state']=='live' and value['http_ok']
         assert value['coordinator_status']['merges']==3
         status['run_id']='different-run'
         value=service.coordinator_health_snapshot(record,{'coordinator':role},read_sandbox=lambda _:Box())
