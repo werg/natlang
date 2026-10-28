@@ -112,8 +112,13 @@ CUDA_VISIBLE_DEVICES='' {shlex.join(init)} >{shlex.quote(logs + '/init.log')} 2>
 CUDA_VISIBLE_DEVICES='' {shlex.join(serve)} >{shlex.quote(logs + '/server.log')} 2>&1 &
 coord=$!
 worker=''
-cleanup() {{ [ -z "$worker" ] || kill "$worker" 2>/dev/null || true; kill "$coord" 2>/dev/null || true; wait 2>/dev/null || true; }}
+cleanup() {{
+  if [ -n "$worker" ]; then kill "$worker" 2>/dev/null || true; wait "$worker" 2>/dev/null || true; fi
+  kill "$coord" 2>/dev/null || true
+  wait "$coord" 2>/dev/null || true
+}}
 trap cleanup EXIT
+trap 'exit 143' TERM INT
 ready=0
 for i in $(seq 1 300); do
   if python -c {shlex.quote(probe)} >/dev/null 2>&1; then ready=1; break; fi

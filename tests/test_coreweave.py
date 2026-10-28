@@ -660,3 +660,110 @@ def test_diloco_cohost_failure_journals_roles_and_stops_each_sandbox_once(tmp_pa
     assert record['state'] == 'failed-stop-requested'
     assert record['ownership'] == {'shared': ['coordinator', 'learner-0'], 'worker1': ['learner-1']}
     assert sorted(stops) == ['shared', 'worker1']
+
+
+@pytest.mark.parametrize('scenario', ['worker_fail', 'coordinator_fail', 'worker_success', 'signal'])
+def test_diloco_cohost_process_lifecycle(tmp_path, monkeypatch, scenario):
+    """Execute the generated shell with authenticated HTTP and independently supervised processes."""
+    import socket
+    import subprocess
+    import time
+
+    diloco = load('diloco')
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]
+    monkeypatch.setattr(diloco, 'PORT', port)
+    work = tmp_path / 'work'
+    work.mkdir()
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    dispatcher = bin_dir / 'python'
+    dispatcher.write_text(f'''#!{sys.executable}
+import http.server, os, pathlib, signal, sys, time
+root = pathlib.Path(os.environ['TEST_ROOT'])
+args = sys.argv[1:]
+if args[0] == '-c':
+    os.execv({sys.executable!r}, [{sys.executable!r}, *args])
+role = args[1]
+def write(name, value=''):
+    (root / name).write_text(value)
+if role.endswith('native_diloco'):
+    write('init-env', os.environ.get('CUDA_VISIBLE_DEVICES', '<absent>'))
+    sys.exit(0)
+if role.endswith('train.diloco'):
+    write('server-env', os.environ.get('CUDA_VISIBLE_DEVICES', '<absent>'))
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            ok = self.path == '/v1/status' and self.headers.get('Authorization') == 'Bearer ' + os.environ['NATLANG_DILOCO_TOKEN']
+            self.send_response(200 if ok else 401); self.end_headers(); self.wfile.write(b'{{}}')
+        def log_message(self, *a): pass
+    server = http.server.HTTPServer(('127.0.0.1', int(args[args.index('--port') + 1])), Handler)
+    server.timeout = .05
+    def stop(*a):
+        write('server-stop', 'checkpoint=' + str((root / 'checkpoint').exists()))
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, stop)
+    while True:
+        server.handle_request()
+        if (root / 'crash-server').exists(): sys.exit(9)
+if role.endswith('native_state_sft'):
+    write('worker-env', os.environ.get('CUDA_VISIBLE_DEVICES', '<absent>'))
+    def stop(*a):
+        time.sleep(.2)
+        write('checkpoint')
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, stop)
+    write('worker-started')
+    scenario = os.environ['TEST_SCENARIO']
+    if scenario == 'worker_fail': sys.exit(17)
+    if scenario == 'worker_success': write('checkpoint'); sys.exit(0)
+    while True: time.sleep(.05)
+sys.exit(2)
+''')
+    dispatcher.chmod(0o755)
+    trainer = ['python', '-m', 'natlang_neuralese.train.native_state_sft', '--continue-from', '/parent']
+    learner = tmp_path / 'learner.json'
+    learner.write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer,
+                                           scratch={'path': str(work), 'size': '200Gi'})))
+    run = {'id': 'lfm-dl', 'settings': {'run_id': 'lfm-dl', 'workers': 4},
+           'coordinator': {'parent': '/parent'}, 'learners': {'job': str(learner)}}
+    job = diloco.cohosted_job(run, trainer[3:])
+    env = {**os.environ, 'PATH': str(bin_dir) + os.pathsep + os.environ['PATH'],
+           'TEST_ROOT': str(tmp_path), 'TEST_SCENARIO': scenario, 'CUDA_VISIBLE_DEVICES': '0',
+           'NATLANG_DILOCO_TOKEN': 'x' * 32}
+    process = subprocess.Popen(job['command'], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    def wait_for(path):
+        deadline = time.monotonic() + 12
+        while not path.exists():
+            if process.poll() is not None:
+                raise AssertionError(f'cohost exited early {process.returncode}: {process.communicate()}')
+            if time.monotonic() > deadline:
+                raise AssertionError(f'timed out waiting for {path}')
+            time.sleep(.05)
+    try:
+        wait_for(tmp_path / 'worker-started')
+        assert (tmp_path / 'init-env').read_text() == ''
+        assert (tmp_path / 'server-env').read_text() == ''
+        assert (tmp_path / 'worker-env').read_text() == '0'
+        if scenario == 'worker_fail':
+            assert process.wait(timeout=8) == 17
+        elif scenario == 'coordinator_fail':
+            (tmp_path / 'crash-server').write_text('')
+            assert process.wait(timeout=8) != 0
+            assert (tmp_path / 'checkpoint').exists()
+        elif scenario == 'worker_success':
+            wait_for(tmp_path / 'checkpoint')
+            time.sleep(.2)
+            assert process.poll() is None and not (tmp_path / 'server-stop').exists()
+            process.terminate()
+            assert process.wait(timeout=8) == 143
+        else:
+            process.terminate()
+            assert process.wait(timeout=8) == 143
+            assert (tmp_path / 'checkpoint').exists()
+            assert (tmp_path / 'server-stop').read_text() == 'checkpoint=True'
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=8)
