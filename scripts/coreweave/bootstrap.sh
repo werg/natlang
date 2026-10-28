@@ -70,13 +70,6 @@ if [ -n "${NATLANG_CW_INSTANCE:-}" ]; then
 fi
 export NATLANG_CW_CONTROL_DIR="$CW"
 mkdir -p "$CW/inbox"
-# DiLoCo learner sandboxes remain owned after the original role exits.  The
-# operator can replace coordinator/worker children through the audited local
-# role-control journal; collection timers never terminate an active lineage.
-if [ "${NATLANG_DILOCO_ROLE_SUPERVISION:-0}" = 1 ]; then
-  log role-supervision "\"previous_status\":$status"
-  exec python3 "$NATLANG_REPO/scripts/coreweave/diloco_role_supervisor.py" "$CW/role-control"
-fi
 if [ "${NATLANG_CW_TRANSPORT:-bucket}" = api ]; then
   log waiting-for-inputs
   until [ -f "$CW/inputs-ready" ]; do sleep 2; done

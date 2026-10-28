@@ -33,3 +33,38 @@ def test_persistent_role_replacement_and_orderly_shutdown(tmp_path):
         assert (tmp_path/'checkpoint').exists() and (tmp_path/'coord-stop').read_text()=='True'
     finally:
         if proc.poll() is None:proc.kill();proc.wait()
+
+
+def test_real_bootstrap_handoff_waits_for_role_owner(tmp_path):
+    repo = Path(__file__).parents[1]
+    work = tmp_path / 'work'
+    env = {**os.environ, 'NATLANG_REPO': str(repo), 'NATLANG_CW_WORK': str(work),
+           'NATLANG_CW_MIRROR_ROOTS': str(tmp_path / 'mirror'),
+           'NATLANG_DILOCO_ROLE_SUPERVISION': '1', 'NATLANG_CW_COLLECT_WAIT': '0'}
+    # Avoid package installation if the host does not have zstd; this test uses no bundle.
+    fakebin = tmp_path / 'bin'; fakebin.mkdir()
+    (fakebin / 'zstd').symlink_to('/bin/true')
+    env['PATH'] = str(fakebin) + os.pathsep + env['PATH']
+    child_marker = tmp_path / 'original-exited'
+    proc = subprocess.Popen(['bash', str(repo / 'scripts/coreweave/bootstrap.sh'), sys.executable,
+                             '-c', 'from pathlib import Path;import sys;Path(sys.argv[1]).write_text("done")', str(child_marker)],
+                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    control = work / '.coreweave/role-control'
+    try:
+        end = time.monotonic() + 10
+        while time.monotonic() < end and not (control / 'state.json').exists():
+            assert proc.poll() is None
+            time.sleep(.05)
+        assert child_marker.read_text() == 'done'
+        state = json.loads((control / 'state.json').read_text())
+        assert state['generation'] == 0 and state['roles'] == {}
+        request = {'schema': 'natlang.diloco-role-request/1', 'id': 'replacement',
+                   'expected_generation': 0, 'role': 'worker', 'action': 'start',
+                   'argv': [sys.executable, '-c', 'import time;time.sleep(30)']}
+        temp = control / 'request.tmp'; temp.write_text(json.dumps(request)); os.replace(temp, control / 'request.json')
+        while time.monotonic() < end and not (control / 'result.json').exists(): time.sleep(.05)
+        assert json.loads((control / 'result.json').read_text())['accepted']
+        assert proc.poll() is None
+        proc.terminate(); assert proc.wait(timeout=8) == 0
+    finally:
+        if proc.poll() is None: proc.kill(); proc.wait()
