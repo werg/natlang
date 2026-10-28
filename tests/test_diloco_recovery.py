@@ -120,7 +120,7 @@ def test_periodic_recovery_retries_missing_worker_and_preserves_topology(tmp_pat
 def test_private_full_state_export_binds_box_hash_get_and_local_copy(tmp_path,monkeypatch):
     import hashlib
     from types import SimpleNamespace
-    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend);backend.storage=tmp_path
+    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend);backend.direct=None;backend.storage=tmp_path
     payload=b'checkpoint';sha=hashlib.sha256(payload).hexdigest()
     intent={'sandbox_id':'actual','path':'/work/pin/checkpoint.pt','sha256':sha,'bytes':len(payload),'global_step':51}
     class Result:
@@ -296,7 +296,7 @@ def test_four_worker_http_recovery_preserves_lost_workers_full_state(tmp_path):
 
 def test_fence_operator_releases_every_worker_after_capture_or_failure(tmp_path,monkeypatch):
     from types import SimpleNamespace
-    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend)
+    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend);backend.direct=None
     backend.workers=['s0','s1','s2','s3'];backend.fingerprint='fingerprint';backend.out='/work/diloco-learner';backend.repo=tmp_path
     events=[]
     class Result:
@@ -382,7 +382,7 @@ def test_stage_verified_topology_keeps_each_worker_and_parent_separate(tmp_path)
 
 def test_original_parent_requires_exact_local_private_and_coordinator_binding(tmp_path):
     import hashlib
-    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend)
+    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend);backend.direct=None
     payload=b'earned parent';sha=hashlib.sha256(payload).hexdigest();identity={'sha256':sha,'bytes':len(payload)}
     parent=tmp_path/'parent.pt';parent.write_bytes(payload)
     pin=tmp_path/'pin.json';pin.write_text(json.dumps({'path':'/work/parent.pt',**identity,'global_step':750}))
@@ -510,7 +510,7 @@ def test_missing_parent_is_downloaded_once_and_retained_as_verified_external_cop
     import hashlib,sys
     from types import SimpleNamespace
     import requests,verified_download
-    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend)
+    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend);backend.direct=None
     data=b'independent exact parent';identity={'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)}
     remote=SimpleNamespace(size=len(data),url='https://storage.googleapis.com/private/object?token=secret')
     monkeypatch.setitem(sys.modules,'wandb',SimpleNamespace(Api=lambda:SimpleNamespace(run=lambda _:SimpleNamespace(file=lambda _:remote))))

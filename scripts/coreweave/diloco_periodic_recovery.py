@@ -24,7 +24,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'training/neuralese'))
 import cwctl
 from recovery_inputs import durable_json
-from diloco_recovery_dependencies import seal, control_bindings
+from diloco_recovery_dependencies import seal, control_bindings, declared_bindings
+from diloco_direct_recovery import load_control, record_from_control, worker_matches
 from natlang_neuralese.common import paths
 from natlang_neuralese.common.hashing import sha256_file_hex
 
@@ -34,11 +35,12 @@ class FenceUnavailable(RuntimeError):
 
 
 class Backend:
-    def __init__(self,record,storage,parent_local=None,parent_qualification=None,parent_copy_receipt=None,runtime_bundle=None):
+    def __init__(self,record,storage,parent_local=None,parent_qualification=None,parent_copy_receipt=None,runtime_bundle=None,direct_control=None):
         self.parent_local=Path(parent_local) if parent_local else None
         self.parent_qualification=Path(parent_qualification) if parent_qualification else None
         self.parent_copy_receipt=Path(parent_copy_receipt) if parent_copy_receipt else None
         self.runtime_bundle=Path(runtime_bundle) if runtime_bundle else None
+        self.external_hash_cache={}
         self.record,self.storage=record,Path(storage).resolve()
         external=paths.root('data_hdd').resolve()
         if not external.is_mount() or not self.storage.is_relative_to(external):
@@ -48,34 +50,82 @@ class Backend:
         self.parent=record['run']['coordinator']['parent'];self.coordinator=record['coordinator']
         self.workers=record['learners'];self.out='/work/diloco-learner'
         self.record_path=cwctl.STATE/'diloco'/(record['run']['id']+'.json')
-        self.root='/work/diloco-coordinator'
+        self.root='/work/diloco-coordinator';self.runtime_repo=self.repo
+        self.direct=load_control(direct_control,record) if direct_control else None
+        self.direct_control=Path(direct_control) if direct_control else None
+        if self.direct:
+            if not runtime_bundle:raise ValueError('direct recovery requires the exact runtime bundle')
+            self.out=self.direct['paths']['worker_out'];self.root=self.direct['paths']['coordinator_root']
+            self.runtime_repo=Path(self.direct['paths']['runtime_repo'])
+            self.parent=self.direct['parent']
         if len(self.workers)!=record['run']['settings']['workers'] or len(set(self.workers))!=len(self.workers):
             raise ValueError('recovery requires distinct actual sandbox IDs for every learner')
         self.manifest=json.loads(cwctl.read_sandbox(self.coordinator).read_file(self.root+'/manifest.json').result(timeout=60))
         if self.manifest.get('run_id')!=record['run']['settings']['run_id']:
             raise ValueError('actual coordinator manifest belongs to another run')
+        if self.direct and any(self.manifest.get(k)!=v for k,v in self.direct['manifest_checks'].items()):
+            raise ValueError('actual coordinator manifest differs from direct launch arguments')
         self.fingerprint=self.manifest['fingerprint']
 
     def verify_ownership(self):
         if not self.external.is_mount():raise ValueError('external recovery storage is no longer mounted')
+        if self.direct:
+            if load_control(self.direct_control,self.record)!=self.direct:
+                raise ValueError('direct recovery control changed; bind a new recovery journal')
+            return
         live=json.loads(self.record_path.read_text())
         if live.get('coordinator')!=self.coordinator or live.get('learners')!=self.workers:
             raise ValueError('sandbox ownership changed; stop and explicitly bind a new recovery journal')
 
     def _exec(self,sandbox_id,args,*,timeout=3600):
-        command=['nice','-n','19','env','PYTHONPATH='+str(self.repo/'training/neuralese')+os.pathsep+str(self.repo),
-                 'python3','-c',self.helper,*map(str,args)]
         deadline=time.monotonic()+timeout
         sandbox=cwctl.read_sandbox(sandbox_id,patience=min(900,timeout))
         remaining=deadline-time.monotonic()
         if remaining<=0:raise TimeoutError('recovery pin expired before sandbox became reachable')
+        if self.direct:
+            import hashlib
+            if hashlib.sha256(self.helper.encode()).hexdigest()!=self.direct['helper_sha256']['pin_code']:
+                raise ValueError('recovery pin helper differs from direct control')
+            helper_root='/work/.coreweave/recovery-helpers/'+uuid.uuid4().hex
+            folder=helper_root+'/scripts/coreweave'
+            made=sandbox.exec(['mkdir','-p',folder],timeout_seconds=min(30,remaining)).result(timeout=min(40,remaining))
+            if made.returncode:raise RuntimeError('recovery helper directory unavailable')
+            names=['cache_bounded_archive.py','private_export_guard.py','recovery_readiness.py','recovery_inputs.py']
+            helper_paths={}
+            for remote in (helper_root+'/scripts/__init__.py',folder+'/__init__.py'):
+                sandbox.write_file(remote,b'').result(timeout=min(60,max(1,deadline-time.monotonic())))
+                import hashlib
+                helper_paths[remote]=hashlib.sha256(b'').hexdigest()
+            for name in names:
+                contents=Path(__file__).with_name(name).read_bytes();remote=folder+'/'+name
+                expected={'cache_bounded_archive.py':'archive_code','private_export_guard.py':'guard_code',
+                          'recovery_readiness.py':'readiness_code','recovery_inputs.py':'inputs_code'}[name]
+                if hashlib.sha256(contents).hexdigest()!=self.direct['helper_sha256'][expected]:
+                    raise ValueError('recovery helper changed: '+name)
+                remaining=deadline-time.monotonic()
+                if remaining<=0:raise TimeoutError('recovery helper staging expired')
+                sandbox.write_file(remote,contents).result(timeout=min(60,remaining))
+                import hashlib
+                helper_paths[remote]=hashlib.sha256(contents).hexdigest()
+            check=("import hashlib,json,pathlib,sys; expected=json.loads(sys.argv[1]); "
+                   "assert all(hashlib.file_digest(pathlib.Path(p).open('rb'),'sha256').hexdigest()==s for p,s in expected.items())")
+            remaining=deadline-time.monotonic()
+            checked=sandbox.exec(['python3','-c',check,json.dumps(helper_paths)],timeout_seconds=min(30,remaining)).result(timeout=min(40,remaining))
+            if checked.returncode:raise ValueError('remote recovery helper bytes differ')
+            command=['nice','-n','19','env','PYTHONPATH='+os.pathsep.join([helper_root,str(self.runtime_repo/'training/neuralese'),str(self.runtime_repo)]),
+                     'python3','-c',self.helper,*map(str,args)]
+        else:
+            command=['nice','-n','19','env','PYTHONPATH='+str(self.repo/'training/neuralese')+os.pathsep+str(self.repo),
+                     'python3','-c',self.helper,*map(str,args)]
+        remaining=deadline-time.monotonic()
+        if remaining<=0:raise TimeoutError('recovery pin expired after helper staging')
         result=sandbox.exec(command,timeout_seconds=remaining).result(timeout=remaining+1)
         if result.returncode:raise RuntimeError(f'recovery pin {sandbox_id} failed: {result.stderr[-2000:]}')
         return json.loads(result.stdout)
 
     def pin_worker(self,worker,cycle,source=None):
         pin=f'/work/.coreweave/recovery-pins/{cycle}/worker-{worker}-{uuid.uuid4().hex}/checkpoint.pt'
-        package=self.repo/'training/neuralese/natlang_neuralese'
+        package=self.runtime_repo/'training/neuralese/natlang_neuralese'
         result=self._exec(self.workers[worker],['worker',source or self.out+'/checkpoint.pt',pin,worker,self.fingerprint,package])
         return {**result,'sandbox_id':self.workers[worker],'source':source or self.out+'/checkpoint.pt'}
 
@@ -86,12 +136,12 @@ class Backend:
 
     def pin_coordinator(self,cycle):
         pin=f'/work/.coreweave/recovery-pins/{cycle}/coordinator-{uuid.uuid4().hex}/coordinator.tar'
-        result=self._exec(self.coordinator,['coordinator',self.root,pin,self.repo/'training/neuralese/natlang_neuralese'])
+        result=self._exec(self.coordinator,['coordinator',self.root,pin,self.runtime_repo/'training/neuralese/natlang_neuralese'])
         return {**result,'sandbox_id':self.coordinator,'source':self.root}
 
     def pin_coordinator_tree(self,cycle,*,timeout=3600):
         pin=f'/work/.coreweave/recovery-pins/{cycle}/coordinator-tree-{uuid.uuid4().hex}/tree'
-        result=self._exec(self.coordinator,['coordinator-tree',self.root,pin,self.repo/'training/neuralese/natlang_neuralese'],timeout=timeout)
+        result=self._exec(self.coordinator,['coordinator-tree',self.root,pin,self.runtime_repo/'training/neuralese/natlang_neuralese'],timeout=timeout)
         return {**result,'sandbox_id':self.coordinator,'source':self.root}
 
     def archive_coordinator_tree(self,component):
@@ -110,6 +160,17 @@ class Backend:
         for ident in self.workers:
             if time.time()>=deadline:raise TimeoutError('worker recovery fence expired before ownership read')
             boxes.append(cwctl.read_sandbox(ident,patience=remaining(900)))
+        if self.direct:
+            owner=self.direct['coordinator']
+            probe=("import json,pathlib,sys; o=json.loads(sys.argv[1]); p=pathlib.Path('/proc'); "
+                   "s=(p/str(o['pid'])/'stat').read_text().split(') ',1)[1].split(); "
+                   "sys.exit(not (o['boot_id']==(p/'sys/kernel/random/boot_id').read_text().strip() "
+                   "and str(o['start_ticks'])==s[19] and s[0]!='Z'))")
+            coord_box=(boxes[self.workers.index(self.coordinator)] if self.coordinator in self.workers else
+                       cwctl.read_sandbox(self.coordinator,patience=remaining(900)))
+            result=coord_box.exec(['python3','-c',probe,json.dumps(owner)],
+                timeout_seconds=30).result(timeout=remaining(40))
+            if result.returncode:raise FenceUnavailable('direct coordinator owner is no longer live')
         # Fail quickly before requesting anything if the actual learner runtime lacks the fence mechanism.
         completed={}
         for worker,box in enumerate(boxes):
@@ -118,6 +179,10 @@ class Backend:
             if (cap.get('schema')!='natlang.diloco-recovery-fence/1' or cap.get('worker')!=worker
                     or cap.get('fingerprint')!=self.fingerprint):
                 raise FenceUnavailable('worker recovery-fence capability belongs to another owner')
+            if self.direct:
+                expected=self.direct['workers'][str(worker)]
+                if any(str(cap['owner'].get(key))!=str(expected[key]) for key in ('pid','boot_id','start_ticks')):
+                    raise FenceUnavailable('worker fence owner differs from direct ownership journal')
             check=box.exec(['python3','-c',
                 "import json,os,pathlib,sys; o=json.loads(sys.argv[1]); p=pathlib.Path('/proc'); "
                 "sys.exit(not (o['boot_id']==(p/'sys/kernel/random/boot_id').read_text().strip() and "
@@ -177,7 +242,7 @@ class Backend:
             with ThreadPoolExecutor(max_workers=5) as pool:
                 pin_timeout=remaining(3600)
                 coordinator=pool.submit(self.pin_coordinator_tree,cycle,timeout=pin_timeout)
-                residents={i:pool.submit(self.pin_resident,i,cycle,timeout=pin_timeout) for i in range(len(boxes))}
+                residents={} if self.direct else {i:pool.submit(self.pin_resident,i,cycle,timeout=pin_timeout) for i in range(len(boxes))}
                 components={'coordinator':coordinator.result()}
                 for i,future in residents.items():components['resident-'+str(i)]=future.result()
             if time.time()>=deadline:raise TimeoutError('coordinator pin finished after fence deadline')
@@ -223,6 +288,8 @@ class Backend:
                 not cycle.get('compatibility',{}).get('compatible') or
                 not self.present(cycle['dependency_receipt'])):
             raise ValueError('unverified recovery cycle cannot release pins')
+        for external in cycle['dependency_intent'].get('external_dependencies',[]):
+            if not self.present(external['receipt']):raise ValueError('external dependency private object disappeared')
         for name,intent in components.items():
             if not self.present(receipts[name]):raise ValueError('private recovery component disappeared: '+name)
             local=self.storage/'objects'/intent['sha256']/Path(intent['path']).name
@@ -257,12 +324,43 @@ class Backend:
             if 'base-model-file' not in kinds or not ({'source-manifest','source-payload'} & kinds):
                 raise ValueError('worker lacks explicit base or source dependency inventory')
             bindings.extend(required)
-            resident=cycle['components']['resident-'+str(i)]
-            archive=self.storage/'objects'/resident['sha256']/Path(resident['path']).name
-            bindings.extend(control_bindings(archive))
+            if not self.direct:
+                resident=cycle['components']['resident-'+str(i)]
+                archive=self.storage/'objects'/resident['sha256']/Path(resident['path']).name
+                bindings.extend(control_bindings(archive))
+        external={};external_receipts=[]
+        if self.direct:
+            bindings.extend(self.direct['bindings'])
+            plan=next(item for item in self.direct['bindings'] if item['path']==self.direct['plan_path'])
+            bindings.extend(declared_bindings(json.loads(Path(plan['path']).read_text())))
+            parent=cycle['parent_reference']
+            bindings.extend(parent[name] for name in ('pin','receipt','qualification','copy_receipt'))
+            from private_export_guard import validate_receipt
+            for item in self.direct['external_dependencies']:
+                identity={'sha256':item['sha256'],'bytes':item['bytes']};receipt_ref=item['receipt']
+                if receipt_ref not in self.direct['bindings']:raise ValueError('external dependency receipt is not control-bound')
+                receipt=json.loads(Path(receipt_ref['path']).read_text());validate_receipt(receipt,identity)
+                local=receipt.get('independent_verification',{}).get('local_copy') or {};path=Path(item['local_path'])
+                if (not receipt.get('verified_at') or local.get('committed') is not True or
+                    local.get('sha256')!=identity['sha256'] or local.get('bytes')!=identity['bytes'] or
+                    Path(local.get('path','')).resolve()!=path.resolve() or not path.resolve().is_relative_to(self.external) or
+                    not path.is_file() or path.stat().st_size!=identity['bytes'] or not self.present(receipt)):
+                    raise ValueError('external dependency lacks exact local and present private copies')
+                before=path.stat();key=(str(path),before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,identity['sha256'])
+                if key not in self.external_hash_cache:
+                    if sha256_file_hex(path,drop_cache=True)!=identity['sha256']:
+                        raise ValueError('external dependency local bytes differ')
+                    after=path.stat()
+                    if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns):
+                        raise ValueError('external dependency changed during hashing')
+                    self.external_hash_cache[key]=True
+                external[item['sha256']]={**identity,'local_path':str(path),'receipt':receipt_ref}
+                external_receipts.append({'identity':identity,'receipt':receipt})
         target=self.storage/'dependencies'/(cycle['id']+'-'+uuid.uuid4().hex+'.tar')
-        return seal(bindings,candidates,bundle,sources,target,
-                    runtime_code_sha256=cycle['components']['worker-0']['runtime_code_sha256'])
+        result=seal(bindings,candidates,bundle,sources,target,
+                    runtime_code_sha256=cycle['components']['worker-0']['runtime_code_sha256'],external=external)
+        if external_receipts:result['external_dependencies']=external_receipts
+        return result
 
     def export_dependencies(self,intent):
         receipt=self.storage/'receipts'/('dependencies-'+intent['sha256']+'.json')
@@ -310,7 +408,7 @@ class Backend:
 
     def verify_parent(self):
         from private_export_guard import validate_receipt
-        transfer=self.record['run'].get('parent_transfer') or {}
+        transfer=(self.direct.get('parent_transfer') if self.direct else self.record['run'].get('parent_transfer')) or {}
         pin_path=Path(transfer['pin']);receipt_path=Path(transfer['receipt'])
         if (sha256_file_hex(pin_path)!=transfer['pin_sha256'] or
                 sha256_file_hex(receipt_path)!=transfer['receipt_sha256']):
@@ -331,7 +429,8 @@ class Backend:
                 or copied.get('sha256')!=pin['sha256'] or copied.get('bytes')!=pin['bytes']
                 or local.get('committed') is not True or Path(local.get('path','')).resolve()!=path.resolve()):
             raise ValueError('original parent local copy or full-state qualification receipt differs')
-        if not path.resolve().is_relative_to(self.external):raise ValueError('original parent copy must be on external storage')
+        if not self.direct and not path.resolve().is_relative_to(self.external):
+            raise ValueError('original parent copy must be on external storage')
         if not path.exists():self.download_parent(receipt,identity,path)
         if (not path.is_file() or
                 path.stat().st_size!=pin['bytes'] or sha256_file_hex(path,drop_cache=True)!=pin['sha256']):
@@ -356,7 +455,7 @@ class Backend:
                 'diloco':value.get('diloco')}
 
 
-def compatibility(components):
+def compatibility(components, direct=None):
     workers=[components.get('worker-'+str(i)) for i in range(4)];coord=components.get('coordinator')
     if not coord or any(not w for w in workers):return {'compatible':False,'reason':'incomplete topology'}
     if any(w['fingerprint']!=coord['fingerprint'] for w in workers):return {'compatible':False,'reason':'coordinator fingerprint differs'}
@@ -367,7 +466,9 @@ def compatibility(components):
             or len({json.dumps(w.get('ce_supervision_policy_binding'),sort_keys=True) for w in workers})!=1):
         return {'compatible':False,'reason':'worker source or runtime transitions differ'}
     residents=[components.get('resident-'+str(i)) for i in range(4)]
-    for w,r in zip(workers,residents):
+    if direct and any(not worker_matches(w,direct) for w in workers):
+        return {'compatible':False,'reason':'direct plan, source, CE, recipe or runtime custody differs'}
+    for w,r in ([] if direct else zip(workers,residents)):
         if not r:
             return {'compatible':False,'reason':'resident state is missing or differs from the worker checkpoint'}
         if w.get('resident_generation'):
@@ -419,11 +520,17 @@ def run_once(record,state_path,backend):
     with state_path.with_suffix('.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
         coordinator_run_id=(record['run'].get('settings') or {}).get('run_id',record['run']['id'])
-        state=json.loads(state_path.read_text()) if state_path.exists() else {'schema':'natlang.diloco-recovery/1',
+        existing=state_path.exists()
+        state=json.loads(state_path.read_text()) if existing else {'schema':'natlang.diloco-recovery/1',
             'run_id':record['run']['id'],'coordinator_run_id':coordinator_run_id,'cycles':[],'latest_verified':None}
         if state['run_id']!=record['run']['id'] or state.get('coordinator_run_id')!=coordinator_run_id:
             raise ValueError('recovery state belongs to a different launch or coordinator run')
         def save():durable_json(state_path,state)
+        direct=getattr(backend,'direct',None)
+        contract={'mode':'direct','control_sha256':direct['control_sha256']} if direct else {'mode':'resident'}
+        if existing and state.get('recovery_contract',{'mode':'resident'})!=contract:
+            raise ValueError('recovery state belongs to another control contract')
+        state['recovery_contract']=contract
         if hasattr(backend,'verify_ownership'):backend.verify_ownership()
         if hasattr(backend,'release_remote_pins'):
             for previous in state['cycles']:
@@ -435,6 +542,9 @@ def run_once(record,state_path,backend):
         if cycle is None:
             cycle={'id':uuid.uuid4().hex,'phase':'pinning','components':{},'receipts':{},'errors':{}}
             state['pending']=cycle;save()
+        if direct and cycle.get('unfenced'):
+            raise ValueError('direct cohort recovery requires a completed worker fence')
+        expected_components=len(backend.workers)+1 if direct else 2*len(backend.workers)+1
         if 'fenced' not in cycle and not cycle.get('unfenced') and hasattr(backend,'capture_fenced'):
             try:
                 captured=backend.capture_fenced(cycle['id'])
@@ -443,6 +553,8 @@ def run_once(record,state_path,backend):
                 cycle['components'].update(captured['components']);cycle['errors'].pop('fence',None)
                 state.pop('recovery_blocker',None);save()
             except FenceUnavailable as error:
+                if direct:
+                    cycle['phase']='incomplete';cycle['errors']['fence']=str(error);save();return state
                 if any(old.get('unfenced') and old.get('phase')=='incompatible-pins' for old in state['cycles']):
                     state['recovery_blocker']='unsafe unfenced cohort retained; live fence runtime required before another attempt'
                     state.pop('pending');save();return state
@@ -470,7 +582,7 @@ def run_once(record,state_path,backend):
                         cycle['components'][name]=component;cycle['errors'].pop(name,None)
                     except Exception as error:cycle['errors'][name]=str(error)
                     save()
-        for i in range(len(backend.workers)):
+        for i in ([] if direct else range(len(backend.workers))):
             name='resident-'+str(i)
             if name not in cycle['components']:
                 try:cycle['components'][name]=backend.pin_resident(i,cycle['id']);cycle['errors'].pop(name,None)
@@ -489,8 +601,8 @@ def run_once(record,state_path,backend):
             save()
         for name in list(cycle['receipts']):
             if str(cycle['errors'].get(name,'')).startswith('presence: '):cycle['errors'].pop(name)
-        cycle['compatibility']=compatibility(cycle['components']);cycle['phase']='exporting';save()
-        if (len(cycle['components'])==2*len(backend.workers)+1 and not cycle['compatibility']['compatible']):
+        cycle['compatibility']=compatibility(cycle['components'],direct=direct);cycle['phase']='exporting';save()
+        if (len(cycle['components'])==expected_components and not cycle['compatibility']['compatible']):
             cycle['phase']='incompatible-pins';cycle['recovery_blocker']=cycle['compatibility']['reason']
             state['cycles'].append(cycle);state.pop('pending');save();return state
         # Each pin and actual step/source/runtime identity is durably recorded before its external PUT.
@@ -510,10 +622,12 @@ def run_once(record,state_path,backend):
             if worker and type(observed.get('global_step')) is int:
                 observed['updates_since_pinned_checkpoint']=max(0,observed['global_step']-worker['global_step'])
         cycle['errors'].pop('dependencies',None)
-        all_components = len(cycle['components']) == 2*len(backend.workers)+1
+        all_components = len(cycle['components']) == expected_components
         all_exported = all_components and set(cycle['receipts'])==set(cycle['components']) and not cycle['errors']
         if all_exported and cycle['compatibility']['compatible']:
             try:
+                if direct and not hasattr(backend,'verify_parent'):
+                    raise ValueError('direct cohort requires independently verified parent custody')
                 if hasattr(backend,'verify_parent'):
                     cycle['parent_reference']=backend.verify_parent();save()
                 if 'dependency_intent' not in cycle:
@@ -522,6 +636,8 @@ def run_once(record,state_path,backend):
                     cycle['dependency_receipt']=backend.export_dependencies(cycle['dependency_intent']);save()
                 if not backend.present(cycle['dependency_receipt']):
                     raise ValueError('dependency private object is absent')
+                for external in cycle['dependency_intent'].get('external_dependencies',[]):
+                    if not backend.present(external['receipt']):raise ValueError('external dependency private object is absent')
                 cycle['errors'].pop('dependencies',None)
             except Exception as error:
                 cycle['errors']['dependencies']=str(error);all_exported=False;save()
@@ -707,11 +823,12 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('run_id');p.add_argument('--state',type=Path,required=True)
     p.add_argument('--storage',type=Path,required=True);p.add_argument('--parent-local',type=Path,required=True);
     p.add_argument('--parent-qualification',type=Path,required=True);p.add_argument('--parent-copy-receipt',type=Path,required=True);p.add_argument('--interval',type=float,default=1800)
-    p.add_argument('--once',action='store_true');p.add_argument('--ownership-journal',type=Path);p.add_argument('--health-interval',type=float,default=60);p.add_argument('--wait-worker-progress',action='store_true');p.add_argument('--runtime-bundle',type=Path);p.add_argument('--health-only',action='store_true');args=p.parse_args()
+    p.add_argument('--once',action='store_true');p.add_argument('--ownership-journal',type=Path);p.add_argument('--health-interval',type=float,default=60);p.add_argument('--wait-worker-progress',action='store_true');p.add_argument('--runtime-bundle',type=Path);p.add_argument('--direct-control',type=Path);p.add_argument('--health-only',action='store_true');args=p.parse_args()
     if args.interval <= 0:p.error('interval must be positive')
     cwctl.load_env_file()
     import diloco
-    record=json.loads((diloco.RUNS/(args.run_id+'.json')).read_text())
+    record=(record_from_control(args.direct_control,args.run_id) if args.direct_control else
+            json.loads((diloco.RUNS/(args.run_id+'.json')).read_text()))
     if args.health_interval<=0:p.error('health interval must be positive')
     if args.ownership_journal:
         health_path=args.state.with_name(args.state.stem+'-health.json')
@@ -728,7 +845,7 @@ def main():
             except (OSError,ValueError,KeyError):pass
             time.sleep(args.health_interval)
     supervise_recovery(record,args.state,lambda:Backend(record,args.storage,args.parent_local,args.parent_qualification,
-        args.parent_copy_receipt,runtime_bundle=args.runtime_bundle),interval=args.interval,once=args.once)
+        args.parent_copy_receipt,runtime_bundle=args.runtime_bundle,direct_control=args.direct_control),interval=args.interval,once=args.once)
 
 
 if __name__=='__main__':

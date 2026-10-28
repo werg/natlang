@@ -4,7 +4,7 @@ from test_diloco_recovery import load
 
 
 def test_fence_accepts_only_bound_final_report_for_dead_worker(tmp_path, monkeypatch):
-    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend)
+    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend);backend.direct=None
     backend.workers=['dead'];backend.fingerprint='fp';backend.out='/work/out';backend.repo=tmp_path
     cap={'schema':'natlang.diloco-recovery-fence/1','worker':0,'fingerprint':'fp','owner':{'pid':123,'boot_id':'old','start_ticks':'1'}}
     report={'active_stage_complete':True,'checkpoint_sha256':'a'*64,'diloco_final_delivery':{'schema':'natlang.diloco-final-delivery/1','worker':0,'fingerprint':'fp','sequences':[2]}}

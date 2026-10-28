@@ -14,8 +14,8 @@ from natlang_neuralese.common.hashing import sha256_file_hex, canonical_json_sha
 
 
 
-def control_bindings(archive):
-    """Collect path and hash declarations from the pinned resident control JSON."""
+def declared_bindings(value):
+    """Collect nested authenticated file declarations from a control document."""
     result = {}
     def visit(value):
         if isinstance(value, dict):
@@ -26,17 +26,26 @@ def control_bindings(archive):
                 if key not in ('by_source_group', 'code'): visit(child)
         elif isinstance(value, list):
             for child in value: visit(child)
+    visit(value)
+    return list(result.values())
+
+
+def control_bindings(archive):
+    """Collect path and hash declarations from the pinned resident control JSON."""
+    result={}
     with tarfile.open(archive, 'r') as tar:
         for member in tar:
             if member.isfile() and member.name.endswith('.json'):
                 if member.size > 64 * 2**20: raise ValueError('resident control JSON too large')
-                visit(json.load(tar.extractfile(member)))
+                for item in declared_bindings(json.load(tar.extractfile(member))):result[(item['path'],item['sha256'])]=item
     return list(result.values())
 
-def seal(bindings, candidates, bundle, sources, output, *, runtime_code_sha256, reserve_bytes=60 * 2**30):
+def seal(bindings, candidates, bundle, sources, output, *, runtime_code_sha256, reserve_bytes=60 * 2**30, external=None):
     """Fail closed unless every declared binding and launch-bundle object is locally exact.
 
     The output is a content archive, never evidence of a remotely durable backup.
+    Explicit external objects must already have separately verified local and
+    private copies; their identity and receipt reference remain in the index.
     """
     bundle = json.loads(Path(bundle).read_text())
     sources = json.loads(Path(sources).read_text())
@@ -56,9 +65,15 @@ def seal(bindings, candidates, bundle, sources, output, *, runtime_code_sha256, 
     for item in [bundle['code'], *bundle['files']]:
         declared.append({'path': item.get('path', '@bundle-code'), 'sha256': item['sha256'],
                          'bytes': item['bytes'], 'candidate': sources[item['key']]})
-    resolved = {}; index = []
+    resolved = {}; index = []; external=external or {}
     for item in declared:
         sha = item['sha256']; logical = item['path']
+        if sha in external:
+            ref=external[sha]
+            if ref.get('sha256')!=sha or type(ref.get('bytes')) is not int or (item.get('bytes') is not None and item['bytes']!=ref['bytes']):
+                raise ValueError('external dependency identity differs '+logical)
+            index.append({'path':logical,'sha256':sha,'bytes':ref['bytes'],'external':ref})
+            continue
         choices = [item.get('candidate'), logical, *candidates.get(sha, [])]
         if logical.startswith('/work/hf/') and os.environ.get('NATLANG_RECOVERY_HF_CACHE'):
             choices.append(str(Path(os.environ['NATLANG_RECOVERY_HF_CACHE']) / logical.removeprefix('/work/hf/')))
