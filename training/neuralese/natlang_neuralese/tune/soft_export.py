@@ -1,7 +1,9 @@
 """Tuned soft states as llama.cpp native state spans (plan §3.3, §7).
 
 A soft state is a native KV/hybrid state span (`NativeStateBlock`): per token, attention layers hold the key after the
-key norm and before RoPE and the value, and LFM2 short-convolution layers hold the gated input B*x. The llama.cpp fork
+key norm and before RoPE and the value, and LFM2/LFM3 short-convolution layers hold the gated input B*x. LFM3's
+sliding and full attention layers are both `attention` states: llama.cpp writes raw keys in HF's layout (no q/k row
+permutation) and rotates them with the consumer's own per-layer RoPE at its positions. The llama.cpp fork
 imports exactly these quantities for virtual tokens (`llama_state_span_register`; the consumer applies RoPE at its own
 positions), so the export carries the final verified tensors, not text and not an approximation.
 
@@ -17,6 +19,9 @@ from ..common.hashing import sha256_file_hex
 from . import TuneMathError
 from .export import LLAMA_CPP
 
+# native architectures whose state spans the llama.cpp fork imports (llm_arch_has_native_state)
+STATE_ARCHITECTURES = ('lfm2', 'lfm3')
+
 
 def _gguf():
     path = str(LLAMA_CPP / 'gguf-py')
@@ -30,10 +35,10 @@ def export_state_gguf(block, path, *, state_id, text_sha256, role_tokens):
     """Write one native state span; returns its sha256. Only exact layer kinds the fork imports are accepted."""
     import numpy as np
     block.validate()
-    if block.architecture != 'lfm2':
-        raise TuneMathError(f'llama.cpp state-span export supports lfm2 states, not {block.architecture}')
+    if block.architecture not in STATE_ARCHITECTURES:
+        raise TuneMathError(f'llama.cpp state-span export supports {", ".join(STATE_ARCHITECTURES)} states, not {block.architecture}')
     gguf = _gguf()
-    writer = gguf.GGUFWriter(str(path), 'lfm2')
+    writer = gguf.GGUFWriter(str(path), block.architecture)
     writer.add_string('general.type', 'natlang.native_state')
     for key, value in (('id', state_id), ('text_sha256', text_sha256), ('architecture', block.architecture),
                        ('checkpoint_sha256', block.checkpoint_sha256), ('tokenizer_fingerprint', block.tokenizer_fingerprint),

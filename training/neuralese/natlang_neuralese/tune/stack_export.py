@@ -5,8 +5,8 @@ runtime's canonical stack identity. The sum is exact: members slicing one canoni
 most the largest member's), everything else concatenates (`stack.stack_factors`). No engine is loaded; coefficients
 and bases come from the release's `artifacts/*.nnt`.
 
-`python -m natlang_neuralese.tune.stack_export --release DIR --stacks stacks.json --module-map lfm2 --hf-config DIR
---out DIR` where stacks.json is ``[{"identity", "entries": [{"id", "scale", "node"}]}]`` (the runtime's resolved
+`python -m natlang_neuralese.tune.stack_export --release DIR --stacks stacks.json --module-map lfm2|lfm3|mellum
+--hf-config DIR --out DIR` (the student's `targets.TABLES` family) where stacks.json is ``[{"identity", "entries": [{"id", "scale", "node"}]}]`` (the runtime's resolved
 effective stacks). Writes ``<out>/<identity>/`` PEFT directories and ``<out>/stack-exports.json``.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ from .bases import CanonicalBasis, tensor_digest
 from .export import export_peft
 from .parameterization import FreeLoRADelta, SubspaceDelta
 from .stack import StackMember, stack_factors
-from .targets import module_map
+from .targets import TABLES, module_map
 
 
 def load_artifacts(directory):
@@ -88,8 +88,9 @@ def export_stacks(release, stacks, out, *, family, hf_config, base_identity):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    for name in ('--release', '--stacks', '--module-map', '--hf-config', '--out'):
+    for name in ('--release', '--stacks', '--hf-config', '--out'):
         parser.add_argument(name, required=True)
+    parser.add_argument('--module-map', required=True, choices=sorted(TABLES))
     args = parser.parse_args(argv)
     manifest = json.loads((Path(args.release) / 'natlang.adapters.json').read_text())
     export_stacks(args.release, json.loads(Path(args.stacks).read_text()), args.out, family=args.module_map,
