@@ -117,6 +117,19 @@ class _SameOriginRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+class _Window:
+    """At most ``length`` bytes of an open file from its current position, read in blocks (a streamed body)."""
+
+    def __init__(self, handle, length: int) -> None:
+        self.handle, self.remaining = handle, length
+
+    def read(self, size: int = -1) -> bytes:
+        size = self.remaining if size is None or size < 0 else min(size, self.remaining)
+        block = self.handle.read(size) if size else b""
+        self.remaining -= len(block)
+        return block
+
+
 class Transport:
     def __init__(self, url: str, token: str, timeout: float, *, allow_http: bool = False, gateway: str = "") -> None:
         self.url = url.rstrip("/")
@@ -148,7 +161,7 @@ class Transport:
         body = (
             json.dumps(json_body, sort_keys=True, allow_nan=False).encode()
             if json_body is not None
-            else file.read_bytes() if file else None
+            else file.read_bytes() if isinstance(file, Path) else file
         )
         request = urllib.request.Request(
             self.url + path,
@@ -183,6 +196,60 @@ class Transport:
         if not isinstance(result, dict):
             raise ValueError(f"Expected JSON coordinator response from {path}")
         return result
+
+    def upload_file(self, source: Path, name: str, *, chunk_bytes: int = 1 << 30, attempts: int = 8) -> dict:
+        """Stream ``source`` to the coordinator file store as ``name`` (PUT /v1/files/NAME), resuming at the
+        stored partial size after an interruption; the server verifies the sha256 before committing."""
+        import hashlib
+        digest = hashlib.sha256()
+        with source.open("rb") as handle:
+            for block in iter(lambda: handle.read(8 << 20), b""):
+                digest.update(block)
+        sha256, total = digest.hexdigest(), source.stat().st_size
+        quoted = urllib.parse.quote(name, safe="")
+        for attempt in range(attempts):
+            try:
+                state = self.json("GET", f"/v1/files/{quoted}?sha256={sha256}")
+                if state["status"] == "present":
+                    return {**state, "name": name}
+                if state["status"] == "conflict":
+                    raise ValueError(f"{name}: a different file is committed under this name")
+                offset = int(state["bytes"])
+                while True:
+                    length = min(chunk_bytes, total - offset)
+                    with source.open("rb") as handle:
+                        handle.seek(offset)
+                        _, result, _ = self.request("PUT", f"/v1/files/{quoted}", file=_Window(handle, length),
+                            headers={"Content-Type": "application/octet-stream", "Content-Length": str(length),
+                                     "X-Sha256": sha256, "X-Offset": str(offset), "X-Total-Bytes": str(total)})
+                    if result["status"] in ("committed", "present"):
+                        return {**result, "name": name}
+                    offset = int(result["bytes"])
+            except (OSError, RemoteError) as error:
+                if isinstance(error, RemoteError) and error.status not in (409, 500, 502, 503, 504):
+                    raise
+                if attempt == attempts - 1:
+                    raise
+                time.sleep(min(60, 2 ** attempt))
+        raise RuntimeError("unreachable")
+
+    def download_file(self, name: str, target: Path) -> dict:
+        """GET /v1/files/NAME into ``target`` (atomic rename), verifying the stored sha256."""
+        import hashlib
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(target.name + ".partial")
+        status, _, headers = self.request("GET", f"/v1/files/{urllib.parse.quote(name, safe='')}", output=temporary)
+        if status != 200:
+            raise ValueError(f"Unexpected HTTP status {status}")
+        digest = hashlib.sha256()
+        with temporary.open("rb") as handle:
+            for block in iter(lambda: handle.read(8 << 20), b""):
+                digest.update(block)
+        if digest.hexdigest() != headers.get("X-Sha256"):
+            temporary.unlink()
+            raise ValueError(f"{name}: downloaded bytes do not match the coordinator's sha256")
+        os.replace(temporary, target)
+        return {"name": name, "path": str(target), "sha256": digest.hexdigest(), "bytes": target.stat().st_size}
 
     def fetch_file(self, path: str, directory: Path) -> tuple[Path | None, Message]:
         fd, name = tempfile.mkstemp(dir=directory, suffix=".download")

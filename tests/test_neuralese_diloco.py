@@ -330,3 +330,61 @@ def test_export_global_from_a_running_coordinator_equals_the_volume_read(tmp_pat
         assert all(torch.equal(a[n], b[n]) for n in a)
         assert ea["fragment_versions"] == eb["fragment_versions"] and ea["source"] == eb["source"]
     assert not list((tmp_path / "dl").iterdir())  # downloaded fragments are not kept
+
+
+def test_file_store_streams_resumes_verifies_and_serves_files(tmp_path):
+    import hashlib
+    import os
+    import tracemalloc
+
+    from natlang_neuralese.train.diloco.worker import RemoteError
+    from natlang_neuralese.train.native_diloco import uploaded
+
+    _init(tmp_path / "coord", _model())
+    port = _free_port()
+    stop = threading.Event()
+    threading.Thread(target=serve_coordinator, args=(tmp_path / "coord", "127.0.0.1", port, TOKEN),
+                     kwargs={"stop": stop}, daemon=True).start()
+    transport = Transport(f"http://127.0.0.1:{port}", TOKEN, 60)
+    deadline = time.time() + 10
+    while True:
+        try:
+            transport.json("GET", "/v1/status")
+            break
+        except OSError:
+            if time.time() > deadline:
+                raise
+            time.sleep(0.05)
+    try:
+        big = tmp_path / "learner-0.pt"
+        with big.open("wb") as handle:  # 256 MiB, written in 4 MiB blocks
+            for index in range(64):
+                handle.write(hashlib.sha256(str(index).encode()).digest() * ((4 << 20) // 32))
+        tracemalloc.start()
+        # 100 MiB chunks: the upload continues the stored partial file twice before committing.
+        result = transport.upload_file(big, "learner-0.pt", chunk_bytes=100 << 20)
+        peak = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        assert result["status"] == "committed" and result["bytes"] == big.stat().st_size
+        assert peak < 64 << 20, peak  # streamed both ways: no buffer proportional to the 256 MiB file
+        assert transport.upload_file(big, "learner-0.pt")["status"] == "present"
+        stored = tmp_path / "coord" / "uploads" / "learner-0.pt"
+        expected = hashlib.sha256(big.read_bytes()).hexdigest()
+        assert hashlib.sha256(stored.read_bytes()).hexdigest() == expected
+        back = transport.download_file("learner-0.pt", tmp_path / "back" / "learner-0.pt")
+        assert back["sha256"] == expected and back["bytes"] == big.stat().st_size
+        # A wrong declared sha256 is refused and nothing is committed under that name.
+        small = tmp_path / "small.bin"
+        small.write_bytes(os.urandom(1000))
+        with pytest.raises(RemoteError) as refused:
+            with small.open("rb") as handle:
+                transport.request("PUT", "/v1/files/other.bin", file=handle, headers={
+                    "Content-Length": "1000", "X-Sha256": "0" * 64, "X-Offset": "0", "X-Total-Bytes": "1000"})
+        assert refused.value.status == 400 and not (tmp_path / "coord" / "uploads" / "other.bin").exists()
+        with pytest.raises(ValueError):  # a committed name is immutable
+            transport.upload_file(small, "learner-0.pt")
+        with pytest.raises(RemoteError):
+            transport.download_file("missing.pt", tmp_path / "missing.pt")
+        assert uploaded(tmp_path / "coord", "learner-0.pt") == stored
+    finally:
+        stop.set()
