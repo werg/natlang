@@ -20,7 +20,7 @@
   "domain": "curriculum domain",
   "family": "program/world family",
   "task_shape": "task kind + curriculum family",
-  "near_duplicate_cluster": "sha256 of the root task's normalized instructions (digits -> 0, whitespace collapsed, first 400 chars)",
+  "near_duplicate_cluster": "sha256 of the root task normalized instructions (digits -> 0, whitespace collapsed, first 400 chars) joined with the sample's first source group (world): the same task text over the same world",
   "choice_call": "decision / scored-judge / progress-judge call kinds (family or task shape matches judge|decision|decide|refine|progress)"
  },
  "drop_rules": [

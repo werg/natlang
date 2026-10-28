@@ -335,6 +335,10 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
             if trajectory not in feature_cache:
                 feature_cache[trajectory] = trajectory_features(trajectories[trajectory], decisions)
             features = derive({**feature_cache[trajectory], 'neuralese_edges': graph_edges(row)})
+            # Instructions repeat across the worlds of one curriculum template; a near-duplicate is the same task
+            # text over the same world (the row's first source group).
+            features['near_duplicate_cluster'] = (f'{features["near_duplicate_cluster"]}|'
+                                                  f'{min(row.get("source_groups") or [""])}')
             tier, reason = classify(features, policy)
             if tier is None:
                 omitted['dropped: ' + reason] += 1
