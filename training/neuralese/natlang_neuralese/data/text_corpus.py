@@ -490,6 +490,7 @@ def _native_gold_segments(tokenizer, turns, tools, *, empty_thought=True, prompt
     # them across each shared serving render instead of reapplying defaults.
     bound = getattr(tokenizer, 'natlang_history_reasoning', {})
     bind_history_reasoning(tokenizer, policy=bound.get('policy'))
+    schema_tools = tools
     turns, tools = apply_prompt_rendering(turns, tools, prompt_rendering)
     def apply_template(turns, schemas):
         return tokenizer.apply_chat_template(
@@ -499,7 +500,7 @@ def _native_gold_segments(tokenizer, turns, tools, *, empty_thought=True, prompt
                 if empty_thought else apply_template(turns, schemas))
     rendered = render_messages(turns, tools, template,
                                specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"),
-                               call_format=tokenizer_call_format(tokenizer))
+                               call_format=tokenizer_call_format(tokenizer), schema_tools=schema_tools)
     if rendered.blocks:
         raise ValueError("ordinary gold text contains unresolved neuralese blocks")
     return rendered
@@ -1725,7 +1726,7 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
         messages, tools,
         lambda turns, schemas: apply_template(turns, schemas, generation=True),
         specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"),
-        call_format=call_format)
+        call_format=call_format, schema_tools=schema_tools)
     if prompt.blocks:
         raise ValueError("ordinary gold text prompt contains unresolved neuralese blocks")
     # Every producer span is authenticated against the same complete source target.

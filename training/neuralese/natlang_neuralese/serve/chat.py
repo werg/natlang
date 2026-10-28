@@ -379,7 +379,7 @@ def normalize_tool_call_arguments(messages: list[dict]) -> tuple[list[dict], lis
 
 
 def render_messages(messages: list[dict], tools: list | None, apply_template, specials=(),
-                    call_format: str | None = None) -> Rendered:
+                    call_format: str | None = None, schema_tools=None) -> Rendered:
     """Messages with native-state parts → template text cut into text runs and state references.
 
     `apply_template(messages, tools)` renders plain messages with the model's chat template and the generation prompt.
@@ -387,6 +387,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     `call_format` is the backbone's declared tool-call format (`tool_call_format`); under `xml` every history call
     must be structurally representable (`check_xml_call`), since the template writes values unescaped.
     """
+    schema_tools = tools if schema_tools is None else schema_tools
     blocks: list[str] = []
     block_stop_gradients: list[bool] = []
     block_source_occurrences = []
@@ -479,8 +480,8 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
 
             inlined = inline(arguments)
             if call_format == "xml":
-                check_xml_call(fn.get("name"), inlined, tools, types=False)
-                inlined = xml_wire_arguments(fn.get("name"), inlined, tools)
+                check_xml_call(fn.get("name"), inlined, schema_tools, types=False)
+                inlined = xml_wire_arguments(fn.get("name"), inlined, schema_tools)
             fn["arguments"] = _escape_value(inlined, specials, nonce)
             calls.append(call)
         if calls:

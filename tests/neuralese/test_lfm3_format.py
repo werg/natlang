@@ -561,6 +561,19 @@ def test_program_header_strips_the_closing_lfm3_tool_section(tokenizer):
 
 
 @needs_lfm3
+def test_program_header_preserves_historical_xml_schema(tokenizer):
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    history = [{'role': 'user', 'content': 'run'}, {'role': 'assistant', 'content': '', 'tool_calls': [
+        {'type': 'function', 'function': {'name': 'eval', 'arguments': {'code': 'return "x";'}}}]},
+        {'role': 'tool', 'content': 'ok'}, {'role': 'user', 'content': 'finish'}]
+    target = {'role': 'assistant', 'content': 'done'}
+    full, _, _ = native_gold_packet(tokenizer, history, target, EVAL_TOOLS)
+    header, _, _ = native_gold_packet(tokenizer, history, target, EVAL_TOOLS, prompt_rendering='program-header')
+    expected = '<parameter=code>\nreturn "x";\n</parameter>'
+    assert expected in full and expected in header
+
+
+@needs_lfm3
 def test_rendered_packet_keeps_history_reasoning_in_program_header_mode(tokenizer):
     """The shared training renderer (native_gold_packet, the serving program-header mode) keeps every earlier
     assistant turn's reasoning on LFM3 (`keep`): the whole history of a later decision is token-exact and its
