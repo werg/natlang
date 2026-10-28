@@ -364,6 +364,11 @@ def compatibility(components):
                 return {'compatible':False,'reason':f'coordinator lacks accepted worker {worker} fragment {index} sequence'}
             if entry and pending and entry['sequence']==pending['sequence'] and entry['delta_sha256']!=pending['delta_sha256']:
                 return {'compatible':False,'reason':f'queued worker {worker} fragment {index} payload differs'}
+            if entry and entry['sequence']>merged:
+                base=entry.get('base_version');max_stale=(coord.get('manifest') or {}).get('max_staleness')
+                if (type(base) is not int or type(max_stale) is not int or
+                        not 0<=versions[index]-base<=max_stale):
+                    return {'compatible':False,'reason':f'queued worker {worker} fragment {index} has missing or stale baseline'}
     return {'compatible':True,'scope':'separate exact worker full states and stable coordinator state; '
             'not a consolidated global checkpoint; replay and staleness remain subject to normal DiLoCo checks'}
 

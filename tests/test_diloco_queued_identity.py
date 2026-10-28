@@ -1,8 +1,9 @@
 import hashlib
+import json
 import uuid
 import pytest
 import torch
-from natlang_neuralese.train.diloco.coordinator import Coordinator, Conflict, initialize_coordinator
+from natlang_neuralese.train.diloco.coordinator import Coordinator, Conflict, _metadata, initialize_coordinator
 from natlang_neuralese.train.diloco.protocol import save_tensors
 
 
@@ -20,6 +21,11 @@ def test_same_queued_sequence_requires_exact_delta_and_metadata(tmp_path):
     assert submit()['status']=='queued'
     target=root/'pending'/'00000'/'000.safetensors'
     original=hashlib.sha256(target.read_bytes()).hexdigest()
+    from test_diloco_recovery import load
+    package=tmp_path/'package';package.mkdir();(package/'__init__.py').write_text('')
+    pinned=load('diloco_recovery_pin').coordinator_pin(root,tmp_path/'pins'/'coordinator.tar',package)
+    queued=pinned['queued'][0]['0']
+    assert queued['sequence']==1 and queued['base_version']==0 and queued['steps']==2 and queued['tokens']==8
     assert submit()['status']=='already_queued'
     with pytest.raises(Conflict,match='different metadata or delta'):submit(tokens=9)
     save_tensors(source,{'delta':delta+1})
@@ -28,3 +34,6 @@ def test_same_queued_sequence_requires_exact_delta_and_metadata(tmp_path):
     save_tensors(source,{'delta':delta})
     assert submit(worker=1)['status']=='queued'
     assert coordinator.status()['versions']==[1]
+    assert not target.exists()
+    ledger=json.loads(_metadata(root/'fragments'/'00000.safetensors')['last_seq'])
+    assert ledger['0']==1 and ledger['1']==1

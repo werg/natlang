@@ -107,6 +107,14 @@ def test_periodic_recovery_retries_missing_worker_and_preserves_topology(tmp_pat
     conflict={**cohort['components'],'worker-0':{**cohort['components']['worker-0'],'pending':{'0':pending}},
               'coordinator':{**cohort['components']['coordinator'],'queued':[{'0':{'sequence':1,'delta_sha256':'b'}}]}}
     assert 'payload differs' in service.compatibility(conflict)['reason']
+    queue={'sequence':1,'base_version':0,'steps':2,'tokens':8,'delta_sha256':'a'}
+    unsafe={**cohort['components'],'worker-0':{**cohort['components']['worker-0'],'awaiting_global':[0]},
+            'coordinator':{**cohort['components']['coordinator'],'versions':[2],
+                'manifest':{'max_staleness':1},'last_seq':[{'1':1,'2':1,'3':1}],
+                'queued':[{'0':queue}]}}
+    assert 'missing or stale baseline' in service.compatibility(unsafe)['reason']
+    unsafe['coordinator']['queued'][0]['0']['base_version']=1
+    assert service.compatibility(unsafe)['compatible'] is True
 
 
 def test_private_full_state_export_binds_box_hash_get_and_local_copy(tmp_path,monkeypatch):
