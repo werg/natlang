@@ -153,7 +153,7 @@ def insert(segments, at, pieces, roles, identity):
     return result
 
 
-def run_episode(model, roles, identity, mode='none', budget_tokens=512, adapter_binding=None):
+def run_episode(model, roles, identity, mode='none', budget_tokens=512, adapter_binding=None, compile_fixture=True):
     """Explicit incremental cached execution of the episode (writers, child, root), with its captures."""
     device = next(model.parameters()).device
     spec = rendering(budget_tokens=budget_tokens)
@@ -235,7 +235,7 @@ def run_episode(model, roles, identity, mode='none', budget_tokens=512, adapter_
             reader = next(item for item in turns if item['graph_turn'] == consumer)
             if mode == 'import':
                 reader['read_bindings'] = {**reader.get('read_bindings', {}), hints[consumer]: 'write-' + writer}
-    replay = compile_replay(turns, identity=identity, roles=roles, fetch_block=states.__getitem__)
+    replay = compile_replay(turns, identity=identity, roles=roles, fetch_block=states.__getitem__) if compile_fixture else None
     return SimpleNamespace(turns=turns, replay=replay, block=states[payload], states=states, logps=logps,
                            order=order, hints=hints)
 

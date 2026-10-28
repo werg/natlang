@@ -180,7 +180,7 @@ def test_coefficient_update_with_captured_guidance_and_decision(tmp_path):
         binding = {'schema': SCHEMA, 'base_native_identity': dict(engine.native_identity),
                    'adapters': execution_binding(engine)}
         episode = episode_with_top_k(engine.shared_model, engine.role_tokens, identity, 'write-only',
-                                     adapter_binding=binding)
+                                     adapter_binding=binding, compile_fixture=False)
         for turn in episode.turns:
             receipt = turn['sampling']
             receipt['policy'] = identity
