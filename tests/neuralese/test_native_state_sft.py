@@ -292,6 +292,7 @@ def test_native_policy_objective_receives_one_forward_and_external_bindings():
 
 
 def test_real_stop_checkpoints_before_held_eval_and_resume_logs_actual_updates(tmp_path, monkeypatch):
+    import hashlib
     import json
     import math
     import torch
@@ -329,7 +330,9 @@ def test_real_stop_checkpoints_before_held_eval_and_resume_logs_actual_updates(t
     assert [row['step'] for row in rows] == [1, 2, 3]
     assert all(math.isfinite(row['loss']) and row['seconds'] > 0 for row in rows)
     assert all(row['forward_tokens'] == 3 and row['supervised_tokens'] == 2 for row in rows)
-    assert json.loads((tmp_path / 'run/progress.json').read_text()) == rows[-1]
+    progress = json.loads((tmp_path / 'run/progress.json').read_text())
+    assert progress == {**rows[-1], 'checkpoint_step': 3, 'checkpoint_global_step': 3,
+        'checkpoint_sha256': hashlib.sha256((tmp_path / 'run/checkpoint.pt').read_bytes()).hexdigest()}
     # A completed three-epoch run must give an appended row all three visits,
     # without replaying the already-complete prefix or resetting its moments.
     appended = graph('new-train')

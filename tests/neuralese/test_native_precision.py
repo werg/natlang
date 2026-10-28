@@ -7,6 +7,21 @@ from natlang_neuralese.model.native_precision import set_native_linear_precision
 from natlang_neuralese.model.shared_state import SharedStateModel
 
 
+def assert_state_equal(left, right):
+    if torch.is_tensor(left):
+        assert torch.equal(left.cpu(), right.cpu())
+    elif isinstance(left, dict):
+        assert left.keys() == right.keys()
+        for key in left:
+            assert_state_equal(left[key], right[key])
+    elif isinstance(left, (list, tuple)):
+        assert len(left) == len(right)
+        for a, b in zip(left, right):
+            assert_state_equal(a, b)
+    else:
+        assert left == right
+
+
 def test_base_location_change_requires_consistent_full_byte_inventory():
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
     from natlang_neuralese.model.native_precision import base_location_transition
@@ -99,7 +114,7 @@ def test_real_optimizer_continuation_records_base_relocation_and_keeps_stage_cre
     assert trainer.main(continued+['--continue-from',str(parent),'--objective-continuation']) == 0
     new = torch.load(tmp_path/'after/checkpoint.pt', weights_only=False)['training']
     assert new['global_step'] == old['global_step']+1
-    assert new['sft_progress']['before'] == old['sft_progress']['before']
+    assert_state_equal(new['sft_progress']['before'], old['sft_progress']['before'])
     assert new['sft_progress']['after']['exposure_counts'] == {'train': 1}
     assert new['options']['base_relocation_history'][-1]['input_bytes'] == 'identical'
     assert hashlib.sha256(parent.read_bytes()).hexdigest() == parent_hash

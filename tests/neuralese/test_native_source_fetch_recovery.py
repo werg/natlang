@@ -83,7 +83,9 @@ def test_fetch_failure_checkpoint_matches_completed_reference_and_resumes(tmp_pa
     original_save=trainer._save;prefix={}
     def capture_save(policy,*args,**kwargs):
         result=original_save(policy,*args,**kwargs)
-        if kwargs['step']==2:prefix['checkpoint']=torch.load(policy.slot,weights_only=False,map_location='cpu')
+        if kwargs['step']==2:
+            policy.drain_async()
+            prefix['checkpoint']=torch.load(policy.slot,weights_only=False,map_location='cpu')
         return result
     with monkeypatch.context()as patch:
         patch.setattr(trainer,'_save',capture_save)

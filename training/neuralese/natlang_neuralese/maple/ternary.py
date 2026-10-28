@@ -308,7 +308,7 @@ class InputPrecision:
 # ``native_precision_input`` (an ``InputPrecision`` or None).
 
 
-class _StraightThrough(torch.autograd.Function):
+class _OperandStraightThrough(torch.autograd.Function):
     """Forward ``value`` (a detached, already ramped operand), identity gradient to ``latent``."""
 
     @staticmethod
@@ -422,8 +422,8 @@ def _inline_operands(module, x, active):
         from ..train.qformats import activation_value
         xf = x.detach().float()
         value = activation_value(x.detach(), activation, scale)
-        x = _StraightThrough.apply(x, (xf + mix * (value - xf)).to(x.dtype))
-    return x, _StraightThrough.apply(module.weight, ramped)
+        x = _OperandStraightThrough.apply(x, (xf + mix * (value - xf)).to(x.dtype))
+    return x, _OperandStraightThrough.apply(module.weight, ramped)
 
 
 def linear_precision(module, x):

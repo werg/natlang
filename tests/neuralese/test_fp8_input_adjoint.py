@@ -1,5 +1,5 @@
 """Shared expert-adjoint precision is explicit, durable, and numerically checked."""
-from types import SimpleNamespace
+from natlang_neuralese.data.native_graph_schema import NativeGraphExample
 import pytest
 import torch
 from natlang_neuralese.train.fp8_backend import (
@@ -120,7 +120,9 @@ def test_real_native_muon_updates_and_exact_optimizer_rng_resume(recipe,record_p
     student=model();backend=make_backend('triton-experts',student.port.hf,device='cuda',recipe=recipe)
     student.port.activation_checkpoint=backend.checkpoint
     optimizer,_=make_native_optimizer(student,lr=3e-4,in_backward=True)
-    plan=graph();rows=[SimpleNamespace(id='communication',plan=plan,target_weights=(1,)*plan.token_count)]
+    plan=graph();rows=[NativeGraphExample(id='communication',split='train',
+        source_groups=('communication',),tokenizer_fingerprint='test',
+        plan=plan,target_weights=(1,)*plan.token_count)]
     before=student.port.layers[0].mlp.experts.gate_up.detach().clone()
     losses=[]
     for _ in range(3):

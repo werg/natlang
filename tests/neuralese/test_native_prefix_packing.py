@@ -1,5 +1,5 @@
 """Exact cached-prefix layout and complete ordinary SFT gradient preservation."""
-from types import SimpleNamespace
+from natlang_neuralese.data.native_graph_schema import NativeGraphExample
 import copy
 import pytest
 import torch
@@ -11,7 +11,8 @@ from test_shared_state import tiny
 
 def examples():
     sequences = [(2,3,4,5,6,7),(2,3,4,5,8),(2,3,4,5),(2,3,4,5,6,7),(9,10,11)]
-    return [SimpleNamespace(id=f'e{index}',plan=compile_graph([Invocation('answer',tokens)]),
+    return [NativeGraphExample(id=f'e{index}',split='train',source_groups=(f'e{index}',),
+        tokenizer_fingerprint='test',plan=compile_graph([Invocation('answer',tokens)]),
         target_weights=tuple([0]+[(.05 if position%2 else 1)*(index+1)
                                   for position in range(1,len(tokens))]))
             for index,tokens in enumerate(sequences)]
