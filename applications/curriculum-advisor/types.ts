@@ -46,7 +46,3 @@ export type TrainingTaskSelection = { row: number; samples: number };
 
 export type TrainingCurriculumOptions = { schema: "natlang.rl-task-curriculum/1"; breadth_fraction: number; promotion_success_rate: number };
 
-/** One call of a training episode graph that the JOLT+ self-teacher scores (selectPrivilegedFacts). */
-export type PrivilegedInvocation = { name: string; role: "root" | "child"; text: string };
-/** One verified privileged fact of a training world (never development, confirmation or held worlds). */
-export type PrivilegedFact = { id: string; kind: string; text: string };

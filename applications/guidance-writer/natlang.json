@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/guidance-writer",
+  "version": "0.1.0",
+  "description": "In-run training guidance: for each call of a training episode, select the verified facts it may see (selectGuidanceFacts, crisp or natural language) and have the policy model write brief guidance from them as Neuralese (writeGuidance), which the call then imports as context. Used by JOLT+ self-teaching, memetic learning and the learned optimizer.",
+  "include": [
+    "README.md",
+    "index.ts",
+    "types.ts",
+    "visibility.ts",
+    "crispSelection.ts",
+    "selectGuidanceFacts.nl",
+    "writeGuidance.nl",
+    "tsconfig.json"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  }
+}
