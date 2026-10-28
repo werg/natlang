@@ -36,6 +36,7 @@ def main():
     parser.add_argument('--storage',required=True);parser.add_argument('--parent-pin',required=True);parser.add_argument('--parent-local',required=True)
     parser.add_argument('--parent-copy-receipt',required=True);parser.add_argument('--parent-qualification',required=True)
     parser.add_argument('--interval',type=float,default=15);parser.add_argument('--backup-interval',type=float,default=1800)
+    parser.add_argument('--ownership-journal',type=Path,help='actual worker process and runtime custody journal')
     args=parser.parse_args()
     if args.interval<=0 or args.backup_interval<=0:parser.error('intervals must be positive')
     from scripts.coreweave import cwctl
@@ -46,6 +47,8 @@ def main():
              '--state',args.state,'--storage',args.storage,'--parent-local',args.parent_local,
              '--parent-copy-receipt',args.parent_copy_receipt,'--parent-qualification',args.parent_qualification,
              '--interval',str(args.backup_interval)]
+    if args.ownership_journal:
+        command.extend(['--ownership-journal',str(args.ownership_journal)])
     os.execv(sys.executable,command)
 
 

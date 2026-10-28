@@ -545,6 +545,18 @@ def test_recovery_wait_requires_four_owned_workers_and_qualified_local_parent(tm
     assert not wait.ready(record,pin,parent,copy,qualified)
 
 
+def test_recovery_wait_forwards_actual_ownership_journal(monkeypatch, tmp_path):
+    wait=load('diloco_recovery_wait')
+    monkeypatch.setattr(wait,'ready',lambda *args:True)
+    command=[]
+    monkeypatch.setattr(wait.os,'execv',lambda exe,args:command.extend(args))
+    monkeypatch.setattr(wait.sys,'argv',['wait','run','--state','state','--storage','store',
+        '--parent-pin','pin','--parent-local','parent','--parent-copy-receipt','copy',
+        '--parent-qualification','qualified','--ownership-journal',str(tmp_path/'ownership.json')])
+    wait.main()
+    assert command[command.index('--ownership-journal')+1]==str(tmp_path/'ownership.json')
+
+
 def test_initial_resident_requires_exact_plan_recipe_and_source_receipts():
     service=load('diloco_periodic_recovery')
     components={'coordinator':{'fingerprint':'f','versions':[0],'last_seq':[{}],'queued':[{}],'runtime_code_sha256':'code'}}
