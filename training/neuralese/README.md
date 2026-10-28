@@ -1,21 +1,21 @@
-# natlang_neuralese: the S3 port reference
+# natlang_neuralese: shared native training, serving and tuning
 
-PyTorch reference of the Neuralese read and write ports on LFM2.5 ([S3 plan](../../plans/neuralese/S3_PORT.md)).
-
-New training lineages start with the [shared declared recipe](../../plans/neuralese/TRAINING_RECIPE.md):
-token identity and causal embedding distillation are prerequisites, followed by
-raw runtime qualification, projection-first/full-stack gold-text warm-up,
-and adapted-weight runtime qualification before Natlang trajectories.
+The shared PyTorch package behind the native Neuralese lines: shared positional KV and hybrid-state spans with
+distinct producer/consumer markers (`model/shared_state.py`), the shared native SFT trainer and recipe loader
+(`train/native_state_sft.py`, `train/recipe.py`), whole-graph RL with JOLT+ (`rl/`), serving (`serve/`), the
+tuning system and learned optimizer (`tune/`), and quantized export (`export/`). The current line is LFM3
+(`plans/neuralese/LFM3_RECIPE_20261028.md`); recipes live in `recipes/` and use `extends`/`overrides`.
 
 | Path | Contents |
 | --- | --- |
-| `model/lfm2_port.py` | Layer-range execution of the HF LFM2 weights with snapshot-able caches; fast path (SDPA native GQA and causal handling, preallocated copy-on-write KV without autograd, hub `causal-conv1d` for prefills) and the original reference path |
-| `model/heads.py` | Feedback projection, stop head, content projection as a payload distribution (mean, per-dimension log-sigma, temperature-gated sampling, log-likelihood, KL), interface norm |
-| `write.py`, `read.py` | The single write procedure (`temperature`, default 0) and the read port |
-| `data/` | Port-record loader (`natlang.port-record/1`), per-model rendering (chat and Natlang forms), span examples, fixtures |
-| `train/` | Shared declared recipes, resumable gold-text warm-up and trajectory trainer, and execution/loss primitives |
-| `eval/` | The harness (payload ablations, stopping, representation monitors, temperature sweep, cache agreement, latency) and the throughput benchmark |
-| `laws.py` | Law-measurement hooks (objectives arrive in S5) |
+| `model/` | Backbone ports, native shared-state execution, native checkpoints and parameter precision |
+| `data/` | Native graph schema, conversion and rendering, trajectory text and source readers |
+| `train/` | Recipe loader, native SFT/preference trainers, optimizers (Muon/AdamW, stochastic rounding), QAT, EMA, DiLoCo |
+| `rl/` | Whole-graph RL rounds, JOLT+ privileged self-teaching, score-centered objective, memetic programs |
+| `serve/` | Native engine, HTTP server, guided generation |
+| `tune/` | Program tunes, native soft states, LoRA mixtures/bases, learned optimizer |
+| `eval/` | Task packets and cadence, native state/gradient/memory checks, throughput |
+| `common/` | Shared hashing, JSON I/O, checkpoint storage, line backbones |
 
 ## Environment
 
@@ -37,7 +37,5 @@ On the GB10 (sm_121, aarch64) torch's flash and cuDNN SDPA backends work with `e
 ```sh
 .venv-neuralese/bin/python -m pytest -q tests/neuralese
 cd training/neuralese
-../../.venv-neuralese/bin/python -m natlang_neuralese.train.recipe \
-  --recipe recipes/neuralese-direct-mellum-v4.json --heads HEADS.pt --out RUN_DIR --device cuda
-../../.venv-neuralese/bin/python -m natlang_neuralese.eval.bench --prefix 2048 --block 32 --batch 1
+../../.venv-neuralese/bin/python -m natlang_neuralese.train.recipe --help
 ```
