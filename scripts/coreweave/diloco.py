@@ -63,6 +63,12 @@ def validate(run: dict) -> dict:
         raise cwctl.ControllerError('coordinator needs job, bundle_file and parent; learners need job and bundle_file')
     if run.get('placement', 'cohosted') not in ('cohosted', 'separate'):
         raise cwctl.ControllerError('placement must be cohosted or separate')
+    run = dict(run)
+    resident = run.setdefault('resident', {'directory': '/work/diloco-resident/resident-data',
+                                           'geometry_qualification': '/work/diloco-resident/geometry.json'})
+    if resident != 'off' and (not isinstance(resident, dict) or set(resident) != {'directory', 'geometry_qualification'} or
+            not all(isinstance(v, str) and v.startswith('/') for v in resident.values())):
+        raise cwctl.ControllerError('resident needs absolute directory and geometry_qualification paths')
     if 'coordinator_url' in run['settings']:
         raise cwctl.ControllerError('settings.coordinator_url is filled in by the launch')
     return run
@@ -87,8 +93,14 @@ def coordinator_job(run: dict, trainer_args: list[str]) -> dict:
 def learner_job(run: dict, worker: int, url: str) -> dict:
     job = copy.deepcopy(_template(run['learners']['job']))
     settings = {**run['settings'], 'coordinator_url': url}
+    resident_args = []
+    if isinstance(run.get('resident'), dict):
+        resident_args = ['--resident-data-directory', run['resident']['directory'],
+                         '--resident-geometry-qualification', run['resident']['geometry_qualification']]
+        if any(flag in job['command'] for flag in ('--resident-data-directory', '--resident-geometry-qualification')):
+            raise cwctl.ControllerError('declare resident paths in the run, not twice in the trainer command')
     job.update(id=f"{run['id']}-learner-{worker}", env={**job['env'], 'NATLANG_DILOCO_WORKER_ID': str(worker)},
-               command=[*job['command'], '--diloco', json.dumps(settings, sort_keys=True)])
+               command=[*job['command'], *resident_args, '--diloco', json.dumps(settings, sort_keys=True)])
     return jobs.validate(job)
 
 
@@ -219,7 +231,7 @@ def launch(run: dict) -> dict:
     learner_template = _template(run['learners']['job'])
     if learner_template['command'][:len(TRAINER)] != TRAINER:
         raise cwctl.ControllerError(f'the learner command must start with {shlex.join(TRAINER)}')
-    trainer_args = learner_template['command'][len(TRAINER):]
+    trainer_args = learner_job(run, 0, 'http://127.0.0.1:8080')['command'][len(TRAINER):-2]
     token = secrets.token_urlsafe(32)
     _keep(RUNS / run['id'] / 'token', token)
     started: list[str] = []

@@ -568,7 +568,7 @@ def test_diloco_run_composes_ordinary_jobs(tmp_path):
     (tmp_path / 'learner.json').write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer)))
     (tmp_path / 'coordinator.json').write_text(json.dumps(base_job(
         id='coord', resources={'cpu': '8', 'memory': '32Gi'}, transport='api')))
-    run = diloco.validate({'schema': diloco.SCHEMA, 'id': 'lfm-dl', 'settings': {'run_id': 'lfm-dl', 'workers': 2},
+    run = diloco.validate({'schema': diloco.SCHEMA, 'id': 'lfm-dl', 'resident': 'off', 'settings': {'run_id': 'lfm-dl', 'workers': 2},
         'coordinator': {'job': str(tmp_path / 'coordinator.json'), 'bundle_file': 'b.json', 'parent': '/work/in/parent.pt'},
         'learners': {'job': str(tmp_path / 'learner.json'), 'bundle_file': 'b.json'}})
     learner = diloco.learner_job(run, 1, 'https://coordinator.example')
@@ -610,7 +610,7 @@ def test_diloco_launch_records_shared_ownership_once(tmp_path, monkeypatch, plac
     coord = tmp_path / 'coord.json'
     learner.write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer)))
     coord.write_text(json.dumps(base_job(id='coord', resources={'cpu': '8', 'memory': '32Gi'}, transport='api')))
-    run = {'schema': diloco.SCHEMA, 'id': 'run', 'placement': placement,
+    run = {'schema': diloco.SCHEMA, 'id': 'run', 'resident': 'off', 'placement': placement,
            'settings': {'run_id': 'run', 'workers': 4},
            'coordinator': {'job': str(coord), 'bundle_file': 'coord.bundle', 'parent': '/work/in/parent.pt'},
            'learners': {'job': str(learner), 'bundle_file': 'learner.bundle'}}
@@ -642,7 +642,7 @@ def test_diloco_cohost_failure_journals_roles_and_stops_each_sandbox_once(tmp_pa
     learner, coord = tmp_path / 'learner.json', tmp_path / 'coord.json'
     learner.write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer)))
     coord.write_text(json.dumps(base_job(id='coord', resources={'cpu': '8', 'memory': '32Gi'})))
-    run = {'schema': diloco.SCHEMA, 'id': 'run', 'settings': {'run_id': 'run', 'workers': 2},
+    run = {'schema': diloco.SCHEMA, 'id': 'run', 'resident': 'off', 'settings': {'run_id': 'run', 'workers': 2},
            'coordinator': {'job': str(coord), 'bundle_file': 'c', 'parent': '/work/in/parent.pt'},
            'learners': {'job': str(learner), 'bundle_file': 'l'}}
     def fake_launch(job, *args, **kwargs):
@@ -767,3 +767,72 @@ sys.exit(2)
         if process.poll() is None:
             process.kill()
             process.wait(timeout=8)
+
+
+def test_diloco_resident_args_bound_into_learner_and_coordinator_identity(tmp_path):
+    diloco = load('diloco')
+    trainer = ['python', '-m', 'natlang_neuralese.train.native_state_sft', '--continue-from', '/parent']
+    learner = tmp_path / 'learner.json'
+    learner.write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer)))
+    run = {'id': 'lfm-dl', 'settings': {'run_id': 'lfm-dl', 'workers': 4},
+           'coordinator': {'parent': '/parent'}, 'learners': {'job': str(learner)},
+           'resident': {'directory': '/work/run/resident-data', 'geometry_qualification': '/work/geometry.json'}}
+    job = diloco.learner_job(run, 2, 'https://coordinator')
+    assert job['command'][-6:-2] == ['--resident-data-directory', '/work/run/resident-data',
+                                      '--resident-geometry-qualification', '/work/geometry.json']
+    trainer_args = diloco.learner_job(run, 0, 'http://127.0.0.1:8080')['command'][len(diloco.TRAINER):-2]
+    cohost = diloco.cohosted_job(run, trainer_args)
+    assert cohost['command'][-1].count('--resident-data-directory') == 2
+
+
+def test_diloco_resident_publication_stages_all_before_cas_and_resumes(tmp_path, monkeypatch):
+    resident = load('diloco_resident')
+    source = tmp_path / 'recipe.json'; source.write_bytes(b'recipe')
+    manifest = {'schema': resident.SCHEMA, 'recipe': '/work/v2/recipe.json', 'stage': 'sft',
+                'tokenizer': 't', 'roles': [1, 2, 3, 4], 'files': [{
+                    'source': str(source), 'target': '/work/v2/recipe.json', 'bytes': 6,
+                    'sha256': hashlib.sha256(b'recipe').hexdigest()}]}
+    record = {'run': {'id': 'run', 'settings': {'workers': 4},
+                      'resident': {'directory': '/work/resident'}}, 'learners': ['w0', 'w1', 'w2', 'w3']}
+    events, fail = [], [True]
+    class Result:
+        returncode = 0
+        def result(self): return self
+    class FakeSandbox:
+        def __init__(self, name): self.name = name
+        def exec(self, *args, **kwargs): return Result()
+        def write_file_streaming(self, path, chunks, **kwargs):
+            assert b''.join(chunks) == b'recipe'
+            return Result()
+    monkeypatch.setattr(resident.cwctl, 'read_sandbox', lambda name: FakeSandbox(name))
+    def call(box, args):
+        events.append((box.name, args[0]))
+        if args[0] == 'prepare':
+            return {'request': {'path': '/request', 'sha256': box.name},
+                    'source_identity': {'train_sha256': 'same', 'ce_sha256': 'ce'}}
+        if args[0] == 'publish':
+            assert sum(event[1] == 'prepare' for event in events) == 4
+            if box.name == 'w2' and fail[0]: raise RuntimeError('interrupted publication')
+            return {'generation': box.name}
+        return {}
+    monkeypatch.setattr(resident, 'call', call)
+    journal = tmp_path / 'publication.json'
+    with pytest.raises(RuntimeError, match='interrupted'):
+        resident.publish(record, manifest, journal)
+    state = json.loads(journal.read_text())
+    assert state['state'] == 'incomplete' and state['workers']['0']['state'] == 'published'
+    fail[0] = False
+    final = resident.publish(record, manifest, journal, resume=True)
+    assert final['state'] == 'published'
+    assert sum(event[1] == 'prepare' for event in events) == 4
+    assert all(item['state'] == 'published' for item in final['workers'].values())
+
+
+def test_diloco_resident_is_enabled_by_default_and_explicitly_opted_out():
+    diloco = load('diloco')
+    run = {'schema': diloco.SCHEMA, 'id': 'run', 'settings': {'run_id': 'run', 'workers': 4},
+           'coordinator': {'job': 'c', 'bundle_file': 'cb', 'parent': '/parent'},
+           'learners': {'job': 'l', 'bundle_file': 'lb'}}
+    assert diloco.validate(run)['resident'] == {'directory': '/work/diloco-resident/resident-data',
+                                                'geometry_qualification': '/work/diloco-resident/geometry.json'}
+    assert diloco.validate({**run, 'resident': 'off'})['resident'] == 'off'
