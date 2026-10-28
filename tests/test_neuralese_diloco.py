@@ -134,15 +134,10 @@ def test_two_http_learners_train_and_merge(tmp_path):
         surface = TensorSurface.from_module(model)
         learner = DilocoLearner(settings, surface=surface, identity={"objective": "toy"}, output=tmp_path / f"w{worker}", transport=Transport(settings.coordinator_url, TOKEN, 5))
         learners.append((model, torch.optim.AdamW(model.parameters(), lr=1e-2), learner))
-    # Start barrier: learner 0 boots first and waits until its peer has registered.
-    learners[0][2].start()  # Returns before quorum so qualification can run.
-    starter = threading.Thread(target=learners[0][2].await_training_start)
-    starter.start()
-    time.sleep(0.5)
-    assert starter.is_alive()
+    # The first learner starts immediately; no peer registration barrier.
+    learners[0][2].start()
+    assert learners[0][2].await_update_capacity()
     learners[1][2].start()
-    starter.join(timeout=30)
-    assert not starter.is_alive() and learners[0][2].start_wait["all"] and learners[0][2].start_wait["seconds"] >= 0.4
     for model, _, _ in learners:
         for name, param in model.named_parameters():
             assert torch.equal(param, dict(seed.named_parameters())[name])
@@ -502,13 +497,21 @@ def test_four_unequal_epochs_drain_every_partial_before_global_export(tmp_path):
         except OSError:time.sleep(.02)
     learners=[]
     for worker in range(4):
-        model=_model();model.load_state_dict(seed.state_dict());optimizer=torch.optim.SGD(model.parameters(),lr=.001)
+        model=_model();model.load_state_dict(seed.state_dict());optimizer=torch.optim.AdamW(model.parameters(),lr=.001)
         settings=DilocoSettings(run_id='full-epoch',workers=4,worker_id=worker,coordinator_url=url,local_steps=128,
             wire_dtype='fp32',allow_private_http=True,start_grace_seconds=0,heartbeat_seconds=.05,timeout_seconds=10)
         learner=DilocoLearner(settings,surface=TensorSurface.from_module(model),identity={'parent':'exact'},
             output=tmp_path/f'w{worker}',transport=Transport(url,token,5))
         learners.append((model,optimizer,learner))
-    starters=[threading.Thread(target=item[2].start) for item in learners]
+    # Worker 0 earns real updates while no other learner is registered.
+    model,optimizer,learner=learners[0]
+    learner.start(); rng=torch.get_rng_state().clone()
+    for _ in range(4):
+        optimizer.zero_grad(); model(torch.ones(1,8)).sum().backward(); optimizer.step(); learner.after_step(tokens=1)
+    assert learner.local_steps==4 and learner.local_tokens==4 and optimizer.state
+    assert torch.equal(torch.get_rng_state(),rng)
+    assert set(transport.json('GET','/v1/status')['registered'])=={'0'}
+    starters=[threading.Thread(target=item[2].start) for item in learners[1:]]
     for t in starters:t.start()
     for t in starters:t.join(10);assert not t.is_alive()
     failures=[];completed={};sequences={}
@@ -517,7 +520,7 @@ def test_four_unequal_epochs_drain_every_partial_before_global_export(tmp_path):
         try:
             # Earlier workers finish while peers are still earning updates.
             if i>=2:time.sleep(.4)
-            for _ in range(steps):
+            for _ in range(steps-(4 if i==0 else 0)):
                 optimizer.zero_grad();model(torch.ones(1,8)).sum().backward();optimizer.step();learner.after_step(tokens=1)
             learner.declare_completion(drained=False)
             assert learner.finish()

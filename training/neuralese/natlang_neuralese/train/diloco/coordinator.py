@@ -842,6 +842,15 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                         self._stream(file, sha256=sha256)
                 elif parsed.path == "/v1/seed":
                     self._stream((coordinator.root / "seed.safetensors").open("rb"))
+                elif re.fullmatch(r"/v1/seed-fragments/[0-9]+", parsed.path):
+                    index = int(parsed.path.rsplit("/", 1)[-1])
+                    coordinator._path(index)  # Validate fragment index.
+                    fragment = coordinator.fragments[index]
+                    with safe_open(coordinator.root / "seed.safetensors", framework="pt", device="cpu") as seed:
+                        pieces = [seed.get_tensor(part.name).reshape(-1)[part.offset:part.offset + part.length]
+                                  for part in fragment.slices]
+                        payload = io.BytesIO(save({"theta": torch.cat(pieces).float()}))
+                    self._stream(payload, 0)
                 elif re.fullmatch(r"/v1/ema/[0-9]+", parsed.path):
                     # The EMA of the global versions for one fragment (evaluation pulls; learners never read it).
                     index = int(parsed.path.rsplit("/", 1)[-1])

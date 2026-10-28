@@ -413,33 +413,37 @@ class DilocoLearner:
         """
         self._adopt_ledger(self._lease())
         self._start_heartbeat()
-        self._start_barrier_pending = True
         for index in range(len(self.fragments)):
             update = self._fetch(index, -1)
-            if update is not None and update[0] == 0:
-                if not torch.equal(update[1], pack_fragment(self.surface.masters, self.fragments[index])):
-                    raise ValueError(f"DiLoCo seed fragment {index} differs from this learner's parent weights")
+            if update is None:
+                raise ValueError(f"DiLoCo coordinator omitted fragment {index}")
+            seed = update[1]
+            if update[0] != 0:
+                path, _ = self.transport.fetch_file(f"/v1/seed-fragments/{index}", self.outbox)
+                if path is None:
+                    raise ValueError(f"DiLoCo coordinator omitted seed fragment {index}")
+                try:
+                    seed = load_tensors(path)["theta"].float()
+                finally:
+                    path.unlink(missing_ok=True)
+            if not torch.equal(seed, pack_fragment(self.surface.masters, self.fragments[index])):
+                raise ValueError(f"DiLoCo seed fragment {index} differs from this learner's parent weights")
             self._install(index, update)
 
-    def await_training_start(self) -> None:
-        """Wait only at the first optimizer update, after read-only qualification."""
-        if getattr(self, '_start_barrier_pending', False):
-            self._start_barrier()
-            self._start_barrier_pending = False
-
-    def _start_barrier(self) -> None:
-        """Wait (heartbeating) until all learners registered, or a quorum did and start_grace_seconds passed."""
-        began = time.time()
-        while True:
-            status = self.transport.json("GET", "/v1/status")
-            registered = len(status.get("registered", {}))
-            quorum = int(status.get("min_quorum", self.settings.workers))
-            waited = time.time() - began
-            if registered >= self.settings.workers or (registered >= quorum and waited >= self.settings.start_grace_seconds):
-                break
-            time.sleep(min(5.0, self.settings.heartbeat_seconds * 10))
-        self.start_wait = {"seconds": round(time.time() - began, 3), "registered": registered,
-                           "all": registered >= self.settings.workers}
+    def await_update_capacity(self, *, stop_requested=lambda: False) -> bool:
+        """Bound local residual behind an unmerged proposal without blocking startup."""
+        limit = self.settings.max_offline_steps
+        if not limit:
+            return True
+        clock = self.local_steps
+        while any(self.steps_since[i] >= limit for i in (set(self.pending) | self.awaiting_global)):
+            if stop_requested():
+                return False
+            clock += 1
+            self._collect_uploads(clock)
+            self._collect_downloads()
+            time.sleep(.2)
+        return True
 
     def resume(self, value: dict) -> None:
         if value["protocol"] != PROTOCOL or value["fingerprint"] != self.manifest["fingerprint"]:
