@@ -54,16 +54,16 @@ def _grouped_ternary_mm(a_ptr, rows_ptr, codes_ptr, scale_ptr, out_ptr, block_ex
     """out[m, n] = sum_k A[row(m), k] * W_e[k, n] for the block's expert e. W_e is the expert matrix at (inner=k,
     outer=n): codes[e] times its scale, where the scale is indexed by the weight's own (row, column // scale_block):
     row = outer and column = inner in the forward pass, the reverse for the input gradient (TRANS)."""
-    pid_m = tl.program_id(0)
-    pid_n = tl.program_id(1)
-    expert = tl.load(block_expert_ptr + pid_m)
+    pid_m = tl.program_id(0).to(tl.int64)
+    pid_n = tl.program_id(1).to(tl.int64)
+    expert = tl.load(block_expert_ptr + pid_m).to(tl.int64)
     if expert < 0:
         return
     offs_m = pid_m * BM + tl.arange(0, BM)
     offs_n = pid_n * BN + tl.arange(0, BN)
     offs_k = tl.arange(0, BK)
     if HAS_ROWS:
-        rows = tl.load(rows_ptr + offs_m, mask=offs_m < P, other=0)
+        rows = tl.load(rows_ptr + offs_m, mask=offs_m < P, other=0).to(tl.int64)
     else:
         rows = offs_m
     n_mask = offs_n < N
@@ -100,13 +100,13 @@ def _grouped_scale_grad(a_ptr, rows_ptr, dy_ptr, codes_ptr, out_ptr, start_ptr, 
                         BK: tl.constexpr):
     """out[e, n, b] = sum over expert e's routed rows p of dy[p, n] * sum_{k in block b} A[row(p), k] * codes[e, n, k].
     Expert e's rows are the padded positions start[e] .. start[e] + count[e] (``Plan``)."""
-    expert = tl.program_id(0)
-    pid_n = tl.program_id(1)
-    block = tl.program_id(2)
+    expert = tl.program_id(0).to(tl.int64)
+    pid_n = tl.program_id(1).to(tl.int64)
+    block = tl.program_id(2).to(tl.int64)
     count = tl.load(count_ptr + expert)
     if count == 0:
         return
-    start = tl.load(start_ptr + expert)
+    start = tl.load(start_ptr + expert).to(tl.int64)
     offs_n = pid_n * BN + tl.arange(0, BN)
     n_mask = offs_n < N
     total = tl.zeros((BN,), dtype=tl.float32)
@@ -119,7 +119,7 @@ def _grouped_scale_grad(a_ptr, rows_ptr, dy_ptr, codes_ptr, out_ptr, start_ptr, 
             p_mask = local < count
             p = start + local
             if HAS_ROWS:
-                rows = tl.load(rows_ptr + p, mask=p_mask, other=0)
+                rows = tl.load(rows_ptr + p, mask=p_mask, other=0).to(tl.int64)
             else:
                 rows = p
             dy = tl.load(dy_ptr + p[:, None] * stride_dm + offs_n[None, :] * stride_dn,
@@ -406,19 +406,19 @@ def _grouped_dense_mm(a_ptr, rows_ptr, w_ptr, out_ptr, block_expert_ptr,
                       BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
     """out[m, n] = sum_k A[row(m), k] * W_e[inner=k, outer=n] for the block's expert e, the k loop in one fixed
     order. ``INNER_CONTIGUOUS``: load weight tiles [BN, BK] along k (the forward of a [N, K] weight)."""
-    pid_m = tl.program_id(0)
-    pid_n = tl.program_id(1)
+    pid_m = tl.program_id(0).to(tl.int64)
+    pid_n = tl.program_id(1).to(tl.int64)
     # Token-local invariant linears and their weight-gradient products always
     # use one matrix. Their former all-zero expert-index tensor caused one
     # CUDA fill launch per GEMM; static specialization removes that launch.
-    expert = 0 if SINGLE_EXPERT else tl.load(block_expert_ptr + pid_m)
+    expert = tl.full((), 0, tl.int64) if SINGLE_EXPERT else tl.load(block_expert_ptr + pid_m).to(tl.int64)
     if expert < 0:
         return
     offs_m = pid_m * BM + tl.arange(0, BM)
     offs_n = pid_n * BN + tl.arange(0, BN)
     offs_k = tl.arange(0, BK)
     if HAS_ROWS:
-        rows = tl.load(rows_ptr + offs_m, mask=offs_m < P, other=0)
+        rows = tl.load(rows_ptr + offs_m, mask=offs_m < P, other=0).to(tl.int64)
     else:
         rows = offs_m
     n_mask = offs_n < N
@@ -461,8 +461,8 @@ def _ordered_dense_weight_gradient(grad_ptr, x_ptr, offsets_ptr, counts_ptr, acc
                                    BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr,
                                    DOT_PRECISION: tl.constexpr):
     """Fold exact per-invocation dW GEMMs into an existing FP32 accumulator."""
-    pid_n = tl.program_id(0)
-    pid_k = tl.program_id(1)
+    pid_n = tl.program_id(0).to(tl.int64)
+    pid_k = tl.program_id(1).to(tl.int64)
     offs_n = pid_n * BM + tl.arange(0, BM)
     offs_k = pid_k * BN + tl.arange(0, BN)
     n_mask = offs_n < N
@@ -470,11 +470,11 @@ def _ordered_dense_weight_gradient(grad_ptr, x_ptr, offsets_ptr, counts_ptr, acc
     running = tl.load(accumulator_ptr + offs_n[:, None] * stride_acc_n + offs_k[None, :] * stride_acc_k,
                       mask=n_mask[:, None] & k_mask[None, :], other=0.0)
     for record in range(RECORDS):
-        start = tl.load(offsets_ptr + record)
+        start = tl.load(offsets_ptr + record).to(tl.int64)
         rows = tl.load(counts_ptr + record)
         contribution = tl.zeros((BM, BN), dtype=tl.float32)
         for row_start in range(0, rows, BK):
-            row = row_start + tl.arange(0, BK)
+            row = row_start.to(tl.int64) + tl.arange(0, BK)
             row_mask = row < rows
             grad_qn = tl.load(grad_ptr + (start + row[:, None]) * N + offs_n[None, :],
                               mask=row_mask[:, None] & n_mask[None, :], other=0.0)
