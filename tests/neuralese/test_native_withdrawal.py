@@ -292,8 +292,19 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
         assert trainer.main(resumed)==0
         result=torch.load(out/'checkpoint.pt',weights_only=False)['training']
         assert result['global_step']>prior['global_step'] and result['exposure_counts']=={'good':1,'extra':1}
-        assert result['optimizer'] and result['rng'] and result['options']['standalone_diloco_history'][0]['sha256']==sha(pin)
-        assert torch.load(pin,weights_only=False)['training']['diloco'] and sha(pin)==result['options']['standalone_diloco_history'][0]['sha256']
+        assert result['optimizer'] and result['rng'] and result['options']['standalone_diloco_history'][0]['checkpoint']['sha256']==sha(pin)
+        assert torch.load(pin,weights_only=False)['training']['diloco'] and sha(pin)==result['options']['standalone_diloco_history'][0]['checkpoint']['sha256']
+        from scripts.coreweave.recovery_readiness import required_bindings
+        from scripts.coreweave.diloco_recovery_dependencies import control_bindings
+        from natlang_neuralese.train.recipe import stage_input_args
+        binding=result['options']['standalone_diloco_history'][0]['checkpoint']
+        assert any(x['path']==str(pin) and x['sha256']==sha(pin) for x in required_bindings({'training':result,'model_config':{}}))
+        import io,tarfile
+        archive=tmp_path/'control.tar'; data=json.dumps({'options':result['options']}).encode()
+        with tarfile.open(archive,'w') as tar:
+            info=tarfile.TarInfo('metadata.json');info.size=len(data);tar.addfile(info,io.BytesIO(data))
+        assert any(x['path']==str(pin) and x['sha256']==sha(pin) for x in control_bindings(archive))
+        assert stage_input_args({'standalone_diloco_parent':binding},'native_state_sft',target='portable')==['--standalone-diloco-parent',str(pin)]
         assert trainer.main(resumed)==0
         assert len(torch.load(out/'checkpoint.pt',weights_only=False)['training']['options']['standalone_diloco_history'])==1
     finally:stop.set();server.join(timeout=3)

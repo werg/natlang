@@ -2335,13 +2335,14 @@ def _main(argv=None, *, requested_refresh):
         if digest != sha256_file_hex_cached(policy.slot):
             raise ValueError('standalone DiLoCo custody pin differs from the resumed checkpoint')
         prior_outer_history.append({'schema':'natlang.diloco-standalone-transition/1',
-            'checkpoint':str(pin), 'sha256':digest, 'global_step':global_step,
+            'checkpoint':{'path':str(pin), 'sha256':digest, 'bytes':pin.stat().st_size}, 'global_step':global_step,
             'outer_history':'historical-only', 'standalone_outer_credit':False})
     elif args.standalone_diloco_parent is not None:
         pin = args.standalone_diloco_parent.resolve(strict=True)
         if (args.diloco is not None or not prior_outer_history or
-                prior_outer_history[-1].get('checkpoint') != str(pin) or
-                prior_outer_history[-1].get('sha256') != sha256_file_hex_cached(pin)):
+                (prior_outer_history[-1].get('checkpoint') or {}).get('path') != str(pin) or
+                (prior_outer_history[-1].get('checkpoint') or {}).get('sha256') != sha256_file_hex_cached(pin) or
+                (prior_outer_history[-1].get('checkpoint') or {}).get('bytes') != pin.stat().st_size):
             raise ValueError('standalone DiLoCo custody pin does not match committed history')
     if prior_outer_history:
         checkpoint_options['standalone_diloco_history'] = prior_outer_history
