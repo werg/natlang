@@ -189,13 +189,24 @@ def archive_coordinator_tree(tree, archive, identity):
     tree,archive=Path(tree),Path(archive)
     expected={k:tuple(v) for k,v in json.loads(Path(identity).read_text()).items()}
     if _inventory(tree)!=expected:raise ValueError('coordinator hardlink tree changed before archive')
-    if archive.exists():raise ValueError('coordinator archive exists')
-    temp=archive.with_name(archive.name+'.tmp')
+    seal=archive.with_name(archive.name+'.seal.json')
+    identity_sha=sha256_file_hex(identity)
+    if archive.exists() and seal.exists():
+        receipt=json.loads(seal.read_text())
+        if (receipt.get('identity_sha256')!=identity_sha or receipt.get('bytes')!=archive.stat().st_size
+                or receipt.get('sha256')!=_hash(archive)):
+            raise ValueError('coordinator archive retry differs from its durable seal')
+        return {k:receipt[k] for k in ('path','sha256','bytes')}
+    if archive.exists():archive.unlink()  # unsealed interrupted preparation was never published
+    temp=archive.with_name(archive.name+'.tmp');temp.unlink(missing_ok=True)
     try:
         with tarfile.open(temp,'x',dereference=True) as tar:tar.add(tree,arcname='diloco-coordinator')
         if _inventory(tree)!=expected:raise ValueError('coordinator hardlink tree changed during archive')
         os.link(temp,archive);temp.unlink()
-        return {'path':str(archive),'sha256':_hash(archive),'bytes':archive.stat().st_size}
+        result={'path':str(archive),'sha256':_hash(archive),'bytes':archive.stat().st_size}
+        from natlang_neuralese.common.jsonio import write_json_durable
+        write_json_durable(seal,{**result,'identity_sha256':identity_sha})
+        return result
     finally:temp.unlink(missing_ok=True)
 
 def release_pin(primary, expected_sha, expected_bytes, *, recovery_root, fenced_source=None, fence_root=None):

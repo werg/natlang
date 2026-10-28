@@ -555,6 +555,7 @@ def test_coordinator_hardlink_capture_can_archive_after_live_update(tmp_path):
     assert (tree/'progress.json').read_bytes()==old
     identity=tmp_path/'identity.json';identity.write_text(json.dumps(value['file_identity']));archive=tmp_path/'coordinator.tar'
     result=pin.archive_coordinator_tree(tree,archive,identity);assert result['sha256']==pin._hash(archive)
+    assert pin.archive_coordinator_tree(tree,archive,identity)==result
     (tree/'progress.json').write_bytes(b'corrupt')
     with pytest.raises(ValueError,match='hardlink tree changed'):
         pin.archive_coordinator_tree(tree,tmp_path/'corrupt.tar',identity)
