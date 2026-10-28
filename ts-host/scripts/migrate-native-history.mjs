@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 import { admitRow } from '../dist/teacher/curriculum.js';
 import { defaultToolSurfaceHash, executeProgram, programRunId, trajectoryTurn } from '../dist/teacher/collector.js';
 import { recorded, callNumbers, observed, REPLAY_END } from '../dist/teacher/replay.js';
-import { openingText } from '../dist/teacher/opening.js';
+import { openingText } from '../dist/runtime/conversation.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { sourceConversionDigest } from '../dist/teacher/source-conversion.js';
 
@@ -33,7 +33,8 @@ async function compiledRuntimeIdentity() {
   const nativeDir = join(hostRoot, 'dist/native'), names = (await readdir(nativeDir)).filter(name => name.endsWith('.js'))
     .map(name => `dist/native/${name}`);
   names.push('dist/teacher/collector.js', 'dist/teacher/curriculum.js', 'dist/teacher/curriculum-policy.js',
-    'dist/teacher/source-conversion.js', 'dist/teacher/replay.js', 'dist/teacher/opening.js');
+    'dist/teacher/source-conversion.js', 'dist/teacher/replay.js', 'dist/runtime/conversation.js',
+    'dist/runtime/trajectory.js', 'dist/runtime/trajectory-replay.js', 'dist/runtime/seeded-decision.js');
   const files = {};
   for (const name of [...new Set(names)].sort()) files[name] = sha(await readFile(join(hostRoot, name)));
   return { files, aggregate_sha256: sha(JSON.stringify(files)) };

@@ -11,7 +11,7 @@ import { withCallOf } from '../compiler/inline.js';
 import { createNatlangRuntime } from '../runtime/node.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import type { ModelTurn, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
-import { openingText, type Message } from './opening.js';
+import { openingText, type Message } from '../runtime/conversation.js';
 
 export type AuthoringSpec = {
   /** The authored module, a path in the folder (for example "app.ts"), and the export to call. */

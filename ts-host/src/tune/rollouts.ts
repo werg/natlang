@@ -1,3 +1,5 @@
+import { derivedSeed, sampleOption } from '../runtime/seeded-decision.js';
+export { derivedSeed, sampleOption } from '../runtime/seeded-decision.js';
 import { tuneRuntime, rethrowInfrastructureFailure, executionKey, type TuneExecution } from './execution.js';
 /**
  * Student rollouts for program RL (plans/HIERARCHICAL_LORA_TUNING.md §5.1a).
@@ -48,25 +50,6 @@ export type RolloutSummary = { readonly path: string; readonly written: number; 
 /** Python's `json.dumps` of a list of strings/null (the trainer's gate and soft-state keys). */
 const pythonKey = (items: readonly (string | null)[]) => '[' + items.map(item => JSON.stringify(item)).join(', ') + ']';
 const hash = (...parts: unknown[]) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
-/** A 31-bit seed derived from its named parts. */
-/** Seeded categorical draw from softmax(logProbs / temperature) (the decision readout's exploration law). */
-export function sampleOption(logProbs: readonly number[], temperature: number, seed: number): number {
-  if (!(temperature > 0) || !Number.isFinite(temperature)) throw new Error('decision sampling needs a positive temperature');
-  const top = Math.max(...logProbs.map(value => value / temperature));
-  const weights = logProbs.map(value => Math.exp(value / temperature - top));
-  const total = weights.reduce((sum, value) => sum + value, 0);
-  // Mulberry32 from the derived seed: deterministic per (rollout, call, turn).
-  let state = seed >>> 0;
-  state = (state + 0x6d2b79f5) >>> 0;
-  let mixed = Math.imul(state ^ (state >>> 15), state | 1);
-  mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
-  let draw = (((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296) * total;
-  for (let index = 0; index < weights.length; index++) { draw -= weights[index]!; if (draw < 0) return index; }
-  return weights.length - 1;
-}
-
-export const derivedSeed = (...parts: unknown[]) => Number.parseInt(hash('natlang.tune-rollout-seed/1', ...parts).slice(0, 8), 16) & 0x7fffffff;
-
 /** The behavior actor of a release as the trainer checks it: node versions, family gates and soft-state versions. */
 export function releaseBehavior(manifest: WeightManifest) {
   return { release: manifest.digest, node_artifacts: Object.fromEntries(manifest.artifacts.map(item => [item.node, item.artifact])),

@@ -10,7 +10,7 @@
 import { executeProgram, programRow, programRunId, type ProgramRecord, type TeacherRow } from './collector.js';
 import { callNumbers, openingsOf, placeOf, scriptedDriver, scriptOf, type Turn } from './replay.js';
 import { admitRow, type CurriculumRecord } from './curriculum.js';
-import { text } from './opening.js';
+import { text } from '../runtime/conversation.js';
 
 export const CORRECTION_VERSION = 'corrected-first-attempt/1';
 

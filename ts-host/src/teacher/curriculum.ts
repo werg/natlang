@@ -100,7 +100,7 @@ export function validateCurriculum(record: CurriculumRecord): void {
 
 // ---- Trajectory reading ----------------------------------------------------------------------
 
-import { openingLength, openingText, text, type Message } from './opening.js';
+import { openingLength, openingText, text, type Message } from '../runtime/conversation.js';
 import { replacesPlantedFailure } from './seeded-failure.js';
 type Turn = { invocation_id?: string; context: Message[]; assistant?: { calls?: { tool: string; arguments: unknown }[]; content?: string } };
 
@@ -109,7 +109,7 @@ export function callName(context: Message[]): string {
   const match = /^You are inside this call: ([^(]+)\(/.exec(String(context[1]?.content ?? ''));
   return match?.[1] ?? '';
 }
-export { openingLength } from './opening.js';
+export { openingLength } from '../runtime/conversation.js';
 const isInline = (name: string) => name.startsWith('nl@');
 const TERMINAL = new Set(['return_result']);
 /** A top-level `return` in an eval stages a result: a decision as much as return_result is. */

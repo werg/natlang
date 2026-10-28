@@ -11,7 +11,7 @@
 import type { ModelTurn } from '../contracts.js';
 import { executeProgram, programRow, type ProgramRecord, type TeacherRow } from './collector.js';
 import { trainingQualityReason, runtimeFailureReason, quarantineReason, retiredFamily } from './curriculum-policy.js';
-import { openingText } from './opening.js';
+import { openingText } from '../runtime/conversation.js';
 import { materializeNativeRows } from './native-materializer.js';
 import { callNumbers, indexOf, observed, openingsOf, placeOf, recorded, scriptedDriver, scriptOf, type Turn } from './replay.js';
 import { sourceConversionDigest } from './source-conversion.js';
