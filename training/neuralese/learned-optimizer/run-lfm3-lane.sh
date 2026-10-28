@@ -43,7 +43,7 @@ fi
 O=$W/operations/$OP
 mkdir -p "$O/tunes" "$O/optimizer"
 cd "$REPO"
-ENV="/usr/bin/env PYTHONPATH=$REPO/training/neuralese:$REPO NATLANG_HASH_CACHE=$O/hash-cache NATLANG_CONFIG_HOME=$O/natlang-config"
+ENV="/usr/bin/env PYTHONPATH=$REPO/training/neuralese:$REPO NATLANG_HASH_CACHE=${NATLANG_HASH_CACHE:-$O/hash-cache} NATLANG_CONFIG_HOME=$O/natlang-config"
 
 # run_stage NAME BUDGET_GB COMMAND...: run COMMAND as ledger unit lopt-NAME-OP, wait for its own recorded exit status
 # and return it. stage NAME BUDGET_GB RESULT COMMAND... additionally stops the run unless that status is 0 and the log
@@ -85,7 +85,7 @@ if [ $DRY = 1 ]; then
   CK=$O/fixture/model/native.pt
   PROGRAMS=$O/fixture/programs
 fi
-SHA=$(sha256sum "$CK" | cut -c1-64)
+SHA=$($ENV "$PY" -c 'from natlang_neuralese.common.checkpoint_digest import verified_checkpoint_digest; import sys; print(verified_checkpoint_digest(sys.argv[1]))' "$CK")
 if [ -f "$O/operation.json" ]; then
   python3 - "$O/operation.json" "$CK" "$SHA" <<'PY'
 import json, sys
