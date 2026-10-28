@@ -11,14 +11,18 @@ import type { TuneExecution } from './execution.js';
  *                                   "trainer": ["python", "-m", "natlang_neuralese.tune.build"], "hfConfigDir": "/path",
  *                                   "env": { ... }, "baseGgufSha256": "...", "moduleMap": "lfm3" } },
  *     // a student of the LFM2.5 line is "lfm2.5-350m" with "moduleMap": "lfm2"; moduleMap is the base's architecture
- *     "teacher": "teacher-profile-name",
- *     "backend": "managed-local"
+ *     "teacher": "self",
+ *     "backend": "native"
  *   }
  * }
  *
+ * The teacher defaults to `"self"` (owner, 2026-10-28: no additional teacher generation): privileged self-teaching
+ * by the student itself with the program's exact training references (selfteach.ts), then oracle-reward RL rounds.
+ * A model profile name in `tune.teacher` (or `--teacher`) opts out to that authorized external teacher.
+ *
  * Without a configured student, the student is the native profile natlang runs (deriveStudent): its pinned complete
- * checkpoint, this checkout's training interpreter, the native backend serving through that profile, and the
- * profile's `escalate` as the teacher. The rest of the tune block (recipe, rounds, ...) still applies.
+ * checkpoint, this checkout's training interpreter and the native backend serving through that profile. The rest of
+ * the tune block (recipe, rounds, ...) still applies.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -28,6 +32,7 @@ import type { NativeModelIdentity } from '../native/neuralese-store.js';
 import type { PluggableSetting } from '../runtime/pluggable.js';
 import type { RoundsSettings } from './schedule.js';
 import type { IncrementalSettings } from './incremental.js';
+import { SELF_TEACHER } from './selfteach.js';
 
 export type StudentSettings = {
   /** The exact base the adapters are trained on. */
@@ -49,7 +54,8 @@ export type StudentSettings = {
 export type TuneSettings = {
   readonly student: string;
   readonly students: Readonly<Record<string, StudentSettings>>;
-  /** A model profile name: the authorized teacher that executes the program during collection. */
+  /** `"self"` (the default: privileged self-teaching, selfteach.ts) or a model profile name: the authorized teacher
+   * that executes the program during collection. */
   readonly teacher: string;
   /** Several authorized teacher profiles: `natlang tune --calibrate` measures them and `routeTeacher` picks one (§4.2). */
   readonly teachers?: readonly string[];
@@ -175,7 +181,7 @@ export function loadTuneSettings(environment: NodeJS.ProcessEnv = process.env, o
     throw new TuneSetupError(`the base identity of native profile ${derived.profile} is not known yet (natlang tune reads it from the profile's server)`);
   if (!config.tune && !derived) throw new TuneSetupError('no tune settings are configured and no native profile can be the student');
   const tune: Partial<TuneSettings> = derived ? { ...configured, student: derived.profile, students: { ...configured.students, [derived.profile]: derived.student! },
-    backend: configured.backend ?? 'native', servingProfile: derived.profile, ...(configured.teacher || !derived.teacher ? {} : { teacher: derived.teacher }) } : configured;
+    backend: configured.backend ?? 'native', servingProfile: derived.profile } : configured;
   const name = derived ? derived.profile : named;
   if (!name) throw new TuneSetupError('tune.student is not set');
   const student = tune.students?.[name];
@@ -185,10 +191,8 @@ export function loadTuneSettings(environment: NodeJS.ProcessEnv = process.env, o
   if (!Array.isArray(student.trainer) || !student.trainer.length) throw new TuneSetupError(`tune.students.${name}.trainer must be an argv array`);
   if (typeof student.checkpoint !== 'string' || !student.checkpoint) throw new TuneSetupError(`tune.students.${name}.checkpoint is missing`);
   if (typeof student.moduleMap !== 'string') throw new TuneSetupError(`tune.students.${name}.moduleMap is missing`);
-  const teacher = overrides.teacher ?? tune.teacher;
-  if (!teacher) throw new TuneSetupError(derived ? `no teacher: give profile ${derived.profile} an "escalate" profile, or set tune.teacher`
-    : 'tune.teacher (a model profile name) is not set');
-  for (const profile of [teacher, ...(tune.teachers ?? [])])
+  const teacher = overrides.teacher ?? tune.teacher ?? SELF_TEACHER;
+  for (const profile of [teacher, ...(tune.teachers ?? [])].filter(profile => profile !== SELF_TEACHER))
     if (!config.profiles?.[profile]) throw new TuneSetupError(`teacher profile ${profile} does not exist`);
   const backend = tune.backend ?? 'managed-local';
   if (backend === 'managed-local' && !student.baseGgufSha256) throw new TuneSetupError(`tune.students.${name}.baseGgufSha256 is required for the managed-local backend`);

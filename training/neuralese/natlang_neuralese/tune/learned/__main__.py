@@ -110,7 +110,10 @@ def bank_init(spec):
         reports[source['name']] = report
     bank = bank.with_components(components, reason='bank-init sources')
     manifest = save_bank(engine, bank)
-    _write(spec['out'], {'bank': manifest, 'reports': reports})
+    from ..targets import deploy_quantized
+    # Targets a required deploy point re-quantizes (LFM3 NVFP4: w1/w2/w3): folded writes there are measured at that
+    # precision before a capability claim (targets.DEPLOY_QUANTIZED).
+    _write(spec['out'], {'bank': manifest, 'reports': reports, 'deploy_quantized': deploy_quantized(names)})
     return manifest['snapshot']
 
 

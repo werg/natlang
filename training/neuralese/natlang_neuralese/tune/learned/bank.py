@@ -40,7 +40,8 @@ _LAYER = re.compile(r'\.layers\.(\d+)\.')
 
 # -- target groups ------------------------------------------------------------------------------------------------
 def target_groups(names, kinds, num_layers, quarters=4):
-    """``(ordered group labels, {name: group index})``: depth quarter by matrix family (12 groups on LFM)."""
+    """``(ordered group labels, {name: group index})``: depth quarter by matrix family (12 groups on LFM2 and LFM3:
+    attention incl. LFM3's per-head gate, convolution projections, feed-forward)."""
     labels, index = [], {}
     for name in sorted(names):
         match = _LAYER.search(name)

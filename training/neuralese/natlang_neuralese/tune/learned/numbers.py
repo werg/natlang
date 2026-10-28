@@ -1,7 +1,9 @@
 """The weight-array number format: single-digit signed integers on a recorded grid (plan "Weight arrays").
 
-Both students spell ``[ 3, 0, -2]`` as ``[``, then per value a sign-bearing space token (``Ġ`` or ``Ġ-``) and one
-digit token, separated by ``,``, then ``]``. Each available slot is therefore a binary sign choice followed by a
+The students spell ``[ 3, 0, -2]`` as ``[``, then per value a sign-bearing space token (``Ġ`` or ``Ġ-``) and one
+digit token, separated by ``,``, then ``]`` (checked on the real LFM2.5-350M and LFM3-1.7B tokenizers; LFM3 IDs
+``[`` 67, ``]`` 69, ``,`` 20, ``Ġ`` 229, ``Ġ-`` 640, digits 24-33). `GridTokens.from_encoder` verifies this from the
+actual encoder of every student and refuses one that spells it differently. Each available slot is therefore a binary sign choice followed by a
 magnitude choice; negative zero is excluded by the grammar. Brackets, separators and every unavailable slot's
 ``Ġ0`` are forced tokens with no sampling score. The executed value of integer ``n`` is ``step * n`` (refined by the
 coefficient head, `head.py`).

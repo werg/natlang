@@ -144,6 +144,9 @@ function hasFailedAssistantHistory(messages: unknown[], failedIds: ReadonlySet<s
  */
 export async function collect(options: { root: string; program: ProgramDescriptor; scaffold: WeightManifest; examples: readonly SplitExample[];
   teacher: ModelDriver; teacherId: string; partitions?: readonly Partition[]; onTurn?: (turn: CollectedTurn) => void;
+  /** A root's own teacher driver (privileged self-teaching, selfteach.ts); the recorded request is always the one the
+   * runtime made, never what this driver adds. Defaults to `teacher`. */
+  teacherFor?: (example: SplitExample) => ModelDriver;
   /** Serve a tuned release while collecting (distillation): its strict binding labels and serves each call. */
   weights?: WeightBinding;
   /** Host services for one root, fresh per root (a test or sandbox world); every call is journaled (world.ts). */
@@ -157,9 +160,10 @@ export async function collect(options: { root: string; program: ProgramDescripto
     const outcomes = new Map<string, string>();
     const events = new Map<string, Record<string, unknown>[]>();
     const counters = new Map<string, number>();
+    const teacher = options.teacherFor?.(example) ?? options.teacher;
     const driver: ModelDriver = Object.assign(async (request: ModelTurnRequest, signal?: AbortSignal, turnOptions?: unknown) => {
       const frame = currentFrame();
-      const reply = await (options.teacher as (r: ModelTurnRequest, s?: AbortSignal, o?: unknown) => Promise<ModelTurn>)(request, signal, turnOptions);
+      const reply = await (teacher as (r: ModelTurnRequest, s?: AbortSignal, o?: unknown) => Promise<ModelTurn>)(request, signal, turnOptions);
       const call = frame?.parentCallId ?? null, turn = (counters.get(call ?? '') ?? 0) + 1;
       counters.set(call ?? '', turn);
       pending.push({ schema: 'natlang.tune-turn/v1', root: example.id, component: example.component, partition: example.partition,
@@ -173,7 +177,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
         ...(options.weights && frame?.weights ? { stack: { identity: frame.weights.identity, status: frame.weights.status,
           requested: frame.weights.requested.map(entry => entry.id), effective: frame.weights.effective.map(entry => entry.id) } } : {}) });
       return reply;
-    }, { decide: (options.teacher as { decide?: unknown }).decide, contextWindow: (options.teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver;
+    }, { decide: (teacher as { decide?: unknown }).decide, contextWindow: (teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver;
     const world: World = { schema: 'natlang.tune-world/v1', calls: [] };
     const provided = await rootServices(options.root, options.services, example);
     const services = provided.services ? journaledServices(provided.services, world) : undefined;

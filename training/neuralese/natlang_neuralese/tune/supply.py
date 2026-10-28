@@ -14,6 +14,16 @@ tuner's persisted component split keeps related invocations together.
 
 The function texts are model-facing; they follow the measured operational programs' wording and are recorded as
 unmeasured in plans/MODEL_FACING_CHANGES.md until sampled live.
+
+Teacher-free supply (owner, 2026-10-28: no additional teacher generation). `python -m natlang_neuralese.tune.supply
+privileged --programs DIR` writes each prepared program's privileged training references, `tune.privileged.jsonl`
+(`natlang.tune-privileged/1`): for every TRAINING-partition root of its persisted grouped split, the exact oracle
+values of each stage (helper output, classifier label, decision) and the root result. `natlang tune` with the
+default self teacher (`ts-host/src/tune/selfteach.ts`) runs the student itself with that reference as privileged
+context on training roots only, keeps oracle-verified trajectories with the privileged block removed (JOLT+-style
+privileged self-teaching, sequence level) and continues with oracle-reward RL rounds. Development and confirmation
+roots never receive privileged context; a split that is not persisted, or an example whose recorded `expected`
+differs from the recomputed oracle, is an error.
 """
 from __future__ import annotations
 
@@ -466,11 +476,115 @@ def write_programs(out, *, domains=None, variants=None, worlds=64, seed=20261027
     return manifest
 
 
+PRIVILEGED_SCHEMA = 'natlang.tune-privileged/1'
+PRIVILEGED_FILE = 'tune.privileged.jsonl'
+
+
+def reference_values(domain, record):
+    """The exact value of every stage of one root, in call order: ``[(function, value)]`` and the result."""
+    calls, env = [], dict(record)
+    if domain.helper:
+        env[domain.helper['output']] = domain.helper['py'](record)
+        calls.append((domain.helper['name'], env[domain.helper['output']]))
+    if domain.classify:
+        classify = domain.classify
+        env[classify['name']] = decide(classify['rules'], classify['default'], record)
+        calls.append((classify['name'], env[classify['name']]))
+    name, _, rules, default = domain.decide
+    result = decide(rules, default, env)
+    calls.append((name, result))
+    return calls, result
+
+
+def _program_of(item):
+    """The catalog program a prepared directory was written from, checked against its recorded file hashes."""
+    domains = {domain.name: domain for domain in CATALOG}
+    if item['family'] not in domains:
+        raise ValueError(f"{item['program']}: family {item['family']} is not in the catalog")
+    program = variant(domains[item['family']], item['variant'])
+    if program is None:
+        raise ValueError(f"{item['program']}: variant {item['variant']} no longer exists in the catalog")
+    files = {relative: hashlib.sha256(text.encode()).hexdigest() for relative, text in sorted(program_files(program).items())}
+    if files != item['files']:
+        raise ValueError(f"{item['program']}: the catalog no longer renders the prepared program files exactly")
+    return program
+
+
+def privileged_rows(directory, program):
+    """``(rows, counts)``: one `natlang.tune-privileged/1` row per training-partition root of a prepared program."""
+    directory = Path(directory)
+    split_path = directory / '.natlang' / 'tune' / 'splits.json'
+    if not split_path.exists():
+        raise ValueError(f'{directory}: persist the grouped split before writing privileged references')
+    split = json.loads(split_path.read_text())
+    if split.get('schema') != 'natlang.tune-split/v1':
+        raise ValueError(f'{split_path} is not a natlang.tune-split/v1 receipt')
+    components = split['components']
+    rows, counts = [], {}
+    for line in (directory / 'tune.examples.jsonl').read_text().splitlines():
+        if not line.strip():
+            continue
+        example = json.loads(line)
+        group = example.get('group')
+        if group not in components:
+            raise ValueError(f'{directory}: root group {group!r} has no persisted partition')
+        partition = components[group]
+        counts[partition] = counts.get(partition, 0) + 1
+        if example.get('protected') or partition != 'train':
+            continue  # privileged context comes only from training worlds
+        record = {key: value for key, value in example['input'][program.arg].items() if key != program.note}
+        calls, result = reference_values(program, record)
+        if result != example['expected']:
+            raise ValueError(f'{directory}: recomputed oracle {result!r} differs from the recorded expected value '
+                             f'{example["expected"]!r} in {group}')
+        rows.append({'schema': PRIVILEGED_SCHEMA, 'function': example['function'], 'group': group, 'input': example['input'],
+                     'result': result, 'calls': [{'function': name, 'value': value} for name, value in calls],
+                     'source': 'natlang_neuralese.tune.supply exact oracle'})
+    return rows, counts
+
+
+def write_privileged(programs_dir, names=None):
+    """Write `tune.privileged.jsonl` beside each prepared program (identical content is left alone; a different
+    existing file is an error: references bind the split they were derived from)."""
+    programs_dir = Path(programs_dir)
+    prepared = json.loads((programs_dir / 'programs-prepared.json').read_text())
+    summary = []
+    for item in prepared['programs']:
+        if names and item['program'] not in names:
+            continue
+        directory = programs_dir / item['program']
+        program = _program_of(item)
+        rows, counts = privileged_rows(directory, program)
+        payload = ''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows)
+        path = directory / PRIVILEGED_FILE
+        if path.exists() and path.read_text() != payload:
+            raise ValueError(f'{path} exists with other references; the split or oracle changed: write to a new program')
+        if not path.exists():
+            path.write_text(payload)
+        summary.append({'program': item['program'], 'family': item['family'], 'path': str(directory), 'partitions': counts,
+                        'privileged_roots': len(rows), 'sha256': hashlib.sha256(payload.encode()).hexdigest()})
+    manifest = {'schema': 'natlang.program-supply-privileged/1', 'programs': summary, 'teacherCalls': 0,
+                'custody': 'training-partition roots only; development/confirmation never receive privileged context'}
+    (programs_dir / 'privileged-prepared.json').write_text(json.dumps(manifest, indent=1) + '\n')
+    return manifest
+
+
 def hash_seed(seed, name):
     return int(hashlib.sha256(f'{seed}:{name}'.encode()).hexdigest()[:12], 16)
 
 
 def main(argv=None):
+    import sys
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ['privileged']:
+        parser = argparse.ArgumentParser(description='privileged training references of prepared programs')
+        parser.add_argument('--programs', required=True)
+        parser.add_argument('--names', nargs='*')
+        args = parser.parse_args(argv[1:])
+        manifest = write_privileged(args.programs, args.names)
+        print(json.dumps({'command': 'privileged', 'programs': len(manifest['programs']),
+                          'privileged_roots': sum(item['privileged_roots'] for item in manifest['programs'])}))
+        return 0
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--out', required=True)
     parser.add_argument('--domains', nargs='*')
