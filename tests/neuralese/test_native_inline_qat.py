@@ -243,3 +243,38 @@ def test_in_training_deploy_weights_equal_liquid_exports():
                     deployed = X._dequantize(fmt, exported, prefix + leaf)
                     assert torch.equal(trained, deployed.to(torch.bfloat16)), (layer, fmt, leaf)
                     assert torch.equal(trained, quantized_value(weight, fmt, options).to(torch.bfloat16))
+
+
+def test_diloco_qat_transition_preserves_progress_calibration_and_resume(base):
+    from natlang_neuralese.train.native_state_sft import _quantization_shard_transition, default_lfm3_quantization
+    from natlang_neuralese.train.quantization import Quantization, stage_component
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    spec, bind = default_lfm3_quantization({'stage':'native_full_sft','start':0,'end':1000})
+    previous={'spec':spec,'bind':bind,'sha256':canonical_json_sha256_hex({'spec':spec,'bind':bind})}
+    saved={'quantization':previous,'quantization_history':[]}
+    result=_quantization_shard_transition(saved,global_step=50,pending_updates=238,stage='native_full_sft',worker=0)
+    newer=result['quantization']; old_q=Quantization(stage_component(spec,bind['stage'],start=0,end=1000))
+    new_q=Quantization(stage_component(newer['spec'],bind['stage'],start=50,end=288))
+    assert old_q.progress(50)==new_q.progress(50)==0.05
+    assert new_q.progress(288)==1.0 and old_q.mixes(50)==new_q.mixes(50)
+    assert result['quantization_history'][-1]['previous_sha256']==previous['sha256']
+    assert result['quantization_history'][-1]['calibration_optimizer_rng_exposure']=='preserved'
+    assert saved['quantization']==previous
+    from types import SimpleNamespace
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train.native_state_sft import _setup_quantization
+    args=SimpleNamespace(quantization=None, fp8_training='off')
+    parent=load_native_model(base,rank=4,dtype=torch.bfloat16)[0];parent_options={}
+    parent_q=_setup_quantization(args,parent,None,parent_options,default_bind=bind)
+    parent_q.begin_calibration(50)
+    calibration=parent_q.state_dict()
+    rebound=_quantization_shard_transition(parent_options,global_step=50,pending_updates=238,
+                                            stage='native_full_sft',worker=0)
+    learner=load_native_model(base,rank=4,dtype=torch.bfloat16)[0];options={}
+    learner_q=_setup_quantization(args,learner,calibration,options,saved_options=rebound)
+    assert learner_q.state_dict()==calibration and learner_q.progress(50)==parent_q.progress(50)
+    resumed=load_native_model(base,rank=4,dtype=torch.bfloat16)[0];resume_options={}
+    resume_q=_setup_quantization(args,resumed,learner_q.state_dict(),resume_options,saved_options=options)
+    assert resume_q.state_dict()==calibration and resume_options['quantization']==options['quantization']
+    with pytest.raises(ValueError,match='stage differs'):
+        _quantization_shard_transition(saved,global_step=50,pending_updates=238,stage='wrong',worker=0)

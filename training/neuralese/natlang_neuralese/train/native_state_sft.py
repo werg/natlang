@@ -1275,6 +1275,36 @@ def default_lfm3_quantization(bind):
             dict(bind))
 
 
+
+def _quantization_shard_transition(saved_options, *, global_step, pending_updates, stage, worker):
+    """Rebind a full-source parent's QAT ramp to its first sharded continuation."""
+    previous = saved_options.get('quantization')
+    if not previous or pending_updates <= 0:
+        return saved_options
+    spec, bind = previous['spec'], previous['bind']
+    if bind['stage'] != stage or stage not in spec['stage_progress']:
+        raise ValueError('QAT stage differs from the sharded continuation')
+    start, end = bind['start'], bind['end']
+    if type(start) is not int or type(end) is not int or not start < end:
+        raise ValueError('parent QAT has no concrete progress range')
+    lo, hi = spec['stage_progress'][stage]
+    fraction = min(1.0, max(0.0, (global_step - start) / (end - start)))
+    progress = lo + (hi - lo) * fraction
+    revised = json.loads(json.dumps(spec))
+    revised['stage_progress'][stage] = [progress, hi]
+    new_bind = {'stage': stage, 'start': global_step, 'end': global_step + pending_updates}
+    from ..common.hashing import canonical_json_sha256_hex
+    declaration = {**previous, 'spec': revised, 'bind': new_bind,
+                   'sha256': canonical_json_sha256_hex({'spec': revised, 'bind': new_bind})}
+    history = list(saved_options.get('quantization_history') or [])
+    history.append({'event': 'diloco-shard-progress-transition', 'at_global_step': global_step,
+                    'worker': worker, 'previous_sha256': previous['sha256'],
+                    'previous_bind': bind, 'previous_progress': progress,
+                    'new_sha256': declaration['sha256'], 'new_bind': new_bind,
+                    'pending_shard_updates': pending_updates,
+                    'calibration_optimizer_rng_exposure': 'preserved'})
+    return {**saved_options, 'quantization': declaration, 'quantization_history': history}
+
 def _setup_quantization(args, model, saved_state, checkpoint_options, saved_options=None, default_bind=None):
     """Install the inline QAT points on the backbone linears and restore their calibration (or record dropping it).
     ``saved_options``: the parent's recorded ``quantization`` declaration and ``quantization_history``.
@@ -2410,6 +2440,11 @@ def _main(argv=None, *, requested_refresh):
     total_end = step + len(pending_batches)
     if step > total_end:
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
+    if (diloco is not None and parent_continuation and not (resume or {}).get('diloco')
+            and getattr(args, 'quantization', None) in (None, '')):
+        saved_quantization_options = _quantization_shard_transition(saved_quantization_options,
+            global_step=global_step, pending_updates=len(pending_batches),
+            stage=args.stage_id or 'native-graph-ce', worker=diloco.worker)
     quantization = _setup_quantization(args, model, saved_quantization, checkpoint_options,
         saved_options=saved_quantization_options,
         default_bind={'stage': args.stage_id or 'native-graph-ce', 'start': global_step,
