@@ -48,4 +48,10 @@ Alternative if learner-side compute dominates: asynchronous actor/learner (K act
 policy versions with captured behaviour log-probs and bounded staleness, one learner consuming groups continuously).
 Costs a weight broadcast per version (small only for adapters) and importance correction.
 
-Choice by measurement: rollout seconds vs update seconds per group, fraction of zero-variance groups, sync cost.
+Score centering (TRAINING_INSIGHTS_20261028.md section 5) changes the trade-off: it stays stable under quantized
+samplers and, with truncated IS, under staleness of tens of steps. That makes the asynchronous actor/learner pattern
+cheaper than assumed (actors need not wait for every version, and can serve the deployed NVFP4/FP8 policy), and it
+also protects DiLoCo-RL against the drift between each sandbox's serving engine and its trainer.
+
+Choice by measurement: rollout seconds vs update seconds per group, fraction of zero-variance groups, sync cost,
+and measured trainer/sampler drift.
