@@ -139,6 +139,29 @@ def build(sources, *, legacy_pair_context_weight, held_sources=(), expected_spli
     return value
 
 
+def own_output_objective(args):
+    """The declared own-outputs/1 objective with the tokenizer's exact chat-role token IDs."""
+    from transformers import PreTrainedTokenizerFast
+    from natlang_neuralese.train.own_output_supervision import NAME, resolve, role_tokens_from_tokenizer
+    if args.objective_tokenizer is None or args.objective_tokenizer_fingerprint is None:
+        raise ValueError('own-output objective needs --objective-tokenizer and its exact fingerprint')
+    # Exact tokenizer.json and pinned chat template (its generation prompt is derived from the template);
+    # no repository code is executed.
+    directory = args.objective_tokenizer
+    tokenizer = PreTrainedTokenizerFast(tokenizer_file=str(directory / 'tokenizer.json'))
+    template = directory / 'chat_template.jinja'
+    tokenizer.chat_template = (template.read_text() if template.exists() else
+        json.loads((directory / 'tokenizer_config.json').read_text()).get('chat_template'))
+    objective = resolve({'name': NAME, 'reasoning_share': args.objective_reasoning_share,
+        'family_balance': args.objective_family_balance,
+        'role_tokens': role_tokens_from_tokenizer(tokenizer,
+            tokenizer_fingerprint=args.objective_tokenizer_fingerprint)})
+    result = {'objective': objective}
+    if args.objective_transition_from is not None:
+        result['objective_transition'] = {'from': args.objective_transition_from}
+    return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', action='append', type=Path, default=[])
@@ -154,6 +177,16 @@ def main(argv=None):
         help='exact protected test source; evaluation declaration only, never training exposure')
     parser.add_argument('--failed-history-mask-manifest',type=Path,action='append',default=[],
         help='source-bound same-ID TRAIN mask continuation, with exact tokenizer snapshot')
+    parser.add_argument('--objective-reasoning-share', type=float,
+        help='declare the own-outputs/1 objective (owner 2026-10-28) with this reasoning share of assistant loss')
+    parser.add_argument('--objective-tokenizer', type=Path,
+        help='expanded model tokenizer whose exact chat-role token IDs the objective declares')
+    parser.add_argument('--objective-tokenizer-fingerprint',
+        help='exact expanded tokenizer fingerprint carried by the native graph rows')
+    parser.add_argument('--objective-family-balance', type=json.loads,
+        help='optional JSON {key: source-cohort|source-group, [pattern], max_scale}')
+    parser.add_argument('--objective-transition-from',
+        help='previous objective sha256 an existing lineage explicitly transitions from')
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.prior_policy:
@@ -186,6 +219,11 @@ def main(argv=None):
     if args.failed_history_mask_manifest:
         from natlang_neuralese.train.native_failed_history import binding
         value['failed_history_masks']=value.get('failed_history_masks',[])+[binding(path.resolve(strict=True))for path in args.failed_history_mask_manifest]
+    if args.objective_reasoning_share is not None:
+        value.update(own_output_objective(args))
+    elif any(item is not None for item in (args.objective_tokenizer, args.objective_tokenizer_fingerprint,
+                                           args.objective_family_balance, args.objective_transition_from)):
+        raise ValueError('objective options require --objective-reasoning-share')
     if args.out.exists():
         if json.loads(args.out.read_text()) != value:
             raise ValueError('existing CE policy differs; write a new explicit continuation artifact')
