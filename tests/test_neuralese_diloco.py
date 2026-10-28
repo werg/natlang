@@ -545,3 +545,36 @@ def test_four_unequal_epochs_drain_every_partial_before_global_export(tmp_path):
     finally:
         for _,_,learner in learners:learner.close()
         stop.set();server.join(timeout=3)
+
+
+def test_late_peer_checks_immutable_seed_and_unmerged_bound(tmp_path):
+    seed=_model(); root=tmp_path/'coord'; _init(root,seed,workers=2,quorum=1)
+    coordinator=Coordinator(root); session='00000000-0000-0000-0000-000000000000'
+    coordinator.lease(0,session)
+    for fragment in coordinator.fragments:
+        update=tmp_path/f'{fragment.index}.safetensors'
+        save_tensors(update,{'delta':torch.full((fragment.length,),.01)})
+        coordinator.submit(fragment.index,0,session,1,0,1,1,update)
+    port=_free_port();url=f'http://127.0.0.1:{port}';stop=threading.Event()
+    server=threading.Thread(target=serve_coordinator,args=(root,'127.0.0.1',port,TOKEN),kwargs={'stop':stop},daemon=True);server.start()
+    transport=Transport(url,TOKEN,5)
+    for _ in range(100):
+        try: transport.json('GET','/v1/status');break
+        except OSError: time.sleep(.02)
+    settings=DilocoSettings(run_id='unit',workers=2,worker_id=1,coordinator_url=url,local_steps=1,
+                            wire_dtype='fp32',max_offline_steps=2,heartbeat_seconds=.05)
+    learner=DilocoLearner(settings,surface=TensorSurface.from_module(_model()),identity={'objective':'toy'},output=tmp_path/'good',transport=transport)
+    wrong=None
+    try:
+        learner.start(); assert all(v==1 for v in learner.versions)
+        # A real outstanding proposal with two additional local updates must pause safely.
+        learner.pending[0]={'future':None,'retry_after':1000}
+        learner.steps_since[0]=2
+        assert learner.await_update_capacity(stop_requested=lambda:True) is False
+        wrong=DilocoLearner(settings,surface=TensorSurface.from_module(_model(8)),identity={'objective':'toy'},output=tmp_path/'wrong',transport=transport)
+        wrong.session=learner.session
+        with pytest.raises(ValueError,match='seed fragment'):wrong.start()
+    finally:
+        learner.pending.clear();learner.close()
+        if wrong:wrong.close()
+        stop.set();server.join(timeout=3)

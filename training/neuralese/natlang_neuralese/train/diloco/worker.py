@@ -433,8 +433,6 @@ class DilocoLearner:
     def await_update_capacity(self, *, stop_requested=lambda: False) -> bool:
         """Bound local residual behind an unmerged proposal without blocking startup."""
         limit = self.settings.max_offline_steps
-        if not limit:
-            return True
         clock = self.local_steps
         while any(self.steps_since[i] >= limit for i in (set(self.pending) | self.awaiting_global)):
             if stop_requested():
