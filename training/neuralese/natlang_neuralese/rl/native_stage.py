@@ -14,7 +14,7 @@ from ..common.hashing import sha256_file_hex_cached
 
 def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coefficient_policy=None,
             expected_history_reasoning_policy=None, expected_history_binding_sha256=None,
-            expected_history_binding_path=None, policy_loss=None):
+            expected_history_binding_path=None, policy_loss=None, jolt_cases=None, protected_packets=None):
     from transformers import AutoTokenizer
     from ..model.shared_state import RoleTokens, ROLE_MARKERS
     from ..data.text_corpus import tokenizer_fingerprint
@@ -90,8 +90,31 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
     def fetch(block_id):
         if reader is None:raise ValueError('native RL state requires its durable actor bundle')
         return reader.state(block_id)
+    from .policy_math import policy_loss_declaration
+    declared = policy_loss_declaration(policy_loss)
+    privileged = None
+    if declared is not None and declared['schema'] == 'jolt-plus/1' and mode == 'grpo':
+        privileged = jolt_privileged_source(rows=rollouts, tokenizer=tokenizer, cases=jolt_cases,
+                                            protected_packets=protected_packets)
     return prepare_objective(rollouts, identity=identity, roles=roles, fetch_block=fetch,
-        block_bundle=Path(bundle).resolve() if bundle else None, mode=mode, policy_loss=policy_loss)
+        block_bundle=Path(bundle).resolve() if bundle else None, mode=mode, policy_loss=policy_loss,
+        privileged=privileged)
+
+
+def jolt_privileged_source(*, rows, tokenizer, cases, protected_packets=None):
+    """Training-world privileged blocks for JOLT+, behind the protected-packet leakage guard."""
+    from ..common.jsonio import iter_jsonl_rows
+    from .jolt import privileged_source, protected_identifiers, registered_protected_packets
+    if cases is None:
+        raise ValueError('JOLT+ needs the exact training cases (--jolt-cases) for its privileged context')
+    worlds = {}
+    for _, case in iter_jsonl_rows(Path(cases)):
+        if case.get('id') in worlds:
+            raise ValueError('JOLT+ training cases repeat a world id')
+        worlds[case.get('id')] = case
+    packets = protected_packets or registered_protected_packets(Path(__file__).resolve().parents[4])
+    return privileged_source(rows, cases=worlds, protected=protected_identifiers(packets),
+        tokenize=lambda text: tokenizer(text, add_special_tokens=False)['input_ids'])
 
 
 def main(argv=None):
@@ -102,6 +125,10 @@ def main(argv=None):
     # Declared grpo policy loss (rl.policy_math.policy_loss_declaration), e.g.
     # '{"schema":"score-centered/1","k":128,"importance":"tis"}'. Omitted: clipped ratio loss.
     parser.add_argument('--rl-policy-loss')
+    # JOLT+ privileged context: the exact train-split cases of the rollouts and the protected packets whose
+    # worlds may never feed it (default: every registered evaluation-only packet).
+    parser.add_argument('--jolt-cases', type=Path)
+    parser.add_argument('--protected-packet', action='append', type=Path)
     parser.add_argument('--rl-block-bundle', type=Path)
     parser.add_argument('--coefficient-policy',type=Path)
     parser.add_argument('--history-reasoning-policy', choices=('keep', 'last_turn_only'))
@@ -146,7 +173,7 @@ def _admit_and_train(args,trainer):
         expected_history_reasoning_policy=args.history_reasoning_policy,
         expected_history_binding_sha256=args.history_reasoning_binding_sha256,
         expected_history_binding_path=args.history_reasoning_binding_path,
-        policy_loss=args.rl_policy_loss)
+        policy_loss=args.rl_policy_loss, jolt_cases=args.jolt_cases, protected_packets=args.protected_packet)
     if not graphs:
         raise ValueError('no useful native policy episodes: route flat failures to verified graph SFT seeding')
     args.out.mkdir(parents=True, exist_ok=True)

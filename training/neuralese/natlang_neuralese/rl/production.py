@@ -980,7 +980,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     case_seconds=config.get('case_seconds', 600),
                     max_model_requests=config.get('max_model_requests', 128),
                     max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native,
-                    **({'behavior_top_k': policy_loss['k']} if policy_loss is not None else {}))
+                    **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}))
             except InterruptedError:
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)
@@ -1019,8 +1019,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
             from .native_semantic_route import has_semantic_inputs
             semantic_batch=bool(has_semantic_inputs(rows))
             rft_stages = ['all']
-            if report['groups_with_spread']:
-                mode = 'grpo'
+            if report['groups_with_spread'] or (policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'):
+                mode = 'grpo'  # JOLT+'s dense self-teaching term learns from every scored group
             else:
                 if any((row.get('reward') or {}).get('quality') == 1 for row in rows):
                     mode = 'rft'
@@ -1261,6 +1261,13 @@ def validate_actor_runtime_configuration(config):
     return True
 
 
+def behavior_top_k(policy_loss):
+    """Top-k the actors must record for the configured loss (None: the clipped ratio loss needs none)."""
+    if policy_loss is None or policy_loss['schema'] == 'clipped-ratio/1':
+        return None
+    return policy_loss['outcome']['k'] if policy_loss['schema'] == 'jolt-plus/1' else policy_loss['k']
+
+
 def bind_policy_loss(config, values):
     """The configured grpo policy loss, bound into the learner command; None keeps the clipped loss."""
     from .policy_math import policy_loss_declaration
@@ -1270,6 +1277,8 @@ def bind_policy_loss(config, values):
     command = config.get('learner_command') or []
     if (policy_loss is not None) != ('{rl_policy_loss}' in command):
         raise ValueError('RL learner command must pass exactly the configured --rl-policy-loss')
+    if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' and '--jolt-cases' not in command:
+        raise ValueError('JOLT+ learner command must pass its training cases (--jolt-cases)')
     if policy_loss is not None:
         values['rl_policy_loss'] = json.dumps(policy_loss, sort_keys=True, separators=(',', ':'))
     return policy_loss
@@ -1310,6 +1319,15 @@ def configure_native(args):
     if declared_loss is not None and recipe_loss is not None and declared_loss != recipe_loss:
         raise ValueError('native RL policy loss differs between its declaration and its recipe stage')
     policy_loss = declared_loss or recipe_loss
+    if policy_loss is None:
+        # Improvements ship on by default (owner 2026-10-28): new configs get JOLT+ with score-centered
+        # outcome terms; per-invocation coefficient actors and semantic codec graphs do not have privileged
+        # twins yet and get score-centered/1.
+        from .policy_math import default_policy_loss, DEFAULT_SCORE_CENTERED
+        policy_loss = (dict(DEFAULT_SCORE_CENTERED) if (getattr(args, 'coefficient_policy', None) is not None or semantic)
+                       else default_policy_loss())
+    elif policy_loss['schema'] == 'jolt-plus/1' and (getattr(args, 'coefficient_policy', None) is not None or semantic):
+        raise ValueError('JOLT+ privileged twins are not yet supported for coefficient or semantic actors')
     parameters = {key: value for key, value in parameters.items()
                   if key in HANDLERS['native_offline_preference' if stages[0]['kind']=='native_offline_preference' else 'native_state_sft']['parameters'] and value is not None}
     parameters.pop('memory_qualification',None)  # one-time source-capacity probe already bound to the SFT parent
@@ -1368,9 +1386,10 @@ def configure_native(args):
             '--rl-block-bundle', '{block_bundle}', *common],
         'seed_command': [python, '-m', 'natlang_neuralese.train.native_state_sft',
             '--native-graphs', '{seed_native_graphs}', '--objective-continuation', *common]}
-    if policy_loss is not None:
-        config['policy_loss'] = policy_loss
-        config['learner_command'] += ['--rl-policy-loss', '{rl_policy_loss}']
+    config['policy_loss'] = policy_loss
+    config['learner_command'] += ['--rl-policy-loss', '{rl_policy_loss}']
+    if policy_loss['schema'] == 'jolt-plus/1':
+        config['learner_command'] += ['--jolt-cases', '{cases}']
     if history_policy is not None:
         config['learner_command'] += ['--history-reasoning-policy', '{history_reasoning_policy}']
     if history_binding_sha256 is not None:

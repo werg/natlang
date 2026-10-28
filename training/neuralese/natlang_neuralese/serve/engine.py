@@ -49,6 +49,9 @@ class GenerationRequest:
     # Score-centered RL: also record the sampler's top-k log-probs per sampled
     # position (common.sampling behaviour top-k receipt). None records none.
     rl_top_k: int | None = None
+    # JOLT+ teacher attempt: a privileged training-world block executed as the leading own tokens of this
+    # invocation and marked 'privileged' in the capture, so the learner can build the unprivileged twin.
+    privileged_context: str | None = None
     native_recording: bool = False
     native_state_modes: dict | None = None
 
@@ -540,11 +543,18 @@ class Engine:
                                              argument_path=argument_path)
                 template_prefix, template_suffix = self._tokens(prefix), self._tokens(suffix)
                 seq.native_template_value_type = value_type
-        for kind, value in seq.prompt_plan or ():
+        plan = list(seq.prompt_plan or ())
+        if seq.request.privileged_context:
+            plan.insert(0, ('privileged', self._tokens(seq.request.privileged_context)))
+        for kind, value in plan:
+            privileged = kind == 'privileged'
+            if privileged:
+                kind = 'tokens'
             if kind == "tokens":
                 if capture_enabled(seq) and value:
                     seq.native_rl_prompt.append({"kind": "tokens", "token_ids": list(value),
-                                                 "producing": [False] * len(value)})
+                                                 "producing": [False] * len(value),
+                                                 **({'privileged': True} if privileged else {})})
                 seq.native_own_position += len(value)
                 if value:
                     output = self._native_prefill_forward(value, seq.cache)

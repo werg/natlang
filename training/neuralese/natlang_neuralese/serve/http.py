@@ -400,13 +400,23 @@ def make_handler(engine: Engine):
             if 'x_natlang_forced_message' in body and (not isinstance(body['x_natlang_forced_message'],dict)
                     or body.get('x_natlang_native_recording') is not True):
                 raise RequestError('bad-request','x_natlang_forced_message requires a bound teacher turn and native structural recording')
-            rl_top_k=body.get('x_natlang_rl_top_k')
+            # Captured sampled rollouts record the sampler's top-k log-probs by default (score-centered RL);
+            # x_natlang_rl_top_k: 0 opts out.
+            from ..common.sampling import MAX_BEHAVIOR_TOP_K, DEFAULT_BEHAVIOR_TOP_K
+            rl_top_k=body.get('x_natlang_rl_top_k',
+                              DEFAULT_BEHAVIOR_TOP_K if body.get('x_natlang_rl_capture') is True else None)
+            if rl_top_k == 0 and type(rl_top_k) is int:
+                rl_top_k = None
             if rl_top_k is not None:
-                from ..common.sampling import MAX_BEHAVIOR_TOP_K
                 if type(rl_top_k) is not int or not 1 <= rl_top_k <= MAX_BEHAVIOR_TOP_K:
-                    raise RequestError('bad-request', f'x_natlang_rl_top_k must be an integer in [1, {MAX_BEHAVIOR_TOP_K}]')
+                    raise RequestError('bad-request', f'x_natlang_rl_top_k must be 0 or an integer in [1, {MAX_BEHAVIOR_TOP_K}]')
                 if body.get('x_natlang_rl_capture') is not True:
                     raise RequestError('bad-request', 'x_natlang_rl_top_k records sampler top-k log-probs inside x_natlang_rl_capture; request both')
+            privileged_context=body.get('x_natlang_privileged_context')
+            if privileged_context is not None and (not isinstance(privileged_context, str) or not privileged_context
+                    or body.get('x_natlang_rl_capture') is not True):
+                raise RequestError('bad-request', 'x_natlang_privileged_context is a nonempty training-reference '
+                                   'string for a captured JOLT+ teacher attempt')
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"),
                 max_tokens=completion_limit(body),
@@ -417,6 +427,7 @@ def make_handler(engine: Engine):
                 native_store_owner=self._owner,
                 rl_capture=bool(body.get('x_natlang_rl_capture', False) or body.get('x_natlang_native_recording', False)),
                 rl_top_k=rl_top_k,
+                privileged_context=privileged_context,
                 native_recording=bool(body.get('x_natlang_native_recording', False)),
                 native_state_modes=body.get('x_natlang_native_state_modes'),
                 # Resolve this exact binding in Engine._native_run. Passing

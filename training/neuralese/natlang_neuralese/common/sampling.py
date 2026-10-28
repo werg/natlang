@@ -46,6 +46,7 @@ def token_mask(width,*,allowed=None,banned=None):
 BEHAVIOR_TOP_K_SCHEMA = 'natlang.behavior-top-k/1'
 BEHAVIOR_TOP_K_ENCODING = {'ids': 'int32-le-base64', 'logps': 'float16-le-base64'}
 MAX_BEHAVIOR_TOP_K = 4096
+DEFAULT_BEHAVIOR_TOP_K = 128
 
 
 def behavior_top_k_declaration(k, *, probabilities='post-processing-normalized'):

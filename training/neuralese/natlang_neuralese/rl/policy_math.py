@@ -22,8 +22,22 @@ def clipped_token_loss(logps, old_logps, advantage, *, clip_low=0.2, clip_high=0
 
 # Score-centered policy gradients (Marek & Ryabinin, arXiv 2609.20807).
 SCORE_CENTERED = 'score-centered/1'
+CLIPPED_RATIO = 'clipped-ratio/1'
 IMPORTANCE_MODES = ('none', 'tis', 'mis')
 DEFAULT_SCORE_CENTERED = {'schema': SCORE_CENTERED, 'k': 128, 'importance': 'none', 'eps': 1e-6}
+
+
+def default_policy_loss():
+    """The RL objective every NEW config/round/recipe gets (owner 2026-10-28: improvements ship on by default):
+    JOLT+ self-teaching with score-centered outcome terms. Opt out with {"schema": "score-centered/1"} or
+    {"schema": "clipped-ratio/1"}; historical bound rounds keep their recorded loss."""
+    from .jolt import DEFAULT_JOLT, jolt_declaration
+    return jolt_declaration(dict(DEFAULT_JOLT))
+
+
+def objective_policy_loss(declaration):
+    """The loss an objective records: the explicit clipped-ratio opt-out keeps the historical clipped objective bytes."""
+    return None if declaration is None or declaration['schema'] == CLIPPED_RATIO else declaration
 
 
 def policy_loss_declaration(value):
@@ -38,9 +52,16 @@ def policy_loss_declaration(value):
     if isinstance(value, str):
         import json
         value = json.loads(value)
+    if isinstance(value, dict) and value.get('schema') == CLIPPED_RATIO:
+        if set(value) != {'schema'}:
+            raise ValueError('clipped-ratio/1 is the historical clipped ratio loss and takes no parameters')
+        return {'schema': CLIPPED_RATIO}
+    if isinstance(value, dict) and value.get('schema') == 'jolt-plus/1':
+        from .jolt import jolt_declaration
+        return jolt_declaration(value)
     if (not isinstance(value, dict) or value.get('schema') != SCORE_CENTERED
             or set(value) - set(DEFAULT_SCORE_CENTERED)):
-        raise ValueError('RL policy loss must be a score-centered/1 declaration with only k, importance and eps')
+        raise ValueError('RL policy loss must be jolt-plus/1, score-centered/1 (k, importance, eps) or clipped-ratio/1')
     result = {**DEFAULT_SCORE_CENTERED, **value}
     if type(result['k']) is not int or not 1 <= result['k'] <= 4096:
         raise ValueError('score-centered k must be an integer in [1, 4096]')

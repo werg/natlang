@@ -133,6 +133,10 @@ def semantic_episode_loss(participants,replays,dependencies,*,channel,external_b
     for name,replay in replays.items():
         from ..model.native_adapters import require_model_execution_actor
         require_model_execution_actor(participants[name].model,replay.identity,replay.adapter_binding)
+        from .policy_math import objective_policy_loss,policy_loss_declaration
+        policy_loss=objective_policy_loss(policy_loss_declaration(policy_loss))
+        if policy_loss is not None and policy_loss['schema']=='jolt-plus/1':
+            raise ValueError('JOLT+ privileged twins are not yet supported through the semantic codec graph')
         if policy_loss is not None and mode=='grpo':
             from .native_replay import require_policy_loss_actions,score_centered_action_loss
             require_policy_loss_actions(replay.actions,policy_loss)

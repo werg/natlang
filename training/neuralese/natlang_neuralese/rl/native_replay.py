@@ -946,10 +946,11 @@ class NativePolicyObjective:
             if names!=self.invocation_source_names:
                 raise ValueError('native invocation objective actor names differ from exact packed ownership')
         hidden = result['h_final'][0]
-        losses, count, diagnostics = [], 0, []
+        losses, count, diagnostics, jolt_parts = [], 0, [], []
         for example in context['examples']:
             row = self.rows[example.id]
-            if set(row['episode_turns']) != {node.name for node in example.plan.invocations}:
+            if set(row['episode_turns']) | set((row.get('jolt') or {}).get('twin_turns', ())) != {
+                    node.name for node in example.plan.invocations}:
                 raise ValueError('native policy graph omits or adds an admitted episode turn')
             # Bind objective coordinates to the exact source graph and masks,
             # rather than accepting same-shaped replacement training rows.
@@ -961,7 +962,16 @@ class NativePolicyObjective:
                         'allowed_token_ids': tuple(action['allowed_token_ids'])
                             if action['allowed_token_ids'] is not None else None}
                        for action in row['actions']]
-            if self.policy_loss is not None:
+            if self.policy_loss is not None and self.policy_loss['schema'] == 'jolt-plus/1':
+                from .jolt import jolt_action_loss
+                if example.id not in self._top_k_cache:
+                    self._top_k_cache[example.id] = behavior_top_k_tensors(row['actions'],
+                        self.policy_loss['outcome']['k'], 'cpu')
+                actions = [{**action, 'twin_query': action['twin_query'] + offset} for action in actions]
+                terms, parts = jolt_action_loss(model, hidden, actions, row, self.policy_loss,
+                    chunk_tokens=self.spec.get('chunk_tokens', 128), top_k=self._top_k_cache[example.id])
+                jolt_parts.append(parts)
+            elif self.policy_loss is not None:
                 if example.id not in self._top_k_cache:
                     self._top_k_cache[example.id] = behavior_top_k_tensors(row['actions'], self.policy_loss['k'], 'cpu')
                 terms, centered = score_centered_action_loss(model, hidden, actions, row['advantage'],
@@ -976,10 +986,12 @@ class NativePolicyObjective:
             losses.append(terms.sum()); count += len(actions)
         if count == 0:
             raise ValueError('native objective batch has no actual sampled actions')
+        from .jolt import summarize_jolt
         return torch.stack(losses).sum() / count, {'sampled_tokens': count,
             'episodes': len(losses), 'objective': self.spec['mode'],
-            **({'policy_loss': self.policy_loss['schema'],
-                'score_centering': summarize_score_centering(diagnostics)} if self.policy_loss is not None else {}),
+            **({'policy_loss': self.policy_loss['schema']} if self.policy_loss is not None else {}),
+            **({'score_centering': summarize_score_centering(diagnostics)} if diagnostics else {}),
+            **({'jolt': summarize_jolt(jolt_parts, count)} if jolt_parts else {}),
             **({'codec_execution':result['codec_execution']} if 'codec_execution' in result else {})}
 
 
@@ -987,9 +999,10 @@ def require_policy_loss_actions(actions, policy_loss):
     """Every sampled action of a score-centered objective carries its sampler top-k with at least the loss k."""
     if policy_loss is None:
         return
+    k = policy_loss['outcome']['k'] if policy_loss['schema'] == 'jolt-plus/1' else policy_loss['k']
     for action in actions:
         receipt = action.get('behavior_top_k')
-        if not isinstance(receipt, dict) or type(receipt.get('k')) is not int or receipt['k'] < policy_loss['k']:
+        if not isinstance(receipt, dict) or type(receipt.get('k')) is not int or receipt['k'] < k:
             raise ValueError('score-centered RL needs every sampled position to carry its sampler top-k log-probs '
                              'with k >= the declared loss k; recollect with x_natlang_rl_top_k')
 
@@ -1037,14 +1050,21 @@ def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
 
 
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,semantic_channel=None,
-                      min_quality=1., policy_loss=None):
+                      min_quality=1., policy_loss=None, privileged=None):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
     [0, 1] (an exact oracle gives 0 or 1). ``grpo`` keeps groups whose qualities differ; ``rft`` (teacher-forced
     whole-graph supervision through every producer/consumer dependency) keeps episodes with quality >= ``min_quality``.
     ``policy_loss`` (policy_math.policy_loss_declaration) selects the grpo policy-gradient loss; None keeps the
-    clipped ratio loss and its objective bytes unchanged. It is recorded only for grpo, the mode it changes."""
-    from .policy_math import policy_loss_declaration
-    policy_loss = policy_loss_declaration(policy_loss) if mode == 'grpo' else None
+    clipped ratio loss and its objective bytes unchanged. It is recorded only for grpo, the mode it changes.
+    A ``jolt-plus/1`` loss (rl.jolt) admits every scored group, centers returns per (task, group, role) and adds
+    each episode's whole-graph privileged/unprivileged twin; ``privileged(rollout, members)`` returns the exact
+    training-world block ({'token_ids', 'record'}) after the leakage guard."""
+    from .policy_math import policy_loss_declaration, objective_policy_loss
+    policy_loss = objective_policy_loss(policy_loss_declaration(policy_loss)) if mode == 'grpo' else None
+    jolt = policy_loss if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else None
+    if jolt is not None and (behavior_policy is not None or semantic_channel is not None or privileged is None):
+        raise ValueError('JOLT+ needs its privileged training-world source; per-invocation actor and semantic-codec '
+                         'graphs do not support privileged twins yet')
     from ..model.native_graph_plan import invocation_dict
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex
@@ -1067,12 +1087,23 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
         if rollout.get('reward') is None:
             continue
         _require_scored_training_episode(rollout,identity,semantic=semantic_channel is not None)
-        grouped.setdefault((rollout['task_id'], rollout.get('group')), []).append(rollout)
+        key = (rollout['task_id'], rollout.get('group'))
+        if jolt is not None:
+            role = rollout.get('jolt_role', 'student')
+            if role not in ('student', 'teacher'):
+                raise ValueError('JOLT+ episode role must be student or teacher')
+            key = (*key, role)
+        grouped.setdefault(key, []).append(rollout)
     graphs, objective_rows = [], {}
     adapter_binding, binding_seen = None, False
     for members in grouped.values():
         advantages, stats = group_advantages([row['reward']['quality'] for row in members])
-        if mode == 'grpo' and not stats['spread']:
+        if jolt is not None:
+            # JOLT+: returns minus the group mean; the dense self-teaching term needs no spread.
+            qualities = [row['reward']['quality'] for row in members]
+            mean = sum(qualities) / len(qualities)
+            advantages = [quality - mean if len(qualities) > 1 else 0. for quality in qualities]
+        elif mode == 'grpo' and not stats['spread']:
             continue
         for rollout, advantage in zip(members, advantages):
             if mode == 'rft' and rollout['reward']['quality'] < min_quality:
@@ -1110,12 +1141,19 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 'source_groups': ['s7-task:' + rollout['task_id']],
                 'tokenizer_fingerprint': identity['tokenizer_fingerprint'], 'nodes': nodes,
                 'external_states': external}
+            actions = list(replay.actions)
+            jolt_row = None
+            if jolt is not None:
+                from .jolt import add_privileged_twin
+                actions, jolt_row = add_privileged_twin(replay, rollout, members, graph, privileged,
+                    turns=whole_episode_turns(rollout))
             example = parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint'])
             if policy_loss is not None:
-                require_policy_loss_actions(replay.actions, policy_loss)
+                require_policy_loss_actions(actions, policy_loss)
             objective_rows[identifier] = {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
                 'episode_turns': episode_turns,
-                'actions': list(replay.actions), 'advantage': float(advantage or 0.),
+                'actions': actions, 'advantage': float(advantage or 0.),
+                **({'jolt': jolt_row} if jolt_row is not None else {}),
                 **({'protocol_failures':replay.protocol_failures} if replay.protocol_failures else {}),
                 'external_consumption_receipts': replay.external_receipts or {},
                 **({'external_invocations':replay.external_invocations or {}} if replay.invocation_actors is not None else {}),
