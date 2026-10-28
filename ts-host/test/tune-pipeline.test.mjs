@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as host from '../dist/index.js';
 import { activeNativeAdapters } from '../dist/native/model-recording.js';
-import { tuneProgram } from '../dist/tune/pipeline.js';
+import { prepareData, tuneProgram } from '../dist/tune/pipeline.js';
 import { collect, splitExamples, protectedExamples, scaffoldManifest, readRootExamples } from '../dist/tune/collect.js';
 import { openAICompatibleModelTurn } from '../dist/model/openai-compatible.js';
 import { scriptedModel } from './support/natlang.mjs';
@@ -68,6 +68,24 @@ const program = root => {
 };
 const settings = { student: 'lfm', students: {}, teacher: 'teacher', backend: 'managed-local' };
 const student = root => ({ name: 'lfm', base, checkpoint: '/unused', trainer: [process.execPath, join(root, 'trainer.mjs')], moduleMap: 'lfm2', baseGgufSha256: 'f'.repeat(64) });
+
+test('interrupted collection retains each completed root and reuses it on retry', async () => {
+  const root = project(), teacher = scriptedModel(respond).driver;
+  try {
+    const options = { root, program: program(root), student: student(root), settings, teacher, teacherId: 'fixture' };
+    await assert.rejects(prepareData(options, [], line => {
+      if (line.startsWith('natlang tune: collected ')) throw new Error('simulated interruption');
+    }), /simulated interruption/);
+    const directory = join(root, '.natlang/tune/data/roots');
+    const before = readdirSync(directory).filter(name => name.endsWith('.json'));
+    assert.equal(before.length, 1);
+    const record = readFileSync(join(directory, before[0]), 'utf8');
+    const data = await prepareData(options);
+    assert.ok(data.turns.length > 0);
+    assert.equal(readFileSync(join(directory, before[0]), 'utf8'), record);
+    assert.ok(readdirSync(directory).filter(name => name.endsWith('.json')).length > 1);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 /** A backend stand-in that serves the release and records which adapters each request carried. */
 function serve(seen) {
   return async ({ manifest }) => {

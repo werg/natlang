@@ -8,7 +8,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVersion, type FamilyMembership, type SoftState } from '../adaptation/weights/manifest.js';
@@ -205,26 +205,25 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   await timed(timings, 'data', log, async () => {
     if (!missing.length) return;
     mkdirSync(rootsDir, { recursive: true });
+    const semantic = new Map(scaffold.bindings.map(entry => [entry.id, entry.semanticHash]));
     const collected = await collect({ root, program, scaffold, examples: missing, teacher: options.teacher, teacherId: options.teacherId, services: options.services, execution: options.settings.execution,
+      onRoot: (example, outcome, turns) => {
+        if (!outcome.ok && outcome.error && outcome.oracle === null) return;
+        const bindings = Object.fromEntries([...new Set(turns.map(turn => turn.binding).filter((id): id is string => !!id))]
+          .map(id => [id, semantic.get(id) ?? '']));
+        const record: RootRecord = { schema: 'natlang.tune-root/v1', root: example.id, teacher: options.teacherId, sharedSources: shared,
+          bindings, outcome: { ok: outcome.ok, oracle: outcome.oracle }, turns: [...turns] };
+        const path = recordPath(example), pending = `${path}.${process.pid}.pending`;
+        writeFileSync(pending, JSON.stringify(record)); renameSync(pending, path);
+        records.set(example.id, record);
+        log(`natlang tune: collected ${records.size}/${collectable.length} roots`);
+      },
       ...(self ? { teacherFor: (example: SplitExample) => { const reference = privileged.get(example.id);
         return reference ? privilegedDriver(options.teacher, reference) : options.teacher; } } : {}) });
     const failures = collected.roots.filter(item => !item.ok && item.error);
     if (failures.length === collected.roots.length && !self)
       // Nothing usable: do not cache it as reusable data; the cause is usually the teacher setup.
       throw new Error(`every root invocation failed with the teacher; first error: ${failures[0]?.error ?? 'unknown'}`);
-    const semantic = new Map(scaffold.bindings.map(entry => [entry.id, entry.semanticHash]));
-    for (const example of missing) {
-      const outcome = collected.roots.find(item => item.id === example.id)!;
-      // A root that raised (teacher or infrastructure error) is retried next time; a wrong answer is a valid outcome.
-      if (!outcome.ok && outcome.error && outcome.oracle === null) continue;
-      const turns = collected.turns.filter(turn => turn.root === example.id);
-      const bindings = Object.fromEntries([...new Set(turns.map(turn => turn.binding).filter((id): id is string => !!id))]
-        .map(id => [id, semantic.get(id) ?? '']));
-      const record: RootRecord = { schema: 'natlang.tune-root/v1', root: example.id, teacher: options.teacherId, sharedSources: shared,
-        bindings, outcome: { ok: outcome.ok, oracle: outcome.oracle }, turns };
-      writeFileSync(recordPath(example), JSON.stringify(record));
-      records.set(example.id, record);
-    }
   }, reusedData);
   const turns = collectable.flatMap(example => records.get(example.id)?.turns ?? []);
   const dataKey = sha(['natlang.tune-data/v3-action-outcome-2', collectable.map(example => [example.id, example.partition, records.has(example.id)

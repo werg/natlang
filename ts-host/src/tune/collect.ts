@@ -32,6 +32,7 @@ export type RootExample = { readonly function: string; readonly input: unknown; 
   /** Source/world component: related examples share one, so they land on one side of every split. */
   readonly group?: string; readonly protected?: boolean; readonly source?: 'real' | 'synthetic' };
 export type SplitExample = RootExample & { readonly id: string; readonly component: string; readonly partition: Partition };
+export type CollectedRoot = { id: string; ok: boolean; oracle: boolean | null; error?: string; world?: World };
 
 /** One captured model turn of one inner invocation. */
 export type CollectedTurn = {
@@ -145,6 +146,8 @@ function hasFailedAssistantHistory(messages: unknown[], failedIds: ReadonlySet<s
  */
 export async function collect(options: { root: string; program: ProgramDescriptor; scaffold: WeightManifest; examples: readonly SplitExample[];
   teacher: ModelDriver; teacherId: string; partitions?: readonly Partition[]; onTurn?: (turn: CollectedTurn) => void;
+  /** Called only after a root and all of its captured turn evidence are complete. */
+  onRoot?: (example: SplitExample, outcome: CollectedRoot, turns: readonly CollectedTurn[]) => void;
   /** A root's own teacher driver (privileged self-teaching, selfteach.ts); the recorded request is always the one the
    * runtime made, never what this driver adds. Defaults to `teacher`. */
   teacherFor?: (example: SplitExample) => ModelDriver;
@@ -152,11 +155,12 @@ export async function collect(options: { root: string; program: ProgramDescripto
   weights?: WeightBinding;
   /** Host services for one root, fresh per root (a test or sandbox world); every call is journaled (world.ts). */
   execution?: TuneExecution; services?: (example: SplitExample) => Services }): Promise<{
-  turns: CollectedTurn[]; roots: { id: string; ok: boolean; oracle: boolean | null; error?: string; world?: World }[] }> {
-  const turns: CollectedTurn[] = [], roots: { id: string; ok: boolean; oracle: boolean | null; error?: string; world?: World }[] = [];
+  turns: CollectedTurn[]; roots: CollectedRoot[] }> {
+  const turns: CollectedTurn[] = [], roots: CollectedRoot[] = [];
   const binding = options.weights ?? new WeightBinding(options.scaffold);
   for (const example of options.examples) {
     if (options.partitions && !options.partitions.includes(example.partition)) continue;
+    const turnStart = turns.length;
     const pending: (Omit<CollectedTurn, 'evidence'> & { rawCallIds: (string | null)[] })[] = [];
     const outcomes = new Map<string, string>();
     const events = new Map<string, Record<string, unknown>[]>();
@@ -266,6 +270,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
         actionDisposition: disposition, failedHistory, actionEvents: matchedActions.length === calls.length ? matchedActions : [] } };
       turns.push(record); options.onTurn?.(record);
     }
+    options.onRoot?.(example, roots[roots.length - 1]!, turns.slice(turnStart));
   }
   return { turns, roots };
 }
