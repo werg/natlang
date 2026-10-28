@@ -35,6 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 
+from natlang_neuralese.common.line_backbones import all_architectures  # noqa: E402
 from natlang_neuralese.common.paths import root as logical_root  # noqa: E402
 
 def requests(queue: Path) -> list[Path]:
@@ -56,7 +57,7 @@ def unit_name(request_dir: Path, request: dict) -> str:
     stage = hashlib.sha256(request['stage_out'].encode()).hexdigest()[:8]
     architecture = ((request.get('evaluation_provenance') or {}).get('model_config') or {}).get('architecture')
     family = ('taskeval-native-' + (architecture if architecture in
-              {'lfm2', 'lfm2_moe', 'maple', 'mellum'} else 'unknown')) if request.get('native_state') else 'taskeval'
+              set(all_architectures()) else 'unknown')) if request.get('native_state') else 'taskeval'
     return f"{family}-{stage}-{request['step']:07d}"
 
 

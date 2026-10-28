@@ -26,15 +26,16 @@ import urllib.request
 from pathlib import Path
 from typing import Callable
 
+from . import line_backbones
+
 
 REQUEST_SCHEMA = 'natlang.memetic-teacher-request/1'
 RECEIPT_SCHEMA = 'natlang.memetic-teacher-response/1'
 ID_RE = re.compile(r'mtf1_[a-f0-9]{64}\Z')
 TEACHER_SANDBOX_ID = '78530f71-08fc-4f57-ace9-7fbad64aeeb8'
-EVALUATOR_IDS = {
-    'lfm': '393f9b75-2666-456c-a850-1b46a8b7d147',
-    'mellum': 'ee341c7b-a425-4b4b-ad7e-f3cf7cbc2369',
-}
+# One evaluator sandbox per role, declared with the line backbones (a role's current backbone first; the LFM3
+# backbone has no evaluator sandbox of its own yet, so the LFM role keeps the LFM2.5 evaluator until it does).
+EVALUATOR_IDS = {role: line_backbones.evaluator_sandbox_ids(role)[0] for role in line_backbones.LINES}
 TEACHER_MODEL_ID = 'nvidia/Qwen3.6-35B-A3B-NVFP4'
 TEACHER_SERVE_ALIAS = 'qwen3.6-35b-a3b'
 TEACHER_REVISION = '1355db6a052410cfd62085d94b58866fd0f2c3c5'
@@ -88,7 +89,7 @@ def load_deployments(path: Path = DEPLOYMENTS_PATH):
                 or set(identity) != {'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'}
                 or any(not isinstance(identity.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', identity[key])
                        for key in ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256'))
-                or identity.get('architecture') not in (('lfm2',) if role == 'lfm' else ('mellum',))):
+                or identity.get('architecture') not in line_backbones.architectures(role)):
             raise ValueError('evaluator native identity must bind one complete current model actor')
     return value
 

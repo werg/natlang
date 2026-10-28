@@ -25,9 +25,12 @@ def bound_output_checkpoint(reference,role,*,production_root='/work/native-produ
     index=argv.index('--out')
     if index+1>=len(argv) or not isinstance(argv[index+1],str):raise ValueError('owner output is missing')
     output=pathlib.Path(argv[index+1]).resolve()
-    standard=pathlib.Path(production_root)/('mellum21'if role=='mellum'else'lfm25')
+    # Self-contained (this function is shipped into sandboxes): the production directories of the role's declared
+    # line backbones, current first; tests keep them equal to natlang_neuralese.common.line_backbones.
+    lineages={'lfm':('lfm3','lfm25'),'mellum':('mellum21',)}[role]
+    standard=pathlib.Path(production_root)/lineages[0]
     allowed=pathlib.Path(reference.get('allowed_output_root',str(standard))).resolve()
-    if allowed!=standard:
+    if allowed not in [pathlib.Path(production_root)/name for name in lineages]:
         control=pathlib.Path(control_root).resolve()
         control_parts=allowed.relative_to(control).parts if allowed.is_relative_to(control) else ()
         control_output=(bool(control_parts)

@@ -27,6 +27,7 @@ from scripts.neuralese_data.build_native_semantic_pairs_e2e import CompressedRow
 from scripts import source_review
 from scripts.neuralese_data.teacher_outcome_contract import exact_honest_root_block
 
+from natlang_neuralese.common import line_backbones
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
 from natlang_neuralese.common.jsonio import open_jsonl_text
@@ -1201,7 +1202,7 @@ def registered_cached_content_index(root, corpus_id, model_key, fingerprint, pol
     from natlang_neuralese.common import row_index
     from scripts.coreweave.teacher_tranche_admission import file_binding, read_bound
     root = Path(root)
-    if model_key not in ('lfm25', 'mellum21'):
+    if model_key not in line_backbones.BACKBONES:
         raise ValueError('cache-only dedup requires the exact model view')
     registry_path = root / 'training/neuralese_corpora.json'
     if registry_ref is None or registry_entry is None:
@@ -1303,7 +1304,7 @@ def registered_base_inventory_reference(reference_path, model_key, *, tokenizer_
         binding = verified.get('binding') or {}
         if (binding.get('sha256') != source.get('checkpoint_sha256')
                 or binding.get('bytes') != source.get('checkpoint_bytes')
-                or verified.get('target_id') != '393f9b75-2666-456c-a850-1b46a8b7d147'
+                or verified.get('target_id') != line_backbones.backbone('lfm25')['evaluator_sandbox_id']
                 or verified.get('target_verification', {}).get('sha256') != binding.get('sha256')
                 or verified.get('target_verification', {}).get('bytes') != binding.get('bytes')):
             raise ValueError('LFM model inventory checkpoint lacks its exact verified artifact binding')
@@ -1490,7 +1491,7 @@ def main():
                         help='authenticate class-only parser/index continuation of historical content caches')
     parser.add_argument('--deduplicate-against-registered-cache', action='append', default=[],
                         help='reuse an exact current-law content index for an admitted registered graph whose bytes are temporarily unavailable')
-    parser.add_argument("--model-key", choices=("lfm25", "mellum21"), required=True)
+    parser.add_argument("--model-key", choices=tuple(line_backbones.BACKBONES), required=True)
     args = parser.parse_args()
     if args.scaffold_harvest is not None and not args.source.exists():
         prepare_scaffold_source(args.source, args.scaffold_harvest)

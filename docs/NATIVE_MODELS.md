@@ -1,6 +1,6 @@
 # Running natlang on our trained models
 
-How to run natlang programs on a trained native checkpoint (LFM2.5, Mellum), for user testing and everyday use.
+How to run natlang programs on a trained native checkpoint (LFM3, LFM2.5, Mellum), for user testing and everyday use.
 Everything below is ordinary `natlang` CLI use; nothing needs a hand-written server command or profile.
 
 ## One-time setup
@@ -244,3 +244,23 @@ token with three stacked adapters). The cache holds about 1 GiB per stack for LF
 The same commands work for Mellum (`mellum-latest`); the GGUF export supports HF backbones only, so Mellum runs on
 the native server. Its 12B weights need far more memory than LFM; on the DGX, give the launcher a budget measured
 from an actual load before testing alongside training.
+
+## LFM3
+
+The `lfm` line is moving from LFM2.5-350M to `LiquidAI/LFM3-1.7B` (plans/neuralese/LFM3_PORT_20261028.md). The commands
+above are unchanged: a native checkpoint reports its architecture (`lfm3`), the server's dialect is
+`native-state/lfm3`, and a state written by an LFM2.5 checkpoint (`native-state/lfm2`) is a different model identity
+that an LFM3 server does not splice. The profile names (`lfm-latest`, `lfm-latest-gguf`) follow whichever lineage the
+source file in `setup --native` points at; the identities each lineage records (`lfm2:<inventory sha>` or
+`lfm3:<inventory sha>`, tokenizer fingerprints, production directories) are declared in one place,
+`natlang_neuralese/common/line_backbones.py`, so LFM2.5 checkpoints and their data keep validating.
+
+- The GGUF path (`--gguf`) and the browser default release (`ts-host/src/model-default.ts`) stay on the published
+  LFM2.5 file until an LFM3 GGUF is exported by the llama.cpp fork and published with
+  `scripts/publish_browser_model.mjs`. That script derives the producer-marker `logit_bias` from the exported
+  manifest, so an LFM3 release carries its own marker id (125033 for the LFM3 role markers) rather than LFM2.5's 64402.
+- LFM3 tool calls are XML (`<tool_call><function=NAME><parameter=K>VALUE</parameter></function></tool_call>`), not the
+  Pythonic calls of LFM2.5; that format and the history-reasoning policy of LFM3 live with the serving renderer
+  (`serve/chat.py`), not here.
+- Memory figures in this document (decode speed, adapter cache size, load time) were measured on LFM2.5-350M; they are
+  not LFM3 numbers. Measure the 1.7B model before quoting a budget.

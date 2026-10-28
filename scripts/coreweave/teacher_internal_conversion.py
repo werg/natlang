@@ -13,6 +13,7 @@ import time
 import tempfile
 from pathlib import Path
 
+from natlang_neuralese.common import line_backbones as lb
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.common.hashing import sha256_file_hex, canonical_json_sha256_hex, sha256_reference
 from natlang_neuralese.common.paths import resolve
@@ -29,6 +30,8 @@ from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import (
 
 FLINT_NAMESPACE = 'flint-verified-positive-native-graphs-20261021-recovery7853'
 LFM_HISTORY_KEEP = 'qwen-verified-positive-native-graphs-20261015-v5-lfm-history-keep-v1-20261020'
+# That versioned repair package exists only as an LFM2.5 view; no other backbone's view dedups against it.
+LFM_HISTORY_KEEP_MODEL = 'lfm25'
 MODEL_CONFIG_READER_SHA256 = 'ff2031ded1225ded550b8ff97a90145a401d798477601120e5cbaf0c88c13a88'
 
 
@@ -38,17 +41,16 @@ def _tokenizers(manifest_path: Path, root: Path) -> dict[str, Path]:
     if manifest.get('schema') != 'natlang.teacher-tokenizer-internal-relocation/1' or manifest.get('training_admission') is not False:
         raise ValueError('internal tokenizer relocation is not an exact non-admission transfer declaration')
     result = {}
-    expected_contracts = {
-        'lfm25': {'source_fingerprint': 'e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008',
-                  'expanded_fingerprint': 'be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105',
-                  'sandbox': '393f9b75-2666-456c-a850-1b46a8b7d147'},
-        'mellum21': {'source_fingerprint': '1abe5e6333be0157f76f5484b389e5586b0e6dbb9bc776f54ca9fd62fce6cb56',
-                     'expanded_fingerprint': 'fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f',
-                     'sandbox': 'ee341c7b-a425-4b4b-ad7e-f3cf7cbc2369'},
-    }
     rows = manifest.get('models')
-    if not isinstance(rows, list) or {row.get('model') for row in rows} != set(expected_contracts):
+    declared_models = {row.get('model') for row in rows} if isinstance(rows, list) else set()
+    # The relocation names which declared line backbones (LFM2.5 or LFM3, plus Mellum) it carries; each is checked
+    # against that backbone's own declared identity, so historical LFM2.5 relocations keep validating.
+    if len(declared_models) != 2 or frozenset(declared_models) not in lb.model_key_pairs():
         raise ValueError('tokenizer relocation does not declare both exact model views')
+    expected_contracts = {model: {**lb.tokenizer_contract(model), 'sandbox': lb.backbone(model)['evaluator_sandbox_id']}
+                          for model in declared_models}
+    if any(contract['sandbox'] is None for contract in expected_contracts.values()):
+        raise ValueError('tokenizer relocation names a backbone with no declared source evaluator sandbox')
     for row in rows:
         model = row['model']
         expected = expected_contracts[model]
@@ -82,7 +84,7 @@ def _tokenizers(manifest_path: Path, root: Path) -> dict[str, Path]:
             raise ValueError(f'{model} expanded tokenizer fingerprint differs from its original receipt')
     if file_binding(manifest_path) != reference:
         raise ValueError('tokenizer relocation declaration changed during verification')
-    return result
+    return {model: result[model] for model in sorted(result, key=lambda key: lb.LINES.index(lb.line_of(key)))}
 
 
 def _add_file(path: Path, expected_sha256: str | None = None) -> Path:
@@ -191,7 +193,7 @@ def _same_actor_boundary_inputs(root: Path, ctx: Tranche, source_proof: dict,
             raise ValueError(f'exact actor/source boundary manifest differs from registry: {corpus_id}')
         resolved_views = {}
         policy_compatible = True
-        for model in ('lfm25', 'mellum21'):
+        for model in inputs:
             rel = f'{model}/train/native-graphs.jsonl.zst'
             members = [item for item in manifest.get('files', []) if item.get('path') == rel]
             if len(members) != 1:
@@ -210,7 +212,7 @@ def _same_actor_boundary_inputs(root: Path, ctx: Tranche, source_proof: dict,
             if (receipt.get('status') != 'passed' or receipt.get('model_key') != model
                     or receipt.get('source', {}).get('sha256') != source_sha):
                 raise ValueError(f'exact actor/source graph receipt differs from current boundary: {corpus_id}/{model}')
-            expected_explicit = 'keep' if model == 'lfm25' else None
+            expected_explicit = lb.backbone(model)['explicit_history_reasoning_policy']
             if (receipt.get('explicit_history_reasoning_policy') != expected_explicit
                     or receipt.get('failed_assistant_history_policy') != 'mask-runtime-failures'):
                 # A registered unexposed package with a declared policy defect
@@ -278,7 +280,7 @@ def _verified_internal_predecessors(root: Path, ctx: Tranche, source_proof: dict
             raise ValueError(f'internal predecessor manifest differs from registry: {ident}')
         members = {item['path']: item for item in manifest.get('files', [])}
         outputs = {}
-        for model in ('lfm25', 'mellum21'):
+        for model in contracts:
             rel = f'{model}/train/native-graphs.jsonl.zst'
             member = members.get(rel)
             if member is None:
@@ -378,9 +380,9 @@ def _verified_internal_predecessors(root: Path, ctx: Tranche, source_proof: dict
                        for key in ('sha256', 'bytes'))):
             raise ValueError(f'internal predecessor source/actor/runtime binding differs: {ident}')
         proof_models = proof.get('models')
-        if not isinstance(proof_models, dict) or set(proof_models) != {'lfm25', 'mellum21'}:
+        if not isinstance(proof_models, dict) or set(proof_models) != set(contracts):
             raise ValueError(f'internal predecessor does not bind both native model views: {ident}')
-        for model in ('lfm25', 'mellum21'):
+        for model in contracts:
             receipt_rel = f'{model}/receipt.json'
             graph_rel = f'{model}/train/native-graphs.jsonl.zst'
             receipt_member, graph_member = members.get(receipt_rel), members.get(graph_rel)
@@ -400,7 +402,7 @@ def _verified_internal_predecessors(root: Path, ctx: Tranche, source_proof: dict
                            for key in ('sha256', 'bytes'))):
                 raise ValueError(f'internal predecessor {model} graph/receipt differs from registration proof: {ident}')
             receipt = read_bound(receipt_ref)
-            expected_explicit = 'keep' if model == 'lfm25' else None
+            expected_explicit = lb.backbone(model)['explicit_history_reasoning_policy']
             if (receipt.get('status') != 'passed' or receipt.get('model_key') != model
                     or receipt.get('source', {}).get('sha256') != source_ref['sha256']
                     or receipt.get('tokenizer', {}).get('expanded_fingerprint') != contracts[model]['tokenizer_fingerprint']
@@ -490,7 +492,7 @@ def _verified_zero_conversion(root: Path, path: Path, ctx: Tranche,
         raise ValueError('zero boundary source/actor/runtime/protection custody differs')
     rows = conversion.get('models')
     if (not isinstance(rows, list) or len(rows) != 2
-            or {row.get('model') for row in rows} != {'lfm25', 'mellum21'}):
+            or {row.get('model') for row in rows} != set(contracts)):
         raise ValueError('zero boundary lacks both exact student receipts')
     admitted = set(conversion.get('admitted_predecessors') or [])
     admitted.update(row.get('corpus_id') for row in conversion.get('same_actor_source_boundary_inputs', [])
@@ -571,7 +573,7 @@ def _verified_zero_conversion(root: Path, path: Path, ctx: Tranche,
         omissions = dedup.get('omissions')
         inputs = {item.get('path'): item for item in dedup.get('inputs', [])
                   if isinstance(item, dict) and isinstance(item.get('path'), str)}
-        expected_history = 'keep' if model == 'lfm25' else None
+        expected_history = lb.backbone(model)['explicit_history_reasoning_policy']
         if (receipt.get('status') != 'passed' or receipt.get('model_key') != model
                 or receipt.get('source', {}).get('sha256') != source_ref.get('sha256')
                 or receipt.get('tokenizer', {}).get('expanded_fingerprint') != contracts[model]['tokenizer_fingerprint']
@@ -627,7 +629,7 @@ def _verified_zero_conversion(root: Path, path: Path, ctx: Tranche,
                     raise ValueError(f'{model} zero-boundary cache input has a mismatched model/member')
                 ident = parts[0]
                 if (ident not in admitted
-                        and not (model == 'lfm25' and ident == LFM_HISTORY_KEEP)):
+                        and not (model == LFM_HISTORY_KEEP_MODEL and ident == LFM_HISTORY_KEEP)):
                     raise ValueError(f'{model} zero-boundary cache input is outside admitted predecessor closure')
                 predecessor = by_id.get(ident)
                 if predecessor is None or predecessor.get('training_admission') is not True:
@@ -728,7 +730,7 @@ def _verified_zero_conversion(root: Path, path: Path, ctx: Tranche,
             represented_path = represented['path']
             if represented_path.startswith('registered-cache:'):
                 ident = represented_path.removeprefix('registered-cache:').split('/', 1)[0]
-                if not (ident in admitted or (model == 'lfm25' and ident == LFM_HISTORY_KEEP)):
+                if not (ident in admitted or (model == LFM_HISTORY_KEEP_MODEL and ident == LFM_HISTORY_KEEP)):
                     raise ValueError(f'{model} zero-boundary omission is outside admitted predecessor closure')
             else:
                 if '/runs/' not in represented_path:
@@ -804,8 +806,8 @@ def _registered_inputs(root: Path, spool: Path, ctx: Tranche, relocation_manifes
         relocation_manifest=relocation_manifest, cache_contracts=contracts,
         accounted_internal_boundaries=accounted_positions)
     by_id = {row['id']: row for row in [*admitted, *additional]}
-    inputs = {model: [] for model in ('lfm25', 'mellum21')}
-    cached_ids = {model: [] for model in ('lfm25', 'mellum21')}
+    inputs = {model: [] for model in contracts}
+    cached_ids = {model: [] for model in contracts}
     for row in by_id.values():
         for model in inputs:
             reference = row['outputs'][model]
@@ -819,11 +821,12 @@ def _registered_inputs(root: Path, spool: Path, ctx: Tranche, relocation_manifes
 
 def history_policy_args(model: str) -> list[str]:
     """Return the established model history mode and independent failure mask."""
-    if model not in ('lfm25', 'mellum21'):
+    if model not in lb.BACKBONES:
         raise ValueError(f'unsupported native student view: {model}')
     args = ['--failed-assistant-history-policy', 'mask-runtime-failures']
-    if model == 'lfm25':
-        args.extend(['--history-reasoning-policy', 'keep'])
+    policy = lb.backbone(model)['explicit_history_reasoning_policy']
+    if policy is not None:
+        args.extend(['--history-reasoning-policy', policy])
     return args
 
 
@@ -964,7 +967,8 @@ def _base_inventory_reference(model: str, model_dir: Path, output: Path,
             raise ValueError('Mellum inventory readback differs from its exact actor-view manifest')
         source_evidence = {'kind': 'mellum-actor-view', 'actor_view_manifest': actor_ref,
                            'actor_checkpoint': actor['source']}
-    else:
+    elif model == 'lfm25':
+        # Historical evidence: the LFM2.5 base inventory is read back from one independently verified trained export.
         verified_path = resolve('data_nvme','dgxops','coreweave-provider-artifacts',
             '7b79178c1d5275cc48c17f89d582f241e3912f4e84378c5f074085e09c219430-'
             '393f9b75-2666-456c-a850-1b46a8b7d147.verified.json')
@@ -979,6 +983,9 @@ def _base_inventory_reference(model: str, model_dir: Path, output: Path,
             raise ValueError('LFM metadata source differs from its independently verified exact checkpoint')
         source_evidence = {'kind': 'lfm-verified-checkpoint', 'checkpoint_verification': verified_ref,
                            'checkpoint_sha256': binding['sha256'], 'checkpoint_bytes': binding['bytes']}
+    else:
+        raise ValueError(f'{model} has no declared base-inventory source evidence for this conversion: a verified '
+                         'trained export (as LFM2.5 had) or the pinned base snapshot readback must be added first')
     readback_declaration = file_binding(model_dir / 'model-config-readback-v2.json')
     declaration = read_bound(readback_declaration)
     readers = [item['reader'] for item in declaration.get('models', []) if item.get('model') == model]
@@ -1052,16 +1059,16 @@ def convert(*, root: Path, settings_path: Path, settings_sha256: str,
         raise FileExistsError(f'conversion output is nonempty: {outputs}')
     outputs.mkdir(parents=True, exist_ok=True)
     model_identity_refs = {model: _registered_model_identity(root, model, admitted_inputs[model], outputs)
-                           for model in ('lfm25', 'mellum21')}
+                           for model in tokenizers}
     model_dir = tokenizer_manifest.parent.parent / 'model-inventories'
     base_inventory_refs = {model: _base_inventory_reference(
         model, model_dir, outputs, tokenizer_manifest, model_identity_refs[model])
-        for model in ('lfm25', 'mellum21')}
+        for model in tokenizers}
     code_root = Path(__file__).resolve().parents[2]
     converter = code_root / 'scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py'
     converter_ref = file_binding(converter)
     records = []
-    for model in ('lfm25', 'mellum21'):
+    for model in tokenizers:
         dedup = [*_legacy_inputs(root, model), *admitted_inputs[model]]
         args = [sys.executable, str(converter), '--source', str(source_file),
                 '--output', str(outputs / model), '--base-tokenizer', str(tokenizers[model]),
@@ -1074,7 +1081,7 @@ def convert(*, root: Path, settings_path: Path, settings_sha256: str,
             args.extend(['--deduplicate-against', str(path)])
         for corpus_id in cached_ids[model]:
             args.extend(registered_dedup_args(root,corpus_id,model))
-        if model == 'lfm25':
+        if model == LFM_HISTORY_KEEP_MODEL:
             args.extend(registered_dedup_args(root,LFM_HISTORY_KEEP,model))
         log = outputs / f'{model}.conversion.log'
         with log.open('xb') as stream:
@@ -1089,8 +1096,7 @@ def convert(*, root: Path, settings_path: Path, settings_sha256: str,
         if (receipt.get('status') != 'passed' or receipt.get('model_key') != model
                 or receipt.get('source', {}).get('sha256') != source['sha256']
                 or receipt.get('tokenizer', {}).get('expanded_fingerprint') !=
-                   {'lfm25': 'be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105',
-                    'mellum21': 'fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f'}[model]):
+                   lb.backbone(model)['expanded_fingerprint']):
             raise ValueError(f'{model} converted receipt differs from exact source/tokenizer authority')
         records.append({'model': model, 'receipt': receipt_ref, 'log': file_binding(log),
                         'deduplication_inputs': len(receipt['deduplication']['inputs'])})

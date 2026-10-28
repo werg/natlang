@@ -26,7 +26,13 @@ APPEND_SCHEMA = 'natlang.private-teacher-append/1'
 CENSUS_SCHEMA = 'natlang.private-ready-source-census/1'
 ROW_SELECTION_SCHEMA = 'natlang.exact-native-row-selection/1'
 SOURCE_EQUALITY_SCHEMA = 'natlang.exact-native-source-equality/1'
-SUPPORTED_MODEL_ROLES = frozenset({'lfm25', 'mellum21'})
+# These mirror natlang_neuralese.common.line_backbones (tests/neuralese/test_line_backbones.py keeps them equal). They
+# are spelled here because descriptor validation runs before the descriptor's frozen runtime, which may predate that
+# module, is imported. 'lfm25' is the historical LFM2.5 view; 'lfm3' the current LFM line.
+SUPPORTED_MODEL_ROLES = frozenset({'lfm25', 'lfm3', 'mellum21'})
+LFM_MODEL_ROLES = frozenset({'lfm25', 'lfm3'})
+EXPLICIT_KEEP_HISTORY_ROLES = frozenset({'lfm25'})  # data conversions that bound history_reasoning_policy=keep
+BACKBONE_MODEL_TYPE = {'lfm25': 'lfm2', 'lfm3': 'lfm3', 'mellum21': 'mellum'}
 # New, independently verified teacher rows enter the existing urgent/debt
 # scheduler; this is scheduling metadata, not an exposure credit.
 NEW_TEACHER_TRAINING_PRIORITY = 1
@@ -101,7 +107,7 @@ def _descriptor(value: dict) -> dict:
             'root', 'config_path', 'plan_path'}:
         raise ValueError('supervision must bind root, config_path and plan_path')
     if value['model_role'] not in SUPPORTED_MODEL_ROLES:
-        raise ValueError('model_role must be lfm25 or mellum21')
+        raise ValueError('model_role must be one of ' + ', '.join(sorted(SUPPORTED_MODEL_ROLES)))
     for key in ('stage_id', 'append_key'):
         if not isinstance(value[key], str) or not re.fullmatch(r'[a-z][a-z0-9_-]*', value[key]):
             raise ValueError(f'{key} must be a safe lowercase identifier')
@@ -228,7 +234,7 @@ def _verify_source_package(*, ready_path: Path, ready: dict, registry: dict,
         raise ValueError(f'{corpus_id}: source tokenizer differs from selected model tokenizer')
     tokenizer_history = role_receipt.get('tokenizer', {}).get('history_reasoning')
     explicit_history = role_receipt.get('explicit_history_reasoning_policy')
-    if role == 'lfm25' and explicit_history != 'keep':
+    if role in EXPLICIT_KEEP_HISTORY_ROLES and explicit_history != 'keep':
         raise ValueError(f'{corpus_id}: LFM role requires explicit history_reasoning_policy=keep')
     recorded_history = explicit_history if isinstance(explicit_history, str) and explicit_history else None
     history_probe = None
@@ -243,7 +249,7 @@ def _verify_source_package(*, ready_path: Path, ready: dict, registry: dict,
         tokenizer_info = role_receipt.get('tokenizer', {})
         model_type = tokenizer_info.get('backbone') or tokenizer_info.get('model_type')
         if not isinstance(model_type, str) or not model_type:
-            model_type = 'mellum' if role == 'mellum21' else 'lfm2'
+            model_type = BACKBONE_MODEL_TYPE[role]
         recorded_history = runtime['natlang_neuralese.serve.chat'].declared_history_reasoning(model_type)
     if recorded_history != expected_history:
         raise ValueError(f'{corpus_id}: history policy {recorded_history!r} differs from selected model/stage {expected_history!r}')
@@ -254,7 +260,7 @@ def _verify_source_package(*, ready_path: Path, ready: dict, registry: dict,
     failure_policy = role_receipt.get('failed_assistant_history_policy')
     if failure_policy not in ('preserve', 'mask-runtime-failures'):
         raise ValueError(f'{corpus_id}: unsupported failed assistant history policy')
-    if role == 'lfm25' and failure_policy != 'mask-runtime-failures':
+    if role in LFM_MODEL_ROLES and failure_policy != 'mask-runtime-failures':
         raise ValueError(f'{corpus_id}: LFM role requires mask-runtime-failures')
     if expected_failure_policy is not None and failure_policy != expected_failure_policy:
         raise ValueError(f'{corpus_id}: failed assistant history policy changed across this append')
@@ -360,7 +366,7 @@ def _read_memory_requests(parameters: dict, runtime: dict, train_binding: dict, 
     if not isinstance(expected_history, str) or not expected_history:
         model_type = identity_config.get('backbone') or identity_config.get('model_type')
         if not isinstance(model_type, str) or not model_type:
-            model_type = 'mellum' if role == 'mellum21' else 'lfm2'
+            model_type = BACKBONE_MODEL_TYPE[role]
         expected_history = runtime['natlang_neuralese.serve.chat'].declared_history_reasoning(model_type)
     if not isinstance(expected_history, str) or not expected_history:
         raise ValueError('selected model has no effective frozen history-reasoning policy')
@@ -492,9 +498,9 @@ def prepare(descriptor: dict) -> dict:
     memory_requests, tokenizer, role_ids, expected_history = _read_memory_requests(parameters, runtime, train_binding, role)
     memory_request_bindings = [resident.binding(resident.bound(item[0])) for item in memory_requests]
     expected_failure_policy = None
-    if role == 'lfm25':
-        if expected_history != 'keep':
-            raise ValueError('selected LFM stage/model identity must explicitly declare history_reasoning_policy=keep')
+    if role in EXPLICIT_KEEP_HISTORY_ROLES and expected_history != 'keep':
+        raise ValueError('selected LFM stage/model identity must explicitly declare history_reasoning_policy=keep')
+    if role in LFM_MODEL_ROLES:
         expected_failure_policy = 'mask-runtime-failures'
 
     output_root.parent.mkdir(parents=True, exist_ok=True)

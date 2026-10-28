@@ -16,6 +16,17 @@ import time
 
 
 SCHEMA = "natlang.history-reasoning-live-window/1"
+
+
+def _proof_views(proof: dict) -> tuple[str, ...]:
+    """The declared student views a validation proof binds (lfm line first): LFM2.5 or LFM3, plus Mellum."""
+    from natlang_neuralese.common import line_backbones
+    views = frozenset(proof.get("models") or ())
+    if views not in line_backbones.model_key_pairs():
+        raise ValueError("validation proof does not bind an admissible pair of student views")
+    return tuple(sorted(views, key=lambda key: line_backbones.LINES.index(line_backbones.line_of(key))))
+
+
 SAMPLED_OUTPUT_FAILURE_CODES = frozenset({
     "neuralese-native-state-open", "neuralese-native-state-close",
     "neuralese-native-state-consume-marker", "neuralese-native-state-nested",
@@ -278,7 +289,8 @@ def prepare_case_packet(proof_paths: list[Path], exclusion_path: Path, output_pa
                 source_row = json.loads(raw_line)
                 raw_rows[source_row["id"]] = (hashlib.sha256(raw_line.rstrip(b"\r\n")).hexdigest(), source_row)
         output_bindings = {}
-        for model_name in ("lfm25", "mellum21"):
+        lfm_view, mellum_view = _proof_views(proof)
+        for model_name in (lfm_view, mellum_view):
             model_proof = proof["models"][model_name]
             receipt_ref = model_proof["receipt"]
             receipt_path = Path(receipt_ref["path"]).resolve(strict=True)
@@ -305,7 +317,7 @@ def prepare_case_packet(proof_paths: list[Path], exclusion_path: Path, output_pa
                                      source.get("source_row_sha256")))
             output_bindings[model_name] = (row_bindings, allowed)
         for row_id, (actual_row_sha, raw_row) in raw_rows.items():
-            binding = output_bindings["lfm25"][0].get(row_id)
+            binding = output_bindings[lfm_view][0].get(row_id)
             if binding is None or binding.get("sha256") != actual_row_sha:
                 continue
             program_id = binding.get("program_id")
@@ -318,7 +330,7 @@ def prepare_case_packet(proof_paths: list[Path], exclusion_path: Path, output_pa
                 context = turn.get("context") or []
                 raw_response_sha = turn.get("raw_response_sha256")
                 key = (row_id, turn_index, raw_response_sha, program_id, actual_row_sha)
-                if key not in output_bindings["lfm25"][1] or key not in output_bindings["mellum21"][1]:
+                if key not in output_bindings[lfm_view][1] or key not in output_bindings[mellum_view][1]:
                     continue
                 if raw_row.get("outcome", {}).get("accepted") is not True or raw_row.get("outcome", {}).get("status") != "done":
                     continue
@@ -410,7 +422,7 @@ def validate_case_packet(case_path: Path, exclusion_path: Path, *, exclusion_sha
             verified_proofs[proof_path] = proof
         proof = verified_proofs[proof_path]
         model_receipts = {}
-        for model_name in ("lfm25", "mellum21"):
+        for model_name in _proof_views(proof):
             model_proof = proof["models"][model_name]
             receipt_ref = model_proof["receipt"]
             receipt_path = Path(receipt_ref["path"]).resolve(strict=True)

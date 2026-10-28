@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import sys
 
+from ..common import line_backbones
 from ..common.hashing import sha256_file_hex_cached, canonical_json_sha256_hex
 from ..common.jsonio import write_json_durable, iter_jsonl_rows
 from .native_readiness import _bound
@@ -265,7 +266,9 @@ def prepare(release_path, curriculum_path, out, *, participants, cases=None, tas
               '--request', '{request}', '--result', '{result}', '--stop-file', '{stop_file}']
     models, requirements = [], []
     for record in sorted(records, key=lambda row: row['role']):
-        role = record['role']; line = 'lfm25' if role == 'lfm' else 'mellum21'
+        role = record['role']
+        backbone = line_backbones.backbone(line_backbones.key_for_role(role, model_id=participants[role]))
+        line = backbone['production_dir']
         recipe_path = _bound({'path': record['recipe_path'], 'sha256': record['recipe_sha256']})
         adoption_binding = record.get('resident_adoption')
         if adoption_binding:
@@ -316,7 +319,7 @@ def prepare(release_path, curriculum_path, out, *, participants, cases=None, tas
                 'rows': task_source['rows'], 'audit_sha256': task_source['audit_sha256'],
                 'selection_proof_sha256': task_source['selection_proof_sha256']}} if task_source else {}),
             'base_inventory_sha256': inventory_sha,
-            'port': 8097 if role == 'lfm' else 8098, 'provider_queue': queue,
+            'port': backbone['port'], 'provider_queue': queue,
             'provider': {'sandbox_id': record['sandbox_id']}})
         requirements.append({'model_id': participants[role],
             'readiness': str(Path(namespace)/line/'native_full_sft/native-training-receipt.json'),

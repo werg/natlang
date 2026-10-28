@@ -10,6 +10,7 @@ from pathlib import Path
 import shutil
 import sqlite3
 
+from natlang_neuralese.common import line_backbones
 from natlang_neuralese.common.hashing import sha256_file_hex
 from natlang_neuralese.common.jsonio import open_jsonl_text, write_json_durable
 
@@ -158,7 +159,11 @@ def assemble(base_receipt, added_receipt, out_dir):
         _validate_full_manifest(base_receipt, base_data)
         if added_data.get('schema') != 'natlang.native-semantic-e2e-build/2':
             raise ValueError('addition input is not a complete E2E graph build')
-        for alias in ('lfm25', 'mellum21'):
+        # The builds name their own declared student views (LFM2.5 or LFM3, plus Mellum); lfm line first.
+        participants = frozenset(base_data.get('models', {}))
+        if participants not in line_backbones.model_key_pairs():
+            raise ValueError('FULL build does not declare an admissible pair of student views')
+        for alias in sorted(participants, key=lambda key: line_backbones.LINES.index(line_backbones.line_of(key))):
             _, added, full_child, model, splits = _paths(base_receipt, added_receipt, alias)
             fingerprint = full_child['expanded_tokenizer_fingerprint']
             if added['tokenizers'][alias]['expanded'] != fingerprint:
@@ -188,10 +193,9 @@ def assemble(base_receipt, added_receipt, out_dir):
                     'full_prefix_sha256': old_record['sha256'], 'appended_sha256': new_record['sha256']}
                 inputs[alias][split] = {'full': {'path': str(old_path), 'sha256': old_record['sha256']},
                     'appended': {'path': str(new_path), 'sha256': new_record['sha256']}}
-            alias_by_name = {'lfm25': 'lfm2', 'mellum21': 'mellum'}
             summaries[alias]['model_id'] = model['model_id']
             summaries[alias]['tokenizer_fingerprint'] = fingerprint
-            summaries[alias]['model_architecture'] = alias_by_name[alias]
+            summaries[alias]['model_architecture'] = line_backbones.backbone(alias)['model_id_architecture']
         db.commit()
         train_groups = {row[0] for row in db.execute("SELECT group_id FROM groups WHERE split='train'")}
         held_groups = {row[0] for row in db.execute("SELECT group_id FROM groups WHERE split='test'")}

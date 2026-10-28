@@ -62,7 +62,8 @@ def bootstrap_configs(plan_path, completion_path, out):
         model = declaration['model']
         participant = declaration.get('native_participant')
         if participant is None:
-            architectures = {'lfm': {'lfm2', 'lfm2_moe'}, 'mellum': {'mellum', 'maple'}}[model]
+            from ..common.line_backbones import architectures as line_architectures
+            architectures = line_architectures(model)
             candidates = [name for name, entry in adapter['models'].items()
                           if entry['native_identity']['architecture'] in architectures]
             if len(candidates) != 1:

@@ -7,7 +7,7 @@ of state, not one checkpoint: whether a reader may splice a state unchanged is
 decided by the state's exact model identity, which every native state carries.
 
 - **Tag.** A native state written by a model is in `native-state/<architecture>`,
-  e.g. `native-state/lfm2`. A state written through a configured learned
+  e.g. `native-state/lfm2` or `native-state/lfm3`. A state written through a configured learned
   semantic adapter (a compact `neuralese.semantic-state/1` message) is in
   `semantic-state/<adapter SHA-256>`. A server declares its tag first in the
   `dialects` of `/v1/neuralese/info`. Named tensor artifacts carry

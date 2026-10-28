@@ -13,6 +13,7 @@ import time
 import uuid
 
 from ..common.jsonio import write_json_durable
+from ..common.line_backbones import all_architectures
 from .native_async import poll_latest, verified_export, verify_request, selected_ingest_export
 from .task_cadence import parse_task_eval, request_queue
 
@@ -375,7 +376,7 @@ def main(argv=None):
     parser.add_argument('--queue',type=Path,default=None);parser.add_argument('--role',choices=('lfm','mellum'),required=True)
     parser.add_argument('--minimum-step',type=int,default=0);parser.add_argument('--disk-reserve-gib',type=int,default=2)
     parser.add_argument('--after-dispatch-state',type=Path);parser.add_argument('--after-dispatch-minimum-step',type=int,default=0)
-    parser.add_argument('--after-dispatch-architecture',choices=('lfm2','lfm2_moe','maple','mellum'))
+    parser.add_argument('--after-dispatch-architecture',choices=all_architectures())
     parser.add_argument('--device',default='cuda');parser.add_argument('--every',type=float,default=60)
     parser.add_argument('--external-payload-root',type=Path)
     parser.add_argument('--external-min-free-gib',type=int,default=20)

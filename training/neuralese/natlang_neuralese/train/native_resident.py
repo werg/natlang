@@ -14,6 +14,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from ..common import line_backbones
 from ..common.hashing import canonical_json_sha256_hex as digest, sha256_file_hex_cached as sha, sha256_file_hex
 from ..common.ordered_json_sequence import canonical_json_sequence_sha256_hex as entries_digest
 from ..common.jsonio import write_json_durable as write_json
@@ -433,7 +434,7 @@ def _d31_reference_qa_geometry_part(part, *, preparation, package):
     if part.get('schema') != _D31_REFERENCE_QA_PART:
         raise ValueError('unsupported D31 static-reference QA geometry part')
     model = part.get('model')
-    if model not in ('lfm25', 'mellum21'):
+    if model not in {value['model_key'] for value in line_backbones.BACKBONES.values()}:
         raise ValueError('D31 static-reference QA model is unsupported')
     required = ('source', 'corpus_manifest', 'review', 'geometry_audit', 'conversion_receipt',
                 'render_manifest', 'render_policy_binding', 'render_source', 'qa_source_manifest')
@@ -660,7 +661,11 @@ def _d31_reference_qa_geometry_part(part, *, preparation, package):
 
 
 def _source03_bridge_geometry_part(part, *, preparation, package):
-    """Verify one source03 bridge using its staged source and old-fit custody."""
+    """Verify one source03 bridge using its staged source and old-fit custody.
+
+    The registered source03 bridge corpus is a historical LFM2.5 artifact: its file names and old-fit
+    coverage rows are keyed 'lfm25' on disk, so this verifier deliberately stays on that backbone.
+    """
     import hashlib
     import pickle
     import re

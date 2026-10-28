@@ -18,6 +18,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'training/neuralese'))
+from natlang_neuralese.common import line_backbones
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest,sha256_file_hex
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.common.runtime_inventory import snapshot_task_runtime,task_runtime_inventory
@@ -324,7 +325,7 @@ def run(args):
     if task_runtime_inventory(runtime)!=inventory:raise ValueError('feedback runtime changed')
     with urllib.request.urlopen(args.endpoint.rstrip('/')+'/v1/neuralese/info') as response:info=json.load(response)
     identity={key:info['native_state'][key] for key in IDENTITY_KEYS}
-    if (identity['architecture'] not in ('lfm2','lfm2_moe') or identity['checkpoint_sha256']!=plan['checkpoint_sha256']
+    if (identity['architecture'] not in line_backbones.architectures('lfm') or identity['checkpoint_sha256']!=plan['checkpoint_sha256']
             or 'native.protocol-recovery' not in info.get('capabilities',[])):
         raise ValueError('feedback endpoint must be the exact trained LFM marker-capable actor')
     directory=root/args.variant

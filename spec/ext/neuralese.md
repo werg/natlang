@@ -50,8 +50,9 @@ declarations in [neuralese.d.ts](../neuralese.d.ts).
   `NatlangRuntime.readerDialect()`). For a native server that is the first
   dialect its `/v1/neuralese/info` declares: `native-state/<architecture>`, or
   `semantic-state/<adapter SHA-256>` for a server with a configured semantic
-  adapter. `Neuralese<T>` and `Neuralese<T, "native-state/lfm2">` are one type in
-  a runtime that reads `native-state/lfm2`. A text-only runtime leaves it unbound.
+  adapter. `Neuralese<T>` and `Neuralese<T, "native-state/lfm3">` are one type in
+  a runtime that reads `native-state/lfm3` (likewise `native-state/lfm2` for an
+  LFM2 checkpoint). A text-only runtime leaves it unbound.
 - A block's stored dialect is checked wherever a value is coerced to a
   `Neuralese` type (call arguments, results, `let` variables, `read`). A block
   written in another dialect is rejected with `neuralese-dialect-mismatch`,
