@@ -484,3 +484,60 @@ def test_export_recalibrates_merged_weights_and_preserves_worker_custody(tmp_pat
     custody = training['options']['diloco_export']['quantization_calibration']
     assert custody['learners'] == {'0': {'amax': {'x': 1}}, '1': {'window': {'batches': 1}}}
     assert custody['action'] == 'recalibrate-merged-weights'
+
+
+def test_four_unequal_epochs_drain_every_partial_before_global_export(tmp_path):
+    import json,time
+    from natlang_neuralese.train.diloco.coordinator import global_ema,_metadata
+    seed=_model();root=tmp_path/'coord';surface=TensorSurface.from_module(seed)
+    manifest=initialize_coordinator(root,run_id='full-epoch',masters=surface.masters,identity={'parent':'exact'},
+        workers=4,min_quorum=3,fragment_bytes=1024,grace_seconds=0,outer_lr=1.0,outer_momentum=0,
+        ema={'decay':.88,'warmup':0})
+    port=_free_port();token=TOKEN;url=f'http://127.0.0.1:{port}';stop=threading.Event()
+    server=threading.Thread(target=serve_coordinator,args=(root,'127.0.0.1',port,token),kwargs={'stop':stop},daemon=True);server.start()
+    transport=Transport(url,token,5)
+    for _ in range(100):
+        try:transport.json('GET','/v1/status');break
+        except OSError:time.sleep(.02)
+    learners=[]
+    for worker in range(4):
+        model=_model();model.load_state_dict(seed.state_dict());optimizer=torch.optim.SGD(model.parameters(),lr=.001)
+        settings=DilocoSettings(run_id='full-epoch',workers=4,worker_id=worker,coordinator_url=url,local_steps=128,
+            wire_dtype='fp32',allow_private_http=True,start_grace_seconds=0,heartbeat_seconds=.05,timeout_seconds=10)
+        learner=DilocoLearner(settings,surface=TensorSurface.from_module(model),identity={'parent':'exact'},
+            output=tmp_path/f'w{worker}',transport=Transport(url,token,5))
+        learners.append((model,optimizer,learner))
+    starters=[threading.Thread(target=item[2].start) for item in learners]
+    for t in starters:t.start()
+    for t in starters:t.join(10);assert not t.is_alive()
+    failures=[];completed={};sequences={}
+    def train(i,steps):
+        model,optimizer,learner=learners[i]
+        try:
+            # Earlier workers finish while peers are still earning updates.
+            if i>=2:time.sleep(.4)
+            for _ in range(steps):
+                optimizer.zero_grad();model(torch.ones(1,8)).sum().backward();optimizer.step();learner.after_step(tokens=1)
+            learner.declare_completion(drained=False)
+            assert learner.finish()
+            learner.declare_completion(drained=True)
+            completed[i]=steps;sequences[i]=list(learner.sequences)
+        except BaseException as error:failures.append(error)
+    threads=[threading.Thread(target=train,args=(i,n)) for i,n in enumerate([128,129,130,131])]
+    try:
+        for t in threads:t.start()
+        for t in threads:t.join(20);assert not t.is_alive()
+        assert not failures and completed=={0:128,1:129,2:130,3:131}
+        status=transport.json('GET','/v1/status')
+        assert len(status['completion'])==4 and all(v['drained'] for v in status['completion'].values())
+        assert all(count==0 for count in status['pending'].values())
+        for fragment in manifest['fragments']:
+            index=fragment['index'];ledger=json.loads(_metadata(root/'fragments'/f'{index:05d}.safetensors')['last_seq'])
+            assert all(int(ledger[str(i)])==sequences[i][index] for i in range(4))
+        masters,global_info=global_masters(root);average,ema_info=global_ema(root)
+        assert global_info['versions']==ema_info['versions']==status['versions']
+        assert any(not torch.equal(masters[name],surface.masters[name]) for name in masters)
+        assert set(average)==set(masters) and ema_info['ema']=={'decay':.88,'warmup':0}
+    finally:
+        for _,_,learner in learners:learner.close()
+        stop.set();server.join(timeout=3)

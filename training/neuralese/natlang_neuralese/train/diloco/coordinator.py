@@ -333,6 +333,39 @@ class Coordinator:
             self._write_progress()
             return self._progress_status()
 
+    def completion(self, worker: int, session: str, *, drained: bool, sequences: list[int] | None = None) -> dict:
+        """Record no-more-local-updates and, separately, delivery of each final window."""
+        self._lease_valid(worker, session)
+        if not 0 <= worker < self.manifest['workers'] or type(drained) is not bool:
+            raise ValueError('invalid learner completion identity')
+        with self.lock:
+            with self.progress_lock:
+                done=self.progress.setdefault('completion',{})
+                prior=done.get(str(worker))
+                if drained:
+                    if not prior or not prior.get('declared'):
+                        raise ValueError('learner must declare completion before draining')
+                    if (not isinstance(sequences,list) or len(sequences)!=len(self.fragments)
+                            or any(type(x) is not int or x<0 for x in sequences)):
+                        raise ValueError('invalid final learner fragment sequences')
+                    held=self._sequences(worker)
+                    if sequences != held:
+                        raise Conflict('final learner updates have not been accepted', undelivered=True)
+                done[str(worker)]={'declared':True,'drained':drained or bool(prior and prior.get('drained')),
+                                   'sequences':sequences if drained else (prior or {}).get('sequences'),
+                                   'at':time.time()}
+                self._write_progress()
+                all_declared=len(done)==self.manifest['workers'] and all(v.get('declared') for v in done.values())
+            if all_declared:
+                for fragment in self.fragments:self._try_merge(fragment.index,final=True)
+                self._refresh_published()
+            return self.status()
+
+    def _all_completion_declared(self) -> bool:
+        with self.progress_lock:
+            done=self.progress.get('completion') or {}
+            return len(done)==self.manifest['workers'] and all(v.get('declared') for v in done.values())
+
     def _progress_status(self) -> dict:
         with self.progress_lock:
             global_tokens = sum(x["tokens"] for x in self.progress["workers"].values())
@@ -349,6 +382,7 @@ class Coordinator:
                 "start_waits": dict(self.progress.get("start_waits", {})),
                 "min_quorum": self.manifest["min_quorum"],
                 "workers": self.manifest["workers"],
+                "completion": dict(self.progress.get("completion") or {}),
                 "recent_rounds": list(self.progress.get("rounds", []))[-8:],
                 **({"outer_schedule": self.manifest["outer_schedule"],
                     "outer_next": [outer_entry(self.manifest, v)[1] for v in sorted(set(self.published_versions))]}
@@ -388,6 +422,10 @@ class Coordinator:
             last_seq = json.loads(_metadata(self._path(index)).get("last_seq", "{}"))
             if sequence <= last_seq.get(str(worker), 0):
                 return {"status": "already_merged", "version": version}
+            with self.progress_lock:
+                completed = (self.progress.get("completion") or {}).get(str(worker), {})
+            if completed.get("drained"):
+                raise Conflict("Learner already declared its final updates drained")
             if base_version > version or version - base_version > self.manifest["max_staleness"]:
                 raise Conflict("Stale fragment baseline; fetch current global weights", stale=True)
             try:
@@ -419,7 +457,7 @@ class Coordinator:
                     "tokens": str(tokens),
                 },
             )
-            self._try_merge(index)
+            self._try_merge(index,final=self._all_completion_declared())
             return {"status": "queued", "version": self._version(index)}
 
     def _try_merge(self, index: int, *, final: bool = False) -> None:
@@ -499,7 +537,7 @@ class Coordinator:
         with self.lock:
             for fragment in self.fragments:
                 try:
-                    self._try_merge(fragment.index)
+                    self._try_merge(fragment.index,final=self._all_completion_declared())
                 except Exception as error:
                     errors.append(error)
             self._refresh_published()
@@ -842,6 +880,10 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 if parsed.path == "/v1/lease":
                     value = self._read_json()
                     result = coordinator.lease(int(value["worker"]), str(value["session"]))
+                elif parsed.path == "/v1/completion":
+                    value=self._read_json()
+                    result=coordinator.completion(int(value['worker']),str(value['session']),
+                                                  drained=value['drained'],sequences=value.get('sequences'))
                 elif parsed.path == "/v1/progress":
                     value = self._read_json()
                     result = coordinator.heartbeat(

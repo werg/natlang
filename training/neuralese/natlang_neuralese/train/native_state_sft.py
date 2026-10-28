@@ -3054,7 +3054,10 @@ def _main(argv=None, *, requested_refresh):
     if diloco is not None:
         try:
             if loop_error is None and step == total_end:
-                diloco.finish()
+                diloco.declare_completion(drained=False)
+                if not diloco.finish(stop_requested=lambda: policy.signaled):
+                    raise RuntimeError('DiLoCo final local updates were not fully delivered; full-state resume required')
+                diloco.declare_completion(drained=True)
         except BaseException as error:
             loop_error, loop_error_tb = error, error.__traceback__
         finally:

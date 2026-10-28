@@ -600,17 +600,11 @@ class DilocoLearner:
                     self.downloads[index] = self.io.submit(self._fetch, index, self.versions[index])
             except RemoteError as exc:
                 if exc.status == 409 and exc.detail.get("stale"):
-                    # Invalidated by staleness: the next pull re-establishes a legitimate baseline.
-                    Path(entry["filename"]).unlink(missing_ok=True)
-                    del self.pending[index]
-                    self.downloads[index] = self.io.submit(self._fetch, index, -1)
+                    # Keep the exact outbox and local history for explicit recovery.
+                    # Dropping this update would falsely report complete exposure.
+                    raise RuntimeError("DiLoCo update became stale; final contribution remains undelivered") from exc
                 elif 400 <= exc.status < 500 and exc.status not in (408, 409, 425, 429) and entry.get("attempts", 0) >= 3:
-                    # Refused for a reason retrying cannot change: drop and rebase on the global.
-                    errors += 1
-                    self.last_error = str(exc)
-                    Path(entry["filename"]).unlink(missing_ok=True)
-                    del self.pending[index]
-                    self.downloads[index] = self.io.submit(self._fetch, index, -1)
+                    raise RuntimeError("DiLoCo update was rejected; contribution remains undelivered") from exc
                 else:
                     errors += 1
                     self._retry_later(entry, steps, exc)
@@ -679,18 +673,26 @@ class DilocoLearner:
             raise RuntimeError(f"DiLoCo coordinator unreachable for too many updates: {self.last_error}")
         return {"updated": int(updated), "pending": len(self.pending), "merges": self.merges, "installs": self.installs}
 
-    def finish(self) -> bool:
+    def declare_completion(self, *, drained: bool) -> None:
+        body={'worker':self.worker,'session':self.session,'drained':drained}
+        if drained:body['sequences']=list(self.sequences)
+        self._with_lease(lambda:self.transport.json('POST','/v1/completion',body))
+
+    def finish(self, *, stop_requested=lambda: False) -> bool:
         """Send the last partial window and wait until it is delivered (bounded).
 
         Progress made after a round that still awaits its merge can be sent
         only once that merge installs, so this waits for it until the deadline.
-        Past the deadline (its peers have finished, so the quorum cannot form),
-        a delivered round counts as handed over: the coordinator's ``close``
-        merges queued rounds however few, and only the steps trained after it
-        stay local. Returns whether every upload was delivered.
+        Returns false rather than claiming delivery when any local window remains unsent.
         """
         deadline = time.monotonic() + 2 * self.manifest["grace_seconds"] + self.settings.timeout_seconds
         clock = self.local_steps
+        def peer_steps():
+            status=self.transport.json('GET','/v1/status')
+            return {worker:int(value.get('steps',0)) for worker,value in status.get('worker_progress',{}).items()
+                    if worker!=str(self.worker)}
+        try:peers=peer_steps()
+        except (OSError,TimeoutError,ValueError,RemoteError):peers={}
         while True:
             clock += 1
             self._collect_uploads(clock)
@@ -699,13 +701,19 @@ class DilocoLearner:
                 self._queue(index)
             expired = time.monotonic() > deadline
             unsent = [i for i in range(len(self.fragments)) if self._flushable(i)]
-            if not self.pending and (not unsent or expired and set(unsent) <= self.awaiting_global):
-                if unsent:
-                    print(f"DiLoCo: steps after {len(unsent)} rounds awaiting a quorum stay local", flush=True)
+            if not self.pending and not unsent:
                 return True
-            if expired:
-                print("DiLoCo final round not fully delivered before the deadline", flush=True)
+            if stop_requested():
                 return False
+            if expired:
+                try:current=peer_steps()
+                except (OSError,TimeoutError,ValueError,RemoteError):current={}
+                if any(steps>peers.get(worker,0) for worker,steps in current.items()):
+                    peers=current
+                    deadline=time.monotonic()+2*self.manifest["grace_seconds"]+self.settings.timeout_seconds
+                else:
+                    print("DiLoCo final round not fully delivered; peers made no observed progress", flush=True)
+                    return False
             time.sleep(0.2)
 
     def state_dict(self) -> dict:
