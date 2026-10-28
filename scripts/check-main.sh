@@ -129,7 +129,7 @@ if [ $python = 1 ]; then
     step python-setup python_setup_error "$python_error"
   elif [ $quick = 1 ]; then
     step python-ratchets env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider tests/test_machine_paths_ratchet.py \
-      tests/test_duplicate_helpers_ratchet.py tests/test_check_spec_links.py tests/neuralese/test_line_parity.py
+      tests/test_duplicate_helpers_ratchet.py tests/test_check_spec_links.py
   else
     # Two processes: one pytest over everything grows past 18 GB.
     # Name the active test and dump stacks on a long wait; faulthandler does not

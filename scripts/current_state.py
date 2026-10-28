@@ -7,7 +7,7 @@ The page replaces the hand-written handover logs: plans/neuralese/HANDOVER.md (D
 1. the coordination status pages (`scripts/coord.py status`, both machines);
 2. running units on this machine (the memory ledger's claims plus `natlang-*` systemd user units), with the
    recipe each one runs;
-3. the declared lineages in training/neuralese/line-parity.json and the recipes on disk;
+3. the recipes on disk;
 4. the corpus registry training/neuralese_corpora.json (counts only);
 5. open coordination requests to the machine and the latest decisions.
 
@@ -95,31 +95,6 @@ def units():
     return found
 
 
-def first_sentence(text, limit=220):
-    text = ' '.join((text or '').split())
-    end = text.find('. ')
-    text = text[:end + 1] if 0 < end < limit else text
-    return text if len(text) <= limit else text[:limit - 1] + '…'
-
-
-def lineages():
-    parity = json.loads((REPO / 'training/neuralese/line-parity.json').read_text())
-    recipes = REPO / 'training/neuralese/recipes'
-    rows = []
-    for stage, entry in parity.get('stages', {}).items():
-        for line, spec in sorted((entry.get('lines') or {}).items()):
-            name = spec.get('recipe')
-            chain, description = [], ''
-            current = name
-            while current and (recipes / f'{current}.json').exists() and current not in chain:
-                chain.append(current)
-                data = json.loads((recipes / f'{current}.json').read_text())
-                description = description or data.get('description', '')
-                current = data.get('extends')
-            rows.append((stage, line, name, ' → '.join(chain[1:]), first_sentence(description)))
-    return rows
-
-
 def registry():
     corpora = json.loads((REPO / 'training/neuralese_corpora.json').read_text())['corpora']
     live = [c for c in corpora if not c.get('retired')]
@@ -170,10 +145,6 @@ def render(machine, now):
             out.append(f"| `{name}` | {unit.get('priority') or ''} | {budget} | {unit['recipe'] or ''} |")
     else:
         out.append('Nothing running.')
-    out += ['', '## Declared lineages (training/neuralese/line-parity.json: next launch per line)', '',
-            '| Stage | Line | Recipe | Extends | Description |', '| --- | --- | --- | --- | --- |']
-    for stage, line, name, chain, description in lineages():
-        out.append(f'| {stage} | {line} | `{name}` | {chain} | {description} |')
     recipes = sorted(p.stem for p in (REPO / 'training/neuralese/recipes').glob('*.json'))
     out += ['', f'Recipes on disk ({len(recipes)}): ' + ', '.join(f'`{r}`' for r in recipes), '']
     total, admitted, owners = registry()

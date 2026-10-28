@@ -122,15 +122,15 @@ def test_hash_is_canonical_over_resolved_content_and_stable(tmp_path):
 
 def test_resolve_cli_prints_recipe_and_hash(tmp_path):
     out = subprocess.run([sys.executable, '-m', 'natlang_neuralese.train.recipe', 'resolve',
-                          'native-state-production-mellum-20261015-v1'],
+                          'native-state-production-lfm-20261015-v1'],
                          capture_output=True, text=True, check=True, cwd=ROOT,
                          env={**__import__('os').environ, 'PYTHONPATH': str(ROOT / 'training/neuralese')}).stdout
     lines = out.strip().splitlines()
     summary = json.loads(lines[-1])
     recipe = json.loads('\n'.join(lines[:-1]))
     assert summary['recipe_sha256'] == canonical_json_sha256_hex(recipe) and summary['inherits'] is True
-    assert recipe['id'] == 'native-state-production-mellum-20261015-v1'
-    assert recipe['stages'] == load_recipe(RECIPES / 'native-state-production-mellum-20261015-v1.json')['stages']
+    assert recipe['id'] == 'native-state-production-lfm-20261015-v1'
+    assert recipe['stages'] == load_recipe(RECIPES / 'native-state-production-lfm-20261015-v1.json')['stages']
 
 
 def test_stages_added_insert_after_a_named_stage(tmp_path):

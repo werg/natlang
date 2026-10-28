@@ -192,7 +192,7 @@ def _mm(a, rows, weights: Weights, plan: Plan, transpose: bool) -> torch.Tensor:
     # W[inner, outer]: forward inner = column (k), outer = row (n); transposed the other way round.
     inner, outer = (codes.stride(2), codes.stride(1)) if not transpose else (codes.stride(1), codes.stride(2))
     # Training-sized plans (128-row blocks): the kernel is bound by streaming each expert's int8 codes once per row
-    # block, so larger blocks win; tiles measured on the GB10 for Maple's projections (scripts/bench_maple_moe.py,
+    # block, so larger blocks win; tiles measured on the GB10 for Maple's projections (a retired Maple MoE bench,
     # 6270 tokens, top-8 of 256): 1.4-2.4x the earlier 64-row tiling.
     if plan.block >= 128:
         BM, BN, BK, tuning = (plan.block, 64, 32, dict(num_warps=8, num_stages=2)) if not transpose and K <= 512 else \
@@ -301,7 +301,7 @@ def _fused(fn):
 
 
 # Performance work on a live run: creating this file (e.g. via `docker exec`) saves the next training-sized call's
-# inputs, routing and expert weights to NATLANG_MAPLE_MOE_DUMP_DIR for scripts/bench_maple_moe.py --dump.
+# inputs, routing and expert weights to NATLANG_MAPLE_MOE_DUMP_DIR for offline MoE benchmarking.
 _DUMP_REQUEST = os.environ.get('NATLANG_MAPLE_MOE_DUMP_REQUEST', '/tmp/natlang-moe-dump-request')
 
 

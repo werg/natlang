@@ -3,7 +3,6 @@
     "scripts/build_code_skill_episodes.py",
     "scripts/consolidate_dgx_checkout.py",
     "scripts/coord.py",
-    "scripts/maple_llamacpp_parity.py",
     "scripts/memory_ledger.py",
     "scripts/neuralese_data/agents.py",
     "scripts/neuralese_data/bgkit.py",
