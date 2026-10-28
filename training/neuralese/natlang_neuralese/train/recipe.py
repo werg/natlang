@@ -37,7 +37,7 @@ HANDLERS = {
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request', 'withdrawn_native_graphs', 'retired_native_withdrawal', 'standalone_diloco_parent', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request', 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
@@ -347,6 +347,9 @@ def _bind_native_source_dependencies(inputs, *, source_route=None):
     if 'pending_native_sources' in inputs:
         from .native_pending_sources import pending_source_dependencies
         inputs['pending_native_sources']['dependencies'] = pending_source_dependencies(inputs['pending_native_sources']['path'])
+    if 'retired_native_withdrawal_set' in inputs:
+        from .native_continuation import retired_withdrawal_set_dependencies
+        inputs['retired_native_withdrawal_set']['dependencies'] = retired_withdrawal_set_dependencies(inputs['retired_native_withdrawal_set']['path'])
     for withdrawal_role in ('withdrawn_native_graphs', 'retired_native_withdrawal'):
       if withdrawal_role in inputs:
         proof=Path(inputs[withdrawal_role]['path'])
@@ -409,7 +412,7 @@ def stage_input_args(resolved, kind, *, target='portable'):
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'native_graphs', 'held_native_graphs', 'continued_native_graphs',
                  'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request',
-                 'withdrawn_native_graphs', 'retired_native_withdrawal', 'standalone_diloco_parent', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction',
+                 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction',
                  'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
@@ -870,11 +873,22 @@ def _data_continuation(old, new):
         if new.get(withdrawal) is not None and not all(new[withdrawal].get(key) for key in ('path','sha256','binding')):
             return False
         retired='retired_native_withdrawal'
+        retired_set='retired_native_withdrawal_set'
         if old.get(withdrawal) is not None and new.get(withdrawal) is None:
-            if not isinstance(new.get(retired),dict) or any(
+            if new.get(retired_set) is not None and new.get(retired) is None:
+                from .native_continuation import retired_withdrawal_set_dependencies
+                try:
+                    proofs=retired_withdrawal_set_dependencies(new[retired_set]['path'])[::2]
+                    expected=[]
+                    if old.get(retired_set):expected.extend(retired_withdrawal_set_dependencies(old[retired_set]['path'])[::2])
+                    if old.get(retired):expected.append(old[retired])
+                    expected.append(old[withdrawal])
+                    if {(x['path'],x['sha256']) for x in proofs}!={(x['path'],x['sha256']) for x in expected}:return False
+                except (OSError,ValueError,KeyError,TypeError):return False
+            elif old.get(retired_set) or old.get(retired) or not isinstance(new.get(retired),dict) or any(
                 new[retired].get(k)!=old[withdrawal].get(k) for k in ('path','sha256')):
                 return False
-        elif old.get(retired) != new.get(retired):
+        elif old.get(retired) != new.get(retired) or old.get(retired_set)!=new.get(retired_set):
             return False
         classification='source_classification_migration'
         classification_changed=old.get(classification)!=new.get(classification)
@@ -885,7 +899,7 @@ def _data_continuation(old, new):
             if old.get(standalone) is not None or not all(
                     new.get(standalone, {}).get(k) for k in ('path', 'sha256', 'binding')):
                 return False
-        excluded = set(roles) | {'continued_' + role for role in roles} | {foundation,withdrawal,retired,standalone}
+        excluded = set(roles) | {'continued_' + role for role in roles} | {foundation,withdrawal,retired,retired_set,standalone}
         if classification_changed:excluded.add(classification)
         return changed and {k: v for k, v in old.items() if k not in excluded} == {
             k: v for k, v in new.items() if k not in excluded}
