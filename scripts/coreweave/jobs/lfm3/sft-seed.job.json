@@ -11,7 +11,7 @@
   "gpu": 1,
   "memory": "48Gi"
  },
- "lifetime_hours": 8,
+ "lifetime_hours": 720,
  "scratch": {
   "path": "/work",
   "size": "300Gi"
