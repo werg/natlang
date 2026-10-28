@@ -1443,7 +1443,8 @@ export class NativeToolAgent {
               throw error;
             }
           } } : {}) } : undefined;
-        const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
+        const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId,
+          invocation_role: callId === session.runtime.options.runId ? 'root' as const : 'child' as const } : {}), ...(adapters.length ? { adapters } : {}),
           ...(session.executionOccurrence() ? { native_execution_occurrence: session.executionOccurrence() } : {}),
           ...(template ? { template } : {}),
           ...(this.options.guidance && supportsGuidance(this.driver) ? { guidance: this.options.guidance } : {}),

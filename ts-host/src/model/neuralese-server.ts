@@ -521,6 +521,13 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const recorder=activeRecorder();
     const nativeRecording=(!!recorder||scopedNativeStates.length>0)&&(capabilities?.native_state as {enabled?:boolean}|undefined)?.enabled===true;
     if(nativeRecording)body={...body,x_natlang_native_recording:true};
+    if(body.x_natlang_privileged_context){
+      // JOLT+ teacher attempt: the server renders this invocation's block; it needs the invocation's root/child role.
+      if(!meta?.invocation_id||!meta.invocation_role)
+        throw new Error('privileged-context-invocation: a JOLT+ teacher attempt needs each model turn\'s invocation and its root/child role');
+      body={...body,x_natlang_privileged_context:{...(body.x_natlang_privileged_context as Json),
+        invocation:{name:meta.invocation_id,role:meta.invocation_role}}};
+    }
     if(Array.isArray(capabilities?.capabilities)&&capabilities.capabilities.includes('native.protocol-recovery'))body={...body,x_natlang_native_protocol_recovery:true};
     if (body.guidance && capabilities && !serves(capabilities, 'guidance'))
       throw Object.assign(new Error('neuralese-guidance-unavailable: this model server does not implement the requested guidance; use a server with guidance support'), { code: 'neuralese-guidance-unavailable' });

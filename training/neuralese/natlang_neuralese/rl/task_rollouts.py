@@ -410,6 +410,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
             emitted.append({"schema": "natlang.rollout/1", "round": round_, "task_id": task["id"],
                             "family": task.get("family"), "group": entry["group"], "sample": entry["sample"],
                             "seed": entry["seed"], "split": task.get("split"),
+                            **({"jolt_role": entry["jolt_role"]} if "jolt_role" in entry else {}),
                             "policy": {"temperature": entry.get("temperature"),
                                 "checkpoint_sha256": preparation.get("policy_checkpoint_sha256"),
                                 "endpoint": entry.get("rl_endpoint")},
@@ -424,10 +425,12 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
         rollouts.append({"task_id": task["id"], "family": task.get("family"), "group": entry["group"],
                          "sample": entry["sample"], "seed": entry["seed"], "outcome": outcome,
                          "reward": reward, "detail": detail if isinstance(detail, str) else None,
-                         "finish_status": (finishes.get(entry["key"]) or {}).get("status")})
+                         "finish_status": (finishes.get(entry["key"]) or {}).get("status"),
+                         **({"jolt_role": entry["jolt_role"]} if "jolt_role" in entry else {})})
     groups = []
     for index, task in enumerate(packet):
-        members = [r for r in rollouts if r["group"] == index]
+        # Group statistics and routes describe the student policy; privileged teacher attempts are reported apart.
+        members = [r for r in rollouts if r["group"] == index and r.get("jolt_role", "student") == "student"]
         advantages, stats = group_advantages([r["reward"] for r in members])
         for member, advantage in zip(members, advantages):
             member["advantage"] = advantage

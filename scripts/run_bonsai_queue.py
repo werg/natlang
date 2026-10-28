@@ -749,8 +749,12 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 command += ['--chat-completions-url', chat_completions_url]
             if api_key_env:
                 command += ['--api-key-env', api_key_env]
-            if chat_request_config is not None:
-                command += ['--chat-request-config', str(chat_request_config)]
+            # A JOLT+ teacher attempt carries its own controls (its world's privileged context).
+            entry_config = entry.get('chat_request_config', chat_request_config)
+            if entry_config is not None:
+                if not isinstance(json.loads(Path(entry_config).read_text()), dict):
+                    raise ValueError(f'entry chat_request_config must be a JSON object: {entry.get("key")}')
+                command += ['--chat-request-config', str(Path(entry_config).resolve())]
         elif not provider:
             command += ['--kv-tokens', '40000']
         if remote:

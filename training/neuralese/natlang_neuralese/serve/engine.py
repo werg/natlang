@@ -79,9 +79,10 @@ class GenerationRequest:
     # Score-centered RL: also record the sampler's top-k log-probs per sampled
     # position (common.sampling behaviour top-k receipt). None records none.
     rl_top_k: int | None = None
-    # JOLT+ teacher attempt: a rl.privileged_context block {'insert_at', 'token_ids'} inserted at its declared
-    # own-token index of the rendered prompt and marked 'privileged' in the capture (privileged_scoring.student_form).
-    privileged_block: dict | None = None
+    # JOLT+ teacher attempt: {'schema': 'natlang.privileged-request/1', 'custody', 'facts', 'invocation': {name,
+    # role}}. The engine renders this invocation's rl.privileged_context block from its own prompt (the learner's
+    # rendering and selection), inserts it at its declared own-token index and marks it 'privileged' in the capture.
+    privileged_context: dict | None = None
     native_recording: bool = False
     native_state_modes: dict | None = None
 
@@ -285,6 +286,44 @@ class Engine:
             names.update(t.content for t in self.tokenizer.added_tokens_decoder.values() if t.special)
             found = self._specials = tuple(sorted(n for n in names if n))
         return found
+
+    def _privileged_rendering(self):
+        rendering = getattr(self, '_privileged_rendering_cache', None)
+        if rendering is None:
+            from types import SimpleNamespace
+            from ..data.render import Renderer
+            from ..rl.privileged_context import PrivilegedRendering
+            from .chat import tokenizer_model_type
+            renderer = Renderer(self.tokenizer, SimpleNamespace(open_id=self.role_tokens.produce_open,
+                                                                close_id=self.role_tokens.produce_close))
+            rendering = PrivilegedRendering.from_renderer(renderer, template=tokenizer_model_type(self.tokenizer),
+                tokenizer_fingerprint=self.native_identity['tokenizer_fingerprint'])
+            self._privileged_rendering_cache = rendering
+        return rendering
+
+    def _privileged_block(self, request, plan):
+        """This invocation's JOLT+ privileged block, rendered exactly as the learner rebuilds it (None: no fact fits)."""
+        from ..rl.privileged_context import Fact, render_block
+        context = request.privileged_context
+        invocation = context.get('invocation') if isinstance(context, dict) else None
+        if (not isinstance(context, dict) or set(context) != {'schema', 'custody', 'facts', 'invocation'}
+                or context['schema'] != 'natlang.privileged-request/1' or not isinstance(context['custody'], dict)
+                or not isinstance(context['facts'], list) or not isinstance(invocation, dict)
+                or set(invocation) != {'name', 'role'} or not isinstance(invocation['name'], str)
+                or invocation['role'] not in ('root', 'child')):
+            raise RequestError('bad-request', 'x_natlang_privileged_context needs schema, custody, facts and the '
+                               'invocation {name, role}')
+        try:
+            facts = tuple(Fact(item['id'], item['kind'], item['text'], item.get('invocation'),
+                               tuple(item.get('match') or ())) for item in context['facts'])
+        except (KeyError, TypeError) as error:
+            raise RequestError('bad-request', 'privileged facts are {id, kind, text, invocation?, match?}') from error
+        own = [token for kind, value in plan if kind == 'tokens' for token in value]
+        text = '\n'.join(message['content'] for message in request.messages or []
+                         if isinstance(message, dict) and isinstance(message.get('content'), str))
+        block = render_block(self._privileged_rendering(), invocation={**invocation, 'text': text}, token_ids=own,
+                             facts=facts, custody_receipt=context['custody'])
+        return {'insert_at': block.insert_at, 'token_ids': list(block.token_ids)} if block.token_ids else None
 
     def _prompt_plan(self, messages, tools) -> list:
         """Render and tokenize on the caller's CPU thread; preserve segment boundaries."""
@@ -578,8 +617,10 @@ class Engine:
                 template_prefix, template_suffix = self._tokens(prefix), self._tokens(suffix)
                 seq.native_template_value_type = value_type
         plan = list(seq.prompt_plan or ())
-        if seq.request.privileged_block is not None:
-            plan = _insert_privileged(plan, seq.request.privileged_block)
+        if seq.request.privileged_context is not None:
+            block = self._privileged_block(seq.request, plan)
+            if block is not None:
+                plan = _insert_privileged(plan, block)
         for kind, value in plan:
             privileged = kind == 'privileged'
             if privileged:

@@ -1,7 +1,9 @@
 /** Model-turn contract shared by model transports and the interpreter's tool agent. */
 /** temperature is omitted unless the application configures one; the model's server keeps its own sampling. */
 /** Invocation identity is collector metadata; transports do not send it as model input. */
-export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; tools: unknown[]; temperature?: number;
+export type ModelTurnRequest = { invocation_id?: string;
+  /** Collector metadata: whether the invocation is the run's root call or a child call (JOLT+ privileged context). */
+  invocation_role?: 'root' | 'child'; messages: unknown[]; tools: unknown[]; temperature?: number;
   seed: number | null; max_tokens: number | null;
   /** "required": the reply must be a tool call (a turn that offers exactly the tool it must use). Default "auto". */
   tool_choice?: 'auto' | 'required';

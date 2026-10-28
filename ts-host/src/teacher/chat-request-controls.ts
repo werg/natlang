@@ -5,7 +5,7 @@ export function chatRequestControls(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('chat request controls must be an object');
   const controls = value as Record<string, unknown>;
   const allowed = ['max_tokens', 'top_p', 'top_k', 'min_p', 'chat_template_kwargs', 'repetition_penalty', 'reasoning_effort',
-    'x_natlang_adapters', 'x_natlang_rl_capture', 'x_natlang_rl_top_k', 'x_natlang_privileged_block', 'x_natlang_native_protocol_recovery', 'guidance',
+    'x_natlang_adapters', 'x_natlang_rl_capture', 'x_natlang_rl_top_k', 'x_natlang_privileged_context', 'x_natlang_native_protocol_recovery', 'guidance',
     'x_natlang_native_coefficient_policy'];
   if (Object.keys(controls).some(key => !allowed.includes(key))) throw new Error('unsupported chat request control');
   if (controls.x_natlang_rl_capture !== undefined && typeof controls.x_natlang_rl_capture !== 'boolean')
@@ -15,12 +15,13 @@ export function chatRequestControls(value: unknown): Record<string, unknown> {
   if (controls.x_natlang_rl_top_k !== undefined && (!Number.isSafeInteger(controls.x_natlang_rl_top_k) ||
       Number(controls.x_natlang_rl_top_k) < 0 || Number(controls.x_natlang_rl_top_k) > 4096 || controls.x_natlang_rl_capture !== true))
     throw new Error('x_natlang_rl_top_k must be an integer in [0, 4096] alongside x_natlang_rl_capture: true');
-  // JOLT+ teacher attempts: a rl/privileged_context block {insert_at, token_ids} (serve/http.py), verified by the learner.
-  const block = controls.x_natlang_privileged_block as { insert_at?: unknown; token_ids?: unknown } | undefined;
-  if (block !== undefined && (!block || typeof block !== 'object' || !Number.isSafeInteger(block.insert_at) ||
-      !Array.isArray(block.token_ids) || !block.token_ids.length || !block.token_ids.every(Number.isSafeInteger) ||
-      Object.keys(block).length !== 2 || controls.x_natlang_rl_capture !== true))
-    throw new Error('x_natlang_privileged_block must be {insert_at, token_ids} alongside x_natlang_rl_capture: true');
+  // JOLT+ teacher attempts: the world's custody-checked privileged facts (rl/privileged_context). The native server
+  // renders each invocation's block from its own prompt; the transport adds the invocation's name and root/child role.
+  const context = controls.x_natlang_privileged_context as { schema?: unknown; custody?: unknown; facts?: unknown } | undefined;
+  if (context !== undefined && (!context || typeof context !== 'object' || context.schema !== 'natlang.privileged-request/1' ||
+      !context.custody || typeof context.custody !== 'object' || !Array.isArray(context.facts) || !context.facts.length ||
+      Object.keys(context).length !== 3 || controls.x_natlang_rl_capture !== true))
+    throw new Error('x_natlang_privileged_context must be {schema: natlang.privileged-request/1, custody, facts} alongside x_natlang_rl_capture: true');
   if (controls.x_natlang_native_protocol_recovery !== undefined && typeof controls.x_natlang_native_protocol_recovery !== 'boolean')
     throw new Error('x_natlang_native_protocol_recovery must be boolean');
   if (controls.guidance !== undefined && controls.guidance !== false)

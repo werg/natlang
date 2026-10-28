@@ -410,9 +410,11 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
-            behavior_top_k=None):
+            behavior_top_k=None, teacher_attempts=0):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
-    actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged."""
+    actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
+    ``teacher_attempts`` JOLT+ teacher attempts per group follow the scored student attempts: the same actor samples
+    with each invocation's privileged block (rl.jolt.teacher_entries); rows are tagged ``jolt_role: teacher``."""
     if control is not None and control.stop.requested:
         raise InterruptedError('collection stop requested')
     if not endpoints or workers < 1:
@@ -439,6 +441,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         coefficient_runtime=runtime_binding(json.loads(coefficient_policy.read_text()),coefficient_policy)
         binding['coefficient_policy']={'path':str(coefficient_policy),'sha256':sha256_file_hex(coefficient_policy),'runtime':coefficient_runtime}
     receipt = out / 'collection-binding.json'
+    if teacher_attempts and not (receipt.exists() and json.loads(receipt.read_text()) == binding):
+        # A collection bound before teacher attempts existed keeps its recorded behaviour.
+        binding['jolt_teacher_attempts'] = teacher_attempts
+    elif receipt.exists():
+        teacher_attempts = 0
     if receipt.exists():
         if json.loads(receipt.read_text()) != binding:
             raise ValueError('RL collection resume policy/cases/sampling/runtime changed')
@@ -484,25 +491,44 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     # A partial response is not usable without its exact communication inputs.
     # Authenticate and hydrate the full archive before any collector can replay.
     retained_artifacts(restore=True)
+    phase = {'entries': entries, 'name': ''}
     def worker(index):
-        queue = directory / f'queue-{index}.jsonl'
-        journal = directory / f'journal-{index}.jsonl'
+        queue = directory / f"queue-{phase['name']}{index}.jsonl"
+        journal = directory / f"journal-{phase['name']}{index}.jsonl"
         endpoint = endpoints[index % len(endpoints)].rstrip('/')
-        for entry in entries[index::workers]:
+        selected = phase['entries'][index::workers]
+        for entry in selected:
             entry['rl_endpoint'] = endpoint
-        queue.write_text(''.join(json.dumps(e) + '\n' for e in entries[index::workers]))
+        queue.write_text(''.join(json.dumps(e) + '\n' for e in selected))
         command = [sys.executable, str(root('repo') / 'scripts/run_bonsai_queue.py'), str(queue), str(journal),
             '--runtime', str(runtime), '--server', endpoint, '--chat-completions-url', endpoint + '/v1/chat/completions',
             '--model-id', 'natlang-rl', '--model-concurrency', '1', '--chat-request-config', str(config)]
         if neuralese_server:
             command.append('--neuralese-server')
-        with (directory / f'worker-{index}.log').open('a') as log:
+        with (directory / f"worker-{phase['name']}{index}.log").open('a') as log:
             code = _run_collector(command, log, control,
-                custody_receipt=directory/f'worker-{index}-process-custody.json')
+                custody_receipt=directory/f"worker-{phase['name']}{index}-process-custody.json")
         return {'worker': index, 'returncode': code, 'journal': str(journal)}
+    def write_journal_and_queue():
+        (out / 'journal.jsonl').write_text(''.join(Path(r['journal']).read_text()
+            for r in results if Path(r['journal']).exists()))
+        (out / 'queue.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in entries))
+    teachers = {'entries': [], 'refusal': None}
     try:
         with ThreadPoolExecutor(max_workers=workers) as pool:
             results = list(pool.map(worker, range(workers)))
+        if teacher_attempts and not (control and control.stop.requested):
+            from .jolt import teacher_entries
+            write_journal_and_queue()
+            score(out, out / 'student-rollouts.jsonl')
+            teachers = teacher_entries(entries, list(read_jsonl(out / 'student-rollouts.jsonl')),
+                                       cases=Path(cases), config=config, out=out, attempts=teacher_attempts,
+                                       seed_base=seed_base)
+            if teachers['entries']:
+                entries.extend(teachers['entries'])
+                phase.update(entries=teachers['entries'], name='teacher-')
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    results += list(pool.map(worker, range(workers)))
     except BaseException as collection_error:
         try:
             retained_artifacts()
@@ -513,10 +539,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         # This also runs after cooperative interruption, before the caller can
         # retire the actor and lose newly produced, unscored partial artifacts.
         retained_artifacts()
-    (out / 'journal.jsonl').write_text(''.join(Path(r['journal']).read_text()
-        for r in results if Path(r['journal']).exists()))
-    (out / 'queue.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in entries))
+    write_journal_and_queue()
     report = score(out, out / 'rollouts.jsonl')
+    if teacher_attempts:
+        report['jolt_teacher_attempts'] = {'requested_per_group': teacher_attempts,
+                                           'entries': len(teachers['entries']), 'refusal': teachers['refusal']}
     from .graph_replay import block_ids, save_bundle
     rollouts = list(read_jsonl(out / 'rollouts.jsonl'))
     if any(block_ids(rollouts)):
@@ -981,7 +1008,9 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     case_seconds=config.get('case_seconds', 600),
                     max_model_requests=config.get('max_model_requests', 128),
                     max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native,
-                    **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}))
+                    **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
+                    teacher_attempts=(config.get('jolt_teacher_attempts', 1)
+                                      if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else 0))
             except InterruptedError:
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)
