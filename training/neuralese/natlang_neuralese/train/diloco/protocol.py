@@ -11,16 +11,19 @@ data uses safetensors, never pickle.
 from __future__ import annotations
 
 import math
+import json
+import os
+import struct
+import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 import torch
-from safetensors.torch import load_file, save
+from safetensors.torch import load_file
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_hex
-from natlang_neuralese.common.jsonio import write_bytes_durable
 
 PROTOCOL = 1
 
@@ -205,11 +208,82 @@ def outer_nesterov(
     return next_theta, velocity
 
 
-def save_tensors(path: str | Path, tensors: dict[str, torch.Tensor], metadata: dict[str, str] | None = None) -> None:
-    """Durably replace a safetensors file (fragments are bounded, so they serialize in memory)."""
+def save_tensors(
+    path: str | Path, tensors: Mapping[str, torch.Tensor], metadata: dict[str, str] | None = None,
+    *, dtype: torch.dtype | None = None,
+) -> None:
+    """Atomically publish safetensors with bounded conversion and dirty-page buffers.
+
+    Seeds span the whole model, unlike wire fragments. Never serialize their
+    payload into a single Python bytes object or convert every tensor at once.
+    ``dtype`` casts each output chunk, leaving mmap-backed source tensors intact.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_bytes_durable(path, save({k: v.detach().cpu().contiguous() for k, v in tensors.items()}, metadata=metadata))
+    codes = {torch.bool: 'BOOL', torch.uint8: 'U8', torch.int8: 'I8',
+             torch.int16: 'I16', torch.int32: 'I32', torch.int64: 'I64',
+             torch.float16: 'F16', torch.bfloat16: 'BF16',
+             torch.float32: 'F32', torch.float64: 'F64'}
+    header: dict[str, Any] = {}
+    if metadata is not None:
+        if not all(isinstance(k, str) and isinstance(v, str) for k, v in metadata.items()):
+            raise ValueError('safetensors metadata must contain strings')
+        header['__metadata__'] = metadata
+    offset = 0
+    for name, tensor in sorted(tensors.items()):
+        if not isinstance(name, str) or name == '__metadata__':
+            raise ValueError('invalid safetensors tensor name')
+        target_dtype = dtype or tensor.dtype
+        if target_dtype not in codes or tensor.layout != torch.strided:
+            raise ValueError('unsupported safetensors tensor dtype or layout')
+        size = tensor.numel() * torch.empty((), dtype=target_dtype).element_size()
+        header[name] = dict(dtype=codes[target_dtype], shape=list(tensor.shape), data_offsets=[offset, offset + size])
+        offset += size
+    encoded = json.dumps(header, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    encoded += b' ' * (-len(encoded) % 8)
+    window = 16 << 20
+    fd, pending = tempfile.mkstemp(prefix=path.name + '.', suffix='.pending', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'wb', buffering=0) as stream:
+            released = 0
+
+            def write(data):
+                nonlocal released
+                view = memoryview(data).cast('B')
+                while len(view):
+                    remaining = window - (stream.tell() - released)
+                    count = stream.write(view[:remaining])
+                    if not count:
+                        raise OSError('safetensors write made no progress')
+                    view = view[count:]
+                    if stream.tell() - released >= window:
+                        os.fdatasync(stream.fileno())
+                        if hasattr(os, 'posix_fadvise'):
+                            os.posix_fadvise(stream.fileno(), released, stream.tell() - released, os.POSIX_FADV_DONTNEED)
+                        released = stream.tell()
+
+            write(struct.pack('<Q', len(encoded)))
+            write(encoded)
+            for name, tensor in sorted(tensors.items()):
+                # Noncontiguous callers need one contiguous tensor, never a
+                # model-wide copy. Native checkpoint parameters are contiguous.
+                flat = tensor.detach().reshape(-1)
+                target_dtype = dtype or tensor.dtype
+                elements = max(1, window // max(tensor.element_size(), torch.empty((), dtype=target_dtype).element_size()))
+                for start in range(0, flat.numel(), elements):
+                    chunk = flat[start:start + elements].to(device='cpu', dtype=target_dtype).contiguous()
+                    write(chunk.view(torch.uint8).numpy())
+            os.fsync(stream.fileno())
+            if hasattr(os, 'posix_fadvise'):
+                os.posix_fadvise(stream.fileno(), released, 0, os.POSIX_FADV_DONTNEED)
+        os.replace(pending, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        Path(pending).unlink(missing_ok=True)
 
 
 def load_tensors(path: str | Path) -> dict[str, torch.Tensor]:
