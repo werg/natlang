@@ -87,9 +87,18 @@ class Backend:
         directory=self.out+'/diloco/recovery-fence'
         boxes=[cwctl.read_sandbox(ident) for ident in self.workers]
         # Fail quickly before requesting anything if the actual learner runtime lacks the fence mechanism.
-        for box in boxes:
-            check=box.exec(['test','-f',str(self.repo/'training/neuralese/natlang_neuralese/train/diloco/recovery_fence.py')],timeout_seconds=30).result()
-            if check.returncode:raise FenceUnavailable('worker runtime has no recovery-fence support; explicit runtime handoff required')
+        for worker,box in enumerate(boxes):
+            try:cap=json.loads(box.read_file(directory+'/capabilities.json').result())
+            except Exception:raise FenceUnavailable('worker runtime has no active recovery-fence capability') from None
+            if (cap.get('schema')!='natlang.diloco-recovery-fence/1' or cap.get('worker')!=worker
+                    or cap.get('fingerprint')!=self.fingerprint):
+                raise FenceUnavailable('worker recovery-fence capability belongs to another owner')
+            check=box.exec(['python3','-c',
+                "import json,os,pathlib,sys; o=json.loads(sys.argv[1]); p=pathlib.Path('/proc'); "
+                "sys.exit(not (o['boot_id']==(p/'sys/kernel/random/boot_id').read_text().strip() and "
+                "o['start_ticks']==(p/str(o['pid'])/'stat').read_text().split(') ',1)[1].split()[19]))",
+                json.dumps(cap['owner'])],timeout_seconds=30).result()
+            if check.returncode:raise FenceUnavailable('worker recovery-fence owner is no longer alive')
         try:
             for worker,box in enumerate(boxes):
                 made=box.exec(['mkdir','-p',directory]).result()

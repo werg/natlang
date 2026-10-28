@@ -10,6 +10,14 @@ from ...common.jsonio import write_json_durable
 SCHEMA='natlang.diloco-recovery-fence/1'
 
 
+
+def announce(out, worker, fingerprint):
+    from ..native_resident import process_owner
+    directory=Path(out)/'diloco/recovery-fence';directory.mkdir(parents=True,exist_ok=True)
+    value={'schema':SCHEMA,'worker':worker,'fingerprint':fingerprint,'owner':process_owner()}
+    write_json_durable(directory/'capabilities.json',value)
+    return value
+
 def request(out, worker, fingerprint, *, now=time.time):
     directory=Path(out)/'diloco/recovery-fence';path=directory/'request.json'
     if not path.is_file():return None

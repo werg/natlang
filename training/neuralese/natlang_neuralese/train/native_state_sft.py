@@ -2309,6 +2309,9 @@ def _main(argv=None, *, requested_refresh):
     diloco = attach_learner(args, named, parent_continuation=parent_continuation,
                             saved_state=None if parent_continuation else (resume or {}).get('diloco'))
     checkpoint_options['_diloco_learner'] = diloco
+    if diloco is not None:
+        from .diloco import recovery_fence
+        recovery_fence.announce(args.out, diloco.worker, diloco.manifest['fingerprint'])
     weight_ema = ema_event = None
     ema_eval_mode = 'raw'
     anneal = None

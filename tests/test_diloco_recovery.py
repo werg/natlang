@@ -289,7 +289,8 @@ def test_fence_operator_releases_every_worker_after_capture_or_failure(tmp_path,
         def __init__(self,value=None):self.value=value;self.returncode=0
         def result(self):return self.value if self.value is not None else self
     class Box:
-        def __init__(self,worker):self.worker=worker;self.files={}
+        def __init__(self,worker):
+            self.worker=worker;self.files={'/work/diloco-learner/diloco/recovery-fence/capabilities.json':json.dumps({'schema':'natlang.diloco-recovery-fence/1','worker':worker,'fingerprint':'fingerprint','owner':{'pid':1,'boot_id':'test','start_ticks':'1'}})}
         def exec(self,args,**kwargs):
             if args[0]=='mv':
                 request=json.loads(self.files[args[1]]);self.files[args[2]]=self.files[args[1]]
