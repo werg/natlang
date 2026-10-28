@@ -32,6 +32,8 @@ def load_control(path, record):
     def data(name):return json.loads(Path(bindings[name]['path']).read_text())
     plan=data('plan');argv=data('worker_argv');coord=data('coordinator_argv');settings=data('settings');owner=data('owner_journal')
     paths=control['paths'];out=paths['worker_out'];root=paths['coordinator_root'];runtime=paths['runtime_repo']
+    reserve=control.get('storage_reserve_bytes')
+    if type(reserve) is not int or reserve<0:raise ValueError('direct storage needs an explicit nonnegative reserve')
     for value in (out,root,runtime):
         if not isinstance(value,str) or not value.startswith('/work/') or os.path.normpath(value)!=value:
             raise ValueError('direct recovery paths must be canonical /work paths')
@@ -71,7 +73,7 @@ def load_control(path, record):
     for flag,key,parse in [('--quorum','min_quorum',int),('--max-staleness','max_staleness',int),
                            ('--ema','ema',json.loads),('--outer-schedule','outer_schedule',json.loads)]:
         if flag in coord:manifest_checks[key]=parse(_flag(coord,flag))
-    result={'paths':paths,'control_sha256':sha256_file_hex(path,drop_cache=True),'manifest_checks':manifest_checks,
+    result={'paths':paths,'storage_reserve_bytes':reserve,'control_sha256':sha256_file_hex(path,drop_cache=True),'manifest_checks':manifest_checks,
             'helper_sha256':{key:bindings[key]['sha256'] for key in ('pin_code','archive_code','guard_code','readiness_code','inputs_code')},
             'plan_path':bindings['plan']['path'],'parent':_flag(coord,'--parent'),
             'parent_transfer':control.get('parent_transfer'),

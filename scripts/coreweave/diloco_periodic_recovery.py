@@ -14,6 +14,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -42,17 +43,23 @@ class Backend:
         self.runtime_bundle=Path(runtime_bundle) if runtime_bundle else None
         self.external_hash_cache={}
         self.record,self.storage=record,Path(storage).resolve()
+        self.direct=load_control(direct_control,record) if direct_control else None
+        self.direct_control=Path(direct_control) if direct_control else None
         external=paths.root('data_hdd').resolve()
-        if not external.is_mount() or not self.storage.is_relative_to(external):
+        if self.direct:
+            nvme=paths.root('data_nvme').resolve()
+            if not (self.storage.is_relative_to(nvme) or (external.is_mount() and self.storage.is_relative_to(external))):
+                raise ValueError('direct recovery storage must be on the declared NVMe or mounted external data root')
+            self.storage.mkdir(parents=True,exist_ok=True)
+            self.storage_reserve_bytes=self.direct['storage_reserve_bytes']
+        elif not external.is_mount() or not self.storage.is_relative_to(external):
             raise ValueError('recovery storage must be on the mounted external data root')
         self.external=external
         self.repo=paths.root('repo'); self.helper=Path(__file__).with_name('diloco_recovery_pin.py').read_text()
-        self.parent=record['run']['coordinator']['parent'];self.coordinator=record['coordinator']
+        self.parent=self.direct['parent'] if self.direct else record['run']['coordinator']['parent'];self.coordinator=record['coordinator']
         self.workers=record['learners'];self.out='/work/diloco-learner'
         self.record_path=cwctl.STATE/'diloco'/(record['run']['id']+'.json')
         self.root='/work/diloco-coordinator';self.runtime_repo=self.repo
-        self.direct=load_control(direct_control,record) if direct_control else None
-        self.direct_control=Path(direct_control) if direct_control else None
         if self.direct:
             if not runtime_bundle:raise ValueError('direct recovery requires the exact runtime bundle')
             self.out=self.direct['paths']['worker_out'];self.root=self.direct['paths']['coordinator_root']
@@ -68,7 +75,8 @@ class Backend:
         self.fingerprint=self.manifest['fingerprint']
 
     def verify_ownership(self):
-        if not self.external.is_mount():raise ValueError('external recovery storage is no longer mounted')
+        if self.storage.is_relative_to(self.external) and not self.external.is_mount():
+            raise ValueError('external recovery storage is no longer mounted')
         if self.direct:
             if load_control(self.direct_control,self.record)!=self.direct:
                 raise ValueError('direct recovery control changed; bind a new recovery journal')
@@ -261,6 +269,7 @@ class Backend:
              'CW_EXPORT_EXPECTED_BYTES':str(intent['bytes']),'CW_EXPORT_CACHE_BOUNDED_READS':'1',
              'CW_EXPORT_VERIFY_ON_OWNER':'1','CW_EXPORT_OWNER_DESTINATION':str(dest),
              'CW_EXPORT_RECEIPT_FILE':str(receipt),'CW_EXPORT_LOCAL':'0','CW_EXPORT_TARGET_VERIFIES':'0'}
+        if self.direct:env['CW_EXPORT_OWNER_RESERVE_BYTES']=str(self.storage_reserve_bytes)
         for key in ('CW_EXPORT_SEALED_PIN','CW_EXPORT_VERIFY_EXISTING_ONLY','CW_EXPORT_VERIFIED_LEGACY_READER'):
             env.pop(key,None)
         sandbox=cwctl.read_sandbox(intent['sandbox_id']);made=sandbox.exec(['mkdir','-p','/work/production'],timeout_seconds=30).result(timeout=40)
@@ -340,10 +349,19 @@ class Backend:
                 identity={'sha256':item['sha256'],'bytes':item['bytes']};receipt_ref=item['receipt']
                 if receipt_ref not in self.direct['bindings']:raise ValueError('external dependency receipt is not control-bound')
                 receipt=json.loads(Path(receipt_ref['path']).read_text());validate_receipt(receipt,identity)
-                local=receipt.get('independent_verification',{}).get('local_copy') or {};path=Path(item['local_path'])
+                local=receipt.get('independent_verification',{}).get('local_copy') or {}
+                copy_ref=item.get('copy_receipt')
+                if copy_ref:
+                    if copy_ref not in self.direct['bindings']:raise ValueError('external local-copy receipt is not control-bound')
+                    copied=json.loads(Path(copy_ref['path']).read_text())
+                    if any(copied.get(k)!=v for k,v in identity.items()):raise ValueError('external local-copy identity differs')
+                    local=copied.get('local_copy') or {}
+                path=Path(item['local_path'])
+                if path.is_relative_to(self.external) and not self.external.is_mount():
+                    raise ValueError('external dependency mount is unavailable')
                 if (not receipt.get('verified_at') or local.get('committed') is not True or
                     local.get('sha256')!=identity['sha256'] or local.get('bytes')!=identity['bytes'] or
-                    Path(local.get('path','')).resolve()!=path.resolve() or not path.resolve().is_relative_to(self.external) or
+                    Path(local.get('path','')).resolve()!=path.resolve() or
                     not path.is_file() or path.stat().st_size!=identity['bytes'] or not self.present(receipt)):
                     raise ValueError('external dependency lacks exact local and present private copies')
                 before=path.stat();key=(str(path),before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,identity['sha256'])
@@ -354,12 +372,52 @@ class Backend:
                     if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns):
                         raise ValueError('external dependency changed during hashing')
                     self.external_hash_cache[key]=True
-                external[item['sha256']]={**identity,'local_path':str(path),'receipt':receipt_ref}
+                external[item['sha256']]={**identity,'local_path':str(path),'receipt':receipt_ref,
+                                          **({'copy_receipt':copy_ref} if copy_ref else {})}
                 external_receipts.append({'identity':identity,'receipt':receipt})
         target=self.storage/'dependencies'/(cycle['id']+'-'+uuid.uuid4().hex+'.tar')
         result=seal(bindings,candidates,bundle,sources,target,
-                    runtime_code_sha256=cycle['components']['worker-0']['runtime_code_sha256'],external=external)
+                    runtime_code_sha256=cycle['components']['worker-0']['runtime_code_sha256'],external=external,
+                    **({'reserve_bytes':self.storage_reserve_bytes} if self.direct else {}))
         if external_receipts:result['external_dependencies']=external_receipts
+        return result
+
+    def direct_storage_preflight(self,cycle):
+        """Reserve room for every not-yet-retained component and dependency object."""
+        bundle=self.runtime_bundle;sources=bundle.with_name(bundle.stem+'.sources.json')
+        source_map=json.loads(sources.read_text());manifest=json.loads(bundle.read_text());candidates={}
+        for key,value in source_map.items():candidates.setdefault(key.rsplit('/',1)[-1],[]).append(value)
+        bindings=list(self.direct['bindings'])
+        bindings.extend(declared_bindings(json.loads(Path(self.direct['plan_path']).read_text())))
+        for i in range(len(self.workers)):bindings.extend(cycle['components']['worker-'+str(i)]['required_dependencies'])
+        bindings.extend(cycle['parent_reference'][name] for name in ('pin','receipt','qualification','copy_receipt'))
+        for item in [manifest['code'],*manifest['files']]:
+            bindings.append({'path':item.get('path','@bundle-code'),'sha256':item['sha256'],
+                             'bytes':item['bytes'],'candidate':source_map[item['key']]})
+        external={item['sha256'] for item in self.direct['external_dependencies']};objects={}
+        for item in bindings:
+            sha=item['sha256'];logical=item['path']
+            if sha in external:continue
+            choices=[item.get('candidate'),logical,*candidates.get(sha,[])]
+            if logical.startswith('/work/hf/') and os.environ.get('NATLANG_RECOVERY_HF_CACHE'):
+                choices.append(str(Path(os.environ['NATLANG_RECOVERY_HF_CACHE'])/logical.removeprefix('/work/hf/')))
+            if logical.startswith('/work/mirror/'):choices.append(logical[len('/work/mirror'):])
+            sizes=[Path(value).stat().st_size for value in filter(None,choices) if Path(value).is_file()]
+            if not sizes:raise ValueError('storage preflight cannot resolve dependency '+logical+' '+sha)
+            objects[sha]=max(objects.get(sha,0),*sizes)
+        # Tar framing and the serialized index are included in addition to all object bytes.
+        archive=sum(((size+511)//512)*512+2048 for size in objects.values())+len(json.dumps(bindings))*4+(1<<20)
+        if cycle.get('dependency_intent') and Path(cycle['dependency_intent']['path']).is_file():archive=0
+        components=0
+        for name,item in cycle['components'].items():
+            path=self.storage/'objects'/item['sha256']/Path(item['path']).name
+            if not path.is_file() or path.stat().st_size!=item['bytes'] or sha256_file_hex(path,drop_cache=True)!=item['sha256']:
+                components+=item['bytes']
+        free=shutil.disk_usage(self.storage).free;needed=components+archive
+        result={'available_bytes':free,'reserve_bytes':self.storage_reserve_bytes,'component_bytes':components,
+                'dependency_upper_bound_bytes':archive,'needed_bytes':needed,'scope':'one recovery storage filesystem'}
+        if free<self.storage_reserve_bytes+needed:
+            raise OSError('direct recovery storage preflight: '+json.dumps(result,sort_keys=True))
         return result
 
     def export_dependencies(self,intent):
@@ -605,6 +663,13 @@ def run_once(record,state_path,backend):
         if (len(cycle['components'])==expected_components and not cycle['compatibility']['compatible']):
             cycle['phase']='incompatible-pins';cycle['recovery_blocker']=cycle['compatibility']['reason']
             state['cycles'].append(cycle);state.pop('pending');save();return state
+        if direct and len(cycle['components'])==expected_components and cycle['compatibility']['compatible']:
+            try:
+                if 'parent_reference' not in cycle:cycle['parent_reference']=backend.verify_parent()
+                cycle['storage_preflight']=backend.direct_storage_preflight(cycle)
+                cycle['errors'].pop('storage-preflight',None);save()
+            except Exception as error:
+                cycle['errors']['storage-preflight']=str(error);cycle['phase']='incomplete';save();return state
         # Each pin and actual step/source/runtime identity is durably recorded before its external PUT.
         with ThreadPoolExecutor(max_workers=5) as pool:
             futures={name:pool.submit(backend.export,name,intent) for name,intent in cycle['components'].items()

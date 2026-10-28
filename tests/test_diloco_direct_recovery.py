@@ -39,7 +39,7 @@ def fixture(tmp_path):
                      ('readiness_code','recovery_readiness.py'),('inputs_code','recovery_inputs.py')]:
         path=helper/name;bindings[key]={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
     control={'schema':'natlang.diloco-direct-recovery-control/1','bindings':bindings,
-             'runtime_code_sha256':canonical_json_sha256_hex(code),
+             'runtime_code_sha256':canonical_json_sha256_hex(code),'storage_reserve_bytes':1024,
              'paths':{'worker_out':'/work/out','coordinator_root':'/work/coord','runtime_repo':'/work/runtime'}}
     descriptor=tmp_path/'control.json';descriptor.write_text(json.dumps(control))
     return descriptor,control,recipe_binding,roles
@@ -55,6 +55,20 @@ def test_direct_control_validates_actual_cohort_and_all_launch_bindings(tmp_path
     assert not mod.worker_matches({**worker,'source_receipt_sha256':['bad','b']},actual)
     Path(control['bindings']['worker_argv']['path']).write_text('[]')
     with pytest.raises(ValueError,match='binding differs'):mod.load_control(descriptor,record)
+
+
+def test_real_backend_constructs_from_nonresident_control(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    service=load('diloco_periodic_recovery');mod=load('diloco_direct_recovery');descriptor,_,_,_=fixture(tmp_path)
+    record=mod.record_from_control(descriptor,'run');manifest={'run_id':'run','workers':4,'fingerprint':'actual'}
+    class Future:
+        def result(self,timeout):return json.dumps(manifest)
+    box=SimpleNamespace(read_file=lambda path:Future())
+    monkeypatch.setattr(service.cwctl,'read_sandbox',lambda ident:box)
+    monkeypatch.setattr(service.paths,'root',lambda name:tmp_path if name=='data_nvme' else tmp_path/'external' if name=='data_hdd' else Path(__file__).parents[1])
+    backend=service.Backend(record,tmp_path/'backups',runtime_bundle=tmp_path/'bundle.json',direct_control=descriptor)
+    assert backend.parent=='/work/parent' and backend.out=='/work/out' and backend.root=='/work/coord'
+    assert backend.runtime_repo==Path('/work/runtime') and backend.storage_reserve_bytes==1024
 
 
 def test_direct_fenced_five_component_cycle_has_no_fake_residents(tmp_path):
@@ -78,6 +92,7 @@ def test_direct_fenced_five_component_cycle_has_no_fake_residents(tmp_path):
         def export(self,name,intent):return {'name':name}
         def progress(self,i):return {'global_step':3}
         def verify_parent(self):return {'verified':True}
+        def direct_storage_preflight(self,cycle):return {'available_bytes':100,'needed_bytes':20}
         def prepare_dependencies(self,cycle):assert len(cycle['components'])==5;return {'path':'deps'}
         def export_dependencies(self,intent):return {'name':'deps'}
         def present(self,receipt):return True
@@ -155,7 +170,7 @@ def test_direct_control_bindings_are_recoverable_from_verified_dependency_archiv
 def test_direct_dependency_preparation_includes_checkpoint_sources_and_parent_proofs(tmp_path,monkeypatch):
     service=load('diloco_periodic_recovery');mod=load('diloco_direct_recovery');descriptor,_,_,_=fixture(tmp_path)
     direct=mod.load_control(descriptor,mod.record_from_control(descriptor,'run'))
-    backend=object.__new__(service.Backend);backend.direct=direct;backend.workers=['s0','s1','s2','s3'];backend.storage=tmp_path
+    backend=object.__new__(service.Backend);backend.direct=direct;backend.workers=['s0','s1','s2','s3'];backend.storage=tmp_path;backend.storage_reserve_bytes=1024
     backend.runtime_bundle=tmp_path/'bundle.json';backend.runtime_bundle.write_text('{}')
     (tmp_path/'bundle.sources.json').write_text('{}')
     required=[{'path':'/base','sha256':'a'*64,'kinds':['base-model-file']},
@@ -177,8 +192,8 @@ def test_external_history_requires_verified_local_and_present_private_copies(tmp
              'independent_verification':{**identity,'local_copy':{**identity,'committed':True,'path':str(path)}}}
     rp=tmp_path/'history-receipt.json';rp.write_text(json.dumps(receipt));ref={'path':str(rp),'sha256':hashlib.sha256(rp.read_bytes()).hexdigest()}
     direct['bindings'].append(ref);direct['external_dependencies']=[{**identity,'local_path':str(path),'receipt':ref}]
-    backend=object.__new__(service.Backend);backend.direct=direct;backend.workers=['s0','s1','s2','s3'];backend.storage=tmp_path
-    backend.external=tmp_path;backend.external_hash_cache={};backend.present=lambda receipt:True
+    backend=object.__new__(service.Backend);backend.direct=direct;backend.workers=['s0','s1','s2','s3'];backend.storage=tmp_path;backend.storage_reserve_bytes=1024
+    backend.external=tmp_path/'external';backend.external_hash_cache={};backend.present=lambda receipt:True
     backend.runtime_bundle=tmp_path/'bundle.json';backend.runtime_bundle.write_text('{}');(tmp_path/'bundle.sources.json').write_text('{}')
     required=[{'path':'/base','sha256':'a'*64,'kinds':['base-model-file']},{'path':'/train','sha256':'b'*64,'kinds':['source-manifest']}]
     components={f'worker-{i}':{'required_dependencies':required,'runtime_code_sha256':direct['runtime_code_sha256']} for i in range(4)}
@@ -186,5 +201,34 @@ def test_external_history_requires_verified_local_and_present_private_copies(tmp
     captured={};monkeypatch.setattr(service,'seal',lambda *args,**kwargs:captured.update(kwargs) or {'ok':True})
     result=backend.prepare_dependencies({'id':'cycle','components':components,'parent_reference':parents})
     assert captured['external'][sha]['receipt']==ref and result['external_dependencies'][0]['receipt']==receipt
+    copy=tmp_path/'copy-receipt.json';copy.write_text(json.dumps({**identity,'local_copy':receipt['independent_verification']['local_copy']}))
+    copyref={'path':str(copy),'sha256':hashlib.sha256(copy.read_bytes()).hexdigest()}
+    direct['bindings'].append(copyref);direct['external_dependencies'][0]['copy_receipt']=copyref
+    assert backend.prepare_dependencies({'id':'cycle','components':components,'parent_reference':parents})['external_dependencies']
     path.write_bytes(b'tampered')
     with pytest.raises(ValueError,match='external dependency'):backend.prepare_dependencies({'id':'cycle','components':components,'parent_reference':parents})
+
+
+def test_direct_preflight_accounts_for_all_components_and_dependency_archive(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    service=load('diloco_periodic_recovery');mod=load('diloco_direct_recovery');descriptor,_,_,_=fixture(tmp_path)
+    direct=mod.load_control(descriptor,mod.record_from_control(descriptor,'run'))
+    backend=object.__new__(service.Backend);backend.direct=direct;backend.workers=['s0','s1','s2','s3']
+    backend.storage=tmp_path;backend.storage_reserve_bytes=1000
+    source=tmp_path/'payload';source.write_bytes(b'1234567');runtime=tmp_path/'runtime.tar';runtime.write_bytes(b'code')
+    runtime_sha=hashlib.sha256(runtime.read_bytes()).hexdigest()
+    bundle=tmp_path/'bundle.json';bundle.write_text(json.dumps({'code':{'key':'runtime','sha256':runtime_sha,'bytes':4},'files':[]}))
+    plan=json.loads(Path(direct['plan_path']).read_text())
+    shas={item['sha256'] for item in service.declared_bindings(plan)}|{'f'*64}
+    source_map={sha:str(source) for sha in shas};source_map['runtime']=str(runtime)
+    (tmp_path/'bundle.sources.json').write_text(json.dumps(source_map));backend.runtime_bundle=bundle
+    required=[{'path':'/missing/base','sha256':'f'*64,'kinds':['base-model-file']}]
+    components={f'worker-{i}':{'required_dependencies':required,'path':f'/w{i}','sha256':str(i)*64,'bytes':100} for i in range(4)}
+    components['coordinator']={'path':'/coord','sha256':'9'*64,'bytes':200}
+    parents={name:{'path':str(source),'sha256':hashlib.sha256(source.read_bytes()).hexdigest()} for name in ('pin','receipt','qualification','copy_receipt')}
+    cycle={'components':components,'parent_reference':parents}
+    monkeypatch.setattr(service.shutil,'disk_usage',lambda path:SimpleNamespace(free=1<<30))
+    result=backend.direct_storage_preflight(cycle)
+    assert result['component_bytes']==600 and result['dependency_upper_bound_bytes']>0
+    monkeypatch.setattr(service.shutil,'disk_usage',lambda path:SimpleNamespace(free=1000))
+    with pytest.raises(OSError,match='storage preflight'):backend.direct_storage_preflight(cycle)
