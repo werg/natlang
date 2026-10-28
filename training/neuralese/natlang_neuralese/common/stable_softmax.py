@@ -167,7 +167,12 @@ def softmax(logits, dim=-1, *, policy=None, compute_dtype=None):
 
 
 class _SelectedLogSoftmax(torch.autograd.Function):
-    """log q[ids] with the zero-sum gradient; ids (N, k) may repeat."""
+    """log q[ids] with the zero-sum gradient; ids (N, k) may repeat.
+
+    The first-order path works in place on one owned compute-dtype copy per chunk:
+    ``sp = log1p(sum_{j != argmax} exp(z_j - z_max))`` (accurate to exp underflow).
+    A create_graph backward recomputes through the functional ``_shifted``.
+    """
 
     @staticmethod
     def forward(ctx, z, ids, cdt, rows):
@@ -176,10 +181,17 @@ class _SelectedLogSoftmax(torch.autograd.Function):
         stats = torch.empty((n, 1), dtype=cdt, device=z.device)
         maxima = torch.empty((n, 1), dtype=cdt, device=z.device)
         for start in range(0, n, rows):
-            chunk = z[start:start + rows].to(cdt)
-            shifted, sp, zmax, _ = _shifted(chunk)
-            out[start:start + rows] = shifted.gather(-1, ids[start:start + rows]) - sp
-            stats[start:start + rows], maxima[start:start + rows] = sp, zmax
+            stop = start + rows
+            chunk = z[start:stop].to(cdt, copy=True)
+            zmax, imax = chunk.max(-1, keepdim=True)
+            safe_max = torch.where(torch.isfinite(zmax), zmax, torch.zeros_like(zmax))
+            chunk.sub_(safe_max)
+            picked = chunk.gather(-1, ids[start:stop])
+            chunk.scatter_(-1, imax, float('-inf'))
+            sp = torch.log1p(chunk.exp_().sum(-1, keepdim=True))
+            out[start:stop] = picked - sp
+            stats[start:stop], maxima[start:stop] = sp, safe_max
+            del chunk
         ctx.save_for_backward(z, ids, stats, maxima)
         ctx.rows = rows
         return out
@@ -190,20 +202,29 @@ class _SelectedLogSoftmax(torch.autograd.Function):
         result = _Rows(z)
         grad = grad.to(stats.dtype)
         differentiable = torch.is_grad_enabled()  # create_graph: recompute row statistics through autograd
+        k = ids.shape[-1]
         for start in range(0, z.shape[0], ctx.rows):
             stop = start + ctx.rows
+            w, index = grad[start:stop], ids[start:stop]
+            total = w.sum(-1, keepdim=True)
             if differentiable:
                 shifted, sp, _, _ = _shifted(z[start:stop].to(stats.dtype))
                 logq = shifted - sp
-            else:
-                zmax = maxima[start:stop]
-                safe_max = torch.where(torch.isfinite(zmax), zmax, torch.zeros_like(zmax))
-                logq = (z[start:stop].to(stats.dtype) - safe_max) - stats[start:stop]
-            weight = torch.zeros_like(logq).scatter_add_(-1, ids[start:stop], grad[start:stop])
-            total = grad[start:stop].sum(-1, keepdim=True)
-            # w - q W, with 1 - q = -expm1(log q) exact at a dominant id.
-            g = weight * (-torch.expm1(logq)) - logq.exp() * (total - weight)
-            result.add(g.to(z.dtype))
+                weight = torch.zeros_like(logq).scatter_add(-1, index, w)
+                # w - q W, with 1 - q = -expm1(log q) exact at a dominant id.
+                g = weight * (-torch.expm1(logq)) - logq.exp() * (total - weight)
+                result.add(g.to(z.dtype))
+                continue
+            chunk = z[start:stop].to(stats.dtype, copy=True)
+            chunk.sub_(maxima[start:stop])
+            # Selected entries from the exact-zero shift (precise at the argmax).
+            logq_ids = chunk.gather(-1, index) - stats[start:stop]
+            chunk.sub_(stats[start:stop]).exp_().mul_(-total)  # -q W everywhere
+            mine = w if k == 1 else ((index[:, :, None] == index[:, None, :]) * w[:, None, :]).sum(-1)
+            precise = mine * (-torch.expm1(logq_ids)) - logq_ids.exp() * (total - mine)
+            chunk.scatter_(-1, index, precise)
+            result.add(chunk.to(z.dtype))
+            del chunk
         return result.result(), None, None, None
 
 
@@ -296,7 +317,7 @@ def cross_entropy(logits, labels, *, weights=None, ignore_index=-100, reduction=
 _KINDS = ('forward_kl', 'soft_ce', 'reverse_kl', 'jsd')
 
 
-def _divergence_chunk(zs, zt, kind, beta, need_grad):
+def _divergence_chunk(zs, zt, kind, beta, need_grad, need_value=None):
     """Per-row value and (optionally) the fixed gradient w.r.t. student logits.
 
     zs, zt: (n, V) in the compute dtype; zt may be -inf outside the teacher support.
@@ -310,7 +331,8 @@ def _divergence_chunk(zs, zt, kind, beta, need_grad):
     both = support & student
     delta = torch.where(both, zs - zt, zero)
     value = grad = None
-    need_r = kind != 'reverse_kl' or not need_grad
+    need_value = (not need_grad) if need_value is None else need_value
+    need_r = kind != 'reverse_kl' or need_value
     if kind in ('forward_kl', 'soft_ce', 'jsd') or need_r:
         # r = log(q / p) on the support, centred under p (cancellation-free).
         mu = (p * delta).sum(-1, keepdim=True)
@@ -329,7 +351,9 @@ def _divergence_chunk(zs, zt, kind, beta, need_grad):
         r = torch.where(both, d - c, torch.where(support, torch.full_like(d, float('-inf')),
                                                  torch.full_like(d, float('inf'))))
     if kind in ('forward_kl', 'soft_ce'):
-        if kind == 'forward_kl':
+        if not need_value:
+            pass
+        elif kind == 'forward_kl':
             value = c - (p * d).sum(-1, keepdim=True)
             value = torch.where((support & ~student).any(-1, keepdim=True), torch.full_like(value, float('inf')), value)
         else:
@@ -345,26 +369,102 @@ def _divergence_chunk(zs, zt, kind, beta, need_grad):
         if need_r:
             value = (q * torch.where(student, r, zero)).sum(-1, keepdim=True)
     else:  # jsd: beta KL(p||m) + (1-beta) KL(q||m), m = beta p + (1-beta) q
-        h = -torch.log1p(beta * torch.expm1(-r))  # log(q / m); -log(1-beta) off the teacher support
+        h = _jsd_h(r, beta)  # log(q / m); -log(1-beta) off the teacher support
         h = torch.where(student, h, zero)
         hp = torch.where(both, h - r, zero)  # log(p / m) where both exist
         hp = torch.where(support & ~student, torch.full_like(hp, -math.log(beta)), hp)
-        value = beta * (p * hp).sum(-1, keepdim=True) + (1 - beta) * (q * h).sum(-1, keepdim=True)
+        if need_value:
+            value = beta * (p * hp).sum(-1, keepdim=True) + (1 - beta) * (q * h).sum(-1, keepdim=True)
         if need_grad:
             grad = (1 - beta) * q * (h - (q * h).sum(-1, keepdim=True))
     return (None if value is None else value[:, 0]), grad
+
+
+def _rowdot(a, b):
+    return torch.linalg.vecdot(a, b).unsqueeze(-1)
+
+
+def _log_normalizer(p, d, zt):
+    """c = log E_p[exp d] = log1p(E_p[expm1 d]) for d centred under p; log-domain fallback far from agreement."""
+    c = torch.log1p(_rowdot(p, torch.expm1(d)))
+    if not bool(torch.isfinite(c).all()):
+        fallback = torch.logsumexp(torch.log_softmax(zt, -1) + d, -1, keepdim=True)
+        c = torch.where(torch.isfinite(c), c, fallback)
+    return c
+
+
+def _jsd_h(r, beta):
+    """log(q / m) = -log1p(beta expm1(-r)), m = beta p + (1-beta) q; log-domain where q << p."""
+    h = -torch.log1p(beta * torch.expm1(-r))
+    far = -torch.logaddexp(math.log(beta) - r, torch.full_like(r, math.log1p(-beta)))
+    return torch.where(r < -1, far, h)
+
+
+def _divergence_fast(zs, zt, kind, beta, need_grad, need_value):
+    """The same law as ``_divergence_chunk`` for finite student/teacher logits, first order only.
+
+    Fused log-softmax/softmax kernels and in-place updates on owned buffers; no
+    masking passes. Never modifies ``zs``/``zt``.
+    """
+    value = grad = None
+    p = torch.softmax(zt, -1)
+    d = zs - zt
+    mu = _rowdot(p, d)
+    d.sub_(mu)  # d: delta centred under p
+    if kind == 'reverse_kl':
+        q = torch.softmax(zs, -1)
+        if need_value:
+            # KL(q||p) = E_q[d] - log1p(E_p[expm1 d]) without cancellation.
+            value = _rowdot(q, d) - _log_normalizer(p, d, zt)
+        if need_grad:
+            mean = _rowdot(q, d)
+            grad = d.sub_(mean).mul_(q)
+        return (None if value is None else value[:, 0]), grad
+    c = _log_normalizer(p, d, zt)
+    if need_value and kind == 'forward_kl':
+        value = c - _rowdot(p, d)
+    elif need_value and kind == 'soft_ce':
+        value = -_rowdot(p, torch.log_softmax(zs, -1))
+    r = d.sub_(c)  # log(q / p)
+    q = torch.softmax(zs, -1) if need_grad or kind == 'jsd' else None
+    if kind == 'jsd':
+        h = _jsd_h(r, beta)  # log(q / m)
+        if need_value:
+            value = beta * _rowdot(p, h - r) + (1 - beta) * _rowdot(q, h)
+        if need_grad:
+            grad = h.sub_(_rowdot(q, h)).mul_(q).mul_(1 - beta)
+        return (None if value is None else value[:, 0]), grad
+    if need_grad:
+        far = r.abs() >= 1
+        u = torch.expm1(r).mul_(p)
+        u = torch.where(far, q - p, u)
+        grad = u.addcmul_(q, -u.sum(-1, keepdim=True))
+    return (None if value is None else value[:, 0]), grad
+
+
+def _divergence_rows(zs, zt, kind, beta, need_grad, need_value, fast):
+    if fast and not torch.is_grad_enabled():
+        return _divergence_fast(zs, zt, kind, beta, need_grad, need_value)
+    return _divergence_chunk(zs, zt, kind, beta, need_grad, need_value)
+
+
+def _finite_logits(*tensors):
+    """True when no -inf masks are present (one pass each, once per call)."""
+    return not any(bool(torch.isinf(t).any()) for t in tensors)
 
 
 class _Divergence(torch.autograd.Function):
     @staticmethod
     def forward(ctx, zs, zt, kind, beta, cdt, rows):
         n = zs.shape[0]
+        fast = _finite_logits(zs, zt)
         out = torch.empty(n, dtype=cdt, device=zs.device)
         for start in range(0, n, rows):
-            value, _ = _divergence_chunk(zs[start:start + rows].to(cdt), zt[start:start + rows].to(cdt), kind, beta, False)
+            value, _ = _divergence_rows(zs[start:start + rows].to(cdt), zt[start:start + rows].to(cdt), kind, beta,
+                                        False, True, fast)
             out[start:start + rows] = value
         ctx.save_for_backward(zs, zt)
-        ctx.kind, ctx.beta, ctx.cdt, ctx.rows = kind, beta, cdt, rows
+        ctx.kind, ctx.beta, ctx.cdt, ctx.rows, ctx.fast = kind, beta, cdt, rows, fast
         return out
 
     @staticmethod
@@ -374,7 +474,8 @@ class _Divergence(torch.autograd.Function):
         grad = grad.to(ctx.cdt)
         for start in range(0, zs.shape[0], ctx.rows):
             stop = start + ctx.rows
-            _, g = _divergence_chunk(zs[start:stop].to(ctx.cdt), zt[start:stop].to(ctx.cdt), ctx.kind, ctx.beta, True)
+            _, g = _divergence_rows(zs[start:stop].to(ctx.cdt), zt[start:stop].to(ctx.cdt), ctx.kind, ctx.beta,
+                                    True, False, ctx.fast)
             result.add((g * grad[start:stop, None]).to(zs.dtype))
         return result.result(), None, None, None, None, None
 
@@ -607,11 +708,18 @@ def cross_entropy_value_and_grad(logits, labels, *, policy=None):
         grad = logp.exp()
         grad[torch.arange(labels.numel(), device=labels.device), labels] -= 1
         return -logp.gather(-1, labels[:, None])[:, 0], grad
-    shifted, sp, _, _ = _shifted(logits)
-    logq = shifted - sp
-    picked = logq.gather(-1, labels[:, None])
-    grad = logq.exp().scatter(-1, labels[:, None], torch.expm1(picked))
-    return -picked[:, 0], grad
+    loss = logits.new_empty(labels.shape)
+    grad = torch.empty_like(logits)
+    rows = _rows(logits.shape[-1], None)
+    for start in range(0, logits.shape[0], rows):
+        stop = start + rows
+        shifted, sp, _, _ = _shifted(logits[start:stop])
+        logq = shifted - sp
+        del shifted
+        picked = logq.gather(-1, labels[start:stop, None])
+        grad[start:stop] = logq.exp_().scatter_(-1, labels[start:stop, None], torch.expm1(picked))
+        loss[start:stop] = -picked[:, 0]
+    return loss, grad
 
 
 @torch.no_grad()
@@ -625,6 +733,12 @@ def divergence_value_and_grad(student_logits, teacher_logits, kind, *, beta=0.5,
             value = _legacy_divergence(zs, teacher_logits, kind, beta)
             (grad,) = torch.autograd.grad(value.sum(), zs)
         return value.detach(), grad
-    value, _ = _divergence_chunk(student_logits, teacher_logits, kind, beta, False)
-    _, grad = _divergence_chunk(student_logits, teacher_logits, kind, beta, True)
+    value = student_logits.new_empty(student_logits.shape[:-1])
+    grad = torch.empty_like(student_logits)
+    fast = _finite_logits(student_logits, teacher_logits)
+    rows = _rows(student_logits.shape[-1], None)
+    for start in range(0, student_logits.shape[0], rows):
+        stop = start + rows
+        value[start:stop], grad[start:stop] = _divergence_rows(student_logits[start:stop], teacher_logits[start:stop],
+                                                               kind, beta, True, True, fast)
     return value, grad

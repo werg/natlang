@@ -274,3 +274,35 @@ def test_fused_helpers_match_autograd():
     zt = z + 1e-4 * torch.randn_like(z)
     value, grad = S.divergence_value_and_grad(z, zt, 'forward_kl')
     assert _rel(grad.double(), _ref_grad(lambda x: _ref_divergence(x, zt.double(), 'forward_kl'), z)) < 1e-3
+
+
+@pytest.mark.parametrize('kind,kw', KINDS)
+def test_fast_and_general_paths_agree_including_extremes(kind, kw):
+    torch.manual_seed(10)
+    zt = torch.randn(6, 90, dtype=torch.float64) * 4
+    zs = zt + torch.randn_like(zt) * 1e-3
+    zs[0, :5] += 150.  # far from agreement: exercises the log-domain fallbacks
+    zt[1, 7] -= 200.
+    beta = kw.get('beta', 0.5)
+    fast = S._divergence_fast(zs, zt, kind, beta, True, True)
+    general = S._divergence_chunk(zs, zt, kind, beta, True, True)
+    torch.testing.assert_close(fast[0], general[0], rtol=1e-9, atol=1e-12)
+    torch.testing.assert_close(fast[1], general[1], rtol=1e-9, atol=1e-12)
+    with S.use_numerics_policy(S.LEGACY_POLICY):
+        ref = _ref_grad(lambda x: S.divergence(x, zt, kind, **kw), zs)
+    assert _rel(fast[1], ref) < 1e-8
+
+
+def test_masked_logits_selected_and_divergence():
+    torch.manual_seed(11)
+    z = torch.randn(4, 30) * 3
+    z[:, 10:20] = -float('inf')
+    labels = torch.tensor([0, 3, 25, 9])
+    ref = _ref_grad(lambda x: -torch.log_softmax(x, -1).gather(-1, labels[:, None]), z)
+    got = _grad(lambda x: S.cross_entropy(x, labels), z)
+    assert _rel(got, ref) < 1e-6 and bool(torch.isfinite(got).all())
+    zt = z + torch.randn_like(z) * 0.1
+    with S.use_numerics_policy(S.LEGACY_POLICY):
+        ref = _ref_grad(lambda x: S.divergence(x, zt.double(), 'forward_kl'), z)
+    got = _grad(lambda x: S.forward_kl(x, zt), z)
+    assert _rel(torch.nan_to_num(got), torch.nan_to_num(ref)) < 1e-5
