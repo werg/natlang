@@ -66,7 +66,7 @@ def test_stage_input_args_pass_staged_path(hdd, tmp_path):
     kind = 'native_state_sft'
     assert 'native_graphs' in hdd_guard.STAGED_ROLES
     assert 'text_data' not in hdd_guard.STAGED_ROLES
-    args = recipe.stage_input_args({'native_graphs': {'path': str(source), 'sha256': digest}}, kind)
+    args = recipe.stage_input_args({'native_graphs': {'path': str(source), 'sha256': digest}}, kind, target='local')
     assert args == ['--native-graphs', str(tmp_path / 'staged' / digest / 'graphs.jsonl')]
 
 
@@ -323,9 +323,9 @@ def test_portable_stage_argv_keeps_logical_inputs_and_local_uses_staging(monkeyp
     monkeypatch.setattr(recipe, '_staged_inputs', lambda values: {
         key: {**value, 'path': '/private/staged/tree/train-sources.json'}
         for key, value in values.items()})
-    portable = recipe.stage_input_args(resolved, 'native_state_sft', target='portable')
+    portable = recipe.stage_input_args(resolved, 'native_state_sft')
     assert portable == ['--native-graphs', source['path'], '--foundation-native-graphs', source['path']]
-    local = recipe.stage_input_args(resolved, 'native_state_sft')
+    local = recipe.stage_input_args(resolved, 'native_state_sft', target='local')
     assert local == ['--native-graphs', '/private/staged/tree/train-sources.json',
                      '--foundation-native-graphs', '/private/staged/tree/train-sources.json']
     with pytest.raises(ValueError, match='local or portable'):

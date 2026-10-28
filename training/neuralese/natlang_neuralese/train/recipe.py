@@ -390,7 +390,7 @@ def require_input_decoders(stage_inputs):
                            'plan-only or launch (first input: ' + compressed[0] + ')')
 
 
-def stage_input_args(resolved, kind, *, target='local'):
+def stage_input_args(resolved, kind, *, target='portable'):
     """Serialize file roles for a local execution or a portable remote plan.
 
     Local execution may use this host's verified HDD staging cache. Portable
@@ -1797,7 +1797,7 @@ def main(argv=None):
                 output = directory / HANDLERS[kind]['result']
                 command = [sys.executable, '-m', HANDLERS[kind]['module']]
                 resolved = stage_inputs[stage['id']]
-                command += stage_input_args(resolved, kind)
+                command += stage_input_args(resolved, kind, target='local')
                 if kind == 'native_shared_stage_controller':
                     validate_shared_controller_output(resolved['controller_config']['path'], directory)
                 else:
