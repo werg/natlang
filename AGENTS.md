@@ -747,9 +747,12 @@ afterwards. The rules below are consequences of this one.
   hashing in `natlang_neuralese/common`) and extend it. Training lineages share
   trainers, objectives, evaluators and recipes (`extends`/`overrides`); only
   declared backbone-inherent differences are allowed.
-- **Training data covers whole trajectories** (prompts, inputs, tool output at
-  lower weight). Breadth comes from more natlang domains, not from anchors or
-  broad mixing; anchors never cap learning.
+- **Supervise the model's own outputs** (owner, 2026-10-28; retires the
+  2026-10-07 whole-trajectory supervision rule). Assistant actions and typed
+  answers are the targets; prompts, instructions, inputs, tool/service output
+  and harness feedback are context with zero loss weight. Breadth comes from
+  more natlang domains, not from anchors or broad mixing; anchors never cap
+  learning.
 
 # Working practice on shared machines
 
