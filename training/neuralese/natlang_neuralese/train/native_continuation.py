@@ -24,8 +24,12 @@ def reject_withdrawn_targets(training,current_bindings):
                 raise ValueError('native source reintroduced a previously withdrawn target: '+row['id'])
 
 
-def withdraw_ordinary_rows(training, proof_path, *, current_bindings, model_id, source_origins=None):
-    """Verify exact rejected targets, keeping current moments/RNG and good credits."""
+def withdraw_native_rows(training, proof_path, *, current_bindings, model_id, source_origins=None):
+    """Withdraw exact rejected targets, preserving earned numeric state and history.
+
+    Communication rows require an explicit classification in the proof that
+    agrees with the saved checkpoint; older ordinary-row proofs remain valid.
+    """
     path=Path(proof_path)
     proof=json.loads(path.read_text())
     if proof.get('schema')!='natlang.native-graph-withdrawal/1' or proof.get('model_id')!=model_id:
@@ -55,12 +59,15 @@ def withdraw_ordinary_rows(training, proof_path, *, current_bindings, model_id, 
     selected={}
     for row in rows:
         key=row.get('id')
-        if (not isinstance(key,str) or key in selected or key in forbidden
+        communication = key in forbidden
+        if (not isinstance(key,str) or key in selected
+                or (communication and row.get('communication') is not True)
+                or ('communication' in row and row['communication'] is not communication)
                 or bindings.get(key)!=row.get('binding') or not bindings.get(key)
                 or row.get('source_sha256') not in leaves or not row.get('reason')
                 or (source_origins or {}).get(key)!=row.get('source_sha256')
                 or key in current_bindings):
-            raise ValueError('native withdrawal row/source/binding is not an exact removed ordinary target: '+str(key))
+            raise ValueError('native withdrawal row/source/binding is not an exact removed native target: '+str(key))
         selected[key]=row
     # Copy schedule metadata only; preserve the actual live optimizer/RNG objects.
     result=dict(training)
@@ -81,12 +88,21 @@ def withdraw_ordinary_rows(training, proof_path, *, current_bindings, model_id, 
         frame['source_row_order']=[k for k in frame.get('source_row_order') or [] if k not in selected]
         for field in ('exposure_counts','required_visits'):
             if field in frame:frame[field]={k:v for k,v in frame[field].items() if k not in selected}
+        options=frame.get('options')
+        if options is not None:
+            for field in ('_communication_ids','_producer_consumer_ids'):
+                if field in options:
+                    options[field]=[key for key in options[field] if key not in selected]
     remove(result)
     result['sft_progress']=deepcopy_metadata(training.get('sft_progress') or {})
     for frame in result['sft_progress'].values():
         for key,row in selected.items():
             if key in (frame.get('source_row_bindings') or {}) and frame['source_row_bindings'][key]!=row['binding']:
                 raise ValueError('native withdrawal conflicts with a carried stage binding')
+            if key in (frame.get('source_row_bindings') or {}):
+                communication=key in ((frame.get('options') or {}).get('_communication_ids') or [])
+                if communication != (key in forbidden):
+                    raise ValueError('native withdrawal conflicts with a carried stage classification')
         remove(frame)
         frame.setdefault('options',{})['withdrawal_history']=deepcopy_metadata(history)
     return result
