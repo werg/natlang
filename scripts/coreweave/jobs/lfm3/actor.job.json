@@ -5,13 +5,13 @@
  "placement": {"where": "coreweave", "reason": "LFM3 RL actor (plans/neuralese/LFM3_SCALEOUT_20261028.md phase 3, asynchronous actor/learner candidate): the prebuilt llama.cpp-neuralese server serving one published policy GGUF behind the sandbox HTTPS share token. One GPU, bounded lifetime; stopped when its policy version is retired."},
  "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
  "resources": {"gpu": 1, "cpu": "8", "memory": "32Gi"},
- "lifetime_hours": 12,
+ "lifetime_hours": 720,
  "scratch": {"path": "/work", "size": "100Gi"},
  "env": {"NATLANG_CW_COLLECT_WAIT": "600", "HF_HUB_OFFLINE": "1", "LFM3_GGUF": "@@GGUF_PATH@@", "LFM3_PORT": "8080",
          "LFM3_SERVER_ARGS": "-np 32 -c 2097152"},
  "service": {"port": 8080},
  "outputs": ["runs/@@ACTOR_ID@@"],
  "command": ["bash", "scripts/coreweave/lfm3_serve.sh", "actor", "runs/@@ACTOR_ID@@", "@@GGUF_URL@@", "@@GGUF_SHA256@@"],
- "needs": {"gpu_memory_gb": 40, "hours": 12, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": false},
- "bundle_plan": "bundle.py plan --code-sha SHA --prebuilt llama-cpp-neuralese-sm120 [--extra POLICY.gguf] -o BUNDLE.json; clients send X-Sandbox-Share-Token (cwctl keeps it under ~/.local/state/natlang/coreweave/tokens)"
+ "needs": {"gpu_memory_gb": 40, "hours": 720, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": false},
+ "bundle_plan": "Bind a prebuilt RL-capture-capable fork and its exact trained-policy GGUF before launch; clients send X-Sandbox-Share-Token (cwctl keeps it under ~/.local/state/natlang/coreweave/tokens)."
 }
