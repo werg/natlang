@@ -48,7 +48,7 @@ def worker_pin(checkpoint, destination, worker, expected_fingerprint, package):
                 'global_step':training['global_step'],'worker':worker,'fingerprint':dl['fingerprint'],
                 'versions':version,'sequences':sequences,'pending_fragments':sorted(dl.get('pending',{})),
                 'exposure_sha256':canonical_json_sha256_hex(training['exposure_counts']),
-                'source_hash':training.get('source_hash'),'source_receipts':training['source_receipts'],
+                'source_hash':training.get('source_hash'),
                 'required_dependencies':dependencies,
                 'resident_generation':(training.get('options',{}).get('resident_adoption') or {}).get('generation'),
                 'recipe_binding':training.get('options',{}).get('recipe_binding'),
