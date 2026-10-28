@@ -158,6 +158,8 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         if name in prepared:
             raise ValueError('native RL graph turn identities must be unique')
         capture = turn.get('sampling') or {}
+        from .actors import validate_capture_export
+        validate_capture_export(capture, actors)
         actor_identity=(invocation_actors['invocations'][name]['native_identity'] if invocation_actors is not None else identity)
         if invocation_actors is None and capture.get('policy') != identity:
             from .actors import declared_actor
@@ -1268,7 +1270,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 **({'external_invocations':replay.external_invocations or {}} if replay.invocation_actors is not None else {}),
                 'task_id': rollout['task_id'], 'sample': rollout.get('sample'),
                 **({'actor_checkpoint_sha256': actor} if (actor := rollout['policy']['checkpoint_sha256'])
-                   != identity['checkpoint_sha256'] else {}),
+                   != identity['checkpoint_sha256'] or actor in (actors or {}).get('actors', {}) else {}),
                 **({'invocation_actors':replay.invocation_actors} if replay.invocation_actors is not None else {})}
             if replay.semantic_dependencies:
                 from dataclasses import asdict

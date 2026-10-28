@@ -34,8 +34,8 @@ def actor_declaration(value, *, learner_identity):
         raise ValueError('RL actor declaration needs its schema, exact learner checkpoint and actor inventory')
     actors = {}
     for sha, actor in value['actors'].items():
-        if not isinstance(sha, str) or not _SHA.fullmatch(sha) or sha == learner:
-            raise ValueError('declared RL actor must name an earlier checkpoint sha256, not the learner')
+        if not isinstance(sha, str) or not _SHA.fullmatch(sha):
+            raise ValueError('declared RL actor must name an exact checkpoint sha256')
         if (not isinstance(actor, dict) or set(actor) != {'lineage_step', 'export'}
                 or type(actor['lineage_step']) is not int or actor['lineage_step'] < 0):
             raise ValueError('declared RL actor needs its lineage step and export')
@@ -45,8 +45,22 @@ def actor_declaration(value, *, learner_identity):
                                    or not isinstance(export['format'], str) or not export['format']
                                    or not isinstance(export['sha256'], str) or not _SHA.fullmatch(export['sha256'])):
             raise ValueError('declared RL actor export needs kind (exact|quantized), format and sha256')
+        if sha == learner and (export is None or export['kind'] != 'quantized'):
+            raise ValueError('same-checkpoint actor declaration requires an exact quantized export binding')
         actors[sha] = {'lineage_step': actor['lineage_step'], 'export': None if export is None else dict(export)}
     return {'schema': SCHEMA, 'learner_checkpoint_sha256': learner, 'actors': actors}
+
+
+def validate_capture_export(capture, declaration):
+    """Bind a lossy or stale actor to the actual export recorded with each turn."""
+    actual = capture.get('actor_export')
+    checkpoint = (capture.get('policy') or {}).get('checkpoint_sha256')
+    entry = (declaration or {}).get('actors', {}).get(checkpoint)
+    if entry is not None:
+        if actual != entry['export']:
+            raise ValueError('captured RL actor export differs from its exact declaration')
+    elif actual is not None and (not isinstance(actual, dict) or actual.get('kind') != 'exact'):
+        raise ValueError('quantized RL actor export requires its exact declaration')
 
 
 def declared_actor(policy, learner_identity, declaration):

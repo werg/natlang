@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from natlang_neuralese.rl.actors import accepted_policy, actor_declaration
+from natlang_neuralese.rl.actors import accepted_policy, actor_declaration, validate_capture_export
 
 ACTOR = '1' * 64
 LEARNER = '9' * 64
@@ -69,6 +69,46 @@ def test_declaration_is_strict_and_admits_only_the_learner_with_another_checkpoi
     assert accepted_policy({**learner, 'checkpoint_sha256': ACTOR}, learner, decl)
     assert not accepted_policy({**learner, 'checkpoint_sha256': ACTOR}, learner, None)
     assert not accepted_policy({'checkpoint_sha256': ACTOR, 'tokenizer_fingerprint': '5' * 64}, learner, decl)
+
+
+def test_quantized_same_checkpoint_requires_actual_bound_export():
+    learner = {'checkpoint_sha256': LEARNER}
+    export = {'kind': 'quantized', 'format': 'gguf-bf16-with-nvfp4', 'sha256': 'a' * 64}
+    declaration = {'schema': 'natlang.rl-actors/1', 'learner_checkpoint_sha256': LEARNER,
+                   'actors': {LEARNER: {'lineage_step': 10, 'export': export}}}
+    declaration = actor_declaration(declaration, learner_identity=learner)
+    capture = {'policy': learner, 'actor_export': export}
+    validate_capture_export(capture, declaration)
+    with pytest.raises(ValueError, match='requires its exact declaration'):
+        validate_capture_export(capture, None)
+    with pytest.raises(ValueError, match='differs from its exact declaration'):
+        validate_capture_export({**capture, 'actor_export': {**export, 'sha256': 'b' * 64}}, declaration)
+    with pytest.raises(ValueError, match='differs from its exact declaration'):
+        validate_capture_export({'policy': learner}, declaration)
+
+
+def test_quantized_same_checkpoint_requires_importance_and_is_retained_in_objective(tmp_path):
+    from natlang_neuralese.rl.native_replay import NativePolicyObjective, prepare_objective
+    model, roles, actor, _, block, episodes = stale_episode()
+    export = {'kind': 'quantized', 'format': 'gguf-bf16-with-nvfp4', 'sha256': 'a' * 64}
+    for episode in episodes:
+        for turn in episode['turns']:
+            turn['sampling']['actor_export'] = export
+    actors = {'schema': 'natlang.rl-actors/1', 'learner_checkpoint_sha256': ACTOR,
+              'actors': {ACTOR: {'lineage_step': 1200, 'export': export}}}
+    with pytest.raises(ValueError, match='requires its exact declaration'):
+        prepare_objective(copy.deepcopy(episodes), identity=actor, roles=roles, fetch_block=lambda _: block,
+                          policy_loss={'schema': 'score-centered/1', 'k': 8})
+    with pytest.raises(ValueError, match='importance-corrected'):
+        prepare_objective(copy.deepcopy(episodes), identity=actor, roles=roles, fetch_block=lambda _: block,
+                          policy_loss={'schema': 'score-centered/1', 'k': 8, 'importance': 'none'}, actors=actors)
+    _, spec = prepare_objective(copy.deepcopy(episodes), identity=actor, roles=roles, fetch_block=lambda _: block,
+                                policy_loss={'schema': 'score-centered/1', 'k': 8}, actors=actors)
+    assert spec['actors'] == actors
+    assert all(row['actor_checkpoint_sha256'] == ACTOR for row in spec['rows'].values())
+    path = tmp_path / 'objective.json'
+    path.write_text(json.dumps(spec))
+    NativePolicyObjective(path)
 
 
 def test_stale_actor_episodes_train_the_learner_with_importance_correction(tmp_path):
