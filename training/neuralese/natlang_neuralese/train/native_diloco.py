@@ -15,6 +15,15 @@ trainable parameters and the outer Nesterov momentum.
         --trainer-argv JSON --settings JSON [--base B] [--quorum Q] ...
     python -m natlang_neuralese.train.native_diloco export --root R --parent P \
         --learner-checkpoint W0 [--learner-checkpoint W1 ...] --out DIR [--base B]
+    python -m natlang_neuralese.train.native_diloco export-global --root R --parent P --out DIR \
+        [--ema-out DIR] [--base B]
+
+``init --outer-schedule '[{"from_round":0,"lr":1.0,"momentum":0.0},{"from_round":10,"lr":0.7,"momentum":0.9}]'``
+replaces ``--outer-lr``/``--outer-momentum`` with a per-fragment merge-round schedule (coordinator.outer_entry).
+``export-global`` writes model-only checkpoints (weights only, never a resumable parent) of the current FP32 global
+masters and, with ``--ema-out``, of the global-version EMA, cast to each parameter's dtype, while the coordinator
+keeps serving: each fragment file is replaced atomically, so every fragment is read at one committed version, and
+the versions read are recorded.
 
 ``--settings`` is the stage's ``diloco`` block; its coordinator URL is not
 part of the identity, because the coordinator's address exists only once it runs.
@@ -37,6 +46,7 @@ from .diloco.worker import DilocoLearner, DilocoSettings
 
 IDENTITY_SCHEMA = 'natlang.native-diloco-identity/1'
 EXPORT_SCHEMA = 'natlang.native-diloco-export/1'
+GLOBAL_EXPORT_SCHEMA = 'natlang.native-diloco-global-export/1'
 ARGUMENT = '--diloco'
 
 
@@ -98,7 +108,8 @@ def init(args):
         outer_lr=args.outer_lr, outer_momentum=args.outer_momentum, grace_seconds=args.grace_seconds,
         max_staleness=args.max_staleness,
         seed_source={'path': str(args.parent), 'sha256': sha256_file_hex_cached(args.parent)},
-        ema=json.loads(args.ema) if args.ema else None)
+        ema=json.loads(args.ema) if args.ema else None,
+        outer_schedule=json.loads(args.outer_schedule) if args.outer_schedule else None)
     print(json.dumps({'run_id': manifest['run_id'], 'fragments': len(manifest['fragments']),
                       'fingerprint': manifest['fingerprint']}, sort_keys=True))
 
@@ -178,6 +189,36 @@ def export_ema(args, manifest, model, named, first_checkpoint, global_step):
     write_weights_checkpoint(model, state['model_config'], state['schema'], global_step, export, args.ema_out)
 
 
+def export_global(args):
+    """Model-only checkpoints of the running coordinator's global masters (and EMA) for evaluation and restore."""
+    from .checkpoint_policy import CheckpointPolicy
+    from .weight_ema import write_weights_checkpoint
+
+    manifest = read_manifest(args.root)
+    parent_sha = sha256_file_hex_cached(args.parent)
+    if manifest['identity']['parent_checkpoint_sha256'] != parent_sha:
+        raise ValueError('coordinator run continues a different parent checkpoint')
+    model, named = _trainable(args.parent, args.base)
+    state = CheckpointPolicy.load(args.parent)
+    parent_step = (state.get('training') or {}).get('global_step', state.get('step', 0))
+    for kind, reader, out in (('global', global_masters, args.out), ('ema', global_ema, args.ema_out)):
+        if out is None:
+            continue
+        values, info = reader(args.root)
+        with torch.no_grad():
+            for name, parameter in named:
+                if values[name].shape != parameter.shape:
+                    raise ValueError(f'global {kind} parameter {name} has a different shape')
+                parameter.copy_(values[name].to(parameter.dtype))
+        export = {'schema': GLOBAL_EXPORT_SCHEMA, 'source': f'diloco-coordinator-{kind}', 'run_id': manifest['run_id'],
+                  'coordinator_fingerprint': manifest['fingerprint'], 'fragment_versions': info['versions'],
+                  'parent_checkpoint_sha256': parent_sha, 'parent_global_step': parent_step,
+                  'dtype_cast': f'FP32 coordinator {kind} rounded to each parameter dtype (nearest)',
+                  **({'ema': info['ema']} if kind == 'ema' else {})}
+        write_weights_checkpoint(model, state['model_config'], state['schema'], parent_step, export, out)
+        print(json.dumps({'kind': kind, 'out': str(out), 'versions': info['versions']}, sort_keys=True))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -194,6 +235,8 @@ def main(argv=None):
     start.add_argument('--grace-seconds', type=float, default=8.0)
     start.add_argument('--max-staleness', type=int, default=2)
     start.add_argument('--ema', help='JSON {"decay": 0.99, "warmup": 0}: keep an EMA of the global versions')
+    start.add_argument('--outer-schedule', help='JSON [{"from_round": 0, "lr": 1.0, "momentum": 0.0}, ...]: '
+                       'per-fragment merge-round outer settings (replaces --outer-lr/--outer-momentum)')
     finish = commands.add_parser('export')
     finish.add_argument('--root', type=Path, required=True)
     finish.add_argument('--parent', type=Path, required=True)
@@ -202,8 +245,14 @@ def main(argv=None):
     finish.add_argument('--out', type=Path, required=True)
     finish.add_argument('--ema-out', type=Path,
                         help='also write a model-only checkpoint of the coordinator EMA of global versions here')
+    snapshot = commands.add_parser('export-global')
+    snapshot.add_argument('--root', type=Path, required=True)
+    snapshot.add_argument('--parent', type=Path, required=True)
+    snapshot.add_argument('--base', type=Path)
+    snapshot.add_argument('--out', type=Path, required=True)
+    snapshot.add_argument('--ema-out', type=Path)
     args = parser.parse_args(argv)
-    {'init': init, 'export': export}[args.command](args)
+    {'init': init, 'export': export, 'export-global': export_global}[args.command](args)
 
 
 if __name__ == '__main__':
