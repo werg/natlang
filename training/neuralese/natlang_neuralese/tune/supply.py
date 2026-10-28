@@ -14,6 +14,18 @@ tuner's persisted component split keeps related invocations together.
 
 The function texts are model-facing; they follow the measured operational programs' wording and are recorded as
 unmeasured in plans/MODEL_FACING_CHANGES.md until sampled live.
+
+Teacher-free supply (owner, 2026-10-28: no additional teacher generation). `python -m natlang_neuralese.tune.supply
+privileged --programs DIR` writes each prepared program's privileged training references, `tune.privileged.jsonl`
+(`natlang.tune-privileged/2`): for every TRAINING-partition root of its persisted grouped split, the privileged facts of
+the shared JOLT+ mechanism (`rl/privileged_context.py` `case_facts` under `ProtectedWorlds` custody): the verified
+result, each natural-language child call's verified value bound to its own prompt, an exact helper output as decisive
+evidence. `natlang tune` with the
+default self teacher (`ts-host/src/tune/selfteach.ts`) runs the student itself with that reference as privileged
+context on training roots only, keeps oracle-verified trajectories with the privileged block removed (JOLT+-style
+privileged self-teaching, sequence level) and continues with oracle-reward RL rounds. Development and confirmation
+roots never receive privileged context; a split that is not persisted, or an example whose recorded `expected`
+differs from the recomputed oracle, is an error.
 """
 from __future__ import annotations
 
@@ -466,11 +478,155 @@ def write_programs(out, *, domains=None, variants=None, worlds=64, seed=20261027
     return manifest
 
 
+PRIVILEGED_SCHEMA = 'natlang.tune-privileged/2'
+PRIVILEGED_FILE = 'tune.privileged.jsonl'
+
+
+def reference_values(domain, record):
+    """The exact value of every stage of one root, in call order: ``[(function, value)]`` and the result."""
+    calls, env = [], dict(record)
+    if domain.helper:
+        env[domain.helper['output']] = domain.helper['py'](record)
+        calls.append((domain.helper['name'], env[domain.helper['output']]))
+    if domain.classify:
+        classify = domain.classify
+        env[classify['name']] = decide(classify['rules'], classify['default'], record)
+        calls.append((classify['name'], env[classify['name']]))
+    name, _, rules, default = domain.decide
+    result = decide(rules, default, env)
+    calls.append((name, result))
+    return calls, result
+
+
+def _program_of(item):
+    """The catalog program a prepared directory was written from, checked against its recorded file hashes."""
+    domains = {domain.name: domain for domain in CATALOG}
+    if item['family'] not in domains:
+        raise ValueError(f"{item['program']}: family {item['family']} is not in the catalog")
+    program = variant(domains[item['family']], item['variant'])
+    if program is None:
+        raise ValueError(f"{item['program']}: variant {item['variant']} no longer exists in the catalog")
+    files = {relative: hashlib.sha256(text.encode()).hexdigest() for relative, text in sorted(program_files(program).items())}
+    if files != item['files']:
+        raise ValueError(f"{item['program']}: the catalog no longer renders the prepared program files exactly")
+    return program
+
+
+def _instruction_match(text):
+    """A child invocation's exact match string: the start of its instruction body (it appears in its own prompt)."""
+    body = text.split('---', 2)[-1].strip()
+    return body[:80]
+
+
+def privileged_case(program, example, *, program_name, files):
+    """One training root as a shared privileged-context case (`rl.privileged_context.case_facts` reads it): the
+    verified root result, each natural-language child call's verified value bound to its own prompt by an exact match
+    string, and an exact helper output as decisive evidence."""
+    record = {key: value for key, value in example['input'][program.arg].items() if key != program.note}
+    calls, result = reference_values(program, record)
+    if result != example['expected']:
+        raise ValueError(f'{program_name}: recomputed oracle {result!r} differs from the recorded expected value '
+                         f'{example["expected"]!r} in {example["group"]}')
+    children, decisive = [], []
+    for name, value in calls:
+        source = files.get(f'main/{name}.nl')
+        if source is not None:
+            children.append({'match': [_instruction_match(source)], 'value': value})
+        else:  # an exact TypeScript helper: its output is evidence for the root, not a model call's answer
+            decisive.append(f'{name}({program.arg}) returns {json.dumps(value)}')
+    ident = hashlib.sha256(json.dumps([program_name, example['group'], example['input']], sort_keys=True).encode()).hexdigest()[:24]
+    return {'id': f'supply:{program_name}:{ident}', 'split': 'train', 'source_groups': [example['group']],
+            'semantics': {'root': example['function'], 'inputs': example['input'], 'expected': result},
+            'curriculum': {'reference': {'children': children}, **({'decisive': decisive} if decisive else {})}}
+
+
+def privileged_rows(directory, program, custody):
+    """``(rows, counts)``: one `natlang.tune-privileged/2` row per training-partition root of a prepared program, its
+    facts extracted by the shared JOLT+ mechanism (`rl.privileged_context.case_facts`) under ``custody``
+    (`ProtectedWorlds`: train split only, disjoint from every registered evaluation-only packet)."""
+    from ..rl.privileged_context import case_facts
+    directory = Path(directory)
+    split_path = directory / '.natlang' / 'tune' / 'splits.json'
+    if not split_path.exists():
+        raise ValueError(f'{directory}: persist the grouped split before writing privileged references')
+    split = json.loads(split_path.read_text())
+    if split.get('schema') != 'natlang.tune-split/v1':
+        raise ValueError(f'{split_path} is not a natlang.tune-split/v1 receipt')
+    components = split['components']
+    files = program_files(program)
+    rows, counts = [], {}
+    for line in (directory / 'tune.examples.jsonl').read_text().splitlines():
+        if not line.strip():
+            continue
+        example = json.loads(line)
+        group = example.get('group')
+        if group not in components:
+            raise ValueError(f'{directory}: root group {group!r} has no persisted partition')
+        partition = components[group]
+        counts[partition] = counts.get(partition, 0) + 1
+        if example.get('protected') or partition != 'train':
+            continue  # privileged context comes only from training worlds
+        case = privileged_case(program, example, program_name=directory.name, files=files)
+        receipt, facts = case_facts(case, custody=custody)
+        rows.append({'schema': PRIVILEGED_SCHEMA, 'function': example['function'], 'group': group, 'input': example['input'],
+                     'result': case['semantics']['expected'], 'case_id': case['id'], 'custody': receipt,
+                     'facts': [{'id': fact.id, 'kind': fact.kind, 'text': fact.text, 'match': list(fact.match),
+                                'sha256': fact.digest} for fact in facts],
+                     'source': 'natlang_neuralese.tune.supply exact oracle'})
+    return rows, counts
+
+
+def write_privileged(programs_dir, names=None, *, registry=None, root=None, custody=None):
+    """Write `tune.privileged.jsonl` beside each prepared program (identical content is left alone; a different
+    existing file is an error: references bind the split and custody they were derived from). Custody is the shared
+    `ProtectedWorlds.load(root, registry)` (default: the shared protected-worlds registry), failing closed."""
+    from ..common.custody import ProtectedWorlds
+    if custody is None:
+        root = Path(root or Path(__file__).resolve().parents[4])
+        custody = ProtectedWorlds.load(root=root, registry=registry)
+    programs_dir = Path(programs_dir)
+    prepared = json.loads((programs_dir / 'programs-prepared.json').read_text())
+    summary = []
+    for item in prepared['programs']:
+        if names and item['program'] not in names:
+            continue
+        directory = programs_dir / item['program']
+        program = _program_of(item)
+        rows, counts = privileged_rows(directory, program, custody)
+        payload = ''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows)
+        path = directory / PRIVILEGED_FILE
+        if path.exists() and path.read_text() != payload:
+            raise ValueError(f'{path} exists with other references; the split, oracle or custody changed: write to a new program')
+        if not path.exists():
+            path.write_text(payload)
+        summary.append({'program': item['program'], 'family': item['family'], 'path': str(directory), 'partitions': counts,
+                        'privileged_roots': len(rows), 'sha256': hashlib.sha256(payload.encode()).hexdigest()})
+    manifest = {'schema': 'natlang.program-supply-privileged/2', 'programs': summary, 'teacherCalls': 0,
+                'protected_sha256': custody.digest,
+                'custody': 'training-partition roots only, checked against every registered evaluation-only packet; '
+                           'development/confirmation never receive privileged context'}
+    (programs_dir / 'privileged-prepared.json').write_text(json.dumps(manifest, indent=1) + '\n')
+    return manifest
+
+
 def hash_seed(seed, name):
     return int(hashlib.sha256(f'{seed}:{name}'.encode()).hexdigest()[:12], 16)
 
 
 def main(argv=None):
+    import sys
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ['privileged']:
+        parser = argparse.ArgumentParser(description='privileged training references of prepared programs')
+        parser.add_argument('--programs', required=True)
+        parser.add_argument('--names', nargs='*')
+        parser.add_argument('--registry', help='protected-worlds registry (default: training/protected-worlds.json)')
+        parser.add_argument('--root', help='directory the registry paths resolve against (default: this checkout)')
+        args = parser.parse_args(argv[1:])
+        manifest = write_privileged(args.programs, args.names, registry=args.registry, root=args.root)
+        print(json.dumps({'command': 'privileged', 'programs': len(manifest['programs']),
+                          'privileged_roots': sum(item['privileged_roots'] for item in manifest['programs'])}))
+        return 0
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--out', required=True)
     parser.add_argument('--domains', nargs='*')

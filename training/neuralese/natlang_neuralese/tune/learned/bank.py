@@ -7,15 +7,15 @@ axes stay explicit). A scope's executed core is
 
     C_sm = sum_k c_{s,k,g(m)} C_km,        Delta W_sm = U_m C_sm V_m^T
 
-with ``c`` the executed coefficients (`head.executed`) and ``g(m)`` the target group of ``m`` (depth quarter x matrix
+with ``c`` the executed coefficients (`mixture.coefficients`: gain times component-token probability) and ``g(m)`` the target group of ``m`` (depth quarter x matrix
 family). The composed core is materialized as an ordinary native ``xs`` adapter that slices the bank's basis
 artifact (`bank-basis-slice-v1`), so the existing execution, gradient, serving and export paths run it unchanged.
 
 Components are normalized: ``sum_m q_m ||C_km||_F^2 = 1`` with ``q_m = 1/(numel_m ms(W_m))`` (energy relative to the
-base weight's mean square), so integer strengths
+base weight's mean square), so coefficient strengths
 are comparable and rescaling a component cannot distort sparsity or precision. A snapshot's identity binds the basis,
-ordered component IDs and tensors, keys, eligibility and number format; any change is a new snapshot, and an old
-weight array never resolves against it (`views.validate_array`).
+ordered component IDs and tensors, keys, eligibility and mixture format; any change is a new snapshot, and an old
+mixture never resolves against it (`views.validate_distribution`).
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from ...common.hashing import canonical_json_sha256_hex
 from ..bases import tensor_digest
 from ..gates import factor_sq_norm
 from . import LearnedOptimizerError
-from .numbers import NumberFormat
+from .mixture import MixtureFormat
 
 BASIS_METHOD = 'bank-shared-basis-v1'
 SLICE_METHOD = 'bank-basis-slice-v1'
@@ -40,7 +40,8 @@ _LAYER = re.compile(r'\.layers\.(\d+)\.')
 
 # -- target groups ------------------------------------------------------------------------------------------------
 def target_groups(names, kinds, num_layers, quarters=4):
-    """``(ordered group labels, {name: group index})``: depth quarter by matrix family (12 groups on LFM)."""
+    """``(ordered group labels, {name: group index})``: depth quarter by matrix family (12 groups on LFM2 and LFM3:
+    attention incl. LFM3's per-head gate, convolution projections, feed-forward)."""
     labels, index = [], {}
     for name in sorted(names):
         match = _LAYER.search(name)
@@ -193,7 +194,7 @@ class ComponentBank:
     basis: SharedBasis
     basis_artifact: str
     components: list
-    number_format: NumberFormat
+    mixture_format: MixtureFormat
     group_labels: list
     group_of: dict             # matrix name -> group index
     q: dict                    # matrix name -> inverse element count
@@ -206,7 +207,7 @@ class ComponentBank:
                 'basis_sha256': self.basis.content_sha256, 'rank': self.basis.rank,
                 'components': [component.as_json() for component in self.components],
                 'component_tensors': tensor_digest(*[t for c in self.components for name in sorted(c.factors) for t in c.factors[name]]),
-                'number_format': self.number_format.as_json(), 'groups': self.group_labels, 'group_of': self.group_of,
+                'mixture_format': self.mixture_format.as_json(), 'groups': self.group_labels, 'group_of': self.group_of,
                 'parent': self.parent}
 
     @property
@@ -221,7 +222,7 @@ class ComponentBank:
         return self.ids.index(component_id)
 
     def group_norms(self):
-        """(K, G) per-group update energy ``sum_{m in g} q_m ||C_km||^2`` (the head's modulation shares)."""
+        """(K, G) per-group update energy ``sum_{m in g} q_m ||C_km||^2`` (reported per component)."""
         out = torch.zeros(len(self.components), len(self.group_labels))
         for k, component in enumerate(self.components):
             for name, value in core_norms(component, self.q).items():
@@ -318,8 +319,8 @@ class ComponentBank:
 
     def fit_mixture(self, cores, slots=None, *, ridge=1e-6):
         """Least-squares single coefficient per slot: ``min sum_m q_m ||C*_m - sum_k a_k C_km||^2 + ridge ||a||^2``.
-        Returns ``(a, residual energy, target energy)``. Weight-space projection only: it initializes and grows the
-        bank; mixture-token labels come from behavioral in-bank fits (`fit.py`)."""
+        Returns ``(a, residual energy, target energy)``. Weight-space projection only: it initializes fits and grows
+        the bank; component-token labels come from behavioral in-bank fits (`fit.py`)."""
         slots = list(range(len(self.components))) if slots is None else list(slots)
         K = len(slots)
         gram, rhs, target = torch.zeros(K, K, dtype=torch.float64), torch.zeros(K, dtype=torch.float64), 0.
@@ -345,7 +346,7 @@ class ComponentBank:
                        history=[*self.history, {'parent': self.snapshot, 'reason': reason}])
 
 
-def new_bank(engine, basis, number_format, *, quarters=4, owner=None, components=()):
+def new_bank(engine, basis, mixture_format, *, quarters=4, owner=None, components=()):
     """Store the basis and return an empty (or seeded) bank over the engine's selected targets."""
     from ...model.native_adapters import target_parameters
     from ..targets import module_map
@@ -359,7 +360,7 @@ def new_bank(engine, basis, number_format, *, quarters=4, owner=None, components
     # coefficient on a normalized component is an update of the weights' own RMS spread over its matrices.
     q = {name: 1. / (available[name].numel() * float(available[name].detach().float().pow(2).mean())) for name in basis.names}
     record = basis.check().to_artifact(engine, owner)
-    return ComponentBank(basis, record.id, list(components), number_format, labels, group_of, q)
+    return ComponentBank(basis, record.id, list(components), mixture_format, labels, group_of, q)
 
 
 # -- persistence --------------------------------------------------------------------------------------------------
@@ -389,7 +390,7 @@ def load_bank(engine, manifest):
     for k, item in enumerate(manifest['components']):
         factors = {name: (tensors[f'{k}.P.{name}'], tensors[f'{k}.Q.{name}']) for name in item['matrices']}
         components.append(Component(item['id'], factors, item['key'], item['description'], item['source'], tuple(item['levels'])))
-    bank = ComponentBank(basis, manifest['basis'], components, NumberFormat.from_json(manifest['number_format']),
+    bank = ComponentBank(basis, manifest['basis'], components, MixtureFormat.from_json(manifest['mixture_format']),
                          list(manifest['groups']), dict(manifest['group_of']),
                          {name: float.fromhex(v) for name, v in manifest['q'].items()}, manifest['parent'],
                          list(manifest.get('history', [])))

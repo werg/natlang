@@ -1,4 +1,5 @@
-// Zero-config tuning: without a tune block, the native profile natlang runs is the student and its escalate the teacher.
+// Zero-config tuning: without a tune block, the native profile natlang runs is the student and it teaches itself
+// (privileged self-teaching, the default teacher since the owner's 2026-10-28 no-teacher-generation decision).
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,7 +10,7 @@ import { deriveStudent, loadTuneSettings } from '../dist/tune/settings.js';
 const sha = 'ab'.repeat(32);
 const identity = { architecture: 'lfm2', checkpoint_sha256: sha, embedding_weight_sha256: 'cd'.repeat(32), tokenizer_fingerprint: 'ef'.repeat(32) };
 
-test('the default native profile (or the native pin behind a GGUF default) is the student, with its escalate teacher', () => {
+test('the default native profile (or the native pin behind a GGUF default) is the student and its own privileged teacher', () => {
   const directory = mkdtempSync(join(tmpdir(), 'natlang-tune-derived-')), models = join(directory, 'models');
   const environment = { ...process.env, NATLANG_CONFIG_HOME: directory, NATLANG_NATIVE_MODELS: models, NATLANG_PROFILE: '' };
   delete environment.NATLANG_PROFILE;
@@ -34,7 +35,7 @@ test('the default native profile (or the native pin behind a GGUF default) is th
     assert.equal(student.moduleMap, 'lfm2');
     assert.equal(settings.backend, 'native');
     assert.equal(settings.servingProfile, 'lfm-latest');
-    assert.equal(settings.teacher, 'teacher');
+    assert.equal(settings.teacher, 'self', 'a profile escalate is not a tune teacher: self-teaching is the default');
     assert.equal(student.baseGgufSha256, undefined, 'no llama.cpp base without an export manifest');
     // The GGUF sibling's export manifest gives the llama.cpp base: tuned adapters then also export for llama.cpp.
     const exportDir = join(models, `gguf-${sha.slice(0, 12)}`);
@@ -53,9 +54,11 @@ test('the default native profile (or the native pin behind a GGUF default) is th
     const partial = loadTuneSettings(environment).settings;
     assert.equal(partial.teacher, 'other');
     assert.deepEqual(partial.recipe, { epochs: 2 });
-    // No teacher anywhere is an actionable error.
+    // No teacher anywhere: the student teaches itself; a named teacher profile must still exist.
     write({ defaultProfile: 'lfm-latest', profiles: { 'lfm-latest': { native } } });
-    assert.throws(() => loadTuneSettings(environment), /give profile lfm-latest an "escalate" profile, or set tune.teacher/);
+    assert.equal(loadTuneSettings(environment).settings.teacher, 'self');
+    write({ defaultProfile: 'lfm-latest', tune: { teacher: 'missing' }, profiles: { 'lfm-latest': { native } } });
+    assert.throws(() => loadTuneSettings(environment), /teacher profile missing does not exist/);
     // A configured student is used as configured.
     write({ defaultProfile: 'lfm-latest', profiles: { 'lfm-latest': { native }, t: { endpoint: 'http://127.0.0.1:9' } },
       tune: { student: 's', teacher: 't', backend: 'native', students: { s: { base: identity, checkpoint: '/c.pt', trainer: ['py'], moduleMap: 'lfm2' } } } });

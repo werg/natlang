@@ -3,11 +3,10 @@ import dataclasses
 import json
 
 from test_learned_optimizer_bank import _component
-from test_learned_optimizer_writer import GRID
 from test_tune_soft_states import soft_engine
 from test_tune_trainer import manifest_for, rows_for
 from natlang_neuralese.serve.store import TensorStore
-from natlang_neuralese.tune.learned import numbers as N
+from natlang_neuralese.tune.learned.mixture import MixtureFormat
 from natlang_neuralese.tune.learned.apply import main, service
 from natlang_neuralese.tune.learned.bank import new_bank, save_bank, weight_svd_basis
 from natlang_neuralese.tune.learned.bundle import verify_bundle
@@ -21,12 +20,12 @@ def operation(tmp_path):
     engine.store.close()
     engine.store = TensorStore(store)
     names = sorted(target_parameters(engine.shared_model))[:6]
-    bank = new_bank(engine, weight_svd_basis(engine, names, 4), N.NumberFormat(.08))
+    bank = new_bank(engine, weight_svd_basis(engine, names, 4), MixtureFormat())
     components = [dataclasses.replace(_component(bank, seed), key=engine.native_write_text(f't{40 + seed} t{50 + seed}')['id'])
                   for seed in (1, 2, 3)]
     bank = bank.with_components(components, reason='planted')
     (tmp_path / 'bank.json').write_text(json.dumps({'bank': save_bank(engine, bank)}))
-    trainer = OuterTrainer(engine, bank, GRID, OuterRecipe(writer={'kind': 'free-lora', 'rank': 2, 'alpha': 2.}), [])
+    trainer = OuterTrainer(engine, bank, OuterRecipe(writer={'kind': 'free-lora', 'rank': 2, 'alpha': 2.}), [])
     (tmp_path / 'state.json').write_text(json.dumps(trainer.state))
     manifest = manifest_for(engine)
     engine.store.close()
@@ -37,8 +36,7 @@ def operation(tmp_path):
     plan = {'schema': 'natlang.tune-plan/v1', 'manifest': manifest, 'rows': 'turns.jsonl',
             'student': {'checkpoint': str(tmp_path / 'native.pt'), 'engine': {}}, 'softStates': False, 'exports': [],
             'learned': {'bank': str(tmp_path / 'bank.json'), 'state': str(tmp_path / 'state.json'), 'store': str(store),
-                        'scopes': {'lambda': 3, 'folder': 3}, 'steps': 3, 'patience': 3, 'seed': 1,
-                        'grid_tokens': {**GRID.__dict__, 'digits': list(GRID.digits)}}}
+                        'scopes': {'lambda': 3, 'folder': 3}, 'steps': 3, 'patience': 3, 'seed': 1}}
     (tmp_path / 'plan.json').write_text(json.dumps(plan))
     return str(tmp_path / 'plan.json'), bank, store
 
@@ -50,7 +48,7 @@ def test_apply_writes_a_build_result_with_the_complete_episode(tmp_path):
     assert result['schema'] == 'natlang.tune.build-result/1'
     receipt = result['receipt']
     assert receipt['bank'] == bank.snapshot and len(receipt['history']) >= 1
-    assert receipt['history'][0]['behavior']['sampled'] is False  # the first proposal decodes deterministically
+    assert receipt['history'][0]['behavior']['choose'] is None  # the first proposal executes the mixture itself
     if receipt['selected']:
         assert {item['node'] for item in result['artifacts']} == {'folder:a', 'folder:b', 'lambda:x', 'lambda:y'}
         assert all((tmp_path / 'out' / 'artifacts' / f"{item['artifact']}.nnt").exists() for item in result['artifacts'])
@@ -72,12 +70,31 @@ def test_services_propose_evaluate_refine_retrieve_and_release(tmp_path):
     refined = service({**common, 'op': 'refine', 'parent': proposed['bundle'], 'steps': 2})
     released = service({**common, 'op': 'release', 'parent': refined['bundle']})
     assert {item['node'] for item in released['artifacts']} == set(evidence['scopes'])
+    controller = {'root': '/controller', 'release': 'earned-release'}
+    service({**common, 'op': 'finish', 'parent': refined['bundle'], 'history': [{'accepted': True}], 'controller': controller})
+    result = json.loads((tmp_path / 'svc' / 'result.json').read_text())
+    assert result['receipt']['controller'] == controller
+    assert result['receipt']['operatorPolicy'] == 'natlang-controller-v1'
+    assert result['receipt']['selected'] == refined['bundle']['id']
+    assert {item['node'] for item in result['artifacts']} == set(evidence['scopes'])
     import torch
     from natlang_neuralese.serve import load_native_engine
     engine = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', dtype=torch.float32)
     engine.store.close()
     engine.store = TensorStore(store)
     try:
+        import base64
+        from natlang_neuralese.serve.store import encode_native_state
+        evidence_state = engine.native_write_text('t40 t50')['id']
+        wire = encode_native_state(engine.store.get_native_state(evidence_state).block)
+        engine.store.close()
+        assert service({**common, 'op': 'import-artifacts', 'artifacts': [
+            {'id': evidence_state, 'bytes': base64.b64encode(wire).decode()}]}) == {'imported': 1}
+        import pytest
+        with pytest.raises(Exception, match='identity mismatch'):
+            service({**common, 'op': 'import-artifacts', 'artifacts': [
+                {'id': 'nzs1_' + 'a' * 52, 'bytes': base64.b64encode(wire).decode()}]})
+        engine.store = TensorStore(store)
         for bundle in (proposed['bundle'], retrieved['bundle'], refined['bundle']):
             verify_bundle(engine, bundle, bank)
     finally:
@@ -142,7 +159,8 @@ def test_the_persistent_service_keeps_contexts_and_runs_commands(tmp_path):
              {'id': 2, 'plan': plan, 'out': out, 'op': 'refine', 'parent': None, 'steps': 1, 'operations': {'bx': 'weights'}},
              {'id': 3, 'plan': plan, 'out': out, 'op': 'refine', 'parent': None, 'operations': {'bx': 'keep'}},
              {'id': 4, 'command': 'ladder', 'spec': {'x': 1}},
-             {'id': 5, 'plan': plan, 'out': out, 'op': 'nonsense'}]
+             {'id': 5, 'plan': plan, 'out': out, 'op': 'nonsense'},
+             {'id': 6, 'plan': plan, 'out': str(tmp_path / 'other'), 'op': 'evidence'}]
     output = io.StringIO()
     def commands(name, spec):
         calls.append((name, spec))
@@ -160,8 +178,8 @@ def test_the_persistent_service_keeps_contexts_and_runs_commands(tmp_path):
     finally:
         apply.Context.__init__ = original
     replies = [json.loads(line) for line in output.getvalue().splitlines()]
-    assert [reply['id'] for reply in replies] == [1, 2, 3, 4, 5]
-    assert len(opened) == 1  # one loaded context served every call of this plan
+    assert [reply['id'] for reply in replies] == [1, 2, 3, 4, 5, 6]
+    assert len(opened) == 2  # reuse one context, then release its exclusive store before switching
     assert replies[0]['result']['incomingLoss'] > 0
     refined = replies[1]['result']
     measured = json.loads((tmp_path / 'svc' / 'bundles' / f"{refined['bundle']['id']}.json").read_text())
@@ -169,3 +187,4 @@ def test_the_persistent_service_keeps_contexts_and_runs_commands(tmp_path):
     assert 'choose the operator "keep"' in replies[2]['error']
     assert replies[3]['result'] == {'ran': 'ladder'} and calls == [('ladder', {'x': 1})]
     assert 'unknown adaptation service' in replies[4]['error']
+    assert replies[5]['result']['incomingLoss'] > 0

@@ -106,9 +106,9 @@ class ProgramContext:
         return training_target(
             self.engine, self.bank, manifest=self.manifest, rows=self.rows, contract=self.contract, view=self.evidence,
             soft_texts=self.texts, incoming_states=states, incoming_adapters=adapters, bank_views=self.views,
-            target_integers=labels.get('integers') or {s: [0] * len(v.slots) for s, v in self.views.items()},
+            target_mixtures=labels.get('mixtures'),
             target_adapters=labels.get('adapters', {}), target_states=labels.get('states', {}),
-            target_rho=labels.get('rho'), target_delta=labels.get('delta'), target_factors=labels.get('factors'),
+            target_factors=labels.get('factors'),
             placeholders=self.placeholders, focus=focus, digests=digests, tier=tier, program=self.program,
             lineage=lineage, key_evidence=key_evidence)
 

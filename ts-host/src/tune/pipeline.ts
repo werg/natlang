@@ -19,6 +19,7 @@ import { sharedSourceHash, rootDataValid, trainingScaffoldKey } from './keys.js'
 import { programSites } from './sites.js';
 import { collect, readRootExamples, scaffoldManifest, splitExamples, type CollectedTurn, type SplitExample, type SplitReceipt } from './collect.js';
 import { evaluateRoots, type ArmResult } from './evaluate.js';
+import { isSelfTeacher, leaksPrivileged, privilegedDriver, privilegedRoots, readPrivileged, recordedTeachers } from './selfteach.js';
 import type { ScopeOptions } from '../adaptation/weights/scopes.js';
 import type { StudentSettings, TuneSettings } from './settings.js';
 import { copyNativeReleaseClosure, installNativeReleaseObject, installReleaseExport, materializeNativeInferenceState, materializeNativeStateGguf, nativeReleaseObjectClosure, verifyNativeInferenceMaterialization, verifyNativeInferenceSnapshotReceipt, type NativeInferenceMaterializationReceipt } from '../native/release-artifact-closure.js';
@@ -148,9 +149,11 @@ export function importedTeachers(root: string): string[] {
   const path = join(tuneDirectory(root), 'data', 'imports.json');
   return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as { teachers: string[] }).teachers : [];
 }
-/** A root's still-valid record: the configured teacher's first, else one imported from the pool. */
+/** A root's still-valid record: the configured teacher's first, else one imported from the pool. The self teacher
+ * (selfteach.ts) reuses every earlier teacher's still-valid record first and collects only what is missing. */
 export function validRootRecord(root: string, example: SplitExample, scaffold: WeightManifest, shared: string, teacherId: string): RootRecord | undefined {
-  for (const teacher of [teacherId, ...importedTeachers(root).filter(id => id !== teacherId)]) {
+  const others = [...new Set([...importedTeachers(root), ...(isSelfTeacher(teacherId) ? recordedTeachers(root) : [])])].filter(id => id !== teacherId);
+  for (const teacher of isSelfTeacher(teacherId) ? [...others, teacherId] : [teacherId, ...others]) {
     const path = rootRecordPath(root, example, teacher);
     if (!existsSync(path)) continue;
     const record = JSON.parse(readFileSync(path, 'utf8')) as RootRecord;
@@ -187,7 +190,11 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   const shared = sharedSourceHash(program, root);
   const rootsDir = join(tuneDirectory(root), 'data', 'roots');
   const recordPath = (example: SplitExample) => rootRecordPath(root, example, options.teacherId);
-  const collectable = examples.filter(example => example.partition === 'train' || example.partition === 'development');
+  // The self teacher collects training roots only (privileged context never reaches development roots, which only
+  // select releases); an external teacher also collects development roots for teacher-reference reports.
+  const self = isSelfTeacher(options.teacherId);
+  const privileged = self ? privilegedRoots(readPrivileged(root), examples) : new Map();
+  const collectable = examples.filter(example => example.partition === 'train' || (!self && example.partition === 'development'));
   const records = new Map<string, RootRecord>();
   for (const example of collectable) {
     const record = validRootRecord(root, example, scaffold, shared, options.teacherId);
@@ -198,9 +205,11 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   await timed(timings, 'data', log, async () => {
     if (!missing.length) return;
     mkdirSync(rootsDir, { recursive: true });
-    const collected = await collect({ root, program, scaffold, examples: missing, teacher: options.teacher, teacherId: options.teacherId, services: options.services, execution: options.settings.execution });
+    const collected = await collect({ root, program, scaffold, examples: missing, teacher: options.teacher, teacherId: options.teacherId, services: options.services, execution: options.settings.execution,
+      ...(self ? { teacherFor: (example: SplitExample) => { const reference = privileged.get(example.id);
+        return reference ? privilegedDriver(options.teacher, reference) : options.teacher; } } : {}) });
     const failures = collected.roots.filter(item => !item.ok && item.error);
-    if (failures.length === collected.roots.length)
+    if (failures.length === collected.roots.length && !self)
       // Nothing usable: do not cache it as reusable data; the cause is usually the teacher setup.
       throw new Error(`every root invocation failed with the teacher; first error: ${failures[0]?.error ?? 'unknown'}`);
     const semantic = new Map(scaffold.bindings.map(entry => [entry.id, entry.semanticHash]));
@@ -220,10 +229,12 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   const turns = collectable.flatMap(example => records.get(example.id)?.turns ?? []);
   const dataKey = sha(['natlang.tune-data/v3-action-outcome-2', collectable.map(example => [example.id, example.partition, records.has(example.id)
     ? sha(records.get(example.id)) : null])]).slice(0, 24);
+  // A self-taught root whose reply echoed its privileged reference depended on it: none of its turns is a target.
+  const leaked = new Set(turns.filter(turn => isSelfTeacher(turn.teacher) && leaksPrivileged(turn)).map(turn => turn.root));
   // Binding IDs depend on program, component and context only, so rows stay valid for any tree-root variant.
   const trainRows = turns.filter(turn => turn.partition === 'train' && turn.binding && turn.evidence.enclosingSuccess &&
     turn.evidence.actionPolicy === 'natlang.tune-action-outcome/2' && Array.isArray(turn.evidence.actionEvents) &&
-    turn.evidence.actionDisposition === 'admissible' && !turn.reply.truncated);
+    turn.evidence.actionDisposition === 'admissible' && !turn.reply.truncated && !leaked.has(turn.root));
   return { scaffold, sites, examples, dataKey, turns, trainRows, protectedCount: all.filter(example => example.protected).length, total: all.length };
 }
 
@@ -251,14 +262,17 @@ export type TrainVariant = { readonly manifest: WeightManifest; readonly recipe?
   readonly receipts?: Readonly<Record<string, unknown>>;
   /** Another Python entry with the `tune.build` plan/result contract, and its extra plan settings (the learned
    * optimizer, plans/neuralese/JOINT_LEARNED_OPTIMIZER.md). */
-  readonly module?: string; readonly learned?: Readonly<Record<string, unknown>> };
+  readonly module?: string; readonly learned?: Readonly<Record<string, unknown>>;
+  readonly execute?: (plan: string, out: string) => Promise<void> };
 
 /** Train a variant (or reuse its receipt) and store its release with exports. Keyed by data, scaffold, recipe, rows. */
 export async function trainRelease(options: TuneOptions, data: TuneData, variant: TrainVariant, timings: StageTiming[] = [],
   log: (line: string) => void = () => {}): Promise<{ manifest: WeightManifest; reused: boolean; build: string }> {
   const { root, student } = options;
   const rows = variant.rows ?? data.trainRows;
-  if (!rows.length) throw new Error('the teacher produced no verified training trajectories; check the examples and teacher profile');
+  if (!rows.length) throw new Error(isSelfTeacher(data.turns[0]?.teacher ?? '') || !data.turns.length
+    ? 'no verified training trajectories: the self teacher (privileged student) solved no training root; check tune.privileged.jsonl and the student'
+    : 'the teacher produced no verified training trajectories; check the examples and teacher profile');
   const recipe = { seed: 0, ...options.settings.recipe, ...variant.recipe };
   const trainKey = sha(['natlang.tune-train/v3', data.dataKey, trainingScaffoldKey(variant.manifest), student, recipe,
     variant.rows ? rows.map(row => [row.root, row.call, row.turn]) : null, variant.parent ?? null,
@@ -283,7 +297,8 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
         ...(variant.artifactDirs?.length ? { artifacts: variant.artifactDirs } : {}),
         ...(variant.pinned ? { pinned: variant.pinned } : {}), ...(variant.warm ? { warm: variant.warm } : {}),
         ...(variant.learned ? { learned: variant.learned } : {}) }, null, 2));
-      await runTrainer(student, plan, out, log, variant.module);
+      if (variant.execute) await variant.execute(plan, out);
+      else await runTrainer(student, plan, out, log, variant.module);
     }
   }, reused);
   const manifest = await timed(timings, 'export', log, () => releaseFromBuild(options, data, variant, out, trainKey, recipe));

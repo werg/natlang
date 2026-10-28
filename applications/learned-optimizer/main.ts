@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { TargetContext } from '@natlang/node';
 import { AdaptationServices, PythonService, TrainingServices, adapt, train } from './index.js';
+import { nativeBridge } from './native-bridge.mjs';
 
 export async function main(context: TargetContext): Promise<number> {
   const args = context.args;
@@ -22,7 +23,8 @@ export async function main(context: TargetContext): Promise<number> {
 async function run(context: TargetContext, python: PythonService, positional: string[], option: (name: string) => string | undefined) {
   const [command, ...rest] = positional;
   if (command === 'adapt' && rest.length === 2) {
-    const services = new AdaptationServices(python, resolve(context.workspace, rest[0]!), resolve(context.workspace, rest[1]!));
+    const plan = resolve(context.workspace, rest[0]!), out = resolve(context.workspace, rest[1]!);
+    const services = new AdaptationServices(python, plan, out, nativeBridge(context.workspace, python, plan, out));
     const state = await adapt(context.runtime, services, Number(option('--steps') ?? 4));
     context.io.output.write(`${JSON.stringify(state, null, 2)}\n`);
     context.io.output.write(`${JSON.stringify(await services.release(state.current?.id ?? null), null, 2)}\n`);

@@ -1,0 +1,23 @@
+{
+ "checkpoint": "{checkpoint}",
+ "store": "{op}/store",
+ "device": "cuda",
+ "dtype": "bfloat16",
+ "bank": "{op}/bank.json",
+ "targets": "{op}/corpus/targets.jsonl",
+ "state": "{op}/optimizer/state.json",
+ "receipt": "{op}/optimizer/receipt.json",
+ "steps": 400,
+ "recipe": {
+  "writer": {
+   "kind": "free-lora",
+   "rank": 16,
+   "alpha": 16.0
+  },
+  "batch_targets": 4,
+  "publish_every": 100,
+  "train_basis": true,
+  "train_bank": true,
+  "train_keys": true
+ }
+}

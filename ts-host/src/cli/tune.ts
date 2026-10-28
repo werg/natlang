@@ -8,7 +8,7 @@
  *   natlang tune <program> --watch         rebuild in the background on edits; the run/call path keeps serving
  *   natlang tune <program> --report        the latest report, status and the active release
  *   natlang tune <program> --rollback      reactivate the previous coherent release
- *   natlang tune <program> --evaluate <development|confirmation|protected> [--with-teacher]
+ *   natlang tune <program> --evaluate <development|confirmation|protected> [--release DIGEST] [--with-teacher]
  *                                          paired arms (untuned, active release, teacher reference) for reports
  *   natlang tune <program> --placement     measured removals/refits on development roots; activates the cheapest
  *                                          candidate within the declared success envelope
@@ -56,6 +56,7 @@ import { exportDistillation } from '../tune/distill.js';
 import { familyRegistry, familyStore, registerTunedProgram, runFamilies, type FamiliesReport, type FamilyProgram } from '../tune/families.js';
 import { calibrateTeachers, routedTeacherProfile, routeTeacher, saveTeacherChoice } from '../tune/teachers.js';
 import { currentSplit } from '../tune/pipeline.js';
+import { readPrivileged, selfTeacherId, SELF_TEACHER } from '../tune/selfteach.js';
 import { createNatlangRuntime } from '../runtime/runtime.js';
 import { loadNatlang } from '../runtime/node-files.js';
 import { requireNativeReaderIdentity } from '../model/index.js';
@@ -86,7 +87,7 @@ function formatReport(report: TuneReport): string {
 
 export async function tuneCommand(argv: readonly string[], io: { out: (text: string) => void; err: (text: string) => void } =
   { out: text => process.stdout.write(text + '\n'), err: text => process.stderr.write(text + '\n') }): Promise<number> {
-  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--learned', '--partition', '--export-cases', '--import-cases', '--import-campaign', '--held', '--score-proposals'];
+  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--release', '--sweep', '--learned', '--partition', '--export-cases', '--import-cases', '--import-campaign', '--held', '--score-proposals'];
   const flags = new Set(argv.filter(arg => arg.startsWith('--') && !valuedNames.includes(arg)));
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
@@ -123,8 +124,12 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     // Several configured teachers: collection uses the calibrated, routed one; an explicit --teacher overrides.
     const teacherProfile = settings.teachers?.length && !value('--teacher')
       ? routedTeacherProfile(programRoot, settings.teachers.map(profile => ({ profile, id: identityOf(profile) }))) : settings.teacher;
-    const teacherConfig = loadModelConfiguration(teacherProfile);
+    // The self teacher (the default) is the student served through the tune serving profile, without adapters; its
+    // identity binds the student base and the program's privileged references (tune/selfteach.ts).
+    const self = teacherProfile === SELF_TEACHER;
+    const teacherConfig = loadModelConfiguration(self ? settings.servingProfile : teacherProfile);
     const teacherSession = createResolvedModelSession(teacherConfig.choice, process.env, process.stderr);
+    const teacherId = self ? selfTeacherId(student, readPrivileged(programRoot).digest) : executorIdentityForChoice(teacherConfig.choice).id;
     try {
       const assertStudentBase = async () => {
         if (settings.backend !== 'native') return;
@@ -136,7 +141,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
           apiKey: process.env[serving.choice.apiKeyEnv], headers: serving.choice.headers });
       };
       return await fn({ root: programRoot, program, settings, student, teacher: driverOf(teacherSession),
-        teacherId: executorIdentityForChoice(teacherConfig.choice).id, examplesPath: value('--examples'), log: io.err,
+        teacherId, examplesPath: value('--examples'), log: io.err,
         assertStudentBase,
         serve: async ({ manifest, directory, capture }) => {
           if (settings.backend === 'native') {
@@ -174,9 +179,14 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     } finally { await teacherSession.close(); }
   };
   const learnedSpec = value('--learned');
+  if (value('--release') && !value('--evaluate')) throw new Error('--release requires --evaluate');
   if (learnedSpec && flags.has('--rounds')) throw new Error('--learned and --rounds select the release differently; pass one');
-  const once = () => withOptions(options => tuneProgram(options, learnedSpec ? learnedSelector(options, readLearnedSettings(learnedSpec))
-    : flags.has('--rounds') ? roundsSelector(options, options.settings.rounds) : undefined));
+  const once = () => withOptions(async options => {
+    if (!learnedSpec) return tuneProgram(options, flags.has('--rounds') ? roundsSelector(options, options.settings.rounds) : undefined);
+    const settings = readLearnedSettings(learnedSpec);
+    if (settings.policy === 'crisp-baseline') return tuneProgram(options, learnedSelector(options, settings));
+    return withOptions(controller => tuneProgram(options, learnedSelector(options, settings, controller)), settings.controller!.root);
+  });
   const proposalRequest = value('--score-proposals');
   if (proposalRequest !== undefined) {
     io.out(await withOptions(options => scoreProposals(options, resolve(proposalRequest), io.err)));
@@ -190,9 +200,11 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       const examples = partition === 'protected' ? protectedExamples(readRootExamples(root, options.examplesPath))
         : data.examples.filter(example => example.partition === partition);
       if (!examples.length) throw new Error(`no ${partition} roots to evaluate`);
-      const current = currentManifest(root);
-      const arms = [await evaluateRelease(options, data, null, examples, 'untuned', partition)];
-      if (current) arms.push(await evaluateRelease(options, data, current, examples, String(current.receipts.variant ?? '').startsWith('placement') ? 'placed' : 'hierarchy', partition));
+      const selectedRelease = value('--release');
+      const current = selectedRelease ? readRelease(root, selectedRelease) : currentManifest(root);
+      const arms = selectedRelease ? [] : [await evaluateRelease(options, data, null, examples, 'untuned', partition)];
+      if (current) arms.push(await evaluateRelease(options, data, current, examples, selectedRelease ? `release-${selectedRelease}` :
+        String(current.receipts.variant ?? '').startsWith('placement') ? 'placed' : 'hierarchy', partition));
       // The teacher reference runs as an isolated evaluator: its answers are never training data.
       if (flags.has('--with-teacher')) arms.push(await evaluateRoots({ root, program: options.program, driver: options.teacher, weights: [], examples, services: options.services, execution: options.settings.execution,
         arm: 'teacher', release: null, partition }));
@@ -272,7 +284,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       scaffold: scaffoldManifest(program, student.base, { sites: programSites(root, program).sites }) };
     if (exportDir !== undefined) {
       const result = exportCases(context, resolve(exportDir), { includeConfirmation: flags.has('--include-confirmation'),
-        teacherId: identityOf(settings.teacher) });
+        teacherId: settings.teacher === SELF_TEACHER ? selfTeacherId(student, readPrivileged(root).digest) : identityOf(settings.teacher) });
       io.out(flags.has('--json') ? JSON.stringify(result, null, 2) : `${result.cases} case(s) written; ${result.skipped.length} root(s) skipped; ` +
         `manifest ${result.manifest}\nnext: root review and dispatch through the reviewed pool (see plans/TUNING_OPERATIONS_HANDOFF_20261026.md)`);
       return 0;
@@ -297,7 +309,9 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     const { settings } = loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') });
     const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
     if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
-    const profiles = value('--teacher') ? [value('--teacher')!] : settings.teachers?.length ? settings.teachers : [settings.teacher];
+    const profiles = (value('--teacher') ? [value('--teacher')!] : settings.teachers?.length ? settings.teachers : [settings.teacher])
+      .filter(profile => profile !== SELF_TEACHER);
+    if (!profiles.length) throw new Error('--calibrate measures external teacher profiles; the self teacher has none configured');
     const sessions = profiles.map(profile => ({ profile, session: createResolvedModelSession(loadModelConfiguration(profile).choice, process.env, process.stderr) }));
     try {
       const examples = currentSplit(root, value('--examples')).filter(example => example.partition === 'development' && !example.protected);

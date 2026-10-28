@@ -1,8 +1,6 @@
-"""Joint learned optimizer: number grid, coefficient head, shared basis/component bank and gradient probe
+"""Joint learned optimizer: component-token mixture law, shared basis/component bank and gradient probe
 (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md) on the real native engine."""
-import glob
 import math
-from pathlib import Path
 
 import pytest
 import torch
@@ -12,124 +10,73 @@ from test_tune_trainer import rows_for
 from natlang_neuralese.model.native_adapters import run_native, target_parameters
 from natlang_neuralese.model.shared_state import Invocation, compile_graph
 from natlang_neuralese.tune.learned import LearnedOptimizerError
-from natlang_neuralese.tune.learned import head as H
-from natlang_neuralese.tune.learned import numbers as N
+from natlang_neuralese.tune.learned import mixture as M
 from natlang_neuralese.tune.learned.bank import (Component, component_id, core_norms, load_bank, new_bank, normalize, orthonormalize,
                                                  save_bank, transform_core, weight_svd_basis)
 from natlang_neuralese.tune.learned.subspace import pooled_basis, probe, source_gradients
 
 
-class ToyEncoder:
-    """A tokenizer with the students' grid spelling: one sign-bearing space token and one digit per value."""
-    def __call__(self, text):
-        out = []
-        index = 0
-        while index < len(text):
-            char = text[index]
-            if char == ' ' and text[index + 1:index + 2] == '-':
-                out.append(11); index += 2
-            elif char == ' ':
-                out.append(10); index += 1
-            elif char.isdigit():
-                out.append(int(char)); index += 1
-            else:
-                out.append({'[': 12, ']': 13, ',': 14}[char]); index += 1
-        return out
-
-
-TOKENS = N.GridTokens.from_encoder(ToyEncoder())
-
-
-def test_real_student_tokenizer_spells_the_grid_as_sign_then_digit():
-    paths = glob.glob(str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/*/tokenizer.json'))
-    if not paths:
-        pytest.skip('LFM2.5-350M tokenizer is not cached here')
-    from tokenizers import Tokenizer
-    tokenizer = Tokenizer.from_file(paths[0])
-    tokens = N.GridTokens.from_encoder(lambda text: tokenizer.encode(text, add_special_tokens=False).ids)
-    assert tokenizer.encode(N.text([3, 0, -2]), add_special_tokens=False).ids == tokens.spell([3, 0, -2])
-
-
-def test_layout_parse_round_trip_and_contract_failures():
-    values, available = [3, 0, -2, 0], [True, True, True, False]
-    items = N.layout(TOKENS, values, available)
-    ids = [token for token, _, _ in items]
-    assert N.parse(TOKENS, ids, available) == values
-    assert [kind for _, kind, slot in items if slot == 3] == ['forced-sign', 'forced-digit']
-    with pytest.raises(LearnedOptimizerError, match='negative zero'):
-        N.parse(TOKENS, TOKENS.spell([0]) [:1] + [TOKENS.negative, TOKENS.digits[0], TOKENS.close], [True])
-    with pytest.raises(LearnedOptimizerError, match='must be zero'):
-        N.parse(TOKENS, TOKENS.spell([1]), [False])
-    with pytest.raises(LearnedOptimizerError, match='template'):
-        N.parse(TOKENS, TOKENS.spell([1, 2]), [True])
-    assert N.text([3, 0, -2]) == '[ 3, 0, -2]'
-
-
-def test_token_expectation_matches_exact_enumeration():
-    fmt = N.NumberFormat(.25)
-    generator = torch.Generator().manual_seed(0)
-    sign, pos, neg = (torch.randn(20, generator=generator) for _ in range(3))
-    logp = N.value_logprobs(TOKENS, fmt, sign, pos, neg)
-    assert math.isclose(float(logp.exp().sum()), 1., rel_tol=1e-6)
-    # Enumerate the grammar directly.
-    ps = torch.softmax(torch.stack([sign[TOKENS.positive], sign[TOKENS.negative]]), 0)
-    dp = torch.softmax(pos[list(TOKENS.digits)], 0)
-    dn = torch.softmax(neg[list(TOKENS.digits[1:])], 0)
-    mean = sum(ps[0] * dp[m] * m for m in range(10)) - sum(ps[1] * dn[m - 1] * m for m in range(1, 10))
-    signed = ps[0] * (1 - dp[0]) - ps[1]
-    got_mean, got_signed, estimator = N.expectation(TOKENS, fmt, sign, pos, False, neg)
-    assert estimator == N.EXACT_ESTIMATOR
-    torch.testing.assert_close(got_mean, mean)
-    torch.testing.assert_close(got_signed, signed)
-    assert N.expectation(TOKENS, fmt, sign, pos, False)[2] == N.APPROX_ESTIMATOR
-
-
-def test_quantize_and_saturation():
-    fmt = N.NumberFormat(.1)
-    assert N.quantize(.04, fmt) == (0, 0., False)
-    n, rho, saturated = N.quantize(-.33, fmt)
-    assert n == -3 and math.isclose(rho, .3, abs_tol=1e-6) and not saturated
-    assert N.quantize(5., fmt)[2] and N.quantize(5., fmt)[0] == 9
-
-
-def test_coefficient_head_invariants_and_finite_difference_gradient():
-    torch.manual_seed(0)
-    head = H.CoefficientHead(8, 3)
-    shares = H.shares_from_norms(torch.tensor([[1., 2., 1.], [0., 0., 0.], [3., 0., 1.]]))
-    hidden = torch.randn(3, 8)
-    u, v = head(hidden)
-    integers = [2, 0, -4]
-    zero = H.executed(integers, u, v, shares, step=.5, beta=.5)
-    torch.testing.assert_close(zero, torch.tensor([[1.] * 3, [0.] * 3, [-2.] * 3]))
+def test_masked_top_p_law_executes_gains_times_probabilities():
+    head = M.MixtureHead(6, 2, ['a', 'b', 'c'], M.MixtureFormat(top_p=.8), dtype=torch.float32)
     with torch.no_grad():
-        head.readout.weight.normal_()
-        head.readout.bias.normal_()
-    u, v = head(hidden)
-    c = H.executed(integers, u, v, shares, step=.5, beta=.5)
-    assert torch.equal(c[1], torch.zeros(3))
-    assert bool((c[0] > 0).all()) and bool((c[2] < 0).all())
-    mean = (c * shares).sum(-1) / .5
-    assert [round(float(x)) for x in mean.detach()] == integers
-    off = H.executed(integers, u, v, shares, step=.5, beta=.5, head=False)
-    torch.testing.assert_close(off, zero)
-    # Finite differences of the head's bias.
-    bias = head.readout.bias
-    loss = lambda: (H.executed(integers, *head(hidden), shares, step=.5, beta=.5) ** 2).sum()
-    (grad,) = torch.autograd.grad(loss(), [bias])
-    eps = 1e-3
-    for index in range(bias.numel()):
-        with torch.no_grad():
-            bias[index] += eps; up = float(loss())
-            bias[index] -= 2 * eps; down = float(loss())
-            bias[index] += eps
-        assert math.isclose(float(grad[index]), (up - down) / (2 * eps), rel_tol=1e-2, abs_tol=1e-3)
+        head.rows[1:] = torch.tensor([[3., 0, 0, 0, 0, 0], [0, 2., 0, 0, 0, 0], [0, 0, 9., 0, 0, 0]])
+    hidden = torch.tensor([1., 1.4, 1., 0, 0, 0])
+    logits = head.logits(hidden, ['a', 'b', 'c'], (True, True, False))
+    assert logits[3] == -math.inf  # the unavailable component is masked before the softmax
+    probs, keep = M.distribution(logits, .8)
+    full = torch.softmax(logits, -1)
+    assert keep.tolist() == [False, True, True, False] and float(full[1] + full[2]) >= .8 > float(full[1])
+    torch.testing.assert_close(probs, torch.where(keep, full, torch.zeros_like(full)) / full[keep].sum())
+    gains = head.gains(hidden)
+    torch.testing.assert_close(gains, torch.full((2,), 2. * .25))  # zero weight, bias at logit(gain_init)
+    torch.testing.assert_close(M.coefficients(probs, gains), probs[1:, None] * gains[None, :])
+    assert M.one_hot(3, M.NULL).tolist() == [1., 0, 0, 0] and M.one_hot(3, 1).tolist() == [0, 0, 1., 0]
     with pytest.raises(LearnedOptimizerError):
-        H.CoefficientHead(8, 3, beta=.9)
+        M.MixtureFormat(top_p=0.)
+
+
+def test_rows_initialize_from_keys_follow_components_and_round_trip():
+    fmt = M.MixtureFormat()
+    head = M.MixtureHead(4, 3, ['a', 'b'], fmt)
+    assert head.rows.dtype == torch.bfloat16 and head.initialized.tolist() == [True, False, False]
+    decision = torch.tensor([2., 0, 0, 0])
+    assert head.initialize_rows(['b'], torch.tensor([[0., 5, 0, 0]]), decision) == ['b']
+    assert head.initialize_rows(['b'], torch.tensor([[1., 0, 0, 0]]), decision) == []  # initialized once
+    torch.testing.assert_close(head.rows[2].float(), torch.tensor([0., 4. / 2, 0, 0]))
+    grown = head.resized(['c', 'b'])
+    torch.testing.assert_close(grown.rows[2], head.rows[2])
+    assert grown.initialized.tolist() == [True, False, True]
+    again = M.MixtureHead(4, 3, ['a', 'b'], fmt)
+    again.load(head.tensors())
+    assert again.identity() == head.identity()
+    assert M.MixtureFormat.from_json(fmt.as_json()) == fmt
+
+
+def test_labels_balance_and_expected_score_are_exact():
+    logits = torch.tensor([0., 1., -1., -math.inf], requires_grad=True)
+    target = torch.tensor([.2, .8, 0., 0.])
+    probs = torch.softmax(logits, -1)
+    torch.testing.assert_close(M.mixture_kl(target, logits), (target[:2] * (target[:2] / probs[:2]).log()).sum())
+    a, b = torch.tensor([.5, .5, 0.]), torch.tensor([.5, 0., .5])
+    value = M.balance([(['null', 'x', 'y'], a), (['null', 'x', 'z'], b)])
+    mean = torch.tensor([.5, .25, 0., .25])
+    assert abs(float(value) - (math.log(4) + float((mean[mean > 0] * mean[mean > 0].log()).sum()))) < 1e-6
+    assert M.balance([(['null'], torch.ones(1))]) is None
+    rewards = [1., 3., 0., 0.]
+    probs, _ = M.distribution(logits, 1.)
+    loss = M.expected_score_loss(probs, rewards)
+    loss.backward()
+    # The exact gradient of -sum_k p_k R_k: -p_k (R_k - E[R]).
+    p = torch.softmax(logits.detach(), -1)
+    expected = -p * (torch.tensor(rewards) - (p * torch.tensor(rewards)).sum())
+    torch.testing.assert_close(logits.grad[:3], expected[:3])
+    gains = torch.tensor([.5, 1.5], requires_grad=True)
+    assert float(M.gain_loss([.5, 1.5], gains, M.MixtureFormat())) == 0
 
 
 def _bank(engine, components=(), rank=4):
     names = sorted(target_parameters(engine.shared_model))[:6]
-    return new_bank(engine, weight_svd_basis(engine, names, rank), N.NumberFormat(.5), components=components)
+    return new_bank(engine, weight_svd_basis(engine, names, rank), M.MixtureFormat(), components=components)
 
 
 def _component(bank, seed, rank=2):
