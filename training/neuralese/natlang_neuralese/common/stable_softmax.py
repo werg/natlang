@@ -116,15 +116,15 @@ def _shifted(z):
     """(shifted logits with an exact-zero max, softplus(-margin), max, argmax) per row.
 
     ``log q = shifted - sp``; the argmax entry is exactly ``-sp`` with
-    ``sp = softplus(LSE(other shifted logits))``.
+    ``sp = softplus(LSE(other shifted logits))``. Functional (no in-place ops), so
+    a create_graph backward can differentiate through it.
     """
-    zmax, imax = z.max(-1, keepdim=True)
+    zmax, imax = z.detach().max(-1, keepdim=True)
     finite = torch.isfinite(zmax)
     safe_max = torch.where(finite, zmax, torch.zeros_like(zmax))
-    shifted = z - safe_max
-    shifted.scatter_(-1, imax, float('-inf'))
-    sp = F.softplus(torch.logsumexp(shifted, -1, keepdim=True))
-    shifted.scatter_(-1, imax, 0.)
+    # Exact zero at the argmax: x - x == 0 for finite x (also through autograd).
+    shifted = z - z.gather(-1, imax).where(finite, safe_max)
+    sp = F.softplus(torch.logsumexp(shifted.scatter(-1, imax, float('-inf')), -1, keepdim=True))
     if not bool(finite.all()):
         # An all -inf row has no distribution; keep it -inf (standard gives NaN).
         shifted = torch.where(finite, shifted, torch.full_like(shifted, float('-inf')))
@@ -187,19 +187,44 @@ class _SelectedLogSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad):
         z, ids, stats, maxima = ctx.saved_tensors
-        result = torch.empty_like(z)
+        result = _Rows(z)
         grad = grad.to(stats.dtype)
+        differentiable = torch.is_grad_enabled()  # create_graph: recompute row statistics through autograd
         for start in range(0, z.shape[0], ctx.rows):
             stop = start + ctx.rows
-            zmax = maxima[start:stop]
-            safe_max = torch.where(torch.isfinite(zmax), zmax, torch.zeros_like(zmax))
-            logq = (z[start:stop].to(stats.dtype) - safe_max) - stats[start:stop]
+            if differentiable:
+                shifted, sp, _, _ = _shifted(z[start:stop].to(stats.dtype))
+                logq = shifted - sp
+            else:
+                zmax = maxima[start:stop]
+                safe_max = torch.where(torch.isfinite(zmax), zmax, torch.zeros_like(zmax))
+                logq = (z[start:stop].to(stats.dtype) - safe_max) - stats[start:stop]
             weight = torch.zeros_like(logq).scatter_add_(-1, ids[start:stop], grad[start:stop])
             total = grad[start:stop].sum(-1, keepdim=True)
             # w - q W, with 1 - q = -expm1(log q) exact at a dominant id.
             g = weight * (-torch.expm1(logq)) - logq.exp() * (total - weight)
-            result[start:stop] = g.to(z.dtype)
-        return result, None, None, None
+            result.add(g.to(z.dtype))
+        return result.result(), None, None, None
+
+
+class _Rows:
+    """Backward output assembly: in place normally, functional under create_graph."""
+
+    def __init__(self, like):
+        self.functional = torch.is_grad_enabled()
+        self.parts = [] if self.functional else None
+        self.out = None if self.functional else torch.empty_like(like)
+        self.at = 0
+
+    def add(self, value):
+        if self.functional:
+            self.parts.append(value)
+        else:
+            self.out[self.at:self.at + value.shape[0]] = value
+        self.at += value.shape[0]
+
+    def result(self):
+        return torch.cat(self.parts) if self.functional else self.out
 
 
 def _flatten(logits):
@@ -345,13 +370,13 @@ class _Divergence(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad):
         zs, zt = ctx.saved_tensors
-        result = torch.empty_like(zs)
+        result = _Rows(zs)
         grad = grad.to(ctx.cdt)
         for start in range(0, zs.shape[0], ctx.rows):
             stop = start + ctx.rows
             _, g = _divergence_chunk(zs[start:stop].to(ctx.cdt), zt[start:stop].to(ctx.cdt), ctx.kind, ctx.beta, True)
-            result[start:stop] = (g * grad[start:stop, None]).to(zs.dtype)
-        return result, None, None, None, None, None
+            result.add((g * grad[start:stop, None]).to(zs.dtype))
+        return result.result(), None, None, None, None, None
 
 
 def _legacy_divergence(zs, zt, kind, beta):
@@ -434,14 +459,14 @@ class _TopKDivergence(torch.autograd.Function):
     def backward(ctx, grad):
         zs, zt, ids = ctx.saved_tensors
         width = zs.shape[-1]
-        result = torch.empty_like(zs)
+        result = _Rows(zs)
         grad = grad.to(ctx.cdt)
         for start in range(0, zs.shape[0], ctx.rows):
             stop = start + ctx.rows
             teacher = _scatter_teacher(zt[start:stop].to(ctx.cdt), ids[start:stop], width)
             _, g = _divergence_chunk(zs[start:stop].to(ctx.cdt), teacher, ctx.kind, ctx.beta, True)
-            result[start:stop] = (g * grad[start:stop, None]).to(zs.dtype)
-        return result, None, None, None, None, None, None
+            result.add((g * grad[start:stop, None]).to(zs.dtype))
+        return result.result(), None, None, None, None, None, None
 
 
 def forward_kl(student_logits, teacher_logits, **kw):
@@ -563,3 +588,43 @@ def score_centered_surrogate(trainer_logits, sampled_ids, sampled_sampler_logpro
     surrogate = w_y * logp_y - (info['coefficients'].to(logp_h.dtype) * logp_h).sum(-1)
     info['sampled_weight'] = w_y
     return surrogate, info
+
+
+
+# ---------------------------------------------------------------------------- fused-kernel helpers
+
+
+@torch.no_grad()
+def cross_entropy_value_and_grad(logits, labels, *, policy=None):
+    """For hand-written fused kernels: per-row CE and its logit gradient for (n, V) rows.
+
+    Computes in ``logits.dtype`` (callers pass their compute-dtype chunk). The
+    gradient is ``q - onehot`` with ``1 - q_t = -expm1(log q_t)`` under ``POLICY``.
+    """
+    labels = labels.long()
+    if not _stable(policy):
+        logp = torch.log_softmax(logits, -1)
+        grad = logp.exp()
+        grad[torch.arange(labels.numel(), device=labels.device), labels] -= 1
+        return -logp.gather(-1, labels[:, None])[:, 0], grad
+    shifted, sp, _, _ = _shifted(logits)
+    logq = shifted - sp
+    picked = logq.gather(-1, labels[:, None])
+    grad = logq.exp().scatter(-1, labels[:, None], torch.expm1(picked))
+    return -picked[:, 0], grad
+
+
+@torch.no_grad()
+def divergence_value_and_grad(student_logits, teacher_logits, kind, *, beta=0.5, policy=None):
+    """For hand-written fused kernels: per-row divergence value and student-logit gradient for (n, V) rows."""
+    if kind not in _KINDS:
+        raise ValueError(f'unknown divergence {kind!r}; expected one of {_KINDS}')
+    if not _stable(policy):
+        zs = student_logits.detach().requires_grad_(True)
+        with torch.enable_grad():
+            value = _legacy_divergence(zs, teacher_logits, kind, beta)
+            (grad,) = torch.autograd.grad(value.sum(), zs)
+        return value.detach(), grad
+    value, _ = _divergence_chunk(student_logits, teacher_logits, kind, beta, False)
+    _, grad = _divergence_chunk(student_logits, teacher_logits, kind, beta, True)
+    return value, grad

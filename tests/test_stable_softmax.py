@@ -241,3 +241,36 @@ def test_bf16_input_grad_dtype_and_native_compute():
     x = zt.clone().requires_grad_(True)
     S.forward_kl(x, zt, compute_dtype=torch.bfloat16).sum().backward()
     assert float(x.grad.float().abs().max()) == 0.
+
+
+def test_double_backward_matches_reference():
+    torch.manual_seed(8)
+    z = torch.randn(3, 20, dtype=torch.float64)
+    labels = torch.tensor([1, 5, 7])
+    v = torch.randn(3, 20, dtype=torch.float64)
+    zt = torch.randn(3, 20, dtype=torch.float64)
+
+    def hvp(fn):
+        x = z.clone().requires_grad_(True)
+        (g,) = torch.autograd.grad(fn(x).sum(), x, create_graph=True)
+        (h,) = torch.autograd.grad((g * v).sum(), x)
+        return h
+
+    ref = hvp(lambda x: F.cross_entropy(x, labels, reduction='none'))
+    torch.testing.assert_close(hvp(lambda x: S.cross_entropy(x, labels)), ref)
+    with S.use_numerics_policy(S.LEGACY_POLICY):
+        ref = hvp(lambda x: S.divergence(x, zt, 'jsd', beta=0.3))
+    torch.testing.assert_close(hvp(lambda x: S.divergence(x, zt, 'jsd', beta=0.3)), ref)
+
+
+def test_fused_helpers_match_autograd():
+    torch.manual_seed(9)
+    z = torch.randn(6, 40) * 5
+    labels = torch.randint(0, 40, (6,))
+    loss, grad = S.cross_entropy_value_and_grad(z, labels)
+    ref_value, ref = _hard_ref(z, labels)
+    assert _rel(grad.double(), ref) < 1e-5
+    torch.testing.assert_close(loss.double(), ref_value, rtol=1e-5, atol=1e-7)
+    zt = z + 1e-4 * torch.randn_like(z)
+    value, grad = S.divergence_value_and_grad(z, zt, 'forward_kl')
+    assert _rel(grad.double(), _ref_grad(lambda x: _ref_divergence(x, zt.double(), 'forward_kl'), z)) < 1e-3
