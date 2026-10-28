@@ -100,18 +100,24 @@ def resident_pin(directory, archive):
                 raise ValueError('resident committed generation and active plan differ')
             if not state and initial_state['plan_sha256'] != canonical_json_sha256_hex(active_plan):
                 raise ValueError('resident initial generation and active plan differ')
+        initial_binding = None
+        if not state:
+            try:
+                initial_binding = {'plan_sha256': initial_state['plan_sha256'],
+                    'recipe_sha256': active_plan['recipe_sha256'],
+                    'runtime_code_sha256': canonical_json_sha256_hex(active_plan['code']),
+                    'roles': [{'train': x.get('native_graphs', {}).get('sha256'),
+                               'held': x.get('held_native_graphs', {}).get('sha256')}
+                              for x in active_plan['stage_inputs'].values()]}
+            except (KeyError, TypeError, AttributeError) as error:
+                raise ValueError('resident initial plan lacks recovery binding metadata') from error
         temp = archive.with_name(archive.name + '.tmp')
         with open_recovery_tar(temp) as tar: tar.add(staging, arcname='diloco-resident')
         os.link(temp, archive); temp.unlink()
         return {'path': str(archive), 'sha256': _hash(archive), 'bytes': archive.stat().st_size,
                 'generation': state['generation'] if state else initial_state['plan_sha256'],
                 'binding_kind': 'adopted' if state else 'initial-only',
-                'initial_binding': None if state else {'plan_sha256': initial_state['plan_sha256'],
-                    'recipe_sha256': active_plan['recipe_sha256'],
-                    'runtime_code_sha256': canonical_json_sha256_hex(active_plan['code']),
-                    'roles': [{'train': x.get('native_graphs', {}).get('sha256'),
-                               'held': x.get('held_native_graphs', {}).get('sha256')}
-                              for x in active_plan['stage_inputs'].values()]},
+                'initial_binding': initial_binding,
                 'at_global_step': state['at_global_step'] if state else None,
                 'captured_at': time.time()}
     finally:

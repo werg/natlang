@@ -142,7 +142,9 @@ def test_resident_pin_records_actual_committed_control_and_rejects_wrong_plan(tm
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
     pin = load('diloco_recovery_pin')
     directory = tmp_path / 'resident-data'; directory.mkdir()
-    plan = {'recipe': {'id': 'test'}}
+    plan = {'recipe': {'id': 'test'}, 'recipe_sha256': 'recipe', 'code': {},
+            'stage_inputs': {'sft': {'native_graphs': {'sha256': 'train'},
+                                     'held_native_graphs': {'sha256': 'held'}}}}
     (tmp_path / 'recipe-plan.json').write_text(json.dumps(plan))
     (directory / 'initial.json').write_text(json.dumps({'plan_sha256': canonical_json_sha256_hex(plan)}))
     result = pin.resident_pin(directory, tmp_path / 'control.tar')
@@ -153,6 +155,10 @@ def test_resident_pin_records_actual_committed_control_and_rejects_wrong_plan(tm
     (tmp_path / 'recipe-plan.json').write_text('{}')
     with pytest.raises(ValueError, match='active plan differ'):
         pin.resident_pin(directory, tmp_path / 'bad.tar')
+    (directory / 'initial.json').write_text(json.dumps({'plan_sha256': canonical_json_sha256_hex({})}))
+    with pytest.raises(ValueError, match='recovery binding metadata'):
+        pin.resident_pin(directory, tmp_path / 'missing-metadata.tar')
+    assert not (tmp_path / 'missing-metadata.tar').exists()
 
 
 def test_dependency_seal_requires_exact_bytes_and_rechecks_archive(tmp_path):
@@ -304,13 +310,13 @@ def test_fence_operator_releases_every_worker_after_capture_or_failure(tmp_path,
             return Result(self.files[path])
     boxes={ident:Box(i) for i,ident in enumerate(backend.workers)}
     monkeypatch.setattr(service.cwctl,'read_sandbox',lambda ident:boxes[ident])
-    monkeypatch.setattr(backend,'pin_coordinator',lambda cycle:{'path':'coord'})
+    monkeypatch.setattr(backend,'pin_coordinator_tree',lambda cycle:{'path':'coord'})
     monkeypatch.setattr(backend,'pin_resident',lambda worker,cycle:{'path':'resident-'+str(worker)})
     captured=backend.capture_fenced('cycle',timeout=30)
     assert len(captured['ready'])==4 and len(captured['components'])==5
     assert all(any(i==worker and path.endswith('.release.json') for i,path in events) for worker in range(4))
     events.clear()
-    monkeypatch.setattr(backend,'pin_coordinator',lambda cycle:(_ for _ in ()).throw(RuntimeError('pin failure')))
+    monkeypatch.setattr(backend,'pin_coordinator_tree',lambda cycle:(_ for _ in ()).throw(RuntimeError('pin failure')))
     with pytest.raises(RuntimeError,match='pin failure'):backend.capture_fenced('cycle',timeout=30)
     assert all(any(i==worker and path.endswith('.release.json') for i,path in events) for worker in range(4))
 
