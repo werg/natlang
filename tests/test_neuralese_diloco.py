@@ -640,3 +640,37 @@ def test_completed_http_worker_reopens_new_source_with_final_custody(tmp_path):
         assert progress['completion_history']['0'][0]['completion']['sequences']==prior
         assert learner.local_steps==2 and learner.local_tokens==8
     finally:learner.close();stop.set();server.join(timeout=3)
+
+
+def test_four_http_workers_reopen_one_source_while_other_workers_continue(tmp_path):
+    root=tmp_path/'coord';_init(root,_model(),workers=4,quorum=3)
+    port=_free_port();url=f'http://127.0.0.1:{port}';stop=threading.Event()
+    server=threading.Thread(target=serve_coordinator,args=(root,'127.0.0.1',port,TOKEN),kwargs={'stop':stop},daemon=True);server.start()
+    transport=Transport(url,TOKEN,5)
+    for _ in range(100):
+        try:transport.json('GET','/v1/status');break
+        except OSError:time.sleep(.02)
+    learners=[]
+    try:
+        for i in range(4):
+            model=_model();optimizer=torch.optim.AdamW(model.parameters(),lr=.001)
+            settings=DilocoSettings(run_id='unit',workers=4,worker_id=i,coordinator_url=url,local_steps=128,wire_dtype='fp32',heartbeat_seconds=.05)
+            learner=DilocoLearner(settings,surface=TensorSurface.from_module(model),identity={'objective':'toy'},output=tmp_path/f'w{i}',transport=transport)
+            learner.start();learners.append((model,optimizer,learner))
+        # Both workers perform an actual update; only worker 0 finishes its old shard.
+        for i in (0,1):
+            model,optimizer,learner=learners[i]
+            optimizer.zero_grad();model(torch.ones(1,8)).sum().backward();optimizer.step();learner.after_step(tokens=3+i)
+        worker=learners[0][2];worker.declare_completion(drained=False,generation='a'*64)
+        assert worker.finish();worker.declare_completion(drained=True,generation='a'*64)
+        prior=list(worker.sequences)
+        worker.reopen(previous='a'*64,generation='b'*64,sequences=prior)
+        model,optimizer,_=learners[0];optimizer.zero_grad();model(torch.ones(1,8)).sum().backward();optimizer.step();worker.after_step(tokens=5)
+        assert worker.local_steps==2 and worker.local_tokens==8 and learners[1][2].local_steps==1
+        progress=json.loads((root/'progress.json').read_text())
+        assert progress['completion_history']['0'][0]['completion']['sequences']==prior
+        assert progress['reopened']['0']['generation']=='b'*64 and '1' not in progress.get('completion',{})
+        assert all(v==0 for v in transport.json('GET','/v1/status')['versions'])
+    finally:
+        for _,_,learner in learners:learner.close()
+        stop.set();server.join(timeout=3)
