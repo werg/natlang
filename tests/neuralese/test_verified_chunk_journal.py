@@ -29,3 +29,11 @@ def test_orphan_chunk_is_reverified_before_recovering_receipt(tmp_path):
     (tmp_path/'chunk-00000000.jsonl').write_text(canonical_json_str(graph)+'\n')
     result=verify_chunks(rows,out=tmp_path,identity=identity,verify=lambda _:graph,validate_identity=lambda _:None)
     assert result['rows']==1 and (tmp_path/'chunk-00000000.receipt.json').exists()
+
+
+def test_edge_identity_matches_source_builder_for_unicode():
+    import hashlib
+    from scripts.neuralese_data.verify_lfm3_pair_chunks import edge_digest
+    edge={'id':'å','z':1}
+    expected=hashlib.sha256(json.dumps(edge,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    assert edge_digest(edge)==expected

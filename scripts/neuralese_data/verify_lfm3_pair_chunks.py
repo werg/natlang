@@ -23,6 +23,7 @@ from scripts.source_review import pending_family_hold_reason
 
 
 def digest(x):return hashlib.sha256(canonical_json_str(x).encode()).hexdigest()
+def edge_digest(x):return hashlib.sha256(json.dumps(x,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 def file_state(p):
     s=p.stat();return [s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns]
 def binding(p):
@@ -95,7 +96,9 @@ def verify_pair(row, *, records, edges, tokenizer, model_id, fingerprint, roles,
     want=expected_calls(writer)
     if want:
         if calls!=want:raise ValueError('complete producer target differs from source')
-    elif (writer.get('target') or {}).get('content','') not in reply:raise ValueError('assistant producer target differs from source')
+    else:
+        content=(writer.get('target') or {}).get('content')
+        if not isinstance(content,str) or not content or content not in reply:raise ValueError('assistant producer target differs from source')
     return graph
 
 
@@ -149,7 +152,7 @@ def main():
     if set(records)!=wanted:raise ValueError('source record coverage incomplete')
     edges={}
     for _,edge in iter_jsonl_rows(Path(inputs['edges']['path'])):
-        key=digest(edge)
+        key=edge_digest(edge)
         if key in edges:raise ValueError('duplicate source edge')
         edges[key]=edge
     validate(identity)
