@@ -4,16 +4,16 @@
   "identity_qualification": "native_state_runtime_qualified",
   "input_bindings": {
     "ce_supervision_policy": {
-      "path": "/home/werg/natlang/runs/lfm3-mixture/joint-sft-v3/ce-policy.json",
-      "sha256": "bee51c44eba1416e53021ba330909ffa0cf7fb81af87c25685adf901bdbc97ec"
+      "path": "/home/werg/data/dgxops/claude-recovery-20261028/data/v3-coding-chain-successor/ce-policy.json",
+      "sha256": "3e4aa7c6329819c6dc765169afab84438ff07e7350fe5070acf9ab1f536985f7"
     },
     "native_held_graphs": {
       "path": "/home/werg/natlang/runs/lfm3-mixture/joint-sft-v3/mixture/held-sources.json",
       "sha256": "5053ab2b6754f2998294215e7892b5c18443d973f55e6c04239803ffac7b5e7f"
     },
     "native_train_graphs": {
-      "path": "/home/werg/natlang/runs/lfm3-mixture/joint-sft-v3/mixture/train-sources.json",
-      "sha256": "2495345c74be777e6e1c3e62c73954f20ee26d32b52ffb6635c76e3e59d409f5"
+      "path": "/home/werg/data/dgxops/claude-recovery-20261028/data/v3-coding-chain-successor/train-sources.json",
+      "sha256": "f9d4327eff1cde3a76c996fde86f84b698800276b91267385208b26184f7a77f"
     }
   },
   "schema": "natlang.neuralese-training-recipe/1",
@@ -54,24 +54,19 @@
           "norms": true
         },
         "memory_qualification": {
-          "path": "/home/werg/data/lfm3-sft-20261028/production-v3/sft-capacity-descriptor.json",
-          "sha256": "11ed429f4fb3768d4a34672eb7df21cc49ea40b503dc526a24fc790bb748b421"
+          "path": "/home/werg/data/dgxops/claude-recovery-20261028/data/v3-coding-chain-successor/sft-capacity-descriptor.json",
+          "sha256": "70c0d96c3e50cc65688be35abdbe1bf5103859805332386115bdff1e74dd0a0d"
         },
         "native_ordinary_precision": "bf16-stochastic-rounding-v1",
         "seed": 20261028,
         "sft_packed_geometry": {
-          "path": "/home/werg/data/dgxops/claude-recovery-20261028/v3-current-runtime-geometry/packed-capacity-geometry/4f7a24a7ad8902b438cc2d3e76e78195bef6fd0d3c32e551ec23365439086fcb.json",
-          "sha256": "fca163f17775f7a2355b08a218bce15f57320f60bc6ccecc5ffb15ae8d023221"
+          "path": "/home/werg/data/dgxops/claude-recovery-20261028/data/v3-coding-chain-successor/geometry/packed-capacity-geometry/4abd613bfa4cb6bb8afd9dadcfb073f6602a24366fa3b7bf79f1c9b7b45490e7.json",
+          "sha256": "d43fbca6d6c3cba6fbf225cadc31521b12f8a4482b548acf6c90ddab5da5b351"
         },
         "share_causal_prefixes": true,
         "task_eval_every": 0,
         "weight_decay": 0.1,
-        "weight_ema": {
-          "decay": 0.999,
-          "eval": "ema",
-          "seed": 0,
-          "warmup": 10
-        }
+        "weight_ema": "off"
       },
       "requires": []
     }
