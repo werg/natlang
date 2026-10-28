@@ -223,6 +223,16 @@ def test_teacher_twin_is_the_student_graph_and_zero_spread_groups_still_teach(tm
     assert model.adapter.up.weight.grad.abs().sum() > 0
 
 
+def test_coefficient_actor_sources_cover_decision_options_and_twins():
+    from natlang_neuralese.rl.jolt import actor_sources, PRIVILEGED_SUFFIX
+    suffix = PRIVILEGED_SUFFIX['student']
+    row = {'invocation_actors': {'invocations': {'decision': {}, 'writer': {}}},
+           'decision_actions': [{'turn': 'decision', 'option_nodes': ['option0', 'option1']}],
+           'jolt': {'role': 'student', 'twin_turns': ['option0' + suffix, 'option1' + suffix, 'writer' + suffix]}}
+    assert actor_sources(row) == {'option0': 'decision', 'option1': 'decision', 'writer': 'writer',
+        'option0' + suffix: 'decision', 'option1' + suffix: 'decision', 'writer' + suffix: 'writer'}
+
+
 def test_custody_refusal_keeps_the_episode_on_its_outcome_term(tmp_path):
     """A world related to a protected packet gets no privileged teacher, never drops out of RL."""
     model, roles, identity = load('lfm')

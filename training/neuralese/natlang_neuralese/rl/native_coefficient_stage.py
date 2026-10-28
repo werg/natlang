@@ -228,9 +228,8 @@ def _train_locked(engine,*,policy,graphs,objective,out,epochs,optimizer,evaluate
                 values.append({'id':ident,'scale':float.fromhex(binding['scale_hex'])})
                 if handle is not None:active[ident]=handle
             bindings[name]=values
-        from .jolt import twin_sources
-        for twin,source in twin_sources(row).items():
-            bindings[twin]=list(bindings[source])  # a JOLT+ twin runs its sampled invocation's actor
+        from .jolt import actor_sources
+        bindings = {node: list(bindings[source]) for node, source in actor_sources(row).items()}
         if not active:
             raise ValueError('admitted graph has no declared trainable coefficient actor; retain it for backbone training instead')
         targets=[{'id':ident,'names':core['handles'][handle]['parameter_names']} for ident,handle in active.items()]

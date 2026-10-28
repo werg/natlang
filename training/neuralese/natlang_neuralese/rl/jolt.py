@@ -225,6 +225,19 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
     return build
 
 
+def actor_sources(row):
+    """Map graph nodes to the captured invocation whose actor they execute."""
+    sources = {name: name for name in row['invocation_actors']['invocations']}
+    for decision in row.get('decision_actions') or ():
+        turn = decision['turn']
+        sources.pop(turn)
+        for option in decision['option_nodes']:
+            sources[option] = turn
+    for twin, source in twin_sources(row).items():
+        sources[twin] = sources[source]
+    return sources
+
+
 def twin_sources(row):
     """{twin invocation: the sampled invocation it mirrors} of one admitted objective row ({} without a twin).
 
