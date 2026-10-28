@@ -134,9 +134,48 @@ def test_actual_optimizer_resume_with_removed_target_and_new_good_row(tmp_path, 
     resumed=torch.load(tmp_path/'out/checkpoint.pt',weights_only=False)['training']
     assert resumed['step']==3 and resumed['exposure_counts']==actual['exposure_counts']
     assert resumed['options']['withdrawal_history']==actual['options']['withdrawal_history']
+    pos=args.index('--withdrawn-native-graphs');args[pos]='--retired-native-withdrawal'
+    assert main(args)==0
+    retired=torch.load(tmp_path/'out/checkpoint.pt',weights_only=False)['training']
+    assert retired['step']==3 and retired['exposure_counts']==actual['exposure_counts']
+    assert retired['options']['withdrawal_history']==actual['options']['withdrawal_history']
     (tmp_path/'audit.json').write_text('changed after application')
     with pytest.raises(ValueError,match='evidence hash'):
         main(args)
+
+
+def test_retirement_requires_committed_exact_proof_and_rejects_reintroduction(tmp_path):
+    from natlang_neuralese.train.native_continuation import verify_retired_withdrawal
+    row={'id':'bad','binding':'b','source_sha256':'physical','reason':'rejected'}
+    path=proof(tmp_path,[row]);old=state()
+    with pytest.raises(ValueError,match='not committed'):
+        verify_retired_withdrawal(old,path,current_bindings={'good':'g'},model_id='model:pin')
+    earned=withdraw_native_rows(old,path,current_bindings={'good':'g','comm':'c'},model_id='model:pin',source_origins={'bad':'physical'})
+    assert verify_retired_withdrawal(earned,path,current_bindings={'good':'g','comm':'c'},model_id='model:pin')['rows']==1
+    with pytest.raises(ValueError,match='reintroduced'):
+        verify_retired_withdrawal(earned,path,current_bindings={'bad':'b'},model_id='model:pin')
+    forged=copy.deepcopy(earned);forged['options']['withdrawal_history'][0]['rows'][0]['binding']='forged'
+    with pytest.raises(ValueError,match='history differs'):
+        verify_retired_withdrawal(forged,path,current_bindings={},model_id='model:pin')
+
+
+def test_recipe_can_retire_only_the_exact_prior_withdrawal(tmp_path):
+    from natlang_neuralese.train.recipe import _data_continuation,_bind_native_source_dependencies,stage_input_args
+    path=proof(tmp_path,[{'id':'bad','binding':'b','source_sha256':'physical','reason':'rejected'}])
+    bind=lambda name,digest:{'path':name,'sha256':digest,'binding':{'declared':True}}
+    old={'native_graphs':bind('old','old-sha'),'held_native_graphs':bind('held','held-sha'),
+         'withdrawn_native_graphs':bind(str(path),sha(path))}
+    new={'native_graphs':bind('new','new-sha'),'held_native_graphs':old['held_native_graphs'],
+         'continued_native_graphs':old['native_graphs'],'retired_native_withdrawal':old['withdrawn_native_graphs']}
+    assert _data_continuation(old,new)
+    wrong=copy.deepcopy(new);wrong['retired_native_withdrawal']['sha256']='wrong'
+    assert not _data_continuation(old,wrong)
+    missing=copy.deepcopy(new);del missing['retired_native_withdrawal']
+    assert not _data_continuation(old,missing)
+    resolved=_bind_native_source_dependencies({'retired_native_withdrawal':new['retired_native_withdrawal']})
+    assert resolved['retired_native_withdrawal']['dependencies'][0]['sha256']==sha(tmp_path/'audit.json')
+    args=stage_input_args(resolved,'native_state_sft')
+    assert '--retired-native-withdrawal' in args and '--withdrawn-native-graphs' not in args
 
 
 def test_recipe_withdrawal_keeps_exact_predecessor_and_evidence_closure(tmp_path):

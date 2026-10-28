@@ -24,6 +24,32 @@ def reject_withdrawn_targets(training,current_bindings):
                 raise ValueError('native source reintroduced a previously withdrawn target: '+row['id'])
 
 
+def verify_retired_withdrawal(training, proof_path, *, current_bindings, model_id):
+    """Authenticate a consumed withdrawal without executing it again."""
+    path=Path(proof_path)
+    proof=json.loads(path.read_text())
+    if proof.get('schema')!='natlang.native-graph-withdrawal/1' or proof.get('model_id')!=model_id:
+        raise ValueError('retired withdrawal schema/model identity differs')
+    evidence=proof.get('evidence') or {}
+    evidence_path=Path(evidence.get('path',''))
+    if not evidence_path.is_absolute():evidence_path=path.parent/evidence_path
+    if not evidence_path.is_file() or sha256_file_hex_cached(evidence_path)!=evidence.get('sha256'):
+        raise ValueError('retired withdrawal evidence hash differs')
+    proof_sha=sha256_file_hex_cached(path)
+    history=(training.get('options') or {}).get('withdrawal_history') or []
+    matches=[item for item in history if item.get('proof_sha256')==proof_sha]
+    rows=proof.get('rows')
+    if not isinstance(rows,list) or not rows or len(matches)!=1:
+        raise ValueError('retired withdrawal is not committed in this checkpoint')
+    expected={row['id']:row['binding'] for row in rows}
+    recorded=matches[0].get('rows') or []
+    if (len(expected)!=len(rows) or len(recorded)!=len(rows)
+            or {row.get('id'):row.get('binding') for row in recorded}!=expected):
+        raise ValueError('retired withdrawal history differs from its exact proof')
+    reject_withdrawn_targets(training,current_bindings)
+    return {'proof_sha256':proof_sha,'rows':len(rows)}
+
+
 def withdraw_native_rows(training, proof_path, *, current_bindings, model_id, source_origins=None):
     """Withdraw exact rejected targets, preserving earned numeric state and history.
 
