@@ -293,7 +293,7 @@ def test_fence_operator_releases_every_worker_after_capture_or_failure(tmp_path,
     events=[]
     class Result:
         def __init__(self,value=None):self.value=value;self.returncode=0
-        def result(self):return self.value if self.value is not None else self
+        def result(self,**kwargs):return self.value if self.value is not None else self
     class Box:
         def __init__(self,worker):
             self.worker=worker;self.files={'/work/diloco-learner/diloco/recovery-fence/capabilities.json':json.dumps({'schema':'natlang.diloco-recovery-fence/1','worker':worker,'fingerprint':'fingerprint','owner':{'pid':1,'boot_id':'test','start_ticks':'1'}})}
@@ -309,14 +309,14 @@ def test_fence_operator_releases_every_worker_after_capture_or_failure(tmp_path,
             if path not in self.files:raise FileNotFoundError(path)
             return Result(self.files[path])
     boxes={ident:Box(i) for i,ident in enumerate(backend.workers)}
-    monkeypatch.setattr(service.cwctl,'read_sandbox',lambda ident:boxes[ident])
-    monkeypatch.setattr(backend,'pin_coordinator_tree',lambda cycle:{'path':'coord'})
-    monkeypatch.setattr(backend,'pin_resident',lambda worker,cycle:{'path':'resident-'+str(worker)})
+    monkeypatch.setattr(service.cwctl,'read_sandbox',lambda ident,**kwargs:boxes[ident])
+    monkeypatch.setattr(backend,'pin_coordinator_tree',lambda cycle,**kwargs:{'path':'coord'})
+    monkeypatch.setattr(backend,'pin_resident',lambda worker,cycle,**kwargs:{'path':'resident-'+str(worker)})
     captured=backend.capture_fenced('cycle',timeout=30)
     assert len(captured['ready'])==4 and len(captured['components'])==5
     assert all(any(i==worker and path.endswith('.release.json') for i,path in events) for worker in range(4))
     events.clear()
-    monkeypatch.setattr(backend,'pin_coordinator_tree',lambda cycle:(_ for _ in ()).throw(RuntimeError('pin failure')))
+    monkeypatch.setattr(backend,'pin_coordinator_tree',lambda cycle,**kwargs:(_ for _ in ()).throw(RuntimeError('pin failure')))
     with pytest.raises(RuntimeError,match='pin failure'):backend.capture_fenced('cycle',timeout=30)
     assert all(any(i==worker and path.endswith('.release.json') for i,path in events) for worker in range(4))
 

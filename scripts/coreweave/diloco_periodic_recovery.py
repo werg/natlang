@@ -51,7 +51,7 @@ class Backend:
         self.root='/work/diloco-coordinator'
         if len(self.workers)!=record['run']['settings']['workers'] or len(set(self.workers))!=len(self.workers):
             raise ValueError('recovery requires distinct actual sandbox IDs for every learner')
-        self.manifest=json.loads(cwctl.read_sandbox(self.coordinator).read_file(self.root+'/manifest.json').result())
+        self.manifest=json.loads(cwctl.read_sandbox(self.coordinator).read_file(self.root+'/manifest.json').result(timeout=60))
         if self.manifest.get('run_id')!=record['run']['settings']['run_id']:
             raise ValueError('actual coordinator manifest belongs to another run')
         self.fingerprint=self.manifest['fingerprint']
@@ -62,10 +62,14 @@ class Backend:
         if live.get('coordinator')!=self.coordinator or live.get('learners')!=self.workers:
             raise ValueError('sandbox ownership changed; stop and explicitly bind a new recovery journal')
 
-    def _exec(self,sandbox_id,args):
+    def _exec(self,sandbox_id,args,*,timeout=3600):
         command=['nice','-n','19','env','PYTHONPATH='+str(self.repo/'training/neuralese')+os.pathsep+str(self.repo),
                  'python3','-c',self.helper,*map(str,args)]
-        result=cwctl.read_sandbox(sandbox_id).exec(command,timeout_seconds=3600).result(timeout=3660)
+        deadline=time.monotonic()+timeout
+        sandbox=cwctl.read_sandbox(sandbox_id,patience=min(900,timeout))
+        remaining=deadline-time.monotonic()
+        if remaining<=0:raise TimeoutError('recovery pin expired before sandbox became reachable')
+        result=sandbox.exec(command,timeout_seconds=remaining).result(timeout=remaining+1)
         if result.returncode:raise RuntimeError(f'recovery pin {sandbox_id} failed: {result.stderr[-2000:]}')
         return json.loads(result.stdout)
 
@@ -75,9 +79,9 @@ class Backend:
         result=self._exec(self.workers[worker],['worker',source or self.out+'/checkpoint.pt',pin,worker,self.fingerprint,package])
         return {**result,'sandbox_id':self.workers[worker],'source':source or self.out+'/checkpoint.pt'}
 
-    def pin_resident(self,worker,cycle):
+    def pin_resident(self,worker,cycle,*,timeout=3600):
         pin=f'/work/.coreweave/recovery-pins/{cycle}/resident-{worker}-{uuid.uuid4().hex}/resident.tar'
-        result=self._exec(self.workers[worker],['resident','/work/diloco-resident/resident-data',pin])
+        result=self._exec(self.workers[worker],['resident','/work/diloco-resident/resident-data',pin],timeout=timeout)
         return {**result,'sandbox_id':self.workers[worker],'source':'/work/diloco-resident/resident-data'}
 
     def pin_coordinator(self,cycle):
@@ -85,27 +89,31 @@ class Backend:
         result=self._exec(self.coordinator,['coordinator',self.root,pin,self.repo/'training/neuralese/natlang_neuralese'])
         return {**result,'sandbox_id':self.coordinator,'source':self.root}
 
-    def pin_coordinator_tree(self,cycle):
+    def pin_coordinator_tree(self,cycle,*,timeout=3600):
         pin=f'/work/.coreweave/recovery-pins/{cycle}/coordinator-tree-{uuid.uuid4().hex}/tree'
-        result=self._exec(self.coordinator,['coordinator-tree',self.root,pin,self.repo/'training/neuralese/natlang_neuralese'])
+        result=self._exec(self.coordinator,['coordinator-tree',self.root,pin,self.repo/'training/neuralese/natlang_neuralese'],timeout=timeout)
         return {**result,'sandbox_id':self.coordinator,'source':self.root}
 
     def archive_coordinator_tree(self,component):
         tree=component['path'];identity=tree+'.identity.json';archive=tree+'.tar'
         box=cwctl.read_sandbox(self.coordinator)
-        box.write_file(identity,json.dumps(component['file_identity'],sort_keys=True).encode()).result()
+        box.write_file(identity,json.dumps(component['file_identity'],sort_keys=True).encode()).result(timeout=60)
         result=self._exec(self.coordinator,['coordinator-tree-archive',tree,archive,identity])
         return {**component,**result,'binding_kind':'immutable-hardlink-tree-archive','tree':tree}
 
     def capture_fenced(self, cycle, *, timeout=600):
         """Fence all learners at completed updates, pin controls and coordinator, then release."""
         fence=uuid.uuid4().hex;deadline=time.time()+timeout
+        def remaining(limit):return max(1,min(limit,deadline-time.time()))
         directory=self.out+'/diloco/recovery-fence'
-        boxes=[cwctl.read_sandbox(ident) for ident in self.workers]
+        boxes=[]
+        for ident in self.workers:
+            if time.time()>=deadline:raise TimeoutError('worker recovery fence expired before ownership read')
+            boxes.append(cwctl.read_sandbox(ident,patience=remaining(900)))
         # Fail quickly before requesting anything if the actual learner runtime lacks the fence mechanism.
         completed={}
         for worker,box in enumerate(boxes):
-            try:cap=json.loads(box.read_file(directory+'/capabilities.json').result())
+            try:cap=json.loads(box.read_file(directory+'/capabilities.json').result(timeout=remaining(30)))
             except Exception:raise FenceUnavailable('worker runtime has no active recovery-fence capability') from None
             if (cap.get('schema')!='natlang.diloco-recovery-fence/1' or cap.get('worker')!=worker
                     or cap.get('fingerprint')!=self.fingerprint):
@@ -114,10 +122,10 @@ class Backend:
                 "import json,os,pathlib,sys; o=json.loads(sys.argv[1]); p=pathlib.Path('/proc'); "
                 "sys.exit(not (o['boot_id']==(p/'sys/kernel/random/boot_id').read_text().strip() and "
                 "o['start_ticks']==(p/str(o['pid'])/'stat').read_text().split(') ',1)[1].split()[19]))",
-                json.dumps(cap['owner'])],timeout_seconds=30).result()
+                json.dumps(cap['owner'])],timeout_seconds=30).result(timeout=remaining(40))
             if check.returncode:
                 # A dead trainer is eligible only with a new-protocol, exact final report.
-                try: report=json.loads(box.read_file(self.out+'/report.json').result())
+                try: report=json.loads(box.read_file(self.out+'/report.json').result(timeout=remaining(30)))
                 except Exception:raise FenceUnavailable('worker owner died without a final report') from None
                 delivery=report.get('diloco_final_delivery') or {}
                 if (report.get('active_stage_complete') is not True or
@@ -132,7 +140,8 @@ class Backend:
                          "h=hashlib.sha256(); f=p.open('rb'); "
                          "[h.update(b) for b in iter(lambda:f.read(8388608),b'')]; "
                          "sys.exit(0 if h.hexdigest()==want else 1)")
-                result=box.exec(['python3','-c',program,source,pin,report['checkpoint_sha256']],timeout_seconds=3600).result(timeout=3660)
+                pin_timeout=remaining(3600)
+                result=box.exec(['python3','-c',program,source,pin,report['checkpoint_sha256']],timeout_seconds=pin_timeout).result(timeout=pin_timeout+1)
                 if result.returncode:raise ValueError('completed worker final checkpoint hash differs from report')
                 completed[worker]={'id':fence,'worker':worker,'fingerprint':self.fingerprint,
                     'checkpoint':pin,'deadline':deadline,'completed':True,'sequences':delivery['sequences'],
@@ -140,13 +149,13 @@ class Backend:
         try:
             for worker,box in enumerate(boxes):
                 if worker in completed:continue
-                made=box.exec(['mkdir','-p',directory]).result()
+                made=box.exec(['mkdir','-p',directory],timeout_seconds=30).result(timeout=remaining(40))
                 if made.returncode:raise RuntimeError('worker fence directory unavailable')
                 value={'schema':'natlang.diloco-recovery-fence/1','id':fence,'worker':worker,
                        'fingerprint':self.fingerprint,'deadline':deadline}
                 pending=directory+'/request-'+fence+'.pending'
-                box.write_file(pending,json.dumps(value).encode()).result()
-                moved=box.exec(['mv',pending,directory+'/request.json']).result()
+                box.write_file(pending,json.dumps(value).encode()).result(timeout=remaining(30))
+                moved=box.exec(['mv',pending,directory+'/request.json'],timeout_seconds=30).result(timeout=remaining(40))
                 if moved.returncode:raise RuntimeError('worker fence request publication failed')
             ready=dict(completed)
             while len(ready)<len(boxes):
@@ -154,9 +163,9 @@ class Backend:
                 for worker,box in enumerate(boxes):
                     if worker in ready:continue
                     try:
-                        value=json.loads(box.read_file(directory+'/'+fence+'.ready.json').result())
+                        value=json.loads(box.read_file(directory+'/'+fence+'.ready.json').result(timeout=max(1,min(10,deadline-time.time()))))
                     except Exception:
-                        try:failure=json.loads(box.read_file(directory+'/'+fence+'.failed.json').result())
+                        try:failure=json.loads(box.read_file(directory+'/'+fence+'.failed.json').result(timeout=max(1,min(10,deadline-time.time()))))
                         except Exception:continue
                         raise RuntimeError('worker fence failed: '+str(failure.get('error_type')))
                     if (value.get('id')!=fence or value.get('worker')!=worker
@@ -166,8 +175,9 @@ class Backend:
                     ready[worker]=value
                 if len(ready)<len(boxes):time.sleep(1)
             with ThreadPoolExecutor(max_workers=5) as pool:
-                coordinator=pool.submit(self.pin_coordinator_tree,cycle)
-                residents={i:pool.submit(self.pin_resident,i,cycle) for i in range(len(boxes))}
+                pin_timeout=remaining(3600)
+                coordinator=pool.submit(self.pin_coordinator_tree,cycle,timeout=pin_timeout)
+                residents={i:pool.submit(self.pin_resident,i,cycle,timeout=pin_timeout) for i in range(len(boxes))}
                 components={'coordinator':coordinator.result()}
                 for i,future in residents.items():components['resident-'+str(i)]=future.result()
             if time.time()>=deadline:raise TimeoutError('coordinator pin finished after fence deadline')
@@ -175,7 +185,7 @@ class Backend:
         finally:
             release=json.dumps({'schema':'natlang.diloco-recovery-fence/1','id':fence}).encode()
             for box in boxes:
-                try:box.write_file(directory+'/'+fence+'.release.json',release).result()
+                try:box.write_file(directory+'/'+fence+'.release.json',release).result(timeout=10)
                 except Exception:pass  # Each trainer also has the bounded deadline.
 
     def export(self,name,intent):
@@ -188,7 +198,7 @@ class Backend:
              'CW_EXPORT_RECEIPT_FILE':str(receipt),'CW_EXPORT_LOCAL':'0','CW_EXPORT_TARGET_VERIFIES':'0'}
         for key in ('CW_EXPORT_SEALED_PIN','CW_EXPORT_VERIFY_EXISTING_ONLY','CW_EXPORT_VERIFIED_LEGACY_READER'):
             env.pop(key,None)
-        sandbox=cwctl.read_sandbox(intent['sandbox_id']);made=sandbox.exec(['mkdir','-p','/work/production']).result()
+        sandbox=cwctl.read_sandbox(intent['sandbox_id']);made=sandbox.exec(['mkdir','-p','/work/production'],timeout_seconds=30).result(timeout=40)
         if made.returncode:raise RuntimeError('private export capability directory unavailable')
         subprocess.run([sys.executable,str(exporter),'lfm3-diloco-'+name,intent['path']],env=env,check=True)
         value=json.loads(receipt.read_text());identity=value.get('identity') or {};checked=value.get('independent_verification') or {}
@@ -340,7 +350,7 @@ class Backend:
         return len(files)==1 and files[0].name==receipt['name'] and files[0].size==identity['bytes']
 
     def progress(self,worker):
-        raw=cwctl.read_sandbox(self.workers[worker]).read_file(self.out+'/progress.json').result()
+        raw=cwctl.read_sandbox(self.workers[worker]).read_file(self.out+'/progress.json').result(timeout=60)
         value=json.loads(raw)
         return {'global_step':value.get('global_step'),'checkpoint_step':value.get('checkpoint_step'),
                 'diloco':value.get('diloco')}

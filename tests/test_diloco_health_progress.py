@@ -1,6 +1,7 @@
 import copy
 from pathlib import Path
 import sys
+import pytest
 
 sys.path.insert(0,str(Path(__file__).parents[1]/'scripts/coreweave'))
 import diloco_periodic_recovery as recovery
@@ -50,3 +51,13 @@ def test_periodic_recovery_retries_initialization_and_partial_exports_promptly(m
     except StopIteration:pass
     assert calls==['init','init','cycle','cycle']
     assert sleeps==[60,60,1800]
+
+
+def test_pin_reachability_and_remote_execution_share_one_deadline(monkeypatch,tmp_path):
+    backend=object.__new__(recovery.Backend);backend.repo=tmp_path;backend.helper='pass'
+    ticks=iter([100.,111.]);monkeypatch.setattr(recovery.time,'monotonic',lambda:next(ticks))
+    class Sandbox:
+        def exec(self,*args,**kwargs):raise AssertionError('expired pin must not launch')
+    monkeypatch.setattr(recovery.cwctl,'read_sandbox',lambda ident,patience:Sandbox())
+    with pytest.raises(TimeoutError,match='before sandbox became reachable'):
+        backend._exec('sandbox',[],timeout=10)

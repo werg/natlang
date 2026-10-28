@@ -15,9 +15,9 @@ def test_fence_accepts_only_bound_final_report_for_dead_worker(tmp_path, monkeyp
         def read_file(self,path):return Result(json.dumps(report if path.endswith('report.json') else cap))
         def exec(self,args,**kw):return Result(code=1 if "o['boot_id']" in ' '.join(args) else 0)
         def write_file(self,*args):return Result()
-    monkeypatch.setattr(service.cwctl,'read_sandbox',lambda ident:Box())
-    monkeypatch.setattr(backend,'pin_coordinator',lambda cycle:{'path':'coord'})
-    monkeypatch.setattr(backend,'pin_resident',lambda worker,cycle:{'path':'resident'})
+    monkeypatch.setattr(service.cwctl,'read_sandbox',lambda ident,**kwargs:Box())
+    monkeypatch.setattr(backend,'pin_coordinator_tree',lambda cycle,**kwargs:{'path':'coord'})
+    monkeypatch.setattr(backend,'pin_resident',lambda worker,cycle,**kwargs:{'path':'resident'})
     captured=backend.capture_fenced('cycle',timeout=30)
     assert captured['ready'][0]['completed'] and captured['ready'][0]['sequences']==[2]
     report.pop('diloco_final_delivery')
