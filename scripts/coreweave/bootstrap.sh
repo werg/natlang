@@ -110,7 +110,8 @@ if code:
         raise SystemExit(f'code snapshot sha256 {code_digest} != {code["sha256"]}')
     exec(@@NATLANG_CODE_ARCHIVE_HELPER@@)
     with tarfile.open(path) as tar:
-        reconciliation = extract_code_archive(tar, repo, work, code_digest)
+        reconciliation = extract_code_archive(tar, repo, work, code_digest,
+            predecessor_manifest_sha256=os.environ.get('NATLANG_CW_PREDECESSOR_BUNDLE_SHA256'))
     print(json.dumps({'bootstrap': 'code', 'git_sha': code['git_sha'], 'sha256': code_digest,
                       'reconciliation': reconciliation}))
 PY

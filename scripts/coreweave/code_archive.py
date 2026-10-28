@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import tarfile
 from pathlib import Path, PurePosixPath
 import tempfile
 
@@ -20,9 +22,7 @@ def digest(path):
         return hashlib.file_digest(source, 'sha256').hexdigest()
 
 
-def extract_code_archive(tar, repo, work, archive_sha256):
-    repo, work = Path(repo), Path(work)
-    package = repo / PACKAGE
+def archive_inventory(tar):
     expected = {}
     prefix = PACKAGE + '/'
     for member in tar.getmembers():
@@ -37,6 +37,32 @@ def extract_code_archive(tar, repo, work, archive_sha256):
             expected[relative] = hashlib.file_digest(stream, 'sha256').hexdigest()
     if not expected:
         raise ValueError('code archive lacks the native Python package')
+    return expected
+
+
+def predecessor_inventory(work, manifest_sha256):
+    """Authenticate a legacy snapshot's original manifest and its content-addressed archive."""
+    if not re.fullmatch('[0-9a-f]{64}', manifest_sha256):
+        raise ValueError('legacy predecessor manifest SHA-256 is malformed')
+    root = Path(work)/'.coreweave'
+    manifest = root/'bundle.json'
+    if not manifest.is_file() or digest(manifest) != manifest_sha256:
+        raise ValueError('legacy predecessor bundle manifest does not match its bound SHA-256')
+    code = json.loads(manifest.read_text())['code']
+    sha = code['sha256']
+    if not re.fullmatch('[0-9a-f]{64}', sha):
+        raise ValueError('legacy predecessor archive SHA-256 is malformed')
+    path = root/'cas'/sha
+    if not path.is_file() or path.stat().st_size != code['bytes'] or digest(path) != sha:
+        raise ValueError('legacy predecessor code archive does not match its manifest')
+    with tarfile.open(path) as tar:
+        return archive_inventory(tar)
+
+
+def extract_code_archive(tar, repo, work, archive_sha256, *, predecessor_manifest_sha256=None):
+    repo, work = Path(repo), Path(work)
+    package = repo / PACKAGE
+    expected = archive_inventory(tar)
     inventory_path = work/'.coreweave'/'installed-code-inventory.json'
     plan_path = work/'diloco-resident'/'recipe-plan.json'
     if inventory_path.exists():
@@ -46,6 +72,8 @@ def extract_code_archive(tar, repo, work, archive_sha256):
         previous = inventory['files']
     elif plan_path.exists():
         previous = json.loads(plan_path.read_text())['code']
+    elif predecessor_manifest_sha256:
+        previous = predecessor_inventory(work, predecessor_manifest_sha256)
     else:
         previous = {}
     existing = {str(path.relative_to(package)): path for path in package.rglob('*.py')}

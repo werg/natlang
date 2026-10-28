@@ -1296,3 +1296,59 @@ def test_seed_recovery_decoder_verifies_actual_full_state(tmp_path):
     assert json.loads(out.read_text())['passed'] is True
     result=subprocess.run([*command[:-2],'51',str(tmp_path/'wrong.json')],capture_output=True,text=True)
     assert result.returncode!=0 and not (tmp_path/'wrong.json').exists()
+
+
+def test_legacy_snapshot_bootstrap_authenticates_predecessor_archive(tmp_path):
+    import io, tarfile, hashlib
+    archive=load('code_archive'); repo=tmp_path/'repo'; work=tmp_path/'work'
+    package=repo/archive.PACKAGE; package.mkdir(parents=True)
+    root=work/'.coreweave'; cas=root/'cas'; cas.mkdir(parents=True)
+    def build(path, files):
+        with tarfile.open(path,'w') as tar:
+            for name,data in files.items():
+                info=tarfile.TarInfo(archive.PACKAGE+'/'+name);info.size=len(data)
+                tar.addfile(info,io.BytesIO(data))
+    old=tmp_path/'old.tar';new=tmp_path/'new.tar'
+    build(old,{'native_memory.py':b'old','retired.py':b'original'})
+    build(new,{'native_memory.py':b'alias fix','added.py':b'new'})
+    oldsha=hashlib.sha256(old.read_bytes()).hexdigest(); (cas/oldsha).write_bytes(old.read_bytes())
+    manifest=root/'bundle.json';manifest.write_text(json.dumps({'code':{'sha256':oldsha,'bytes':old.stat().st_size}}))
+    manifestsha=hashlib.sha256(manifest.read_bytes()).hexdigest()
+    (package/'native_memory.py').write_bytes(b'old');(package/'retired.py').write_bytes(b'original')
+    (package/'retired.py').write_bytes(b'user change')
+    with tarfile.open(new) as tar, pytest.raises(ValueError,match='existing native code changed'):
+        archive.extract_code_archive(tar,repo,work,'b'*64,predecessor_manifest_sha256=manifestsha)
+    (package/'retired.py').write_bytes(b'original')
+    with tarfile.open(new) as tar, pytest.raises(ValueError,match='manifest does not match'):
+        archive.extract_code_archive(tar,repo,work,'b'*64,predecessor_manifest_sha256='a'*64)
+    with tarfile.open(new) as tar:
+        result=archive.extract_code_archive(tar,repo,work,'b'*64,predecessor_manifest_sha256=manifestsha)
+    assert result['removed_predecessor_files']==1
+    assert (package/'native_memory.py').read_bytes()==b'alias fix' and not (package/'retired.py').exists()
+
+
+def test_startup_log_capture_preserves_failure_and_redacts_secrets(tmp_path, monkeypatch):
+    monkeypatch.setenv('WANDB_API_KEY','secret-value')
+    class Sandbox:
+        def stream_logs(self,follow):
+            assert follow is True
+            yield '{"bootstrap":"waiting-for-inputs"}\n'
+            yield 'Traceback: secret-value\n'
+            yield '{"bootstrap":"failed","step":"code"}\n'
+    path=tmp_path/'startup.log';ready=tmp_path/'ready'
+    cwctl.capture_startup_logs(Sandbox(),path,ready)
+    assert ready.read_text().strip()=='ready'
+    content=path.read_text()
+    assert 'Traceback: [redacted]' in content and 'secret-value' not in content and '"step":"code"' in content
+    assert path.stat().st_mode & 0o077 == 0
+
+
+def test_startup_log_capture_redacts_run_command(tmp_path):
+    class Sandbox:
+        def stream_logs(self,follow):
+            yield '{"bootstrap":"run","command":"secret argument"}\n'
+            yield 'trainer output must not be captured'
+    path=tmp_path/'startup.log';ready=tmp_path/'ready'
+    cwctl.capture_startup_logs(Sandbox(),path,ready)
+    assert 'secret argument' not in path.read_text() and 'trainer output' not in path.read_text()
+    assert ready.read_text().strip()=='ready'
