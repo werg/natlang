@@ -239,7 +239,9 @@ def launch(args):
                 verification = REPO / item['out'] / 'student-verification.json'
                 item['status'] = ('verified' if verification.exists() and load(verification).get('passed')
                                   else 'verify-failed')
-        running = [i for i in items.values() if i['status'] in ('running', 'verifying')]
+            if item['status'] == 'graphing' and unit_state(item['graph_unit']) != 'active':
+                item['status'] = 'graphed' if graphs_done(item) else 'graph-failed'
+        running = [i for i in items.values() if i['status'] in ('running', 'verifying', 'graphing')]
         slots = args.max_running - len(running)
         for item in items.values():  # verify rendered items first (cheap, and they unblock registration)
             if slots <= 0:
@@ -254,6 +256,15 @@ def launch(args):
                 subprocess.run(cmd, check=True, capture_output=True)
                 item.update(status='verifying', verify_unit=unit, verify_log=f'{logs}/{unit}.log')
                 slots -= 1
+            elif item['status'] == 'verified' and graph_views(item):
+                unit = short_unit('lfm3-data-g', item['id']) + f'-{int(time.time()) % 100000}'
+                script = graph_script(item, queue['student'])
+                cmd = ['python3', str(LEDGER), 'run', '--unit', unit, '--budget-gb', str(args.verify_budget_gb),
+                       '--priority', 'low', '--resumable', '--wait', '86400', '--detach', '--workdir', str(REPO),
+                       '--', 'bash', '-c', f'nice -n 10 bash {script} > {logs}/{unit}.log 2>&1']
+                subprocess.run(cmd, check=True, capture_output=True)
+                item.update(status='graphing', graph_unit=unit, graph_log=f'{logs}/{unit}.log')
+                slots -= 1
         order = sorted((i for i in items.values() if i['status'] == 'pending' and i['tier'] <= args.tier),
                        key=lambda i: (i['tier'], i['reference_tokens']))
         for item in order:
@@ -265,7 +276,7 @@ def launch(args):
                 out = REPO / item['out']
                 container = (f'render-{out.name}-' + hashlib.sha1(str(out).encode()).hexdigest()[:10])
                 # Memory scales with the corpus (the renderer keeps a working copy of its selection).
-                budget = 6 if item['reference_tokens'] < 30e6 else 12 if item['reference_tokens'] < 200e6 else args.budget_gb
+                budget = 4 if item['reference_tokens'] < 5e6 else 6 if item['reference_tokens'] < 30e6 else 12 if item['reference_tokens'] < 200e6 else args.budget_gb
                 inner = (f'STUDENTS={queue["student"]} CPUS={args.cpus} MEM={budget - 1}g nice -n 10 '
                          + ' '.join(shell(w) for w in item['command'][:2]) + ' '
                          + ' '.join(shell(w) for w in item['command'][2:]) + f' --workers {args.cpus}')
@@ -282,6 +293,35 @@ def launch(args):
             slots -= 1
         counts = collections.Counter(i['status'] for i in items.values())
     print(json.dumps(dict(counts)))
+
+
+GRAPH_VIEWS = ('program-header', 'whole-trajectory')  # the serving renderings; `full` is the warm-up sample only
+
+
+def graph_views(item: dict) -> list[str]:
+    return [view for view in GRAPH_VIEWS if view in item['views']]
+
+
+def graphs_done(item: dict) -> bool:
+    return all((REPO / item['out'] / 'native-graphs' / view / 'receipt.json').exists() for view in graph_views(item))
+
+
+def graph_script(item: dict, student: str) -> Path:
+    """Native one-node graph views (build_native_graph_text_corpus.py) of a verified render's serving views;
+    resumable per view (a finished view keeps its receipt)."""
+    from student_tokenizers import model_id, resolve
+    out = REPO / item['out']
+    lines = ['set -euo pipefail', f'cd {REPO}', f'export PYTHONPATH={PYTHONPATH}']
+    for view in graph_views(item):
+        source = view_file(out, view, student)
+        target = out / 'native-graphs' / view
+        lines.append(f'if [ ! -f {target}/receipt.json ]; then rm -rf {target}; '
+                     f'{VENV_PY} scripts/neuralese_data/build_native_graph_text_corpus.py --source {source} '
+                     f'--source-sha256 $(sha256sum {source} | cut -d" " -f1) --base-tokenizer {resolve(student)["path"]} '
+                     f'--model-id {model_id(student)} --output {target} | tail -c 2000; fi')
+    script = out / 'native-graphs.sh'
+    script.write_text('\n'.join(lines) + '\n')
+    return script
 
 
 def shell(word: str) -> str:
@@ -472,7 +512,8 @@ def registry_entry(item: dict, student: str) -> dict:
                        'merge.json', '*/*/text-data.jsonl', '*/*/text-data.jsonl.zst', '*/*/omissions.jsonl',
                        'selection-omissions.jsonl', 'render-omissions/*/*', 'parts/*/receipt.json',
                        'parts/*/render-policy-binding.json', 'parts/*/*.jsonl', 'parts/*/*/*/omissions.jsonl',
-                       'parts/*/*/*/omissions.jsonl.zst', 'parts/*/render-omissions/*/omissions.jsonl'],
+                       'parts/*/*/*/omissions.jsonl.zst', 'parts/*/render-omissions/*/omissions.jsonl',
+                       'native-graphs.sh', 'native-graphs/*/receipt.json', 'native-graphs/*/*/native-graphs.jsonl.zst'],
            **{k: source[k] for k in keep if k in source},
            'admission': (f'{student} render of the registered render {item["id"]} (scripts/neuralese_data/'
                          f'student_rerender.py: its receipt\'s exact selection arguments, {student} tokenizer only); '
@@ -486,6 +527,22 @@ def registry_entry(item: dict, student: str) -> dict:
                                                                     'only_reference', 'only_student')}
                                           for v, s in verification['views'].items()},
                                 'target_parse': verification.get('target_parse')}}
+    graphs = {}
+    for view in graph_views(item):
+        path = out / 'native-graphs' / view / 'receipt.json'
+        if path.exists():
+            graph_receipt = load(path)
+            graphs[view] = {'train': next(o['rows'] for o in graph_receipt['outputs'] if '/train/' in o['path']),
+                            'test': next(o['rows'] for o in graph_receipt['outputs'] if '/test/' in o['path']),
+                            'outputs': [{'path': rel(o['path']), 'rows': o['rows'], 'bytes': o['bytes'],
+                                         'sha256': o['sha256']} for o in graph_receipt['outputs']],
+                            'expanded_tokenizer_fingerprint': graph_receipt['expanded_tokenizer_fingerprint'],
+                            'role_token_ids': graph_receipt['role_token_ids']}
+            model = graph_receipt['model_id']
+    if graphs:
+        new['native_graph_views'] = {student: {'model_id': model,
+                                               'views': {v: g['train'] + g['test'] for v, g in graphs.items()},
+                                               'detail': graphs}}
     if receipt.get('render_policy_binding_sha256'):
         new['render_policy_binding_sha256'] = receipt['render_policy_binding_sha256']
     return new
@@ -507,7 +564,7 @@ def main():
     p.add_argument('--max-running', type=int, default=4)
     p.add_argument('--cpus', type=int, default=4)
     p.add_argument('--budget-gb', type=int, default=20, help='ledger budget of the largest direct renders')
-    p.add_argument('--verify-budget-gb', type=int, default=6)
+    p.add_argument('--verify-budget-gb', type=int, default=3)
     p.add_argument('--tier', type=int, default=1)
     p.add_argument('--logs', required=True)
     p = sub.add_parser('status')

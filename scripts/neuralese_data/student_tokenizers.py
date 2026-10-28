@@ -37,6 +37,8 @@ STUDENTS = {
     'lfm3': {'path': HF_CACHE / 'models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd',
              # Snapshot files are symlinks into the repository's blobs: mount the whole model repository.
              'mount': HF_CACHE / 'models--LiquidAI--LFM3-1.7B', 'model_type': 'lfm3',
+             # base_inventory of the pinned snapshot (common/line_backbones.py declares the same id).
+             'model_id': 'lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5',
              'tokenizer_sha256': '7e226e34bface23ccf6e495d157bf77186c1c30a7659880e1a8994db528c3701',
              'chat_template_sha256': 'f45005c50cd2a97329722bf3a2dee9f16c04cdf825a589b280fb7e99e6827818'},
 }
