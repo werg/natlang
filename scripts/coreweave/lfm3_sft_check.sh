@@ -57,6 +57,7 @@ done
 wait $pid; echo "$(date -u +%FT%TZ) phase A exit $?" >> "$OUT/phases.log"
 cp "$OUT/train/progress.json" "$OUT/progress-a.json" 2>/dev/null
 facts
+[ "${CHECK_PHASE_B:-1}" = 0 ] && { echo "$(date -u +%FT%TZ) phase B skipped (CHECK_PHASE_B=0: seed run)" >> "$OUT/phases.log"; exit 0; }
 echo "$(date -u +%FT%TZ) phase B start (same command: restore from the rolling state)" >> "$OUT/phases.log"
 "${CMD[@]}" > "$OUT/train-b.log" 2>&1
 rc=$?
