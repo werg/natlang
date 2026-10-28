@@ -136,6 +136,20 @@ def test_decision_counts_as_one_invocation_beside_token_targets_and_under_prefix
         torch.testing.assert_close(alone, decision_loss, atol=2e-6, rtol=2e-6)
 
 
+def test_single_graph_and_packed_training_agree_for_decision_and_mixed_rows():
+    from natlang_neuralese.data.native_graph import graph_loss
+    model = model_for('lfm')
+    answer = {'name':'answer','token_ids':[4,5,6,7,8],'target_weights':[0.,0.,1.,1.,1.]}
+    for extra in ((), (answer,)):
+        example = parse_graph(decision_row(extra_nodes=extra), tokenizer_fingerprint=FINGERPRINT)
+        direct, _ = graph_loss(model, example, checkpoint_layers=False)
+        packed, _ = packed_graph_loss(model, [example], checkpoint_layers=False)
+        torch.testing.assert_close(direct, packed, atol=2e-6, rtol=2e-6)
+        direct_grad = torch.autograd.grad(direct, model.adapter.up.weight, retain_graph=True)[0]
+        packed_grad = torch.autograd.grad(packed, model.adapter.up.weight)[0]
+        torch.testing.assert_close(direct_grad, packed_grad, atol=2e-6, rtol=2e-6)
+
+
 @pytest.mark.parametrize('change, message', [
     (lambda row: row['decisions'][0].update(label=3), 'label must index'),
     (lambda row: row['decisions'][0].update(options=['d:option:0']), 'at least two'),

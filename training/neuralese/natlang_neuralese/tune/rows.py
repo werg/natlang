@@ -94,6 +94,35 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None):
     from .soft import import_name, place_states, soft_items_to_node
     mine = {key: state for key, state in (soft or {}).items() if json.loads(key)[0] == turn['binding']}
     messages, placed = place_states(turn, mine) if mine else (turn['messages'], [])
+    decision = turn.get('decision')
+    if decision is not None:
+        from ..serve.native_learning import decision_items
+        options, chosen = decision.get('options'), decision.get('chosen')
+        if (not isinstance(options, list) or len(options) < 2 or any(not isinstance(item, str) for item in options)
+                or len(set(options)) != len(options) or type(chosen) is not int or not 0 <= chosen < len(options)):
+            raise TuneMathError('a decision turn needs distinct options and its selected option')
+        prompt, continuations = decision_items(engine, messages, turn['tools'], options)
+        names = {mine[key]: import_name(*json.loads(key)[1:]) for key in placed}
+        ids, _, imports, external = soft_items_to_node(engine, prompt, [], prompt_weight=0., state_names=names)
+        import dataclasses
+        occurrence = f"{turn['root']}:{turn.get('call') or 'root'}:{turn['turn']}"
+        nodes = [{'name':f'decision:option:{index}', 'token_ids':ids + continuation,
+                  'imports':[dataclasses.asdict(edge) for edge in imports],
+                  'target_weights':[0.] * (len(ids) + len(continuation))}
+                 for index, continuation in enumerate(continuations)]
+        graph = {'schema':GRAPH_SCHEMA,'id':'tune:'+occurrence,'split':'train',
+                 'source_groups':['tune-component:'+turn['component']],
+                 'tokenizer_fingerprint':engine.model_config['tokenizer_fingerprint'],'nodes':nodes,
+                 'decisions':[{'name':'decision','options':[node['name'] for node in nodes],
+                               'prompt_tokens':len(ids),'label':chosen,'label_source':'verified-trajectory',
+                               'values':options}], **({'external_states':external} if external else {}),
+                 'source':{'schema':TURN_SCHEMA,'sha256':canonical_json_sha256_hex(turn),'teacher':turn['teacher'],
+                           'source':turn['source'],'evidence':turn['evidence']}}
+        row = {'binding':turn['binding'],'graph':graph,'occurrence':occurrence,'evidence_weight':weight}
+        if external:
+            keys = {import_name(*json.loads(key)[1:]):key for key in placed}
+            row['soft'] = {name:keys[name] for name in external}
+        return row
     prompt, target = target_items(engine, messages, turn['tools'], reply_message(turn['reply']))
     if not target:
         raise TuneMathError('the reply rendered no target tokens')

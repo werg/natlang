@@ -25,7 +25,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ModelDriver } from '../runtime/runtime.js';
-import type { ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, DecisionScorer, ModelTurnRequest } from '../contracts.js';
 import { currentFrame } from '../runtime/context.js';
 import { canonicalJson } from '../package/archive.js';
 import { tuneDirectory } from '../adaptation/weights/release.js';
@@ -114,7 +114,7 @@ export function privilegedText(facts: readonly PrivilegedFact[]): string | null 
 }
 
 /** The request with the block as a system turn after the leading system turn (else first). Never mutates the request. */
-export function withPrivileged(request: ModelTurnRequest, text: string): ModelTurnRequest {
+export function withPrivileged<T extends { messages: unknown[] }>(request: T, text: string): T {
   const messages = [...request.messages];
   const at = (messages[0] as { role?: unknown } | undefined)?.role === 'system' ? 1 : 0;
   messages.splice(at, 0, { role: 'system', content: text });
@@ -127,15 +127,25 @@ const promptText = (messages: readonly unknown[]) => messages.map(message => {
     typeof (part as { text?: unknown })?.text === 'string' ? (part as { text: string }).text : '').join('') : '';
 }).join('\n');
 
-/** The student driver with one root's privileged facts on every model turn (decision readouts pass through). */
+/** The student driver with one root's privileged facts on every generated or scored model turn. */
 export function privilegedDriver(student: ModelDriver, reference: PrivilegedReference): ModelDriver {
   const inner = student as (request: ModelTurnRequest, ...rest: unknown[]) => ReturnType<ModelDriver>;
-  return Object.assign((request: ModelTurnRequest, ...rest: unknown[]) => {
+  const privileged = <T extends { messages: unknown[]; invocation_id?: string; invocation_role?: 'root' | 'child' }>(request: T): T => {
     const frame = currentFrame();
-    const role = (frame?.chain.length ?? 1) > 1 ? 'child' as const : 'root' as const;
+    const role = frame ? (frame.chain.length > 1 ? 'child' as const : 'root' as const) : (request.invocation_role ?? 'root');
     const text = privilegedText(selectFacts(reference.facts, { role, name: request.invocation_id, text: promptText(request.messages) }));
-    return inner(text ? withPrivileged(request, text) : request, ...rest);
-  }, Object.fromEntries(Object.entries(student))) as unknown as ModelDriver;
+    return text ? withPrivileged(request, text) : request;
+  };
+  const wrapped = Object.assign((request: ModelTurnRequest, ...rest: unknown[]) => inner(privileged(request), ...rest),
+    Object.fromEntries(Object.entries(student))) as unknown as ModelDriver & { decide?: DecisionScorer };
+  const decide = (student as ModelDriver & { decide?: DecisionScorer }).decide;
+  if (decide) {
+    const scored: DecisionScorer = (request, signal) => decide(privileged(request), signal);
+    if (decide.scoreMany) scored.scoreMany = (requests: DecisionRequest[], signal?: AbortSignal) =>
+      decide.scoreMany!(requests.map(privileged), signal);
+    wrapped.decide = scored;
+  }
+  return wrapped;
 }
 
 /** Whether a captured reply echoes the privileged block (never a positive target). */

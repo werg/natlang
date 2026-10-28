@@ -77,8 +77,17 @@ def graph_loss_from_result(model, example, result, *, chunk_tokens=128, boundary
                 queries.append(target - 1)
                 targets.append(int(node.token_ids[local]))
                 selected_weights.append(example.target_weights[target])
-    if not queries:
+    if not queries and not example.decisions:
         raise ValueError('native graph contains no supervised own-token targets')
+    if not queries:
+        from ..train.decision_supervision import decision_terms
+        loss_sum, count, correct = decision_terms(model, hidden, example, chunk_tokens=chunk_tokens)
+        return loss_sum / count, {'supervised_tokens':0, 'weight':0., 'accuracy':None,
+            'physical_tokens':example.plan.token_count,
+            'logical_slots':sum(len(sequence) for sequence in example.plan.sequences),
+            'allocated_kv_slots':len(example.plan.slot_sources),
+            'kv_padding_slots':sum(source < 0 for source in example.plan.slot_sources),
+            'decisions':{'count':count,'loss_sum':float(loss_sum.detach()),'correct':float(correct.detach())}}
     query_ids = torch.tensor(queries, device=hidden.device)
     target_ids = torch.tensor(targets, device=hidden.device)
     selected = torch.tensor(selected_weights, device=hidden.device, dtype=torch.float32)
@@ -157,4 +166,13 @@ def graph_loss_from_result(model, example, result, *, chunk_tokens=128, boundary
         detail['boundary_sums'] = {str(token): dict(zip(
             ('count', 'weight', 'nll_sum', 'correct_weight', 'probability_sum'), values))
             for token, values in zip(boundary_token_ids, boundaries.detach().cpu().tolist())}
-    return total / denominator, detail
+    loss = total / denominator
+    if example.decisions:
+        from ..train.decision_supervision import decision_terms
+        decision_sum, count, decision_correct = decision_terms(model, hidden, example, chunk_tokens=chunk_tokens)
+        invocations = sum(any(weight > 0 for weight in example.target_weights[offset:offset + len(node.token_ids)])
+                          for node, offset in zip(example.plan.invocations, example.plan.offsets))
+        loss = (loss * invocations + decision_sum) / (invocations + count)
+        detail['decisions'] = {'count':count,'loss_sum':float(decision_sum.detach()),
+                               'correct':float(decision_correct.detach())}
+    return loss, detail

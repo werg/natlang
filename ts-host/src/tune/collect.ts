@@ -15,7 +15,7 @@ import { sealManifest, type WeightManifest } from '../adaptation/weights/manifes
 import { compileScopeTree, type ScopeOptions } from '../adaptation/weights/scopes.js';
 import { WeightBinding } from '../adaptation/weights/binding.js';
 import type { NativeModelIdentity } from '../native/neuralese-store.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, DecisionScorer, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { scoreRoot } from './reward.js';
 import { rootServices } from './services.js';
 import type { ModelDriver } from '../runtime/runtime.js';
@@ -39,6 +39,7 @@ export type CollectedTurn = {
   readonly root: string; readonly component: string; readonly partition: Partition;
   readonly binding: string | null; readonly definition: string | null; readonly call: string | null; readonly turn: number;
   readonly messages: unknown[]; readonly tools: unknown[]; readonly reply: Pick<ModelTurn, 'calls' | 'text' | 'reasoning' | 'truncated'>;
+  readonly decision?: { readonly options: readonly string[]; readonly chosen: number };
   readonly teacher: string; readonly source: 'real' | 'synthetic';
   /** The invocation's exact instruction text and disclosed skill documents, where training places soft states. */
   readonly texts: { readonly instructions?: string; readonly skills?: Readonly<Record<string, string>> };
@@ -161,7 +162,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
     const events = new Map<string, Record<string, unknown>[]>();
     const counters = new Map<string, number>();
     const teacher = options.teacherFor?.(example) ?? options.teacher;
-    const driver: ModelDriver = Object.assign(async (request: ModelTurnRequest, signal?: AbortSignal, turnOptions?: unknown) => {
+    const driver = Object.assign(async (request: ModelTurnRequest, signal?: AbortSignal, turnOptions?: unknown) => {
       const frame = currentFrame();
       const reply = await (teacher as (r: ModelTurnRequest, s?: AbortSignal, o?: unknown) => Promise<ModelTurn>)(request, signal, turnOptions);
       const call = frame?.parentCallId ?? null, turn = (counters.get(call ?? '') ?? 0) + 1;
@@ -177,7 +178,25 @@ export async function collect(options: { root: string; program: ProgramDescripto
         ...(options.weights && frame?.weights ? { stack: { identity: frame.weights.identity, status: frame.weights.status,
           requested: frame.weights.requested.map(entry => entry.id), effective: frame.weights.effective.map(entry => entry.id) } } : {}) });
       return reply;
-    }, { decide: (teacher as { decide?: unknown }).decide, contextWindow: (teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver;
+    }, { contextWindow: (teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver & { decide?: DecisionScorer };
+    const decide = (teacher as ModelDriver & {decide?: DecisionScorer}).decide;
+    if (decide) driver.decide = async (request: DecisionRequest, signal?: AbortSignal) => {
+      const frame = currentFrame();
+      const result = await decide(request, signal);
+      const chosen = result.chosen ?? result.log_probs.indexOf(Math.max(...result.log_probs));
+      if (!Number.isInteger(chosen) || chosen < 0 || chosen >= request.options.length)
+        throw new Error('decision scorer returned an invalid selected option');
+      const call = frame?.parentCallId ?? null, turn = (counters.get(call ?? '') ?? 0) + 1;
+      counters.set(call ?? '', turn);
+      pending.push({schema:'natlang.tune-turn/v1',root:example.id,component:example.component,partition:example.partition,
+        binding:frame?.weights?.binding ?? null,definition:frame?.chain.at(-1) ?? null,call,turn,
+        messages:structuredClone(request.messages),tools:[],reply:{text:request.options[chosen]},
+        decision:{options:[...request.options],chosen},rawCallIds:[],teacher:options.teacherId,
+        source:example.source ?? 'real',texts:structuredClone(frame?.invocationTexts ?? {}),
+        ...(options.weights && frame?.weights ? {stack:{identity:frame.weights.identity,status:frame.weights.status,
+          requested:frame.weights.requested.map(entry=>entry.id),effective:frame.weights.effective.map(entry=>entry.id)}} : {})});
+      return result;
+    };
     const world: World = { schema: 'natlang.tune-world/v1', calls: [] };
     const provided = await rootServices(options.root, options.services, example);
     const services = provided.services ? journaledServices(provided.services, world) : undefined;

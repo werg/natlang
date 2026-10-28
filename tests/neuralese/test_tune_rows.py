@@ -46,6 +46,31 @@ def turn(**changes):
     return row
 
 
+def test_verified_decision_lowers_to_option_set_with_native_soft_state(tmp_path):
+    from natlang_neuralese.tune.soft import soft_key
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    state = engine.native_write_text('choose one')['id']
+    row = turn(binding='bx',messages=[{'role':'system','content':'choose one'},{'role':'user','content':'t4'}],tools=[],
+               reply={'text':'t7'},decision={'options':['t7','t8 t9'],'chosen':0},
+               texts={'instructions':'choose one'},
+               evidence={'rootOracle':True,'enclosingSuccess':True,'callOutcome':'done',
+                         'actionPolicy':'natlang.tune-action-outcome/2','actionDisposition':'admissible',
+                         'failedHistory':False,'actionEvents':[]})
+    lowered = turn_graph(engine,row,prompt_weight=0.,soft={soft_key('bx','instructions',None):state})
+    graph = lowered['graph']
+    assert all(len(node['token_ids']) > graph['decisions'][0]['prompt_tokens'] for node in graph['nodes']), graph
+    example = parse_graph(graph,tokenizer_fingerprint=engine.model_config['tokenizer_fingerprint'])
+    assert len(example.decisions) == 1 and example.decisions[0].target == (1.,0.)
+    assert len(graph['nodes']) == 2 and all(node['imports'] for node in graph['nodes'])
+    assert not any(weight for node in graph['nodes'] for weight in node['target_weights'])
+    from natlang_neuralese.tune.trainer import JointTrainer, Recipe
+    from test_tune_trainer import manifest_for
+    trainer = JointTrainer(engine, manifest_for(engine), [lowered], Recipe(steps=1,batch_rows=1))
+    before = dict(trainer.state['node_artifacts'])
+    update = trainer.step()
+    assert update['updated_nodes'] and any(trainer.state['node_artifacts'][key] != value for key,value in before.items())
+
+
 @real_lfm
 def test_turn_renders_with_the_student_template_and_targets_only_the_reply(tmp_path):
     engine, _ = real_engine(tmp_path)

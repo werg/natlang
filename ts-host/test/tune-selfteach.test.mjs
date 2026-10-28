@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import * as host from '../dist/index.js';
 import { prepareData } from '../dist/tune/pipeline.js';
 import { readRootExamples, splitExamples } from '../dist/tune/collect.js';
-import { PRIVILEGED_HEADER, PRIVILEGED_SCHEMA, leaksPrivileged, privilegedText, selectFacts, selfTeacherId, withPrivileged } from '../dist/tune/selfteach.js';
+import { PRIVILEGED_HEADER, PRIVILEGED_SCHEMA, leaksPrivileged, privilegedDriver, privilegedText, selectFacts, selfTeacherId, withPrivileged } from '../dist/tune/selfteach.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const base = { architecture: 'lfm3', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 'd'.repeat(64), embedding_weight_sha256: 'e'.repeat(64) };
@@ -32,6 +32,44 @@ const program = root => {
 const settings = { student: 'lfm3', students: {}, teacher: 'self', backend: 'managed-local' };
 const student = { name: 'lfm3', base, checkpoint: '/unused', trainer: ['/unused'], moduleMap: 'lfm3', baseGgufSha256: 'f'.repeat(64) };
 const split = root => splitExamples(readRootExamples(root));
+
+test('privileged self-teaching supplies only invocation-visible facts to scored decisions', async () => {
+  const seen = [];
+  const student = Object.assign(async () => ({}), {decide: async request => { seen.push(request); return {log_probs:[-1,-2]}; }});
+  const reference = {facts:[{id:'root',kind:'expected_result',text:'root answer'},
+    {id:'child',kind:'child_value',text:'child answer',match:['child question']}]};
+  const driver = privilegedDriver(student, reference);
+  const request = {messages:[{role:'system',content:'s'},{role:'user',content:'child question'}],
+    options:['"yes"','"no"'],invocation_id:'child',invocation_role:'child'};
+  await driver.decide(request);
+  assert.match(JSON.stringify(seen[0].messages), /child answer/);
+  assert.doesNotMatch(JSON.stringify(seen[0].messages), /root answer/);
+  assert.equal(request.messages.length, 2);
+  await driver.decide({...request,invocation_id:'root',invocation_role:'root'});
+  assert.match(JSON.stringify(seen[1].messages), /root answer/);
+  assert.doesNotMatch(JSON.stringify(seen[1].messages), /child answer/);
+});
+
+test('verified scored decisions become training turns without privileged prompts', async () => {
+  const root = project();
+  try {
+    writeFileSync(join(root, 'outer.nl'), '---\nargs: { value: string }\nreturns: "yes" | "no"\nreadout: decision\n---\nChoose yes.\n');
+    writeFileSync(join(root, 'tune.examples.jsonl'), values.map(value => JSON.stringify({function:'outer.nl',
+      input:{value},expected:'yes',group:`w:${value}`})).join('\n')+'\n');
+    const examples = split(root);
+    writeReferences(root, examples.filter(example => example.partition === 'train'));
+    const seen = [];
+    const teacher = Object.assign(async () => { throw new Error('tool loop was not expected'); },
+      {decide:async request => { seen.push(request); return {log_probs:[-1,-2]}; }});
+    const teacherId = selfTeacherId(student, 'decision-digest');
+    const data = await prepareData({root,program:program(root),settings,student,teacher,teacherId,
+      serve:async () => { throw new Error('unused'); }});
+    assert.ok(seen.length && seen.every(request => JSON.stringify(request.messages).includes(PRIVILEGED_HEADER)));
+    assert.ok(seen.every(request => request.invocation_role === 'root'), 'a callable task root has no parent call');
+    assert.ok(data.trainRows.length && data.trainRows.every(turn => turn.decision?.chosen === 0));
+    assert.ok(data.trainRows.every(turn => !JSON.stringify(turn.messages).includes(PRIVILEGED_HEADER)));
+  } finally { rmSync(root, {recursive:true,force:true}); }
+});
 function writeReferences(root, examples) {
   // The shape `natlang_neuralese.tune.supply privileged` writes from the shared `case_facts` (rl/privileged_context.py).
   writeFileSync(join(root, 'tune.privileged.jsonl'), examples.map(example => JSON.stringify({ schema: PRIVILEGED_SCHEMA,
