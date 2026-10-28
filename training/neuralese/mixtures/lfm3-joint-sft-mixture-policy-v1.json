@@ -20,7 +20,7 @@
   "domain": "curriculum domain",
   "family": "program/world family",
   "task_shape": "task kind + curriculum family",
-  "near_duplicate_cluster": "sha256 of the root task normalized instructions (digits -> 0, whitespace collapsed, first 400 chars) joined with the sample's first source group (world): the same task text over the same world",
+  "near_duplicate_cluster": "sha256 of the root task's normalized instructions (digits -> 0, whitespace collapsed, first 400 chars)",
   "choice_call": "decision / scored-judge / progress-judge call kinds (family or task shape matches judge|decision|decide|refine|progress)"
  },
  "drop_rules": [
@@ -202,17 +202,5 @@
  "serving_mode": {
   "prompt_rendering": "program-header",
   "rule": "train/held rows come from program-header or whole-trajectory (program-header) renderings; teacher twins rendered with the full system prompt are excluded until re-rendered in program-header mode (coverage audit G7)"
- },
- "oracle_regrade_hold": {
-  "reason": "coordinator 2026-10-28 (oracle repairs cd26eb512): edit_stream and contract_diagnosis rows graded by the old exploitable oracles stay out of the LFM3 mixture until the oracle agent regrade passes them; reference replays (static-lambda etc., correct by construction) stay",
-  "families": [
-   "edit_stream",
-   "contract_diagnosis"
-  ],
-  "inventory": "plans/neuralese/oracle-repair-20261028/old-oracle-admitted-sources.json",
-  "exempt_path_markers": [
-   "static-lambda"
-  ],
-  "regrade_passed": []
  }
 }
