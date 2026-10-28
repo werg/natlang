@@ -421,7 +421,8 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     training = state.get('training') or state.get('shared_training') or {}
     options = training.get('options') or {}
     accumulator_backend = options.get('cotangent_accumulator_backend', 'cpu_file')
-    if accumulator_backend not in ('cpu_file', 'device_fp32'):
+    from .native_weight_carrier import COTANGENT_BACKENDS
+    if accumulator_backend not in COTANGENT_BACKENDS:
         raise ValueError('native checkpoint has an invalid cotangent accumulator backend')
     model.native_cotangent_accumulator_backend = accumulator_backend
     _bind_backbone_revision(model, sha256_file_hex_cached(path))

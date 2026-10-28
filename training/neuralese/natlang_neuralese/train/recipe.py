@@ -114,8 +114,8 @@ def validate_stage_parameters(kind, parameters):
             raise ValueError('checkpoint_input_offload must be a boolean or omitted for inheritance')
     if kind in {'native_state_sft','native_state_rl','native_offline_preference'}:
         cotangent_backend = parameters.get('cotangent_accumulator_backend')
-        if cotangent_backend is not None and cotangent_backend not in ('cpu_file', 'device_fp32'):
-            raise ValueError('cotangent_accumulator_backend must be cpu_file or device_fp32')
+        if cotangent_backend is not None and cotangent_backend not in ('plain', 'device_fp32', 'cpu_file'):
+            raise ValueError('cotangent_accumulator_backend must be plain, device_fp32 or cpu_file')
         storage=parameters.get('optimizer_state_storage')
         if storage is not None and storage not in ('device','cpu'):
             raise ValueError('optimizer_state_storage must be device or cpu')
@@ -734,7 +734,8 @@ def native_stage_parameter_handoffs(old_recipe, new_recipe, out):
                 raise ValueError('handoff refused: norm storage upgrade requires its explicit FP32 ordinary-precision profile and fresh restored-model memory qualification')
         old_cotangent_backend = before.get('cotangent_accumulator_backend') or 'cpu_file'
         new_cotangent_backend = after.get('cotangent_accumulator_backend') or old_cotangent_backend
-        if old_cotangent_backend != new_cotangent_backend:
+        if old_cotangent_backend != new_cotangent_backend and new_cotangent_backend != 'plain':
+            # Plain arithmetic holds no FP32 accumulators: moving to it needs no new capacity qualification.
             if (new_cotangent_backend not in ('cpu_file', 'device_fp32')
                     or not after.get('memory_qualification')
                     or after.get('memory_qualification') == before.get('memory_qualification')):

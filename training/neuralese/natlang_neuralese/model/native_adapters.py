@@ -506,12 +506,12 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
                     return torch.func.functional_call(_Operation(engine.shared_model, callback), cached_replacement, ())
             scope_parameters = [(name, parameter) for name, parameter in parameters.items()
                                 if cotangent_parameter_ids is None or id(parameter) in cotangent_parameter_ids]
+            from .native_weight_carrier import carrier_backend
             cotangent_scope = ParameterCotangentScope(scope_parameters, mode='vjp',
                 track_auxiliary=track_adapter_cotangents,
                 auxiliary_target_ids=adapter_cotangent_target_ids,
                 parameter_target_ids=cotangent_parameter_ids,
-                accumulator_backend=getattr(engine.shared_model,
-                    'native_cotangent_accumulator_backend', 'cpu_file'))
+                accumulator_backend=carrier_backend(engine.shared_model))
             cotangent_scope.model=engine.shared_model
             with cotangent_scope:
                 replacement, storage_dtypes = _effective_replacements(parameters, resolved, gradient_precision)
