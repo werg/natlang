@@ -1,9 +1,15 @@
 {
-  "description": "llama.cpp fork serving natlang's native models: native state spans (consume), native state production (producer adapter and capture) and the native-state protocol (/v1/neuralese/info, /v1/neuralese/native-states), decision readout (/v1/natlang/score), guided generation (guidance) and per-sequence LoRA in llama-server; parity dumps in tools/neuralese. A separate git checkout, not vendored. The browser's wllama is built from this branch.",
+  "description": "llama.cpp fork serving natlang's native models: native state spans (consume), native state production (producer adapter and capture) and the native-state protocol (/v1/neuralese/info, /v1/neuralese/native-states), decision readout (/v1/natlang/score), guided generation (guidance) and per-sequence LoRA in llama-server; parity dumps in tools/neuralese. Branch neuralese-lfm3 adds the LFM3 architecture (Lfm3ForCausalLM, conversion/lfm3.py). A separate git checkout, not vendored; vendor/llama.cpp is a converter snapshot of the pinned commit. The browser's wllama is built from this branch.",
   "path": "../llama.cpp-neuralese",
-  "branch": "neuralese",
+  "branch": "neuralese-lfm3",
+  "commit": "85a2e7167fcf578e7823f639971ff51b79549a96",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
+  "converter_snapshot": {
+    "path": "vendor/llama.cpp",
+    "target": ".development-source-snapshots/llama.cpp-85a2e716",
+    "contents": "git archive of the pinned commit: convert_hf_to_gguf.py convert_lora_to_gguf.py conversion gguf-py requirements"
+  },
   "build_cpu": "cmake -S . -B build-cpu && cmake --build build-cpu --target llama-server llama-state-span-dump llama-logits-dump -j16",
   "build_cuda": "cmake -S . -B build-cuda -DGGML_CUDA=ON && cmake --build build-cuda --target llama-server llama-state-span-dump -j16",
   "parity": [

@@ -1,11 +1,13 @@
-"""Usage: check_llama_producer_parity.py CHECKPOINT OUT_DIR STATE_SPAN_DUMP [--export]
+"""Usage: check_llama_producer_parity.py CHECKPOINT OUT_DIR STATE_SPAN_DUMP [--export] [--cpu]
 
 Native state production on the llama.cpp fork equals the native engine. One sequence: an ordinary prompt, the
 produce-open marker, a producer span (the producer adapter applies and the span's state is captured), the
 produce-close marker and an ordinary tail. Compares every position's logits and the captured embeddings, keys (after
 the key norm, before RoPE), values and short-convolution gated inputs. Controls: the native engine without the
 producer adapter on the span, and the fork's span decoded as ordinary tokens. With --export the f32 GGUF (with the
-producer adapter) is exported to OUT_DIR/base first.
+producer adapter) is exported to OUT_DIR/base first. --cpu runs the native engine on the CPU, an FP32 reference without
+CUDA's TF32 matmuls (the native engine selects them), which leave about 0.04 logit noise on LFM3-1.7B. The fork runs
+with an F32 cache and flash attention off: flash attention casts K/V to F16 (about 0.01 logit noise on LFM3-1.7B).
 """
 import json
 import subprocess
@@ -20,10 +22,11 @@ from natlang_neuralese.model.shared_state import native_step
 from natlang_neuralese.serve import load_native_engine
 
 checkpoint, out, dump = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+device = 'cpu' if '--cpu' in sys.argv else 'cuda'
 out.mkdir(parents=True, exist_ok=True)
 if '--export' in sys.argv or not (out / 'base' / 'model-f32.gguf').exists():
     export_native_gguf(checkpoint, out / 'base', outtypes=('f32',))
-engine = load_native_engine(str(checkpoint), device='cuda', dtype=torch.float32)
+engine = load_native_engine(str(checkpoint), device=device, dtype=torch.float32)
 model, tok, roles = engine.shared_model, engine.tokenizer, engine.role_tokens
 prompt = tok.encode('Summarize the ticket for the billing team:', add_special_tokens=False)
 span = tok.encode(' refund request for order 4411, charged twice', add_special_tokens=False)
@@ -35,7 +38,7 @@ adapter_norm = float(model.adapter.up.weight.norm())
 def native(producing_span=True):
     def run(ids, cache, producing):
         with torch.no_grad():
-            result = native_step(model, torch.tensor([ids], device='cuda'), cache, producing=producing)
+            result = native_step(model, torch.tensor([ids], device=device), cache, producing=producing)
             return result, model.logits(result['h_final'][0]).float().cpu()
     first, a = run(prompt + [open_], None, False)
     second, b = run(span, first['cache'], producing_span)
@@ -48,7 +51,8 @@ def fork(produce):
     (out / 'seq.json').write_text(json.dumps(sequence))
     prefix = out / ('capture' if produce else 'plain')
     subprocess.run([dump, '-m', str(out / 'base' / 'model-f32.gguf'), '--input', str(out / 'seq.json'), '--from', '0',
-                    '--out', str(prefix) + '.logits', '--f32-cache', '--capture', str(prefix)], check=True)
+                    '--out', str(prefix) + '.logits', '--f32-cache', '--fa', 'off', '--capture', str(prefix)],
+                   check=True)
     n = len(prompt) + len(span) + len(tail) + 2
     logits = torch.from_numpy(np.fromfile(str(prefix) + '.logits', dtype=np.float32).reshape(n, -1))
     meta = json.loads(Path(str(prefix) + '.json').read_text())
@@ -67,7 +71,9 @@ report = {'adapter_up_norm': adapter_norm, 'producer_adapter_in_gguf': meta['pro
           'max_dlogit': float((native_logits - fork_logits).abs().max()),
           'top1_agreement': float((native_logits.argmax(1) == fork_logits.argmax(1)).float().mean()),
           'control_native_without_adapter_vs_native': float((native_logits - control_native).abs().max()),
-          'control_fork_without_production_vs_fork': float((plain_logits - fork_logits).abs().max())}
+          'control_fork_without_production_vs_fork': float((plain_logits - fork_logits).abs().max()),
+          # the same comparison without production: separates the producer path from ordinary chunked decoding
+          'plain_max_dlogit': float((control_native - plain_logits).abs().max())}
 # Captured tensors in the native layout, flattened per token as the fork writes them.
 offset = 0
 def take(width):
@@ -78,7 +84,7 @@ def take(width):
 # The token embeddings are compared with a fresh lookup: the native capture's own `embeddings` view can change after
 # later native calls on the same model, which is reported separately.
 with torch.no_grad():
-    expected_embeddings = model.embed(torch.tensor([span], device='cuda'))[0].float().cpu()
+    expected_embeddings = model.embed(torch.tensor([span], device=device))[0].float().cpu()
 fork_embeddings = take(meta['embd_width'])
 gaps = {'embeddings': float((fork_embeddings - expected_embeddings).abs().max())}
 report['native_capture_embeddings_vs_lookup'] = float((captured['embeddings'].float().cpu() - expected_embeddings).abs().max())
