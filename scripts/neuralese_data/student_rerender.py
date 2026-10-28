@@ -223,6 +223,86 @@ def unit_state(unit: str) -> str:
     return state
 
 
+def late_receipt_status(item: dict, queue: dict) -> str | None:
+    """Promote terminal failures only when late artifacts bind to this render.
+
+    Verification remains authoritative for retained rows and explicit renderer
+    omissions; this does not change its admission or parity policy.
+    """
+    out, reference = REPO / item['out'], REPO / item['path']
+    try:
+        report = load(out / 'student-verification.json')
+        if (report.get('id') != item['id'] or report.get('student') != queue['student']
+                or report.get('reference') != queue['reference'] or report.get('passed') is not True):
+            return None
+        from natlang_neuralese.common.hashing import sha256_file_hex
+        if report.get('render_receipt_sha256') != sha256_file_hex(out / 'receipt.json'):
+            return None
+        if report.get('reference_receipt_sha256') != sha256_file_hex(reference / 'receipt.json'):
+            return None
+        if not report.get('identical_documents'):
+            missing = []
+            for view, stats in report.get('views', {}).items():
+                n = stats.get('only_reference', 0)
+                sample = stats.get('only_reference_sample', [])
+                if stats.get('only_student', 0) or stats.get('split_or_group_changed', 0) or len(sample) != n:
+                    return None
+                missing.extend((view, ident) for ident in sample)
+            omissions = []
+            for path in (out / 'render-omissions').rglob('*'):
+                if path.is_file():
+                    if path.stat().st_size > 1024 * 1024:
+                        return None
+                    omissions.extend(json.loads(line) for line in path.read_text().splitlines())
+            explained = [(o.get('rendering'), o.get('id')) for o in omissions
+                         if o.get('reason') == 'native_chat_render_failed'
+                         and 'tool-call-unrepresentable' in o.get('detail', '')]
+            if not missing or sorted(missing) != sorted(explained):
+                return None
+            render_receipt = load(out / 'receipt.json')
+            for view in {v for v, _ in missing}:
+                count = (render_receipt.get('render_omissions') or {}).get(
+                    f'{queue["student"]}/{view}/native_chat_render_failed')
+                if count != sum(v == view for v, _ in missing):
+                    return None
+        if item['kind'] == 'direct':
+            original, rendered = load(reference / 'receipt.json'), load(out / 'receipt.json')
+            if not original.get('sources') or original.get('sources') != rendered.get('sources'):
+                return None
+            if original.get('selection') != rendered.get('selection'):
+                return None
+            for view in item['views']:
+                for base, tok, receipt in ((reference, queue['reference'], original),
+                                           (out, queue['student'], rendered)):
+                    data = view_file(base, view, tok)
+                    binding = (receipt.get('renders') or {}).get(f'{view}/{tok}') or {}
+                    if data is None or sha256_file_hex(data) != binding.get('text_data_sha256'):
+                        return None
+        if item['status'] == 'verify-failed':
+            return 'verified'
+        if item['status'] != 'graph-failed' or not graph_views(item):
+            return None
+        from student_tokenizers import model_id
+        for view in graph_views(item):
+            receipt = load(out / 'native-graphs' / view / 'receipt.json')
+            source = view_file(out, view, queue['student'])
+            if (source is None or receipt.get('model_id') != model_id(queue['student'])
+                    or Path(receipt['source']['path']).resolve() != source.resolve()
+                    or sha256_file_hex(source) != receipt['source']['sha256']):
+                return None
+            outputs = receipt.get('outputs') or []
+            if not outputs:
+                return None
+            target = (out / 'native-graphs' / view).resolve()
+            for entry in outputs:
+                path = Path(entry['path']).resolve()
+                if not path.is_relative_to(target) or sha256_file_hex(path) != entry['sha256']:
+                    return None
+        return 'graphed'
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def launch(args):
     logs = Path(args.logs)
     logs.mkdir(parents=True, exist_ok=True)
@@ -233,6 +313,10 @@ def launch(args):
                 item['status'] = 'pending'
             if item['status'] == 'failed' and (REPO / item['out'] / 'receipt.json').exists():
                 item['status'] = 'rendered'  # its receipt landed after the unit was last seen
+            if item['status'] in ('verify-failed', 'graph-failed'):
+                recovered = late_receipt_status(item, queue)
+                if recovered:
+                    item['status'] = recovered
             if item['status'] == 'running':
                 done = (REPO / item['out'] / 'receipt.json').exists()
                 if unit_state(item['unit']) != 'active':
@@ -399,6 +483,9 @@ def verify(args):
     report = {'schema': 'natlang.student-rerender-verification/1', 'id': item['id'], 'student': student,
               'reference': reference, 'views': {}, 'problems': []}
     new_receipt, old_receipt = load(new / 'receipt.json'), load(old / 'receipt.json')
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    report['render_receipt_sha256'] = sha256_file_hex(new / 'receipt.json')
+    report['reference_receipt_sha256'] = sha256_file_hex(old / 'receipt.json')
     if item['kind'] == 'direct':
         if new_receipt.get('sources') != old_receipt.get('sources'):
             report['problems'].append('source identities differ from the reference render receipt')
