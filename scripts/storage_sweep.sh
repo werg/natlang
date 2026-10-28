@@ -9,15 +9,26 @@ AGE=${SWEEP_AGE_MINUTES:-180}
 ALERT_GB=${SWEEP_ALERT_GB:-60}
 LOG=${SWEEP_LOG:-$HOME/.local/state/natlang/storage-sweep.log}
 mkdir -p "$(dirname "$LOG")"
+# A live pytest root must not prevent pruning its completed sibling runs. Never
+# delete the whole pytest-of directory: its pytest-current and live PID locks
+# belong to ongoing tests even when they have no files open at this instant.
+for root in /tmp/pytest-of-*; do
+  [ -d "$root" ] || continue
+  /usr/bin/python3 "$(dirname "$0")/prune_pytest_scratch.py" --root "$root" --age-minutes "$AGE" --apply >> "$LOG" 2>&1
+done
 open_paths=$(mktemp)
 trap 'rm -f "$open_paths"' EXIT
-for p in /proc/[0-9]*; do
-  readlink "$p/cwd" 2>/dev/null
-  ls -l "$p/fd" 2>/dev/null | awk '{print $NF}'
-done | grep -E '^(/tmp|/mnt/external)/' | sort -u > "$open_paths"
+/usr/bin/python3 - "$(cd "$(dirname "$0")/.." && pwd)" > "$open_paths" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+from scripts.archive_to_external import open_paths, process_cwds
+for path in sorted(open_paths() | process_cwds()):
+    if path.startswith(('/tmp/', '/mnt/external/')):
+        print(path)
+PY
 
 candidates() {
-  find /tmp -maxdepth 1 -mindepth 1 -user "$USER" \( -name 'pytest-of-*' -o -name 'natlang-*' -o -name 'torchinductor_*' -o -name 'tmp*' \) -mmin +"$AGE"
+  find /tmp -maxdepth 1 -mindepth 1 -user "$USER" \( -name 'natlang-*' -o -name 'torchinductor_*' -o -name 'tmp*' \) -mmin +"$AGE"
   [ -d /mnt/external/natlang-test-tmp ] && find /mnt/external/natlang-test-tmp -maxdepth 1 -mindepth 1 -user "$USER" -mmin +"$AGE"
 }
 

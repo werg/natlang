@@ -1,5 +1,18 @@
 # Storage policy (DGX; Pop may opt in)
 
+## Active scratch retention (2026-10-28)
+
+The 30-minute `natlang-storage-sweep` timer prunes completed pytest run
+directories separately. A live test previously protected the entire shared
+`/tmp/pytest-of-werg` root, allowing 62 GiB of completed fixtures to accumulate.
+`scripts/prune_pytest_scratch.py` now keeps the newest three runs,
+`pytest-current`, live or unreadable PID locks, open/mapped files and process
+working directories. Each candidate must also have no recent writes anywhere
+in its tree (three hours by default); process custody is refreshed before
+deletion. The shared pytest root is never deleted. Other disposable scratch
+also uses the shared FD/mapping/CWD inventory. These rules preserve training
+data and checkpoints outside disposable test scratch.
+
 ## Standing owner order — 2026-10-11
 
 Discarded approaches and runs are deleted, including checkpoints, optimizer
