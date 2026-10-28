@@ -257,6 +257,14 @@ def test_native_loader_dispatches_lfm3_and_restores_saved_backbone(tmp_path):
     restored, _ = restore_backbone(tmp_path, 'lfm3', state, device='cpu', dtype=torch.float32)
     assert type(restored).__module__ == 'natlang_neuralese.third_party.lfm3.modeling_lfm3'
     assert all(torch.equal(state[name], restored.state_dict()[name]) for name in state)
+    # A BF16 backbone keeps FP32 masters for the learned role and reasoning rows and the declared FP32 norm gains.
+    half, _, _, half_config = load_native_model(tmp_path, rank=4, dtype=torch.bfloat16,
+                                                native_ordinary_precision='fp32-norms-v1')
+    assert half.port.embedding_weight.dtype == torch.bfloat16
+    assert half.input_rows.dtype == torch.float32 and half.extra_input_rows.dtype == torch.float32
+    assert half.port.layers[3].post_operator_norm.weight.dtype == torch.float32
+    assert half.port.layers[3].self_attn.gate_proj.weight.dtype == torch.bfloat16
+    assert half_config['sparse_row_dtype'] == 'torch.float32'
 
 
 def test_native_optimizer_updates_every_lfm3_layer_form_from_an_import_graph():
