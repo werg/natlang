@@ -116,7 +116,8 @@ def compile_semantic_episode(rollout,participants,*,channel,fetch_block):
 
 
 def semantic_episode_loss(participants,replays,dependencies,*,channel,external_blocks,advantage,mode='grpo',
-                          clip_low=.2,clip_high=.28,chunk_tokens=128,training_execution=None,behavior_channel=None,reference=False):
+                          clip_low=.2,clip_high=.28,chunk_tokens=128,training_execution=None,behavior_channel=None,reference=False,
+                          policy_loss=None):
     """One joint policy objective; this mechanism never steps any optimizer."""
     import math
     import torch
@@ -132,10 +133,16 @@ def semantic_episode_loss(participants,replays,dependencies,*,channel,external_b
     for name,replay in replays.items():
         from ..model.native_adapters import require_model_execution_actor
         require_model_execution_actor(participants[name].model,replay.identity,replay.adapter_binding)
-        logps,behavior=action_logps(participants[name].model,results[name]['h_final'][0],replay.actions,
-                                  chunk_tokens=chunk_tokens)
-        values=-logps if mode=='rft' else clipped_token_loss(logps,behavior,advantage,
-                                                          clip_low=clip_low,clip_high=clip_high)
+        if policy_loss is not None and mode=='grpo':
+            from .native_replay import require_policy_loss_actions,score_centered_action_loss
+            require_policy_loss_actions(replay.actions,policy_loss)
+            values,_=score_centered_action_loss(participants[name].model,results[name]['h_final'][0],replay.actions,
+                advantage,policy_loss,chunk_tokens=chunk_tokens)
+        else:
+            logps,behavior=action_logps(participants[name].model,results[name]['h_final'][0],replay.actions,
+                                      chunk_tokens=chunk_tokens)
+            values=-logps if mode=='rft' else clipped_token_loss(logps,behavior,advantage,
+                                                              clip_low=clip_low,clip_high=clip_high)
         terms.append(values.sum());count+=len(replay.actions);by_model[name]=len(replay.actions)
     if not count:raise ValueError('semantic policy episode contains no actual sampled actions')
     return torch.stack(terms).sum()/count,{'sampled_tokens':count,'sampled_tokens_by_model':by_model,

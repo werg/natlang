@@ -102,7 +102,8 @@ def bootstrap_configs(plan_path, completion_path, out):
             out=out/model, config=config_path, port=declaration['port'],
             coefficient_policy=_bound(declaration['coefficient_policy']) if declaration.get('coefficient_policy') else None,
             coefficient_optimizer=declaration.get('coefficient_optimizer'),
-            coefficient_task_eval=declaration.get('coefficient_task_eval'))
+            coefficient_task_eval=declaration.get('coefficient_task_eval'),
+            rl_policy_loss=declaration.get('policy_loss'))
         config = configure_native(args)
         configure_provider(config,declaration,plan,binding,config_path)
         results.append(config_path)

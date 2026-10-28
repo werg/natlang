@@ -97,6 +97,24 @@ def _input_stream(capture, prompt_length):
     return stream, writes
 
 
+def _behavior_top_k(sample, token, law):
+    """Validated sampler top-k receipt, consistent with the exact sampled token's log-probability."""
+    from ..common.sampling import decode_top_k
+    ids, logps = decode_top_k(sample['top_k'])
+    expected = law['k']
+    if len(ids) > expected:
+        raise ValueError('native RL behavior top-k receipt exceeds its declared k')
+    # float16 storage: relative precision 2^-11 of |log q|.
+    tolerance = 2e-3 * (1 + abs(sample['logp']))
+    hits = (ids == token).nonzero()
+    if len(hits):
+        if abs(float(logps[int(hits[0])]) - sample['logp']) > tolerance:
+            raise ValueError('native RL behavior top-k disagrees with the sampled token log-probability')
+    elif len(ids) == expected and sample['logp'] > float(logps[-1]) + tolerance:
+        raise ValueError('native RL sampled token outside top-k is more probable than the recorded top-k')
+    return {'k': expected, **sample['top_k']}
+
+
 def capture_invocation_actors(turns,base):
     """Exact host-capture actor inventory; graph/state proof is compile_replay's."""
     import copy
@@ -179,6 +197,12 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             raise ValueError('native RL needs its exact positive-temperature sampling law')
         if set(law) - {'temperature', 'seed', 'guidance', 'probabilities'}:
             raise ValueError('native RL sampling processor needs explicit replay support')
+        top_k_law = capture.get('behavior_top_k')
+        if top_k_law is not None:
+            from ..common.sampling import validate_behavior_top_k_declaration
+            validate_behavior_top_k_declaration(top_k_law)
+            if greedy or decision or forced_capture or law.get('probabilities') != top_k_law['distribution']:
+                raise ValueError('native RL behavior top-k requires its actual sampled post-processing law')
         own, mask, reads, read_stops, read_sources, read_semantics = [], [], [], [], [], []
         for segment in capture.get('prompt') or []:
             if segment.get('kind') == 'tokens':
@@ -269,10 +293,13 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 banned = _tokens(banned)
                 if token in banned or len(set(banned)) != len(banned):
                     raise ValueError('native RL banned mask excludes its sampled token or repeats IDs')
+            if ('top_k' in sample) != (top_k_law is not None and not sample['forced']):
+                raise ValueError('native RL behavior top-k must cover exactly every sampled position of its capture')
             if not sample['forced'] and not structural:
                 events.append({'local_query': prompt_length + index - 1, 'token_id': token,
                     'behavior_logp': sample['logp'], 'temperature': float(temperature),
-                    'allowed_token_ids': allowed, 'banned_token_ids': banned, 'turn': name, 'sample': sample['source_sample']})
+                    'allowed_token_ids': allowed, 'banned_token_ids': banned, 'turn': name, 'sample': sample['source_sample'],
+                    **({'behavior_top_k': _behavior_top_k(sample, token, top_k_law)} if top_k_law is not None else {})})
             input_actions.append({'local_query':prompt_length+index-1,'token_id':token,
                 'turn':name,'kind':'forced' if sample['forced'] else 'sampled',
                 'source_sample':sample.get('source_sample'),'input_index':index,
@@ -517,6 +544,83 @@ def token_action_logps(model, hidden, actions, *, chunk_tokens=128, readout=None
     return torch.stack(logps)
 
 
+_CENTERING_FIELDS = ('rho', 'alpha', 'tail_q', 'tail_p', 'w_y', 'y_in_top_k')
+
+
+def behavior_top_k_tensors(actions, k, device):
+    """Padded [n, k] sampler top-k IDs (-1) and log q (-inf), truncated to the loss k."""
+    from ..common.sampling import decode_top_k
+    ids = torch.full((len(actions), k), -1, dtype=torch.long)
+    logq = torch.full((len(actions), k), float('-inf'), dtype=torch.float32)
+    for row, action in enumerate(actions):
+        receipt = action.get('behavior_top_k')
+        if not isinstance(receipt, dict) or receipt.get('k', 0) < k:
+            raise ValueError('score-centered action lacks its sampler top-k with k >= the declared loss k')
+        values, logps = decode_top_k({'ids': receipt['ids'], 'logps': receipt['logps']})
+        width = min(k, len(values))
+        ids[row, :width] = values[:width]
+        logq[row, :width] = logps[:width]
+    return ids.to(device), logq.to(device)
+
+
+def score_centered_action_loss(model, hidden, actions, advantage, policy_loss, *, chunk_tokens=128, readout=None):
+    """Per-action score-centered/1 losses -R U over the same chunked, checkpointed readout as action_logps.
+
+    Every sampled action (all producer and consumer turns of the replayed graph) is scored under its own exact
+    temperature/mask law; forced/imported positions are not actions and stay excluded.
+    """
+    if chunk_tokens < 1:
+        raise ValueError('native RL loss chunks must be positive')
+    from torch.utils.checkpoint import checkpoint
+    from .policy_math import score_centered_surrogate, policy_loss_declaration
+    if policy_loss_declaration(policy_loss) != policy_loss:
+        raise ValueError('score-centered loss requires its canonical declaration')
+    a = torch.as_tensor(float(advantage), dtype=torch.float32, device=hidden.device)
+    if not torch.isfinite(a):
+        raise ValueError('nonfinite advantage')
+    groups = {}
+    for index, action in enumerate(actions):
+        groups.setdefault((action['temperature'],tuple(action['allowed_token_ids']) if action['allowed_token_ids'] is not None else None,
+                           tuple(action['banned_token_ids']) if action.get('banned_token_ids') is not None else None), []).append(index)
+    terms = [None] * len(actions)
+    stats = {name: [] for name in _CENTERING_FIELDS}
+    def score(states, labels, behavior, ids, logq, temperature, allowed, banned):
+        from ..common.sampling import masked_log_distribution
+        log_probs = masked_log_distribution((readout or model.logits)(states), temperature, allowed=allowed, banned=banned)
+        surrogate, details = score_centered_surrogate(log_probs, labels, behavior, ids, logq,
+            importance=policy_loss['importance'], eps=policy_loss['eps'])
+        return (surrogate, *(details[name] for name in _CENTERING_FIELDS))
+    from ..common.native_higher_order import capture_reference_execution,active_reference_arithmetic
+    if active_reference_arithmetic() is not None:
+        from ..model.native_adapters import capture_native_execution
+        score=capture_reference_execution(capture_native_execution(score))
+    for (temperature, allowed, banned), indices in groups.items():
+        for start in range(0, len(indices), chunk_tokens):
+            selected = indices[start:start+chunk_tokens]
+            chosen = [actions[i] for i in selected]
+            queries = torch.tensor([action['query'] for action in chosen], device=hidden.device)
+            labels = torch.tensor([action['token_id'] for action in chosen], device=hidden.device)
+            behavior = torch.tensor([action['behavior_logp'] for action in chosen], device=hidden.device, dtype=torch.float32)
+            ids, logq = behavior_top_k_tensors(chosen, policy_loss['k'], hidden.device)
+            surrogate, *details = checkpoint(score, hidden[queries], labels, behavior, ids, logq,
+                                             temperature, allowed, banned, use_reentrant=False)
+            for index, value in zip(selected, (-a * surrogate).unbind()):
+                terms[index] = value
+            for name, value in zip(_CENTERING_FIELDS, details):
+                stats[name].append(value.detach().float())
+    return torch.stack(terms), {name: torch.cat(values) for name, values in stats.items()}
+
+
+def summarize_score_centering(diagnostics):
+    """Mean per-position centering telemetry (rho, alpha, tail masses, w_y, fraction of y inside H)."""
+    if not diagnostics:
+        return {}
+    joined = {name: torch.cat([value[name] for value in diagnostics]) for name in _CENTERING_FIELDS}
+    return {'positions': int(joined['rho'].numel()),
+            **{name + '_mean': float(value.mean()) for name, value in joined.items()},
+            'rho_max': float(joined['rho'].max()), 'w_y_zero_fraction': float((joined['w_y'] == 0).float().mean())}
+
+
 def _validate_adapter_transition(engine,before_identity,before_binding,after_identity,after_binding,bundle,archive_owner):
     """One exact current/behavior adapter contract for uniform and call graphs."""
     from types import SimpleNamespace
@@ -583,6 +687,13 @@ class NativePolicyObjective:
         self.rows = self.spec['rows']
         if not self.rows:
             raise ValueError('native policy objective has no admitted episodes')
+        from .policy_math import policy_loss_declaration
+        self.policy_loss = self.spec.get('policy_loss')
+        if 'policy_loss' in self.spec and (self.spec['mode'] != 'grpo'
+                or policy_loss_declaration(self.policy_loss) != self.policy_loss):
+            raise ValueError('native policy objective declares a noncanonical or inapplicable policy loss')
+        for row in self.rows.values():
+            require_policy_loss_actions(row['actions'], self.policy_loss)
         for row in self.rows.values():
             names = row.get('episode_turns')
             if (not isinstance(names, list) or not names
@@ -636,7 +747,8 @@ class NativePolicyObjective:
         from ..common.hashing import canonical_json_sha256_hex,sha256_file_hex_cached
         if canonical_json_sha256_hex(json.loads(self.path.read_text()))!=canonical_json_sha256_hex(self.spec):
             raise ValueError('native policy objective changed after admission')
-        result={'kind':'native-policy','sha256':sha256_file_hex_cached(self.path),'mode':self.spec['mode']}
+        result={'kind':'native-policy','sha256':sha256_file_hex_cached(self.path),'mode':self.spec['mode'],
+                **({'policy_loss':self.policy_loss} if self.policy_loss is not None else {})}
         if self.bundle is not None:
             path,manifest=self.bundle
             if canonical_json_sha256_hex(json.loads(path.read_text()))!=canonical_json_sha256_hex(manifest):
@@ -827,7 +939,7 @@ class NativePolicyObjective:
             if names!=self.invocation_source_names:
                 raise ValueError('native invocation objective actor names differ from exact packed ownership')
         hidden = result['h_final'][0]
-        losses, count = [], 0
+        losses, count, diagnostics = [], 0, []
         for example in context['examples']:
             row = self.rows[example.id]
             if set(row['episode_turns']) != {node.name for node in example.plan.invocations}:
@@ -842,16 +954,34 @@ class NativePolicyObjective:
                         'allowed_token_ids': tuple(action['allowed_token_ids'])
                             if action['allowed_token_ids'] is not None else None}
                        for action in row['actions']]
-            logps, behavior = action_logps(model, hidden, actions,
-                                          chunk_tokens=self.spec.get('chunk_tokens', 128))
-            terms = (-logps if self.spec['mode'] == 'rft' else clipped_token_loss(logps, behavior,
-                row['advantage'], clip_low=self.spec.get('clip_low', .2), clip_high=self.spec.get('clip_high', .28)))
+            if self.policy_loss is not None:
+                terms, centered = score_centered_action_loss(model, hidden, actions, row['advantage'],
+                    self.policy_loss, chunk_tokens=self.spec.get('chunk_tokens', 128))
+                diagnostics.append(centered)
+            else:
+                logps, behavior = action_logps(model, hidden, actions,
+                                              chunk_tokens=self.spec.get('chunk_tokens', 128))
+                terms = (-logps if self.spec['mode'] == 'rft' else clipped_token_loss(logps, behavior,
+                    row['advantage'], clip_low=self.spec.get('clip_low', .2), clip_high=self.spec.get('clip_high', .28)))
             losses.append(terms.sum()); count += len(actions)
         if count == 0:
             raise ValueError('native objective batch has no actual sampled actions')
         return torch.stack(losses).sum() / count, {'sampled_tokens': count,
             'episodes': len(losses), 'objective': self.spec['mode'],
+            **({'policy_loss': self.policy_loss['schema'],
+                'score_centering': summarize_score_centering(diagnostics)} if self.policy_loss is not None else {}),
             **({'codec_execution':result['codec_execution']} if 'codec_execution' in result else {})}
+
+
+def require_policy_loss_actions(actions, policy_loss):
+    """Every sampled action of a score-centered objective carries its sampler top-k with at least the loss k."""
+    if policy_loss is None:
+        return
+    for action in actions:
+        receipt = action.get('behavior_top_k')
+        if not isinstance(receipt, dict) or type(receipt.get('k')) is not int or receipt['k'] < policy_loss['k']:
+            raise ValueError('score-centered RL needs every sampled position to carry its sampler top-k log-probs '
+                             'with k >= the declared loss k; recollect with x_natlang_rl_top_k')
 
 
 def graph_identity(example):
@@ -897,10 +1027,14 @@ def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
 
 
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,semantic_channel=None,
-                      min_quality=1.):
+                      min_quality=1., policy_loss=None):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
     [0, 1] (an exact oracle gives 0 or 1). ``grpo`` keeps groups whose qualities differ; ``rft`` (teacher-forced
-    whole-graph supervision through every producer/consumer dependency) keeps episodes with quality >= ``min_quality``."""
+    whole-graph supervision through every producer/consumer dependency) keeps episodes with quality >= ``min_quality``.
+    ``policy_loss`` (policy_math.policy_loss_declaration) selects the grpo policy-gradient loss; None keeps the
+    clipped ratio loss and its objective bytes unchanged. It is recorded only for grpo, the mode it changes."""
+    from .policy_math import policy_loss_declaration
+    policy_loss = policy_loss_declaration(policy_loss) if mode == 'grpo' else None
     from ..model.native_graph_plan import invocation_dict
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex
@@ -967,6 +1101,8 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 'tokenizer_fingerprint': identity['tokenizer_fingerprint'], 'nodes': nodes,
                 'external_states': external}
             example = parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint'])
+            if policy_loss is not None:
+                require_policy_loss_actions(replay.actions, policy_loss)
             objective_rows[identifier] = {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
                 'episode_turns': episode_turns,
                 'actions': list(replay.actions), 'advantage': float(advantage or 0.),
@@ -980,7 +1116,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 objective_rows[identifier]['semantic_dependencies']=[asdict(value) for value in replay.semantic_dependencies]
             graphs.append(graph)
     return graphs, {'schema': 'natlang.native-policy-objective/2' if behavior_policy is not None else 'natlang.native-policy-objective/1', 'kind': 'native-policy',
-        'mode': mode, 'rows': objective_rows,
+        'mode': mode, **({'policy_loss': policy_loss} if policy_loss is not None else {}), 'rows': objective_rows,
         **({'base_native_identity':dict(identity),'behavior_policy':behavior_policy,'behavior_policy_sha256':canonical_json_sha256_hex(behavior_policy)}
            if behavior_policy is not None else {'policy':dict(identity)}),
         **({'adapter_binding': adapter_binding} if adapter_binding else {}),

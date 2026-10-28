@@ -20,6 +20,7 @@ import torch
 
 from .chat import RequestError, build_message, placeholder, render_messages, split_escaped
 from .native_protocol import capture_enabled
+from ..common.sampling import behavior_top_k_declaration
 from .store import TensorStore
 
 
@@ -45,6 +46,9 @@ class GenerationRequest:
     native_protocol_recovery: bool = False
     native_store_owner: str | None = None
     rl_capture: bool = False
+    # Score-centered RL: also record the sampler's top-k log-probs per sampled
+    # position (common.sampling behaviour top-k receipt). None records none.
+    rl_top_k: int | None = None
     native_recording: bool = False
     native_state_modes: dict | None = None
 
@@ -87,6 +91,7 @@ class Sequence:
     native_write_open_sample: int | None = None
     native_own_position: int = 0
     native_sampling_seed: int | None = None
+    native_sample_top_k: dict | None = None
     native_forced_tokens: list[int] = field(default_factory=list)
     native_forced_replay: bool = False
     native_forced_source: dict | None = None
@@ -601,6 +606,9 @@ class Engine:
             banned=sorted(seq.bans.get(seq.native_own_position, ())))
         if seq.request.temperature and seq.request.temperature > 0:
             token = int(torch.multinomial(log_probs.exp().cpu(), 1, generator=seq.rng))
+            if seq.request.rl_top_k is not None:
+                from ..common.sampling import encode_top_k
+                seq.native_sample_top_k = encode_top_k(log_probs, seq.request.rl_top_k)
             return token, float(log_probs[token])
         return int(log_probs.argmax()), None
 
@@ -1054,7 +1062,13 @@ class Engine:
                 self._finish(seq, "length")
                 return
             forced=seq.native_forced_replay
+            seq.native_sample_top_k = None
             token, sampled_logp = ((seq.native_forced_tokens.pop(0),None) if forced else self._native_token(seq))
+            top_k_receipt = None
+            if seq.request.rl_top_k is not None and not forced and seq.request.temperature > 0:
+                top_k_receipt, seq.native_sample_top_k = seq.native_sample_top_k, None
+                if top_k_receipt is None:
+                    raise RequestError('rl-top-k-unavailable', 'the sampler did not record its requested top-k log-probs')
             sample_index = len(seq.rl_samples)
             # The next-token query is the output position of the last own
             # input; imported KV slots do not contribute to this index.
@@ -1065,6 +1079,7 @@ class Engine:
             if capture_enabled(seq) or seq.guide is not None:
                 seq.rl_samples.append({"index": sample_index, "token_id": token, "logp": sampled_logp,
                                        **({'forced':True} if forced else {}),
+                                       **({'top_k': top_k_receipt} if top_k_receipt is not None else {}),
                                        **({'banned_token_ids': sorted(seq.bans.get(seq.native_own_position, ()))}
                                           if seq.guide is not None else {}),
                                        "input_role": "produce" if producing_input else "ordinary",
@@ -1228,6 +1243,8 @@ class Engine:
                 "generated_inputs": seq.native_rl_inputs, "writes": seq.native_rl_writes,
                 "finish_reason": seq.finish_reason,
                 "sample_range_convention": "half-open",
+                **({'behavior_top_k': behavior_top_k_declaration(seq.request.rl_top_k)}
+                   if seq.request.rl_top_k is not None and seq.request.temperature > 0 and not seq.native_forced_replay else {}),
                 "sampling_law": {"temperature": seq.request.temperature, "seed": seq.native_sampling_seed,
                                  "guidance": seq.guide is not None, "probabilities": ("exact-forced-sequence"
                                      if seq.native_forced_replay else "greedy-argmax"

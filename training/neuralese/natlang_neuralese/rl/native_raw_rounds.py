@@ -289,6 +289,7 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None,ow
         production_stage=declaration['production_stage'],runtime=runtime,out=out/'production',config=path,
             actor_runtime=declaration.get('actor_runtime'),
         port=declaration['port'],coefficient_policy=None,coefficient_optimizer=None,coefficient_task_eval=None,
+        rl_policy_loss=declaration.get('policy_loss'),
         verified_native_checkpoint=(record['checkpoint'],saved))
     config=configure_native(args)
     args.verified_native_checkpoint=None

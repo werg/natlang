@@ -68,6 +68,9 @@ def refuse_retired_parameters(parameters):
 
 def validate_stage_parameters(kind, parameters):
     """Validate parameter shapes whose CLI actions are not scalar values."""
+    if kind in {'native_state_rl','native_coefficient_rl'} and parameters.get('rl_policy_loss') is not None:
+        from ..rl.policy_math import policy_loss_declaration
+        policy_loss_declaration(parameters['rl_policy_loss'])
     if kind=='native_coefficient_rl':
         if 'epochs' in parameters and (type(parameters['epochs']) is not int or parameters['epochs']<1):
             raise ValueError('native coefficient epochs must be a positive integer')
@@ -195,7 +198,7 @@ HANDLERS['native_state_rl'] = {
     'required_inputs': {'rollouts', 'held_native_graphs', 'continue_from'},
     'optional_inputs': {'rl_block_bundle'},
     'parameters': set(HANDLERS['native_state_sft']['parameters']) |
-        {'rl_tokenizer', 'rl_mode', 'native_participant'},
+        {'rl_tokenizer', 'rl_mode', 'rl_policy_loss', 'native_participant'},
     'result': 'checkpoint.pt'}
 
 HANDLERS['native_offline_preference'] = {
@@ -211,7 +214,7 @@ HANDLERS['native_coefficient_rl'] = {
     'module':'natlang_neuralese.rl.native_stage',
     'required_inputs':{'rollouts','held_native_graphs','continue_from','coefficient_policy'},
     'optional_inputs':{'rl_block_bundle'},
-    'parameters':{'rl_tokenizer','rl_mode','epochs','base','native_participant','device','coefficient_optimizer',
+    'parameters':{'rl_tokenizer','rl_mode','rl_policy_loss','epochs','base','native_participant','device','coefficient_optimizer',
                   'task_eval','task_eval_every','held_eval_graphs','held_eval_tokens','chunk_tokens',
                   'checkpoint_layers','fp8_training','fp8_recipe'},
     'result':'checkpoint.pt'}

@@ -28,6 +28,10 @@ def validate_policy_training(value,phase_ids=()):
         bound=value.get(name,.2 if name=='clip_low' else .28)
         if type(bound) not in (float,int) or not math.isfinite(bound) or not 0<=bound<1:
             raise ValueError('semantic policy clipping must be finite and in [0,1)')
+    if 'policy_loss' in value:
+        from ..rl.policy_math import policy_loss_declaration
+        if policy_loss_declaration(value['policy_loss'])!=value['policy_loss']:
+            raise ValueError('semantic policy loss must be its canonical declaration')
     for source in value['sources']:
         if (not isinstance(source,dict) or not {'rollouts','block_bundle','adapter'}<=set(source)
                 or set(source)-{'rollouts','block_bundle','adapter','mode','collector_participant'}
@@ -80,6 +84,7 @@ class PolicySource:
                 entry['advantage']=float(advantage or 0.)
                 entry['objective_sha256']=canonical_json_sha256_hex({'mode':entry['mode'],
                     'clip_low':declaration.get('clip_low',.2),'clip_high':declaration.get('clip_high',.28),
+                    **({'policy_loss':declaration['policy_loss']} if entry['mode']=='grpo' and declaration.get('policy_loss') else {}),
                     'advantage':entry['advantage'],'episode':entry['id']})
                 self.entries.append(entry)
         # Stable physical source/row order; repeated source scans are avoided by
@@ -235,7 +240,8 @@ def policy_loss(source,entry,participants,vae,training,origin,*,device,loaded=No
     loss,details=semantic_episode_loss(selected,replays,dependencies,channel=channel,external_blocks=external,
         advantage=entry['advantage'],mode=entry['mode'],clip_low=declaration.get('clip_low',.2),
         clip_high=declaration.get('clip_high',.28),chunk_tokens=declaration.get('chunk_tokens',128),
-        training_execution=execution,behavior_channel=behavior,reference=reference)
+        training_execution=execution,behavior_channel=behavior,reference=reference,
+        policy_loss=declaration.get('policy_loss') if entry['mode']=='grpo' else None)
     return loss,{**details,'training_execution':execution,'source_row_sha256':entry['id'],
         'behavior_source':source.sources[entry['source']]},set(replays)
 

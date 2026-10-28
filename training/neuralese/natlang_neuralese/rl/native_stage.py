@@ -14,7 +14,7 @@ from ..common.hashing import sha256_file_hex_cached
 
 def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coefficient_policy=None,
             expected_history_reasoning_policy=None, expected_history_binding_sha256=None,
-            expected_history_binding_path=None):
+            expected_history_binding_path=None, policy_loss=None):
     from transformers import AutoTokenizer
     from ..model.shared_state import RoleTokens, ROLE_MARKERS
     from ..data.text_corpus import tokenizer_fingerprint
@@ -65,7 +65,7 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
             raise ValueError('immutable invocation admission archive changed its source binding')
         write_json_durable(destination,rebound)
         return prepare_objective(rollouts,identity=identity,roles=RoleTokens(*marker_ids),fetch_block=fetch,
-                                 block_bundle=destination,mode=mode,behavior_policy=behavior)
+                                 block_bundle=destination,mode=mode,behavior_policy=behavior,policy_loss=policy_loss)
     policies = [turn['sampling']['policy'] for row in rollouts if row.get('reward') is not None
                 for turn in row.get('turns', []) if (turn.get('sampling') or {}).get('policy')]
     if not policies or any(policy != policies[0] for policy in policies):
@@ -91,7 +91,7 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
         if reader is None:raise ValueError('native RL state requires its durable actor bundle')
         return reader.state(block_id)
     return prepare_objective(rollouts, identity=identity, roles=roles, fetch_block=fetch,
-        block_bundle=Path(bundle).resolve() if bundle else None, mode=mode)
+        block_bundle=Path(bundle).resolve() if bundle else None, mode=mode, policy_loss=policy_loss)
 
 
 def main(argv=None):
@@ -99,6 +99,9 @@ def main(argv=None):
     parser.add_argument('--rollouts', action='append', type=Path, required=True)
     parser.add_argument('--rl-tokenizer', type=Path, required=True)
     parser.add_argument('--rl-mode', choices=('grpo', 'rft'), default='grpo')
+    # Declared grpo policy loss (rl.policy_math.policy_loss_declaration), e.g.
+    # '{"schema":"score-centered/1","k":128,"importance":"tis"}'. Omitted: clipped ratio loss.
+    parser.add_argument('--rl-policy-loss')
     parser.add_argument('--rl-block-bundle', type=Path)
     parser.add_argument('--coefficient-policy',type=Path)
     parser.add_argument('--history-reasoning-policy', choices=('keep', 'last_turn_only'))
@@ -142,7 +145,8 @@ def _admit_and_train(args,trainer):
         bundle=args.rl_block_bundle, mode=args.rl_mode,coefficient_policy=args.coefficient_policy,
         expected_history_reasoning_policy=args.history_reasoning_policy,
         expected_history_binding_sha256=args.history_reasoning_binding_sha256,
-        expected_history_binding_path=args.history_reasoning_binding_path)
+        expected_history_binding_path=args.history_reasoning_binding_path,
+        policy_loss=args.rl_policy_loss)
     if not graphs:
         raise ValueError('no useful native policy episodes: route flat failures to verified graph SFT seeding')
     args.out.mkdir(parents=True, exist_ok=True)
@@ -153,6 +157,7 @@ def _admit_and_train(args,trainer):
         'schema': 'natlang.native-rl-admission/1',
         **({'base_native_identity':objective['base_native_identity'],'behavior_policy_sha256':objective['behavior_policy_sha256']}
            if args.coefficient_policy is not None else {'policy':objective['policy']}), 'mode': args.rl_mode,
+        **({'policy_loss': objective['policy_loss']} if 'policy_loss' in objective else {}),
         'rollouts': {str(path.resolve()): sha256_file_hex_cached(path) for path in args.rollouts},
         'tasks_selected': [{'task_id': row['task_id'], 'split': 'train'} for row in objective['rows'].values()],
         'omissions':{'unscored':[{'task_id':row.get('task_id'),'sample':row.get('sample')} for row in rows if row.get('reward') is None]},

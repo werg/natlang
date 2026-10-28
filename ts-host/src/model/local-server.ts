@@ -56,7 +56,10 @@ export type ManagedModelRuntimeOptions = { ensureRuntime?:
   /** Native state span files (tuned soft states) the managed server loads with `--native-state` (the llama.cpp fork). */
   nativeStates?: () => readonly { readonly id: string; readonly path: string }[];
   /** Native reference server: request exact sampling receipts (`x_natlang_rl_capture`) on every turn, for RL rollouts. */
-  rlCapture?: boolean };
+  rlCapture?: boolean;
+  /** With rlCapture: also record the sampler's top-k log-probs at each sampled position (`x_natlang_rl_top_k`,
+   * score-centered RL). */
+  rlTopK?: number };
 
 export function localModelPrerequisites(environment: NodeJS.ProcessEnv = process.env) {
   const runtime = discoverLlamaRuntime(environment), found = runtime.selected?.path ?? null;
@@ -229,7 +232,8 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   let native: ReturnType<typeof neuraleseServerModelTurn> | undefined;
   const nativeDriver = () => native ??= neuraleseServerModelTurn({ endpoint: external!.endpoint, model: external!.model,
     headers: external!.headers, apiKey: environment[external!.apiKeyEnv], owner: randomUUID(),
-    request: runtimeOptions.rlCapture ? { ...external!.request, x_natlang_rl_capture: true } : external!.request });
+    request: runtimeOptions.rlCapture ? { ...external!.request, x_natlang_rl_capture: true,
+      ...(runtimeOptions.rlTopK !== undefined ? { x_natlang_rl_top_k: runtimeOptions.rlTopK } : {}) } : external!.request });
   // vLLM: a call's whole stack is one loaded LoRA, selected by name; the base model name serves untuned calls.
   const vllmLoaded = new Set<string>();
   const vllmTunedRequest = () => {

@@ -5,10 +5,15 @@ export function chatRequestControls(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('chat request controls must be an object');
   const controls = value as Record<string, unknown>;
   const allowed = ['max_tokens', 'top_p', 'top_k', 'min_p', 'chat_template_kwargs', 'repetition_penalty', 'reasoning_effort',
-    'x_natlang_adapters', 'x_natlang_rl_capture', 'x_natlang_native_protocol_recovery', 'guidance', 'x_natlang_native_coefficient_policy'];
+    'x_natlang_adapters', 'x_natlang_rl_capture', 'x_natlang_rl_top_k', 'x_natlang_native_protocol_recovery', 'guidance',
+    'x_natlang_native_coefficient_policy'];
   if (Object.keys(controls).some(key => !allowed.includes(key))) throw new Error('unsupported chat request control');
   if (controls.x_natlang_rl_capture !== undefined && typeof controls.x_natlang_rl_capture !== 'boolean')
     throw new Error('x_natlang_rl_capture must be boolean');
+  // Score-centered RL (serve/http.py): the native sampler's top-k log-probs per sampled position, inside the capture.
+  if (controls.x_natlang_rl_top_k !== undefined && (!Number.isSafeInteger(controls.x_natlang_rl_top_k) ||
+      Number(controls.x_natlang_rl_top_k) < 1 || Number(controls.x_natlang_rl_top_k) > 4096 || controls.x_natlang_rl_capture !== true))
+    throw new Error('x_natlang_rl_top_k must be an integer in [1, 4096] alongside x_natlang_rl_capture: true');
   if (controls.x_natlang_native_protocol_recovery !== undefined && typeof controls.x_natlang_native_protocol_recovery !== 'boolean')
     throw new Error('x_natlang_native_protocol_recovery must be boolean');
   if (controls.guidance !== undefined && controls.guidance !== false)

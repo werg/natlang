@@ -407,8 +407,10 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
 
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
-            case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None):
-    """Bounded subprocess fanout; existing collector and exact task verifier."""
+            case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
+            behavior_top_k=None):
+    """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
+    actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged."""
     if control is not None and control.stop.requested:
         raise InterruptedError('collection stop requested')
     if not endpoints or workers < 1:
@@ -426,7 +428,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         'runtime': {str(p.relative_to(runtime)): sha256_file_hex(p)
                     for p in sorted((runtime / 'dist').rglob('*.js'))},
         'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py'),
-        **({'expected_native_actor': expected_native} if expected_native is not None else {})}
+        **({'expected_native_actor': expected_native} if expected_native is not None else {}),
+        **({'behavior_top_k': behavior_top_k} if behavior_top_k is not None else {})}
     coefficient_runtime=None
     if coefficient_policy is not None:
         from ..model.native_coefficient_policy import runtime_binding
@@ -461,6 +464,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     directory.mkdir(exist_ok=True)
     config = out / 'sampling-config.json'
     write_json_durable(config, {'guidance': False, 'x_natlang_rl_capture': True,
+        **({'x_natlang_rl_top_k': behavior_top_k} if behavior_top_k is not None else {}),
         **({'x_natlang_native_coefficient_policy':coefficient_runtime} if coefficient_runtime is not None else {})})
     runtime = Path(runtime or root('repo') / 'ts-host')
     if not (runtime / 'dist/teacher/cli.js').is_file():
@@ -895,6 +899,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                       'continue_monitor_reference': str(Path(state['checkpoint']).parent / 'monitor-reference.pt')}
             if control is not None:
                 values['_run_control'] = control
+            policy_loss = bind_policy_loss(config, values)
             from ..train.recipe import stage_parameter_args
             expected_native = None
             semantic_adapter=state.get('semantic_adapter')or config.get('semantic_adapter')
@@ -972,7 +977,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     coefficient_policy=values.get('coefficient_policy'),
                     case_seconds=config.get('case_seconds', 600),
                     max_model_requests=config.get('max_model_requests', 128),
-                    max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native)
+                    max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native,
+                    **({'behavior_top_k': policy_loss['k']} if policy_loss is not None else {}))
             except InterruptedError:
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)
@@ -1023,6 +1029,9 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     write_json_durable(state_path, state)
                     raise RuntimeError('native RL needs a verified whole-graph seed source when no sampled success is available')
             if state.get('active_update_round') == str(round_dir):
+                if state.get('update_policy_loss') != policy_loss:
+                    raise ValueError('RL policy loss changed inside an active update round; keep its declared loss '
+                                     'or start a fresh round with a new collection')
                 mode = state['update_mode']
                 values['rollouts'] = state['update_rollouts']
                 rft_stages = state.get('update_stages', ['all'])
@@ -1046,6 +1055,10 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 state['update_coefficient_policy']={'path':values['coefficient_policy'],'sha256':values['coefficient_policy_sha256']}
             state.update(phase='updating', update_mode=mode, active_update_round=str(round_dir),
                          update_rollouts=values['rollouts'], update_stages=rft_stages)
+            if policy_loss is not None:
+                state['update_policy_loss'] = policy_loss
+            else:
+                state.pop('update_policy_loss', None)
             write_json_durable(state_path, state)
             base_learner_out = Path(values['learner_out'])
             pending = False
@@ -1054,6 +1067,10 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 values.update(learner_out=str(stage_out), rft_document_kind=kind)
                 learner_report = stage_out / 'report.json'
                 saved_progress=json.loads(learner_report.read_text()) if learner_report.is_file() else {}
+                saved_receipt = stage_out / 'rl-data-receipt.json'
+                if mode == 'grpo' and saved_receipt.is_file() and (
+                        json.loads(saved_receipt.read_text()).get('policy_loss') != policy_loss):
+                    raise ValueError('completed RL learner stage was admitted under a different policy loss')
                 already_complete=bool((saved_progress.get('completed') and
                     (not (config.get('coefficient_policy') and mode!='seed') or saved_progress.get('qualification_complete') is True))
                     or qualified_seed_boundary(config,mode,saved_progress,stage_out/'checkpoint.pt'))
@@ -1242,6 +1259,20 @@ def validate_actor_runtime_configuration(config):
     return True
 
 
+def bind_policy_loss(config, values):
+    """The configured grpo policy loss, bound into the learner command; None keeps the clipped loss."""
+    from .policy_math import policy_loss_declaration
+    policy_loss = policy_loss_declaration(config.get('policy_loss'))
+    if policy_loss != config.get('policy_loss'):
+        raise ValueError('RL production policy loss must be stored in its canonical declaration')
+    command = config.get('learner_command') or []
+    if (policy_loss is not None) != ('{rl_policy_loss}' in command):
+        raise ValueError('RL learner command must pass exactly the configured --rl-policy-loss')
+    if policy_loss is not None:
+        values['rl_policy_loss'] = json.dumps(policy_loss, sort_keys=True, separators=(',', ':'))
+    return policy_loss
+
+
 def configure_native(args):
     """Declare both cloud/local native learners using the same trainer and refresh."""
     from ..train.recipe import resolve_recipe_data, effective_stage_parameters, HANDLERS
@@ -1271,6 +1302,12 @@ def configure_native(args):
     if len(stages) != 1 or stages[0]['kind'] not in {'native_state_sft', 'native_state_rl','native_offline_preference'}:
         raise ValueError('native RL configure requires the actual declared native production stage')
     parameters = effective_stage_parameters(stages[0], [], recipe)
+    from .policy_math import policy_loss_declaration
+    declared_loss = policy_loss_declaration(getattr(args, 'rl_policy_loss', None))
+    recipe_loss = policy_loss_declaration(parameters.get('rl_policy_loss'))
+    if declared_loss is not None and recipe_loss is not None and declared_loss != recipe_loss:
+        raise ValueError('native RL policy loss differs between its declaration and its recipe stage')
+    policy_loss = declared_loss or recipe_loss
     parameters = {key: value for key, value in parameters.items()
                   if key in HANDLERS['native_offline_preference' if stages[0]['kind']=='native_offline_preference' else 'native_state_sft']['parameters'] and value is not None}
     parameters.pop('memory_qualification',None)  # one-time source-capacity probe already bound to the SFT parent
@@ -1329,6 +1366,9 @@ def configure_native(args):
             '--rl-block-bundle', '{block_bundle}', *common],
         'seed_command': [python, '-m', 'natlang_neuralese.train.native_state_sft',
             '--native-graphs', '{seed_native_graphs}', '--objective-continuation', *common]}
+    if policy_loss is not None:
+        config['policy_loss'] = policy_loss
+        config['learner_command'] += ['--rl-policy-loss', '{rl_policy_loss}']
     if history_policy is not None:
         config['learner_command'] += ['--history-reasoning-policy', '{history_reasoning_policy}']
     if history_binding_sha256 is not None:
@@ -1419,6 +1459,7 @@ def main(argv=None):
     g.add_argument('--production-recipe', type=Path, required=True)
     g.add_argument('--production-stage', required=True)
     g.add_argument('--port', type=int, default=8097)
+    g.add_argument('--rl-policy-loss', type=json.loads, help='grpo policy loss declaration, e.g. {"schema":"score-centered/1","k":128}')
     a = p.parse_args(argv)
     if a.command == 'configure':
         configure(a)
