@@ -370,7 +370,8 @@ def compatibility(components):
             sources=w['source_receipt_sha256']
             matching={'train':sources[0], 'held':sources[1]} in initial['roles']
             valid=(r.get('binding_kind')=='initial-only' and r['generation']==initial['plan_sha256']
-                   and recipe['lineage_sha256']==initial['recipe_sha256'] and matching)
+                   and recipe['lineage_sha256']==initial['recipe_sha256']
+                   and w['runtime_code_sha256']==initial['runtime_code_sha256'] and matching)
         except (KeyError,TypeError,IndexError,ValueError):
             valid=False
         if not valid:

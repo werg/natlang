@@ -536,9 +536,11 @@ def test_initial_resident_requires_exact_plan_recipe_and_source_receipts():
     components={'coordinator':{'fingerprint':'f','versions':[0],'last_seq':[{}],'queued':[{}],'runtime_code_sha256':'code'}}
     for i in range(4):
         components[f'worker-{i}']={'worker':i,'fingerprint':'f','versions':[0],'sequences':[0], 'pending':{},'awaiting_global':[], 'source_hash':'s','runtime_code_sha256':'code','resident_generation':None,'source_receipt_sha256':['train','held'],'recipe_binding':{'lineage_sha256':'recipe'},'ce_supervision_policy_binding':'ce'}
-        components[f'resident-{i}']={'generation':'plan','binding_kind':'initial-only','initial_binding':{'plan_sha256':'plan','recipe_sha256':'recipe','roles':[{'train':'train','held':'held'}]}}
+        components[f'resident-{i}']={'generation':'plan','binding_kind':'initial-only','initial_binding':{'plan_sha256':'plan','recipe_sha256':'recipe','runtime_code_sha256':'code','roles':[{'train':'train','held':'held'}]}}
     assert service.compatibility(components)['compatible']
-    for replacement in ({'plan_sha256':'other','recipe_sha256':'recipe','roles':[{'train':'train','held':'held'}]}, {'plan_sha256':'plan','recipe_sha256':'other','roles':[{'train':'train','held':'held'}]}, {'plan_sha256':'plan','recipe_sha256':'recipe','roles':[{'train':'other','held':'held'}]}):
+    bad_code={**components,'worker-0':{**components['worker-0'],'runtime_code_sha256':'other'}}
+    assert not service.compatibility(bad_code)['compatible']
+    for replacement in ({'plan_sha256':'other','recipe_sha256':'recipe','roles':[{'train':'train','held':'held'}]}, {'plan_sha256':'plan','recipe_sha256':'other','roles':[{'train':'train','held':'held'}]}, {'plan_sha256':'plan','recipe_sha256':'recipe','runtime_code_sha256':'code','roles':[{'train':'other','held':'held'}]}):
         bad={**components,'resident-0':{**components['resident-0'],'initial_binding':replacement}}
         assert not service.compatibility(bad)['compatible']
 

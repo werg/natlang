@@ -108,6 +108,7 @@ def resident_pin(directory, archive):
                 'binding_kind': 'adopted' if state else 'initial-only',
                 'initial_binding': None if state else {'plan_sha256': initial_state['plan_sha256'],
                     'recipe_sha256': active_plan['recipe_sha256'],
+                    'runtime_code_sha256': canonical_json_sha256_hex(active_plan['code']),
                     'roles': [{'train': x.get('native_graphs', {}).get('sha256'),
                                'held': x.get('held_native_graphs', {}).get('sha256')}
                               for x in active_plan['stage_inputs'].values()]},
