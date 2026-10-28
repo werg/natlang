@@ -14,6 +14,21 @@ SFT, whole-graph JOLT+ RL, program adaptation, then metalearner training.
 
 ## Start promptly and revise training live (owner, 2026-10-28)
 
+Owner follow-up (2026-10-28 evening): operate a robust **four-sandbox training
+setup**, with useful learner work on every GPU and coordination cohosted where
+measured memory permits. Keep a productive learner running while replacements
+initialize; cut over from the newest earned full state. Check actual optimizer
+advancement, tokens per second, host pressure, checkpoint commits and independently
+verified exports per worker. A role acknowledgement, provider Running label or
+busy GPU alone does not establish useful training. Recover one failed worker
+without discarding healthy peers' progress; coordinator restart and queued-update
+replay must preserve exact effective updates and optimizer/RNG/exposure custody.
+Persist service tokens at creation, compile assembled entrypoints before launch,
+reuse authenticated build/index caches, and serialize requests to each persistent
+owner. Keep backup queues bounded and retry failed publications while protecting
+the last verified recovery state. Do not let preparation or diagnostic probes
+become a substitute for the four learners advancing the complete evolving recipe.
+
 Use the platform maximum sandbox lifetime for training. Do not introduce short
 expiry limits or routine sandbox cycling to control spend: they interrupt
 healthy work and force unnecessary recovery. Supervise actual useful progress,
