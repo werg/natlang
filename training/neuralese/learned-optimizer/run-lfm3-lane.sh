@@ -207,10 +207,13 @@ PY
   for index in "${!HELD[@]}"; do
     name=${HELD[$index]}
     program=$($PY -c 'import json,sys; print(json.load(open(sys.argv[1]))["root"])' "$O/tunes/$name.json")
+    baseline=$($PY -c 'import json,sys; print(json.load(open(sys.argv[1]))["best"]["release"])' "$O/tunes/$name.json")
     stage "held-learned-$index" "$TUNE_BUDGET_GB" '' $ENV NATLANG_LOPT_REPOSITORY=$REPO NATLANG_LOPT_PYTHON=$PY \
       $NATLANG tune "$program" --learned "$O/learned-controller.json"
     stage "held-development-$index" "$TUNE_BUDGET_GB" '' $ENV $NATLANG tune "$program" --evaluate development
     stage "held-confirmation-$index" "$TUNE_BUDGET_GB" '' $ENV $NATLANG tune "$program" --evaluate confirmation
+    stage "held-baseline-development-$index" "$TUNE_BUDGET_GB" '' $ENV $NATLANG tune "$program" --evaluate development --release "$baseline"
+    stage "held-baseline-confirmation-$index" "$TUNE_BUDGET_GB" '' $ENV $NATLANG tune "$program" --evaluate confirmation --release "$baseline"
   done
 fi
 $ENV $PY -m natlang_neuralese.tune.learned.lane summary --op "$O" | tee "$O/summary.json"

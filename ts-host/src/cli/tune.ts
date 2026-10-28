@@ -8,7 +8,7 @@
  *   natlang tune <program> --watch         rebuild in the background on edits; the run/call path keeps serving
  *   natlang tune <program> --report        the latest report, status and the active release
  *   natlang tune <program> --rollback      reactivate the previous coherent release
- *   natlang tune <program> --evaluate <development|confirmation|protected> [--with-teacher]
+ *   natlang tune <program> --evaluate <development|confirmation|protected> [--release DIGEST] [--with-teacher]
  *                                          paired arms (untuned, active release, teacher reference) for reports
  *   natlang tune <program> --placement     measured removals/refits on development roots; activates the cheapest
  *                                          candidate within the declared success envelope
@@ -87,7 +87,7 @@ function formatReport(report: TuneReport): string {
 
 export async function tuneCommand(argv: readonly string[], io: { out: (text: string) => void; err: (text: string) => void } =
   { out: text => process.stdout.write(text + '\n'), err: text => process.stderr.write(text + '\n') }): Promise<number> {
-  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--learned', '--partition', '--export-cases', '--import-cases', '--import-campaign', '--held', '--score-proposals'];
+  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--release', '--sweep', '--learned', '--partition', '--export-cases', '--import-cases', '--import-campaign', '--held', '--score-proposals'];
   const flags = new Set(argv.filter(arg => arg.startsWith('--') && !valuedNames.includes(arg)));
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
@@ -179,6 +179,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     } finally { await teacherSession.close(); }
   };
   const learnedSpec = value('--learned');
+  if (value('--release') && !value('--evaluate')) throw new Error('--release requires --evaluate');
   if (learnedSpec && flags.has('--rounds')) throw new Error('--learned and --rounds select the release differently; pass one');
   const once = () => withOptions(async options => {
     if (!learnedSpec) return tuneProgram(options, flags.has('--rounds') ? roundsSelector(options, options.settings.rounds) : undefined);
@@ -199,9 +200,11 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       const examples = partition === 'protected' ? protectedExamples(readRootExamples(root, options.examplesPath))
         : data.examples.filter(example => example.partition === partition);
       if (!examples.length) throw new Error(`no ${partition} roots to evaluate`);
-      const current = currentManifest(root);
-      const arms = [await evaluateRelease(options, data, null, examples, 'untuned', partition)];
-      if (current) arms.push(await evaluateRelease(options, data, current, examples, String(current.receipts.variant ?? '').startsWith('placement') ? 'placed' : 'hierarchy', partition));
+      const selectedRelease = value('--release');
+      const current = selectedRelease ? readRelease(root, selectedRelease) : currentManifest(root);
+      const arms = selectedRelease ? [] : [await evaluateRelease(options, data, null, examples, 'untuned', partition)];
+      if (current) arms.push(await evaluateRelease(options, data, current, examples, selectedRelease ? `release-${selectedRelease}` :
+        String(current.receipts.variant ?? '').startsWith('placement') ? 'placed' : 'hierarchy', partition));
       // The teacher reference runs as an isolated evaluator: its answers are never training data.
       if (flags.has('--with-teacher')) arms.push(await evaluateRoots({ root, program: options.program, driver: options.teacher, weights: [], examples, services: options.services, execution: options.settings.execution,
         arm: 'teacher', release: null, partition }));

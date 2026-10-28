@@ -35,7 +35,7 @@ priority; rerunning an operation id skips its succeeded stages.
 | `outer-rl` | `outer-rl-round.sh`: proposals, `natlang tune ROOT --score-proposals` per program (real task outcomes), collect, policy update | `outer-rl/` |
 | `meta-examples` | exact labels for the optimizer's own stages over the final corpus plans | `meta/tune.examples.jsonl` |
 | `controller-split`, `controller-supply`, `controller-tune` | persist the program-family split, prepare protected-world-checked training references, and self-teach and train the controller with SFT and oracle-reward RL | `controller/`, including its recorded active release |
-| `held-learned-*`, `held-development-*`, `held-confirmation-*` | apply that exact controller release to held programs and measure the selected release on development and confirmation roots | each held program's tune reports and evaluation arms |
+| `held-learned-*`, `held-development-*`, `held-confirmation-*`, `held-baseline-*` | apply that exact controller release to held programs and measure the untuned, earlier tuned, and learned releases on development and confirmation roots | each held program's tune reports and evaluation arms |
 
 `lane summary` writes `summary.json`: stage statuses, per-program tune outcomes (development success per round and the
 untuned/active arms), the optimizer split, outer steps/publications/adoptions, meta-RL records and meta-example
