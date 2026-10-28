@@ -333,15 +333,19 @@ class Coordinator:
             self._write_progress()
             return self._progress_status()
 
-    def completion(self, worker: int, session: str, *, drained: bool, sequences: list[int] | None = None) -> dict:
+    def completion(self, worker: int, session: str, *, drained: bool, sequences: list[int] | None = None, generation: str | None = None) -> dict:
         """Record no-more-local-updates and, separately, delivery of each final window."""
         self._lease_valid(worker, session)
         if not 0 <= worker < self.manifest['workers'] or type(drained) is not bool:
             raise ValueError('invalid learner completion identity')
+        if generation is not None and not re.fullmatch('[0-9a-f]{64}', generation):
+            raise ValueError('invalid source generation')
         with self.lock:
             with self.progress_lock:
                 done=self.progress.setdefault('completion',{})
                 prior=done.get(str(worker))
+                if prior and prior.get('generation') not in (None, generation):
+                    raise Conflict('completion source generation changed without reopening')
                 if drained:
                     if not prior or not prior.get('declared'):
                         raise ValueError('learner must declare completion before draining')
@@ -353,18 +357,53 @@ class Coordinator:
                         raise Conflict('final learner updates have not been accepted', undelivered=True)
                 done[str(worker)]={'declared':True,'drained':drained or bool(prior and prior.get('drained')),
                                    'sequences':sequences if drained else (prior or {}).get('sequences'),
-                                   'at':time.time()}
+                                   'generation':generation if generation is not None else (prior or {}).get('generation'), 'at':time.time()}
                 self._write_progress()
-                all_declared=len(done)==self.manifest['workers'] and all(v.get('declared') for v in done.values())
+                all_declared=len(done)==self.manifest['workers'] and all(v.get('declared') for v in done.values()) and len({v.get('generation') for v in done.values()})==1
             if all_declared:
                 for fragment in self.fragments:self._try_merge(fragment.index,final=True)
                 self._refresh_published()
             return self.status()
 
+    def reopen(self, worker: int, session: str, *, previous: str, generation: str, sequences: list[int]) -> dict:
+        """Open one previously drained worker for an explicitly bound new source generation."""
+        self._lease_valid(worker, session)
+        if not all(isinstance(x,str) and re.fullmatch('[0-9a-f]{64}',x) for x in (previous,generation)) or previous==generation:
+            raise ValueError('reopen needs distinct exact source generation hashes')
+        with self.lock:
+            with self.progress_lock:
+                done=self.progress.setdefault('completion',{}); prior=done.get(str(worker))
+                reopened=self.progress.setdefault('reopened',{})
+                event={'previous':previous,'generation':generation,'sequences':sequences}
+                if prior is None and reopened.get(str(worker))==event:
+                    if sequences!=self._sequences(worker):
+                        raise Conflict('reopened worker has newer coordinator updates; restore exact topology')
+                    return self._progress_status()
+                if not prior or not prior.get('drained'):
+                    raise Conflict('only a fully drained worker can reopen')
+                # Every prior worker must finish before any source generation
+                # reopens; subsequent reopen calls join that same transition.
+                for index in range(self.manifest['workers']):
+                    other=done.get(str(index)); moved=reopened.get(str(index))
+                    if other and other.get('drained') and other.get('generation') in (None,previous):
+                        continue
+                    if moved and moved.get('previous')==previous and moved.get('generation')==generation:
+                        continue
+                    raise Conflict('prior source generation is not fully drained by every learner')
+                if prior.get('generation') not in (None, previous):
+                    raise Conflict('prior source generation differs from completion custody')
+                if (not isinstance(sequences,list) or sequences!=prior.get('sequences') or
+                        sequences!=self._sequences(worker)):
+                    raise Conflict('prior final sequences differ from coordinator custody')
+                history=self.progress.setdefault('completion_history',{}).setdefault(str(worker),[])
+                history.append({'completion':prior,'reopen':event,'at':time.time()})
+                reopened[str(worker)]=event;del done[str(worker)];self._write_progress()
+            return self.status()
+
     def _all_completion_declared(self) -> bool:
         with self.progress_lock:
             done=self.progress.get('completion') or {}
-            return len(done)==self.manifest['workers'] and all(v.get('declared') for v in done.values())
+            return len(done)==self.manifest['workers'] and all(v.get('declared') for v in done.values()) and len({v.get('generation') for v in done.values()})==1
 
     def _progress_status(self) -> dict:
         with self.progress_lock:
@@ -892,7 +931,10 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 elif parsed.path == "/v1/completion":
                     value=self._read_json()
                     result=coordinator.completion(int(value['worker']),str(value['session']),
-                                                  drained=value['drained'],sequences=value.get('sequences'))
+                                                  drained=value['drained'],sequences=value.get('sequences'),generation=value.get('generation'))
+                elif parsed.path == "/v1/reopen":
+                    value=self._read_json()
+                    result=coordinator.reopen(int(value['worker']),str(value['session']),previous=value['previous'],generation=value['generation'],sequences=value['sequences'])
                 elif parsed.path == "/v1/progress":
                     value = self._read_json()
                     result = coordinator.heartbeat(

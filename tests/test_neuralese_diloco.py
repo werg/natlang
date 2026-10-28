@@ -1,5 +1,6 @@
 """Shared DiLoCo: protocol numerics, durable coordinator and HTTP learners on CPU."""
 
+import json
 import socket
 import threading
 import time
@@ -404,7 +405,7 @@ def test_launcher_creates_learners_concurrently_and_reports_failures(monkeypatch
 
     active, peak, lock = [0], [0], threading.Lock()
 
-    def fake_launch(job, dry_run, wait, price, bundle_file, secrets=None):
+    def fake_launch(job, dry_run, wait, price, bundle_file, secrets=None, on_created=None):
         with lock:
             active[0] += 1
             peak[0] = max(peak[0], active[0])
@@ -578,3 +579,64 @@ def test_late_peer_checks_immutable_seed_and_unmerged_bound(tmp_path):
         learner.pending.clear();learner.close()
         if wrong:wrong.close()
         stop.set();server.join(timeout=3)
+
+
+def test_stale_http_window_rebases_without_losing_local_update(tmp_path):
+    seed=_model();root=tmp_path/'c';_init(root,seed,workers=2,quorum=1,max_staleness=0,outer_lr=1,outer_momentum=0)
+    port=_free_port();url=f'http://127.0.0.1:{port}';stop=threading.Event()
+    server=threading.Thread(target=serve_coordinator,args=(root,'127.0.0.1',port,TOKEN),kwargs={'stop':stop},daemon=True);server.start()
+    transport=Transport(url,TOKEN,5)
+    for _ in range(100):
+        try:transport.json('GET','/v1/status');break
+        except OSError:time.sleep(.02)
+    model=_model();surface=TensorSurface.from_module(model)
+    settings=DilocoSettings(run_id='unit',workers=2,worker_id=0,coordinator_url=url,local_steps=1,wire_dtype='fp32',heartbeat_seconds=100)
+    learner=DilocoLearner(settings,surface=surface,identity={'objective':'toy'},output=tmp_path/'w0',transport=transport)
+    try:
+        learner.start();session='00000000-0000-0000-0000-000000000001'
+        transport.json('POST','/v1/lease',{'worker':1,'session':session})
+        for f in learner.fragments:
+            update=tmp_path/f'{f.index}.safe';save_tensors(update,{'delta':torch.full((f.length,),.01)})
+            transport.request('POST',f'/v1/updates/{f.index}',file=update,headers={'X-Worker':'1','X-Session':session,'X-Sequence':'1','X-Base-Version':'0','X-Steps':'1','X-Tokens':'3','Content-Type':'application/octet-stream'})
+        optimizer=torch.optim.SGD(model.parameters(),lr=.01);optimizer.zero_grad();model(torch.ones(1,8)).sum().backward();optimizer.step()
+        learner.after_step(tokens=7)
+        deadline=time.time()+10
+        while time.time()<deadline:
+            learner._collect_uploads(1000);learner._collect_downloads()
+            for f in learner.fragments:learner._queue(f.index)
+            if not learner.pending and all(v>=1 for v in learner.versions):break
+            time.sleep(.02)
+        assert not learner.pending and all(v>=1 for v in learner.versions)
+        assert learner.local_steps==1 and learner.local_tokens==7
+        assert all(s==1 for s in learner.sequences)
+        assert all(x==0 for x in learner.steps_since)
+    finally:
+        learner.close();stop.set();server.join(timeout=3)
+
+
+def test_completed_http_worker_reopens_new_source_with_final_custody(tmp_path):
+    root=tmp_path/'coord';_init(root,_model(),workers=1,quorum=1)
+    port=_free_port();url=f'http://127.0.0.1:{port}';stop=threading.Event()
+    server=threading.Thread(target=serve_coordinator,args=(root,'127.0.0.1',port,TOKEN),kwargs={'stop':stop},daemon=True);server.start()
+    transport=Transport(url,TOKEN,5)
+    for _ in range(100):
+        try:transport.json('GET','/v1/status');break
+        except OSError:time.sleep(.02)
+    model=_model();optimizer=torch.optim.AdamW(model.parameters(),lr=.01)
+    settings=DilocoSettings(run_id='unit',workers=1,worker_id=0,coordinator_url=url,local_steps=1,wire_dtype='fp32',heartbeat_seconds=.05)
+    learner=DilocoLearner(settings,surface=TensorSurface.from_module(model),identity={'objective':'toy'},output=tmp_path/'worker',transport=transport)
+    try:
+        learner.start()
+        optimizer.zero_grad();model(torch.ones(1,8)).sum().backward();optimizer.step();learner.after_step(tokens=3)
+        learner.declare_completion(drained=False,generation='a'*64);assert learner.finish();learner.declare_completion(drained=True,generation='a'*64)
+        prior=list(learner.sequences);state_before=optimizer.state_dict();rng=torch.get_rng_state().clone()
+        with pytest.raises(Exception):learner.reopen(previous='a'*64,generation='a'*64,sequences=prior)
+        learner.reopen(previous='a'*64,generation='b'*64,sequences=prior)
+        assert optimizer.state_dict()['state'].keys()==state_before['state'].keys() and torch.equal(torch.get_rng_state(),rng)
+        optimizer.zero_grad();model(torch.ones(1,8)).sum().backward();optimizer.step();learner.after_step(tokens=5)
+        learner.declare_completion(drained=False,generation='b'*64);assert learner.finish();learner.declare_completion(drained=True,generation='b'*64)
+        progress=json.loads((root/'progress.json').read_text())
+        assert progress['completion']['0']['generation']=='b'*64
+        assert progress['completion_history']['0'][0]['completion']['sequences']==prior
+        assert learner.local_steps==2 and learner.local_tokens==8
+    finally:learner.close();stop.set();server.join(timeout=3)
