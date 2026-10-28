@@ -34,14 +34,15 @@ priority; rerunning an operation id skips its succeeded stages.
 | outer cycles | `lane outer-next`: `train` up to the next bank publication (`publish_every` 100 of 400 steps, `train_bank`/`train_basis`/`train_keys` on); `adopt-bank` (the trainer continues on the published snapshot; bank moments restart with a recorded transition when basis training changed coordinates); `corpus` refit of the labels against the published bank (`cycles/<k>/corpus`) | `optimizer/state.json`, `cycles/` |
 | `outer-rl` | `outer-rl-round.sh`: proposals, `natlang tune ROOT --score-proposals` per program (real task outcomes), collect, policy update | `outer-rl/` |
 | `meta-examples` | exact labels for the optimizer's own stages over the final corpus plans | `meta/tune.examples.jsonl` |
+| `controller-split`, `controller-supply`, `controller-tune` | persist the program-family split, prepare protected-world-checked training references, and self-teach and train the controller with SFT and oracle-reward RL | `controller/`, including its recorded active release |
+| `held-learned-*`, `held-development-*`, `held-confirmation-*` | apply that exact controller release to held programs and measure the selected release on development and confirmation roots | each held program's tune reports and evaluation arms |
 
 `lane summary` writes `summary.json`: stage statuses, per-program tune outcomes (development success per round and the
 untuned/active arms), the optimizer split, outer steps/publications/adoptions, meta-RL records and meta-example
 counts. These are records of work done, not capability claims.
 
-Afterwards: tune the optimizer program (`applications/learned-optimizer`) with `meta/tune.examples.jsonl`; measure
-`natlang tune <held program> --learned spec.json` on development roots of the held families, the ceiling ladder and
-planted controls; confirm on untouched confirmation worlds. Folded writes into feed-forward w1/w2/w3 are re-quantized
+The learned spec binds the controller's program root and exact earned release. An explicit
+`"policy": "crisp-baseline"` selects the non-controller baseline for comparison. Folded writes into feed-forward w1/w2/w3 are re-quantized
 at the NVFP4 deploy point: measure their task effect at NVFP4 before claiming lift for the deployed model.
 
 ## Teacher-free program supply

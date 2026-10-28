@@ -24,8 +24,9 @@ test('a root gets its program\'s own tune services and declarations, or the host
 
 test('the learned optimizer serves whole adapt roots from their reference context', async () => {
   const root = new URL('../../applications/learned-optimizer/', import.meta.url).pathname;
-  await assert.rejects(rootServices(root, undefined, { id: 'r', reference: {} }), /reference \{ plan, out \}/);
-  const { services, serviceDeclarations } = await rootServices(root, undefined, { id: 'r', reference: { plan: '/p.json', out: '/o' } });
+  await assert.rejects(rootServices(root, undefined, { id: 'r', function: 'adapt.nl', reference: {} }), /reference \{ plan, out \}/);
+  assert.deepEqual((await rootServices(root, undefined, { id: 'r', function: 'adapt/chooseOperator.nl', reference: {} })).services, {});
+  const { services, serviceDeclarations } = await rootServices(root, undefined, { id: 'r', function: 'adapt.nl', reference: { plan: '/p.json', out: '/o' } });
   assert.deepEqual(Object.keys(services.optimizer).sort(), ['evidence', 'propose', 'refine', 'retrieve']);
   assert.match(serviceDeclarations.optimizer, /operations: Record<string, RevisionOperation>/);
 });

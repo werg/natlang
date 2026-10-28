@@ -184,6 +184,33 @@ stage outer-rl "$STAGE_BUDGET_GB" '' $ENV PY=$PY "NATLANG='$NATLANG'" PER_CONTEX
 result_line "$O/outer-rl/policy.log" train || { echo "outer-rl: the policy update did not finish; see $O/outer-rl/policy.log" >&2; exit 1; }
 outer_cycles
 stage meta-examples "$STAGE_BUDGET_GB" meta-examples $ENV $PY -m natlang_neuralese.tune.learned meta-examples --spec "$O/meta-spec.json"
+if [ $DRY = 0 ]; then
+  CONTROLLER=$O/controller
+  if [ ! -d "$CONTROLLER" ]; then cp -a "$REPO/applications/learned-optimizer" "$CONTROLLER"; fi
+  stage controller-split "$STAGE_BUDGET_GB" controller-split $ENV $NODE "$HERE/controller-split.mjs" "$CONTROLLER" "$O/meta/tune.examples.jsonl"
+  stage controller-supply "$STAGE_BUDGET_GB" controller-supply $ENV $PY "$HERE/controller-supply.py" --controller "$CONTROLLER" \
+    --examples "$O/meta/tune.examples.jsonl" --root "${PROTECTED_ROOT:-$REPO}"
+  stage controller-tune "$TUNE_BUDGET_GB" '' $ENV NATLANG_LOPT_REPOSITORY=$REPO NATLANG_LOPT_PYTHON=$PY \
+    $NATLANG tune "$CONTROLLER" --examples "$O/meta/tune.examples.jsonl" --rounds
+  $PY - "$O" "$CONTROLLER" <<'PY'
+import json, pathlib, sys
+op, root = map(pathlib.Path, sys.argv[1:])
+active = json.loads((root / '.natlang/tune/active.json').read_text())
+learned = json.loads((op / 'meta-spec.json').read_text())['learned']
+learned['controller'] = {'root': str(root), 'release': active['release']}
+path = op / 'learned-controller.json'
+if path.exists() and json.loads(path.read_text()) != learned:
+    raise SystemExit('controller binding changed: use a new operation')
+path.write_text(json.dumps(learned, indent=2) + '\n')
+PY
+  mapfile -t HELD < <($PY -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["held"]))' "$O/optimizer-split.json")
+  for index in "${!HELD[@]}"; do
+    name=${HELD[$index]}
+    program=$($PY -c 'import json,sys; print(json.load(open(sys.argv[1]))["root"])' "$O/tunes/$name.json")
+    stage "held-learned-$index" "$TUNE_BUDGET_GB" '' $ENV NATLANG_LOPT_REPOSITORY=$REPO NATLANG_LOPT_PYTHON=$PY \
+      $NATLANG tune "$program" --learned "$O/learned-controller.json"
+    stage "held-development-$index" "$TUNE_BUDGET_GB" '' $ENV $NATLANG tune "$program" --evaluate development
+    stage "held-confirmation-$index" "$TUNE_BUDGET_GB" '' $ENV $NATLANG tune "$program" --evaluate confirmation
+  done
+fi
 $ENV $PY -m natlang_neuralese.tune.learned.lane summary --op "$O" | tee "$O/summary.json"
-# Then: tune the optimizer program itself with $O/meta/tune.examples.jsonl, and measure natlang tune --learned on the
-# held programs of optimizer-split.json (development roots), confirming on untouched confirmation worlds.

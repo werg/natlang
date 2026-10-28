@@ -7,13 +7,15 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AdaptationServices, PythonService, optimizerDeclaration } from './python.mjs';
 
-const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const repository = process.env.NATLANG_LOPT_REPOSITORY ?? resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 let python = null;
 
 export const declarations = { optimizer: optimizerDeclaration };
 
 export default function services(example) {
   const reference = example.reference ?? {};
+  // Counterfactual decision roots are pure functions; only the whole episode needs a live adaptation context.
+  if (example.function !== 'adapt.nl') return {};
   if (typeof reference.plan !== 'string' || typeof reference.out !== 'string')
     throw new Error(`root ${example.id} names no adaptation context; an adapt root carries reference { plan, out }`);
   python ??= new PythonService({ argv: [process.env.NATLANG_LOPT_PYTHON ?? 'python3', '-m'], cwd: repository,
