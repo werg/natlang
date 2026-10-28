@@ -21,6 +21,17 @@ export recovery state independently, and explicitly stop finished, failed or
 unused allocations. Quota supervision remains necessary; a maximum lifetime
 is permission for continuity, not a commitment to keep an idle sandbox running.
 
+Sandbox lifetime includes the actual entrypoint (engineering finding,
+2026-10-28 evening). Restarting a learner or coordinator as a detached SDK exec
+does not replace the original bootstrap child. Its output-collection timeout
+can still expire and complete the sandbox, killing the replacement and any
+checkpoint uploads despite a 720-hour provider lifetime. Use a persistent role
+supervisor for every learner and cohost, adopt replacements into that owner,
+and verify its process identity alongside the actual training processes. Keep
+collection/explicit final shutdown separate from a resumable role handoff;
+test real child exit, replacement, shutdown and backup ordering. Do not infer
+OOM from upload exit 137 when provider completion reports exit 0.
+
 Launch LFM3 joint training as soon as an initial useful mixture and the required
 runtime checks are ready. Do not wait for all rendering, chain conversion,
 guidance or other improvements to finish. Adopt each useful qualified addition
