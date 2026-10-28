@@ -8,8 +8,8 @@ and history-reasoning policy come from ``natlang_neuralese.serve.chat``), and na
 graph views (``build_native_graph_text_corpus.py --model-id``: ``<architecture>:<base inventory sha256>``, the id
 ``native_model.load_native_model`` gives the loaded base).
 
-``DEFAULT_STUDENTS`` stays the production pair until the LFM3 cutover (plans/neuralese/LFM3_PORT_20261028.md, part
-D); an LFM3 render is requested explicitly (``STUDENTS="lfm3"`` or ``lfm25 mellum21 lfm3`` in the wrappers).
+``DEFAULT_STUDENTS`` is LFM3 alone (owner 2026-10-28: LFM3 is the current line, the Mellum line is retired and
+LFM2.5 is historical); a historical twin is requested explicitly (``STUDENTS="lfm25"`` in the wrappers).
 
   student_tokenizers.py args NAME...     the --tokenizer NAME=DIR arguments (pins verified)
   student_tokenizers.py mounts NAME...   docker -v arguments for directories outside the repo and data mounts
@@ -42,7 +42,7 @@ STUDENTS = {
              'tokenizer_sha256': '7e226e34bface23ccf6e495d157bf77186c1c30a7659880e1a8994db528c3701',
              'chat_template_sha256': 'f45005c50cd2a97329722bf3a2dee9f16c04cdf825a589b280fb7e99e6827818'},
 }
-DEFAULT_STUDENTS = ('lfm25', 'mellum21')
+DEFAULT_STUDENTS = ('lfm3',)
 TOKENIZER_FILES = ('tokenizer.json', 'tokenizer_config.json', 'chat_template.jinja', 'special_tokens_map.json',
                    'config.json', 'generation_config.json')
 MOUNTED = (REPO,machine_path('data_nvme'), machine_path('data_hdd'))  # the wrappers' standard read-only mounts

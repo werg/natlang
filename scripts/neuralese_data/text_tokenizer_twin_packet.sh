@@ -1,13 +1,13 @@
 #!/bin/bash
 # Tokenizer twin of one admitted LFM2.5 ordinary-text packet (free-provider packets, D8), with its context_only_spans
 # re-expressed in the twin's coordinates. The twin student is TWIN (scripts/neuralese_data/student_tokenizers.py;
-# default mellum21, the original use; TWIN=lfm3 for LFM3-1.7B). CPU, docker, under the DGX memory ledger:
+# default lfm3, the current line; TWIN=mellum21 was the original use). CPU, docker, under the DGX memory ledger:
 #   python3 scripts/memory_ledger.py run --unit twin-<id> --budget-gb 4 --priority low -- \
 #     scripts/neuralese_data/text_tokenizer_twin_packet.sh OUT_DIR SOURCE_TEXT NATIVE_RECORDS... [-- --workers N]
 set -euo pipefail
 REPO=/home/werg/natlang
 SELF_DIR=$(cd "$(dirname "$0")" && pwd)
-TWIN=${TWIN:-mellum21}
+TWIN=${TWIN:-lfm3}
 SOURCE_TOKENIZER=$(python3 "$SELF_DIR/student_tokenizers.py" path lfm25)
 TWIN_TOKENIZER=$(python3 "$SELF_DIR/student_tokenizers.py" path "$TWIN")  # verifies the twin's pinned bytes
 MOUNTS_TEXT=$(python3 "$SELF_DIR/student_tokenizers.py" mounts "$TWIN")

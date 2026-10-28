@@ -122,7 +122,11 @@ def build(args):
     held = json.loads((mixture / 'held-sources.json').read_text())['sources'][0]
     if not (out / 'ce-policy.json').exists():
         run([PY, 'scripts/neuralese_data/build_native_ce_supervision_policy.py',
-             '--source', str(mixture / 'train-sources.json'), '--held-source', str(mixture / held['path']),
+             '--source', str(mixture / 'train-sources.json'),
+             # An empty held view (inputs with no test rows) has nothing to declare; held CE then comes from later
+             # versions and task evaluation uses the dev packet.
+             *(['--held-source', str(mixture / held['path'])]
+               if json.loads((mixture / 'mixture.json').read_text())['held']['rows'] else []),
              '--legacy-pair-context-weight', '0.05', '--objective-reasoning-share', str(objective['reasoning_share']),
              '--objective-tokenizer', tokenizer, '--objective-tokenizer-fingerprint', fingerprint,
              '--objective-family-balance', json.dumps(objective['family_balance']), '--out', str(out / 'ce-policy.json')])
