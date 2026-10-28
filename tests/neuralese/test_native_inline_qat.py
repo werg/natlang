@@ -116,7 +116,7 @@ def test_quantized_update_routes_straight_through_gradients_to_bf16_latents(base
     deltas = {}
     for point, mix in (('bf16', 0.0), ('fp8', 0.0), ('fp8', 1.0)):
         model, quantization = model_with_points(base)
-        optimizer, _ = make_native_optimizer(model, lr=1e-2, weight_decay=0., in_backward=False, learned_row_lr=1e-2)
+        optimizer, _ = make_native_optimizer(model, lr=1e-2, weight_decay=0., learned_row_lr=1e-2)
         weights = {name: parameter for name, parameter in model.named_parameters()
                    if name.endswith(('feed_forward.w1.weight', 'self_attn.q_proj.weight'))}
         assert weights and all(parameter.dtype == torch.bfloat16 for parameter in weights.values())
@@ -124,7 +124,7 @@ def test_quantized_update_routes_straight_through_gradients_to_bf16_latents(base
         torch.manual_seed(11)
         loss, _ = native_training_update(model, optimizer, [example], checkpoint_layers=True,
                                          precision=(quantization, point, mix, 1.0))
-        deltas[(point, mix)] = (float(loss), {name: weights[name].detach().float() - before[name] for name in weights})
+        deltas[(point, mix)] = (float(loss.detach()), {name: weights[name].detach().float() - before[name] for name in weights})
         assert all(delta.abs().sum() > 0 for delta in deltas[(point, mix)][1].values())
     # λ = 0 is the unquantized update bit for bit; the quantized forward changes the loss and the update.
     assert deltas[('fp8', 0.0)][0] == deltas[('bf16', 0.0)][0]

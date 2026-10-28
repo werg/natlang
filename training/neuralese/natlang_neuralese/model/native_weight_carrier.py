@@ -1684,6 +1684,10 @@ def _precision_operands(module, x):
         scope = active_cotangent_scope()
         if scope is not None and scope.mode == 'vjp':
             scope.register_effective_weight(weight, module.weight, ())
+            # Routes are keyed by tensor id: a freed quantized weight's id can be reused by the next one, so its
+            # route leaves with it.
+            import weakref
+            weakref.finalize(weight, scope._effective_routes.pop, id(weight), None)
     return x, weight
 
 
