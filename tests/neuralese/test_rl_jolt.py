@@ -285,6 +285,23 @@ def test_engine_teacher_attempt_renders_each_invocations_block_at_the_declared_p
         assert own(prompt) == expected[:block.insert_at] + list(block.token_ids) + expected[block.insert_at:]
         assert [fact['id'] for fact in block.receipt['facts']] == (
             ['expected_result:0'] if role == 'root' else ['child_value:0'])
+    # A decision readout in the same teacher attempt gets its own block, inside its captured decision prompt.
+    from natlang_neuralese.serve.native_learning import decide_native
+    plain = decide_native(engine, {'messages': messages, 'options': ['t8', 't9'], 'native_recording': True})
+    taught = decide_native(engine, {'messages': messages, 'options': ['t8', 't9'], 'native_recording': True,
+                                    'x_natlang_privileged_context': context('child')})
+    with pytest.raises(Exception, match='native_recording'):
+        decide_native(engine, {'messages': messages, 'options': ['t8', 't9'],
+                               'x_natlang_privileged_context': context('child')})
+    expected = own(plain['native_decision_capture']['prompt'])
+    block = render_block(engine._privileged_rendering(), invocation={'name': 'run-1#turn1', 'role': 'child',
+        'text': 't7\nt4 t5'}, token_ids=expected, facts=tuple(Fact(f['id'], f['kind'], f['text'], None,
+        tuple(f.get('match') or ())) for f in facts), custody_receipt=custody)
+    prompt = taught['native_decision_capture']['prompt']
+    assert [tuple(s['token_ids']) for s in prompt if s.get('privileged')] == [block.token_ids]
+    assert own(prompt) == expected[:block.insert_at] + list(block.token_ids) + expected[block.insert_at:]
+    assert taught['native_decision_capture']['continuations'] == plain['native_decision_capture']['continuations']
+    engine.store.close()
 
 
 @pytest.mark.parametrize('scale', [1.0, 1e-4])

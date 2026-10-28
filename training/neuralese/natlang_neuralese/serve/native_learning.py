@@ -83,9 +83,14 @@ def _score_item(engine, item, adapters=None):
 
 
 def _score_rendered(engine, item, plan, continuations, bindings):
+    privileged = item.get('x_natlang_privileged_context')
+    if privileged is not None and not item.get('native_recording'):
+        raise RequestError('bad-request', 'x_natlang_privileged_context renders a captured JOLT+ teacher decision; '
+                           'request native_recording')
     request = GenerationRequest(messages=item.get("messages") or [], tools=item.get("tools"), max_tokens=0,
                                 adapters=bindings, native_state_modes=item.get('native_state_modes'),
-                                rl_capture=bool(item.get('native_recording')),native_recording=bool(item.get('native_recording')))
+                                rl_capture=bool(item.get('native_recording')),native_recording=bool(item.get('native_recording')),
+                                privileged_context=privileged)
     sequence = Sequence(request, None, prompt_plan=plan)
     engine._native_prefill(sequence)
     base_cache, base_logits = sequence.cache, sequence.logits
@@ -104,7 +109,9 @@ def decide_native(engine, body: dict) -> dict:
     """Score candidate replies from a single exact native prompt cache."""
     return _score_item(engine, {"messages": body.get("messages") or [], "tools": body.get("tools"),
                                 "options": body.get("options") or [], "native_state_modes": body.get("native_state_modes"),
-                                "native_recording":body.get("native_recording",False)}, body.get('adapters'))
+                                "native_recording":body.get("native_recording",False),
+                                **({'x_natlang_privileged_context': body['x_natlang_privileged_context']}
+                                   if body.get('x_natlang_privileged_context') is not None else {})}, body.get('adapters'))
 
 
 def decide_many_native(engine, body: dict) -> dict:

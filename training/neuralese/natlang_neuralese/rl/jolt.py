@@ -253,10 +253,6 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
             # invocation's messages) are the same on the teacher-role tokens, so the learner rebuilds the exact
             # blocks; student_form verifies the attempt carried them token for token.
             blocks = source(rollout, replay, turns)
-            # Decision readouts are scored without privileged context during teacher attempts.
-            decisions = {turn.get('graph_turn') for turn in turns
-                         if (turn.get('sampling') or {}).get('schema') == 'natlang.native-decision-capture/1'}
-            blocks = {name: block for name, block in blocks.items() if name not in decisions}
             if not any(block.token_ids for block in blocks.values()):
                 raise CustodyError('no privileged fact fits any invocation of this teacher attempt')
             try:

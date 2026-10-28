@@ -97,7 +97,7 @@ export function decisionJudge(scorer: DecisionScorer, options: { id: string; sys
           `Property: the value is ${normalize(predicate)}\n\nDoes the value satisfy the property? Reply with exactly one of these JSON values and nothing else: true, false.` }];
       // model-call-kind: refinement-judge-scored -- training/model-call-kinds.json
       const scores = await scorer({ messages, options: ['true', 'false'],
-        ...(turn ? { invocation_id: turn.invocationId } : {}) }, signal);
+        ...(turn ? { invocation_id: turn.invocationId, invocation_role: 'child' as const } : {}) }, signal);
       if (scores.log_probs.length !== 2 || scores.log_probs.some(item => !Number.isFinite(item)))
         throw new Error('refinement judge returned no finite score for true and false');
       // A scored judgement is a model turn (a decision readout) of the judged call's execution graph.
