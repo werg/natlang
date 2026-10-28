@@ -73,8 +73,8 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
     throw new Error('promptRendering must be full or program-header');
   if (profile.runtime && (typeof profile.runtime !== 'object' || Array.isArray(profile.runtime)))
     throw new TypeError('profile.runtime must be an object');
-  if (profile.runtime?.review && 'driver' in profile.runtime.review)
-    throw new Error('profile.runtime.review.driver is programmatic only');
+  if (profile.runtime && 'review' in profile.runtime)
+    throw new Error('profile.runtime.review is no longer supported: careful review was removed; delete the setting');
   if (profile.provider && profile.endpoint) throw new Error('model profile cannot set both provider and endpoint');
   if (profile.escalate !== undefined && (typeof profile.escalate !== 'string' || !profile.escalate))
     throw new Error('escalate must name another model profile');

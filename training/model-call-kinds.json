@@ -35,14 +35,6 @@
    "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/decision_policy.py", "training/neuralese/natlang_neuralese/rl/native_replay.py", "ts-host/src/tune/rollouts.ts", "tests/neuralese/test_decision_supervision.py"]},
    "parity": {"status": "covered", "evidence": ["tests/test_refine_data_judge.py"]}
   },
-  "careful-review": {
-   "summary": "Optional review of a pending action batch (model.review): a forked turn that must call review_write with reason and decision.",
-   "model_output": "generated",
-   "endpoints": ["/v1/chat/completions"],
-   "sft": {"status": "gap", "owner": "supervisor", "section": "careful-review"},
-   "rl": {"status": "gap", "owner": "supervisor", "section": "careful-review"},
-   "parity": {"status": "gap", "owner": "supervisor", "section": "careful-review"}
-  },
   "view-write": {
    "summary": "The Neuralese instance of builtin view(value, instructions?): template writes of the value at a view site (POST /v1/neuralese/view).",
    "model_output": "generated",
@@ -81,7 +73,7 @@
   }
  },
  "endpoints": {
-  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call", "careful-review"]},
+  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call"]},
   "/v1/neuralese/decide": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/neuralese/decide_many": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/natlang/score": {"kinds": ["decision-readout", "refinement-judge-scored"]},

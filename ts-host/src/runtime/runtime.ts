@@ -9,7 +9,6 @@ import type { MemeticGuidanceBinding, NativeProgramGuidance } from '../adaptatio
 import { declarationNamespace } from '../native/external.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import type { ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
-import type { NativeReviewOptions } from '../native/agent.js';
 import { TOOLS_PROMPT } from '../native/prompt.js';
 import { NatlangContextError, SlotContextStore, contextStore, currentFrame, runInFrame, type DecisionReadout, type Frame } from './context.js';
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
@@ -43,8 +42,7 @@ export type ModelConfig = { driver: ModelDriver;
   /** Guided generation (the `guidance` request field) on natlang's reference server and the llama.cpp fork (managed and in
    * the page). A configured runtime (`natlang run`, natlangRuntime()) turns it on for those backends unless the profile's
    * `runtime.guidance` says otherwise; set directly, it is off unless given. Other backends ignore the field. */
-  guidance?: boolean | { repeat?: number; syntax?: boolean; retries?: number; tools?: string[] };
-  review?: NativeReviewOptions };
+  guidance?: boolean | { repeat?: number; syntax?: boolean; retries?: number; tools?: string[] } };
 
 /** One natlang invocation's trace, delivered to the runtime's trace sink when the invocation ends. */
 export type InvocationTrace = { callId: string; parentCallId: string | null; taskId: string;

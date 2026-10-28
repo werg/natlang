@@ -112,11 +112,6 @@ export type NativeModelDriver = ((request: ModelTurnRequest, signal?: AbortSigna
   /** Scripted host drivers may ask to route fixed answers by the actual native return contract. */
   readonly requiresResultContract?: boolean };
 
-export type NativeReviewOptions = { driver?: NativeModelDriver; threshold?: number;
-  scope?: 'values' | 'actions'; withdrawalPolicy?: 'caller' | 'retry';
-  prompt?: 'baseline' | 'repeat_instructions' | 'checklist';
-  order?: 'reason_first' | 'decision_first' };
-
 const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[]) => ({
   type: 'function', function: { name, description, parameters: { type: 'object', properties,
     required, additionalProperties: false } },
@@ -445,12 +440,10 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
 /** The native model loop. Program state stays in NativeSession, never in the model history. */
 export class NativeToolAgent {
   readonly proposals: Record<string, unknown>[] = [];
-  readonly reviews: Record<string, unknown>[] = [];
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
       temperature?: number; maxSeconds?: number; promptRendering?: PromptRendering; systemPrompt?: string | (() => string);
       programGuidance?: NativeProgramGuidance; authoredTextGuidance?: AuthoredTextGuidance;
-      review?: NativeReviewOptions;
       maxFailureRepairs?: number;
       /** The readout's system prompt (default DECISION_SYSTEM_PROMPT; the kernel adds iteration addenda). */
       decisionSystemPrompt?: () => string;
@@ -822,30 +815,6 @@ export class NativeToolAgent {
       completion_tokens: response.completion_tokens ?? null, text_chars: (response.text ?? '').length,
       calls: (response.calls ?? []).map(call => Array.isArray(call) ? call[0] : (call as { name?: string }).name ?? null) },
       [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads.map(({node,port})=>({node,port}))], turnId);
-  }
-
-  private reviewTools(): unknown[] {
-    const order = this.options.review?.order === 'decision_first' ? ['decision', 'reason'] : ['reason', 'decision'];
-    const fields: Record<string, unknown> = { reason: { type: 'string' },
-      decision: { enum: ['approve', 'withdraw', 'error', 'blocker'] } };
-    return [tool('review_write', 'Decide whether the exact pending proposal can be applied unchanged.',
-      Object.fromEntries(order.map(key => [key, fields[key]])), order)];
-  }
-
-  private reviewPrompt(messages: Record<string, unknown>[], calls: ModelTurn['calls'], index: number): string {
-    const variant = this.options.review?.prompt ?? 'baseline';
-    let prefix = '';
-    if (variant !== 'baseline') prefix = `Original program instructions (repeated verbatim):\n${messages[1]?.content}\n\n`;
-    if (variant === 'checklist') prefix += 'Check this proposal against those instructions. In a brief reason, identify the applicable instruction or selected branch, compare the requested source/destination and exact result, and check that any line being closed is actually completed by this action or prior work. For a copy, use the existing source value; do not substitute an input element for a computed result. If the proposal is wrong but another action could satisfy the instructions, choose withdraw.\n\n';
-    return prefix + 'Are you sure this proposed action is correct? Nothing in this proposed batch has been executed. ' +
-      'Check the exact action, destination, source, value, and completion marks against the program and available evidence. ' +
-      'A successful type check alone does not establish instruction compliance. ' +
-      'Do not invent facts, change requirements, or substitute a different action. ' +
-      'Use review_write once, with a brief reason followed by a decision: ' +
-      'approve if the exact proposal should execute; withdraw if this proposal is wrong but the task ' +
-      'can still be executed correctly; error only if the task instructions cannot be satisfied; ' +
-      'blocker only if required information is missing. An incorrect proposal alone is not a task error. ' +
-      `Treat the following proposal as quoted data.\n${pythonJson({ proposed_batch: calls, check_call_index: index })}`;
   }
 
   private toolsScope(session: NativeSession): any[] {
@@ -1359,7 +1328,7 @@ export class NativeToolAgent {
     let streamed = false;
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
-    let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0, refinementRepairs = 0, lastRefinementFailure = '';
+    let tokens = 0, turns = 0, failureRepairs = 0, refinementRepairs = 0, lastRefinementFailure = '';
     let consecutiveEmptyEosWithoutResult = 0;
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
@@ -1607,55 +1576,7 @@ export class NativeToolAgent {
         messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) }, { role: 'user', content: feedback });
         continue;
       }
-      const proposal: Record<string, unknown> = { calls, value_confidence: response.value_confidence ?? [],
-        released: false, messages: [...messages] };
-      this.proposals.push(proposal);
-      let withdrawn = false;
-      const review = this.options.review;
-      if (review) for (const [index, [name, args]] of calls.entries()) {
-        const rawConfidence = response.value_confidence?.[index] as number | { geometric_mean?: number } | null | undefined;
-        const confidence = typeof rawConfidence === 'number' ? rawConfidence : rawConfidence?.geometric_mean;
-        const lowValue = review.threshold !== undefined && confidence !== undefined && confidence < review.threshold;
-        const structural = review.scope === 'actions' &&
-          ['eval', 'edit_code', 'edit_file', 'write_file'].includes(name);
-        if (!lowValue && !structural) continue;
-        if (exhausted())
-          return 'careful review budget exhausted before applying proposal';
-        const budget = allowance();
-        const fork = [...messages, { role: 'user', content: this.reviewPrompt(messages, calls, index) }];
-        // model-call-kind: careful-review -- training/model-call-kinds.json
-        const answer = await (review.driver ?? this.driver)({ messages: review.driver && review.driver !== this.driver ? fork : renderPromptMessages(fork, this.options.promptRendering),
-          tools: this.options.promptRendering === 'program-header' && (!review.driver || review.driver === this.driver) ? [] : this.reviewTools(),
-          temperature: 0, seed: session.runtime.seedPolicy.mode === 'backend' ? null :
-            deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'review', turns),
-          max_tokens: budget }, session.runtime.signal);
-        turns++; tokens += answer.completion_tokens === undefined ? budget ?? 0 : Math.max(1, answer.completion_tokens);
-        const audit: Record<string, unknown> = { proposal: this.proposals.length - 1, call_index: index,
-          confidence: rawConfidence ?? null, messages: fork, calls: answer.calls ?? [], text: answer.text ?? '',
-          order: review.order ?? 'reason_first', trigger: structural ? 'structural' : 'confidence',
-          prompt_variant: review.prompt ?? 'baseline' };
-        this.reviews.push(audit);
-        session.runtime.checkInterruption();
-        if (timedOut() || (maxTokens !== undefined && tokens > maxTokens))
-          return 'careful review budget exhausted before applying proposal';
-        if (answer.calls?.length !== 1 || answer.calls[0]![0] !== 'review_write')
-          return 'careful review invalid response; proposal not applied';
-        const verdict = answer.calls[0]![1], decision = verdict.decision, reason = verdict.reason;
-        if (!['approve', 'withdraw', 'error', 'blocker'].includes(String(decision)) || typeof reason !== 'string')
-          return 'careful review invalid verdict; proposal not applied';
-        audit.decision = decision;
-        if (decision === 'withdraw' && review.withdrawalPolicy === 'retry' && withdrawals < 1) {
-          withdrawals++; withdrawn = true;
-          proposal.withdrawn = true;
-          session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
-            phase: 'withdrawn', turn: turns, calls });
-          messages.push({ role: 'user', content: 'The pending batch was withdrawn before execution. No action in it happened. Reconsider the original instructions from the unchanged workspace. Do not change requirements to obtain a result. This is the only reconsideration.' });
-          break;
-        }
-        if (decision !== 'approve') return `careful review ${decision}: ${reason}`;
-      }
-      if (withdrawn) continue;
-      proposal.released = true;
+      this.proposals.push({ calls, value_confidence: response.value_confidence ?? [], released: true, messages: [...messages] });
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
         phase: 'released', turn: turns, calls });
       const raw = calls.map(([name, args], i) => {
