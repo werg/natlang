@@ -69,6 +69,7 @@ def worker_pin(checkpoint, destination, worker, expected_fingerprint, package):
                 'source_receipt_sha256': [x.get('sha256') for x in training['source_receipts'][:2]],
                 'recipe_binding':training.get('options',{}).get('recipe_binding'),
                 'ce_supervision_policy_binding':training.get('options',{}).get('ce_supervision_policy_binding'),
+                'identity_transition_history':training.get('options',{}).get('diloco_identity_transition_history') or [],
                 'runtime_code_sha256':canonical_json_sha256_hex(code_inventory(package))}
     except BaseException:
         destination.unlink(missing_ok=True)
@@ -171,6 +172,7 @@ def coordinator_pin(root, archive, package, *, attempts=5, tree_only=False):
                                        'steps':int(entry['steps']),'tokens':int(entry['tokens']),
                                        'delta_sha256':_delta_hash(load_file(path)['delta'])}
                 queued.append(items)
+            transitions=json.loads((staging/'progress.json').read_text()).get('identity_transitions') or {}
             if tree_only:
                 for directory in sorted([staging, *[p for p in staging.rglob('*') if p.is_dir()]], key=lambda p:len(p.parts), reverse=True):
                     fd=os.open(directory,os.O_DIRECTORY);os.fsync(fd);os.close(fd)
@@ -178,7 +180,7 @@ def coordinator_pin(root, archive, package, *, attempts=5, tree_only=False):
                 fd=os.open(archive.parent,os.O_DIRECTORY);os.fsync(fd);os.close(fd)
                 return {'path':str(archive),'binding_kind':'immutable-hardlink-tree','file_identity':before,
                         'fingerprint':manifest['fingerprint'],'versions':versions,'last_seq':ledgers,'queued':queued,
-                        'manifest':manifest,'captured_at':time.time(),
+                        'manifest':manifest,'identity_transitions':transitions,'captured_at':time.time(),
                         'runtime_code_sha256':canonical_json_sha256_hex(code_inventory(package)),
                         'scope':'stable coordinator hardlinks; separate worker checkpoints retain local optimizer and pending updates'}
             temp=archive.with_name(archive.name+'.tmp')
@@ -186,7 +188,7 @@ def coordinator_pin(root, archive, package, *, attempts=5, tree_only=False):
             os.link(temp,archive);temp.unlink()
             return {'path':str(archive),'sha256':_hash(archive),'bytes':archive.stat().st_size,
                     'fingerprint':manifest['fingerprint'],'versions':versions,'last_seq':ledgers,'queued':queued,
-                    'manifest':manifest,'captured_at':time.time(),
+                    'manifest':manifest,'identity_transitions':transitions,'captured_at':time.time(),
                     'runtime_code_sha256':canonical_json_sha256_hex(code_inventory(package)),
                     'scope':'stable coordinator files; separate worker checkpoints retain local optimizer and pending updates'}
         finally:

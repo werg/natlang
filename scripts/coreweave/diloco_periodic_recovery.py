@@ -26,7 +26,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'training/neuralese'))
 import cwctl
 from recovery_inputs import durable_json
 from diloco_recovery_dependencies import seal, control_bindings, declared_bindings
-from diloco_direct_recovery import load_control, record_from_control, worker_matches
+from diloco_direct_recovery import load_control, record_from_control, worker_matches, transition_matches
 from natlang_neuralese.common import paths
 from natlang_neuralese.common.hashing import sha256_file_hex
 
@@ -577,6 +577,8 @@ def compatibility(components, direct=None):
     residents=[components.get('resident-'+str(i)) for i in range(4)]
     if direct and any(not worker_matches(w,direct) for w in workers):
         return {'compatible':False,'reason':'direct plan, source, CE, recipe or runtime custody differs'}
+    if direct and any(not transition_matches(w,i,coord,direct) for i,w in enumerate(workers)):
+        return {'compatible':False,'reason':'worker source transition differs from coordinator or checkpoint custody'}
     for w,r in ([] if direct else zip(workers,residents)):
         if not r:
             return {'compatible':False,'reason':'resident state is missing or differs from the worker checkpoint'}

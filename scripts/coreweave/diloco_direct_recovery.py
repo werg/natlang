@@ -2,17 +2,49 @@
 import json
 import hashlib
 import os
+import re
 from pathlib import Path
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
 
 REQUIRED=('plan','recipe','worker_argv','coordinator_argv','settings','owner_journal','launch_code','recovery_code',
           'pin_code','direct_code','dependencies_code','archive_code','guard_code','readiness_code','inputs_code','stage_code',
           'private_export_code','verified_download_code')
+SOURCE_ARGUMENTS=frozenset({'--native-graphs','--held-native-graphs','--foundation-native-graphs',
+    '--continued-native-graphs','--continued-held-native-graphs','--source-correction',
+    '--source-classification-migration','--ce-supervision-policy','--sft-packed-geometry',
+    '--memory-qualification','--recipe-binding','--pending-native-sources','--withdrawn-native-graphs',
+    '--retired-native-withdrawal'})
 
 
 def _flag(argv,name):
     if argv.count(name)!=1:raise ValueError('direct argv must contain exactly one '+name)
     return argv[argv.index(name)+1]
+
+
+def _identity_argv(argv):
+    """Match native_diloco.trainer_argv without importing torch in the operator."""
+    result=[];i=0
+    while i<len(argv):
+        value=argv[i]
+        if value=='--diloco':
+            if i+1>=len(argv):raise ValueError('missing DiLoCo argument')
+            i+=2;continue
+        if not value.startswith('--diloco='):result.append(value)
+        i+=1
+    return result
+
+
+def _fixed_identity_argv(argv):
+    result=[];i=0
+    while i<len(argv):
+        value=argv[i];name=value.split('=',1)[0]
+        if name in SOURCE_ARGUMENTS:
+            if '=' not in value:
+                if i+1>=len(argv) or argv[i+1].startswith('--'):raise ValueError('source identity argument lacks a value')
+                i+=1
+        else:result.append(value)
+        i+=1
+    return result
 
 
 def load_control(path, record, *, control_bytes=None, read_bound=None, verify_helpers=True):
@@ -51,8 +83,11 @@ def load_control(path, record, *, control_bytes=None, read_bound=None, verify_he
     for value in (out,root,runtime):
         if not isinstance(value,str) or not value.startswith('/work/') or os.path.normpath(value)!=value:
             raise ValueError('direct recovery paths must be canonical /work paths')
-    if _flag(argv,'--out')!=out or _flag(coord,'--root')!=root or json.loads(_flag(coord,'--trainer-argv'))!=argv:
-        raise ValueError('direct coordinator and worker argv differ')
+    original_argv=json.loads(_flag(coord,'--trainer-argv'))
+    if _flag(argv,'--out')!=out or _flag(coord,'--root')!=root:
+        raise ValueError('direct coordinator and worker paths differ')
+    if _fixed_identity_argv(_identity_argv(original_argv))!=_fixed_identity_argv(_identity_argv(argv)):
+        raise ValueError('direct source transition changes fixed trainer arguments')
     if json.loads(_flag(coord,'--settings'))!=settings or json.loads(_flag(argv,'--diloco'))!=settings:
         raise ValueError('direct coordinator and learner settings differ')
     if settings.get('workers')!=len(record['learners']) or settings.get('run_id')!=record['run']['settings']['run_id']:
@@ -88,6 +123,8 @@ def load_control(path, record, *, control_bytes=None, read_bound=None, verify_he
                            ('--ema','ema',json.loads),('--outer-schedule','outer_schedule',json.loads)]:
         if flag in coord:manifest_checks[key]=parse(_flag(coord,flag))
     result={'paths':paths,'storage_reserve_bytes':reserve,'component_placement':placement,'control_sha256':hashlib.sha256(raw).hexdigest(),'manifest_checks':manifest_checks,
+            'original_identity_argv':_identity_argv(original_argv),'current_identity_argv':_identity_argv(argv),
+            'transition_required':_identity_argv(original_argv)!=_identity_argv(argv),
             'helper_sha256':{key:bindings[key]['sha256'] for key in ('pin_code','archive_code','guard_code','readiness_code','inputs_code')},
             'plan_path':bindings['plan']['path'],'parent':_flag(coord,'--parent'),
             'parent_transfer':control.get('parent_transfer'),
@@ -122,3 +159,24 @@ def worker_matches(worker, control):
     return (worker.get('resident_generation') is None and worker.get('runtime_code_sha256')==control['runtime_code_sha256']
             and binding==control['recipe_binding'] and worker.get('source_receipt_sha256')==control['source_receipt_sha256']
             and ce.get('sha256')==control['ce_sha256'])
+
+
+def transition_matches(worker,index,coordinator,control):
+    """Bind a resumed checkpoint to the coordinator's committed source transition."""
+    if not control.get('transition_required'):return True
+    original=(coordinator.get('manifest') or {}).get('identity') or {}
+    if original.get('trainer_argv')!=control['original_identity_argv']:return False
+    histories=(coordinator.get('identity_transitions') or {}).get(str(index)) or []
+    worker_history=worker.get('identity_transition_history') or []
+    if not histories or not worker_history:return False
+    proof=histories[-1];local=worker_history[-1]
+    if not isinstance(proof,dict) or not isinstance(local,dict):return False
+    if {k:v for k,v in proof.items() if k not in ('worker','fingerprint')}!=local:return False
+    current=proof.get('current_identity') or {}
+    if (proof.get('schema')!='natlang.diloco-source-identity-transition/1' or proof.get('correction_verified') is not True
+            or proof.get('worker')!=index or proof.get('fingerprint')!=coordinator.get('fingerprint')
+            or proof.get('original_identity')!=original or proof.get('source_hash')!=worker.get('source_hash')
+            or current!={**original,'trainer_argv':control['current_identity_argv']}):return False
+    if not all(isinstance(proof.get(key),str) and re.fullmatch('[0-9a-f]{64}',proof[key])
+               for key in ('checkpoint_sha256','correction_sha256','previous_source_hash','source_hash')):return False
+    return proof['previous_source_hash']!=proof['source_hash'] or proof.get('transition_kind')=='consumed-proof-retirement'
