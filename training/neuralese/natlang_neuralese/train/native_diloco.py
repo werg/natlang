@@ -79,7 +79,8 @@ def identity(parent_checkpoint, argv, settings):
 _SOURCE_ARGUMENTS = frozenset({'--native-graphs','--held-native-graphs','--foundation-native-graphs',
     '--continued-native-graphs','--continued-held-native-graphs','--source-correction',
     '--source-classification-migration','--ce-supervision-policy','--sft-packed-geometry',
-    '--memory-qualification','--recipe-binding','--pending-native-sources','--withdrawn-native-graphs'})
+    '--memory-qualification','--recipe-binding','--pending-native-sources','--withdrawn-native-graphs',
+    '--retired-native-withdrawal'})
 
 def _fixed_trainer_argv(argv):
     result=[];i=0
@@ -134,7 +135,7 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
                     # Only retire consumed correction/predecessor switches without
                     # inventing another data generation; trainer already verified
                     # their checkpoint history and current bound source.
-                    retired={'--withdrawn-native-graphs','--source-correction','--continued-native-graphs','--continued-held-native-graphs'}
+                    retired={'--withdrawn-native-graphs','--retired-native-withdrawal','--source-correction','--continued-native-graphs','--continued-held-native-graphs'}
                     def without_retired(argv):
                         out=[];i=0
                         while i<len(argv):
