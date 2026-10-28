@@ -44,7 +44,7 @@ the LFM3 mixture's 113 scored teacher sources, about 40 GB); (g) exercised by th
 | Kind | (a) | (b) | (c) | (d) | (e) | (f) | (g) | (h) |
 |---|---|---|---|---|---|---|---|---|
 | tool-loop-turn | yes (linked, `agent.ts:1489-1511`) | yes (renders, `student_rerender`, graph views) | yes (`own_output_supervision.py:277-311`; forced generation prompt 0 since `dd856b7a5`) | yes (sampled positions, `rl/native_replay.py:298`) | **no for program-header rows recorded after 2026-10-25**: stale piece table (gap G1, fixed) | all rows | 128/128 cases | yes |
-| runtime-authored-call | yes, as ordinary calls (`internal: true` only disables specialization, `kernel.ts:383,598,755`) | yes, if present | yes | yes | as tool-loop | progress-judge verdict lines: FILL; `refinement:holds`: 0 | progress judge in iterateOn cases without a bound (40 cases use iterateOn) | yes |
+| runtime-authored-call | yes, as ordinary calls (`internal: true` only disables specialization, `kernel.ts:383,598,755`) | yes, if present | yes | yes | as tool-loop | **0 progressJudge, `refinement:holds`, ask, delegate or compareBehaviors call turns**; progress verdicts appear only as scripted child references (e.g. `greenhouse-iterated-measured-20261015-v1`, Luna held-shapes parents) (G8) | progress judge in iterateOn cases without a bound (40 cases use iterateOn) | yes |
 | decision-readout | recorded and linked only under a native recorder (`agent.ts:1168-1171`) | **no** (no generated target) | **no** | **no** (`native_replay.py:184-186` refuses; `tune/rollouts.ts:160` skips the rollout) | untested (no fixture holds `DECISION_SYSTEM_PROMPT`/`decisionPrompt`) | teacher collection never scores: decisions appear only as generated turns (`teacher/collector.ts:1315` driver has no `decide`) | 0 (no packet function declares `readout: decision`; no profile sets `finite-returns`) | no (no sampled positions) |
 | refinement-judge-scored | recorded as a decision turn under a native recorder (`neuralese-server.ts:672-677`) but **never linked** to a graph node | exact-oracle rows exist (`refine-judge-exact-20261009-v1`, 1,020 train rows; LFM3 render done, not registered) but the LFM3 mixture's answer-only drop rule removes them (gap G3) | yes when present (target `</think>false<|im_end|>` after the forced `<think>`; matches the scorer's empty-thought continuation) | **no**: silent drop in collector episodes, refusal in recorded objectives (`native_recorded_graph.py:36-37`), rollout skip only when the judge uses the wrapped driver (`rollouts.ts:144-145`) | prompt parity tested at message level (`tests/test_refine_data_judge.py:116`) | `Is<` 0, `refine(` 0, `refinement-unsatisfied` 0 lines in teacher sources | 0 | no |
 | careful-review | **no graph node, no invocation id** (`agent.ts:1598`) | none | none | none: collector episodes with a review are rejected whole, rollouts skipped | none (no Python counterpart; program-header sends `tools: []` while requiring `review_write`) | 0 `review_write` lines | 0 (opt-in, no profile enables it) | no |
@@ -175,6 +175,20 @@ program-header removes historical pieces too). Recommendation: declare program-h
 production line did after warm-up), pass `prompt_rendering='program-header'` through the teacher-graph builder and
 re-render the teacher twins, then pin the serving mode in the recipe.
 
+<a id="g8-runtime-authored-calls-have-no-demonstrations"></a>
+### G8. Runtime-authored calls have no demonstrations (conversion owner; RL covers them once they run)
+
+The progress judge runs in every `iterateOn` loop without a step bound or measure (`runtime/iterate.ts:256-257`; 40 of 128
+development cases use `iterateOn`), and `refinement:holds`, bash/CLI `ask`, `nl@python`, the `delegate` reducer and
+`compareBehaviors` run as ordinary calls. The generic mechanisms cover them (they are tool-loop turns, captured and
+linked, and RL treats their sampled tokens as actions), but no admitted teacher source contains one of their call
+turns (scan in section 2, column f). Progress verdicts exist only as scripted child references inside parent
+trajectories (`greenhouse-iterated-measured-20261015-v1`: 168 lines; Luna held-shapes parents: thousands), whose
+worlds define divergence exactly. Those references are exact-oracle labels for the judge's typed answer
+(`{verdict, reason}`); converting them into progress-judge call rows (the builtin's real prompt over the recorded
+trajectory) fills the SFT side without teacher generation. RL episodes on unbounded `iterateOn` training worlds
+train the judge's actions through the outcome.
+
 ## 4. Other data defects checked
 
 | Class | Check | Result |
@@ -209,5 +223,6 @@ re-render the teacher twins, then pin the serving mode in the recipe.
 | G5 `view` server path | legacy sweep | delete `serverViewer`/`/v1/neuralese/view` or wire its turns into the recorder |
 | G6 forced producers in RL | RL owner | decide whether in-episode `write-text` producers carry gradient; keep authored guidance external |
 | G7 mixed prompt modes | mixture owner + supervisor | declare program-header for LFM3 and re-render the teacher twins with it |
+| G8 runtime-authored calls without demonstrations | LFM3 conversion owner | convert scripted progress-verdict references into progress-judge call rows (exact labels); include unbounded `iterateOn` worlds in the RL curriculum |
 | Port-record continuation guard | RL curriculum owner | apply `_ill_posed_port_record_continuation` to plain manifests and to mixed continue/consume items |
 | `keep` history test | LFM3 conversion owner | add a real LFM3 `keep` render to the own-output real-row test |
