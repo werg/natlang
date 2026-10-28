@@ -11,7 +11,6 @@
     "scripts/neuralese_source_world_builder.py": 1,
     "scripts/periodic_heldout.py": 1,
     "scripts/prepare_visual_source_tasks.py": 1,
-    "scripts/probe_opencode_model.py": 1,
     "scripts/recover_reviewed_dgx_data_relocation.py": 1,
     "scripts/run_bonsai_queue.py": 1,
     "scripts/run_skill_authoring_queue.py": 1,
