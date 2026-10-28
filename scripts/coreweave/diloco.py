@@ -17,6 +17,7 @@ bearer token and the coordinator's share token reach the sandboxes only as secre
 
     diloco.py launch RUN.json     start the coordinator, then the learners (stops all on any failure)
     diloco.py status RUN_ID       the coordinator's merge status
+    diloco.py attach-eval RUN_ID JOB.json BUNDLE.json   an eval sandbox with the coordinator URL and secrets
 
 After the learners finish, collect them (cwctl.py collect), stop the coordinator with a graceful SIGTERM
 (``cwctl.py stop ID``: it merges what arrived last), collect its root and run
@@ -127,6 +128,22 @@ def launch(run: dict) -> dict:
     return record
 
 
+def attach_eval(run_id: str, job_path: str, bundle_file: str) -> dict:
+    """Attach an evaluation sandbox to a running stage: it receives the coordinator URL (NATLANG_DILOCO_URL) and the
+    learners' secrets, so it pulls global versions over the coordinator API instead of through the controller."""
+    record_path = RUNS / f'{run_id}.json'
+    record = json.loads(record_path.read_text())
+    job = copy.deepcopy(_template(job_path))
+    job['env'] = {**job.get('env', {}), 'NATLANG_DILOCO_URL': record['url']}
+    entry = cwctl.launch(jobs.validate(job), False, True, None, Path(bundle_file),
+                         secrets={'diloco-token': (RUNS / run_id / 'token').read_bytes(),
+                                  'diloco-gateway': cwctl.share_token(record['coordinator'])})
+    record.setdefault('evals', []).append({'sandbox_id': entry['sandbox_id'], 'job': job['id']})
+    record_path.write_text(json.dumps(record, indent=1) + '\n')
+    cwctl.record({'event': 'diloco_eval_attached', 'run': run_id, 'sandbox_id': entry['sandbox_id']})
+    return entry
+
+
 def status(run_id: str) -> dict:
     record = json.loads((RUNS / f'{run_id}.json').read_text())
     request = urllib.request.Request(record['url'].rstrip('/') + '/v1/status', headers={
@@ -141,10 +158,16 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('launch').add_argument('run', type=Path)
     commands.add_parser('status').add_argument('run_id')
+    attach = commands.add_parser('attach-eval')
+    attach.add_argument('run_id')
+    attach.add_argument('job')
+    attach.add_argument('bundle_file')
     args = parser.parse_args(argv)
     cwctl.load_env_file()
     if args.command == 'launch':
         print(json.dumps(launch(json.loads(args.run.read_text())), indent=1))
+    elif args.command == 'attach-eval':
+        print(json.dumps(attach_eval(args.run_id, args.job, args.bundle_file), indent=1))
     else:
         print(json.dumps(status(args.run_id), indent=1))
     return 0

@@ -8,9 +8,8 @@ Policy is natural language and runs in the natlang runtime that executes the epi
 ``writeGuidance`` (executed by the policy model itself) writes them as a ``Neuralese<string>`` producer span inside
 the same episode graph. This module is the crisp mechanism around it:
 
-1. ``ProtectedWorlds`` (custody): the exact identities of every registered evaluation-only packet. Privileged facts
-   are derived only from ``split == 'train'`` worlds that share no id, source id, source group, split group, pair
-   group or world fingerprint with them.
+1. Custody is the shared ``common.custody.ProtectedWorlds`` (every declared protected source, failing closed).
+   Privileged facts are derived only from ``split == 'train'`` worlds related to no protected world.
 2. ``case_facts`` (extraction): authored reference solution, reference child values, oracle checks expressed as
    facts, verified teacher trajectories of the same world and earlier-attempt runtime feedback.
 3. ``applicable`` (visibility, exact data rule): a child sees only its own matched reference value; the root sees
@@ -29,16 +28,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from ..common.custody import CUSTODY_SCHEMA, CustodyError
 from ..common.hashing import canonical_json_sha256_hex, sha256_hex
 
 BLOCK_SCHEMA = 'natlang.jolt-privileged-block/2'
 REQUEST_SCHEMA = 'natlang.guidance-request/1'
 RENDERING_SCHEMA = 'natlang.jolt-privileged-rendering/2'
-CUSTODY_SCHEMA = 'natlang.jolt-privileged-custody/1'
 WRITER_FUNCTION = 'writeGuidance'
 SELECTION_FUNCTION = 'selectGuidanceFacts'
 MODES = ('import', 'write-only', 'text')
-PROTECTED_ADMISSION = 'evaluation-only-never-training'
 FACT_KINDS = ('expected_result', 'expected_stop', 'expected_files', 'expected_effects', 'reference_failure',
               'reference_solution', 'child_value', 'minimum_sequence', 'decisive', 'teacher_trajectory',
               'attempt_feedback', 'fit_hindsight')
@@ -46,94 +44,8 @@ REFERENCE_KINDS = ('reference_solution', 'teacher_trajectory', 'child_value', 'e
 VERBATIM_MIN_CHARS = 16
 
 
-class CustodyError(ValueError):
-    """Privileged context would come from a development, confirmation or held world."""
-
-
 def _text(value):
     return value if isinstance(value, str) else json.dumps(value, sort_keys=True, ensure_ascii=False)
-
-
-# ---------------------------------------------------------------- custody
-
-def world_fingerprint(case):
-    """Content identity of a case's world, independent of its ids/split labels."""
-    semantics = case.get('semantics') or {}
-    curriculum = case.get('curriculum') or {}
-    world = {key: semantics.get(key) for key in ('root', 'files', 'folder_files', 'services', 'inputs')}
-    world['evidence'] = curriculum.get('evidence')
-    return canonical_json_sha256_hex(world)
-
-
-def case_identities(case):
-    curriculum = case.get('curriculum') or {}
-    ids = {('id', case.get('id'))}
-    ids.update(('id', value) for value in case.get('source_ids') or [])
-    ids.update(('group', value) for value in case.get('source_groups') or [])
-    ids.update(('group', value) for value in case.get('split_groups') or [])
-    for key in ('split_group', 'pair_group'):
-        if curriculum.get(key):
-            ids.add(('group', curriculum[key]))
-    ids.add(('world', world_fingerprint(case)))
-    return {item for item in ids if isinstance(item[1], str) and item[1]}
-
-
-@dataclass(frozen=True)
-class ProtectedWorlds:
-    """Exact protected identities of every registered evaluation-only packet."""
-    identities: frozenset
-    packets: tuple
-
-    @property
-    def digest(self):
-        return canonical_json_sha256_hex({'packets': list(self.packets),
-                                          'identities': sorted(map(list, self.identities))})
-
-    @classmethod
-    def from_cases(cls, packets):
-        """``packets``: {packet_id: (cases_sha256, rows)}."""
-        identities, bound = set(), []
-        for packet_id in sorted(packets):
-            digest, rows = packets[packet_id]
-            for row in rows:
-                identities |= case_identities(row)
-            bound.append({'id': packet_id, 'cases_sha256': digest, 'rows': len(rows)})
-        return cls(frozenset(identities), tuple(json.dumps(item, sort_keys=True) for item in bound))
-
-    @classmethod
-    def from_registry(cls, registry_path, root):
-        """Fail closed: every evaluation-only packet with cases must be readable here."""
-        from ..common.hashing import sha256_file_hex
-        registry = json.loads(Path(registry_path).read_text())
-        entries = registry.get('corpora', registry) if isinstance(registry, dict) else registry
-        packets = {}
-        for entry in entries:
-            if not isinstance(entry, dict) or entry.get('admission') != PROTECTED_ADMISSION:
-                continue
-            include = entry.get('include') or []
-            if 'cases.jsonl' not in include:
-                continue
-            path = Path(root) / entry['path'] / 'cases.jsonl'
-            if not path.is_file():
-                raise CustodyError(f'protected packet {entry["id"]} is not readable; privileged custody fails closed')
-            rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-            packets[entry['id']] = (sha256_file_hex(path), rows)
-        if not packets:
-            raise CustodyError('no protected evaluation packets were registered; privileged custody fails closed')
-        return cls.from_cases(packets)
-
-    def check(self, case):
-        """Return the custody receipt of a training world, or raise CustodyError."""
-        if not isinstance(case, dict) or not isinstance(case.get('id'), str):
-            raise CustodyError('privileged context needs an identified case')
-        if case.get('split') != 'train':
-            raise CustodyError(f'privileged context refuses split {case.get("split")!r}: only train worlds teach')
-        overlap = case_identities(case) & self.identities
-        if overlap:
-            kinds = sorted({kind for kind, _ in overlap})
-            raise CustodyError(f'privileged context refuses a world related to a protected packet ({", ".join(kinds)})')
-        return {'schema': CUSTODY_SCHEMA, 'case_id': case['id'], 'split': 'train',
-                'world_sha256': world_fingerprint(case), 'protected_sha256': self.digest}
 
 
 # ---------------------------------------------------------------- facts

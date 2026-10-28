@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-rl-semantic-curriculum-20261024-v1-corrected",
+  "owner": "dgx",
+  "path": "runs/local-rl-semantic-curriculum-20261024-v1-corrected",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 3256166,
+      "sha256": "482872581c90d9310976e0a4b4b106b8b143a5186ce05e0bdcebb4c377a875d9",
+      "lines": 850
+    },
+    {
+      "path": "source-correction-proof.json",
+      "bytes": 40944,
+      "sha256": "a3e99b457d30c1786b50a49d95fff63585e906257cf7e06779c05cf5e4a00e0b"
+    },
+    {
+      "path": "task-source-manifest.json",
+      "bytes": 587,
+      "sha256": "248256899590ee6f2b6a04ede525fdef2197303194da8b3c7baefc6f18d473d1"
+    }
+  ],
+  "bytes": 3297697
+}

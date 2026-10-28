@@ -7,14 +7,14 @@ import shutil
 import pytest
 
 from natlang_neuralese.rl.curriculum import metadata
-from natlang_neuralese.rl.task_source import resolve_task_source
+from natlang_neuralese.rl.task_source import _ill_posed_port_record_continuation, resolve_task_source
 from scripts.neuralese_data.build_rl_task_source_correction import build as build_correction
-from natlang_neuralese.rl.task_source import _ill_posed_port_record_continuation
 
 
 ROOT = Path(__file__).resolve().parents[2]
 V1 = ROOT / 'runs/decision-rich-train-20261016-v1'
 V2 = ROOT / 'runs/decision-rich-train-20261016-v2-curriculum'
+V2_CORRECTED = ROOT / 'runs/decision-rich-train-20261016-v2-curriculum-corrected'
 def read_rows(path):
     with path.open(encoding='utf-8') as stream:
         return [json.loads(line) for line in stream if line.strip()]
@@ -114,7 +114,7 @@ def make_v3_fixture(tmp_path):
 
 
 def test_curriculum_successor_preserves_every_task_and_only_adds_schedule_metadata():
-    resolved = resolve_task_source(V2 / 'task-source-manifest.json')
+    resolved = resolve_task_source(V2 / 'task-source-manifest.json', as_correction_parent=True)
     old_rows = read_rows(V1 / 'cases.jsonl')
     rows = read_rows(resolved['cases'])
     assert len(old_rows) == len(rows) == 128
@@ -144,7 +144,7 @@ def test_curriculum_successor_preserves_every_task_and_only_adds_schedule_metada
 
 def test_qualified_scaffold_continuation_preserves_128_and_binds_12_additions(tmp_path):
     fixture = make_v3_fixture(tmp_path)
-    resolved = resolve_task_source(fixture / 'task-source-manifest.json')
+    resolved = resolve_task_source(fixture / 'task-source-manifest.json', as_correction_parent=True)
     prior = read_rows(V2 / 'cases.jsonl')
     rows = read_rows(resolved['cases'])
     qualified_source = read_rows(fixture / 'additional-scaffold-cases.jsonl')
@@ -171,7 +171,7 @@ def test_additional_rl_source_rejects_changed_case_bytes(tmp_path):
     additional = copied / 'additional-scaffold-cases.jsonl'
     additional.write_text(additional.read_text().replace('"split":"train"', '"split":"held"', 1))
     with pytest.raises(ValueError, match='additional source bytes differ'):
-        resolve_task_source(copied / 'task-source-manifest.json')
+        resolve_task_source(copied / 'task-source-manifest.json', as_correction_parent=True)
 
 
 @pytest.mark.parametrize('mutate', [
@@ -190,8 +190,8 @@ def test_additional_rl_source_rejects_incomplete_qualification_proof(tmp_path, m
     manifest = json.loads(manifest_path.read_text())
     manifest['additional_admitted_train_sources'][0]['qualification_proof_sha256'] = hashlib.sha256(proof_bytes).hexdigest()
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + '\n')
-    with pytest.raises(ValueError):
-        resolve_task_source(manifest_path)
+    with pytest.raises(ValueError, match='additional|qualified task payload'):
+        resolve_task_source(manifest_path, as_correction_parent=True)
 
 
 def _port_record_row(requests):
@@ -208,27 +208,51 @@ def test_port_record_quarantine_predicate_is_content_based_and_complete():
     assert _ill_posed_port_record_continuation(_port_record_row([prompt, prompt]))
     assert not _ill_posed_port_record_continuation({'family': 'curriculum_port_record_calls',
         'semantics': {'expected': {'item-01': 'x'}, 'folder_files': {}}})
-    assert not _ill_posed_port_record_continuation(_port_record_row([prompt, 'Use the supplied record.']))
+    # A task that mixes continue and consume items still grades an unseen reply.
+    assert _ill_posed_port_record_continuation(_port_record_row([prompt, 'Use the supplied record.']))
+    assert _ill_posed_port_record_continuation(_port_record_row(['  ' + prompt]))
+    assert not _ill_posed_port_record_continuation(_port_record_row(['Use the supplied record.']))
     assert not _ill_posed_port_record_continuation({**_port_record_row([prompt]), 'family': 'other'})
 
 
-def test_corrected_task_source_is_exact_parent_order_complement_and_preserves_proofs(tmp_path):
+def test_plain_source_with_continuation_tasks_is_refused_and_the_published_correction_resolves():
+    with pytest.raises(ValueError, match='port-record continuation task'):
+        resolve_task_source(V2 / 'task-source-manifest.json')
+    resolved = resolve_task_source(V2_CORRECTED / 'task-source-manifest.json')
+    parent_rows = read_rows(V2 / 'cases.jsonl')
+    assert read_rows(resolved['cases']) == [row for row in parent_rows
+                                            if not _ill_posed_port_record_continuation(row)]
+    assert resolved['rows'] == 76 and resolved['source_correction_excluded_rows'] == 52
+    assert resolved['audit'] == (V2 / 'union-audit.json').resolve()
+
+
+def test_corrected_task_source_is_exact_parent_order_complement_and_keeps_parent_intact(tmp_path):
     parent = tmp_path / 'parent'
     shutil.copytree(V2, parent)
+    before = {path.name: path.read_bytes() for path in parent.iterdir()}
     output = tmp_path / 'corrected'
     result = build_correction(parent / 'task-source-manifest.json', output)
     resolved = resolve_task_source(output / 'task-source-manifest.json')
     parent_rows = read_rows(parent / 'cases.jsonl')
     corrected_rows = read_rows(resolved['cases'])
     assert result['rows'] == len(corrected_rows) == 76
-    expected = [row for row in parent_rows if not _ill_posed_port_record_continuation(row)]
-    assert corrected_rows == expected
-    assert (output / 'parent-source' / 'task-source-manifest.json').read_bytes() == \
-        (parent / 'task-source-manifest.json').read_bytes()
-    for source_file in parent.iterdir():
-        if source_file.is_file():
-            assert (output / 'parent-source' / source_file.name).read_bytes() == source_file.read_bytes()
+    assert corrected_rows == [row for row in parent_rows if not _ill_posed_port_record_continuation(row)]
+    assert {path.name: path.read_bytes() for path in parent.iterdir()} == before
+    assert json.loads((output / 'task-source-manifest.json').read_text())['parent_manifest'] == \
+        '../parent/task-source-manifest.json'
     assert resolved['source_correction_excluded_rows'] == 52
+    assert not any(_ill_posed_port_record_continuation(row) for row in corrected_rows)
+
+
+def test_corrected_task_source_rejects_a_changed_parent(tmp_path):
+    parent = tmp_path / 'parent'
+    shutil.copytree(V2, parent)
+    output = tmp_path / 'corrected'
+    build_correction(parent / 'task-source-manifest.json', output)
+    manifest = parent / 'task-source-manifest.json'
+    manifest.write_text(manifest.read_text() + ' ')
+    with pytest.raises(ValueError, match='parent_manifest changed from its manifest binding'):
+        resolve_task_source(output / 'task-source-manifest.json')
 
 
 def test_corrected_task_source_rejects_arbitrary_row_omission(tmp_path):

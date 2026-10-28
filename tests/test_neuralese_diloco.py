@@ -276,3 +276,57 @@ def test_export_global_writes_fp32_masters_at_parameter_dtype(tmp_path, monkeypa
     assert step == 7 and set(export["fragment_versions"]) == {0}
     assert all(torch.equal(weights[n], masters[n].to(torch.bfloat16)) for n in weights)
     assert written["e"][2]["source"] == "diloco-coordinator-ema"
+
+
+def test_export_global_from_a_running_coordinator_equals_the_volume_read(tmp_path, monkeypatch):
+    """Remote mode (an evaluation sandbox): theta and the EMA over the API equal the coordinator-volume read."""
+    from types import SimpleNamespace
+
+    import natlang_neuralese.train.checkpoint_policy as checkpoint_policy
+    import natlang_neuralese.train.native_diloco as native_diloco
+    import natlang_neuralese.train.weight_ema as weight_ema
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+
+    surface = TensorSurface.from_module(_model().to(torch.bfloat16))
+    parent = tmp_path / "parent.pt"
+    parent.write_bytes(b"parent")
+    initialize_coordinator(tmp_path / "c", run_id="unit", masters=surface.masters,
+                           identity={"parent_checkpoint_sha256": sha256_file_hex_cached(parent)}, workers=1,
+                           min_quorum=1, fragment_bytes=1024, ema={"decay": 0.5, "warmup": 0})
+    port = _free_port()
+    stop = threading.Event()
+    threading.Thread(target=serve_coordinator, args=(tmp_path / "c", "127.0.0.1", port, TOKEN),
+                     kwargs={"stop": stop}, daemon=True).start()
+    deadline = time.time() + 10
+    while True:
+        try:
+            Transport(f"http://127.0.0.1:{port}", TOKEN, 5).json("GET", "/v1/status")
+            break
+        except OSError:
+            if time.time() > deadline:
+                raise
+            time.sleep(0.05)
+    target = _model(seed=1).to(torch.bfloat16)
+    monkeypatch.setattr(native_diloco, "_trainable", lambda path, base: (target, list(target.named_parameters())))
+    monkeypatch.setattr(checkpoint_policy.CheckpointPolicy, "load", staticmethod(
+        lambda path: {"schema": "s", "model_config": {}, "training": {"global_step": 7}}))
+    written = {}
+
+    def write(model, config, schema, step, export, out):
+        written[out.name] = ({n: p.detach().clone() for n, p in model.named_parameters()}, export)
+
+    monkeypatch.setattr(weight_ema, "write_weights_checkpoint", write)
+    monkeypatch.setenv("NATLANG_DILOCO_TOKEN", TOKEN)
+    try:
+        native_diloco.export_global(SimpleNamespace(root=tmp_path / "c", parent=parent, base=None,
+                                                    out=tmp_path / "local", ema_out=tmp_path / "local-ema"))
+        native_diloco.export_global(SimpleNamespace(root=None, coordinator_url=f"http://127.0.0.1:{port}",
+                                                    parent=parent, base=None, timeout=5, workdir=tmp_path / "dl",
+                                                    out=tmp_path / "remote", ema_out=tmp_path / "remote-ema"))
+    finally:
+        stop.set()
+    for local, remote in (("local", "remote"), ("local-ema", "remote-ema")):
+        (a, ea), (b, eb) = written[local], written[remote]
+        assert all(torch.equal(a[n], b[n]) for n in a)
+        assert ea["fragment_versions"] == eb["fragment_versions"] and ea["source"] == eb["source"]
+    assert not list((tmp_path / "dl").iterdir())  # downloaded fragments are not kept

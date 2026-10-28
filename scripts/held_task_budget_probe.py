@@ -62,6 +62,8 @@ def main(argv=None) -> int:
     parser.add_argument('--report-only', action='store_true', help='rescore an existing --out without running')
     args = parser.parse_args(argv)
 
+    if args.spec and not args.spec.lstrip().startswith('{'):
+        args.spec = Path(args.spec).read_text()  # a task_eval JSON file (lfm3_serve.sh eval passes a path)
     spec = json.loads(args.spec) if args.spec else recipe_spec(args.spec_from)
     if args.cases:
         spec['cases'] = [int(index) for index in args.cases.split(',')]

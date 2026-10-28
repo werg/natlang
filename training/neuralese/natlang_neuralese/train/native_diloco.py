@@ -15,8 +15,8 @@ trainable parameters and the outer Nesterov momentum.
         --trainer-argv JSON --settings JSON [--base B] [--quorum Q] ...
     python -m natlang_neuralese.train.native_diloco export --root R --parent P \
         --learner-checkpoint W0 [--learner-checkpoint W1 ...] --out DIR [--base B]
-    python -m natlang_neuralese.train.native_diloco export-global --root R --parent P --out DIR \
-        [--ema-out DIR] [--base B]
+    python -m natlang_neuralese.train.native_diloco export-global (--root R | --coordinator-url URL) --parent P \
+        --out DIR [--ema-out DIR] [--base B]
 
 ``init --outer-schedule '[{"from_round":0,"lr":1.0,"momentum":0.0},{"from_round":10,"lr":0.7,"momentum":0.9}]'``
 replaces ``--outer-lr``/``--outer-momentum`` with a per-fragment merge-round schedule (coordinator.outer_entry).
@@ -212,17 +212,31 @@ def export_global(args):
     from .checkpoint_policy import CheckpointPolicy
     from .weight_ema import write_weights_checkpoint
 
-    manifest = read_manifest(args.root)
+    if getattr(args, 'coordinator_url', None):
+        from .diloco.coordinator import TOKEN_ENV, TOKEN_SECRET, credential, remote_global
+        from .diloco.worker import GATEWAY_SECRET, GATEWAY_TOKEN_ENV, Transport
+        transport = Transport(args.coordinator_url, credential(TOKEN_ENV, TOKEN_SECRET), getattr(args, 'timeout', 600.0),
+                              gateway=credential(GATEWAY_TOKEN_ENV, GATEWAY_SECRET))
+        workdir = getattr(args, 'workdir', None) or args.out.with_name(args.out.name + '.fetch')
+        manifest = transport.json('GET', '/v1/manifest')
+
+        def read(key):
+            values, info, _ = remote_global(transport, key, workdir)
+            return values, info
+        readers = {'global': lambda: read('theta'), 'ema': lambda: read('ema')}
+    else:
+        manifest = read_manifest(args.root)
+        readers = {'global': lambda: global_masters(args.root), 'ema': lambda: global_ema(args.root)}
     parent_sha = sha256_file_hex_cached(args.parent)
     if manifest['identity']['parent_checkpoint_sha256'] != parent_sha:
         raise ValueError('coordinator run continues a different parent checkpoint')
     model, named = _trainable(args.parent, args.base)
     state = CheckpointPolicy.load(args.parent)
     parent_step = (state.get('training') or {}).get('global_step', state.get('step', 0))
-    for kind, reader, out in (('global', global_masters, args.out), ('ema', global_ema, args.ema_out)):
+    for kind, out in (('global', args.out), ('ema', args.ema_out)):
         if out is None:
             continue
-        values, info = reader(args.root)
+        values, info = readers[kind]()
         with torch.no_grad():
             for name, parameter in named:
                 if values[name].shape != parameter.shape:
@@ -266,7 +280,13 @@ def main(argv=None):
                         help='model-only checkpoint of the coordinator EMA of global versions (default: <out>-ema '
                              'when the run keeps an EMA; "off" skips it)')
     snapshot = commands.add_parser('export-global')
-    snapshot.add_argument('--root', type=Path, required=True)
+    source = snapshot.add_mutually_exclusive_group(required=True)
+    source.add_argument('--root', type=Path, help='the coordinator root on this volume')
+    source.add_argument('--coordinator-url',
+                        help='a running coordinator: fragments over its API (bearer token and gateway share token from '
+                             '$NATLANG_CW_SECRETS/diloco-token and diloco-gateway, as learners receive them)')
+    snapshot.add_argument('--timeout', type=float, default=600.0)
+    snapshot.add_argument('--workdir', type=Path, help='download scratch for --coordinator-url (default: <out>.fetch)')
     snapshot.add_argument('--parent', type=Path, required=True)
     snapshot.add_argument('--base', type=Path)
     snapshot.add_argument('--out', type=Path, required=True)

@@ -91,6 +91,11 @@ def validate_stage_parameters(kind, parameters):
                 raise ValueError('a diloco block is a native_state_sft learner settings object')
             from .diloco.worker import DilocoSettings
             DilocoSettings.from_dict(parameters['diloco'])
+        if 'quantization' in parameters:
+            if kind != 'native_state_sft':
+                raise ValueError('a quantization component is a native_state_sft stage parameter')
+            from .quantization import parse_native_component
+            parse_native_component(parameters['quantization'])
         if 'history_reasoning_policy' in parameters and parameters['history_reasoning_policy'] != 'keep':
             raise ValueError('history_reasoning_policy currently supports the explicit keep profile only')
         from ..model.native_parameter_precision import ORDINARY_PRECISION_PROFILES

@@ -20,6 +20,7 @@ Root layout::
 from __future__ import annotations
 
 import hmac
+import io
 import json
 import os
 import re
@@ -35,6 +36,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import torch
 from safetensors import safe_open
+from safetensors.torch import save
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
 from natlang_neuralese.common.jsonio import write_json_durable
@@ -499,54 +501,80 @@ class Coordinator:
                 raise errors[0]
 
 
+def _assemble(manifest: dict, fragment_values, label: str) -> dict[str, torch.Tensor]:
+    """Full FP32 tensors from per-fragment flat values (``fragment_values(fragment) -> tensor``)."""
+    out = {name: torch.empty(shape, dtype=torch.float32) for name, shape in manifest["parameter_shapes"].items()}
+    for spec in manifest["fragments"]:
+        fragment = Fragment.from_dict(spec)
+        values = fragment_values(fragment)
+        if values.dtype != torch.float32 or values.numel() != fragment.length:
+            raise ValueError(f"Corrupt coordinator {label} fragment")
+        cursor = 0
+        for part in fragment.slices:
+            out[part.name].reshape(-1)[part.offset : part.offset + part.length].copy_(
+                values[cursor : cursor + part.length]
+            )
+            cursor += part.length
+    return out
+
+
+def _read_global(root: str | Path, key: str) -> tuple[dict[str, torch.Tensor], dict]:
+    root = Path(root)
+    manifest = read_manifest(root)
+    if key == "ema" and manifest.get("ema") is None:
+        raise ValueError("this DiLoCo run keeps no EMA of its global versions (declare ema at init)")
+    versions = []
+
+    def values(fragment):
+        path = root / "fragments" / f"{fragment.index:05d}.safetensors"
+        versions.append(int(_metadata(path)["version"]))
+        return load_tensors(path)[key]
+
+    tensors = _assemble(manifest, values, "EMA" if key == "ema" else "")
+    info = {"versions": versions, "fingerprint": manifest["fingerprint"], "run_id": manifest["run_id"]}
+    return tensors, {**info, **({"ema": manifest["ema"]} if key == "ema" else {})}
+
+
 def global_masters(root: str | Path) -> tuple[dict[str, torch.Tensor], dict]:
     """The coordinator's current global FP32 masters, assembled from its fragments.
 
-    Read it from a stopped (or closed) coordinator for a coherent snapshot.
+    Each fragment file is replaced atomically, so every fragment is read at one committed version (the versions are
+    returned); a stopped coordinator gives one coherent version.
     """
-    root = Path(root)
-    manifest = read_manifest(root)
-    masters = {name: torch.empty(shape, dtype=torch.float32) for name, shape in manifest["parameter_shapes"].items()}
-    versions = []
-    for spec in manifest["fragments"]:
-        fragment = Fragment.from_dict(spec)
-        path = root / "fragments" / f"{fragment.index:05d}.safetensors"
-        versions.append(int(_metadata(path)["version"]))
-        theta = load_tensors(path)["theta"]
-        if theta.dtype != torch.float32 or theta.numel() != fragment.length:
-            raise ValueError("Corrupt coordinator fragment")
-        cursor = 0
-        for part in fragment.slices:
-            masters[part.name].reshape(-1)[part.offset : part.offset + part.length].copy_(
-                theta[cursor : cursor + part.length]
-            )
-            cursor += part.length
-    return masters, {"versions": versions, "fingerprint": manifest["fingerprint"], "run_id": manifest["run_id"]}
+    return _read_global(root, "theta")
 
 
 def global_ema(root: str | Path) -> tuple[dict[str, torch.Tensor], dict]:
     """The EMA of the coordinator's global versions, assembled like ``global_masters`` (FP32)."""
-    root = Path(root)
-    manifest = read_manifest(root)
-    if manifest.get("ema") is None:
+    return _read_global(root, "ema")
+
+
+def remote_global(transport, key: str, workdir: str | Path) -> tuple[dict[str, torch.Tensor], dict, dict]:
+    """``global_masters``/``global_ema`` of a *running* coordinator over its HTTP API (``transport``: the learners'
+    ``worker.Transport``), so an evaluation sandbox pulls global versions without the coordinator's volume. Fetches
+    ``/v1/manifest`` and each committed fragment (``/v1/fragments/i`` for theta, ``/v1/ema/i`` for the EMA); every
+    fragment is one committed version (recorded). Returns (tensors, info, manifest)."""
+    manifest = transport.json("GET", "/v1/manifest")
+    if key == "ema" and manifest.get("ema") is None:
         raise ValueError("this DiLoCo run keeps no EMA of its global versions (declare ema at init)")
-    averages = {name: torch.empty(shape, dtype=torch.float32) for name, shape in manifest["parameter_shapes"].items()}
+    workdir = Path(workdir)
+    workdir.mkdir(parents=True, exist_ok=True)
     versions = []
-    for spec in manifest["fragments"]:
-        fragment = Fragment.from_dict(spec)
-        path = root / "fragments" / f"{fragment.index:05d}.safetensors"
-        versions.append(int(_metadata(path)["version"]))
-        values = load_tensors(path)["ema"]
-        if values.dtype != torch.float32 or values.numel() != fragment.length:
-            raise ValueError("Corrupt coordinator EMA fragment")
-        cursor = 0
-        for part in fragment.slices:
-            averages[part.name].reshape(-1)[part.offset : part.offset + part.length].copy_(
-                values[cursor : cursor + part.length]
-            )
-            cursor += part.length
-    return averages, {"versions": versions, "fingerprint": manifest["fingerprint"], "run_id": manifest["run_id"],
-                      "ema": manifest["ema"]}
+    route = "/v1/ema" if key == "ema" else "/v1/fragments"
+
+    def values(fragment):
+        path, headers = transport.fetch_file(f"{route}/{fragment.index}", workdir)
+        if path is None:
+            raise ValueError(f"coordinator returned no {key} fragment {fragment.index}")
+        try:
+            versions.append(int(headers["X-Fragment-Version"]))
+            return load_tensors(path)["ema" if key == "ema" else "theta"]
+        finally:
+            path.unlink(missing_ok=True)
+
+    tensors = _assemble(manifest, values, "EMA" if key == "ema" else "")
+    info = {"versions": versions, "fingerprint": manifest["fingerprint"], "run_id": manifest["run_id"]}
+    return tensors, {**info, **({"ema": manifest["ema"]} if key == "ema" else {})}, manifest
 
 
 def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, stop: threading.Event | None = None) -> None:
@@ -584,7 +612,8 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
 
         def _stream(self, file, version: int | None = None) -> None:
             with file:
-                size = os.fstat(file.fileno()).st_size
+                size = (file.getbuffer().nbytes if isinstance(file, io.BytesIO)
+                        else os.fstat(file.fileno()).st_size)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/octet-stream")
                 self.send_header("Content-Length", str(size))
@@ -644,6 +673,18 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                     self._json(200, coordinator.status())
                 elif parsed.path == "/v1/seed":
                     self._stream((coordinator.root / "seed.safetensors").open("rb"))
+                elif re.fullmatch(r"/v1/ema/[0-9]+", parsed.path):
+                    # The EMA of the global versions for one fragment (evaluation pulls; learners never read it).
+                    index = int(parsed.path.rsplit("/", 1)[-1])
+                    if coordinator.manifest.get("ema") is None:
+                        self._json(404, {"error": "this run keeps no EMA of its global versions"})
+                    else:
+                        with coordinator.lock:
+                            path = coordinator._path(index)
+                            version = int(_metadata(path)["version"])
+                            ema = load_tensors(path)["ema"]
+                        payload = io.BytesIO(save({"ema": ema}, metadata={"version": str(version)}))
+                        self._stream(payload, version)
                 elif re.fullmatch(r"/v1/fragments/[0-9]+", parsed.path):
                     index = int(parsed.path.rsplit("/", 1)[-1])
                     with coordinator.lock:

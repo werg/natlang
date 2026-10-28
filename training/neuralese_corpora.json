@@ -1437,6 +1437,28 @@
       "note": "Scheduling metadata is a curriculum prior, not an RL eligibility gate. Full 128-row task breadth remains included; pending 12-task executor qualification remains excluded. This is an RL task source, not neuralese SFT graph data."
     },
     {
+      "id": "decision-rich-train-20261016-v2-curriculum-corrected",
+      "owner": "dgx",
+      "path": "runs/decision-rich-train-20261016-v2-curriculum-corrected",
+      "include": [
+        "cases.jsonl",
+        "source-correction-proof.json",
+        "task-source-manifest.json"
+      ],
+      "source_class": "immutable-RL-task-source-correction-successor",
+      "split": "Train-only. Byte-preserving, order-preserving retained rows of decision-rich-train-20261016-v2-curriculum (76 of 128); the parent packet stays registered and intact as the hash-bound parent.",
+      "admission": "natlang.rl-task-source-correction/1 successor under predicate port-record-next-assistant-turn-unprovided-v2: quarantines the 52 curriculum_port_record_calls tasks whose items ask for the historical next assistant message without supplying it, so their exact recorded reply is an SFT label, not a valid RL reward.",
+      "training_admission": true,
+      "training_admission_reason": "Every retained row is an unchanged row of the admitted parent; the resolver re-derives the exact exclusion set from the parent and refuses any other omission. The parent's audit, selection and protection evidence carry over unchanged.",
+      "derived_from": [
+        "decision-rich-train-20261016-v2-curriculum"
+      ],
+      "task_source_manifest": "runs/decision-rich-train-20261016-v2-curriculum-corrected/task-source-manifest.json",
+      "snapshot_manifest": "training/corpus-manifests/decision-rich-train-20261016-v2-curriculum-corrected.json",
+      "license_provenance": "Inherited unchanged from the parent rows.",
+      "note": "RL task source, not native SFT graph data. The quarantined rows stay in the parent (and its SFT uses) with their source/split evidence."
+    },
+    {
       "id": "clef-rich-teacher-evidence-20261005-v1",
       "owner": "pop",
       "path": "runs",
@@ -605232,6 +605254,28 @@
       "snapshot_manifest": "training/corpus-manifests/local-rl-semantic-curriculum-20261024-v1.json",
       "license_provenance": "New procedural tasks are project-generated; inherited140 rows retain existing source license facts and historical teacher qualification identities.",
       "notes": "Shared task packet for LFM and Mellum. Reward actual correct execution with or without Neuralese; update an actual captured communication graph whole. Full parent programs remain alongside terminal semantic practice. Static reference success is not student performance; observe live outcomes and adapt."
+    },
+    {
+      "id": "local-rl-semantic-curriculum-20261024-v1-corrected",
+      "owner": "dgx",
+      "path": "runs/local-rl-semantic-curriculum-20261024-v1-corrected",
+      "include": [
+        "cases.jsonl",
+        "source-correction-proof.json",
+        "task-source-manifest.json"
+      ],
+      "source_class": "immutable-RL-task-source-correction-successor",
+      "split": "Train-only. Byte-preserving, order-preserving retained rows of local-rl-semantic-curriculum-20261024-v1 (850 of 902); the parent packet stays registered and intact as the hash-bound parent.",
+      "admission": "natlang.rl-task-source-correction/1 successor under predicate port-record-next-assistant-turn-unprovided-v2: quarantines the 52 curriculum_port_record_calls tasks whose items ask for the historical next assistant message without supplying it, so their exact recorded reply is an SFT label, not a valid RL reward.",
+      "training_admission": true,
+      "training_admission_reason": "Every retained row is an unchanged row of the admitted parent; the resolver re-derives the exact exclusion set from the parent and refuses any other omission. The parent's audit, selection, qualification and protection evidence carry over unchanged.",
+      "derived_from": [
+        "local-rl-semantic-curriculum-20261024-v1"
+      ],
+      "task_source_manifest": "runs/local-rl-semantic-curriculum-20261024-v1-corrected/task-source-manifest.json",
+      "snapshot_manifest": "training/corpus-manifests/local-rl-semantic-curriculum-20261024-v1-corrected.json",
+      "license_provenance": "Inherited unchanged from the parent rows.",
+      "note": "Use this, not the parent, as an RL task source: plain sources holding these tasks are refused. The quarantined rows stay in the parent with their source/split evidence."
     },
     {
       "id": "restored-searchowl-original-native-views-20261025-v1",

@@ -175,7 +175,8 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
     in-graph writer's own prompt carried those facts. Raises ``CustodyError``/``ValueError`` when an episode has no
     verified guidance. ``fetch_text(state_id)`` reads a written state's text for the verbatim telemetry.
     """
-    from .privileged_context import (CustodyError, captured_block, case_facts, reproduces_reference,
+    from ..common.custody import CustodyError
+    from .privileged_context import (captured_block, case_facts, reproduces_reference,
                                      verify_captured_block, writer_saw)
     from .privileged_scoring import graph_invocations, writer_span
     students = {}
@@ -254,7 +255,7 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
     A student episode without verified guidance keeps its plain outcome term; the record names the refusal.
     """
     from ..model.native_graph_plan import compile_graph, invocation_dict
-    from .privileged_context import CustodyError
+    from ..common.custody import CustodyError
     from .privileged_scoring import student_form, teacher_form, writer_span
     role = rollout.get('jolt_role', 'student')
     if role not in ('student', 'teacher'):
@@ -447,11 +448,9 @@ def guidance_controls(base, *, role, custody_receipt, facts, selection=None):
 def _load_custody(custody):
     if custody is not None:
         return custody, None
-    from pathlib import Path
-    from .privileged_context import CustodyError, ProtectedWorlds
-    repo = Path(__file__).resolve().parents[4]
+    from ..common.custody import CustodyError, ProtectedWorlds
     try:
-        return ProtectedWorlds.from_registry(repo / 'training/neuralese_corpora.json', repo), None
+        return ProtectedWorlds.load(), None
     except CustodyError as error:
         return None, str(error)
 
@@ -546,9 +545,9 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
     ``plan_command`` (``plan_command(endpoint)``) runs the NL ``planTeacherAttempts`` that may skip or add attempts.
     """
     import copy
-    from pathlib import Path
     from ..common.jsonio import iter_jsonl_rows, write_json_durable
-    from .privileged_context import CustodyError, case_facts
+    from ..common.custody import CustodyError
+    from .privileged_context import case_facts
     if type(attempts) is not int or attempts < 1:
         raise ValueError('JOLT+ teacher attempts must be a positive integer')
     custody, refusal = _load_custody(custody)

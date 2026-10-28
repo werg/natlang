@@ -36,6 +36,21 @@ WEIGHT_FORMATS = ('nvfp4', 'fp8_block')
 ACTIVATION_FORMATS = ('nvfp4', 'fp8_group')
 
 
+def _div(x: torch.Tensor, constant: float) -> torch.Tensor:
+    """``x / constant`` with torch's CUDA semantics on every device: CUDA divides an FP32 tensor by a Python scalar as a
+    multiplication by the FP32 reciprocal (not a correctly rounded division). Liquid's checkpoints were produced that
+    way (their NVFP4 global scales match only this form), and CPU true division differs in the last bit."""
+    x = x.float()
+    return x * (torch.ones((), dtype=torch.float32, device=x.device) / constant)
+
+
+def _true_div(x: torch.Tensor, constant: float) -> torch.Tensor:
+    """Correctly rounded ``x / constant`` on every device (a tensor divisor): the deploy activation kernels divide in
+    FP32 C++ (vLLM ``per_token_group_quant_fp8``), not by torch's CUDA reciprocal multiplication."""
+    x = x.float()
+    return x / torch.full((), constant, dtype=torch.float32, device=x.device)
+
+
 def _table(values, device):
     return torch.tensor(values, dtype=torch.float32, device=device)
 
@@ -85,7 +100,7 @@ def _groups(x: torch.Tensor, group: int) -> torch.Tensor:
 # NVFP4 weights (ModelOpt) -----------------------------------------------------------------------------------------
 def nvfp4_global_scale(amax: torch.Tensor) -> torch.Tensor:
     """``weight_scale_2`` / ``input_scale``: FP32 ``amax / (6 * 448)``."""
-    return amax.float() / (FP4_MAX * FP8_MAX)
+    return _div(amax, FP4_MAX * FP8_MAX)
 
 
 def nvfp4_weight_encode(weight: torch.Tensor, group: int = NVFP4_GROUP, global_amax=None):
@@ -97,14 +112,14 @@ def nvfp4_weight_encode(weight: torch.Tensor, group: int = NVFP4_GROUP, global_a
     blocks = _groups(w, group)
     scale_2 = nvfp4_global_scale(w.abs().amax() if global_amax is None else torch.as_tensor(global_amax))
     amax = blocks.abs().amax(dim=-1).float()
-    if float(scale_2) == 0.0:
-        scales = torch.ones_like(amax).to(torch.float8_e4m3fn)
-        codes = torch.zeros(blocks.shape, dtype=torch.uint8, device=w.device)
-    else:
-        per_group = amax / (FP4_MAX * scale_2)
-        per_group[per_group == 0] = 1.0
-        scales = per_group.to(torch.float8_e4m3fn)
-        codes = e2m1_codes(blocks.float() / (scales.float() * scale_2).unsqueeze(-1))
+    # Branch-free (no host synchronization; one compiled graph in the training ramp): a zero weight has unit scales
+    # and zero codes, a zero group a unit scale.
+    zero = scale_2 == 0
+    per_group = amax / (FP4_MAX * scale_2)
+    per_group = torch.where(zero | (per_group == 0), torch.ones_like(per_group), per_group)
+    scales = per_group.to(torch.float8_e4m3fn)
+    codes = e2m1_codes(blocks.float() / (scales.float() * scale_2).unsqueeze(-1))
+    codes = torch.where(zero, torch.zeros_like(codes), codes)
     return pack_fp4(codes.reshape(w.shape)), scales, scale_2
 
 
@@ -125,7 +140,7 @@ def nvfp4_activation_value(x: torch.Tensor, input_scale: torch.Tensor, group: in
     input_scale = input_scale.float().to(x.device)
     blocks = _groups(x.float(), group)
     amax = blocks.abs().amax(dim=-1)
-    scales = _e4m3(amax / FP4_MAX / input_scale).float()
+    scales = _e4m3(_true_div(amax, FP4_MAX) / input_scale).float()
     divisor = (scales * input_scale).unsqueeze(-1)
     codes = e2m1_codes(torch.where(divisor > 0, blocks / divisor, torch.zeros_like(blocks)))
     return (e2m1_values(codes) * divisor).reshape(x.shape)
@@ -146,7 +161,7 @@ def fp8_block_encode(weight: torch.Tensor, block: int = FP8_BLOCK):
     tiles = _block_view(w, block)
     low = tiles.amin(dim=(1, 3)).float().clamp(max=0)
     high = tiles.amax(dim=(1, 3)).float().clamp(min=0)
-    scales = torch.clamp(torch.maximum(low.abs(), high) / FP8_MAX, min=torch.finfo(torch.float32).eps).to(w.dtype)
+    scales = torch.clamp(_div(torch.maximum(low.abs(), high), FP8_MAX), min=torch.finfo(torch.float32).eps).to(w.dtype)
     expanded = scales[:, None, :, None]
     codes = torch.clamp(tiles / expanded, -FP8_MAX, FP8_MAX).to(torch.float8_e4m3fn)
     return codes.reshape(w.shape), scales
@@ -164,7 +179,7 @@ def fp8_block_value(weight: torch.Tensor, block: int = FP8_BLOCK) -> torch.Tenso
 # FP8 dynamic group activations (vLLM) ------------------------------------------------------------------------------
 def fp8_group_activation_value(x: torch.Tensor, group: int = FP8_ACT_GROUP) -> torch.Tensor:
     blocks = _groups(x.float(), group)
-    scales = blocks.abs().amax(dim=-1, keepdim=True).clamp(min=1e-10) / FP8_MAX
+    scales = _true_div(blocks.abs().amax(dim=-1, keepdim=True).clamp(min=1e-10), FP8_MAX)
     return (_e4m3(blocks / scales).float() * scales).reshape(x.shape)
 
 

@@ -109,6 +109,65 @@ Recommendations:
   Otherwise use local_steps = ceil(20 × (transfer + merge seconds) / step seconds), rounded up to a multiple of 32.
   Recompute after the seed run reports its plain-path step time.
 
+## Plain + compile on the sandbox (seed run, 24225f416)
+
+RTX PRO 6000, 2 CPUs, 48Gi, 32k tokens per update, own-output objective on joint-sft-v1: median **2.57 s/update,
+12.3k tok/s** over 200 updates (6.7k before, with `device_fp32`). CUDA peak 20.9 GB, host cgroup peak 16.5 GiB,
+GPU at 100% outside eval/checkpoint (2 CPUs do not starve it), first update after ~20 s. At 2.57 s/update the 5% rule
+allows ~16 s of sync per 128-step round; size `local_steps` from the round-1 sync measurement.
+
+## QAT in native SFT (FP8 + NVFP4, on by default for LFM3)
+
+The fork's inline installation (`Quantization.install(model, inline=True)`: plain parameter names, `--quantization`
+with `bind`, loss mode `sample`, calibration in the full state) plus:
+- **Default for LFM3 SFT**: with `--quantization` omitted, an LFM3 run adopts the recipe component
+  (`native_state_sft.default_lfm3_quantization`): FP8 0-0.15, NVFP4 0.1-0.5, bf16/fp8/nvfp4 weights 1/0.5/1. The
+  bind covers the remaining planned updates of this process (DiLoCo: the learner's own shard), recorded as
+  `quantization_history` `default-adopted` at that global update. A resume continues the recorded declaration;
+  `--quantization off` opts out.
+- **One weight fake quant per pass** (`maple/ternary.inline_precision`): the ramped weights `W + λ(Q(W) − W)` are
+  computed once on entering the pass, by one compiled kernel set per weight shape, and reused by
+  activation-checkpoint recomputation. λ is a device scalar, so the compiled layer pieces fuse the activation codecs
+  without recompiling as the ramp moves. The recompile limit is raised to 256, because the default 8 sent later
+  layers back to eager.
+- **Export parity**: the compiled weight ramp uses eager division rounding, no flush-to-zero and emulated precision
+  casts. With Inductor's default approximate division, 3,672 of 15.7M NVFP4 codes of one weight differed, and the
+  FP8 BF16-division double rounding was skipped. At λ = 1 the trained weights equal the BF16 values of
+  `export.lfm3_quantized` codes (`test_in_training_deploy_weights_equal_liquid_exports`, real LFM3 layers 0/13/23,
+  w1/w2/w3, both formats), and those reproduce Liquid's checkpoints bit for bit. Activation codecs inside the
+  compiled layers keep Inductor's division, like the deploy kernels' approximate reciprocals. Emulating eager there
+  cost 1.2x per NVFP4 pass.
+- **CPU/CUDA codec agreement** (`train/qformats._div`, `_true_div`): torch's CUDA tensor/scalar division is a
+  reciprocal multiplication, and Liquid's weight scales match only that. Weight scale rules now use it on every
+  device. Activation scales use correctly rounded division, as vLLM does.
+  `test_liquid_codes_and_scales_reproduce_exactly` now also passes on CPU.
+
+Cost per 13.2k-token update on GB10 (plain + compile, chunk 1024; 7.25 s at BF16):
+
+| Pass | s/update | vs BF16 |
+|---|---|---|
+| FP8 λ = 1 | 7.3-7.4 | +2% |
+| NVFP4 λ = 1 | 8.4, then **7.7** after the branch-free encode | +16%, then **+5%** |
+| Sampled mix (weights 1/0.5/1) | ~7.5 expected | ~+3% |
+
+The NVFP4 weight encoder branched on `float(scale_2) == 0`. That host synchronization broke the compiled per-pass
+ramp, so most of the codec ran eagerly; the profile showed it as int64 adds and copies. Writing the encoder
+branch-free (`torch.where`; bit-identical, and the parity tests pass) removed most of the NVFP4 pass overhead, so
+no hand-written activation kernel was needed.
+
+Resuming inside a calibration window (fixed in 3fc0e91f1): the open window is saved in the quantization state
+(start, batches, running maxima) and continues exactly on resume. Only the BF16 calibration forwards observe;
+before the fix, the window's quantized training passes also widened the static ranges.
+
+Batched Newton-Schulz (measured, not adopted): stacking same-shape LFM3 matrices gives bit-identical results, but
+on GB10 it is 0.6x the speed of per-matrix NS (2.42 s vs 1.46 s for all 168 matrices). Re-measure on the RTX PRO 6000
+before reconsidering.
+
+Real FP8 GEMMs (not adopted): the deployed FP8_BLOCK format has per-128 activation-group scales and 128x128 weight
+block scales. A rowwise `_scaled_mm` (one scale per token and per output row) cannot represent those values, so it
+would train against a different quantizer than the one deployed. Matching exactly would need one K = 128 GEMM per
+block column, 16 per projection, which is slower than BF16. The FP8 pass costs only +2% as fake quant.
+
 ## Remaining ideas, ranked by expected gain
 
 1. Larger `--batch-tokens`: NS falls from 20% of the update at 13k tokens to ~5% at 64k. Config only. GB10
@@ -116,9 +175,10 @@ Recommendations:
 2. Real FP8 GEMMs in the forward once the FP8 QAT point is at λ = 1 (rowwise FP8 is 1.9-2.1x BF16 on both GPUs).
    This is not an exact match to the FP8_BLOCK deploy scaling, which the hardware does not support, so it needs its
    own parity check. Could be ~25-35% of GEMM time.
-3. Fused QAT fake-quant kernels: QAT is not yet wired into `native_state_sft`. When it is, measure the
-   `PrecisionSTE` cost; an unfused NVFP4 fake-quant of w1/w2/w3 per forward could cost 10-20%.
-4. Batched Newton-Schulz over same-shape matrices after backward (~0.2-0.3 s of 1.44 s).
+3. Real NVFP4 forward GEMMs once λ = 1 (`F.scaled_mm` BlockWise1x16 + TensorWise is exactly the NVFP4 deploy
+   format; 4.5x on GB10, 2.8x on the sandbox). This would speed up the FFN forward and recompute of NVFP4 passes
+   only, worth roughly 0.3-0.5 s per NVFP4 pass on GB10.
+4. Batched Newton-Schulz: slower on GB10 (above); check on the sandbox.
 5. Selective activation checkpointing in the graph forward (keep the top K layers): at most ~7% (no checkpointing at
    all measured 6.6 vs 7.1 s), at ~3 GB per 1k tokens.
 6. Fused linear + cross-entropy readout (vocab 128k): ~0.3 s.

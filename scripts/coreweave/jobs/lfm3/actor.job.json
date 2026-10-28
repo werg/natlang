@@ -4,7 +4,7 @@
  "kind": "eval",
  "placement": {"where": "coreweave", "reason": "LFM3 RL actor (plans/neuralese/LFM3_SCALEOUT_20261028.md phase 3, asynchronous actor/learner candidate): the prebuilt llama.cpp-neuralese server serving one published policy GGUF behind the sandbox HTTPS share token. One GPU, bounded lifetime; stopped when its policy version is retired."},
  "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
- "resources": {"gpu": 1, "memory": "32Gi"},
+ "resources": {"gpu": 1, "cpu": "8", "memory": "32Gi"},
  "lifetime_hours": 12,
  "scratch": {"path": "/work", "size": "100Gi"},
  "env": {"NATLANG_CW_COLLECT_WAIT": "600", "HF_HUB_OFFLINE": "1", "LFM3_GGUF": "@@GGUF_PATH@@", "LFM3_PORT": "8080",

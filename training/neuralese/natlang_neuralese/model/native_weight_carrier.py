@@ -1650,7 +1650,8 @@ class NativeCarrierLinear(nn.Linear):
         override = original.__dict__.get('forward')
         if 'forward' in original.__dict__ and not (
                 getattr(override, '__self__', None) is original and
-                getattr(override, '__func__', None) is nn.Linear.forward):
+                (getattr(override, '__func__', None) is nn.Linear.forward or
+                 getattr(getattr(override, '__func__', None), 'natlang_precision_forward', False))):
             raise RuntimeError('Linear cotangent carrier cannot replace a custom instance forward')
         # Preserve hooks/config/ties without resetting or cloning parameters.
         self.__dict__ = original.__dict__.copy()
@@ -1662,11 +1663,32 @@ class NativeCarrierLinear(nn.Linear):
         self.forward_storage_dtype = original.weight.dtype
 
     def forward(self, x):
-        return stored_linear(x, self.weight, self.bias, storage_dtype=self.forward_storage_dtype)
+        x, weight = _precision_operands(self, x)
+        return stored_linear(x, weight, self.bias, storage_dtype=self.forward_storage_dtype)
 
     def native_fixed_forward(self, x):
-        return stored_linear(x, self.weight, self.bias, storage_dtype=self.forward_storage_dtype,
+        x, weight = _precision_operands(self, x)
+        return stored_linear(x, weight, self.bias, storage_dtype=self.forward_storage_dtype,
                              fixed=True, precision=getattr(self, 'native_linear_precision', 'ieee'))
+
+
+def _precision_operands(module, x):
+    """A carrier's (input, weight) under an inline QAT point (``maple.ternary.linear_precision``). A quantized weight
+    is a straight-through function of the latent, so its dW is routed to the latent's cotangent accumulator as an
+    effective weight of that base parameter. Unquantized: the module's own weight, unchanged."""
+    if 'native_precision_key' not in module.__dict__ and module.__dict__.get('native_precision_input') is None:
+        return x, module.weight
+    from ..maple.ternary import linear_precision
+    x, weight = linear_precision(module, x)
+    if weight is not module.weight:
+        scope = active_cotangent_scope()
+        if scope is not None and scope.mode == 'vjp':
+            scope.register_effective_weight(weight, module.weight, ())
+            # Routes are keyed by tensor id: a freed quantized weight's id can be reused by the next one, so its
+            # route leaves with it.
+            import weakref
+            weakref.finalize(weight, scope._effective_routes.pop, id(weight), None)
+    return x, weight
 
 
 @contextmanager
