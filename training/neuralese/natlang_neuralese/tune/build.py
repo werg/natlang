@@ -170,7 +170,12 @@ def main(argv=None):
     parser.add_argument('--out', required=True)
     args = parser.parse_args(argv)
     plan, manifest, rows, rollouts = load_plan(args.plan)
-    recipe = Recipe.from_json(plan.get('recipe', {}))
+    # The effective prompt weight: explicit, else the current default, except that an in-flight fit resuming its
+    # own state keeps the value it was bound with (trainer.resolve_prompt_weight).
+    existing = Path(args.out) / 'state.json'
+    from .trainer import resolve_prompt_weight
+    recipe = Recipe.from_json({**plan.get('recipe', {}), 'prompt_weight': resolve_prompt_weight(
+        plan.get('recipe', {}), json.loads(existing.read_text()) if existing.exists() else None)})
     # A continued round names the previous round's build directory: its state, versions and soft initialization.
     parent_dir = Path(args.plan).parent / plan['parent'] if plan.get('parent') else None
     from ..serve import load_native_engine

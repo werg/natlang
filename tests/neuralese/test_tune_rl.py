@@ -39,6 +39,13 @@ def test_schedule_math():
     # Recipes written before these fields stay valid.
     assert Recipe.from_json({'steps': 3, 'batch_rows': 2, 'optimizer': {'name': 'adam', 'learning_rate': 1e-3}}).steps == 3
     assert Recipe.from_json({'prompt_weight': 0}).prompt_weight == 0
+    # Own outputs only by default (owner 2026-10-28); an in-flight fit keeps the weight it was bound with.
+    from natlang_neuralese.tune.trainer import LEGACY_PROMPT_WEIGHT, resolve_prompt_weight
+    assert Recipe().prompt_weight == 0 and Recipe.from_json({}).prompt_weight == 0
+    assert resolve_prompt_weight({}) == 0 and resolve_prompt_weight({'prompt_weight': .3}) == .3
+    assert resolve_prompt_weight({}, {'input_sha256': 'x'}) == LEGACY_PROMPT_WEIGHT == .1
+    assert resolve_prompt_weight({}, {'recipe_prompt_weight': 0.}) == 0
+    assert resolve_prompt_weight({'prompt_weight': .2}, {'input_sha256': 'x'}) == .2
     for weight in (-1, 1.01, float('nan'), float('inf'), True):
         with pytest.raises(TuneMathError, match='prompt_weight'):
             Recipe.from_json({'prompt_weight': weight})
@@ -185,6 +192,13 @@ def test_rl_sign_and_whole_graph_coverage(tmp_path, monkeypatch):
     continued = JointTrainer(engine, manifest_for(engine), newer + records,
                              Recipe(objectives=['rl'], batch_rows=4, **NEUTRAL), workdir=tmp_path / 'rl2',
                              parent=copy.deepcopy(trainer.state))
+    assert continued.state['recipe_prompt_weight'] == 0 and 'recipe_transitions' not in continued.state
+    # A parent bound before the own-outputs default (implicit 0.1) is continued at 0 with a recorded transition.
+    legacy = copy.deepcopy(trainer.state)
+    legacy.pop('recipe_prompt_weight')
+    adopted = JointTrainer(engine, manifest_for(engine), newer + records,
+                           Recipe(objectives=['rl'], batch_rows=4, **NEUTRAL), workdir=tmp_path / 'rl3', parent=legacy)
+    assert adopted.state['recipe_transitions'][-1]['prompt_weight'] == {'from': .1, 'to': 0.}
     record = continued.step()
     assert record['updated_nodes'] == sorted(start)
     assert sorted(record['optimizer_restarted']) == sorted(start), 'SGD history is not reinterpreted as Adam moments'

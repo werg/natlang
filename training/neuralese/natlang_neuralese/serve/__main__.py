@@ -39,10 +39,11 @@ def main(argv=None):
                              "<data_nvme>/neuralese-blocks/<dialect> (NVMe)")
     parser.add_argument("--store-resident-gb", type=float, default=2.0,
                         help="with --store-dir: payload memory kept resident (least recently used blocks are evicted)")
-    parser.add_argument("--prefix-cache-gb", type=float, default=0,
+    parser.add_argument("--prefix-cache-gb", type=float, default=2.0,
                         help="reuse prompt-prefix model state across requests within this memory (serve/prefix_cache.py); "
-                             "prefill then runs on a --prefix-block token grid, so numerics differ from the default "
-                             "single-chunk prefill (default 0: off)")
+                             "prefill then runs on a --prefix-block token grid, so numerics differ from single-chunk "
+                             "prefill (default 2, on by default like the managed host; 0 opts out for actors whose exact "
+                             "prefill numerics are bound elsewhere)")
     parser.add_argument("--prefix-block", type=int, default=256, help="prefix cache grid in tokens")
     parser.add_argument("--guidance", default=None,
                         help="guidance for requests that do not set one: JSON (serve/guidance.py), e.g. '{\"repeat\": 3}' or true")

@@ -142,7 +142,8 @@ def build(sources, *, legacy_pair_context_weight, held_sources=(), expected_spli
 def own_output_objective(args):
     """The declared own-outputs/1 objective with the tokenizer's exact chat-role token IDs."""
     from transformers import PreTrainedTokenizerFast
-    from natlang_neuralese.train.own_output_supervision import NAME, resolve, role_tokens_from_tokenizer
+    from natlang_neuralese.train.own_output_supervision import (DEFAULT_REASONING_SHARE, NAME, resolve,
+                                                                 role_tokens_from_tokenizer)
     if args.objective_tokenizer is None or args.objective_tokenizer_fingerprint is None:
         raise ValueError('own-output objective needs --objective-tokenizer and its exact fingerprint')
     # Exact tokenizer.json and pinned chat template (its generation prompt is derived from the template);
@@ -152,7 +153,8 @@ def own_output_objective(args):
     template = directory / 'chat_template.jinja'
     tokenizer.chat_template = (template.read_text() if template.exists() else
         json.loads((directory / 'tokenizer_config.json').read_text()).get('chat_template'))
-    objective = resolve({'name': NAME, 'reasoning_share': args.objective_reasoning_share,
+    share = DEFAULT_REASONING_SHARE if args.objective_reasoning_share is None else args.objective_reasoning_share
+    objective = resolve({'name': NAME, 'reasoning_share': share,
         'family_balance': args.objective_family_balance,
         'role_tokens': role_tokens_from_tokenizer(tokenizer,
             tokenizer_fingerprint=args.objective_tokenizer_fingerprint)})
@@ -177,8 +179,13 @@ def main(argv=None):
         help='exact protected test source; evaluation declaration only, never training exposure')
     parser.add_argument('--failed-history-mask-manifest',type=Path,action='append',default=[],
         help='source-bound same-ID TRAIN mask continuation, with exact tokenizer snapshot')
+    parser.add_argument('--objective', choices=('own-outputs', 'declared-row-weights'), default='own-outputs',
+        help='own-outputs (default, owner 2026-10-28): without --objective-tokenizer the policy declares no objective '
+             'and the trainer applies own-outputs/1 (reasoning share 0.1) with the model tokenizer; with it, the '
+             'objective is declared here. declared-row-weights opts out explicitly (declared-row-weights/1); a prior '
+             'policy that already declares an objective keeps it')
     parser.add_argument('--objective-reasoning-share', type=float,
-        help='declare the own-outputs/1 objective (owner 2026-10-28) with this reasoning share of assistant loss')
+        help='own-outputs/1 reasoning share of assistant loss (default 0.1; requires --objective-tokenizer)')
     parser.add_argument('--objective-tokenizer', type=Path,
         help='expanded model tokenizer whose exact chat-role token IDs the objective declares')
     parser.add_argument('--objective-tokenizer-fingerprint',
@@ -189,6 +196,14 @@ def main(argv=None):
         help='previous objective sha256 an existing lineage explicitly transitions from')
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
+    own_options = (args.objective_reasoning_share, args.objective_tokenizer, args.objective_tokenizer_fingerprint,
+                   args.objective_family_balance)
+    if args.objective == 'declared-row-weights' and any(item is not None for item in own_options):
+        raise ValueError('own-output options contradict --objective declared-row-weights')
+    if (args.objective == 'own-outputs' and args.objective_tokenizer is None and args.objective_tokenizer_fingerprint is None
+            and any(item is not None for item in own_options + (args.objective_transition_from,))):
+        raise ValueError('own-output objective parameters require --objective-tokenizer and its fingerprint '
+                         '(omit them all for the trainer default own-outputs/1)')
     if args.prior_policy:
         if not args.complete_source_contract and (args.source or args.held_source or args.legacy_pair_context_weight is not None):
             raise ValueError('prior-policy mask continuation preserves all existing source declarations')
@@ -219,11 +234,14 @@ def main(argv=None):
     if args.failed_history_mask_manifest:
         from natlang_neuralese.train.native_failed_history import binding
         value['failed_history_masks']=value.get('failed_history_masks',[])+[binding(path.resolve(strict=True))for path in args.failed_history_mask_manifest]
-    if args.objective_reasoning_share is not None:
+    if args.objective == 'declared-row-weights':
+        if value.get('objective') is None:
+            from natlang_neuralese.train.own_output_supervision import LEGACY
+            value['objective'] = {'name': LEGACY}
+            if args.objective_transition_from is not None:
+                value['objective_transition'] = {'from': args.objective_transition_from}
+    elif args.objective_tokenizer is not None or args.objective_tokenizer_fingerprint is not None:
         value.update(own_output_objective(args))
-    elif any(item is not None for item in (args.objective_tokenizer, args.objective_tokenizer_fingerprint,
-                                           args.objective_family_balance, args.objective_transition_from)):
-        raise ValueError('objective options require --objective-reasoning-share')
     if args.out.exists():
         if json.loads(args.out.read_text()) != value:
             raise ValueError('existing CE policy differs; write a new explicit continuation artifact')

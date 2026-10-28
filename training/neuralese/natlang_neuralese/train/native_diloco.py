@@ -98,6 +98,19 @@ def _trainable(path, base):
     return model, native_trainable_parameters(model)
 
 
+DEFAULT_COORDINATOR_EMA = {'decay': 0.99, 'warmup': 0}
+
+
+def parse_coordinator_ema(text):
+    """``--ema``: on by default for every new coordinator run (owner 2026-10-28, improvements ship on by default);
+    ``off`` opts out. An existing run keeps the EMA setting its manifest recorded at init."""
+    if text is None or text == '':
+        return dict(DEFAULT_COORDINATOR_EMA)
+    if text == 'off':
+        return None
+    return json.loads(text)
+
+
 def init(args):
     settings = DilocoSettings.from_dict(json.loads(args.settings))
     _, named = _trainable(args.parent, args.base)
@@ -108,7 +121,7 @@ def init(args):
         outer_lr=args.outer_lr, outer_momentum=args.outer_momentum, grace_seconds=args.grace_seconds,
         max_staleness=args.max_staleness,
         seed_source={'path': str(args.parent), 'sha256': sha256_file_hex_cached(args.parent)},
-        ema=json.loads(args.ema) if args.ema else None,
+        ema=parse_coordinator_ema(args.ema),
         outer_schedule=json.loads(args.outer_schedule) if args.outer_schedule else None)
     print(json.dumps({'run_id': manifest['run_id'], 'fragments': len(manifest['fragments']),
                       'fingerprint': manifest['fingerprint']}, sort_keys=True))
@@ -165,7 +178,12 @@ def export(args):
     training['sft_progress'] = collect_sft_progress(training)
     state.update(model_state(model), step=training['global_step'])
     CheckpointPolicy(args.out).save(state)
-    if args.ema_out is not None:
+    ema_out = args.ema_out
+    if ema_out is None and manifest.get('ema') is not None:
+        # On by default: a run that keeps a global EMA also exports it beside the continuation checkpoint.
+        ema_out = Path(str(args.out) + '-ema')
+    if ema_out is not None and str(ema_out) != 'off':
+        args.ema_out = Path(ema_out)
         export_ema(args, manifest, model, named, first, training['global_step'])
     print(json.dumps(training['options']['diloco_export'], sort_keys=True))
 
@@ -234,7 +252,8 @@ def main(argv=None):
     start.add_argument('--outer-momentum', type=float, default=0.9)
     start.add_argument('--grace-seconds', type=float, default=8.0)
     start.add_argument('--max-staleness', type=int, default=2)
-    start.add_argument('--ema', help='JSON {"decay": 0.99, "warmup": 0}: keep an EMA of the global versions')
+    start.add_argument('--ema', help='JSON {"decay": 0.99, "warmup": 0} (the default): keep an EMA of the global '
+                                     'versions; "off" opts out')
     start.add_argument('--outer-schedule', help='JSON [{"from_round": 0, "lr": 1.0, "momentum": 0.0}, ...]: '
                        'per-fragment merge-round outer settings (replaces --outer-lr/--outer-momentum)')
     finish = commands.add_parser('export')
@@ -243,8 +262,9 @@ def main(argv=None):
     finish.add_argument('--base', type=Path)
     finish.add_argument('--learner-checkpoint', type=Path, action='append', required=True)
     finish.add_argument('--out', type=Path, required=True)
-    finish.add_argument('--ema-out', type=Path,
-                        help='also write a model-only checkpoint of the coordinator EMA of global versions here')
+    finish.add_argument('--ema-out',
+                        help='model-only checkpoint of the coordinator EMA of global versions (default: <out>-ema '
+                             'when the run keeps an EMA; "off" skips it)')
     snapshot = commands.add_parser('export-global')
     snapshot.add_argument('--root', type=Path, required=True)
     snapshot.add_argument('--parent', type=Path, required=True)

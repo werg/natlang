@@ -7,8 +7,9 @@ its longest stored prefix that ends on the grid (or from its whole prompt), so t
 prefill on that grid performs: reuse changes nothing but the work done. `PortCache` states are immutable (a
 reference is a snapshot; lfm2_port.PortCache), so stored states are shared, never copied.
 
-The grid itself splits prefill differently from the default single chunk; it is therefore opt-in per server
-(`--prefix-cache-gb`), and actors whose exact numerics are bound elsewhere keep the default.
+The grid itself splits prefill differently from a single chunk. The cache is on by default (`--prefix-cache-gb 2`,
+owner 2026-10-28: improvements ship on by default; the managed host already defaulted to 2); actors whose exact
+prefill numerics are bound elsewhere opt out with `--prefix-cache-gb 0`.
 """
 from __future__ import annotations
 

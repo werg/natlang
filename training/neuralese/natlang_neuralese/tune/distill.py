@@ -1,6 +1,6 @@
 """Lower a tune distillation export to the student's native graph training rows (plan §5.7).
 
-`python -m natlang_neuralese.tune.distill --export DIR --checkpoint PATH [--device cpu] [--prompt-weight 0.1]` reads
+`python -m natlang_neuralese.tune.distill --export DIR --checkpoint PATH [--device cpu] [--prompt-weight 0]` reads
 ``DIR/turns.jsonl`` (verified training-split `natlang.tune-turn/v1` rows: the teacher's and the tuned stack's) and
 writes ``DIR/native-graphs.jsonl`` rendered with the student's own serving template, plus ``DIR/lowered.json`` binding
 the input and output hashes. Admission into a production recipe is a separate, explicit registry decision.
@@ -21,7 +21,8 @@ def main(argv=None):
     parser.add_argument('--export', required=True)
     parser.add_argument('--checkpoint', required=True)
     parser.add_argument('--device', default='cpu')
-    parser.add_argument('--prompt-weight', type=float, default=.1)
+    parser.add_argument('--prompt-weight', type=float, default=0.,
+        help='prompt-token supervision weight (default 0: only the model\'s own outputs are targets)')
     args = parser.parse_args(argv)
     export = Path(args.export)
     manifest = json.loads((export / 'manifest.json').read_text())

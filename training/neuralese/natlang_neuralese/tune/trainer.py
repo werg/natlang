@@ -69,8 +69,10 @@ class Recipe:
     steps: int = 1
     epochs: float | None = None
     batch_rows: int = 8
-    # Auxiliary prompt supervision is adjustable independently of the reply target.
-    prompt_weight: float = .1
+    # Auxiliary prompt supervision is adjustable independently of the reply target. Default 0 (owner 2026-10-28:
+    # whole-trajectory supervision retired, only the model's own outputs are targets); an in-flight fit whose state
+    # predates this default keeps the 0.1 it was bound with (`resolve_prompt_weight`).
+    prompt_weight: float = 0.
     seed: int = 0
     parameterization: str = 'native-subspace'
     ranks: dict = field(default_factory=lambda: {'tree': 8, 'folder': 4, 'lambda': 2})
@@ -124,6 +126,25 @@ class Recipe:
 
     def as_json(self):
         return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+
+LEGACY_PROMPT_WEIGHT = .1  # the Recipe default before 2026-10-28
+
+
+def bound_prompt_weight(state):
+    """The prompt weight an existing trainer state was bound with (states before 2026-10-28 used the 0.1 default)."""
+    return float(state.get('recipe_prompt_weight', LEGACY_PROMPT_WEIGHT))
+
+
+def resolve_prompt_weight(recipe_json, state=None):
+    """The effective ``prompt_weight`` of a plan recipe. An explicit value always wins; an omitted value is the
+    current default (0) for a new or continued fit, and the recorded value for an in-flight fit resuming its own
+    ``state`` (a unit already bound finishes as bound)."""
+    if 'prompt_weight' in (recipe_json or {}):
+        return float(recipe_json['prompt_weight'])
+    if state is not None:
+        return bound_prompt_weight(state)
+    return float(Recipe.__dataclass_fields__['prompt_weight'].default)
 
 
 def lr_factor(schedule, step, total):
@@ -257,6 +278,9 @@ class JointTrainer:
         self.state = state or (self._continued_state(parent) if parent is not None else self._initial_state())
         if self.state.get('schema') != STATE_SCHEMA or self.state['input_sha256'] != self.input_sha256:
             raise TuneMathError('trainer state belongs to another manifest, row set or recipe')
+        # The effective prompt weight is recorded (legacy states: the value they were bound with).
+        self.state.setdefault('recipe_prompt_weight', float(recipe.prompt_weight) if state is None
+                              else bound_prompt_weight(self.state))
         # States written before lineage/RL cursors existed resume with their current versions as history.
         self.state.setdefault('node_history', {node: [artifact] for node, artifact in self.state['node_artifacts'].items()})
         self.state.setdefault('soft_history', {key: [ident] for key, ident in self.state.get('soft_states', {}).items()})
@@ -454,6 +478,14 @@ class JointTrainer:
                  'soft_history': {key: list(parent.get('soft_history', {}).get(key, [ident])) for key, ident in soft.items()},
                  'rl_epoch': 0, 'rl_position': 0, 'exposure': dict(parent.get('exposure', {})), 'losses': [],
                  'parent': {'input_sha256': parent['input_sha256'], 'step': parent['step']}}
+        transitions = list(parent.get('recipe_transitions', []))
+        if bound_prompt_weight(parent) != float(self.recipe.prompt_weight):
+            # A continued round adopts the current prompt weight; the change is recorded, never silent.
+            transitions.append({'prompt_weight': {'from': bound_prompt_weight(parent), 'to': float(self.recipe.prompt_weight)},
+                                'parent_input_sha256': parent['input_sha256'], 'parent_step': parent['step']})
+        if transitions:
+            state['recipe_transitions'] = transitions
+        state['recipe_prompt_weight'] = float(self.recipe.prompt_weight)
         state['input_sha256'] = self.input_sha256
         return state
 

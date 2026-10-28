@@ -17,7 +17,7 @@ Declaration (JSON, ``--matrix-telemetry``)::
 
     {"every": 100, "norms": true, "attention_logits": true, "layers": null}
 
-Absent, nothing runs and the training path is unchanged. Telemetry reads weights after the update and never
+Absent, ``DEFAULT`` runs (on by default); ``"off"`` opts out. Telemetry reads weights after the update and never
 touches RNG, optimizer state or gradients.
 """
 
@@ -33,8 +33,14 @@ SCHEMA = 'natlang.native-matrix-telemetry/1'
 _LAYER = re.compile(r'(^|\.)layers\.\d+\.')
 
 
+DEFAULT = {'every': 100, 'norms': True, 'attention_logits': True, 'layers': None}
+
+
 def parse_matrix_telemetry(text):
+    """On by default (owner 2026-10-28) at ``DEFAULT``; ``"off"`` opts out (``None``)."""
     if text is None or text == '':
+        return dict(DEFAULT)
+    if text == 'off':
         return None
     spec = json.loads(text) if isinstance(text, str) else dict(text)
     unknown = set(spec) - {'every', 'norms', 'attention_logits', 'layers'}

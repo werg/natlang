@@ -3,9 +3,13 @@
 The model's own outputs are the only CE targets: assistant replies/actions and
 typed answers dominate, assistant reasoning gets a separately normalized share,
 and prompts, instructions, inputs, tool/service output and harness feedback are
-context with zero loss weight. Historical lineages keep their exact declared row
-weights (``declared-row-weights/1``); this objective is selected only by an
-explicit declaration in the stage's bound CE supervision policy.
+context with zero loss weight. It is the default (owner 2026-10-28, improvements
+ship on by default): the native trainer applies it, with reasoning share 0.1 and
+the model tokenizer's exact role tokens, to any CE policy that declares no
+objective (``with_default_objective``); a continuation of a row-weight parent
+adopts it through a recorded objective transition. ``declared-row-weights/1``
+remains available as an explicit declaration or ``--supervision-objective
+declared`` (opt-out).
 
 Definition of ``own-outputs/1`` for one invocation (one graph node / one text
 window), given per-token chat roles (``text_supervision.chat_roles``) and a
@@ -531,6 +535,44 @@ def continuation_identity(previous_options, policy):
                          'without an explicit objective_transition from the previous objective sha256')
     return current, {'from': {k: previous[k] for k in ('name', 'sha256')},
                      'to': {k: current[k] for k in ('name', 'sha256')}}
+
+
+DEFAULT_REASONING_SHARE = 0.1
+
+
+def default_objective(tokenizer, *, tokenizer_fingerprint, chat_template=None):
+    """The default ``own-outputs/1`` objective of a model tokenizer (reasoning share 0.1), or ``None`` with the
+    reason when the tokenizer cannot express it (no ChatML role tokens or no chat template)."""
+    try:
+        tokens = role_tokens_from_tokenizer(tokenizer, tokenizer_fingerprint=tokenizer_fingerprint,
+                                            chat_template=chat_template)
+    except (ValueError, TypeError, AttributeError, ImportError) as error:
+        return None, f'{type(error).__name__}: {error}'[:500]
+    return resolve({'name': NAME, 'reasoning_share': DEFAULT_REASONING_SHARE, 'role_tokens': tokens}), None
+
+
+def with_default_objective(policy, objective, *, previous_options=None):
+    """Apply the default objective (owner 2026-10-28: own outputs are on by default) to a loaded CE policy.
+
+    A policy that declares any ``objective`` (including ``declared-row-weights/1``) keeps it. Otherwise the default
+    is added, with ``require_eligible_sources`` relaxed only for a synthesized policy (no bound policy: own outputs
+    need no per-source raw declaration). A continuation whose checkpoint recorded a different objective (legacy row
+    weights when it recorded none) adopts the default through an explicit, recorded ``objective_transition``.
+    Returns ``(policy, resolution)``; the bound policy file is unchanged."""
+    if policy is not None and policy.get('objective') is not None:
+        return policy, {'source': 'declared'}
+    if objective is None:
+        return policy, {'source': 'unavailable'}
+    result = dict(policy) if policy is not None else {
+        'schema': 'natlang.native-ce-supervision-policy/1', 'sources': [], 'require_eligible_sources': False,
+        '_synthesized': True}
+    result['objective'] = objective
+    if previous_options:
+        previous = previous_options.get('supervision_objective') or identity(resolve(None))
+        if previous['sha256'] != identity(objective)['sha256'] and not result.get('objective_transition'):
+            result['objective_transition'] = {'from': previous['sha256']}
+    return result, {'source': 'default', 'objective': identity(objective),
+                    'bound_policy': policy is not None}
 
 
 def validate_policy_fields(value):

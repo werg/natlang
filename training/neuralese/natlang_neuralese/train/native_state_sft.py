@@ -829,10 +829,12 @@ def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backen
 
 
 def _retain_current_held_coverage(metrics, training, held):
-    metrics.pop('held_coverage',None)
-    coverage=(training.get('metrics') or {}).get('held_coverage')
-    if isinstance(coverage,dict) and coverage.get('source_sha256')==held.file_sha256:
-        metrics['held_coverage']=copy.deepcopy(coverage)
+    # The EMA side evaluation keeps its own rotating coverage under the same rule.
+    for key in ('held_coverage', 'held_ema_coverage'):
+        metrics.pop(key,None)
+        coverage=(training.get('metrics') or {}).get(key)
+        if isinstance(coverage,dict) and coverage.get('source_sha256')==held.file_sha256:
+            metrics[key]=copy.deepcopy(coverage)
 
 
 def _resume_identity_for_comparison(identity):
@@ -1042,8 +1044,10 @@ def build_parser():
     parser.add_argument('--batch-graphs', type=int, default=1)
     parser.add_argument('--batch-tokens', type=int, default=0,
         help='pack whole sequential graphs to this token volume instead of graph-count batching')
-    parser.add_argument('--share-causal-prefixes', action=argparse.BooleanOptionalAction, default=False,
-        help='reuse exact ordinary token prefixes with unchanged targets, losses and exposure')
+    parser.add_argument('--share-causal-prefixes', action=argparse.BooleanOptionalAction, default=None,
+        help='reuse exact ordinary token prefixes with unchanged targets, losses and exposure. On by default for new '
+             'runs and continuations (recorded); an omitted flag on a rolling resume keeps the in-flight stage\'s '
+             'recorded mode (its capacity identity binds it); --no-share-causal-prefixes opts out')
     parser.add_argument('--dtype', choices=('float32', 'bfloat16', 'float16'), default=None,
         help='fresh backbone precision; required for a new lineage, resumes retain exact checkpoint dtype')
     from ..model.native_precision import PRODUCTION_NATIVE_LINEAR_PRECISIONS, NATIVE_ATTENTION_PRECISIONS
@@ -1074,8 +1078,9 @@ def build_parser():
         help='Keep the declared rotating held budget at component-stage ends; full explicitly requests a whole-source sweep. Shared foundation qualification requests also require a full sweep.')
     parser.add_argument('--checkpoint-every', type=int, default=0)
     parser.add_argument('--checkpoint-seconds', type=float, default=3600.)
-    parser.add_argument('--async-checkpoint', action=argparse.BooleanOptionalAction, default=False,
-        help='write ordinary full-state cadence snapshots asynchronously when measured host/cgroup headroom permits')
+    parser.add_argument('--async-checkpoint', action=argparse.BooleanOptionalAction, default=True,
+        help='write ordinary full-state cadence snapshots asynchronously when measured host/cgroup headroom permits '
+             '(on by default; falls back to a synchronous write otherwise; --no-async-checkpoint opts out)')
     parser.add_argument('--checkpoint-publication', action='store_true')
     parser.add_argument('--checkpoint-publication-namespace', default='/work/native-production')
     parser.add_argument('--checkpoint-publication-readonly-input-roots', default='[]')
@@ -1124,7 +1129,9 @@ def build_parser():
     parser.add_argument('--preference-margin',type=float)
     parser.add_argument('--weight-ema', default=None,
         help='JSON {"decay":0.999,"warmup":10,"eval":"raw|ema|both"}: BF16 stochastic-rounding EMA of the trainable '
-             'weights, part of the full-state checkpoint (train/weight_ema.py); "off" discards a carried EMA')
+             'weights, part of the full-state checkpoint (train/weight_ema.py). On by default: omitted, a carried EMA '
+             'continues and otherwise weight_ema.DEFAULT starts from the current weights (recorded); "off" opts out '
+             'and discards a carried EMA')
     parser.add_argument('--lr-anneal', default=None,
         help='JSON {"steps":N,"shape":"linear|cosine","floor":0.0}: anneal branch off a --continue-from full state into '
              'its own --out namespace, then stop (train/lr_anneal.py launches it)')
@@ -1133,7 +1140,12 @@ def build_parser():
              'declared constant rate (train/lr_anneal.LrWarmup); 0 = none')
     parser.add_argument('--matrix-telemetry', default=None,
         help='JSON {"every":100,"norms":true,"attention_logits":true,"layers":null}: per-matrix norm growth and max '
-             'attention logit (train/matrix_telemetry.py)')
+             'attention logit (train/matrix_telemetry.py); on by default at matrix_telemetry.DEFAULT, "off" opts out')
+    parser.add_argument('--supervision-objective', dest='supervision_objective_mode', choices=('own-outputs', 'declared'),
+        default='own-outputs',
+        help='own-outputs (default, owner 2026-10-28): a CE policy that declares no objective gets own-outputs/1 '
+             '(reasoning share 0.1, role tokens from the model tokenizer), adopted by continuations through a recorded '
+             'objective transition; declared: use exactly the bound CE policy (row weights when it declares none)')
     return parser
 
 
@@ -1301,6 +1313,32 @@ def _main(argv=None, *, requested_refresh):
     saved_ema = (resume or {}).get('ema')
     saved_lr_anneal = None if parent_continuation else ((resume or {}).get('options') or {}).get('lr_anneal')
     saved_norm_reference = ((resume or {}).get('options') or {}).get('matrix_norm_reference')
+    if args.share_causal_prefixes is None:
+        # On by default (owner 2026-10-28). A rolling resume is the same in-flight stage, whose resident/capacity
+        # identity binds its recorded mode; a fresh run or a parent continuation (a new stage) adopts the default.
+        recorded = ((resume or {}).get('options') or {}).get('share_causal_prefixes')
+        if state is not None:
+            args.share_causal_prefixes = bool(recorded)
+            prefix_resolution = {'source': 'in-flight-recorded'}
+        else:
+            args.share_causal_prefixes = True
+            prefix_resolution = {'source': 'default', **({'transition_from': bool(recorded)}
+                                                         if parent_continuation and not recorded else {})}
+    else:
+        prefix_resolution = {'source': 'declared'}
+    checkpoint_options['share_causal_prefixes'] = args.share_causal_prefixes
+    checkpoint_options['share_causal_prefixes_resolution'] = prefix_resolution
+    # Improvements ship on by default (owner 2026-10-28): an omitted EMA declaration continues a carried EMA or
+    # starts the default one from the current weights (recorded in its provenance and the options).
+    from .weight_ema import resolve_weight_ema
+    ema_spec, ema_resolution = resolve_weight_ema(ema_spec, saved_ema,
+        recorded_option=((resume or {}).get('options') or {}).get('weight_ema'),
+        diloco=args.diloco is not None, fp8_training=args.fp8_training != 'off')
+    checkpoint_options['weight_ema'] = args.weight_ema = (None if ema_spec is None else 'off' if ema_spec.get('off')
+                                                          else json.dumps(ema_spec, sort_keys=True))
+    checkpoint_options['weight_ema_resolution'] = ema_resolution
+    checkpoint_options['matrix_telemetry'] = args.matrix_telemetry = (
+        'off' if telemetry_spec is None else json.dumps(telemetry_spec, sort_keys=True))
     if args.history_reasoning_policy is not None:
         previous_history_policy = config.get('history_reasoning_policy')
         if previous_history_policy != args.history_reasoning_policy:
@@ -1673,6 +1711,19 @@ def _main(argv=None, *, requested_refresh):
             'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
             'weights_optimizer_rng_exposure':'preserved', 'held_ce':'original-corpus-weights'})
     checkpoint_options['ce_supervision_policy_history'] = ce_history
+    default_supervision = None
+    if objective is None and args.supervision_objective_mode == 'own-outputs':
+        # Own outputs are the default objective (owner 2026-10-28); a continuation adopts it through a recorded
+        # objective transition (own_output_supervision.with_default_objective).
+        from .own_output_supervision import default_objective, with_default_objective
+        default_supervision, unavailable = default_objective(tokenizer, tokenizer_fingerprint=fingerprint)
+        ce_policy, objective_resolution = with_default_objective(ce_policy, default_supervision,
+                                                                 previous_options=ce_prior_options)
+        if unavailable is not None and objective_resolution['source'] == 'unavailable':
+            objective_resolution['reason'] = unavailable
+        checkpoint_options['supervision_objective_resolution'] = objective_resolution
+    elif objective is None:
+        checkpoint_options['supervision_objective_resolution'] = {'source': 'opt-out-declared-policy'}
     if objective is None:
         # The declared supervision objective is part of the exact continuation
         # identity: a changed objective needs an explicit transition in the policy.
@@ -1996,7 +2047,7 @@ def _main(argv=None, *, requested_refresh):
                     or (saved_training.get('options') or {}).get('stage_id')!=args.stage_id
                     or (saved_training.get('identity') or {}).get('objective')!=objective_binding):
                 # Credits survive other objectives; evaluations belong to the new weights.
-                for key in ('held', 'task_eval', 'task_checkpoint_sha256', 'task_native_identity'):
+                for key in ('held', 'held_ema', 'task_eval', 'task_checkpoint_sha256', 'task_native_identity'):
                     metrics.pop(key, None)
                 _retain_current_held_coverage(metrics,saved_training,held)
         held_quality_binding = ((resume or saved_training or {}).get('options') or {}).get('held_quality_hold_binding')
@@ -2020,11 +2071,12 @@ def _main(argv=None, *, requested_refresh):
                 raise ValueError('held quality hold binding differs from its authenticated row ledger')
             held_quality_excluded_ids = quality['excluded_ids']
             from .native_held import bind_held_quality_exclusions
-            metrics['held_coverage'] = bind_held_quality_exclusions(held.entries,
-                metrics.get('held_coverage'), held_quality_excluded_ids,
-                source_sha256=held.file_sha256,
-                allow_transition=bool(source_correction_result.get('changed')))
-            metrics['held_coverage']['quality_hold_binding'] = dict(held_quality_binding)
+            for coverage_key in ('held_coverage', *(('held_ema_coverage',) if 'held_ema_coverage' in metrics else ())):
+                metrics[coverage_key] = bind_held_quality_exclusions(held.entries,
+                    metrics.get(coverage_key), held_quality_excluded_ids,
+                    source_sha256=held.file_sha256,
+                    allow_transition=bool(source_correction_result.get('changed')))
+                metrics[coverage_key]['quality_hold_binding'] = dict(held_quality_binding)
             checkpoint_options['held_quality_hold_binding'] = dict(held_quality_binding)
         restore_training_rng_state(resume['rng'], args.device)
         resume['optimizer'] = None
@@ -2318,9 +2370,11 @@ def _main(argv=None, *, requested_refresh):
                 def packed_candidate_check(candidate_train, candidate_held, payload, candidate_ce, declarations):
                     from .native_packed_capacity import qualify_pending
                     from ..eval.native_memory import capacity_identity
-                    from .own_output_supervision import prepare_policy
-                    candidate_train.set_ce_policy(prepare_policy(
-                        candidate_ce[1] if candidate_ce is not None else ce_policy, candidate_train))
+                    from .own_output_supervision import prepare_policy, with_default_objective
+                    candidate_policy = ce_policy
+                    if candidate_ce is not None:
+                        candidate_policy = with_default_objective(candidate_ce[1], default_supervision)[0]
+                    candidate_train.set_ce_policy(prepare_policy(candidate_policy, candidate_train))
                     candidate_counts = dict(exposure_counts)
                     for key in candidate_train.bindings: candidate_counts.setdefault(key,0)
                     candidate_options = {**checkpoint_options, '_pending_native_source_declarations':declarations}
@@ -2355,7 +2409,9 @@ def _main(argv=None, *, requested_refresh):
                         checkpoint_options['ce_supervision_active'] = objective is None
                     if objective is None:
                         # A source append changes the family census, never the objective identity.
-                        from .own_output_supervision import prepare_policy
+                        from .own_output_supervision import prepare_policy, with_default_objective
+                        if ce_update is not None:
+                            ce_policy = with_default_objective(ce_policy, default_supervision)[0]
                         ce_policy = prepare_policy(ce_policy, train)
                         census = (ce_policy or {}).get('_family_census')
                         if census is not None:

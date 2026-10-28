@@ -465,8 +465,11 @@ def _propagate_held_correction_to_frames(progress, *, held, proof, proof_path,
         frame['source_receipts'] = receipts
 
         metrics = dict(frame.get('metrics') or {})
-        coverage = metrics.get('held_coverage')
-        if coverage is not None:
+        # The weight-EMA side evaluation keeps its own rotating ledger; it is re-bound the same way.
+        for coverage_key in ('held_coverage', 'held_ema_coverage'):
+            coverage = metrics.get(coverage_key)
+            if coverage is None:
+                continue
             coverage = rebind_held_coverage_after_exact_correction(
                 held['prior_entries'], held['current_entries'], coverage,
                 source_sha256=current_receipt['sha256'])
@@ -475,10 +478,11 @@ def _propagate_held_correction_to_frames(progress, *, held, proof, proof_path,
                     held['current_entries'], coverage, excluded_ids,
                     source_sha256=current_receipt['sha256'], allow_transition=True)
                 coverage['quality_hold_binding'] = dict(quality_binding)
-            metrics['held_coverage'] = coverage
+            metrics[coverage_key] = coverage
         # A loss or accuracy summary measured the old held targets. Keep the
         # re-bound per-row observation ledger above, but require fresh scores.
         metrics.pop('held', None)
+        metrics.pop('held_ema', None)
         frame['metrics'] = metrics
 
         options = dict(frame.get('options') or {})
