@@ -443,7 +443,8 @@ def test_export_calibration_custody_requires_new_merged_weight_window():
     custody = _retire_learner_calibration(training, learners)
     assert 'quantization' not in training
     assert training['options']['quantization']['sha256'] == 'binding'
-    assert custody == {'action': 'recalibrate-merged-weights', 'learners': {'0': first, '1': second}}
+    assert custody['action']=='recalibrate-merged-weights' and custody['learners']=={'0':first,'1':second}
+    assert custody['learner_declarations']=={'0':{'declaration':None,'history':[]},'1':{'declaration':None,'history':[]}}
 
 
 def test_export_recalibrates_merged_weights_and_preserves_worker_custody(tmp_path, monkeypatch):

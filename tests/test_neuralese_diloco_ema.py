@@ -56,6 +56,7 @@ def test_coordinator_without_an_ema_is_unchanged_and_refuses_its_export(tmp_path
 def test_diloco_export_writes_the_coordinator_ema_as_a_model_only_checkpoint(tmp_path, monkeypatch):
     import json
 
+    monkeypatch.syspath_prepend(str(Path(__file__).parent / 'neuralese'))
     from test_native_serve import _tiny_source
     from test_native_state_sft import graph
     from natlang_neuralese.model.native_model import load_native_checkpoint, load_native_model

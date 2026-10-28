@@ -142,7 +142,8 @@ def test_lfm3_templates_render_to_valid_jobs_and_run_file(tmp_path):
                                'COORDINATOR_BUNDLE': '/b/c.json', 'LEARNER_BUNDLE': '/b/l.json', 'RECIPE': 'r.json',
                                'STAGE': 's', 'EVAL_ID': 'lfm3-dev-eval-test', 'ACTOR_ID': 'lfm3-actor-test',
                                'GGUF_PATH': '/work/models/m.gguf', 'GGUF_URL': 'https://x/m.gguf',
-                               'GGUF_SHA256': 'a' * 64},
+                               'GGUF_SHA256': 'a' * 64, 'EVERY':'100', 'SNAPSHOT':'snapshot-id',
+                               'RESIDENT_DIRECTORY':'/work/resident/data', 'RESIDENT_GEOMETRY':'/work/resident/geometry.json'},
               'overrides': {'diloco-sft.run.json': {'settings': {'workers': 2}},
                             'diloco-learner.job.json': {'resources': {'gpu': 1, 'memory': '80Gi'}}}}
     written = {path.name: json.loads(path.read_text()) for path in render.render(values, tmp_path)}
@@ -156,7 +157,7 @@ def test_lfm3_templates_render_to_valid_jobs_and_run_file(tmp_path):
     diloco.validate(run)
     for name, value in written.items():
         if name.endswith('.job.json'):
-            assert 'gpu' not in value['resources'] or set(value['resources']) <= {'gpu', 'memory'}
+            assert 'gpu' not in value['resources'] or (value['resources']['gpu']==1 and set(value['resources']) <= {'gpu', 'memory', 'cpu'})
     with pytest.raises(SystemExit, match='unfilled'):
         render.render({'placeholders': {}}, tmp_path / 'empty')
 
