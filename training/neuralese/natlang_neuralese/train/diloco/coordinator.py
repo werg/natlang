@@ -492,7 +492,12 @@ class Coordinator:
                 raise ValueError("Delta dtype, shape, or finiteness invalid")
             target = self._pending_dir(index) / f"{worker:03d}.safetensors"
             if target.exists():
-                if int(_metadata(target)["sequence"]) == sequence:
+                queued = _metadata(target)
+                if int(queued["sequence"]) == sequence:
+                    if (any(queued.get(key) != str(value) for key,value in
+                            (('worker',worker),('base_version',base_version),('steps',steps),('tokens',tokens)))
+                            or not torch.equal(load_tensors(target)['delta'],delta.float())):
+                        raise Conflict('Queued learner sequence was replayed with different metadata or delta')
                     return {"status": "already_queued", "version": version}
                 raise Conflict("One fragment update per learner may be in flight")
             save_tensors(
