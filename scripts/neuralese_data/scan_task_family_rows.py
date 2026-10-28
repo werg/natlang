@@ -28,7 +28,7 @@ BLOCK = 32 << 20
 CHUNK = 50
 
 
-def candidate_corpora(root: Path) -> list[dict]:
+def candidate_corpora(root: Path, data_root: Path) -> list[dict]:
     registry = json.loads((root / 'training/neuralese_corpora.json').read_text(encoding='utf-8'))
     out = []
     for corpus in registry['corpora']:
@@ -42,17 +42,18 @@ def candidate_corpora(root: Path) -> list[dict]:
             continue
         data = json.loads(manifest.read_text(encoding='utf-8'))
         base = data.get('path') or corpus.get('path') or ''
-        files = [str(root / base / item['path']) for item in data.get('files', [])
+        files = [str(data_root / base / item['path']) for item in data.get('files', [])
                  if isinstance(item, dict) and str(item.get('path', '')).endswith(('.jsonl', '.json', '.jsonl.zst'))]
         out.append({'id': corpus['id'], 'admission': json.dumps(admission)[:200], 'files': files})
     return out
 
 
 def count(path: str, patterns: tuple[bytes, ...]) -> int:
+    """Occurrences of the patterns, or -1 when the file cannot be opened (reported, never counted as clean)."""
     try:
         fd = os.open(path, os.O_RDONLY)
     except OSError:
-        return 0
+        return -1
     total, tail = 0, b''
     try:
         raw = os.fdopen(fd, 'rb', buffering=0, closefd=False)
@@ -80,12 +81,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--threads', type=int, default=6)
+    parser.add_argument('--data-root', type=Path, default=ROOT,
+                        help='checkout whose runs/ and data/ hold the registered files (default: this checkout)')
     parser.add_argument('--corpora-file', type=Path, help='scan only the corpus ids listed (one per line or a JSON list)')
     parser.add_argument('--exclude', default=None, help='regular expression of file paths to skip (for example rendered views)')
     parser.add_argument('families', nargs='+')
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
-    corpora = candidate_corpora(ROOT)
+    corpora = candidate_corpora(ROOT, args.data_root.resolve())
     if args.corpora_file:
         text = args.corpora_file.read_text(encoding='utf-8')
         wanted = set(json.loads(text)) if text.lstrip().startswith('[') else {line.strip() for line in text.splitlines() if line.strip()}
@@ -105,14 +108,18 @@ def main() -> int:
             index, lines = future.result()
             out.write(f'{index}\t' + '\x1f'.join(lines) + '\n')
             out.flush()
-    matches = sorted({m for line in progress.read_text().splitlines() for m in line.partition('\t')[2].split('\x1f') if m})
+    entries = {m for line in progress.read_text().splitlines() for m in line.partition('\t')[2].split('\x1f') if m}
+    missing = sorted(m.rpartition(':')[0] for m in entries if m.endswith(':-1'))
+    matches = sorted(m for m in entries if not m.endswith(':-1'))
+    (args.out / 'missing.txt').write_text(''.join(p + '\n' for p in missing), encoding='utf-8')
     (args.out / 'matches.txt').write_text('\n'.join(matches) + '\n', encoding='utf-8')
     hits = {m.rpartition(':')[0]: int(m.rpartition(':')[2]) for m in matches}
     grouped = [{'corpus': c['id'], 'admission': c['admission'], 'files': {f: hits[f] for f in c['files'] if f in hits}}
                for c in corpora if any(f in hits for f in c['files'])]
     (args.out / 'by-corpus.json').write_text(json.dumps({'families': args.families, 'files_scanned': len(files),
+                                                         'unreadable_files': len(missing),
                                                          'corpora': grouped}, indent=1) + '\n', encoding='utf-8')
-    print(json.dumps({'files': len(files), 'matching_files': len(matches), 'corpora': len(grouped)}))
+    print(json.dumps({'files': len(files), 'unreadable_files': len(missing), 'matching_files': len(matches), 'corpora': len(grouped)}))
     return 0
 
 
