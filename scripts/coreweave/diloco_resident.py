@@ -28,6 +28,7 @@ import cwctl
 SCHEMA = 'natlang.diloco-resident-source/1'
 REPO = '/home/werg/natlang'
 HELPER_SOURCE = Path(__file__).with_name('diloco_resident_worker.py')
+CONTROL_DIRECTORY = '/work/.coreweave/resident-control'
 
 
 def validate(record, manifest):
@@ -72,7 +73,7 @@ def ensure_helper(sandbox):
     """Install an exact immutable control helper without touching the learner's runtime package."""
     content = HELPER_SOURCE.read_bytes()
     digest = hashlib.sha256(content).hexdigest()
-    directory = '/work/.coreweave/resident-control'
+    directory = CONTROL_DIRECTORY
     target, temporary = f'{directory}/{digest}.py', f'{directory}/{digest}.{os.getpid()}.part'
     result = sandbox.exec(['mkdir', '-p', directory]).result()
     if result.returncode:

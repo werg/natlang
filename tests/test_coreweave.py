@@ -837,3 +837,27 @@ def test_diloco_resident_is_enabled_by_default_and_explicitly_opted_out():
     assert diloco.validate(run)['resident'] == {'directory': '/work/diloco-resident/resident-data',
                                                 'geometry_qualification': '/work/diloco-resident/geometry.json'}
     assert diloco.validate({**run, 'resident': 'off'})['resident'] == 'off'
+
+
+def test_diloco_resident_helper_is_staged_verified_and_immutable(tmp_path, monkeypatch):
+    import subprocess
+    resident = load('diloco_resident')
+    monkeypatch.setattr(resident, 'CONTROL_DIRECTORY', str(tmp_path / 'control'))
+    class Result:
+        def __init__(self, result=None):
+            self.returncode = result.returncode if result else 0
+            self.stderr = result.stderr if result else ''
+        def result(self): return self
+    class LocalSandbox:
+        def exec(self, args, **kwargs):
+            return Result(subprocess.run(args, capture_output=True, text=True))
+        def write_file(self, path, data):
+            Path(path).write_bytes(data)
+            return Result()
+    sandbox = LocalSandbox()
+    target = Path(resident.ensure_helper(sandbox))
+    assert target.read_bytes() == resident.HELPER_SOURCE.read_bytes()
+    assert resident.ensure_helper(sandbox) == str(target)
+    target.write_bytes(b'corrupt')
+    with pytest.raises(RuntimeError, match='verification failed'):
+        resident.ensure_helper(sandbox)
