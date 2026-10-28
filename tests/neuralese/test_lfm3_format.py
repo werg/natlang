@@ -385,3 +385,32 @@ def test_program_header_strips_the_closing_lfm3_tool_section(tokenizer):
     assert reason is None and info['retokenization_checked']
     assert stripped['text'] == ph_text
     assert stripped['token_ids'][stripped['supervised_suffix_start']:] == ph_ids[ph_start:]
+
+
+@needs_lfm3
+def test_rendered_packet_keeps_history_reasoning_in_program_header_mode(tokenizer):
+    """The shared training renderer (native_gold_packet, the serving program-header mode) keeps every earlier
+    assistant turn's reasoning on LFM3 (`keep`): the whole history of a later decision is token-exact and its
+    prompt is a prefix of the full document, so whole-trajectory targets see the reasoning that produced them."""
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    call = {'type': 'function', 'function': {'name': 'eval', 'arguments': json.dumps({'code': 'return 1;'})}}
+    messages = [
+        {'role': 'system', 'content': 'You are inside this call: f(x: number): number\n\nInstructions:\nAdd one.'},
+        {'role': 'user', 'content': 'run the program'},
+        {'role': 'assistant', 'reasoning_content': 'first reasoning R1', 'content': '', 'tool_calls': [call]},
+        {'role': 'tool', 'content': '1'},
+        {'role': 'assistant', 'reasoning_content': 'second reasoning R2', 'content': '', 'tool_calls': [call]},
+        {'role': 'tool', 'content': '1'},
+    ]
+    target = {'role': 'assistant', 'reasoning_content': 'final reasoning R3', 'content': '',
+              'tool_calls': [{'type': 'function', 'function': {'name': 'return_result',
+                                                                'arguments': json.dumps({'status': 'success',
+                                                                                         'value': 2})}}]}
+    packet = native_gold_packet(tokenizer, messages, target, EVAL_TOOLS, prompt_rendering='program-header')
+    text, ids, boundary = packet[0], packet[1], packet[2]
+    for reasoning in ('first reasoning R1', 'second reasoning R2', 'final reasoning R3'):
+        assert text.count(reasoning) == 1
+    assert '<think></think>' not in text
+    assert tokenizer.decode(ids[:boundary]).endswith('<think>')
+    assert 'final reasoning R3' in tokenizer.decode(ids[boundary:])
+    assert 'first reasoning R1' in tokenizer.decode(ids[:boundary])
