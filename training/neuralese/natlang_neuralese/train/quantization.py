@@ -384,9 +384,13 @@ class Quantization:
         PRECISION['groups'], PRECISION['point'] = self.resolve(name, mix), (None if name == 'bf16' else name)
 
     def context(self, name, mix):
-        """Context manager running forwards at point ``name`` with mix ``mix`` (``bf16``: unquantized)."""
-        from ..maple.ternary import active_precision
-        return active_precision(self.resolve(name, mix), None if name == 'bf16' else name)
+        """Context manager running forwards at point ``name`` with mix ``mix`` (``bf16``: unquantized). Inline
+        modules (the native trainer) get their pass operands resolved once on entry (``maple.ternary.
+        inline_precision``): the ramped weights of the current latents and a device λ."""
+        from ..maple.ternary import active_precision, inline_precision
+        context = active_precision(self.resolve(name, mix), None if name == 'bf16' else name)
+        modules = getattr(self, 'inline_modules', None)
+        return inline_precision(context, modules) if modules else context
 
     def gated_points(self):
         return [name for name, point in self.points.items() if point.get('gate', 'report') != 'none']
@@ -516,6 +520,7 @@ class Quantization:
             shared = {n for c in configs[group] for s in c.get('shared_global', []) if leaf in s for n in s} - {leaf}
             child.native_precision_peers = [(n, selected[f'{parent}.{n}'][2]) for n in sorted(shared)
                                             if f'{parent}.{n}' in selected]
+        self.inline_modules = [child for _, _, child in selected.values()]
         return self.installed
 
     def _install_input(self, name, key, child, configs):

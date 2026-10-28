@@ -308,10 +308,132 @@ class InputPrecision:
 # ``native_precision_input`` (an ``InputPrecision`` or None).
 
 
+class _StraightThrough(torch.autograd.Function):
+    """Forward ``value`` (a detached, already ramped operand), identity gradient to ``latent``."""
+
+    @staticmethod
+    def forward(ctx, latent, value):
+        return value
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad, None
+
+
+class inline_precision:
+    """``Quantization.context`` for inline modules: enters the point, then resolves each module's pass operands once
+    (``native_precision_active``): the ramped weight ``W + λ·(Q(W) − W)`` of the current latents (detached; computed
+    once per pass, so activation-checkpoint recomputation reuses it), the activation config, λ as a device scalar and
+    the static input scale. Inside the pass, ``linear_precision`` only applies them, so compiled layer pieces see the
+    same graph at every λ (no recompilation as the ramp moves) and fuse the activation fake quant."""
+
+    def __init__(self, context, modules):
+        self.context, self.modules = context, modules
+
+    @torch.no_grad()
+    def __enter__(self):
+        self.context.__enter__()
+        mixes = {}
+        try:
+            for module in self.modules:
+                module.__dict__["native_precision_active"] = _resolve_inline(module, mixes)
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
+        return self
+
+    def __exit__(self, *exc):
+        for module in self.modules:
+            module.__dict__.pop("native_precision_active", None)
+        return self.context.__exit__(*exc)
+
+
+def _resolve_inline(module, mixes):
+    selected = _selected(module.native_precision_key)
+    holder = module.__dict__.get("native_precision_input")
+    if selected is None or selected[0] == "bf16":
+        return None
+    fmt, mix, options = selected
+    weight = module.weight
+    peers = [(leaf, peer.weight) for leaf, peer in module.__dict__.get("native_precision_peers", ())]
+    if fmt == "nvfp4" and peers and options.get("shared_global"):
+        leaf = parse_group_key(module.native_precision_key)[2]
+        shared = next((set(s) for s in options["shared_global"] if leaf in s), set())
+        amaxes = [weight.detach().abs().amax()] + [p.detach().abs().amax() for n, p in peers if n in shared]
+        if len(amaxes) > 1:
+            options = {**options, "global_amax": torch.stack(amaxes).amax()}
+    w = weight.detach()
+    key = (float(mix), w.device)
+    if key not in mixes:
+        mixes[key] = torch.tensor(float(mix), dtype=torch.float32, device=w.device)
+    ramped = _ramped_weight(w, fmt, options, mixes[key])
+    activation, scale = options.get("activations"), None
+    if activation is not None and holder is not None:
+        if activation["format"] == "nvfp4":
+            if holder.amax is None:
+                raise RuntimeError(f"{holder.key}: static NVFP4 activations are not calibrated (Quantization.calibrate)")
+            from ..train.qformats import nvfp4_global_scale
+            scale = nvfp4_global_scale(holder.amax.to(w.device))
+    else:
+        activation = None
+    return ramped, activation, mixes[key], scale
+
+
+_RAMP = {}
+EAGER_NUMERICS = {"eager_numerics.division_rounding": True, "eager_numerics.disable_ftz": True,
+                  "emulate_precision_casts": True}
+
+
+def _ramp_rule(w, fmt, block_or_group, global_amax, mix):
+    from ..train.qformats import weight_value
+    options = ({"group": block_or_group, "global_amax": global_amax} if fmt == "nvfp4" else {"block": block_or_group})
+    wf = w.float()
+    return (wf + mix * (weight_value(w, fmt, options) - wf)).to(w.dtype)
+
+
+def _ramped_weight(w, fmt, options, mix):
+    """``W + λ·(Q(W) − W)`` once per pass: one compiled kernel set per weight shape on CUDA (the eager codec is ~60
+    launches per weight; bit-identical arithmetic), the eager rule elsewhere. ``mix`` is a device scalar."""
+    if fmt not in ("nvfp4", "fp8_block"):
+        wf = w.float()
+        return (wf + mix * (quantized_value(w, fmt, options) - wf)).to(w.dtype)
+    size = int(options.get("group", 16) if fmt == "nvfp4" else options.get("block", 128))
+    global_amax = options.get("global_amax")
+    if fmt == "nvfp4" and global_amax is None:
+        global_amax = w.abs().amax()
+    if global_amax is not None:
+        global_amax = torch.as_tensor(global_amax, device=w.device)
+    if not w.is_cuda or not PRECISION["fused"]:
+        return _ramp_rule(w, fmt, size, global_amax, mix)
+    if "kernel" not in _RAMP:
+        # Eager division rounding and no flush-to-zero: the codec's ties must round as the eager (deploy) rule does
+        # (Triton's default approximate division moved 3,672 of 15.7M NVFP4 codes of one LFM3 weight).
+        _RAMP["kernel"] = torch.compile(_ramp_rule, dynamic=False, options=EAGER_NUMERICS)
+    return _RAMP["kernel"](w, fmt, size, global_amax, mix)
+
+
+def _inline_operands(module, x, active):
+    ramped, activation, mix, scale = active
+    holder = module.__dict__.get("native_precision_input")
+    if holder is not None and holder.observe:
+        current = x.detach().abs().amax().float()
+        holder.observed = current if holder.observed is None else torch.maximum(holder.observed, current)
+    if activation is not None:
+        from ..train.qformats import activation_value
+        xf = x.detach().float()
+        value = activation_value(x.detach(), activation, scale)
+        x = _StraightThrough.apply(x, (xf + mix * (value - xf)).to(x.dtype))
+    return x, _StraightThrough.apply(module.weight, ramped)
+
+
 def linear_precision(module, x):
     """(input, weight) of a linear ``module`` under the active precision point. Without an installed key, or with
     no active point selecting it, returns ``x`` and ``module.weight`` themselves (the unquantized path, unchanged)."""
     state = module.__dict__
+    if "native_precision_active" in state:
+        active = state["native_precision_active"]
+        if active is not None:
+            return _inline_operands(module, x, active)
     holder = state.get("native_precision_input")
     if holder is not None:
         x = holder.apply(x)

@@ -1217,13 +1217,34 @@ def _cotangent_transition_capacity_request(args):
     raise ValueError('cotangent accumulator transition requires fresh exact-parent capacity qualification')
 
 
-def _setup_quantization(args, model, saved_state, checkpoint_options, saved_options=None):
+def default_lfm3_quantization(bind):
+    """The LFM3 recipe's QAT component (owner 2026-10-28; LFM3_RECIPE_20261028.md): FP8 (attention q/k/v/o and FFN,
+    128x128 blocks, dynamic per-128 activations) ramping over 0-0.15 and NVFP4 (FFN w1/w2/w3, static calibrated
+    activations, w1/w3 shared global) over 0.1-0.5 of the stage's updates, one sampled pass per update."""
+    from ..export.lfm3_quantized import LFM3_POINTS
+    from .quantization import SCHEMA
+    return ({'schema': SCHEMA, 'loss': {'mode': 'sample', 'bf16_weight': 1.0, 'seed': 0},
+             'stage_progress': {bind['stage']: [0.0, 1.0]}, 'points': json.loads(json.dumps(LFM3_POINTS))},
+            dict(bind))
+
+
+def _setup_quantization(args, model, saved_state, checkpoint_options, saved_options=None, default_bind=None):
     """Install the inline QAT points on the backbone linears and restore their calibration (or record dropping it).
-    ``saved_options``: the parent's recorded ``quantization`` declaration and ``quantization_history``."""
+    ``saved_options``: the parent's recorded ``quantization`` declaration and ``quantization_history``.
+    Omitted ``--quantization``: a parent's recorded declaration continues; otherwise ``default_bind`` (LFM3 SFT)
+    adopts the LFM3 recipe component over the remaining planned updates, recorded as a transition at that update
+    (``--quantization off`` opts out)."""
     from .quantization import parse_native_component
     parsed = parse_native_component(getattr(args, 'quantization', None))
     saved_options = saved_options or {}
     history = list(saved_options.get('quantization_history') or [])
+    previous = saved_options.get('quantization')
+    if parsed is None and previous:
+        parsed = previous['spec'], previous['bind']
+    elif parsed is None and default_bind is not None and saved_state is None:
+        parsed = default_lfm3_quantization(default_bind)
+        history.append({'event': 'default-adopted', 'at_global_step': default_bind['start'],
+                        'weights_optimizer_rng_exposure': 'preserved'})
     if parsed in (None, 'off'):
         if saved_state is not None:
             if parsed is None:
@@ -2213,9 +2234,6 @@ def _main(argv=None, *, requested_refresh):
         raise ValueError('the parent checkpoint carries a weight EMA: declare --weight-ema to continue it, '
                          'or --weight-ema off to discard it explicitly')
     saved_ema = None
-    quantization = _setup_quantization(args, model, saved_quantization, checkpoint_options,
-                                       saved_options=saved_quantization_options)
-    saved_quantization = saved_quantization_options = None
     if anneal_spec is not None:
         start = global_step
         if saved_lr_anneal is not None:
@@ -2331,6 +2349,12 @@ def _main(argv=None, *, requested_refresh):
     total_end = step + len(pending_batches)
     if step > total_end:
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
+    quantization = _setup_quantization(args, model, saved_quantization, checkpoint_options,
+        saved_options=saved_quantization_options,
+        default_bind={'stage': args.stage_id or 'native-graph-ce', 'start': global_step,
+                      'end': global_step + max(1, len(pending_batches))}
+        if config.get('source_architecture') == 'lfm3' and objective is None else None)
+    saved_quantization = saved_quantization_options = None
     resumed_step = step
     last_saved_step = step if policy.slot.is_file() and not parent_continuation else -1
     refresh_boundary = False

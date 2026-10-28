@@ -258,6 +258,15 @@ def _plain_compiled(function):
                 or not any(isinstance(value, torch.Tensor) and value.is_cuda for value in args)):
             return function(*args, **kwargs)
         if not compiled:
+            # One graph per layer kind, precision pass and per-layer module guards (QAT reads each module's pass
+            # operands): the default limit of 8 sent later layers back to eager under QAT.
+            import torch._dynamo.config as dynamo_config
+            for name in ('recompile_limit', 'cache_size_limit'):
+                if getattr(dynamo_config, name, 0) < 256:
+                    setattr(dynamo_config, name, 256)
+            # Default Inductor numerics: QAT activation codecs may round a division tie differently from the eager
+            # rule, as the deploy kernels do (approximate reciprocals, train/qformats.py); eager-numerics emulation
+            # cost 1.2x per NVFP4 pass. Weights keep exact eager numerics (maple/ternary._ramped_weight).
             compiled.append(torch.compile(function, dynamic=True))
         return compiled[0](*args, **kwargs)
     return run

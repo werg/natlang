@@ -144,3 +144,71 @@ def test_native_component_declaration_forms():
         parse_native_component({**declared, 'loss': {'mode': 'sum'}})
     with pytest.raises(ValueError, match='bind'):
         parse_native_component(lfm3_points())
+
+
+def test_lfm3_default_component_is_adopted_recorded_and_continued(base):
+    """Omitted --quantization: an LFM3 SFT run adopts the recipe's FP8/NVFP4 component over its remaining planned
+    updates (recorded at that update); a resume continues the recorded declaration; `off` opts out explicitly."""
+    from types import SimpleNamespace
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train.native_state_sft import _setup_quantization
+    args = SimpleNamespace(quantization=None, fp8_training='off')
+    bind = {'stage': 'joint_sft', 'start': 40, 'end': 140}
+    model, _, _, _ = load_native_model(base, rank=4, dtype=torch.bfloat16)
+    options = {}
+    quantization = _setup_quantization(args, model, None, options, saved_options={}, default_bind=bind)
+    declaration = options['quantization']
+    assert quantization is not None and declaration['bind'] == bind
+    assert [p['name'] for p in declaration['spec']['points']] == ['fp8', 'nvfp4']
+    assert options['quantization_history'][0] == {'event': 'default-adopted', 'at_global_step': 40,
+                                                  'weights_optimizer_rng_exposure': 'preserved'}
+    assert options['quantization_history'][1]['sha256'] == declaration['sha256']
+    assert quantization.progress(90) == 0.5
+    resumed, resumed_options = load_native_model(base, rank=4, dtype=torch.bfloat16)[0], {}
+    _setup_quantization(args, resumed, quantization.state_dict(), resumed_options,
+                        saved_options={'quantization': declaration, 'quantization_history': options['quantization_history']},
+                        default_bind={'stage': 'joint_sft', 'start': 90, 'end': 200})
+    assert resumed_options['quantization']['bind'] == bind  # the recorded ramp continues
+    assert resumed_options['quantization_history'] == options['quantization_history']
+    off = {}
+    assert _setup_quantization(SimpleNamespace(quantization='off', fp8_training='off'),
+                               load_native_model(base, rank=4, dtype=torch.bfloat16)[0], None, off,
+                               saved_options={}, default_bind=bind) is None
+    assert off['quantization'] is None
+
+
+@pytest.mark.gpu_heavy
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='the fused pass ramp runs on CUDA')
+def test_in_training_deploy_weights_equal_liquid_exports():
+    """Export parity: the λ = 1 weights an inline QAT pass trains through (the compiled per-pass ramp, with the w1/w3
+    shared NVFP4 global scale as the pass resolves it) are the BF16 values of the deployed codes: the dequantized
+    `export.lfm3_quantized` state, which reproduces Liquid's NVFP4/FP8 checkpoints bit for bit
+    (test_qat_deploy_formats)."""
+    from test_qat_deploy_formats import BASE, LIQUID, NVFP4
+    if not LIQUID:
+        pytest.skip("Liquid's LFM3 checkpoints are not in the HF cache")
+    from safetensors import safe_open
+    from natlang_neuralese.export import lfm3_quantized as X
+    from natlang_neuralese.maple.ternary import _ramped_weight, quantized_value
+    one = torch.ones((), device='cuda')
+    with safe_open(str(BASE / 'model.safetensors'), 'pt', 'cuda') as base, \
+            safe_open(str(NVFP4 / 'model.safetensors'), 'pt', 'cuda') as nv:
+        for layer in (0, 13, 23):
+            prefix = f'model.layers.{layer}.feed_forward.'
+            tensors = {prefix + f'{leaf}.weight': base.get_tensor(prefix + f'{leaf}.weight')
+                       for leaf in ('w1', 'w2', 'w3')}
+            scales = {prefix + leaf: nv.get_tensor(prefix + f'{leaf}.input_scale') for leaf in ('w1', 'w2', 'w3')}
+            for fmt in ('nvfp4', 'fp8_block'):
+                exported = X.quantize_state(fmt, tensors, ['conv'] * 24, device='cuda',
+                                            input_scales=scales if fmt == 'nvfp4' else None)
+                exported = {k: v.to('cuda') for k, v in exported.items()}
+                for leaf in ('w1', 'w2', 'w3'):
+                    weight = tensors[prefix + f'{leaf}.weight']
+                    options = {'group': 16} if fmt == 'nvfp4' else {'block': 128}
+                    if fmt == 'nvfp4' and leaf != 'w2':
+                        options['global_amax'] = torch.stack([tensors[prefix + f'{n}.weight'].abs().amax()
+                                                              for n in ('w1', 'w3')]).amax()
+                    trained = _ramped_weight(weight, fmt, options, one)
+                    deployed = X._dequantize(fmt, exported, prefix + leaf)
+                    assert torch.equal(trained, deployed.to(torch.bfloat16)), (layer, fmt, leaf)
+                    assert torch.equal(trained, quantized_value(weight, fmt, options).to(torch.bfloat16))
