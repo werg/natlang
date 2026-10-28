@@ -12,6 +12,78 @@ const [{ definitionProject }, { nativeJobRunner, expectedProvenance, defaultTool
   load('teacher/program.js'), load('teacher/collector.js'), load('native/neuralese-store.js')]);
 import { nativeStateFixture } from './fixtures/native-state.mjs';
 
+test('interrupted collector replays a sampled guided decision without another request or budget charge', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'native-decision-resume-'));
+  const remote = new MemoryNeuraleseStore();
+  const block = await remote.putNativeState(nativeStateFixture());
+  const aborted = new AbortController();
+  const calls = [], gets = [], results = [];
+  let executions = 0;
+  const server = createServer(async (request, response) => {
+    if (request.url === '/v1/neuralese/info') {
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({dialects:['native-state/fixture'], stream:false, capabilities:['chat'],
+        native_state:{enabled:true,...block.metadata,consumption_modes:['exact-native-state']}})); return;
+    }
+    if (request.url.startsWith('/v1/neuralese/native-states/')) {
+      const id = request.url.split('/').at(-1); gets.push(id);
+      const value = await remote.getNativeState(id);
+      if (!value) { response.writeHead(404); response.end(); return; }
+      response.setHeader('content-type', 'application/octet-stream'); response.end(encodeNativeState(value)); return;
+    }
+    if (request.url === '/v1/neuralese/decide') {
+      let body = ''; for await (const chunk of request) body += chunk;
+      const item = JSON.parse(body); calls.push(item);
+      const context = item.x_natlang_privileged_context;
+      const actor = {architecture:block.metadata.architecture, checkpoint_sha256:block.metadata.checkpoint_sha256,
+        tokenizer_fingerprint:block.metadata.tokenizer_fingerprint, embedding_weight_sha256:block.metadata.embedding_weight_sha256};
+      response.setHeader('content-type','application/json');
+      response.end(JSON.stringify({log_probs:[-1,-2], native_decision_capture:{schema:'natlang.native-decision-capture/1',
+        policy:actor, prompt:[{kind:'native_state',id:block.id}], continuations:[[5],[6]],
+        native_state_imports:[{id:block.id}], privileged:context}})); return;
+    }
+    response.writeHead(404); response.end();
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const project = definitionProject('decision', {returns:'string',instructions:'Choose.'});
+    const record = {version:'natlang.program/2',id:'decision-replay',kind:'lambda_source',source:'test',split:'train',
+      source_ids:['decision-replay'],source_groups:['decision-replay'],license:'test',
+      semantics:{root:project.root,files:project.files,inputs:{},expected:'yes',operation:'exact'}};
+    const config = {jobs:join(directory,'jobs'),output:join(directory,'out.jsonl'),workers:1,
+      modelId:'native-replay-fixture',endpoint:`http://127.0.0.1:${server.address().port}`,rootSeed:42,
+      systemPrompt:'Test.',contextTokens:8192,toolSurfaceSha256:await defaultToolSurfaceHash(),
+      neuraleseServer:true,temperature:1,maxModelRequests:1,transportRetries:0,requestRetries:0,retryDelayMs:0,
+      request:{x_natlang_rl_capture:true}, execution:{identity:'decision-replay/1',run:async (_record,driver) => {
+        executions++;
+        const request = {invocation_id:'decision-call',invocation_role:'child',messages:[{role:'user',content:'Choose.'}],
+          options:['"yes"','"no"'],x_natlang_privileged_context:{schema:'natlang.guidance-request/1',mode:'import',
+            state:{id:block.id},custody:{case_id:'train-world',split:'train'}}};
+        const first = await driver.decide(request);
+        results.push(structuredClone(first));
+        if (executions === 1) { aborted.abort(new Error('interrupt after saved decision')); throw aborted.signal.reason; }
+        await driver.decide({...request,invocation_id:'second-call'});
+        return {outcome:{accepted:true},trace:[]};
+      }}};
+    const item = {index:0,record};
+    const first = await collectBatch([item],config,nativeJobRunner(config),aborted.signal);
+    assert.deepEqual(first.missing,[0]);
+    const before = gets.length;
+    const second = await collectBatch([item],config,nativeJobRunner(config));
+    assert.equal(second.completed,1);
+    assert.equal(calls.length,2,'the saved decision is never sent or sampled again');
+    assert.deepEqual(results[1].native_decision_capture,results[0].native_decision_capture);
+    assert.equal(results[1].chosen,results[0].chosen);
+    assert.equal(results[1].native_decision_capture.privileged.state.id,block.id);
+    assert.equal(results[1].native_decision_capture.policy.checkpoint_sha256,block.metadata.checkpoint_sha256);
+    assert.ok(gets.slice(before).includes(block.id),'resume rehydrates the exact captured guidance');
+    const row = JSON.parse((await readFile(config.output,'utf8')).trim());
+    assert.equal(row.trajectory.length,2);
+    assert.deepEqual(row.trajectory[0].model_response.rl_sampling,results[0].native_decision_capture);
+    assert.equal(row.request_telemetry.starts.length,2,'the replay consumes no new request budget');
+  } finally { await new Promise(resolve => server.close(resolve)); await rm(directory,{recursive:true,force:true}); }
+});
+
 for (const missingOnReplay of [false, true]) test(`interrupted collector hydrates exact saved native writes before replay (missing=${missingOnReplay})`, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'native-replay-custody-'));
   const remote = new MemoryNeuraleseStore();
