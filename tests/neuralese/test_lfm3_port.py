@@ -223,3 +223,69 @@ def test_native_precision_profiles_cover_every_lfm3_norm():
     assert all(parameter.dtype == torch.float32 for _, parameter in found.values())
     configure_shared_execution(model, 'stable-v1')
     validate_shared_execution(model, {'native_shared_execution': 'stable-v1'})
+
+
+def test_native_loader_dispatches_lfm3_and_restores_saved_backbone(tmp_path):
+    from tokenizers import Tokenizer, models, pre_tokenizers
+    from transformers import PreTrainedTokenizerFast
+    from natlang_neuralese.model.lfm3_port import Lfm3PortBackbone
+    from natlang_neuralese.model.native_backbone_restore import restore_backbone
+    from natlang_neuralese.model.native_model import load_native_model, model_state
+    from natlang_neuralese.third_party import lfm3
+
+    hf = tiny_lfm3_hf()
+    hf.save_pretrained(tmp_path, safe_serialization=True)
+    tokenizer = Tokenizer(models.WordLevel({'[UNK]': 0, 'sample': 1, '<think>': 2, '</think>': 3}, unk_token='[UNK]'))
+    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+    hf_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer, unk_token='[UNK]')
+    hf_tokenizer.chat_template = "{% for message in messages %}{{ message['content'] }}\\n{% endfor %}"
+    hf_tokenizer.save_pretrained(tmp_path)
+
+    model, tokenizer, roles, config = load_native_model(tmp_path, rank=4, dtype=torch.float32,
+                                                        native_ordinary_precision='fp32-norms-v1')
+    assert isinstance(model.port, Lfm3PortBackbone)
+    assert config['architecture'] == 'lfm3' and config['vendored_modeling']['sources'] == lfm3.SOURCES
+    assert config['vendored_modeling']['revision'] == lfm3.REVISION
+    assert model.port.embedding_weight.shape[0] == 64  # the four role tokens fit the existing rows: no resize
+    assert roles.ids == (4, 5, 6, 7) and model.token_override_ids == (2, 3)
+    ids = torch.tensor([[1, 4, 9, 10, 11, 5, 12, 13, 14, 15]])
+    with torch.no_grad():
+        expected = hf(ids).logits
+        actual = model.logits(model.port.forward_ids(ids)['h_final'])
+    torch.testing.assert_close(actual, expected, atol=2e-5, rtol=2e-5)
+    state = model_state(model)['backbone_state']
+    restored, _ = restore_backbone(tmp_path, 'lfm3', state, device='cpu', dtype=torch.float32)
+    assert type(restored).__module__ == 'natlang_neuralese.third_party.lfm3.modeling_lfm3'
+    assert all(torch.equal(state[name], restored.state_dict()[name]) for name in state)
+
+
+def test_native_optimizer_updates_every_lfm3_layer_form_from_an_import_graph():
+    from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer, packed_graph_loss
+
+    torch.manual_seed(42)
+    port = tiny_lfm3(markers=False)
+    model = SharedStateModel(port, (58, 59, 60, 61), rank=4)
+    optimizer, _ = make_native_optimizer(model, lr=1e-3, weight_decay=0., in_backward=False)
+    raw = {'schema': SCHEMA, 'id': 'lfm3-optimizer', 'split': 'train', 'source_groups': ['lfm3-optimizer-contract'],
+           'tokenizer_fingerprint': '1' * 64,
+           'nodes': [{'name': 'producer', 'token_ids': [4, 5, 6, 7, 8, 9], 'producing': [[1, 5]],
+                      'target_weights': [0.] * 6},
+                     {'name': 'consumer', 'token_ids': [10, 11, 12, 13, 14, 15, 16, 17],
+                      'target_weights': [0., 1., 0., 1., 1., 1., 1., 1.],
+                      'imports': [{'at': 2, 'source': 'producer', 'start': 1, 'stop': 5}]}]}
+    example = parse_graph(raw, tokenizer_fingerprint='1' * 64)
+    parameters = dict(port.hf.named_parameters())
+    targets = {name: parameters[name] for name in (
+        'model.layers.0.conv.conv.weight', 'model.layers.1.self_attn.gate_proj.weight',
+        'model.layers.3.self_attn.o_proj.weight', 'model.layers.3.post_operator_norm.weight',
+        'model.layers.5.post_ffn_norm.weight')}
+    before = {name: value.detach().clone() for name, value in targets.items()}
+    loss, _ = packed_graph_loss(model, [example], checkpoint_layers=False)
+    loss.backward()
+    for name, value in targets.items():
+        assert value.grad is not None and value.grad.abs().sum() > 0, name
+    optimizer.step()
+    for name, value in targets.items():
+        assert not torch.equal(before[name], value), name
