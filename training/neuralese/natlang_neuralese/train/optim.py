@@ -241,11 +241,15 @@ def make_port_optimizer(policy: str, backbone, heads, lr: float, momentum: float
                          momentum=momentum)
 
 
-def stochastic_round_(target: torch.Tensor, value: torch.Tensor) -> None:
+def stochastic_round_(target: torch.Tensor, value: torch.Tensor, generator: torch.Generator | None = None) -> None:
     """Write FP32 ``value`` into BF16 ``target`` with unbiased stochastic rounding: random low mantissa bits are added
-    before truncation, so updates below BF16 resolution survive in expectation."""
+    before truncation, so updates below BF16 resolution survive in expectation. ``generator``: a dedicated RNG stream
+    (it must live on ``value``'s device); omitted, the global stream is used exactly as before."""
     bits = value.contiguous().view(torch.int32)
-    noise = torch.randint_like(bits, 0, 1 << 16)
+    if generator is None:
+        noise = torch.randint_like(bits, 0, 1 << 16)
+    else:
+        noise = torch.randint(0, 1 << 16, bits.shape, dtype=torch.int32, device=bits.device, generator=generator)
     target.copy_(((bits + noise) & -65536).view(torch.float32))
 
 

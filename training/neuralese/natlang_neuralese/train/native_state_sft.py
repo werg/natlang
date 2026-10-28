@@ -839,7 +839,8 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
         'quality_policy':'supervisor-task-and-declared-target-evidence' if options.get('ce_supervision_active')
             else 'legacy-raw-ce-optional-export'}
     diloco = options.get('_diloco_learner')
-    options = {key: value for key, value in options.items() if key != '_diloco_learner'}
+    weight_ema = options.get('_weight_ema')
+    options = {key: value for key, value in options.items() if key not in ('_diloco_learner', '_weight_ema')}
     state = {'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model), 'step': global_step,
              'training': {'schema': TRAINING_SCHEMA, 'identity': identity, 'step': step,
                           'global_step': global_step, 'epoch': epoch,
@@ -852,6 +853,8 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
                           'options': options, 'fp8': fp8_state, 'sft_progress': sft_progress or {}}}
     if diloco is not None:
         state['training']['diloco'] = diloco.state_dict()
+    if weight_ema is not None:
+        state['training']['ema'] = weight_ema.state_dict()
     state['training']['sft_progress'] = collect_sft_progress(state['training'])
     if sft_progress is not None:
         sft_progress.clear()
@@ -1105,6 +1108,15 @@ def build_parser():
                         help='Keep MuonSR history on device or page each complete matrix update from CPU storage.')
     parser.add_argument('--preference-beta',type=float)
     parser.add_argument('--preference-margin',type=float)
+    parser.add_argument('--weight-ema', default=None,
+        help='JSON {"decay":0.999,"warmup":10,"eval":"raw|ema|both"}: BF16 stochastic-rounding EMA of the trainable '
+             'weights, part of the full-state checkpoint (train/weight_ema.py); "off" discards a carried EMA')
+    parser.add_argument('--lr-anneal', default=None,
+        help='JSON {"steps":N,"shape":"linear|cosine","floor":0.0}: anneal branch off a --continue-from full state into '
+             'its own --out namespace, then stop (train/lr_anneal.py launches it)')
+    parser.add_argument('--matrix-telemetry', default=None,
+        help='JSON {"every":100,"norms":true,"attention_logits":true,"layers":null}: per-matrix norm growth and max '
+             'attention logit (train/matrix_telemetry.py)')
     return parser
 
 
@@ -1200,6 +1212,16 @@ def _main(argv=None, *, requested_refresh):
                   if args.ce_supervision_policy else None)
     ce_policy = load_policy(ce_binding)
     checkpoint_options['ce_supervision_policy_binding'] = ce_binding
+    from .weight_ema import parse_weight_ema
+    from .lr_anneal import parse_lr_anneal, LrAnneal, SCHEMA as LR_ANNEAL_SCHEMA
+    from .matrix_telemetry import parse_matrix_telemetry
+    ema_spec = parse_weight_ema(args.weight_ema)
+    anneal_spec = parse_lr_anneal(args.lr_anneal)
+    telemetry_spec = parse_matrix_telemetry(args.matrix_telemetry)
+    if anneal_spec is not None and args.continue_from is None:
+        raise ValueError('an lr anneal branch starts from a full-state parent: pass --continue-from and its own --out')
+    if ema_spec and not ema_spec.get('off') and args.diloco is not None:
+        raise ValueError('DiLoCo learners do not keep a local weight EMA; the coordinator keeps the EMA of global versions')
     if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
             args.chunk_tokens, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens, args.held_eval_tokens, args.held_eval_graphs) < 0:
         raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
@@ -1259,6 +1281,9 @@ def _main(argv=None, *, requested_refresh):
             device=args.device, dtype=getattr(torch, args.dtype),
             native_norm_execution=args.native_norm_execution or 'stable-v1',
             history_reasoning_policy=args.history_reasoning_policy)
+    saved_ema = (resume or {}).get('ema')
+    saved_lr_anneal = None if parent_continuation else ((resume or {}).get('options') or {}).get('lr_anneal')
+    saved_norm_reference = ((resume or {}).get('options') or {}).get('matrix_norm_reference')
     if args.history_reasoning_policy is not None:
         previous_history_policy = config.get('history_reasoning_policy')
         if previous_history_policy != args.history_reasoning_policy:
@@ -1993,6 +2018,51 @@ def _main(argv=None, *, requested_refresh):
     diloco = attach_learner(args, named, parent_continuation=parent_continuation,
                             saved_state=None if parent_continuation else (resume or {}).get('diloco'))
     checkpoint_options['_diloco_learner'] = diloco
+    weight_ema = ema_event = None
+    ema_eval_mode = 'raw'
+    anneal = None
+    lineage_checkpoint_sha = (sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
+                              if parent_continuation or policy.slot.exists() else None)
+    if ema_spec and not ema_spec.get('off'):
+        from .weight_ema import WeightEMA
+        ema_eval_mode = ema_spec['eval']
+        if ema_eval_mode != 'raw' and args.fp8_training != 'off':
+            raise ValueError('EMA evaluation under an FP8 training backend is not qualified: evaluate an exported '
+                             'EMA checkpoint (python -m natlang_neuralese.train.weight_ema export)')
+        ema_event = {'global_step': global_step, 'checkpoint_sha256': lineage_checkpoint_sha}
+        if saved_ema is not None:
+            weight_ema = WeightEMA.restore(named, saved_ema, decay=ema_spec['decay'], warmup=ema_spec['warmup'],
+                                           seed=ema_spec['seed'], event=ema_event)
+        else:
+            weight_ema = WeightEMA(named, decay=ema_spec['decay'], warmup=ema_spec['warmup'],
+                                   seed=ema_spec['seed'], provenance=ema_event)
+        checkpoint_options['_weight_ema'] = weight_ema
+    elif saved_ema is not None and ema_spec is None:
+        raise ValueError('the parent checkpoint carries a weight EMA: declare --weight-ema to continue it, '
+                         'or --weight-ema off to discard it explicitly')
+    saved_ema = None
+    if anneal_spec is not None:
+        start = global_step
+        if saved_lr_anneal is not None:
+            if saved_lr_anneal.get('spec') != anneal_spec:
+                raise ValueError('the rolling anneal branch was declared with a different anneal; start a new branch namespace')
+            start = int(saved_lr_anneal['start_global_step'])
+        anneal = LrAnneal(optimizer, anneal_spec, start_global_step=start)
+        checkpoint_options['lr_anneal'] = {'schema': LR_ANNEAL_SCHEMA, 'spec': anneal_spec,
+            'start_global_step': start, 'branch': True, 'release_candidate': True,
+            'parent_checkpoint_sha256': (saved_lr_anneal or {}).get('parent_checkpoint_sha256') or lineage_checkpoint_sha,
+            'adopt_as_lineage_parent': False}
+    elif saved_lr_anneal is not None:
+        raise ValueError('this rolling checkpoint is an lr anneal branch; resume it with its --lr-anneal declaration')
+    matrix_reference = saved_norm_reference
+    if telemetry_spec is not None and matrix_reference is None:
+        from .matrix_telemetry import frobenius_norms, matrix_inventory, reference_record
+        matrix_reference = reference_record(frobenius_norms(matrix_inventory(model, named)),
+            source='parent-continuation' if (parent_continuation or resume is not None) else 'base-initialization',
+            checkpoint_sha256=lineage_checkpoint_sha, global_step=global_step)
+    if matrix_reference is not None:
+        checkpoint_options['matrix_norm_reference'] = matrix_reference
+    saved_lr_anneal = saved_norm_reference = None
     saved_options = ce_prior_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
@@ -2136,6 +2206,28 @@ def _main(argv=None, *, requested_refresh):
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('pending_source_declarations'))
     eval_at = max(1, args.eval_every)
     started = time.time()
+    ema_side_metrics = {}
+    def held_evaluation(final):
+        """Held cadence on the raw weights, the EMA weights, or both (``--weight-ema`` eval mode)."""
+        def measure(coverage_key='held_coverage', result_key='held'):
+            return _evaluate_cadence(model, held, args=args, coverage=metrics.get(coverage_key),
+                previous_result=metrics.get(result_key), final=final, backend=backend,
+                objective=held_objective, stop_requested=lambda: policy.signaled)
+        if weight_ema is None or ema_eval_mode == 'raw':
+            return measure()
+        if ema_eval_mode == 'ema':
+            with weight_ema.applied():
+                result, coverage = measure()
+            result['evaluated_weights'] = 'ema'
+            result['weight_ema'] = weight_ema.summary()
+            return result, coverage
+        raw = measure()
+        with weight_ema.applied():
+            ema_result, ema_coverage = measure('held_ema_coverage', 'held_ema')
+        ema_result['evaluated_weights'] = 'ema'
+        ema_result['weight_ema'] = weight_ema.summary()
+        ema_side_metrics.update(held_ema=ema_result, held_ema_coverage=ema_coverage)
+        return raw
     def foundation_exposure():
         return communication_foundation(foundation_source, exposure_counts, epochs=args.epochs,
                                         trained_bindings=source_row_bindings)
@@ -2286,6 +2378,9 @@ def _main(argv=None, *, requested_refresh):
                     target_rows = sum(required_visits.values())
                     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
                                                       cohort_ids=urgent_cohort_ids)
+            if anneal is not None:
+                # The branch ends after its declared updates, whatever data remains in the stage.
+                total_end = min(total_end, step + anneal.remaining(global_step))
             if policy.signaled or step >= total_end:
                 break
             update_started = time.monotonic()
@@ -2321,8 +2416,25 @@ def _main(argv=None, *, requested_refresh):
             batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
             cursor = indices[-1] + 1
             exception_boundary_safe = False
-            loss, details = native_training_update(model, optimizer, batch, backend=backend,
-                checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
+            anneal_factor = anneal.scale(global_step) if anneal is not None else None
+            telemetry_due = telemetry_spec is not None and (step + 1) % telemetry_spec['every'] == 0
+            logit_probe = None
+            if telemetry_due and telemetry_spec['attention_logits']:
+                from ..model.attention_probe import AttentionLogitProbe
+                from .matrix_telemetry import choose_attention_layers
+                logit_probe = AttentionLogitProbe(choose_attention_layers(model.port, telemetry_spec['layers']))
+            try:
+                if logit_probe is not None:
+                    from ..model.attention_probe import probing
+                    with probing(logit_probe):
+                        loss, details = native_training_update(model, optimizer, batch, backend=backend,
+                            checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
+                else:
+                    loss, details = native_training_update(model, optimizer, batch, backend=backend,
+                        checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
+            finally:
+                if anneal is not None:
+                    anneal.restore()
             step += 1
             global_step += 1
             for example in batch:
@@ -2335,6 +2447,9 @@ def _main(argv=None, *, requested_refresh):
             if pass_end and all(exposure_counts[key] >= required for key, required in required_visits.items()):
                 cursor = 0
             exception_boundary_safe = True
+            if weight_ema is not None:
+                # Excluded from update credit: neither step, global_step nor exposure moves, and the global RNG is untouched.
+                weight_ema.update()
             # Telemetry is appended after the actual optimizer update. The rolling
             # checkpoint remains the authority for committed resume/exposure; logs
             # can include work subsequently replayed after an uncheckpointed crash.
@@ -2357,6 +2472,30 @@ def _main(argv=None, *, requested_refresh):
                     'completed_graphs': len((foundation_template or {}).get('rows', {})) - len(foundation_missing)}
             if mandatory_objective:progress['offline_preference']=details
             progress['learning_rates']=optimizer.native_learning_rates
+            if anneal is not None:
+                progress['lr_anneal'] = {'multiplier': anneal_factor, 'update': global_step - anneal.start,
+                                         'steps': anneal.spec['steps'], 'branch': True}
+            if weight_ema is not None:
+                progress['weight_ema'] = weight_ema.summary()
+            if telemetry_due:
+                from .matrix_telemetry import norm_report
+                telemetry_record = {'schema': 'natlang.native-matrix-telemetry/1', 'global_step': global_step, 'step': step}
+                if telemetry_spec['norms']:
+                    telemetry_record['norms'] = norm_report(model, named, checkpoint_options.get('matrix_norm_reference'),
+                                                            global_step=global_step)
+                if logit_probe is not None:
+                    telemetry_record['attention_logits'] = {
+                        'layers_observed': sorted(logit_probe.layers or ()),
+                        'layers': {str(layer): value for layer, value in logit_probe.finalize().items()}}
+                if weight_ema is not None:
+                    telemetry_record['weight_ema_distance'] = weight_ema.distance()
+                with (args.out / 'matrix-telemetry.jsonl').open('a') as telemetry_log:
+                    telemetry_log.write(json.dumps(telemetry_record, sort_keys=True) + '\n')
+                progress['matrix_telemetry'] = {
+                    'norm_by_kind': (telemetry_record.get('norms') or {}).get('by_kind'),
+                    'max_attention_logit': {layer: value.get('all') for layer, value in
+                        (telemetry_record.get('attention_logits') or {}).get('layers', {}).items()},
+                    'file': 'matrix-telemetry.jsonl'}
             progress['checkpoint_input_offload'] = {'enabled': args.checkpoint_input_offload,
                 **(model.port.activation_checkpoint.snapshot() if hasattr(model.port.activation_checkpoint, 'snapshot') else {'checkpoint_calls': 0})}
             if getattr(model, 'native_sparse_updates', None):
@@ -2409,8 +2548,7 @@ def _main(argv=None, *, requested_refresh):
             if due_eval:
                 evaluation_rng = capture_training_rng_state(args.device)
                 try:
-                    held_metrics, held_coverage = _evaluate_cadence(model, held, args=args,
-                        coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
+                    held_metrics, held_coverage = held_evaluation(step == total_end and not policy_operation)
                 except Exception as error:
                     # This boundary follows a completed optimizer update and exact
                     # exposure accounting. Never checkpoint a partial failed update.
@@ -2435,6 +2573,7 @@ def _main(argv=None, *, requested_refresh):
                         error.add_note(f'Completed-update recovery checkpoint failed: {save_error!r}')
                     raise
                 metrics = {'train_loss': train_loss, 'held': held_metrics, 'held_coverage': held_coverage,
+                           **ema_side_metrics,
                            'step': step, 'epoch': epoch, 'cursor': cursor,
                            'elapsed_seconds': time.time() - started,
                            'fp8': backend.inventory() if backend is not None else {'enabled': False},
@@ -2493,7 +2632,7 @@ def _main(argv=None, *, requested_refresh):
                                         and args.refresh_at_checkpoint and due_checkpoint):
                 refresh_boundary = True
                 break
-        if step == total_end and not policy.signaled:
+        if step == total_end and not policy.signaled and anneal is None:
             try:
                 next(schedule)
             except StopIteration:
@@ -2569,8 +2708,8 @@ def _main(argv=None, *, requested_refresh):
         last_saved_step = step
     if metadata_dirty or ((step != resumed_step or policy.signaled) and last_saved_step != step):
         if not policy.signaled and not metrics.get('held'):
-            metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
+            metrics['held'], metrics['held_coverage'] = held_evaluation(step == total_end and not policy_operation)
+            metrics.update(ema_side_metrics)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
               global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
               source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -2582,8 +2721,8 @@ def _main(argv=None, *, requested_refresh):
     completed = all(exposure_counts[key] >= visits for key, visits in required_visits.items())
     if completed and not policy_operation and not policy.signaled and _full_held_requested(args) and (metrics.get('held', {}).get('scope') != 'full'
             or metrics.get('held', {}).get('source_sha256') != held.file_sha256):
-        metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-            coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=True, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
+        metrics['held'], metrics['held_coverage'] = held_evaluation(True)
+        metrics.update(ema_side_metrics)
         metrics.pop('task_checkpoint_sha256', None)
         metrics.pop('task_native_identity', None)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,

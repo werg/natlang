@@ -15,6 +15,7 @@ import torch.nn.functional as F
 
 from .native_graph_plan import ImportSpan, Invocation, GraphPlan, compile_graph
 from .native_gated_delta import PAYLOAD_FIELDS, payload_widths
+from .attention_probe import observe_attention
 
 
 def _is_gated_delta(port, layer_index):
@@ -371,6 +372,7 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
                 kr = _rotate(port, key_slots, key_positions, index)
                 if _fp32_kv_cotangents(port, q):
                     kr, value_slots = kr.float(), value_slots.float()
+                observe_attention(index, q, kr, plan, window, layer.self_attn.scaling)
                 out = graph_attention(q, kr, value_slots, plan, window,
                                       layer.self_attn.scaling, prepared_mask=masks[window], prepared_workspace=attention_workspace,
                                       precision=getattr(port, 'native_attention_precision', 'ieee'))
