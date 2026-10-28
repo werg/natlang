@@ -15,6 +15,9 @@
 set -euo pipefail
 OUT=$1; LLAMA_TAR=$2; LLAMA_SHA=$3; FAT_ARCHS=${4:-"90a-real;100a-real;120a-real"}
 [[ "$LLAMA_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'LLAMA_GIT_SHA must be an exact full Git commit' >&2; exit 2; }
+ARCHIVE_COMMIT=$(gzip -dc "$LLAMA_TAR" | { git get-tar-commit-id; cat > /dev/null; })
+[[ "$ARCHIVE_COMMIT" = "$LLAMA_SHA" ]] || { echo 'llama source archive commit differs from its declared build commit' >&2; exit 2; }
+LLAMA_ARCHIVE_SHA=$(sha256sum "$LLAMA_TAR" | cut -d' ' -f1)
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 exec > >(tee -a "$OUT/build.log") 2>&1
 B=${NATLANG_CW_WORK:-/work}/prebuilt-build; rm -rf "$B"; mkdir -p "$B"
@@ -45,10 +48,11 @@ build_llama() {  # $1 label, $2 archs
     cp "$build/bin/$t" "$stage/bin/$t"; strip --strip-unneeded "$stage/bin/$t" || true
   done
   ldd "$stage/bin/llama-server" > "$stage/ldd-llama-server.txt" 2>&1 || true
-  python3 - "$stage/BUILD.json" "$LLAMA_SHA" "$archs" "$seconds" <<'PY'
+  python3 - "$stage/BUILD.json" "$LLAMA_SHA" "$archs" "$seconds" "$LLAMA_ARCHIVE_SHA" <<'PY'
 import json, sys
-path, sha, archs, seconds = sys.argv[1:]
+path, sha, archs, seconds, archive_sha = sys.argv[1:]
 json.dump({'source': 'github.com/werg/llama.cpp-neuralese', 'branch': 'neuralese', 'git_sha': sha,
+           'source_archive_sha256': archive_sha,
            'cuda_architectures': archs, 'build_seconds': float(seconds),
            'cmake': ['-DGGML_CUDA=ON', f'-DCMAKE_CUDA_ARCHITECTURES={archs}', '-DGGML_NATIVE=OFF', '-DGGML_CUDA_NCCL=OFF',
                      f'-DLLAMA_BUILD_COMMIT={sha}',
@@ -84,7 +88,7 @@ echo "{\"artifact\":\"$ARTIFACT\",\"build_seconds\":$(python3 -c "print(round($(
 # 3. optional fat build (sm_90/100/120), bounded so it cannot hold the sandbox for long
 if [ "${PREBUILT_FAT:-1}" = 1 ]; then
   timeout "${PREBUILT_FAT_SECONDS:-1800}" bash -c "set -euo pipefail; $(declare -f now build_llama detar); OUT='$OUT' B='$B' LLAMA_TAR='$LLAMA_TAR' \
-    LLAMA_SHA='$LLAMA_SHA' SHA12='$SHA12' build_llama fat '$FAT_ARCHS'" || echo '{"artifact":"fat","failed_or_timed_out":true}' >> "$OUT/timings.jsonl"
+    LLAMA_SHA='$LLAMA_SHA' LLAMA_ARCHIVE_SHA='$LLAMA_ARCHIVE_SHA' SHA12='$SHA12' build_llama fat '$FAT_ARCHS'" || echo '{"artifact":"fat","failed_or_timed_out":true}' >> "$OUT/timings.jsonl"
 fi
 
 python3 - "$OUT" <<'PY'
