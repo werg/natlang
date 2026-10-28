@@ -1,5 +1,17 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Program adaptation follows a trained backbone (owner, 2026-10-28 evening)
+
+Collect program-tuning executions and metalearner targets once the backbone has
+trained meaningfully and provides an applicable base. Do not spend hours fitting
+the early step-750 checkpoint while joint SFT is unfinished. Prepare the full
+tuning/metalearner machinery and existing oracle/source supply in parallel;
+select the executing base from actual later SFT/RL progress and development task
+outcomes. Preserve early diagnostic traces without calling them useful adapter
+updates or capability lift. This supersedes running the early LFM3 tuning lane
+alongside the initial backbone stage; the full intended order remains joint
+SFT, whole-graph JOLT+ RL, program adaptation, then metalearner training.
+
 ## Start promptly and revise training live (owner, 2026-10-28)
 
 Use the platform maximum sandbox lifetime for training. Do not introduce short
