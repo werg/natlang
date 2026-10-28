@@ -799,7 +799,7 @@ def _assistant_text_target(writer_record, payload, role_markers):
     return target
 
 
-def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, payload,
+def pair_derivations(writer_record, reader_record, pieces, *, tokenizer, payload,
                          occurrence, role_markers, tokenizer_sha256, source_records=None):
     """Authenticate original endpoints, then derive explicit native role spans."""
     records=[writer_record,reader_record]
@@ -927,6 +927,17 @@ def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, pay
         'target':writer_target},
         reader_record['id']:{'schema':'natlang.native-pair-static-derivation/1',
             'source_record_sha256':digest(reader_record),'context_replacements':replacements}}
+    return derivations
+
+
+def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, payload,
+                         occurrence, role_markers, tokenizer_sha256, source_records=None):
+    """Authenticate original endpoints, then derive explicit native role spans."""
+    records = [writer_record, reader_record]
+    context_records = source_records if source_records is not None else records
+    derivations = pair_derivations(writer_record, reader_record, pieces, tokenizer=tokenizer,
+        payload=payload, occurrence=occurrence, role_markers=role_markers,
+        tokenizer_sha256=tokenizer_sha256, source_records=source_records)
     rows,_,omitted,_=gold_text_rows(records,pieces,tokenizer=tokenizer,
         require_independent_splits=False,target_reasoning=True,include_token_offsets=True,
         tokenizer_sha256=tokenizer_sha256,static_derivations=derivations,writer_context_records=context_records)

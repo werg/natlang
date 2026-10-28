@@ -315,6 +315,116 @@ def test_inline_producer_span_inside_eval_code(tokenizer):
 
 
 @needs_lfm3
+def test_multiple_inline_producer_spans_preserve_complete_code(tokenizer):
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    code = 'const a = nl`first body`; const b = nl`second body`; return [a, b];'
+    target = {'role': 'assistant', 'content': '', 'tool_calls': [{'type': 'function', 'id': 'c', 'function': {
+        'name': 'eval', 'arguments': json.dumps({'code': code, 'finish': False})}}]}
+    spans = []
+    for body in ('first body', 'second body'):
+        start = code.index(body)
+        spans.append({'call_index': 0, 'argument_path': ['code'], 'body': body, 'value_type': 'inline-string',
+            'payload_sha256': hashlib.sha256(body.encode()).hexdigest(), 'source_start': start,
+            'source_end': start + len(body), 'sidecar_code_sha256': hashlib.sha256(code.encode()).hexdigest()})
+    messages = [{'role': 'user', 'content': 'run the program'}]
+    baseline = native_gold_packet(tokenizer, messages, copy.deepcopy(target), EVAL_TOOLS)[0]
+    text, ids, boundary, binding = native_gold_packet(tokenizer, messages, copy.deepcopy(target), EVAL_TOOLS,
+        producer_span=spans, return_producer_span=True)
+    assert binding['rendered_bodies'] == ['first body', 'second body']
+    assert [text[x['char_start']:x['char_stop']] for x in binding['producer_intervals']] == binding['rendered_bodies']
+    assert all(ROLE_MARKERS[0] + body + ROLE_MARKERS[1] in text for body in ('first body', 'second body'))
+    assert text.replace(ROLE_MARKERS[0], '').replace(ROLE_MARKERS[1], '') == baseline
+    assert boundary < len(ids)
+    with pytest.raises(ValueError):
+        native_gold_packet(tokenizer, messages, copy.deepcopy(target), EVAL_TOOLS,
+                           producer_span=[spans[0], spans[0]], return_producer_span=True)
+
+
+@needs_lfm3
+def test_multiple_structured_producer_spans_preserve_siblings(tokenizer):
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    value = {'a': 'first', 'b': 'second', 'untouched': 7}
+    target = {'role': 'assistant', 'content': '', 'tool_calls': [{'type': 'function', 'function': {
+        'name': 'return_result', 'arguments': json.dumps({'status': 'success', 'value': value})}}]}
+    spans = [{'call_index': 0, 'argument_path': ['value', key], 'body': body, 'value_type': 'string',
+              'payload_sha256': hashlib.sha256(body.encode()).hexdigest()} for key, body in [('a', 'first'), ('b', 'second')]]
+    messages = [{'role': 'user', 'content': 'run the program'}]
+    baseline = native_gold_packet(tokenizer, messages, copy.deepcopy(target), EVAL_TOOLS)[0]
+    text, _, _, binding = native_gold_packet(tokenizer, messages, copy.deepcopy(target), EVAL_TOOLS,
+                                      producer_span=spans, return_producer_span=True)
+    assert all(ROLE_MARKERS[0] + body + ROLE_MARKERS[1] in text for body in ('first', 'second'))
+    assert [text[x['char_start']:x['char_stop']] for x in binding['producer_intervals']] == ['first', 'second']
+    assert text.replace(ROLE_MARKERS[0], '').replace(ROLE_MARKERS[1], '') == baseline
+
+
+@needs_lfm3
+def test_multiple_producer_spans_keep_unknown_json_and_sibling_types(tokenizer):
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    value = {'a': {'count': 4}, 'b': 'second', 'untouched': False}
+    tools = copy.deepcopy(EVAL_TOOLS)
+    tools[1]['function']['parameters']['properties']['value'] = {'type': 'object'}
+    target = {'role': 'assistant', 'content': '', 'tool_calls': [{'type': 'function', 'function': {
+        'name': 'return_result', 'arguments': json.dumps({'status': 'success', 'value': value})}}]}
+    spans = [{'call_index': 0, 'argument_path': ['value', 'a'], 'body': '{"count":4}', 'value_type': 'unknown'},
+             {'call_index': 0, 'argument_path': ['value', 'b'], 'body': 'second', 'value_type': 'string'}]
+    for span in spans: span['payload_sha256'] = hashlib.sha256(span['body'].encode()).hexdigest()
+    text, _, _, binding = native_gold_packet(tokenizer, [{'role': 'user', 'content': 'run'}], target, tools,
+                                              producer_span=spans, return_producer_span=True)
+    assert len(binding['producer_intervals']) == 2
+    clean = text[text.rindex('<|im_start|>assistant\n<think>') + len('<|im_start|>assistant\n<think>'):]
+    clean = clean.replace(ROLE_MARKERS[0], '').replace(ROLE_MARKERS[1], '')
+    (call,) = build_message(clean, [], tools=tools)['tool_calls']
+    assert json.loads(call['function']['arguments']) == {'status': 'success', 'value': value}
+
+
+@needs_lfm3
+def test_joint_producer_and_repeated_context_occurrences_bind_positions(tokenizer):
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    tags = ['a' * 64, 'b' * 64]
+    wrapped = ROLE_MARKERS[2] + 'same' + ROLE_MARKERS[3]
+    tagged = [f'__natlang_context_open_{tag}__{wrapped}__natlang_context_close_{tag}__' for tag in tags]
+    messages = [{'role': 'user', 'content': 'first ' + tagged[0] + ' then ' + tagged[1]}]
+    code = 'const x = nl`output`; return x;'
+    body = 'output'; start = code.index(body)
+    target = {'role': 'assistant', 'content': '', 'tool_calls': [{'type': 'function', 'function': {
+        'name': 'eval', 'arguments': json.dumps({'code': code})}}]}
+    span = {'call_index': 0, 'argument_path': ['code'], 'body': body, 'value_type': 'inline-string',
+            'payload_sha256': hashlib.sha256(body.encode()).hexdigest(), 'source_start': start,
+            'source_end': start + len(body), 'sidecar_code_sha256': hashlib.sha256(code.encode()).hexdigest()}
+    text, ids, boundary, meta = native_gold_packet(tokenizer, messages, target, EVAL_TOOLS,
+        producer_span=[span], return_producer_span=True, context_tags=tags)
+    intervals = meta['context_intervals']
+    assert all(text[intervals[tag]['char_start']:intervals[tag]['char_stop']] == wrapped for tag in tags)
+    assert intervals[tags[0]]['char_stop'] < intervals[tags[1]]['char_start']
+    assert text[meta['producer_intervals'][0]['char_start']:meta['producer_intervals'][0]['char_stop']] == body
+    assert tokenizer.decode(ids, skip_special_tokens=False) == text and boundary < len(ids)
+
+
+@needs_lfm3
+def test_multiple_assistant_text_producer_spans_preserve_full_answer(tokenizer):
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    content = 'before first between second after'
+    target = {'role': 'assistant', 'content': content}
+    spans = []
+    for body in ('first', 'second'):
+        start = content.index(body)
+        spans.append({'value_type': 'assistant-text', 'body': body, 'source_start': start,
+            'source_end': start+len(body), 'payload_sha256': hashlib.sha256(body.encode()).hexdigest(),
+            'source_content_sha256': hashlib.sha256(content.encode()).hexdigest()})
+    messages = [{'role': 'user', 'content': 'answer'}]
+    baseline = native_gold_packet(tokenizer, messages, copy.deepcopy(target), [])[0]
+    text, _, _, binding = native_gold_packet(tokenizer, messages, target, [], producer_span=spans,
+                                              return_producer_span=True)
+    assert text.replace(ROLE_MARKERS[0], '').replace(ROLE_MARKERS[1], '') == baseline
+    assert [text[x['char_start']:x['char_stop']] for x in binding['producer_intervals']] == ['first', 'second']
+
+
+@needs_lfm3
 def test_history_reasoning_policy_is_prefix_stable(tokenizer):
     assert tokenizer.natlang_history_reasoning == {'policy': 'keep', 'backbone': 'lfm3',
                                                    'template_kwargs': {'preserve_thinking': True}, 'probe': 'keep'}

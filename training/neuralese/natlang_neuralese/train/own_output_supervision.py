@@ -378,6 +378,15 @@ def _node_suffixes(row, raw_nodes):
         if len(raw_nodes) != 1 or type(suffix) is not int or not 0 <= suffix <= len(raw_nodes[0]):
             raise ValueError('own-output ordinary row needs one node and an exact suffix inside it')
         return [suffix]
+    if row.get('source_chain'):
+        if row.get('source_pairing') or conversion.get('role_interpretation') == 'ordinary-text':
+            raise ValueError('own-output source chain cannot also declare a pair or ordinary row')
+        suffixes = row['source_chain'].get('source_suffixes')
+        if (not isinstance(suffixes, list) or len(suffixes) != len(raw_nodes)
+                or any(type(suffix) is not int or not 0 <= suffix <= len(raw)
+                       for suffix, raw in zip(suffixes, raw_nodes))):
+            raise ValueError('own-output source chain needs one exact target suffix per node')
+        return suffixes
     if row.get('source_pairing'):
         # The witnessed pair encoding's exact target suffix: its first full-weight token.
         return [next((i for i, value in enumerate(raw) if value == 1.), len(raw)) for raw in raw_nodes]

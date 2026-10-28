@@ -1485,11 +1485,11 @@ def _static_context_replacements(record, replacements, bodies, read_bodies, sour
                 # sidecars. Bind their original typed `$write` descriptor by
                 # the exact target pointer plus the full source-record digest;
                 # never infer a producer from a matching body elsewhere.
-                pointer=writer_binding.get("source_pointer")
-                if not isinstance(pointer,str) or not pointer.startswith("/target/"):
+                writer_pointer=writer_binding.get("source_pointer")
+                if not isinstance(writer_pointer,str) or not writer_pointer.startswith("/target/"):
                     raise ValueError("historical native producer lacks its exact target pointer")
                 value=writer
-                parts=[part.replace("~1","/").replace("~0","~") for part in pointer.split("/")[1:]]
+                parts=[part.replace("~1","/").replace("~0","~") for part in writer_pointer.split("/")[1:]]
                 try:
                     for part in parts:
                         if part.endswith("<json>"):
@@ -1508,7 +1508,7 @@ def _static_context_replacements(record, replacements, bodies, read_bodies, sour
                     except json.JSONDecodeError as exc:
                         raise ValueError("historical unknown producer source is not valid JSON") from exc
                 expected_occurrence="nso_"+_sha(_canonical({"record":writer.get("id"),
-                    "path":pointer,"write":writer_binding.get("write_name"),
+                    "path":writer_pointer,"write":writer_binding.get("write_name"),
                     "sha256":item["payload_sha256"]}).encode())
                 if writer_binding.get("occurrence_id")!=expected_occurrence:
                     raise ValueError("historical native producer occurrence identity differs")
@@ -1555,7 +1555,17 @@ def _static_context_replacements(record, replacements, bodies, read_bodies, sour
         if (not isinstance(replacement,dict) or set(replacement)!={"type","text"}
                 or replacement["type"]!="text" or not isinstance(replacement["text"],str)):
             raise ValueError("static context derivation replacement must be explicit text")
-        parent[key]=copy.deepcopy(replacement)
+        actual_replacement = copy.deepcopy(replacement)
+        tag = item.get('render_tag')
+        if tag is not None:
+            if (not isinstance(tag, str) or not re.fullmatch(r'[0-9a-f]{64}', tag)
+                    or not isinstance(item.get('occurrence_id'), str) or not item['occurrence_id']
+                    or tag != _sha(_canonical({'occurrence_id': item['occurrence_id'], 'pointer': pointer,
+                                               'payload_sha256': item['payload_sha256']}).encode())):
+                raise ValueError('context render tag needs an exact occurrence and digest')
+            actual_replacement['text'] = ('__natlang_context_open_' + tag + '__' + replacement['text']
+                                          + '__natlang_context_close_' + tag + '__')
+        parent[key]=actual_replacement
         evidence.append({"pointer":pointer,"source_value_sha256":item["source_value_sha256"],
             "payload_sha256":item["payload_sha256"],"derived_value_sha256":_sha(_canonical(replacement).encode()),
             **({"writer_source":copy.deepcopy(writer_binding)} if writer_binding is not None else {})})
@@ -1683,7 +1693,8 @@ def _string_typed_parameter(tools, name, parameter):
 
 
 def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="full",
-                       return_offsets=False, producer_span=None, return_producer_span=False):
+                       return_offsets=False, producer_span=None, return_producer_span=False,
+                       context_tags=()):
     """Render the exact serving prompt followed by the target assistant reply.
 
     The target boundary is the prompt's token length, not a longest-common-
@@ -1716,11 +1727,48 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
         call_format=call_format)
     if prompt.blocks:
         raise ValueError("ordinary gold text prompt contains unresolved neuralese blocks")
-    reply_target = target
-    producer_sentinel = None
-    producer_sentinel_close = None
+    # Every producer span is authenticated against the same complete source target.
+    # Process inline ranges from right to left so source offsets remain valid.
+    import copy
+    if producer_span is None:
+        producer_spans = []
+    elif isinstance(producer_span, Mapping):
+        producer_spans = [producer_span]
+    elif isinstance(producer_span, (list, tuple)) and producer_span:
+        producer_spans = list(producer_span)
+    else:
+        raise ValueError('producer spans must be a nonempty list of source bindings')
+    if any(not isinstance(span, Mapping) for span in producer_spans):
+        raise ValueError('producer spans must be source-bound mappings')
+    indexed_spans = list(enumerate(producer_spans))
+    indexed_spans.sort(key=lambda pair: (pair[1].get('call_index', -1),
+        -(pair[1].get('source_start', -1) if pair[1].get('value_type') in ('inline-string', 'assistant-text') else -1)))
+    reply_target = copy.deepcopy(target) if producer_spans else target
+    sentinels = []
+    marker_tags = {}
     rendered_producer_body = None
-    if producer_span is not None:
+    rendered_producer_bodies = [None] * len(producer_spans)
+    typing_tools = tools
+    for producer_index, producer_span in indexed_spans:
+        producer_sentinel = producer_sentinel_close = None
+        if producer_span.get('value_type') == 'assistant-text':
+            import secrets
+            body, start, stop = producer_span.get('body'), producer_span.get('source_start'), producer_span.get('source_end')
+            original, content = target.get('content'), reply_target.get('content')
+            if (not isinstance(body, str) or not isinstance(original, str) or not isinstance(content, str)
+                    or type(start) is not int or type(stop) is not int or not 0 <= start <= stop <= len(original)
+                    or original[start:stop] != body or content[start:stop] != body
+                    or producer_span.get('payload_sha256') != _sha(body.encode())
+                    or producer_span.get('source_content_sha256') != _sha(original.encode())):
+                raise ValueError('assistant text producer span differs from its exact source target')
+            producer_sentinel = '__natlang_native_producer_open_' + secrets.token_hex(24) + '__'
+            producer_sentinel_close = '__natlang_native_producer_close_' + secrets.token_hex(24) + '__'
+            reply_target['content'] = content[:start] + producer_sentinel + body + producer_sentinel_close + content[stop:]
+            open_tag, close_tag = producer_sentinel + '_ROLE_OPEN', producer_sentinel + '_ROLE_CLOSE'
+            marker_tags[open_tag], marker_tags[close_tag] = (producer_index, True), (producer_index, False)
+            sentinels.append((producer_index, producer_span, producer_sentinel, producer_sentinel_close,
+                              body, None, open_tag, close_tag))
+            continue
         # Structured `Neuralese<unknown>` results are raw JSON values. A role
         # span inserted as a quoted string would change that result's type.
         # Render a unique valid string at the exact source-bound value path,
@@ -1740,12 +1788,15 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
         try:
             body_value = (json.loads(producer_span['body']) if producer_span['value_type'] == 'unknown'
                           else producer_span['body'])
-            reply_target = copy.deepcopy(target)
+            # reply_target is shared by every producer derivation
             call = reply_target['tool_calls'][producer_span['call_index']]
             function = call.get('function', call)
             arguments = json.loads(function['arguments'])
             if producer_span['value_type'] == 'inline-string':
                 code = arguments.get('code')
+                original_call = target['tool_calls'][producer_span['call_index']]
+                original_function = original_call.get('function', original_call)
+                original_code = json.loads(original_function['arguments']).get('code')
                 start, stop = producer_span.get('source_start'), producer_span.get('source_end')
                 if (not isinstance(code, str) or type(start) is not int or type(stop) is not int
                         or start < 0 or stop < start or code[start:stop] != producer_span['body']):
@@ -1755,7 +1806,8 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
                 # derivation receipt authenticates the original whole target;
                 # this renderer rechecks its retained code bytes and exact
                 # offsets against that bound sidecar digest.
-                if hashlib.sha256(code.encode('utf-8')).hexdigest() != producer_span.get('sidecar_code_sha256'):
+                if (not isinstance(original_code, str) or
+                        hashlib.sha256(original_code.encode('utf-8')).hexdigest() != producer_span.get('sidecar_code_sha256')):
                     raise ValueError('inline producer code differs from the authenticated sidecar digest')
                 producer_sentinel = '__natlang_native_producer_open_' + secrets.token_hex(24) + '__'
                 producer_sentinel_close = '__natlang_native_producer_close_' + secrets.token_hex(24) + '__'
@@ -1780,22 +1832,25 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
             producer_sentinel = '__natlang_native_producer_' + secrets.token_hex(24) + '__'
             parent[key] = producer_sentinel
             function['arguments'] = json.dumps(arguments, ensure_ascii=False, separators=(',', ':'))
-    typing_tools = tools
-    if (producer_sentinel is not None and call_format == 'xml' and producer_span['value_type'] == 'unknown'
-            and len(producer_span['argument_path']) == 1):
-        # A whole-parameter XML write site: the sentinel string temporarily stands in for a non-string value, so
-        # the target's type check reads that one parameter as a string. The real body's type is checked below
-        # against the template's own rendering of it (`xml_value`), after the sentinel is replaced.
-        typing_tools = _string_typed_parameter(tools, function.get('name'), producer_span['argument_path'][0])
+        open_tag = producer_sentinel + '_ROLE_OPEN'
+        close_tag = producer_sentinel + '_ROLE_CLOSE'
+        marker_tags[open_tag] = (producer_index, True)
+        marker_tags[close_tag] = (producer_index, False)
+        sentinels.append((producer_index, producer_span, producer_sentinel, producer_sentinel_close,
+                          body_value, function.get('name'), open_tag, close_tag))
+        if (producer_sentinel is not None and call_format == 'xml' and producer_span['value_type'] == 'unknown'
+                and len(producer_span['argument_path']) == 1):
+            typing_tools = _string_typed_parameter(typing_tools, function.get('name'), producer_span['argument_path'][0])
     reply_runs = assistant_reply_segments(
         lambda turns, generation: apply_template(turns, tools, generation=generation),
         reply_target, specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"),
         call_format=call_format, tools=typing_tools)
     if reply_runs is None:
         raise ValueError("assistant target does not continue the serving generation prompt")
-    if producer_sentinel is not None:
+    for producer_index, producer_span, producer_sentinel, producer_sentinel_close, body_value, _, open_tag, close_tag in sentinels:
+        rendered_producer_body = None
         from ..model.shared_state import ROLE_MARKERS
-        if producer_span['value_type'] == 'inline-string':
+        if producer_span['value_type'] in ('inline-string', 'assistant-text'):
             joined = ''.join(run for run, _ in reply_runs)
             start = joined.find(producer_sentinel)
             close_start = joined.find(producer_sentinel_close)
@@ -1816,8 +1871,8 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
             body_stop = close_start
             rendered_producer_body = joined[body_start:body_stop]
             close_stop = close_start + len(producer_sentinel_close)
-            reply_runs = [*slice_runs(0, start), (ROLE_MARKERS[0], True),
-                          *slice_runs(body_start, body_stop), (ROLE_MARKERS[1], True),
+            reply_runs = [*slice_runs(0, start), (open_tag, True),
+                          *slice_runs(body_start, body_stop), (close_tag, True),
                           *slice_runs(close_stop, len(joined))]
             reply_runs = [(run, escaped) for run, escaped in reply_runs if run]
         else:
@@ -1851,9 +1906,11 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
                 marker_prefix = run[:start - 1] if producer_span['value_type'] == 'unknown' else run[:start]
                 marker_suffix = run[stop + 1:] if producer_span['value_type'] == 'unknown' else run[stop:]
                 marker_body = producer_span['body']
-            marker_parts = [(ROLE_MARKERS[0], True), (marker_body, escaped), (ROLE_MARKERS[1], True)]
+                rendered_producer_body = marker_body
+            marker_parts = [(open_tag, True), (marker_body, escaped), (close_tag, True)]
             reply_runs[index:index + 1] = [(marker_prefix, escaped), *marker_parts, (marker_suffix, escaped)]
 
+        rendered_producer_bodies[producer_index] = rendered_producer_body
     text, ids, offsets, character_cursor = [], [], [], 0
     special_spellings = set(tokenizer.all_special_tokens)
     special_spellings.update(("<|neuralese|>", "<|/neuralese|>"))
@@ -1872,16 +1929,43 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
         offsets.extend((left + character_cursor, right + character_cursor)
                        for left, right in local)
 
+    context_intervals = {tag: {} for tag in context_tags}
+    if len(context_intervals) != len(context_tags) or any(not re.fullmatch(r'[0-9a-f]{64}', tag) for tag in context_tags):
+        raise ValueError('context render tags must be unique exact digests')
+    tags = {f'__natlang_context_{side}_{tag}__': (tag, side)
+            for tag in context_tags for side in ('open', 'close')}
+    tag_pattern = re.compile('|'.join(re.escape(tag) for tag in tags)) if tags else None
     for segment in prompt.segments:
         for run, escaped in split_escaped(segment, prompt.escape_nonce):
-            text.append(run)
-            encoded = tokenizer(run, add_special_tokens=False, split_special_tokens=escaped,
-                                **offset_options)
-            ids.extend(encoded["input_ids"])
-            append_offsets(run, encoded)
-            character_cursor += len(run)
+            parts = tag_pattern.split(run) if tag_pattern else [run]
+            matches = list(tag_pattern.finditer(run)) if tag_pattern else []
+            for index, part in enumerate(parts):
+                if part:
+                    text.append(part)
+                    encoded = tokenizer(part, add_special_tokens=False, split_special_tokens=escaped,
+                                        **offset_options)
+                    ids.extend(encoded["input_ids"])
+                    append_offsets(part, encoded)
+                    character_cursor += len(part)
+                if index < len(matches):
+                    tag, side = tags[matches[index].group()]
+                    key = 'char_start' if side == 'open' else 'char_stop'
+                    if key in context_intervals[tag]:
+                        raise ValueError('context occurrence tag appeared more than once')
+                    context_intervals[tag][key] = character_cursor
+    if any(set(x) != {'char_start', 'char_stop'} or x['char_start'] > x['char_stop']
+           for x in context_intervals.values()):
+        raise ValueError('context occurrence tags did not survive rendering exactly once')
     boundary = len(ids)
+    producer_intervals = [{} for _ in producer_spans]
     for run, escaped in reply_runs:
+        marker = marker_tags.get(run)
+        if marker is not None:
+            from ..model.shared_state import ROLE_MARKERS
+            producer_index, is_open = marker
+            run = ROLE_MARKERS[0 if is_open else 1]
+            producer_intervals[producer_index]['char_start' if is_open else 'char_stop'] = (
+                character_cursor + len(run) if is_open else character_cursor)
         text.append(run)
         encoded = tokenizer(run, add_special_tokens=False, split_special_tokens=escaped,
                             **offset_options)
@@ -1893,8 +1977,13 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
     result = ("".join(text), ids, boundary)
     if return_offsets:
         result = (*result, offsets)
-    if return_producer_span:
-        return (*result, {'rendered_body': rendered_producer_body})
+    if return_producer_span or context_tags:
+        if any(set(interval) != {'char_start', 'char_stop'} or interval['char_start'] > interval['char_stop']
+               for interval in producer_intervals):
+            raise ValueError('producer marker positions do not bind every source span')
+        return (*result, {'rendered_body': rendered_producer_bodies[0] if len(rendered_producer_bodies) == 1 else None,
+                          'rendered_bodies': rendered_producer_bodies, 'producer_intervals': producer_intervals,
+                          'context_intervals': context_intervals})
     return result
 
 
@@ -2205,18 +2294,25 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             omitted.append({"id": rid, "reason": "unresolved_or_malformed_crisp_reference", "detail": str(exc)[:240]})
             continue
         try:
-            producer_span = (derivation or {}).get('producer_span')
+            producer_span = (derivation or {}).get('producer_spans', (derivation or {}).get('producer_span'))
+            if isinstance(producer_span, (list, tuple)) and not producer_span:
+                raise ValueError('multiple producer spans must be nonempty')
             capture_rendered_span = (isinstance(producer_span, Mapping)
                                      and producer_span.get('value_type') == 'inline-string')
             # XML write sites also report their rendered span (the template's text of the value); other formats
             # report none, so their rows are unchanged.
-            request_rendered_span = isinstance(producer_span, Mapping)
+            request_rendered_span = isinstance(producer_span, (Mapping, list, tuple))
+            context_tags = [item['render_tag'] for item in ((derivation or {}).get('context_replacements') or [])
+                            if item.get('render_tag') is not None]
             rendered = native_gold_packet(tokenizer, messages, target, record.get("tools") or [],
                 prompt_rendering=prompt_rendering, return_offsets=include_token_offsets,
-                producer_span=producer_span, return_producer_span=request_rendered_span)
+                producer_span=producer_span, return_producer_span=request_rendered_span, context_tags=context_tags)
             text, token_ids, suffix_start = rendered[:3]
             token_offsets = rendered[3] if include_token_offsets else None
             rendered_producer_body = rendered[-1].get('rendered_body') if request_rendered_span else None
+            rendered_producer_bodies = rendered[-1].get('rendered_bodies') if request_rendered_span else None
+            producer_intervals = rendered[-1].get('producer_intervals') if request_rendered_span else None
+            context_intervals = rendered[-1].get('context_intervals') if context_tags else None
         except (KeyError, TypeError, ValueError) as exc:
             omitted.append({"id": rid, "reason": "native_chat_render_failed", "detail": str(exc)[:240]})
             continue
@@ -2244,6 +2340,13 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             prepared[-1]["producer_rendered_body"] = rendered_producer_body
         elif isinstance(rendered_producer_body, str):
             prepared[-1]["producer_rendered_body"] = rendered_producer_body
+        if isinstance(producer_span, (list, tuple)):
+            if not isinstance(rendered_producer_bodies, list) or len(rendered_producer_bodies) != len(producer_span):
+                raise ValueError('producer rendered body inventory differs from source span bindings')
+            prepared[-1]['producer_rendered_bodies'] = rendered_producer_bodies
+            prepared[-1]['producer_rendered_intervals'] = producer_intervals
+        if context_tags:
+            prepared[-1]['context_rendered_intervals'] = context_intervals
         if include_token_offsets:
             if not isinstance(token_offsets, list) or len(token_offsets) != len(token_ids):
                 raise ValueError(f"native rendering did not return one character offset per token: {rid}")
