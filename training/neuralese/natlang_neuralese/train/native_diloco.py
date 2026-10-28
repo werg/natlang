@@ -31,7 +31,7 @@ from pathlib import Path
 import torch
 
 from ..common.hashing import sha256_file_hex_cached
-from .diloco.coordinator import global_masters, initialize_coordinator, read_manifest
+from .diloco.coordinator import global_ema, global_masters, initialize_coordinator, read_manifest
 from .diloco.protocol import TensorSurface
 from .diloco.worker import DilocoLearner, DilocoSettings
 
@@ -97,7 +97,8 @@ def init(args):
         workers=settings.workers, min_quorum=args.quorum or settings.workers, fragment_bytes=args.fragment_mib << 20,
         outer_lr=args.outer_lr, outer_momentum=args.outer_momentum, grace_seconds=args.grace_seconds,
         max_staleness=args.max_staleness,
-        seed_source={'path': str(args.parent), 'sha256': sha256_file_hex_cached(args.parent)})
+        seed_source={'path': str(args.parent), 'sha256': sha256_file_hex_cached(args.parent)},
+        ema=json.loads(args.ema) if args.ema else None)
     print(json.dumps({'run_id': manifest['run_id'], 'fragments': len(manifest['fragments']),
                       'fingerprint': manifest['fingerprint']}, sort_keys=True))
 
@@ -153,7 +154,28 @@ def export(args):
     training['sft_progress'] = collect_sft_progress(training)
     state.update(model_state(model), step=training['global_step'])
     CheckpointPolicy(args.out).save(state)
+    if args.ema_out is not None:
+        export_ema(args, manifest, model, named, first, training['global_step'])
     print(json.dumps(training['options']['diloco_export'], sort_keys=True))
+
+
+def export_ema(args, manifest, model, named, first_checkpoint, global_step):
+    """Model-only checkpoint of the coordinator's EMA of global versions (an evaluation / release artifact)."""
+    from .checkpoint_policy import CheckpointPolicy
+    from .weight_ema import EXPORT_SCHEMA as EMA_EXPORT_SCHEMA, write_weights_checkpoint
+    averages, info = global_ema(args.root)
+    with torch.no_grad():
+        for name, parameter in named:
+            if averages[name].shape != parameter.shape:
+                raise ValueError(f'global EMA parameter {name} has a different shape')
+            parameter.copy_(averages[name].to(parameter.dtype))
+    state = CheckpointPolicy.load(first_checkpoint)
+    export = {'schema': EMA_EXPORT_SCHEMA, 'source': 'diloco-coordinator-global-ema', 'run_id': manifest['run_id'],
+              'coordinator_fingerprint': manifest['fingerprint'], 'fragment_versions': info['versions'],
+              'ema': info['ema'], 'source_global_step': global_step,
+              'parent_checkpoint_sha256': manifest['identity']['parent_checkpoint_sha256'],
+              'dtype_cast': 'FP32 coordinator EMA rounded to each parameter dtype (nearest)'}
+    write_weights_checkpoint(model, state['model_config'], state['schema'], global_step, export, args.ema_out)
 
 
 def main(argv=None):
@@ -171,12 +193,15 @@ def main(argv=None):
     start.add_argument('--outer-momentum', type=float, default=0.9)
     start.add_argument('--grace-seconds', type=float, default=8.0)
     start.add_argument('--max-staleness', type=int, default=2)
+    start.add_argument('--ema', help='JSON {"decay": 0.99, "warmup": 0}: keep an EMA of the global versions')
     finish = commands.add_parser('export')
     finish.add_argument('--root', type=Path, required=True)
     finish.add_argument('--parent', type=Path, required=True)
     finish.add_argument('--base', type=Path)
     finish.add_argument('--learner-checkpoint', type=Path, action='append', required=True)
     finish.add_argument('--out', type=Path, required=True)
+    finish.add_argument('--ema-out', type=Path,
+                        help='also write a model-only checkpoint of the coordinator EMA of global versions here')
     args = parser.parse_args(argv)
     {'init': init, 'export': export}[args.command](args)
 

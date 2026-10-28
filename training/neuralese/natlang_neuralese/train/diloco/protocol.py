@@ -186,6 +186,13 @@ def merge_pseudogradients(
     )
 
 
+def ema_decay_at(decay: float, warmup: int, updates: int) -> float:
+    """EMA decay used by the update that follows ``updates`` earlier ones (``warmup`` N >= 2: min(decay, (1+n)/(N+n)))."""
+    if warmup >= 2:
+        return min(decay, (1 + updates) / (warmup + updates))
+    return decay
+
+
 def outer_nesterov(
     theta: torch.Tensor, velocity: torch.Tensor, pseudo_gradient: torch.Tensor, *, lr: float, momentum: float
 ) -> tuple[torch.Tensor, torch.Tensor]:
