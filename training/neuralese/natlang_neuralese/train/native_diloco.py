@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -71,7 +72,41 @@ def identity(parent_checkpoint, argv, settings):
             'trainer_argv': trainer_argv(argv), 'diloco': settings.identity()}
 
 
-def attach_learner(args, named, *, parent_continuation, saved_state):
+
+# These arguments name authenticated data/recipe inputs, not the distributed
+# optimizer surface or transport layout. A change still requires an actual
+# full-checkpoint source-correction proof in the native trainer.
+_SOURCE_ARGUMENTS = frozenset({'--native-graphs','--held-native-graphs','--foundation-native-graphs',
+    '--continued-native-graphs','--continued-held-native-graphs','--source-correction',
+    '--source-classification-migration','--ce-supervision-policy','--sft-packed-geometry',
+    '--memory-qualification','--recipe-binding','--pending-native-sources','--withdrawn-native-graphs'})
+
+def _fixed_trainer_argv(argv):
+    result=[];i=0
+    while i<len(argv):
+        value=argv[i];name=value.split('=',1)[0]
+        if name in _SOURCE_ARGUMENTS:
+            if '=' not in value:
+                if i+1>=len(argv) or argv[i+1].startswith('--'):raise ValueError('source identity argument lacks a value')
+                i+=1
+        else:result.append(value)
+        i+=1
+    return result
+
+def source_identity_transition(original, current, proof):
+    """Keep the original coordinator identity, recording a checked data-only transition."""
+    if (not isinstance(proof,dict) or proof.get('schema')!='natlang.diloco-source-identity-transition/1'
+            or proof.get('correction_verified') is not True or not all(isinstance(proof.get(k),str) and re.fullmatch('[0-9a-f]{64}',proof[k])
+                 for k in ('checkpoint_sha256','correction_sha256','previous_source_hash','source_hash'))
+            or proof['previous_source_hash']==proof['source_hash']):
+        raise ValueError('coordinator identity change requires a verified full-checkpoint source correction')
+    if (original.get('schema')!=current.get('schema') or original.get('parent_checkpoint_sha256')!=current.get('parent_checkpoint_sha256')
+            or original.get('diloco')!=current.get('diloco')
+            or _fixed_trainer_argv(original['trainer_argv'])!=_fixed_trainer_argv(current['trainer_argv'])):
+        raise ValueError('source correction cannot change coordinator surface, parent, transport or fixed trainer arguments')
+    return {**proof,'original_identity':original,'current_identity':current}
+
+def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, source_transition=None):
     """Join the stage's coordinator after the trainer restored its parent or own state."""
     if args.diloco is None:
         if saved_state is not None:
@@ -80,14 +115,35 @@ def attach_learner(args, named, *, parent_continuation, saved_state):
     if args.continue_from is None:
         raise ValueError('DiLoCo learners continue from the coordinator parent checkpoint (--continue-from)')
     settings = DilocoSettings.from_dict(json.loads(args.diloco))
+    current_identity=identity(args.continue_from,sys.argv[1:] if argv is None else argv,settings)
+    transition=None;transport=None;effective=current_identity
+    if source_transition is not None:
+        if parent_continuation or saved_state is None:
+            raise ValueError('source identity transition requires an earned DiLoCo checkpoint')
+        from .diloco.worker import transport_from_env
+        transport=transport_from_env(settings);manifest=transport.json('GET','/v1/manifest')
+        original=manifest['identity']
+        if current_identity!=original:
+            prior=source_transition.get('original_identity')
+            if prior is not None:
+                if prior!=original or source_transition.get('current_identity')!=current_identity:
+                    raise ValueError('carried identity transition does not match this exact coordinator and argv')
+                proof={k:v for k,v in source_transition.items() if k not in ('original_identity','current_identity','replay_verified_checkpoint_sha256')}
+                transition=source_identity_transition(original,current_identity,proof)
+            else:
+                transition=source_identity_transition(original,current_identity,source_transition)
+            effective=original
     learner = DilocoLearner(settings, surface=TensorSurface(dict(named)),
-                            identity=identity(args.continue_from, sys.argv[1:], settings), output=args.out / 'diloco')
+                            identity=effective, output=args.out / 'diloco', transport=transport)
     if parent_continuation:
         learner.start()
     elif saved_state is None:
         raise ValueError('rolling checkpoint lacks its DiLoCo learner state')
     else:
         learner.resume(saved_state)
+    if transition is not None:
+        learner.record_identity_transition(transition)
+        learner.identity_transition=transition
     return learner
 
 
