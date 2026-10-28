@@ -93,10 +93,16 @@ def load_scores(files):
             fit = sum(weight for key, weight in FIT.items() if row['scores'].get(key))
             family = row.get('curriculum_family') or row.get('family') or 'unknown'
             previous = scores.get(row['id'])
-            if previous is not None and previous[1] and not row['positive']:
-                continue  # the same decision scored in two sources: keep a positive reading only if both agree
-            scores[row['id']] = (row['category'], bool(row['positive']), fit, family)
-            census[f'{row["category"]}:{"positive" if row["positive"] else "excluded"}'] += 1
+            if previous is not None and not previous[1]:
+                continue  # the same decision scored in two sources: one non-positive reading excludes it
+            # Scores written before idiom_scores stopped filtering on row approval: the render's own admission
+            # (row approval or registry admission) decides that, so that reason alone does not exclude.
+            positive = not [r for r in row['exclusions'] if r != 'decision not approved']
+            scores[row['id']] = (row['category'], positive, fit, family)
+            census[f'{row["category"]}:{"positive" if positive else "excluded"}'] += 1
+            for reason in row['exclusions']:
+                if reason != 'decision not approved':
+                    census['exclusion:' + reason[:60]] += 1
     return scores, census
 
 

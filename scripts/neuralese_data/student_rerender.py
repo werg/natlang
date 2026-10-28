@@ -241,8 +241,9 @@ def launch(args):
                                   else 'verify-failed')
             if item['status'] == 'graphing' and unit_state(item['graph_unit']) != 'active':
                 item['status'] = 'graphed' if graphs_done(item) else 'graph-failed'
-        running = [i for i in items.values() if i['status'] in ('running', 'verifying', 'graphing')]
-        slots = args.max_running - len(running)
+        # Two pools: renders, and the lighter verify/graph steps (which must not starve new renders).
+        post = args.max_post - sum(1 for i in items.values() if i['status'] in ('verifying', 'graphing'))
+        slots = post
         for item in items.values():  # verify rendered items first (cheap, and they unblock registration)
             if slots <= 0:
                 break
@@ -265,6 +266,7 @@ def launch(args):
                 subprocess.run(cmd, check=True, capture_output=True)
                 item.update(status='graphing', graph_unit=unit, graph_log=f'{logs}/{unit}.log')
                 slots -= 1
+        slots = args.max_running - sum(1 for i in items.values() if i['status'] == 'running')
         order = sorted((i for i in items.values() if i['status'] == 'pending' and i['tier'] <= args.tier),
                        key=lambda i: (i['tier'], i['reference_tokens']))
         for item in order:
@@ -561,7 +563,8 @@ def main():
     p.add_argument('--cpus', type=int, default=4)
     p = sub.add_parser('launch')
     p.add_argument('--queue', required=True)
-    p.add_argument('--max-running', type=int, default=4)
+    p.add_argument('--max-running', type=int, default=4, help='concurrent renders')
+    p.add_argument('--max-post', type=int, default=4, help='concurrent verify/graph steps')
     p.add_argument('--cpus', type=int, default=4)
     p.add_argument('--budget-gb', type=int, default=20, help='ledger budget of the largest direct renders')
     p.add_argument('--verify-budget-gb', type=int, default=3)

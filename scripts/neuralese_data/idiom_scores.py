@@ -167,8 +167,8 @@ def finish(record: dict, s: dict, *, verified, approved, failed, held, child) ->
     reasons = []
     if verified is not True:
         reasons.append('root outcome not verified' if verified is None else 'root outcome rejected')
-    if approved is False:
-        reasons.append('decision not approved')
+    # Row-level approval is not a filter here: the renderer already admits a decision either by its own approval or
+    # by its registry entry's admission (reviewed static batches), and only rendered decisions reach the mixture.
     if failed:
         reasons.append('failed action')
     if s.get('unawaited_nl'):
@@ -178,7 +178,7 @@ def finish(record: dict, s: dict, *, verified, approved, failed, held, child) ->
     if held:
         reasons.append(held)
     family = ' '.join(str(record.get(k) or '') for k in ('family', 'curriculum_family'))
-    record.update(scores=s, child=child, verified=verified, category=category(s, child=child, family=family),
+    record.update(scores=s, child=child, verified=verified, row_approved=approved, category=category(s, child=child, family=family),
                   positive=not reasons, exclusions=reasons)
     return record
 
