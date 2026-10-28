@@ -1378,3 +1378,27 @@ def test_coordinator_identity_uses_unwrapped_restored_trainer_argv(tmp_path,monk
     assert result['state']=='coordinator-ready'
     assert captured==trainer[3:]+['--resident-data-directory','/work/diloco-resident/resident-data',
                                   '--resident-geometry-qualification','/work/diloco-resident/geometry.json']
+
+
+def test_prepare_earned_parent_quarantines_roles_idempotently(tmp_path):
+    import subprocess, sys, torch
+    root=tmp_path/'work';root.mkdir();parent=root/'parent.pt'
+    torch.save({'training':{'global_step':59,'options':{'recipe_binding':json.dumps({'sha256':'recipe'})},
+        'optimizer':{'state':1},'rng':{'state':1},'exposure_counts':{'x':1},'ema':{'updates':59}}},parent)
+    sha=hashlib.sha256(parent.read_bytes()).hexdigest()
+    receipt={'sha256':sha,'bytes':parent.stat().st_size,'global_step':59,'requested_stop':50,'full_optimizer_rng_exposure':True}
+    Path(str(parent)+'.seed.json').write_text(json.dumps(receipt))
+    pin=root/'pin.json';pin.write_text(json.dumps({'path':str(parent),**receipt}))
+    plan=root/'plan.json';plan.write_text(json.dumps({'recipe_sha256':'recipe','handoffs':[{}]}))
+    for name in ('diloco-coordinator','diloco-learner','diloco-resident'):
+        (root/name).mkdir();(root/name/'old').write_text(name)
+    env={**os.environ,'NATLANG_CW_WORK':str(root),'NATLANG_CW_INSTANCE':'new-learner-0'}
+    command=[sys.executable,str(ROOT/'scripts/coreweave/diloco_prepare_continuation.py'),str(pin),
+             hashlib.sha256(pin.read_bytes()).hexdigest(),str(plan)]
+    for _ in range(2):subprocess.run(command,env=env,check=True,capture_output=True,text=True)
+    dest=root/'diloco-resident/recipe-plan.json'
+    assert json.loads(dest.read_text())['handoffs'][-1]['seed_checkpoint']['global_step']==59
+    quarantine=root/'.coreweave/instances/new-learner-0/inherited-previous-run'
+    for name in ('diloco-coordinator','diloco-learner','diloco-resident'):
+        assert (quarantine/name/'old').read_text()==name
+    assert hashlib.sha256(parent.read_bytes()).hexdigest()==sha
