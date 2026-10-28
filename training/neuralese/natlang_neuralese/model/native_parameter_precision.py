@@ -190,4 +190,5 @@ def validate_norm_precision(model, config):
                              getattr(model, '_native_norm_parameter_dtypes', ()))
         if (profile not in ORDINARY_PRECISION_PROFILES or not dtypes
                 or any(dtype != profile_dtype(profile) for dtype in dtypes)):
-            raise ValueError('native norm storage violates declared ' + profile + ' profile')
+            raise ValueError('native norm storage violates declared '
+                             + ('BF16' if profile == BF16_SR_PROFILE else 'FP32') + ' profile')

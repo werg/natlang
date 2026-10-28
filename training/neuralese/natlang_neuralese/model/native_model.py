@@ -285,7 +285,8 @@ def restore_model_state(model, state):
             value = state['backbone_state'].get(name)
             from .native_parameter_precision import profile_dtype
             if value is None or value.dtype != profile_dtype(profile) or value.shape != parameter.shape:
-                raise ValueError(f'native checkpoint norm tensors violate declared {profile} profile '
+                storage = 'BF16' if profile_dtype(profile) == torch.bfloat16 else 'FP32'
+                raise ValueError(f'native checkpoint norm tensors violate declared {storage} profile '
                                  f'(ordinary precision): ' + name)
     model.port.hf.load_state_dict(state['backbone_state'], strict=True)
     from .shared_state import restore_channel_checkpoint
