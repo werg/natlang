@@ -19,6 +19,8 @@ class NativeGraphExample:
     plan: object
     target_weights: tuple[float, ...]
     external_states: dict = field(default_factory=dict)
+    # Finite decision readouts over sibling option nodes (data.decision_graph.GraphDecision).
+    decisions: tuple = ()
 
 
 def _graph_fields(row, *, tokenizer_fingerprint):
@@ -65,9 +67,11 @@ def _graph_fields(row, *, tokenizer_fingerprint):
 def parse_graph(row, *, tokenizer_fingerprint):
     """Validate and compile a graph for actual execution."""
     nodes, weights, external = _graph_fields(row, tokenizer_fingerprint=tokenizer_fingerprint)
+    from .decision_graph import parse_decisions
+    decisions = parse_decisions(row, nodes, weights)
     plan = compile_graph(nodes, external_sizes={name: binding['token_count'] for name, binding in external.items()})
     return NativeGraphExample(row['id'], row['split'], tuple(row['source_groups']),
-                              tokenizer_fingerprint, plan, weights, external)
+                              tokenizer_fingerprint, plan, weights, external, decisions)
 
 
 def indexed_graph_metadata(row, *, tokenizer_fingerprint):
@@ -93,11 +97,13 @@ def communication_classification(example):
     """
     internal = external = False
     names = {node.name for node in example.plan.invocations}
+    # A decision readout's option continuations are supervised over the option set (data.decision_graph).
+    decided = {option for decision in getattr(example, 'decisions', ()) for option in decision.options}
     offset = 0
     for node in example.plan.invocations:
         weights = example.target_weights[offset:offset + len(node.token_ids)]
         for edge in node.imports:
-            if edge.stop <= edge.start or not any(weight > 0 for weight in weights[edge.at + 1:]):
+            if edge.stop <= edge.start or not (node.name in decided or any(weight > 0 for weight in weights[edge.at + 1:])):
                 continue
             if edge.source in names:
                 internal = True

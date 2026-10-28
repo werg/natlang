@@ -34,7 +34,10 @@ def _native_plan(engine, items):
     return plan
 
 
-def _decision_render(engine, messages, tools, options):
+def decision_items(renderer, messages, tools, options):
+    """The decision prompt items and each option's complete closed continuation token IDs (end of message
+    included). ``renderer`` is a serving engine or ``data.decision_graph.tokenizer_renderer`` (CPU conversion):
+    one rendering for serving, training rows and recorded captures."""
     if not isinstance(options, list) or not options:
         raise RequestError("neuralese-decision", "a decision needs at least one option")
     prompt = None
@@ -43,7 +46,7 @@ def _decision_render(engine, messages, tools, options):
         if not isinstance(option, str):
             raise RequestError("neuralese-decision", "options are reply texts")
         try:
-            before, rest = target_items(engine, messages, tools, {"role": "assistant", "content": option})
+            before, rest = target_items(renderer, messages, tools, {"role": "assistant", "content": option})
         except RequestError as error:
             raise RequestError("neuralese-decision", str(error).removeprefix(f"{error.code}: ")) from error
         if prompt is not None and before != prompt:
@@ -52,6 +55,11 @@ def _decision_render(engine, messages, tools, options):
             raise RequestError("neuralese-decision", "options must be ordinary assistant text")
         prompt = before
         continuations.append([int(value) for _, value in rest])
+    return prompt, continuations
+
+
+def _decision_render(engine, messages, tools, options):
+    prompt, continuations = decision_items(engine, messages, tools, options)
     return _native_plan(engine, prompt), continuations
 
 

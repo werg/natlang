@@ -452,7 +452,9 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
     """One backbone graph forward for a minibatch; mean the original per-graph losses."""
     # A graph weighted by the declared own-output objective may have no own
     # outputs (e.g. only failed actions); it contributes nothing, not an error.
-    targeted = [any(weight>0 for weight in example.target_weights) for example in examples]
+    # Decision readouts (data.decision_graph) are own outputs supervised over their option set.
+    targeted = [any(weight>0 for weight in example.target_weights) or bool(example.decisions)
+                for example in examples]
     if objective is None and any(not has and getattr(example, 'objective_categories', None) is None
                                  for has, example in zip(targeted, examples)):
         raise ValueError('native graph has no ordinary CE targets; its declared offline/policy objective is required')
@@ -517,7 +519,7 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
     readout_index, readout_queries, readout_targets, readout_groups, readout_weights = {}, [], [], [], []
     readout_position = 0
     losses, details, detail_weights, detail_accuracies = [], [], [], []
-    category_sums = []
+    category_sums, decision_sums, decision_extra = [], [], []
     boundary_ids = set((*getattr(model, 'marker_ids', ()), *getattr(model, 'token_override_ids', ())))
     for graph_index, example in enumerate(examples):
         if not targeted[graph_index]:
@@ -541,8 +543,35 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                     if token in boundary_ids:
                         boundary_targets[str(token)]['count'] += 1
                         boundary_targets[str(token)]['weight'] += float(weight)
-        if not queries:
+        if not queries and not example.decisions:
             raise ValueError(f'native graph {examples[graph_index].id!r} has no supervised target')
+        decided = None
+        if example.decisions:
+            from .decision_supervision import decision_terms
+            decided = decision_terms(model, hidden, example, physical_rows=physical_rows[graph_index],
+                                     chunk_tokens=chunk_tokens)
+            decision_sums.append(torch.stack((decided[0].detach(), decided[2])))
+            # A decision is one invocation of mass 1; token CE keeps its per-invocation normalization, so the
+            # graph mean is (token invocations * token mean + decision CE sum) / (token invocations + decisions).
+            invocations = sum(1 for node, offset in zip(example.plan.invocations, example.plan.offsets)
+                              if any(weight > 0 for weight in example.target_weights[offset:offset+len(node.token_ids)]))
+            token_share = invocations / (invocations + decided[1])
+            decision_scale = scale / (invocations + decided[1])
+        if not queries:
+            if reuse_readouts:
+                decision_extra.append(decided[0] * decision_scale / targeted_graphs)
+            else:
+                losses.append(decided[0] * decision_scale)
+            detail_weights.append(hidden.new_zeros((), dtype=torch.float32))
+            if collect_accuracy:
+                detail_accuracies.append((decided[2] / decided[1]).detach())
+            details.append({'weight': None, 'boundary_targets': boundary_targets, 'supervised_tokens': 0,
+                            'packed_physical_tokens': plan.token_count, 'primal_projection_rows': 0,
+                            'reused_primal_projection_rows': 0,
+                            'original_physical_tokens': sum(item.plan.token_count for item in examples),
+                            'accuracy': None, 'decisions': None,
+                            **({'loss_scale': scale} if categories is not None else {})})
+            continue
         query_ids = torch.tensor(queries, device=hidden.device)
         target_ids = torch.tensor(targets, device=hidden.device)
         token_weights = torch.tensor(weights, device=hidden.device, dtype=torch.float32)
@@ -557,7 +586,11 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                     readout_groups.append([])
                 readout_groups[readout_index[key]].append(readout_position)
                 readout_position += 1
-            readout_weights.append(token_weights / denominator / targeted_graphs * scale)
+            if decided is None:
+                readout_weights.append(token_weights / denominator / targeted_graphs * scale)
+            else:
+                readout_weights.append(token_weights / denominator * token_share / targeted_graphs * scale)
+                decision_extra.append(decided[0] * decision_scale / targeted_graphs)
         elif categories is not None:
             # Own-output objective: the same weighted CE, summed per category
             # so reply/action and reasoning learning are reported separately.
@@ -576,12 +609,14 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                     correct = part_correct if correct is None else correct + part_correct
             total = parts[0][0] + parts[1][0]
             category_sums.append(torch.stack((parts[0][1], parts[0][0].detach(), parts[1][1], parts[1][0].detach())))
-            losses.append(total / denominator * scale)
+            losses.append(total / denominator * scale if decided is None else
+                          total / denominator * token_share * scale + decided[0] * decision_scale)
         else:
             total, correct = _native_ce_sum(model, hidden, query_ids, target_ids, token_weights,
                 chunk_tokens=chunk_tokens, collect_accuracy=collect_accuracy,
                 unique_queries=len(set(queries)) == len(queries))
-            losses.append(total / denominator * scale)
+            losses.append(total / denominator * scale if decided is None else
+                          total / denominator * token_share * scale + decided[0] * decision_scale)
         detail_weights.append(denominator.detach())
         if collect_accuracy:
             detail_accuracies.append((correct / denominator).detach())
@@ -593,10 +628,12 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                         'reused_primal_projection_rows': (primal_aliases.forward_input_rows-primal_aliases.forward_unique_rows)
                             if primal_aliases else 0,
                         'original_physical_tokens': sum(item.plan.token_count for item in examples),
-                        'accuracy': None,
+                        'accuracy': None, **({'decisions': None} if decided is not None else {}),
                         **({'own_output': None, 'loss_scale': scale} if categories is not None else {})})
     original_readout_rows = sum(item['supervised_tokens'] for item in details)
-    if reuse_readouts:
+    if reuse_readouts and not readout_queries:
+        losses = [torch.stack(decision_extra).sum()]
+    elif reuse_readouts:
         combined = torch.cat(readout_weights)
         order = torch.tensor([position for group in readout_groups for position in group],
                              dtype=torch.long, device=hidden.device)
@@ -611,7 +648,7 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
             unique_queries=len(set(readout_queries)) == len(readout_queries))
         # Coefficients already include each original graph's denominator and
         # its 1/batch multiplicity. Do not normalize this scalar again.
-        losses = [total]
+        losses = [total + torch.stack(decision_extra).sum()] if decision_extra else [total]
     for detail in details:
         detail['readout_forward_rows'] = len(readout_queries) if reuse_readouts else original_readout_rows
         detail['readout_original_rows'] = original_readout_rows
@@ -628,6 +665,12 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         host_metrics = [(weight, None) for weight in host_weights]
     for detail, (weight, accuracy) in zip(details, host_metrics):
         detail['weight'], detail['accuracy'] = float(weight), None if accuracy is None else float(accuracy)
+    if decision_sums:
+        values = iter(torch.stack(decision_sums).detach().cpu().tolist())
+        for detail, example in zip(details, (item for item, has in zip(examples, targeted) if has)):
+            if 'decisions' in detail:
+                loss_sum, correct = next(values)
+                detail['decisions'] = {'count': len(example.decisions), 'loss_sum': loss_sum, 'correct': correct}
     if category_sums:
         values = iter(torch.stack(category_sums).detach().cpu().tolist())
         for detail in details:
