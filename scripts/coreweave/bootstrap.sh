@@ -92,6 +92,9 @@ if code:
     path = f'{work}/.coreweave/code.tar.gz'
     if api:
         shutil.move(f'{work}/.coreweave/inbox/{code["sha256"]}', path)
+        os.makedirs(f'{work}/.coreweave/cas', exist_ok=True)
+        if not os.path.exists(f'{work}/.coreweave/cas/{code["sha256"]}'):
+            os.link(path, f'{work}/.coreweave/cas/{code["sha256"]}')  # reusable by a later bundle on this volume
     else:
         s3.download_file(bucket, code['key'], path)
     digest = hashlib.sha256(open(path, 'rb').read()).hexdigest()
