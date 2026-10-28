@@ -183,7 +183,7 @@ def initialize_coordinator(
     }
     manifest["fingerprint"] = _manifest_fingerprint(manifest)
     try:
-        save_tensors(root / "seed.safetensors", {name: p.detach().float().cpu() for name, p in masters.items()})
+        save_tensors(root / "seed.safetensors", masters, dtype=torch.float32)
         for fragment in fragments:
             values = pack_fragment(masters, fragment)
             save_tensors(
