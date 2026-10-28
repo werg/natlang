@@ -152,6 +152,7 @@ export function predicatePrompt(completedSteps: number, unchangedSteps: number):
 /** The library progress judge: a natlang lambda with read-only access to the whole trajectory. */
 export const defaultProgressJudge: ProgressJudgeFunction = async (trajectory, context) => {
   const frame = currentFrame() ?? resolveFrame();
+  // model-call-kind: runtime-authored-call (progress judge) -- training/model-call-kinds.json
   const definition = builtinDefinition('progressJudge');
   const step = `${context.stepName}${context.stepInstructions ? `: ${context.stepInstructions}` : ''}` +
     (context.predicateInstructions ? `\nStop when: ${context.predicateInstructions}` : '');

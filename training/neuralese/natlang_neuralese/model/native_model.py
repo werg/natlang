@@ -365,18 +365,38 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     from .shared_execution import NATIVE_SHARED_EXECUTIONS
     if 'native_shared_execution'in saved and saved['native_shared_execution']not in NATIVE_SHARED_EXECUTIONS:
         raise ValueError('native checkpoint has an invalid shared execution profile')
-    requested_dtype = dtype or {'torch.bfloat16': torch.bfloat16, 'torch.float32': torch.float32,
-                                'torch.float16': torch.float16}[saved['dtype']]
+    dtypes = {'torch.bfloat16': torch.bfloat16, 'torch.float32': torch.float32, 'torch.float16': torch.float16}
+    requested_dtype = dtype or dtypes[saved['dtype']]
+    token_override_dtype = dtypes[saved.get('token_override_dtype', saved['dtype'])]
+    sparse_row_dtype = dtypes[saved.get('sparse_row_dtype', saved['dtype'])]
+    ordinary_precision = saved.get('native_ordinary_precision')
+    if saved['architecture'] == 'lfm3' and requested_dtype != dtypes[saved['dtype']]:
+        # LFM3 keeps every parameter in one dtype (BF16 under bf16-stochastic-rounding-v1, FP32 only as a
+        # diagnostic), so a read at another dtype is a cast of the whole model, its learned rows included. It is a
+        # weights-only read (export, inference): an optimizer state belongs to the precision it was saved under.
+        if not allow_weights_only:
+            raise ValueError('an LFM3 checkpoint restores with its optimizer only at its saved dtype ' + saved['dtype'])
+        token_override_dtype = sparse_row_dtype = requested_dtype
+        ordinary_precision = None  # load_native_model selects the profile of the requested dtype
+        interface = dict(state['interface_state'])
+        for name in ('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows'):
+            if isinstance(interface.get(name), torch.Tensor):
+                interface[name] = interface[name].to(requested_dtype)
+        interface['adapter'] = {name: value.to(requested_dtype) for name, value in interface['adapter'].items()}
+        for name in ('sparse_row_dtype', 'token_override_dtype', 'adapter_dtype'):
+            if name in interface:
+                interface[name] = str(requested_dtype)
+        backbone = {name: value.to(requested_dtype) if value.is_floating_point() else value
+                    for name, value in state['backbone_state'].items()}
+        state = {**state, 'interface_state': interface, 'backbone_state': backbone}
     model, tokenizer, roles, config = load_native_model(base or saved['base'], rank=saved['rank'],
         device=device, dtype=requested_dtype, inventory=saved['base_inventory'],
         native_linear_precision=saved.get('native_linear_precision', 'ieee'),
         native_attention_precision=saved.get('native_attention_precision'),
         token_override_ids=saved.get('token_override_ids', ()),
-        token_override_dtype={'torch.float32':torch.float32,'torch.bfloat16':torch.bfloat16,
-            'torch.float16':torch.float16}[saved.get('token_override_dtype', saved['dtype'])],
-        sparse_row_dtype={'torch.float32':torch.float32,'torch.bfloat16':torch.bfloat16,
-            'torch.float16':torch.float16}[saved.get('sparse_row_dtype', saved['dtype'])],
-        native_ordinary_precision=saved.get('native_ordinary_precision'),
+        token_override_dtype=token_override_dtype,
+        sparse_row_dtype=sparse_row_dtype,
+        native_ordinary_precision=ordinary_precision,
         native_norm_execution=saved.get('native_norm_execution'),
         native_shared_execution=saved.get('native_shared_execution'),
         history_reasoning_policy=saved.get('history_reasoning_policy'),
@@ -401,7 +421,8 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     training = state.get('training') or state.get('shared_training') or {}
     options = training.get('options') or {}
     accumulator_backend = options.get('cotangent_accumulator_backend', 'cpu_file')
-    if accumulator_backend not in ('cpu_file', 'device_fp32'):
+    from .native_weight_carrier import COTANGENT_BACKENDS
+    if accumulator_backend not in COTANGENT_BACKENDS:
         raise ValueError('native checkpoint has an invalid cotangent accumulator backend')
     model.native_cotangent_accumulator_backend = accumulator_backend
     _bind_backbone_revision(model, sha256_file_hex_cached(path))

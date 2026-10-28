@@ -390,6 +390,7 @@ export class NatlangTask {
       // No scoring: run `holds` as an ordinary natural-language call on that model (needs the calling frame).
       return frame ? callJudge(async (value, predicate, signal) => {
         const { invokeDefinition } = await import('./kernel.js');
+        // model-call-kind: runtime-authored-call (refinement:holds without a scoring driver) -- training/model-call-kinds.json
         const result = await invokeDefinition({ ...frame, ...(signal ? { signal } : {}) }, { id: 'refinement:holds', name: 'holds',
           body: JUDGE_CALL_INSTRUCTIONS, params: [{ name: 'value', type: 'unknown' }, { name: 'predicate', type: 'string' }], returns: 'boolean',
           types: {}, codebase: {}, subtype: 'function', ...(name ? { model: name } : {}) }, [value, predicate], { manifest: { internal: true } });

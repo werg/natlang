@@ -768,6 +768,7 @@ async function askCommand(parsed: Parsed, instruction: string): Promise<number> 
       lines: parsed.options.has('--lines'), jsonl: parsed.options.has('--jsonl'),
       filter: parsed.options.has('--filter'), files: option(parsed, '--files'),
       returns: option(parsed, '--returns'), jobs,
+    // model-call-kind: runtime-authored-call (natlang ask) -- training/model-call-kinds.json
     }, (instructions, returns, input) => invokeDefinition(resolveFrame(), {
       id: `natlang:ask:${instructions}`, name: 'ask', body: `${instructions}\n`,
       params: [{ name: inferValueType(input) === 'Folder' ? 'project' : 'input', type: inferValueType(input) }], returns,

@@ -330,8 +330,14 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
         from contextlib import nullcontext
         context = nullcontext()
     try:
-        from ..model.native_weight_carrier import ParameterCotangentScope
-        with ParameterCotangentScope.for_model(model, mode='vjp') as cotangents, context:
+        from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
+        if getattr(model, 'native_cotangent_accumulator_backend', 'cpu_file') == 'plain':
+            scope = contextlib.ExitStack()
+            scope.enter_context(plain_training_arithmetic())
+            scope.finish = lambda: None
+        else:
+            scope = ParameterCotangentScope.for_model(model, mode='vjp')
+        with scope as cotangents, context:
             if backend is not None:
                 with backend.autocast():
                     loss, details = packed_graph_loss(model, batch,
@@ -1077,12 +1083,15 @@ def build_parser():
         help='store nonreentrant layer-checkpoint inputs on host RAM or explicit file storage; omission inherits the saved mode')
     parser.add_argument('--checkpoint-input-offload-directory', default=None,
         help='private file-backed checkpoint inputs in this directory; omission inherits, empty string selects CPU')
-    parser.add_argument('--cotangent-accumulator-backend', choices=('cpu_file', 'device_fp32'),
-        default=None, help='explicit FP32 parameter-cotangent storage; default preserves historical cpu_file behavior')
+    parser.add_argument('--cotangent-accumulator-backend', choices=('plain', 'device_fp32', 'cpu_file'),
+        default=None, help='parameter-cotangent handling: plain autograd with vendor GEMMs (default; a resume '
+        'records the transition), or the exact FP32 carrier stored on the device or in CPU files (opt-out)')
     parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--checkpoint-direct-token-limit', type=int, default=0,
                         help='Skip layer recomputation for compiled physical graphs at or below this size; zero retains uniform checkpointing')
-    parser.add_argument('--chunk-tokens', type=int, default=128)
+    parser.add_argument('--chunk-tokens', type=int, default=None,
+                        help='readout rows per checkpointed logits chunk (exact). Omitted: a resume keeps its saved '
+                             'value (128 before it was recorded), a new run uses 1024 (1.09x per LFM3 update over 128)')
     parser.add_argument('--ffn-chunk-tokens', type=int, default=None,
         help='Existing token-local FFN workspace bound; omitted inherits saved value, zero disables chunking')
     parser.add_argument('--fp8-training', choices=('off', 'te-fp8', 'triton-experts'), default='off')
@@ -1119,6 +1128,9 @@ def build_parser():
     parser.add_argument('--lr-anneal', default=None,
         help='JSON {"steps":N,"shape":"linear|cosine","floor":0.0}: anneal branch off a --continue-from full state into '
              'its own --out namespace, then stop (train/lr_anneal.py launches it)')
+    parser.add_argument('--lr-warmup', type=int, default=0,
+        help='linear learning-rate warmup over the lineage\'s first N optimizer updates (by global step), then the '
+             'declared constant rate (train/lr_anneal.LrWarmup); 0 = none')
     parser.add_argument('--matrix-telemetry', default=None,
         help='JSON {"every":100,"norms":true,"attention_logits":true,"layers":null}: per-matrix norm growth and max '
              'attention logit (train/matrix_telemetry.py)')
@@ -1228,7 +1240,7 @@ def _main(argv=None, *, requested_refresh):
     if ema_spec and not ema_spec.get('off') and args.diloco is not None:
         raise ValueError('DiLoCo learners do not keep a local weight EMA; the coordinator keeps the EMA of global versions')
     if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
-            args.chunk_tokens, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens, args.held_eval_tokens, args.held_eval_graphs) < 0:
+            args.chunk_tokens or 1, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens, args.held_eval_tokens, args.held_eval_graphs) < 0:
         raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
     if not math.isfinite(args.checkpoint_seconds) or args.checkpoint_seconds < 0:
         raise ValueError('checkpoint-seconds must be finite and nonnegative')
@@ -1344,6 +1356,10 @@ def _main(argv=None, *, requested_refresh):
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
     saved_options = saved_training.get('options') or {}
+    if args.chunk_tokens is None:
+        # Readout chunking is exact but part of a resident geometry identity: a resume keeps its geometry.
+        args.chunk_tokens = saved_options.get('chunk_tokens', 128) if saved_training else 1024
+    checkpoint_options['chunk_tokens'] = args.chunk_tokens
     from ..model.native_precision import base_location_transition
     base_history = list(saved_options.get('base_relocation_history') or [])
     previous_config = (saved_training.get('identity') or {}).get('config')
@@ -1367,13 +1383,20 @@ def _main(argv=None, *, requested_refresh):
     checkpoint_options['native_snapshot_ancestors'] = snapshot_ancestors
     checkpoint_options['foundation_declaration_recovery_history'] = list(
         saved_options.get('foundation_declaration_recovery_history') or [])
+    from ..model.native_weight_carrier import COTANGENT_BACKENDS, DEFAULT_COTANGENT_BACKEND
     previous_cotangent_backend = saved_options.get('cotangent_accumulator_backend', 'cpu_file')
-    args.cotangent_accumulator_backend = (previous_cotangent_backend
-        if args.cotangent_accumulator_backend is None else args.cotangent_accumulator_backend)
-    if args.cotangent_accumulator_backend not in ('cpu_file', 'device_fp32'):
+    # Improvements ship on by default (AGENTS.md): a resume adopts plain arithmetic through a recorded transition.
+    # The backend is part of a resident geometry identity, which changes only through a drained runtime handoff: a
+    # resident-bound resume keeps its saved backend until that handoff passes the new one explicitly.
+    if args.cotangent_accumulator_backend is None:
+        args.cotangent_accumulator_backend = (previous_cotangent_backend
+            if saved_training and args.resident_data_directory is not None else DEFAULT_COTANGENT_BACKEND)
+    if args.cotangent_accumulator_backend not in COTANGENT_BACKENDS:
         raise ValueError('native checkpoint declares an unknown cotangent accumulator backend')
     if saved_training and args.cotangent_accumulator_backend != previous_cotangent_backend:
-        transition_capacity_request=_cotangent_transition_capacity_request(args)
+        # Plain arithmetic holds no FP32 accumulators: it needs no capacity beyond the qualified carrier path.
+        transition_capacity_request=(None if args.cotangent_accumulator_backend == 'plain'
+                                     else _cotangent_transition_capacity_request(args))
         history = list(saved_options.get('cotangent_accumulator_history') or [])
         history.append({'from': previous_cotangent_backend,
             'to': args.cotangent_accumulator_backend,
@@ -2059,6 +2082,11 @@ def _main(argv=None, *, requested_refresh):
             'adopt_as_lineage_parent': False}
     elif saved_lr_anneal is not None:
         raise ValueError('this rolling checkpoint is an lr anneal branch; resume it with its --lr-anneal declaration')
+    warmup = None
+    if args.lr_warmup:
+        from .lr_anneal import LrWarmup
+        warmup = LrWarmup(optimizer, args.lr_warmup)
+        checkpoint_options['lr_warmup'] = {'updates': args.lr_warmup}
     matrix_reference = saved_norm_reference
     if telemetry_spec is not None and matrix_reference is None:
         from .matrix_telemetry import frobenius_norms, matrix_inventory, reference_record
@@ -2422,6 +2450,7 @@ def _main(argv=None, *, requested_refresh):
             cursor = indices[-1] + 1
             exception_boundary_safe = False
             anneal_factor = anneal.scale(global_step) if anneal is not None else None
+            warmup_factor = warmup.scale(global_step) if warmup is not None else None
             telemetry_due = telemetry_spec is not None and (step + 1) % telemetry_spec['every'] == 0
             logit_probe = None
             if telemetry_due and telemetry_spec['attention_logits']:
@@ -2438,6 +2467,8 @@ def _main(argv=None, *, requested_refresh):
                     loss, details = native_training_update(model, optimizer, batch, backend=backend,
                         checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
             finally:
+                if warmup is not None:
+                    warmup.restore()
                 if anneal is not None:
                     anneal.restore()
             step += 1
@@ -2480,6 +2511,8 @@ def _main(argv=None, *, requested_refresh):
             if anneal is not None:
                 progress['lr_anneal'] = {'multiplier': anneal_factor, 'update': global_step - anneal.start,
                                          'steps': anneal.spec['steps'], 'branch': True}
+            if warmup is not None:
+                progress['lr_warmup'] = {'multiplier': warmup_factor, 'updates': warmup.updates}
             if weight_ema is not None:
                 progress['weight_ema'] = weight_ema.summary()
             if telemetry_due:

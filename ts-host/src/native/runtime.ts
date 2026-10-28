@@ -1428,6 +1428,7 @@ export class NativeSession {
         const value = await runFolderBash(folder, String(args.command ?? ''),
           { network: this.runtime.environment.scopeCapabilities?.allowNetwork !== false,
             python: await this.pythonHost(),
+            // model-call-kind: runtime-authored-call (bash ask) -- training/model-call-kinds.json
             ask: (instructions, returns, input) => invokeDefinition(this.runtime.frame!, {
               id: `bash:ask:${instructions}`, name: 'natlang-ask', body: instructions,
               params: [{ name: 'input', type: inferValueType(input) }], returns,
@@ -1476,6 +1477,7 @@ export class NativeSession {
         if (!instructions.trim()) throw new Reject([{ path: 'instructions', code: 'bad-action', expected: 'nonempty child instructions' }]);
         const handle = folder.dir(path), transaction = await handle.beginTransaction(true);
         const { invokeDefinition } = await import('../runtime/kernel.js');
+        // model-call-kind: runtime-authored-call (delegate tool) -- training/model-call-kinds.json
         const value = await invokeDefinition(this.runtime.frame!, {
           id: `delegate:${this.runtime.options.runId}:${this.lam.steps}`, name: 'delegate',
           body: instructions, params: [], returns: String(args.returns ?? 'unknown'),
@@ -1508,6 +1510,7 @@ export class NativeSession {
     const { invokeDefinition } = await import('../runtime/kernel.js');
     const { iterateOn } = await import('../runtime/iterate.js');
     return {
+      // model-call-kind: runtime-authored-call (nl@python) -- training/model-call-kinds.json
       nl: (instructions, returns) => (...inputs) => invokeDefinition(this.runtime.frame!, {
         id: `python:${instructions}`, name: 'nl@python', body: instructions, params: [], openParameters: true,
         returns, types: this.lam.typesSrc, codebase: this.lam.codebase, subtype: 'function',

@@ -385,7 +385,8 @@ def capacity_identity(config,args,backend):
     accumulator_backend = getattr(args, 'cotangent_accumulator_backend', None)
     if accumulator_backend is None:
         accumulator_backend = getattr(args, 'native_cotangent_accumulator_backend', 'cpu_file')
-    if accumulator_backend not in ('cpu_file', 'device_fp32'):
+    from ..model.native_weight_carrier import COTANGENT_BACKENDS
+    if accumulator_backend not in COTANGENT_BACKENDS:
         raise ValueError('capacity identity needs a declared cotangent accumulator backend')
     objective={}
     if getattr(args,'objective_spec',None):

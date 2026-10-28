@@ -109,6 +109,7 @@ def initialize_coordinator(
     token_budget: int = 0,
     seed_source: Mapping | None = None,
     ema: Mapping | None = None,
+    outer_schedule: list | None = None,
 ) -> dict:
     """Create a new run from the seed masters; never overwrite an existing trajectory.
 
@@ -120,8 +121,15 @@ def initialize_coordinator(
     version itself (``decay_v``: the warmup schedule at v earlier merges), starting from the seed. The coordinator
     holds its masters and outer momentum in FP32, so its EMA is FP32 too; ``native_diloco export --ema-out`` casts
     it to each parameter's dtype. Absent, manifests and fragments are exactly as before.
+    ``outer_schedule``: ``[{"from_round": 0, "lr": 1.0, "momentum": 0.0}, {"from_round": 10, "lr": 0.7,
+    "momentum": 0.9}]`` replaces the single ``outer_lr``/``outer_momentum`` (``outer_entry``): a fragment's merge number
+    v (its version before the merge) uses the last entry with ``from_round <= v``, and the outer momentum buffer
+    restarts at zero when the entry changes. It is part of the manifest and so of the run fingerprint.
     """
     root = Path(root)
+    if outer_schedule is not None:
+        outer_schedule = validate_outer_schedule(outer_schedule)
+        outer_lr, outer_momentum = outer_schedule[0]["lr"], outer_schedule[0]["momentum"]
     if ema is not None:
         decay, warmup = ema.get("decay"), ema.get("warmup", 0)
         if (
@@ -168,6 +176,7 @@ def initialize_coordinator(
         "fragments": [item.to_dict() for item in fragments],
         "seed_source": dict(seed_source or {}),
         **({"ema": ema} if ema is not None else {}),
+        **({"outer_schedule": outer_schedule} if outer_schedule is not None else {}),
     }
     manifest["fingerprint"] = _manifest_fingerprint(manifest)
     try:
@@ -189,6 +198,32 @@ def initialize_coordinator(
         (root / "manifest.json").unlink(missing_ok=True)
         raise
     return manifest
+
+
+def validate_outer_schedule(schedule) -> list[dict]:
+    """A nonempty list of {from_round, lr, momentum}, starting at round 0 with strictly increasing rounds."""
+    if not isinstance(schedule, list) or not schedule:
+        raise ValueError("outer schedule is a nonempty list of {from_round, lr, momentum}")
+    out = []
+    for entry in schedule:
+        if not isinstance(entry, dict) or set(entry) != {"from_round", "lr", "momentum"}:
+            raise ValueError("outer schedule entries are exactly {from_round, lr, momentum}")
+        start, lr, momentum = entry["from_round"], entry["lr"], entry["momentum"]
+        if (type(start) is not int or start < 0 or type(lr) not in (int, float) or type(momentum) not in (int, float)
+                or not (0 < lr <= 4 and 0 <= momentum < 1)):
+            raise ValueError("invalid outer schedule entry: " + json.dumps(entry, sort_keys=True))
+        out.append({"from_round": start, "lr": float(lr), "momentum": float(momentum)})
+    if out[0]["from_round"] != 0 or any(b["from_round"] <= a["from_round"] for a, b in zip(out, out[1:])):
+        raise ValueError("outer schedule starts at round 0 with strictly increasing from_round")
+    return out
+
+
+def outer_entry(manifest: Mapping, merge_round: int) -> tuple[int, dict]:
+    """(index, entry) of the outer optimizer settings for a fragment's merge number ``merge_round`` (0-based)."""
+    schedule = manifest.get("outer_schedule") or [
+        {"from_round": 0, "lr": manifest["outer_lr"], "momentum": manifest["outer_momentum"]}]
+    index = max(i for i, entry in enumerate(schedule) if entry["from_round"] <= merge_round)
+    return index, schedule[index]
 
 
 class Coordinator:
@@ -303,6 +338,9 @@ class Coordinator:
                 "versions": list(self.published_versions),
                 "live_workers": sum(x["expires"] >= time.time() for x in self.progress["leases"].values()),
                 "worker_progress": {k: dict(v) for k, v in self.progress["workers"].items()},
+                **({"outer_schedule": self.manifest["outer_schedule"],
+                    "outer_next": [outer_entry(self.manifest, v)[1] for v in sorted(set(self.published_versions))]}
+                   if "outer_schedule" in self.manifest else {}),
             }
 
     def status(self) -> dict:
@@ -404,13 +442,11 @@ class Coordinator:
             [int(item["steps"]) for _, item, _ in proposals],
             [age for _, _, age in proposals],
         )
-        theta, momentum = outer_nesterov(
-            data["theta"],
-            data["momentum"],
-            delta,
-            lr=self.manifest["outer_lr"],
-            momentum=self.manifest["outer_momentum"],
-        )
+        entry_index, entry = outer_entry(self.manifest, version)
+        velocity = data["momentum"]
+        if version > 0 and outer_entry(self.manifest, version - 1)[0] != entry_index:
+            velocity = torch.zeros_like(velocity)  # a new schedule entry starts its momentum buffer at zero
+        theta, momentum = outer_nesterov(data["theta"], velocity, delta, lr=entry["lr"], momentum=entry["momentum"])
         for _, item, _ in proposals:
             last_seq[item["worker"]] = int(item["sequence"])
         committed = {"theta": theta, "momentum": momentum}
@@ -420,7 +456,10 @@ class Coordinator:
             committed["ema"] = torch.lerp(data["ema"], theta, weight)
         # The authoritative fragment with its last_seq is the commit record;
         # proposals replayed after a crash are discarded by the ledger above.
-        save_tensors(path, committed, metadata={"version": str(version + 1), "last_seq": json.dumps(last_seq)})
+        record = {"version": str(version + 1), "last_seq": json.dumps(last_seq)}
+        if "outer_schedule" in self.manifest:
+            record["outer"] = json.dumps({"entry": entry_index, **entry}, sort_keys=True)
+        save_tensors(path, committed, metadata=record)
         save_tensors(self._published(index), {"theta": theta}, metadata={"version": str(version + 1)})
         # Heartbeats report these versions; a learner whose upload did not complete the quorum learns of the merge
         # only from them. Publishing on the reconcile tick (1 s) left it training against its upload point meanwhile,

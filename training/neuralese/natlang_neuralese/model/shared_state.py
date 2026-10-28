@@ -239,6 +239,35 @@ def _finite_convolution(kernel, histories, c):
     return stored_finite_convolution(histories, kernel.weight, kernel.bias, c)
 
 
+def _plain_compiled(function):
+    """``function`` compiled (Inductor, dynamic shapes) while a plain training update runs; unchanged otherwise.
+
+    Plain training arithmetic (model/native_weight_carrier.py) fuses the norms, gates, SiLU products, residuals and
+    the finite-convolution gather of each layer: 1.19x per LFM3 update at an unchanged FP32-reference gradient
+    (plans/neuralese/LFM3_THROUGHPUT_20261028.md). Exact carrier scopes, inference and reference arithmetic keep the
+    eager function, and so does CPU execution. ``NATLANG_NATIVE_COMPILE=0`` opts out.
+    """
+    import functools
+    import os
+    compiled = []
+
+    @functools.wraps(function)
+    def run(*args, **kwargs):
+        from .native_weight_carrier import plain_training_active
+        if (not plain_training_active() or os.environ.get('NATLANG_NATIVE_COMPILE', '1') == '0'
+                or not any(isinstance(value, torch.Tensor) and value.is_cuda for value in args)):
+            return function(*args, **kwargs)
+        if not compiled:
+            compiled.append(torch.compile(function, dynamic=True))
+        return compiled[0](*args, **kwargs)
+    return run
+
+
+_layer_inputs = _plain_compiled(_layer_inputs)
+_finish = _plain_compiled(_finish)
+_finite_convolution = _plain_compiled(_finite_convolution)
+
+
 def _fp32_kv_cotangents(port, tensor):
     if tensor.dtype == torch.bfloat16:
         from .native_adapters import native_fp32_state_cotangents

@@ -2,7 +2,6 @@
  "schema": "natlang.idiom-mixture-policy/1",
  "id": "lfm3-joint-sft-mixture-policy-v1",
  "owner_requirements": "LFM3_RECIPE_20261028.md data curation (35/20/15/15/15) and the owner's 2026-10-28 prioritization: most diverse, deepest-call-graph, most natlang-centric and Neuralese-using samples first; directory reducers count toward tier 1 with their own family cap; single joint natlang + Neuralese stage; held/dev never train.",
- "category_allocation": {"delegation": 35, "exact": 20, "iteration": 15, "scope": 15, "broad": 15},
  "communication_share": 20,
  "sample": "one native graph row: a whole-trajectory chain or a program-header decision (renders), a verified teacher action turn (teacher twins), or a producer/consumer graph (communication); call-graph features are those of the sample's whole source trajectory",
  "features": {
@@ -18,37 +17,190 @@
   "neuralese_edges": "producer->consumer edges in the graph row (genuine native Neuralese)",
   "text_neuralese_markers": "text-emulated Neuralese marker spans in teacher actions (emulation, not native state)",
   "reducer": "directory-reducer use: reducer kind/modality or Folder first parameter; with folder_apply_calls and reducer_iterate_cursor",
-  "domain": "curriculum domain", "family": "program/world family", "task_shape": "task kind + curriculum family",
-  "near_duplicate_cluster": "sha256 of the root task's normalized instructions (digits -> 0, whitespace collapsed, first 400 chars)"
+  "domain": "curriculum domain",
+  "family": "program/world family",
+  "task_shape": "task kind + curriculum family",
+  "near_duplicate_cluster": "sha256 of the root task's normalized instructions (digits -> 0, whitespace collapsed, first 400 chars)",
+  "choice_call": "decision / scored-judge / progress-judge call kinds (family or task shape matches judge|decision|decide|refine|progress)"
  },
  "drop_rules": [
-  {"reason": "no natlang program structure (answer-only, plain QA or chat)", "all": {"evals": {"max": 0}, "typed_natlang_calls": {"max": 0}, "neuralese_edges": {"max": 0}}},
-  {"reason": "generic tool use or chat dominates the natlang actions", "all": {"natlang_action_share": {"lt": 0.2}, "neuralese_edges": {"max": 0}}}
+  {
+   "reason": "no natlang program structure (answer-only, plain QA or chat); decision and scored-judge calls (choice_call) are exempt: their supervised output is the choice",
+   "all": {
+    "evals": {
+     "max": 0
+    },
+    "typed_natlang_calls": {
+     "max": 0
+    },
+    "neuralese_edges": {
+     "max": 0
+    },
+    "choice_call": {
+     "eq": false
+    }
+   }
+  },
+  {
+   "reason": "generic tool use or chat dominates the natlang actions",
+   "all": {
+    "natlang_action_share": {
+     "lt": 0.2
+    },
+    "neuralese_edges": {
+     "max": 0
+    }
+   }
+  }
  ],
  "tiers": [
-  {"tier": 1, "name": "deep or branching, natlang idioms, Neuralese or reducer",
+  {
+   "tier": 1,
+   "name": "deep or branching, natlang idioms, Neuralese or reducer",
    "any_of": [
-    {"verified": {"eq": true}, "natlang_idioms": {"min": 1}, "deep_or_branching": {"eq": true}, "neuralese_or_reducer": {"eq": true}},
-    {"verified": {"eq": true}, "neuralese_edges": {"min": 1}}]},
-  {"tier": 2, "name": "deep or branching (or reducer) with natlang idioms",
-   "any_of": [{"verified": {"eq": true}, "natlang_idioms": {"min": 1}, "deep_or_branching_or_reducer": {"eq": true}}]},
-  {"tier": 3, "name": "natlang idioms or typed natlang calls",
-   "any_of": [{"verified": {"eq": true}, "natlang_idioms": {"min": 1}},
-              {"verified": {"eq": true}, "typed_natlang_calls": {"min": 1}},
-              {"verified": {"eq": true}, "distinct_functions": {"min": 2}}]},
-  {"tier": 4, "name": "verified natlang program actions",
-   "any_of": [{"verified": {"eq": true}, "evals": {"min": 1}}]}
+    {
+     "verified": {
+      "eq": true
+     },
+     "natlang_idioms": {
+      "min": 1
+     },
+     "deep_or_branching": {
+      "eq": true
+     },
+     "neuralese_or_reducer": {
+      "eq": true
+     }
+    },
+    {
+     "verified": {
+      "eq": true
+     },
+     "neuralese_edges": {
+      "min": 1
+     }
+    }
+   ]
+  },
+  {
+   "tier": 2,
+   "name": "deep or branching (or reducer) with natlang idioms",
+   "any_of": [
+    {
+     "verified": {
+      "eq": true
+     },
+     "natlang_idioms": {
+      "min": 1
+     },
+     "deep_or_branching_or_reducer": {
+      "eq": true
+     }
+    }
+   ]
+  },
+  {
+   "tier": 3,
+   "name": "natlang idioms or typed natlang calls",
+   "any_of": [
+    {
+     "verified": {
+      "eq": true
+     },
+     "natlang_idioms": {
+      "min": 1
+     }
+    },
+    {
+     "verified": {
+      "eq": true
+     },
+     "typed_natlang_calls": {
+      "min": 1
+     }
+    },
+    {
+     "verified": {
+      "eq": true
+     },
+     "distinct_functions": {
+      "min": 2
+     }
+    }
+   ]
+  },
+  {
+   "tier": 4,
+   "name": "verified natlang program actions",
+   "any_of": [
+    {
+     "verified": {
+      "eq": true
+     },
+     "evals": {
+      "min": 1
+     }
+    }
+   ]
+  }
  ],
- "derived": {"deep_or_branching": "max_depth >= 2 or max_branching >= 2",
-             "neuralese_or_reducer": "neuralese_edges >= 1 or text_neuralese_markers >= 1 or reducer",
-             "deep_or_branching_or_reducer": "deep_or_branching or reducer"},
- "caps": {"near_duplicate_per_tier": 4, "family_share_per_tier": 0.15, "reducer_family_share_per_tier": 0.10,
-          "family_cap_floor_rows": 64,
-          "tier_row_limits": {"4": "rows of tiers 1-3"}},
- "tier_weights": {"1": 4.0, "2": 2.0, "3": 1.0, "4": 0.5},
+ "derived": {
+  "deep_or_branching": "max_depth >= 2 or max_branching >= 2",
+  "neuralese_or_reducer": "neuralese_edges >= 1 or text_neuralese_markers >= 1 or reducer",
+  "deep_or_branching_or_reducer": "deep_or_branching or reducer"
+ },
+ "caps": {
+  "near_duplicate_per_tier": 4,
+  "near_duplicate_unit": "source trajectories (tasks) per cluster per tier; samples of one admitted trajectory share its slot",
+  "family_share_per_tier": 0.15,
+  "reducer_family_share_per_tier": 0.1,
+  "family_cap_floor_rows": 64,
+  "tier_row_limits": {
+   "4": "rows of tiers 1-3"
+  }
+ },
+ "tier_weights": {
+  "1": 4.0,
+  "2": 2.0,
+  "3": 1.0,
+  "4": 0.5
+ },
  "ordering": "tier 1 cohorts (and communication) carry training_priority 1: they are scheduled first (communication lane interleaved with the urgent lane); tiers 2-4 have priority 0 and follow in manifest order (tier 2 first)",
- "tier_training_priority": {"1": 1, "2": 0, "3": 0, "4": 0},
- "weighting": "category c keeps its allocation; inside it, tier t gets mass rows(t,c) * tier_weight(t) / sum_t' rows(t',c) * tier_weight(t'); each (tier, category) cell is written as round(mass / cohort_unit) equal cohort files, and own-outputs/1 family_balance (source-cohort) gives every cohort file equal loss mass",
+ "tier_training_priority": {
+  "1": 1,
+  "2": 0,
+  "3": 0,
+  "4": 0
+ },
+ "weighting": "tier t gets loss mass natlang_share * rows(t) * tier_weight(t) / sum_t rows * tier_weight; each (tier, category) cell is written as max(1, round(mass(t) * rows(t,c)/rows(t) / cohort_unit)) equal cohort files, and own-outputs/1 family_balance (source-cohort) gives every cohort file equal loss mass",
  "cohort_unit": 0.0125,
- "objective": {"name": "own-outputs/1", "reasoning_share": 0.1, "family_balance": {"key": "source-cohort", "max_scale": 8}}
+ "objective": {
+  "name": "own-outputs/1",
+  "reasoning_share": 0.1,
+  "family_balance": {
+   "key": "source-cohort",
+   "max_scale": 8
+  },
+  "reasoning_share_note": "fixed at 10% (LFM3_COMMITTED_DECISIONS_20261028.md #3)"
+ },
+ "category_caps": {
+  "delegation": 35,
+  "exact": 20,
+  "iteration": 15,
+  "scope": 15,
+  "broad": 15
+ },
+ "category_caps_rule": "per tier, a category keeps at most ceil(share/100 * rows of that tier after the cluster and family caps) rows (highest fit first): the 35/20/15/15/15 idiom split is a cap, not a target (owner, LFM3_COMMITTED_DECISIONS_20261028.md #4); no rebalancing runs",
+ "learner_data": "pre-tokenized native graph cohort files (token ids, target weights) plus the exact packed-capacity geometry sidecar built on DGX (build_native_packed_geometry.py); learners do no tokenization (decision #9)",
+ "held_carve": {
+  "fraction": 0.015,
+  "max_rows": 1500,
+  "salt": "lfm3-joint-sft-held-v1:",
+  "rule": "a source group is held when sha256(salt+group) < fraction, closed over groups shared by this version's new train rows (renders and teacher twins); a component touching any group an earlier version trained on is never carved; carved rows are held (split test, conversion.held_carve) in every version; beyond max_rows they are dropped, never trained"
+ },
+ "zero_target_rows": "refused (not written), counted in mixture.json cap_drops",
+ "serving_mode": {
+  "prompt_rendering": "program-header",
+  "rule": "train/held rows come from program-header or whole-trajectory (program-header) renderings; teacher twins rendered with the full system prompt are excluded until re-rendered in program-header mode (coverage audit G7)"
+ }
 }

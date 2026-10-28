@@ -10,7 +10,14 @@ not represented, and serving bans the producer's opening marker so execution sta
 The chat template is the tokenizer's own, with the backbone's pinned history-reasoning template arguments, which is
 what the native server renders through (`serve/chat.py` `bind_history_reasoning`).
 
-    python -m natlang_neuralese.export.native_gguf CHECKPOINT OUT_DIR [--outtype bf16|f32|q8_0]...
+    python -m natlang_neuralese.export.native_gguf CHECKPOINT OUT_DIR [--outtype bf16|f32|q8_0]... [--llama-cpp DIR]
+
+The converter is the vendored snapshot of the pinned fork commit (`vendor/llama.cpp`, revision in its
+NATLANG_REPLICATION.json and `training/neuralese/llama-cpp-fork.json`), which registers LFM3 (`Lfm3ForCausalLM`,
+`conversion/lfm3.py`); an export whose HF architecture the converter does not register fails before converting. LFM3 needs no q/k row
+permutation: the converter writes q_proj/k_proj unpermuted and llama.cpp applies NEOX RoPE over the full 128-dim head
+(dims i and i + 64), with the zero-tail partial rotation of full-attention layers as frequency factors 1e30 for the
+trailing 32 pairs (`rope_freqs`), so pre-RoPE keys have HF's layout on both sides.
 """
 from __future__ import annotations
 
@@ -29,6 +36,41 @@ from ..common.hashing import sha256_file_hex, sha256_file_hex_cached
 
 SCHEMA = 'natlang.native-gguf/1'
 LLAMA_CPP = Path(__file__).resolve().parents[4] / 'vendor' / 'llama.cpp'
+# native architectures (config['architecture']) whose backbone is an HF model the upstream converter reads
+ARCHITECTURES = ('lfm2', 'lfm2_moe', 'lfm3', 'qwen3', 'qwen2')
+
+
+def converter_registers(llama_cpp, hf_architecture):
+    """Whether the converter at `llama_cpp` registers the HF architecture class (`@ModelBase.register("...")`)."""
+    sources = [Path(llama_cpp) / 'convert_hf_to_gguf.py', *sorted((Path(llama_cpp) / 'conversion').glob('*.py'))]
+    needle = f'"{hf_architecture}"'
+    for source in sources:
+        try:
+            text = source.read_text()
+        except OSError:
+            continue
+        for line in text.splitlines():
+            if 'register(' in line and needle in line:
+                return True
+    return False
+
+
+def convert_hf(hf_dir, target, outtype, *, llama_cpp=LLAMA_CPP, python=sys.executable, tensors=None, metadata=None):
+    """Convert an HF checkpoint directory to one GGUF file with the vendored converter, then add natlang's extra
+    tensors and metadata (when given). Writes through `<target>.partial`; returns the target path."""
+    hf_dir, target = Path(hf_dir), Path(target)
+    architectures = json.loads((hf_dir / 'config.json').read_text()).get('architectures') or []
+    if len(architectures) != 1 or not converter_registers(llama_cpp, architectures[0]):
+        raise ValueError(f'the converter at {llama_cpp} ({(_replication(llama_cpp) or {}).get("revision")}) does not '
+                         f'register {architectures}; pass a newer snapshot with --llama-cpp')
+    env = {**os.environ, 'PYTHONPATH': os.pathsep.join([str(Path(llama_cpp) / 'gguf-py'), os.environ.get('PYTHONPATH', '')])}
+    partial = target.with_suffix('.gguf.partial')
+    subprocess.run([python, str(Path(llama_cpp) / 'convert_hf_to_gguf.py'), str(hf_dir), '--outfile', str(partial),
+                    '--outtype', outtype], check=True, env=env)
+    if tensors or metadata:
+        _add_natlang(partial, tensors or {}, metadata or {}, llama_cpp)
+    partial.replace(target)
+    return target
 
 
 def merged_backbone(model):
@@ -58,7 +100,7 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
     out_dir.mkdir(parents=True, exist_ok=True)
     model, tokenizer, roles, config, state = load_native_checkpoint(str(checkpoint), device='cpu', dtype=torch.float32,
                                                                     allow_weights_only=True)
-    if config['architecture'] not in ('lfm2', 'lfm2_moe', 'qwen3', 'qwen2'):
+    if config['architecture'] not in ARCHITECTURES:
         raise ValueError(f"GGUF export supports HF backbones only, not {config['architecture']!r}")
     checkpoint_sha256 = sha256_file_hex_cached(checkpoint)
     # The native identity states carry (natlang.identity.* in the GGUF; llama-server declares it and stamps produced
@@ -101,16 +143,11 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
         for item in hf_dir.iterdir():
             if item.is_file() and item.suffix not in ('.safetensors', '.bin') and not item.name.endswith('.index.json'):
                 shutil.copy2(item, config_dir / item.name)
-        env = {**os.environ, 'PYTHONPATH': os.pathsep.join([str(llama_cpp / 'gguf-py'), os.environ.get('PYTHONPATH', '')])}
         for outtype in outtypes:
             target = out_dir / f'model-{outtype}.gguf'
-            partial = target.with_suffix('.gguf.partial')
-            subprocess.run([python, str(llama_cpp / 'convert_hf_to_gguf.py'), str(hf_dir), '--outfile', str(partial),
-                            '--outtype', outtype], check=True, env=env)
             identity = identities['float32' if outtype == 'f32' else 'bfloat16']
-            _add_natlang(partial, producer or {}, {**markers, **{f'natlang.identity.{key}': str(value) for key, value in identity.items()}},
-                         llama_cpp)
-            partial.replace(target)
+            convert_hf(hf_dir, target, outtype, llama_cpp=llama_cpp, python=python, tensors=producer or {},
+                       metadata={**markers, **{f'natlang.identity.{key}': str(value) for key, value in identity.items()}})
             files.append({'outtype': outtype, 'file': target.name, 'bytes': target.stat().st_size,
                           'sha256': sha256_file_hex(target), 'native_identity': dict(identity)})
     produce_open = int(roles.produce_open)
@@ -195,8 +232,10 @@ def main(argv=None):
     parser.add_argument('out_dir')
     parser.add_argument('--outtype', action='append', choices=('f32', 'bf16', 'f16', 'q8_0'),
                         help='GGUF tensor type; repeat for several files (default bf16)')
+    parser.add_argument('--llama-cpp', type=Path, default=LLAMA_CPP,
+                        help='converter snapshot (convert_hf_to_gguf.py, conversion/, gguf-py/); default vendor/llama.cpp')
     args = parser.parse_args(argv)
-    manifest = export(args.checkpoint, args.out_dir, outtypes=tuple(args.outtype or ('bf16',)))
+    manifest = export(args.checkpoint, args.out_dir, outtypes=tuple(args.outtype or ('bf16',)), llama_cpp=args.llama_cpp.resolve())
     print(json.dumps({'manifest': str(Path(args.out_dir) / 'manifest.json'), 'files': manifest['files']}))
     return 0
 

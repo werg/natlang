@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-verified-positive-native-graphs-20261026-tranche000002-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/luna-verified-positive-native-graphs-20261026-tranche000002",
+  "files": [
+    {
+      "path": "lfm3/receipt.json",
+      "bytes": 3260,
+      "sha256": "a049cf0c621b7fa80fc4c6a0a49152e30fdc2abbb09836c29b5b7f84f78f8ef3"
+    },
+    {
+      "path": "lfm3/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm3/train/native-graphs.jsonl.zst",
+      "bytes": 1477874,
+      "sha256": "0266dfd15b2b50ab747434550a6fc0b406d792c99ef33edf7cc3ab50afaf5408"
+    }
+  ],
+  "bytes": 1481147
+}

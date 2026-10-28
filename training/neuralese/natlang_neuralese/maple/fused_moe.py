@@ -758,6 +758,12 @@ def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forw
         return reference_linear(x,w)
     if precision not in {"ieee", "tf32x3", "tf32", "bf16", "bf16x6"}:
         raise ValueError("native fixed linear requires explicit ieee, tf32x3, tf32, bf16 or bf16x6 arithmetic")
+    from ..model.native_weight_carrier import plain_training_active
+    if not cotangent_anchors and precision == "ieee" and plain_training_active():
+        # Plain training arithmetic: one vendor GEMM for the forward, dX and dW (FP32 accumulation, one rounding).
+        weight = w.to(forward_storage_dtype) if forward_storage_dtype is not None else w
+        if weight.dtype == x.dtype:
+            return F.linear(x, weight)
     if torch.is_inference_mode_enabled():
         # Preserve the same effective stored operands; there is no autograd
         # graph in true inference, so no cotangent bookkeeping is consumed.

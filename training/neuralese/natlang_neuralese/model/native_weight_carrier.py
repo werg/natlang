@@ -18,6 +18,36 @@ from .native_gradient_partitions import active_gradient_partitions, reduce_param
 
 
 _COTANGENT_SCOPE = contextvars.ContextVar('natlang_bf16_parameter_cotangent_scope', default=None)
+# Process-wide, not a ContextVar: activation-checkpoint recomputation runs on autograd's device threads.
+_PLAIN_TRAINING = [0]
+
+# Parameter-cotangent handling of a native training update (`--cotangent-accumulator-backend`). `plain` (the
+# default, plans/neuralese/LFM3_THROUGHPUT_20261028.md): ordinary autograd with vendor GEMMs; every trainable layer
+# matrix is used once per layer-major graph pass, so its gradient is one GEMM with FP32 accumulation and one
+# rounding, measured closer to the FP32 gradient than the carried path (cosine 0.984 vs 0.976 on LFM3-1.7B BF16)
+# at 4.2x the throughput. `device_fp32`/`cpu_file`: the exact FP32 fan-in carrier with fixed row tiles.
+COTANGENT_BACKENDS = ('plain', 'device_fp32', 'cpu_file')
+DEFAULT_COTANGENT_BACKEND = 'plain'
+
+
+def carrier_backend(model, default='cpu_file'):
+    """The FP32 carrier storage for scopes that require a carrier (adapter fits): `plain` models use device FP32."""
+    backend = getattr(model, 'native_cotangent_accumulator_backend', default)
+    return 'device_fp32' if backend == 'plain' else backend
+
+
+def plain_training_active() -> bool:
+    return _PLAIN_TRAINING[0] > 0 and torch.is_grad_enabled()
+
+
+@contextmanager
+def plain_training_arithmetic():
+    """Ordinary autograd and vendor GEMMs for a training update (no carrier scope, no fixed-tile linear)."""
+    _PLAIN_TRAINING[0] += 1
+    try:
+        yield
+    finally:
+        _PLAIN_TRAINING[0] -= 1
 _RMS_NORM_TYPES = {'RMSNorm', 'Lfm2RMSNorm', 'Lfm3RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm',
                    'Qwen3_5RMSNorm', 'Qwen3_5RMSNormGated'}
 _COTANGENT_TRANSFER_CHUNK_BYTES = 16 * 1024 * 1024
@@ -302,7 +332,7 @@ class ParameterCotangentScope:
                   auxiliary_target_ids=None, parameter_target_ids=None,
                   accumulator_backend=None):
         if accumulator_backend is None:
-            accumulator_backend = getattr(model, 'native_cotangent_accumulator_backend', 'cpu_file')
+            accumulator_backend = carrier_backend(model)
         parameter_target_ids = (None if parameter_target_ids is None
                                 else frozenset(parameter_target_ids))
         selected, seen = [], set()

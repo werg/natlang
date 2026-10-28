@@ -428,7 +428,20 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dic
     inbox = f"{job['scratch']['path']}/.coreweave/inbox"
     pushed, bytes_pushed = 0, 0
     items = [i for i in manifest['files'] if not i.get('url')] + ([manifest['code']] if manifest.get('code') else [])
-    seen = set()
+    # Objects already in the volume's content store (a restored snapshot, an earlier bundle) are linked into the inbox
+    # instead of crossing the controller's uplink (measured 0.2-0.5 MB/s from DGX); the fetch still verifies them.
+    cas = f"{job['scratch']['path']}/.coreweave/cas"
+    reuse = ('import json,os,sys\ninbox,cas=sys.argv[1],sys.argv[2];os.makedirs(inbox,exist_ok=True);found=[]\n'
+             'for sha,size in json.loads(sys.argv[3]):\n p=os.path.join(cas,sha)\n'
+             ' if os.path.isfile(p) and os.path.getsize(p)==size:\n'
+             '  t=os.path.join(inbox,sha)\n  os.path.exists(t) or os.link(p,t)\n  found.append(sha)\n'
+             'print(json.dumps(found))')
+    result = sandbox.exec(['python3', '-c', reuse, inbox, cas,
+                           json.dumps([[i['sha256'], i['bytes']] for i in items])]).result()
+    seen = set(json.loads(result.stdout.strip() or '[]')) if result.returncode == 0 else set()
+    if seen:
+        log(json.dumps({'event': 'reused', 'objects': len(seen),
+                        'bytes': sum(i['bytes'] for i in items if i['sha256'] in seen)}))
     for item in items:
         if item['sha256'] in seen:
             continue

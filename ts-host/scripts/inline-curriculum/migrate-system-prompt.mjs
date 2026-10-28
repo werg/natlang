@@ -116,7 +116,8 @@ export async function historicalPromptPieces() {
   }
   // The text-channel prompt was first declared in its transport module, then moved into native/prompt.ts.
   // Keep those exact older texts as the same declared program piece instead of inferring scope from export names.
-  const emulationRevisions = execFileSync('git', ['log', '--format=%H', '--', EMULATION_FILE], { cwd: REPO, encoding: 'utf8' }).split('\n').filter(Boolean);
+  // --diff-filter=d: the deleting commit (7b027d2fb) has no text to load.
+  const emulationRevisions = execFileSync('git', ['log', '--diff-filter=d', '--format=%H', '--', EMULATION_FILE], { cwd: REPO, encoding: 'utf8' }).split('\n').filter(Boolean);
   for (const commit of emulationRevisions) {
     const source = execFileSync('git', ['show', `${commit}:${EMULATION_FILE}`], { cwd: REPO, encoding: 'utf8', maxBuffer: 1 << 26 });
     const parsed = ts.createSourceFile(EMULATION_FILE, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);

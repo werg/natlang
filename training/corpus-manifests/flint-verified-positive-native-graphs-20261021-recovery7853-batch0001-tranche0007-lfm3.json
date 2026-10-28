@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "flint-verified-positive-native-graphs-20261021-recovery7853-batch0001-tranche0007-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/flint-verified-positive-native-graphs-20261021-recovery7853-batch0001-tranche0007",
+  "files": [
+    {
+      "path": "lfm3/receipt.json",
+      "bytes": 3394,
+      "sha256": "9919da858e20548f75b12eb8ce60702b5ec2b961f8d1a8cc44691c5973d5d76a"
+    },
+    {
+      "path": "lfm3/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm3/train/native-graphs.jsonl.zst",
+      "bytes": 119121,
+      "sha256": "78e05997f02f9aa4b59c1b2554ac0b13bb764aa280d00f6b438412bca497cf87"
+    }
+  ],
+  "bytes": 122528
+}
