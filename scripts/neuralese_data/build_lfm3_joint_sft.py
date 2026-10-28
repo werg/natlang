@@ -115,8 +115,14 @@ def build(args):
               'objective_tokenizer': tokenizer, 'expanded_tokenizer_fingerprint': fingerprint,
               'renders_waiting_for_scores': waiting,
               'prior': [str((REPO / prior).resolve().relative_to(REPO)) for prior in args.prior]}
-    (out / 'config.json').write_text(json.dumps(config, indent=1) + '\n')
     mixture = out / 'mixture'
+    if (mixture / 'mixture.json').exists():  # a resumed build keeps the config its mixture was built from
+        bound = json.loads((mixture / 'mixture.json').read_text())['config']
+        (out / 'config.json').write_text(json.dumps(bound['value'], indent=1) + '\n')
+        if sha256_file_hex(out / 'config.json') != bound['sha256']:
+            raise SystemExit('config.json differs from the one the existing mixture was built from')
+    else:
+        (out / 'config.json').write_text(json.dumps(config, indent=1) + '\n')
     if not (mixture / 'mixture.json').exists():
         run([PY, 'scripts/neuralese_data/build_idiom_mixture.py', '--config', str(out / 'config.json'),
              '--out', str(mixture)])
