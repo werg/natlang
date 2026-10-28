@@ -674,10 +674,15 @@ def _materialize_sft_capacity_request(source, descriptor, *, identity, runtime_c
     from ..common.jsonio import write_json_durable
     if set(descriptor) != {'schema', 'source', 'geometry'}:
         raise ValueError('SFT capacity descriptor needs exactly source and geometry bindings')
-    if descriptor['source'] != binding(source.path):
+    actual_source = binding(source.path)
+    def same_source(reference):
+        return (isinstance(reference, dict)
+                and reference.get('sha256') == actual_source['sha256']
+                and bound(reference) == Path(actual_source['path']))
+    if not same_source(descriptor['source']):
         raise ValueError('SFT capacity descriptor source differs from the restored training source')
     geometry = json.loads(bound(descriptor['geometry']).read_text())
-    if geometry.get('source') != binding(source.path):
+    if not same_source(geometry.get('source')):
         raise ValueError('SFT capacity geometry source differs from the restored training source')
     # This verifier checks the parser policy, tokenizer, role IDs, complete ordered row bindings and every KV slot.
     slots, _, _ = geometry_for_source(source, Path(request_path).parent, prior=descriptor['geometry'])

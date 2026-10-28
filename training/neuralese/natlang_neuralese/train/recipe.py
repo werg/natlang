@@ -710,12 +710,12 @@ def write_json(path, value):
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
 OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'sdpa_backend', 'deterministic_training', 'fp8_training', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'task_eval', 'task_eval_every', 'qualify_training_backend', 'memory_qualification', 'refresh_at_checkpoint', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'diloco'})
-OPERATIONAL_STAGE_PARAMETERS |= {'held_final_policy','optimizer_state_storage'}
+OPERATIONAL_STAGE_PARAMETERS |= {'held_final_policy','optimizer_state_storage','weight_ema'}
 
 def native_stage_parameter_handoffs(old_recipe, new_recipe, out):
     """Allow only current native trainers' explicit resume-safe parameter changes."""
     tuning = {
-              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'task_eval', 'task_eval_every', 'qualify_training_backend'),
+              'native_state_sft': ('weight_ema', 'epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'task_eval', 'task_eval_every', 'qualify_training_backend'),
               'native_offline_preference': ('preference_beta', 'preference_margin', 'epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend'),
               'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision', 'native_attention_precision', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'task_eval', 'task_eval_every', 'qualify_training_backend')}
     def parameters(recipe, stage):
@@ -823,12 +823,26 @@ def stage_finished(out, stage_id):
 
 
 
+def _shared_foundation_append(old, new):
+    """Only a declared shared input may move foundation with the train role."""
+    old_train, old_foundation = old.get('native_graphs'), old.get('foundation_native_graphs')
+    new_train, new_foundation = new.get('native_graphs'), new.get('foundation_native_graphs')
+    return bool(isinstance(old_train, dict) and isinstance(new_train, dict)
+        and old_foundation == old_train and new_foundation == new_train
+        and old_train.get('binding') and old_train['binding'] == new_train.get('binding')
+        and old_train != new_train)
+
+
 def _data_continuation(old, new):
     """Whether changed train/held graph manifests retain their exact predecessor custody."""
     if 'native_graphs' in old and 'native_graphs' in new:
         foundation = 'foundation_native_graphs'
-        if old.get(foundation) is not None and old[foundation] != new.get(foundation):
-            return False  # New data must not move an already declared finish line.
+        if (old.get(foundation) == old.get('native_graphs') and old['native_graphs'].get('binding')
+                and old['native_graphs'] != new['native_graphs'] and not _shared_foundation_append(old, new)):
+            return False  # A shared named role cannot silently split on append.
+        if (old.get(foundation) is not None and old[foundation] != new.get(foundation)
+                and not _shared_foundation_append(old, new)):
+            return False  # A separately named foundation remains fixed.
         if new.get(foundation) is not None and not all(
                 new[foundation].get(key) for key in ('path', 'sha256', 'binding')):
             return False

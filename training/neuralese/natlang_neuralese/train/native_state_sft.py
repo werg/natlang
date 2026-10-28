@@ -1275,6 +1275,36 @@ def default_lfm3_quantization(bind):
             dict(bind))
 
 
+
+def _quantization_shard_transition(saved_options, *, global_step, pending_updates, stage, worker):
+    """Rebind a full-source parent's QAT ramp to its first sharded continuation."""
+    previous = saved_options.get('quantization')
+    if not previous or pending_updates <= 0:
+        return saved_options
+    spec, bind = previous['spec'], previous['bind']
+    if bind['stage'] != stage or stage not in spec['stage_progress']:
+        raise ValueError('QAT stage differs from the sharded continuation')
+    start, end = bind['start'], bind['end']
+    if type(start) is not int or type(end) is not int or not start < end:
+        raise ValueError('parent QAT has no concrete progress range')
+    lo, hi = spec['stage_progress'][stage]
+    fraction = min(1.0, max(0.0, (global_step - start) / (end - start)))
+    progress = lo + (hi - lo) * fraction
+    revised = json.loads(json.dumps(spec))
+    revised['stage_progress'][stage] = [progress, hi]
+    new_bind = {'stage': stage, 'start': global_step, 'end': global_step + pending_updates}
+    from ..common.hashing import canonical_json_sha256_hex
+    declaration = {**previous, 'spec': revised, 'bind': new_bind,
+                   'sha256': canonical_json_sha256_hex({'spec': revised, 'bind': new_bind})}
+    history = list(saved_options.get('quantization_history') or [])
+    history.append({'event': 'diloco-shard-progress-transition', 'at_global_step': global_step,
+                    'worker': worker, 'previous_sha256': previous['sha256'],
+                    'previous_bind': bind, 'previous_progress': progress,
+                    'new_sha256': declaration['sha256'], 'new_bind': new_bind,
+                    'pending_shard_updates': pending_updates,
+                    'calibration_optimizer_rng_exposure': 'preserved'})
+    return {**saved_options, 'quantization': declaration, 'quantization_history': history}
+
 def _setup_quantization(args, model, saved_state, checkpoint_options, saved_options=None, default_bind=None):
     """Install the inline QAT points on the backbone linears and restore their calibration (or record dropping it).
     ``saved_options``: the parent's recorded ``quantization`` declaration and ``quantization_history``.
@@ -1384,6 +1414,13 @@ def _main(argv=None, *, requested_refresh):
             args.native_graphs = Path(resident_state['payload']['train']['path'])
             args.held_native_graphs = Path(resident_state['payload']['held']['path'])
             args.recipe_binding = json.dumps(resident_state['payload']['recipe'])
+            resident_foundation = resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('foundation_native_graphs')
+            if resident_foundation is not None:
+                args.foundation_native_graphs = resident_bound(resident_foundation)
+            resident_geometry = resident_state['payload'].get('sft_packed_geometry')
+            if resident_geometry is not None:
+                resident_bound(resident_geometry)
+                args.sft_packed_geometry = json.dumps(resident_geometry)
             resident_ce = resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('ce_supervision_policy')
             if resident_ce is not None:
                 args.ce_supervision_policy = resident_bound(resident_ce)
@@ -2277,6 +2314,15 @@ def _main(argv=None, *, requested_refresh):
     anneal = None
     lineage_checkpoint_sha = (sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
                               if parent_continuation or policy.slot.exists() else None)
+    if diloco is not None and ema_spec and ema_spec.get('off') and saved_ema is not None:
+        if not parent_continuation or not lineage_checkpoint_sha:
+            raise ValueError('retiring carried learner EMA requires an exact full parent checkpoint')
+        checkpoint_options['weight_ema_resolution'] = {
+            **ema_resolution, 'transition': 'local-ema-retired-for-coordinator-ema',
+            'parent_checkpoint': {'path': str(args.continue_from), 'sha256': lineage_checkpoint_sha},
+            'parent_ema': {key: saved_ema.get(key) for key in ('schema', 'updates', 'decay', 'warmup', 'seed', 'provenance')},
+            'weights_optimizer_rng_exposure': 'preserved',
+            'coordinator_ema': 'separate-global-version-history'}
     if ema_spec and not ema_spec.get('off'):
         from .weight_ema import WeightEMA
         ema_eval_mode = ema_spec['eval']
@@ -2410,6 +2456,11 @@ def _main(argv=None, *, requested_refresh):
     total_end = step + len(pending_batches)
     if step > total_end:
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
+    if (diloco is not None and parent_continuation and not (resume or {}).get('diloco')
+            and getattr(args, 'quantization', None) in (None, '')):
+        saved_quantization_options = _quantization_shard_transition(saved_quantization_options,
+            global_step=global_step, pending_updates=len(pending_batches),
+            stage=args.stage_id or 'native-graph-ce', worker=diloco.worker)
     quantization = _setup_quantization(args, model, saved_quantization, checkpoint_options,
         saved_options=saved_quantization_options,
         default_bind={'stage': args.stage_id or 'native-graph-ce', 'start': global_step,
@@ -2562,9 +2613,14 @@ def _main(argv=None, *, requested_refresh):
                         'source_row_order':candidate_train.ordered_ids(), 'exposure_counts':dict(candidate_counts),
                         'options':candidate_options}, pending_frame)
                     candidate_cohorts = source_cohort_ids(candidate_train) if args.urgent_cohort_fairness else None
+                    candidate_foundation_ids = foundation_priority_ids
+                    candidate_foundation = payload['plan']['stage_inputs'][args.stage_id].get('foundation_native_graphs')
+                    if (candidate_foundation and candidate_foundation['sha256'] == candidate_train.file_sha256
+                            and args.foundation_communication_batches is not None):
+                        candidate_foundation_ids = {entry['id'] for entry in candidate_train.entries if entry.get('communication')}
                     _, candidate_batches = pending_exposure_batches(candidate_train.entries,candidate_counts,
                         epochs=args.epochs,batch_graphs=args.batch_graphs,batch_tokens=args.batch_tokens,
-                        foundation_ids=foundation_priority_ids,
+                        foundation_ids=candidate_foundation_ids,
                         foundation_communication_batches=args.foundation_communication_batches or 1,
                         minimum_visits=candidate_frame.get('required_visits'),schedule_offset=global_step,
                         cohort_ids=candidate_cohorts)
@@ -2611,6 +2667,29 @@ def _main(argv=None, *, requested_refresh):
                             {'proof_sha256':proof['sha256'],'graph_visits_created':0})
                     source_row_bindings = train.bindings
                     source_order = train.ordered_ids()
+                    resident_foundation = resident.plan['stage_inputs'][args.stage_id].get('foundation_native_graphs')
+                    prior_foundation_binding = checkpoint_options.get('foundation_native_graphs_binding')
+                    if (resident_foundation and prior_foundation_binding and
+                            resident_foundation['sha256'] != prior_foundation_binding['sha256']):
+                        if (resident_bound(resident_foundation).resolve() != train.path.resolve()
+                                or resident_foundation['sha256'] != train.file_sha256):
+                            raise ValueError('resident shared foundation differs from the adopted train source')
+                        foundation_source = train
+                        args.foundation_native_graphs = train.path
+                        from .native_foundation_recovery import native_graph_bindings
+                        foundation_binding = {'path':str(train.path.resolve()),'sha256':train.file_sha256,
+                                              'bytes':train.path.stat().st_size}
+                        foundation_binding['dependencies'] = [item for item in native_graph_bindings(foundation_binding)
+                            if item['path'] != foundation_binding['path']]
+                        checkpoint_options['foundation_native_graphs'] = str(train.path)
+                        checkpoint_options['foundation_native_graphs_binding'] = foundation_binding
+                        foundation_priority_ids = ({entry['id'] for entry in train.entries if entry.get('communication')}
+                            if args.foundation_communication_batches is not None else None)
+                        foundation_template = foundation_exposure() if args.communication_foundation else None
+                        foundation_missing = {key for key,row in (foundation_template or {}).get('rows',{}).items()
+                            if not row['admitted_to_training'] or row['required_visits']<=0 or row['graph_visits']<row['required_visits']}
+                        refresh_inherited_foundation = bool((args.refresh_foundation_readiness or
+                            args.foundation_readiness_policy == 'on-shared-request') and foundation_template and foundation_template['complete'])
                     source_receipts = [source_receipt(train), source_receipt(held)]
                     source_hash = hashlib.sha256(json.dumps(
                         [source_receipts[0]['sha256'], source_receipts[1]['sha256'],
@@ -2643,6 +2722,11 @@ def _main(argv=None, *, requested_refresh):
                     if args.memory_qualification and objective is None:
                         packed = resident.packed_capacity_update
                         if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
+                        adopted_geometry = resident.state['payload'].get('sft_packed_geometry')
+                        if adopted_geometry is not None:
+                            resident_bound(adopted_geometry)
+                            args.sft_packed_geometry = json.dumps(adopted_geometry)
+                            checkpoint_options['sft_packed_geometry'] = args.sft_packed_geometry
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
                     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,

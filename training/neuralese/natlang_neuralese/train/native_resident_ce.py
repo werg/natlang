@@ -30,7 +30,7 @@ def extension_policy(old, new):
         raise ValueError('resident CE append is not a declared data continuation')
     prior, policy = load_policy(before), load_policy(after)
     a, b = _public(prior), _public(policy)
-    excluded = {'sources', 'source_contract'}
+    excluded = {'sources', 'source_contract', 'inventory', 'first_row_observations'}
     if ({k:v for k,v in a.items() if k not in excluded} !=
             {k:v for k,v in b.items() if k not in excluded}):
         raise ValueError('resident CE append changed prior masks, held declarations or objective settings')
@@ -76,6 +76,19 @@ def extension_policy(old, new):
     old_active = identities(ac.get('active_sources', []))
     if not old_active.keys() <= declared.keys():
         raise ValueError('resident CE contract removed prior active source custody')
+    old_observations, new_observations = a.get('first_row_observations', []), b.get('first_row_observations', [])
+    if (not isinstance(old_observations, list) or not isinstance(new_observations, list)
+            or any(item not in new_observations for item in old_observations)):
+        raise ValueError('resident CE append removed a prior first-row observation')
+    for item in new_observations:
+        if (not isinstance(item, dict) or not isinstance(item.get('path'), str)
+                or (str(Path(item['path']).resolve()), item.get('sha256')) not in declared):
+            raise ValueError('resident CE observation is outside the exact active source DAG')
+    for policy, reference in ((a, old['native_graphs']), (b, train)):
+        top_inventory = policy.get('inventory')
+        if top_inventory is not None and (len(top_inventory) != 1 or
+                checked(top_inventory[0]) != checked(reference) or top_inventory[0]['sha256'] != reference['sha256']):
+            raise ValueError('resident CE inventory differs from its exact train input')
     inventory = bc.get('inventory', [])
     if len(inventory) != 1 or checked(inventory[0]) != path or inventory[0]['sha256'] != train['sha256']:
         raise ValueError('resident CE contract inventory differs from its train input')

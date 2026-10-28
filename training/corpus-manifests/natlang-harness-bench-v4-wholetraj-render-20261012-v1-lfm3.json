@@ -1,0 +1,62 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-harness-bench-v4-wholetraj-render-20261012-v1-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/natlang-harness-bench-v4-wholetraj-render-20261012-v1",
+  "files": [
+    {
+      "path": "native-graphs/whole-trajectory/receipt.json",
+      "bytes": 2329,
+      "sha256": "91b1edb1a8edaa0cc9a61e5beb5d46841c2faa8497334b5d96cae10c6320a26f"
+    },
+    {
+      "path": "native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+      "bytes": 2754331,
+      "sha256": "095cca6bf0864cda803719fb2644ebc571ffbccb1b2d980fc425a92708a7b2ac"
+    },
+    {
+      "path": "native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+      "bytes": 8270534,
+      "sha256": "aa79ea75be99be99636e1fb8927e23652b13d56a0637fc8638721a180c0444fa"
+    },
+    {
+      "path": "native-graphs.sh",
+      "bytes": 1182,
+      "sha256": "a4d63266d386470761e07e2c8d8f84bd04f29b0c061d1d1a1ce9d12ca9881c99"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 32783,
+      "sha256": "0e374a75d4ca9fd9872baa6306e09c9b2c8d588d69e7f97563a7ac8ccbc1bfb0"
+    },
+    {
+      "path": "render-omissions/lfm3/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "selection-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "student-verification.json",
+      "bytes": 554,
+      "sha256": "d63a0b77ec77a02357da3279f5ef52e05d3f0d8698bc3c3e000431ea0395085f"
+    },
+    {
+      "path": "whole-trajectory/lfm3/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "whole-trajectory/lfm3/text-data.jsonl.zst",
+      "bytes": 17821587,
+      "sha256": "69211aa6aacdaf89b0a76df3cbcd6b225ae8193f38be5df6a1c38a33c68b7aab"
+    }
+  ],
+  "bytes": 28883300
+}

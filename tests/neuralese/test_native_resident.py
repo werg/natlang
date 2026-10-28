@@ -1529,3 +1529,70 @@ def test_diloco_resident_control_stages_publishes_and_adopts_at_update_boundary(
     status = helper.status(directory)
     assert status['generation'] == published['generation'] and status['at_global_step'] == 12
     assert 'exposure_counts' not in resident.current(directory)
+
+
+def test_resident_shared_named_foundation_moves_with_train_and_retains_old_rows(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    paths,directory,manager,new_path=setup(tmp_path,manifest_train=True)
+    old_plan=copy.deepcopy(manager.plan);old_stage=old_plan['recipe']['stages'][0]
+    old_stage['inputs']['foundation_native_graphs']='train'
+    old_plan['stage_inputs']['sft']['foundation_native_graphs']=copy.deepcopy(old_plan['stage_inputs']['sft']['native_graphs'])
+    candidate_recipe=json.loads(new_path.read_text());candidate_recipe['stages'][0]['inputs']['foundation_native_graphs']='train'
+    candidate_path=tmp_path/'shared-recipe.json';write_json(candidate_path,candidate_recipe)
+    loaded=load_recipe(candidate_path)
+    candidate={**old_plan,'recipe':loaded,'stage_inputs':{'sft':resolve_stage_inputs(loaded,loaded['stages'][0],{})}}
+    resident._contract(old_plan,candidate,'sft')
+    old=old_plan['stage_inputs']['sft'];new=candidate['stage_inputs']['sft']
+    assert old['foundation_native_graphs']==old['native_graphs']
+    assert new['foundation_native_graphs']==new['native_graphs']
+    assert new['continued_native_graphs']['sha256']==old['native_graphs']['sha256']
+    drift=copy.deepcopy(candidate);drift['stage_inputs']['sft']['foundation_native_graphs']=old['foundation_native_graphs']
+    with pytest.raises(ValueError):resident._contract(old_plan,drift,'sft')
+    assert manager.train.ordered_ids()==['a','b']
+    assert manager.held.ordered_ids()==['held']
+
+
+@pytest.mark.parametrize('crash_after_commit',[False,True])
+def test_real_shared_foundation_resident_append_preserves_optimizer_rng_and_exposure(tmp_path,monkeypatch,crash_after_commit):
+    import torch
+    from natlang_neuralese.train import native_state_sft as trainer
+    original_setup=setup
+    def shared_setup(*args,**kwargs):
+        paths,directory,manager,new_path=original_setup(*args,**kwargs)
+        plan_path=directory.parent/'recipe-plan.json';plan=json.loads(plan_path.read_text())
+        old_path=Path(manager.recipe_binding['path']);old=json.loads(old_path.read_text())
+        old['stages'][0]['inputs']['foundation_native_graphs']='train';write_json(old_path,old)
+        plan['recipe']=load_recipe(old_path);plan['recipe_sha256']=resident.sha(old_path)
+        plan['stage_inputs']['sft']=resolve_stage_inputs(plan['recipe'],plan['recipe']['stages'][0],{})
+        write_json(plan_path,plan);manager.recipe_binding=native_recipe_binding(old_path,plan['recipe_sha256'])
+        newer=json.loads(new_path.read_text());newer['stages'][0]['inputs']['foundation_native_graphs']='train';write_json(new_path,newer)
+        return paths,directory,manager,new_path
+    original_main=trainer.main
+    def main_with_foundation(argv):
+        argv=list(argv);argv.extend(['--foundation-native-graphs',argv[argv.index('--native-graphs')+1]])
+        return original_main(argv)
+    monkeypatch.setitem(globals(),'setup',shared_setup)
+    monkeypatch.setattr(trainer,'main',main_with_foundation)
+    test_real_resident_sgd_matches_all_data_run_and_recovers_old_checkpoint(tmp_path,monkeypatch,crash_after_commit,False,False)
+    actual=torch.load(tmp_path/'run'/'sft'/'checkpoint.pt',weights_only=False)
+    assert actual['training']['options']['foundation_native_graphs_binding']['sha256']==resident.sha(tmp_path/'new.jsonl')
+    assert actual['training']['options']['foundation_native_graphs']==str(tmp_path/'new.jsonl')
+    assert actual['training']['exposure_counts']=={'a':1,'b':1,'c':1}
+
+
+def test_expanded_shared_foundation_carries_only_exact_prior_row_exposure(tmp_path,monkeypatch):
+    from natlang_neuralese.train.native_continuation import communication_foundation
+    from test_native_state_sft import authenticated_pair,source_manifest
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    old_dir=tmp_path/'old';new_dir=tmp_path/'new';old_dir.mkdir();new_dir.mkdir()
+    old_path=source_manifest(old_dir,[],[authenticated_pair('a')])
+    new_path=source_manifest(new_dir,[],[authenticated_pair('a'),authenticated_pair('b')])
+    old=NativeGraphSource(old_path,'1'*64,required_split='train',role_ids=(58,59,60,61))
+    new=NativeGraphSource(new_path,'1'*64,required_split='train',role_ids=(58,59,60,61))
+    assert old.bindings['lfm:a']==new.bindings['lfm:a']
+    value=communication_foundation(new,{'lfm:a':1},epochs=1,trained_bindings=new.bindings)
+    assert value['rows']['lfm:a']['graph_visits']==1
+    assert value['rows']['lfm:b']['graph_visits']==0 and not value['complete']
+    stale={**new.bindings,'lfm:b':'stale'}
+    guarded=communication_foundation(new,{'lfm:a':1,'lfm:b':9},epochs=1,trained_bindings=stale)
+    assert guarded['rows']['lfm:b']['graph_visits']==0 and not guarded['rows']['lfm:b']['admitted_to_training']

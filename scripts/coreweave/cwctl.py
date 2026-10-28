@@ -129,7 +129,11 @@ def reexec_in_venv() -> None:
 
 
 def bootstrap_text() -> str:
-    return (HERE / 'bootstrap.sh').read_text()
+    script = (HERE / 'bootstrap.sh').read_text()
+    marker = '@@NATLANG_CODE_ARCHIVE_HELPER@@'
+    if script.count(marker) != 1:
+        raise ControllerError('bootstrap code archive helper marker is missing or duplicated')
+    return script.replace(marker, repr((HERE / 'code_archive.py').read_text()))
 
 
 def load_job(path: Path, bundle: str | None = None, bucket: str | None = None, resume: bool = False) -> dict:
@@ -291,6 +295,50 @@ def run_keywords(request: dict) -> dict:
     return {k: v for k, v in request.items() if k not in ('command', 'args')}
 
 
+
+def capture_startup_logs(sandbox, path, ready):
+    """Persist bootstrap diagnostics only; stop before job output or command arguments."""
+    path, ready = Path(path), Path(ready)
+    secrets = [os.environ.get(name) for name in KEY_NAMES if os.environ.get(name)]
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, 'a', buffering=1) as log:
+        try:
+            for chunk in sandbox.stream_logs(follow=True):
+                text = chunk.decode('utf-8', 'replace') if isinstance(chunk, bytes) else str(chunk)
+                for secret in secrets:
+                    text = text.replace(secret, '[redacted]')
+                # The run marker includes the job command; do not persist arguments.
+                if '"bootstrap":"run"' in text:
+                    log.write('{"bootstrap":"run","command":"[redacted]"}\n'); log.flush(); os.fsync(log.fileno())
+                    ready.write_text('ready\n'); return
+                log.write(text); log.flush(); os.fsync(log.fileno())
+                ready.write_text('ready\n')
+                if '"bootstrap":"failed"' in text:
+                    return
+        except Exception as error:
+            log.write(json.dumps({'event':'startup_log_stream_error','type':type(error).__name__})+'\n')
+            log.flush(); os.fsync(log.fileno())
+            if not ready.exists(): ready.write_text('error\n')
+            return
+        if not ready.exists(): ready.write_text('error\n')
+
+
+def start_startup_log_capture(sandbox_id, timeout=30):
+    directory=STATE/'startup-logs';directory.mkdir(parents=True,exist_ok=True,mode=0o700)
+    path=directory/(sandbox_id+'.log');ready=directory/(sandbox_id+'.ready')
+    ready.unlink(missing_ok=True)
+    process=subprocess.Popen([sys.executable,str(Path(__file__).resolve()),'_capture-startup',sandbox_id,
+                              str(path),str(ready)], stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,start_new_session=True)
+    deadline=time.monotonic()+timeout
+    while time.monotonic()<deadline:
+        if ready.exists():
+            if ready.read_text().strip()!='ready':raise ControllerError('startup log stream failed before input transfer')
+            return {'path':str(path),'pid':process.pid}
+        if process.poll() is not None:raise ControllerError('startup log stream exited before input transfer')
+        time.sleep(0.1)
+    raise ControllerError('startup log stream did not become ready before input transfer')
+
 def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, bundle_file: Path | None = None,
            secrets: dict[str, bytes] | None = None) -> dict:
     request = jobs.sandbox_request(job, bootstrap_text())
@@ -339,6 +387,8 @@ def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, b
     if job['transport'] == 'api' and bundle_file is not None:
         if not wait:
             sandbox.wait(timeout=float(os.environ.get('NATLANG_CW_START_TIMEOUT', '5400')))
+        entry['startup_log'] = start_startup_log_capture(entry['sandbox_id'])
+        record({'event': 'startup_log_capture', 'sandbox_id': entry['sandbox_id'], **entry['startup_log']})
         entry['push'] = push_inputs(sandbox, job, bundle_file, secrets=secrets)
         record({'event': 'inputs_pushed', 'sandbox_id': entry['sandbox_id'], **entry['push']})
     if job.get('recovery'):
@@ -425,7 +475,13 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dic
     become files under $NATLANG_CW_SECRETS (the bootstrap makes them owner-only) and are never logged."""
     manifest = json.loads(manifest_path.read_text())
     sources = json.loads(manifest_path.with_suffix('.sources.json').read_text())
-    inbox = f"{job['scratch']['path']}/.coreweave/inbox"
+    instance = job.get('env', {}).get('NATLANG_CW_INSTANCE')
+    control = f"{job['scratch']['path']}/.coreweave" + (f'/instances/{instance}' if instance else '')
+    inbox = f'{control}/inbox'
+    made = sandbox.exec(['mkdir', '-p', inbox, f'{control}/secrets']).result()
+    if made.returncode != 0:
+        raise ControllerError('cannot create isolated input/secret directories')
+    sandbox.exec(['chmod', '700', f'{control}/secrets']).result()
     pushed, bytes_pushed = 0, 0
     items = [i for i in manifest['files'] if not i.get('url')] + ([manifest['code']] if manifest.get('code') else [])
     # Objects already in the volume's content store (a restored snapshot, an earlier bundle) are linked into the inbox
@@ -456,9 +512,9 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dic
     for name, value in (secrets or {}).items():
         if not SECRET_NAME.fullmatch(name):
             raise ControllerError(f'secret name {name!r}: lower-case letters, digits, dots and dashes')
-        sandbox.write_file(f"{job['scratch']['path']}/.coreweave/secrets/{name}", value).result()
-    sandbox.write_file(f"{job['scratch']['path']}/.coreweave/bundle.json", manifest_path.read_bytes()).result()
-    sandbox.write_file(f"{job['scratch']['path']}/.coreweave/inputs-ready", b'').result()
+        sandbox.write_file(f'{control}/secrets/{name}', value).result()
+    sandbox.write_file(f'{control}/bundle.json', manifest_path.read_bytes()).result()
+    sandbox.write_file(f'{control}/inputs-ready', b'').result()
     return {'pushed': pushed, 'bytes': bytes_pushed}
 
 
@@ -493,13 +549,15 @@ def service_url(sandbox, timeout: float = 600) -> str:
 
 
 def collect(sandbox_id: str, scratch: str = '/work', mapping: list[tuple[str, str]] = (), timeout: float = 86400,
-            log=print) -> dict:
+            log=print, instance: str | None = None) -> dict:
     """File-API transport: wait for the bootstrap's outputs-ready, pull every output file, verify its sha256 against
     the manifest the sandbox wrote, place it (``mapping`` remaps path prefixes), then release the sandbox."""
     import bundle
     from cwsandbox import Sandbox
     sandbox = Sandbox.from_id(sandbox_id, auth=sdk_auth(), data_plane_mode='gateway').result()
-    base = f'{scratch}/.coreweave'
+    if instance and not jobs._ID.fullmatch(instance):
+        raise ControllerError('invalid control instance')
+    base = f'{scratch}/.coreweave' + (f'/instances/{instance}' if instance else '')
     deadline = time.time() + timeout
     while sandbox.exec(['test', '-f', f'{base}/outputs-ready']).result().returncode != 0:
         if time.time() > deadline:
@@ -678,7 +736,10 @@ def main(argv=None) -> int:
     p = sub.add_parser('collect', help='pull and verify a file-API job\'s outputs, then release its sandbox')
     p.add_argument('sandbox_id')
     p.add_argument('--scratch', default='/work')
+    p.add_argument('--instance', help='unique job id for snapshot-restored isolated control paths')
     p.add_argument('--map', action='append', default=[], help='OLD=NEW path prefix for where outputs land')
+    p = sub.add_parser('_capture-startup', help=argparse.SUPPRESS)
+    p.add_argument('sandbox_id');p.add_argument('path');p.add_argument('ready')
     p = sub.add_parser('logs', help='main-process logs through the gateway data plane')
     p.add_argument('sandbox_id')
     p.add_argument('--follow', '-f', action='store_true')
@@ -690,7 +751,10 @@ def main(argv=None) -> int:
     sub.add_parser('records')
     sub.add_parser('status-line')
     args = parser.parse_args(argv)
-    if args.command == 'doctor':
+    if args.command == '_capture-startup':
+        load_env_file()
+        capture_startup_logs(read_sandbox(args.sandbox_id), args.path, args.ready)
+    elif args.command == 'doctor':
         print(json.dumps(doctor(), indent=1))
     elif args.command == 'plan':
         print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket, args.resume), True, False, args.gpu_hour_price), indent=1))
@@ -708,7 +772,7 @@ def main(argv=None) -> int:
         return result.returncode
     elif args.command == 'collect':
         mapping = [tuple(m.split('=', 1)) for m in args.map]
-        print(json.dumps(collect(args.sandbox_id, args.scratch, mapping), indent=1))
+        print(json.dumps(collect(args.sandbox_id, args.scratch, mapping, instance=args.instance), indent=1))
     elif args.command == 'place':
         print(json.dumps(place(args.job, args.mode, args.model, args.write), indent=1))
     elif args.command == 'smoke' and args.attach:

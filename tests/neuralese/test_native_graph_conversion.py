@@ -906,6 +906,26 @@ def test_typed_producer_preserves_full_assistant_tool_result_and_marks_exact_val
     assert 'return_result' in recovered_target and 'relevant' in recovered_target and 'true' in recovered_target
     assert ROLE_MARKERS[0] + body + ROLE_MARKERS[1] in recovered_target
     assert recovered_reader['text'].find(ROLE_MARKERS[2] + body + ROLE_MARKERS[3]) >= 0
+    # A historical writer's target pointer must not replace the reader pointer
+    # used to authenticate a tagged consumer occurrence in a joint graph.
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import pair_derivations
+    from natlang_neuralese.data.text_corpus import gold_text_rows
+    from natlang_neuralese.common.jsonio import canonical_json_str
+    import hashlib
+    derived = pair_derivations(raw_writer, raw_reader, {}, tokenizer=tokenizer, payload=body,
+        occurrence=recovered_occurrence, role_markers=ROLE_MARKERS, tokenizer_sha256='b' * 64,
+        source_records=[raw_writer, raw_reader])
+    replacement = derived['raw-typed-reader']['context_replacements'][0]
+    tag_input = {'occurrence_id': replacement['occurrence_id'], 'pointer': replacement['pointer'],
+                 'payload_sha256': replacement['payload_sha256']}
+    replacement['render_tag'] = hashlib.sha256(canonical_json_str(tag_input).encode()).hexdigest()
+    rows, _, omissions, _ = gold_text_rows([raw_reader], {}, tokenizer=tokenizer,
+        require_independent_splits=False, include_token_offsets=True, tokenizer_sha256='b' * 64,
+        static_derivations={'raw-typed-reader': derived['raw-typed-reader']},
+        writer_context_records=[raw_writer, raw_reader])
+    assert not omissions and len(rows) == 1
+    interval = rows[0]['context_rendered_intervals'][replacement['render_tag']]
+    assert rows[0]['text'][interval['char_start']:interval['char_stop']] == ROLE_MARKERS[2] + body + ROLE_MARKERS[3]
 
 
 def test_unknown_producer_keeps_structured_tool_value_and_all_exact_reader_occurrences():

@@ -995,3 +995,480 @@ def test_diloco_seed_startup_failure_is_journaled_before_stop(tmp_path, monkeypa
     record = json.loads((tmp_path / 'records/run.json').read_text())
     assert record['state'] == 'failed-stop-requested' and record['learners'] == ['shared', None, None, None]
     assert record['ownership'] == {'shared': ['coordinator', 'learner-0']} and stopped == ['shared']
+
+
+def test_diloco_restored_workers_isolate_stale_control_and_verify_seed(tmp_path):
+    import subprocess
+    diloco = load('diloco')
+    seed = tmp_path / 'parent.pt'; seed.write_bytes(b'full-seed')
+    expected = hashlib.sha256(seed.read_bytes()).hexdigest()
+    (tmp_path / 'parent.pt.seed.json').write_text(json.dumps({'sha256': expected, 'global_step': 50,
+        'requested_stop': 50, 'full_optimizer_rng_exposure': True}))
+    fakebin = tmp_path / 'bin'; fakebin.mkdir()
+    fakepython = fakebin / 'python'; fakepython.write_text('#!/bin/sh\nprintf started > "$WORKER_MARKER"\n'); fakepython.chmod(0o755)
+    trainer = ['python', '-m', 'natlang_neuralese.train.native_state_sft', '--continue-from', str(seed)]
+    template = tmp_path / 'job.json'; template.write_text(json.dumps(base_job(id='orig', kind='train', command=trainer,
+        env={'NATLANG_DILOCO_SEED_SHA256': expected}, scratch={'path':'/work','size':'200Gi','restore_from_snapshot_id':'s'})))
+    run = {'id':'run', 'settings':{'run_id':'run','workers':4}, 'coordinator':{'parent':str(seed)},
+           'learners':{'job':str(template)}}
+    target = diloco.learner_job(run, 1, 'https://coordinator')
+    request = diloco.jobs.sandbox_request(target, 'bootstrap')
+    assert target['env']['NATLANG_CW_INSTANCE']=='run-learner-1'
+    assert request['environment_variables']['NATLANG_CW_SECRETS']=='/work/.coreweave/instances/run-learner-1/secrets'
+    env = {**os.environ, 'PATH':str(fakebin)+os.pathsep+os.environ['PATH'], 'WORKER_MARKER':str(tmp_path/'started'), 'NATLANG_CW_WORK':str(tmp_path/'sandbox-work')}
+    result = subprocess.run(target['command'], env=env, capture_output=True, text=True)
+    assert result.returncode == 0 and (tmp_path/'started').exists()
+    (tmp_path/'started').unlink(); seed.write_bytes(b'wrong')
+    result = subprocess.run(target['command'], env=env, capture_output=True, text=True)
+    assert result.returncode != 0 and not (tmp_path/'started').exists()
+    bootstrap = (ROOT/'scripts/coreweave/bootstrap.sh').read_text()
+    assert 'CW="$CW/instances/$NATLANG_CW_INSTANCE"' in bootstrap
+    assert 'until [ -f "$CW/inputs-ready" ]' in bootstrap
+
+
+def test_diloco_post_seed_snapshot_download_and_resume_are_idempotent(tmp_path, monkeypatch):
+    post = load('diloco_post_seed')
+    seedsha = hashlib.sha256(b'seed').hexdigest()
+    original = tmp_path/'learner.json'
+    definition=base_job(id='job',kind='train',scratch={'path':'/work','size':'200Gi'}, env={})
+    original.write_text(json.dumps(definition))
+    record_path=tmp_path/'run.json'
+    record={'coordinator':'box0','placement':'cohosted','state':'coordinator-ready',
+            'learners':['box0',None,None,None], 'ownership':{'box0':['coordinator','learner-0']},
+            'run':{'id':'run','settings':{'workers':4},'learners':{'job':str(original)},
+                   'coordinator':{'parent':'/work/parent.pt'}}}
+    record_path.write_text(json.dumps(record))
+    import threading
+    launch_event=threading.Event()
+    counts={'cache':0,'snapshot':0,'download':0,'private':0,'launch':0,'restore':0}
+    class FakeCloud:
+        sandbox_id='box0'; parent='/work/parent.pt'
+        def seed_receipt(self):return {'checkpoint':self.parent,'sha256':seedsha,'bytes':4,'global_step':50,
+                                       'requested_stop':50,'full_optimizer_rng_exposure':True}
+        def cache(self):counts['cache']+=1;return {'objects':1,'bytes':4}
+        def capture(self,request_id):counts['snapshot']+=1;return 'snap-1'
+        def inspect(self,snapshot):return {'snapshot_id':snapshot,'status':'READY','source_sandbox_id':'box0','size_bytes':4}
+        def download(self,receipt):counts['download']+=1;return {'verified':True,'sha256':seedsha,'bytes':4}
+        def runtime_binding(self):return {'code_sha256':'runtime','plan_sha256':'plan'}
+        def private_export(self,receipt,intent):
+            counts['private']+=1;assert counts['snapshot']==1
+            assert intent['global_step']==50 and intent['runtime']['code_sha256']=='runtime'
+            assert json.loads(journal.read_text())['private_export_intent']==intent
+            assert launch_event.wait(5), 'private verification blocked worker launch'
+            return {'private':True,'identity':{'sha256':seedsha,'bytes':4},'independent_verification':{'sha256':seedsha,'bytes':4}}
+        def verify_restore(self,snapshot,worker,receipt):counts['restore']+=1;return {'passed':True,'worker':worker}
+    def launch_remaining(run_id):
+        counts['launch']+=1
+        launch_event.set()
+        value=json.loads(record_path.read_text()); assert value['state']=='coordinator-ready'
+        new=json.loads(Path(value['run']['learners']['job']).read_text())
+        assert new['scratch']['restore_from_snapshot_id']=='snap-1' and new['lifetime_hours']==720
+        assert new['env']['NATLANG_DILOCO_SEED_SHA256']==seedsha
+        assert json.loads(original.read_text())==definition
+        value.update(state='running',learners=['box0','box1','box2','box3']);record_path.write_text(json.dumps(value));return value
+    monkeypatch.setattr(post.diloco,'launch_remaining',launch_remaining)
+    journal=tmp_path/'journal.json'
+    result=post.run(record_path,journal,FakeCloud(),wait_seconds=3,interval=.01)
+    assert result['phase']=='complete' and len(result['restored'])==3
+    assert counts=={'cache':1,'snapshot':1,'download':1,'private':1,'launch':1,'restore':3}
+    post.run(record_path,journal,FakeCloud(),wait_seconds=3,interval=.01)
+    assert counts=={'cache':1,'snapshot':1,'download':1,'private':1,'launch':1,'restore':3}
+
+
+def test_restored_worker_quarantines_inherited_state_once(tmp_path):
+    import subprocess
+    diloco = load('diloco')
+    work=tmp_path/'work';work.mkdir()
+    seed=work/'parent.pt';seed.write_bytes(b'full-seed');sha=hashlib.sha256(seed.read_bytes()).hexdigest()
+    (work/'parent.pt.seed.json').write_text(json.dumps({'sha256':sha,'global_step':50,
+        'requested_stop':50,'full_optimizer_rng_exposure':True}))
+    out=work/'learner';out.mkdir();(out/'checkpoint.pt').write_text('worker-zero')
+    resident=work/'resident';resident.mkdir();(resident/'initial.json').write_text('old-owner')
+    (work/'recipe-plan.json').write_text('preserve-plan')
+    fakebin=tmp_path/'bin';fakebin.mkdir();fake=fakebin/'python';fake.write_text('#!/bin/sh\nexit 0\n');fake.chmod(0o755)
+    trainer=['python','-m','natlang_neuralese.train.native_state_sft','--out',str(out),'--continue-from',str(seed)]
+    template=tmp_path/'job.json';template.write_text(json.dumps(base_job(id='orig',kind='train',command=trainer,
+        env={'NATLANG_DILOCO_SEED_SHA256':sha},scratch={'path':str(work),'size':'200Gi','restore_from_snapshot_id':'s'})))
+    run={'id':'run','settings':{'run_id':'run','workers':4},'coordinator':{'parent':str(seed)},
+         'learners':{'job':str(template)},'resident':{'directory':str(resident),'geometry_qualification':str(work/'geo')}}
+    job=diloco.learner_job(run,1,'https://coordinator')
+    env={**os.environ,'PATH':str(fakebin)+os.pathsep+os.environ['PATH'],'NATLANG_CW_WORK':str(work)}
+    result=subprocess.run(job['command'],env=env,capture_output=True,text=True)
+    assert result.returncode==0, result.stderr
+    stash=work/'.coreweave/instances/run-learner-1/inherited'
+    assert (stash/'0/checkpoint.pt').read_text()=='worker-zero' and (stash/'1/initial.json').read_text()=='old-owner'
+    assert (work/'recipe-plan.json').read_text()=='preserve-plan' and not out.exists() and not resident.exists()
+    out.mkdir();(out/'checkpoint.pt').write_text('worker-one')
+    result=subprocess.run(job['command'],env=env,capture_output=True,text=True)
+    assert result.returncode==0 and (out/'checkpoint.pt').read_text()=='worker-one'
+
+
+def test_postseed_cache_keeps_live_markers_and_secrets(tmp_path):
+    import subprocess
+    post=load('diloco_post_seed');work=tmp_path/'work'; repo=tmp_path/'repo';repo.mkdir()
+    cw=work/'.coreweave';(cw/'secrets').mkdir(parents=True)
+    (cw/'inputs-ready').write_text('live');(cw/'secrets/token').write_text('secret')
+    source=repo/'data.json';source.write_bytes(b'important')
+    code=cw/'code.tar.gz';code.write_bytes(b'code')
+    def item(path,content):return {'path':path,'sha256':hashlib.sha256(content).hexdigest(),'bytes':len(content)}
+    manifest={'files':[item('data.json',b'important')], 'code':item('ignored',b'code')}
+    (cw/'bundle.json').write_text(json.dumps(manifest))
+    def run():return subprocess.run([sys.executable,'-c',post.CACHE_PROGRAM,str(work),str(repo),str(cw)],capture_output=True,text=True)
+    result=run();assert result.returncode==0,result.stderr
+    assert json.loads(result.stdout)['objects']==2
+    assert (cw/'inputs-ready').read_text()=='live' and (cw/'secrets/token').read_text()=='secret'
+    assert source.read_bytes()==b'important' and code.read_bytes()==b'code'
+    assert (cw/'cas'/manifest['files'][0]['sha256']).read_bytes()==b'important'
+    assert run().returncode==0
+    (cw/'cas'/manifest['files'][0]['sha256']).write_bytes(b'corrupt')
+    assert run().returncode!=0
+
+
+def test_restore_origin_uses_provider_get_sandbox_rpc(monkeypatch):
+    import asyncio
+    import types
+    from types import SimpleNamespace
+    recovery = load('recovery_snapshots')
+    class Request:
+        def __init__(self, sandbox_id): self.sandbox_id=sandbox_id
+    proto=types.ModuleType('cwsandbox._proto');proto.sandbox_pb2=SimpleNamespace(GetSandboxRequest=Request)
+    package=types.ModuleType('cwsandbox');package._proto=proto
+    monkeypatch.setitem(sys.modules,'cwsandbox',package)
+    monkeypatch.setitem(sys.modules,'cwsandbox._proto',proto)
+    calls=[]
+    class Stub:
+        async def GetSandbox(self, req, timeout, metadata):
+            calls.append((req.sandbox_id,timeout,metadata))
+            vol=SimpleNamespace(scratch=SimpleNamespace(restore_from_snapshot_id='actual-snapshot'),
+                                HasField=lambda name:name=='scratch')
+            return SimpleNamespace(spec=SimpleNamespace(volumes=[vol]))
+    class Destination:
+        _stub=Stub();_auth_metadata=[('auth','x')]
+        _loop_manager=SimpleNamespace(run_sync=lambda coro: asyncio.run(coro))
+        async def _ensure_client(self):pass
+    destination=Destination()
+    assert recovery.inspect_destination_snapshots(destination,'worker')==['actual-snapshot']
+    assert calls==[('worker',30,[('auth','x')])]
+
+
+def test_initial_seed_restored_snapshot_has_fresh_isolated_control(tmp_path):
+    diloco=load('diloco')
+    trainer=['python','-m','natlang_neuralese.train.native_state_sft','--continue-from','/work/new-parent.pt']
+    template=tmp_path/'job.json';template.write_text(json.dumps(base_job(id='job',kind='train',command=trainer,
+        scratch={'path':'/work','size':'300Gi','restore_from_snapshot_id':'failed-seed-snapshot'})))
+    run={'id':'fresh-run','settings':{'run_id':'fresh-run','workers':4},
+         'coordinator':{'parent':'/work/new-parent.pt','prepare_parent':['bash','prepare-new-seed.sh']},
+         'learners':{'job':str(template)}}
+    args=diloco.learner_job(run,0,'http://127.0.0.1:8080')['command'][len(diloco.TRAINER):-2]
+    cohost=diloco.cohosted_job(run,args)
+    request=diloco.jobs.sandbox_request(cohost,'bootstrap')
+    assert request['environment_variables']['NATLANG_CW_INSTANCE']=='fresh-run-learner-0'
+    assert request['environment_variables']['NATLANG_CW_SECRETS']=='/work/.coreweave/instances/fresh-run-learner-0/secrets'
+    assert 'prepare-new-seed.sh' in cohost['command'][-1]
+
+
+def test_postseed_cache_reads_actual_isolated_cohost_manifest(tmp_path):
+    import subprocess
+    post=load('diloco_post_seed');work=tmp_path/'work';repo=tmp_path/'repo';repo.mkdir()
+    global_cw=work/'.coreweave';instance=global_cw/'instances/new-run-learner-0';instance.mkdir(parents=True)
+    (global_cw/'bundle.json').write_text('{"files":[]}')
+    source=repo/'new';source.write_bytes(b'new-data')
+    sha=hashlib.sha256(b'new-data').hexdigest()
+    (instance/'bundle.json').write_text(json.dumps({'files':[{'path':'new','sha256':sha,'bytes':8}]}))
+    result=subprocess.run([sys.executable,'-c',post.CACHE_PROGRAM,str(work),str(repo),str(instance)],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    assert (global_cw/'cas'/sha).read_bytes()==b'new-data'
+    assert json.loads(result.stdout)['objects']==1
+
+
+def test_postseed_private_export_binds_actual_sandbox_and_independent_get(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    post=load('diloco_post_seed');sha='a'*64;receipt={'sha256':sha,'bytes':123,'global_step':50}
+    intent={'role':'lfm3-v3-seed-'+sha[:12]};cloud=post.Cloud('actual-box','/work/parent.pt',tmp_path)
+    seen=[]
+    class Result:
+        returncode=0
+        def result(self):return self
+    monkeypatch.setattr(cloud,'sandbox',lambda: SimpleNamespace(exec=lambda args: Result()))
+    def fake_run(argv,env,check):
+        seen.append((argv,env))
+        value={'sandbox_id':'actual-box','source':'/work/parent.pt','private':True,
+               'identity':{'sha256':sha,'bytes':123},'independent_verification':{'sha256':sha,'bytes':123},
+               'verified_at':1,'run':'private-run','name':'object'}
+        Path(env['CW_EXPORT_RECEIPT_FILE']).write_text(json.dumps(value))
+    monkeypatch.setattr(post.subprocess,'run',fake_run)
+    verified=cloud.private_export(receipt,intent)
+    argv,env=seen[0]
+    assert argv[-2:]==[intent['role'],'/work/parent.pt']
+    assert env['CW_EXPORT_SANDBOX_ID']=='actual-box' and env['CW_EXPORT_EXPECTED_SHA256']==sha
+    assert env['CW_EXPORT_EXPECTED_BYTES']=='123' and env['CW_EXPORT_VERIFY_ON_OWNER']=='1'
+    assert verified['independent_verification']['sha256']==sha
+    def bad_run(argv,env,check):
+        value={'sandbox_id':'actual-box','source':'/work/parent.pt','private':True,
+               'identity':{'sha256':sha,'bytes':123},'independent_verification':{'sha256':'b'*64,'bytes':123},
+               'verified_at':1,'run':'private-run','name':'object'}
+        Path(env['CW_EXPORT_RECEIPT_FILE']).write_text(json.dumps(value))
+    monkeypatch.setattr(post.subprocess,'run',bad_run)
+    with pytest.raises(ValueError,match='independent full-object'):
+        cloud.private_export(receipt,intent)
+
+
+def test_code_archive_removes_only_verified_predecessor_modules(tmp_path):
+    import io
+    import tarfile
+    archive=load('code_archive');repo=tmp_path/'repo';work=tmp_path/'work';repo.mkdir();work.mkdir()
+    package=repo/archive.PACKAGE;package.mkdir(parents=True)
+    def make_tar(name, files):
+        target=tmp_path/name
+        with tarfile.open(target,'w') as tar:
+            for path,data in files.items():
+                info=tarfile.TarInfo(path);info.size=len(data);tar.addfile(info,io.BytesIO(data))
+        return target
+    old={'__init__.py':b'old-init','removed.py':b'old-file'}
+    first=make_tar('first.tar',{archive.PACKAGE+'/'+k:v for k,v in old.items()})
+    with tarfile.open(first) as tar:archive.extract_code_archive(tar,repo,work,'a'*64)
+    protected=repo/'data/source.json';protected.parent.mkdir();protected.write_text('preserve')
+    new={'__init__.py':b'new-init','added.py':b'new-file'}
+    second=make_tar('second.tar',{archive.PACKAGE+'/'+k:v for k,v in new.items()})
+    with tarfile.open(second) as tar:result=archive.extract_code_archive(tar,repo,work,'b'*64)
+    assert result['removed_predecessor_files']==1 and not (package/'removed.py').exists()
+    assert protected.read_text()=='preserve' and (package/'added.py').read_bytes()==b'new-file'
+    extra=package/'untracked.py';extra.write_bytes(b'user-work')
+    with tarfile.open(second) as tar, pytest.raises(ValueError,match='untracked native Python'):
+        archive.extract_code_archive(tar,repo,work,'b'*64)
+    assert extra.read_bytes()==b'user-work'
+
+
+def test_code_archive_refuses_to_delete_modified_predecessor(tmp_path):
+    import io
+    import tarfile
+    archive=load('code_archive');repo=tmp_path/'repo';work=tmp_path/'work';repo.mkdir();work.mkdir()
+    package=repo/archive.PACKAGE;package.mkdir(parents=True)
+    def add(name, files):
+        path=tmp_path/name
+        with tarfile.open(path,'w') as tar:
+            for k,v in files.items():
+                info=tarfile.TarInfo(archive.PACKAGE+'/'+k);info.size=len(v);tar.addfile(info,io.BytesIO(v))
+        return path
+    before=add('before.tar',{'__init__.py':b'x','retired.py':b'original'})
+    after=add('after.tar',{'__init__.py':b'x'})
+    with tarfile.open(before) as tar:archive.extract_code_archive(tar,repo,work,'a'*64)
+    (package/'retired.py').write_bytes(b'user-changes')
+    with tarfile.open(after) as tar, pytest.raises(ValueError,match='existing native code changed'):
+        archive.extract_code_archive(tar,repo,work,'b'*64)
+    assert (package/'retired.py').read_bytes()==b'user-changes'
+    assert '@@NATLANG_CODE_ARCHIVE_HELPER@@' not in cwctl.bootstrap_text()
+
+
+def test_postseed_download_defers_full_decode_to_separate_ledger_unit(tmp_path,monkeypatch):
+    post=load('diloco_post_seed');sha='a'*64;receipt={'sha256':sha,'bytes':123,'global_step':50}
+    cloud=post.Cloud('sandbox','/work/parent.pt',tmp_path)
+    seen=[]
+    def run(argv,**kwargs):
+        seen.append(argv)
+        if argv[1].endswith('recovery_pull.py'):
+            latest=tmp_path/'latest';latest.mkdir();(latest/'receipt.json').write_text(json.dumps(
+                {'verified':True,'sha256':sha,'bytes':123,'local':str(tmp_path/'checkpoint.pt')}))
+        else:
+            assert argv[2]=='run' and argv[argv.index('--budget-gb')+1]=='18'
+            proof=Path(argv[-1]);proof.write_text(json.dumps({'passed':True,'sha256':sha,'bytes':123,'global_step':50}))
+        return SimpleNamespace(returncode=0)
+    from types import SimpleNamespace
+    monkeypatch.setattr(post.subprocess,'run',run)
+    result=cloud.download(receipt)
+    assert len(seen)==2 and result['full_state_verification']['passed']
+    assert result['verification_unit'].startswith('lfm3-seed-decode-')
+
+
+def test_seed_recovery_decoder_verifies_actual_full_state(tmp_path):
+    import torch
+    import hashlib
+    import subprocess
+    from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
+    from natlang_neuralese.train.native_state_sft import TRAINING_SCHEMA
+    path=tmp_path/'seed.pt';state={'schema':CHECKPOINT_SCHEMA,'step':50,'model_config':{'base':'test'},
+        'backbone_state':{'weight':torch.ones(1)},'interface_state':{'weight':torch.ones(1)},
+        'training':{'schema':TRAINING_SCHEMA,'global_step':50,
+        'optimizer':{'state':{'x':1}},'rng':{'x':1},'exposure_counts':{'row':1},'source_receipts':[{'sha256':'x'}]}}
+    torch.save(state,path);sha=hashlib.sha256(path.read_bytes()).hexdigest();out=tmp_path/'receipt.json'
+    command=[sys.executable,str(ROOT/'scripts/coreweave/qualify_seed_recovery.py'),str(path),sha,str(path.stat().st_size),'50',str(out)]
+    subprocess.run(command,check=True,capture_output=True,text=True)
+    assert json.loads(out.read_text())['passed'] is True
+    result=subprocess.run([*command[:-2],'51',str(tmp_path/'wrong.json')],capture_output=True,text=True)
+    assert result.returncode!=0 and not (tmp_path/'wrong.json').exists()
+
+
+def test_legacy_snapshot_bootstrap_authenticates_predecessor_archive(tmp_path):
+    import io, tarfile, hashlib
+    archive=load('code_archive'); repo=tmp_path/'repo'; work=tmp_path/'work'
+    package=repo/archive.PACKAGE; package.mkdir(parents=True)
+    root=work/'.coreweave'; cas=root/'cas'; cas.mkdir(parents=True)
+    def build(path, files):
+        with tarfile.open(path,'w') as tar:
+            for name,data in files.items():
+                info=tarfile.TarInfo(archive.PACKAGE+'/'+name);info.size=len(data)
+                tar.addfile(info,io.BytesIO(data))
+    old=tmp_path/'old.tar';new=tmp_path/'new.tar'
+    build(old,{'native_memory.py':b'old','retired.py':b'original'})
+    build(new,{'native_memory.py':b'alias fix','added.py':b'new'})
+    oldsha=hashlib.sha256(old.read_bytes()).hexdigest(); (cas/oldsha).write_bytes(old.read_bytes())
+    manifest=root/'bundle.json';manifest.write_text(json.dumps({'code':{'sha256':oldsha,'bytes':old.stat().st_size}}))
+    manifestsha=hashlib.sha256(manifest.read_bytes()).hexdigest()
+    (package/'native_memory.py').write_bytes(b'old');(package/'retired.py').write_bytes(b'original')
+    (package/'retired.py').write_bytes(b'user change')
+    with tarfile.open(new) as tar, pytest.raises(ValueError,match='existing native code changed'):
+        archive.extract_code_archive(tar,repo,work,'b'*64,predecessor_manifest_sha256=manifestsha)
+    (package/'retired.py').write_bytes(b'original')
+    with tarfile.open(new) as tar, pytest.raises(ValueError,match='manifest does not match'):
+        archive.extract_code_archive(tar,repo,work,'b'*64,predecessor_manifest_sha256='a'*64)
+    with tarfile.open(new) as tar:
+        result=archive.extract_code_archive(tar,repo,work,'b'*64,predecessor_manifest_sha256=manifestsha)
+    assert result['removed_predecessor_files']==1
+    assert (package/'native_memory.py').read_bytes()==b'alias fix' and not (package/'retired.py').exists()
+
+
+def test_startup_log_capture_preserves_failure_and_redacts_secrets(tmp_path, monkeypatch):
+    monkeypatch.setenv('WANDB_API_KEY','secret-value')
+    class Sandbox:
+        def stream_logs(self,follow):
+            assert follow is True
+            yield '{"bootstrap":"waiting-for-inputs"}\n'
+            yield 'Traceback: secret-value\n'
+            yield '{"bootstrap":"failed","step":"code"}\n'
+    path=tmp_path/'startup.log';ready=tmp_path/'ready'
+    cwctl.capture_startup_logs(Sandbox(),path,ready)
+    assert ready.read_text().strip()=='ready'
+    content=path.read_text()
+    assert 'Traceback: [redacted]' in content and 'secret-value' not in content and '"step":"code"' in content
+    assert path.stat().st_mode & 0o077 == 0
+
+
+def test_startup_log_capture_redacts_run_command(tmp_path):
+    class Sandbox:
+        def stream_logs(self,follow):
+            yield '{"bootstrap":"run","command":"secret argument"}\n'
+            yield 'trainer output must not be captured'
+    path=tmp_path/'startup.log';ready=tmp_path/'ready'
+    cwctl.capture_startup_logs(Sandbox(),path,ready)
+    assert 'secret argument' not in path.read_text() and 'trainer output' not in path.read_text()
+    assert ready.read_text().strip()=='ready'
+
+
+def test_coordinator_identity_uses_unwrapped_restored_trainer_argv(tmp_path,monkeypatch):
+    diloco=load('diloco');monkeypatch.setattr(diloco,'RUNS',tmp_path/'records')
+    trainer=['python','-m','natlang_neuralese.train.native_state_sft','--continue-from','/work/parent.pt','--weight-ema','off']
+    learner=base_job(id='lfm',kind='train',command=trainer)
+    learner['scratch']={'path':'/work','size':'200Gi','restore_from_snapshot_id':'snapshot'}
+    learner['env']={'NATLANG_DILOCO_SEED_SHA256':'a'*64}
+    path=tmp_path/'learner.json';path.write_text(json.dumps(learner))
+    run={'schema':diloco.SCHEMA,'id':'run','placement':'cohosted','settings':{'run_id':'run','workers':4},
+         'resident':{'directory':'/work/diloco-resident/resident-data','geometry_qualification':'/work/diloco-resident/geometry.json'},
+         'coordinator':{'job':str(path),'bundle_file':'coord.bundle','parent':'/work/parent.pt'},
+         'learners':{'job':str(path),'bundle_file':'learner.bundle'}}
+    wrapped=diloco.learner_job(run,0,'http://127.0.0.1:8080')['command']
+    assert wrapped[:2]==['bash','-c']
+    actual=diloco.cohosted_job;captured=[]
+    def cohost(run,argv):captured.extend(argv);return actual(run,argv)
+    monkeypatch.setattr(diloco,'cohosted_job',cohost)
+    monkeypatch.setattr(diloco.cwctl,'launch',lambda *a,**k:{'sandbox_id':'s0','push':{},'service_url':'https://coord'})
+    monkeypatch.setattr(diloco.cwctl,'share_token',lambda _:b'gateway')
+    monkeypatch.setattr(diloco,'wait_coordinator',lambda *a,**k:None)
+    monkeypatch.setattr(diloco.cwctl,'record',lambda _:None)
+    result=diloco.launch(run,coordinator_only=True)
+    assert result['state']=='coordinator-ready'
+    assert captured==trainer[3:]+['--resident-data-directory','/work/diloco-resident/resident-data',
+                                  '--resident-geometry-qualification','/work/diloco-resident/geometry.json']
+
+
+def test_prepare_earned_parent_quarantines_roles_idempotently(tmp_path):
+    import subprocess, sys, torch
+    root=tmp_path/'work';root.mkdir();parent=root/'parent.pt'
+    torch.save({'training':{'global_step':59,'options':{'recipe_binding':json.dumps({'sha256':'recipe'})},
+        'optimizer':{'state':1},'rng':{'state':1},'exposure_counts':{'x':1},'ema':{'updates':59}}},parent)
+    sha=hashlib.sha256(parent.read_bytes()).hexdigest()
+    receipt={'sha256':sha,'bytes':parent.stat().st_size,'global_step':59,'requested_stop':50,'full_optimizer_rng_exposure':True}
+    Path(str(parent)+'.seed.json').write_text(json.dumps(receipt))
+    pin=root/'pin.json';pin.write_text(json.dumps({'path':str(parent),**receipt}))
+    plan=root/'plan.json';plan.write_text(json.dumps({'recipe_sha256':'recipe','handoffs':[{}]}))
+    for name in ('diloco-coordinator','diloco-learner','diloco-resident'):
+        (root/name).mkdir();(root/name/'old').write_text(name)
+    env={**os.environ,'NATLANG_CW_WORK':str(root),'NATLANG_CW_INSTANCE':'new-learner-0'}
+    command=[sys.executable,str(ROOT/'scripts/coreweave/diloco_prepare_continuation.py'),str(pin),
+             hashlib.sha256(pin.read_bytes()).hexdigest(),str(plan)]
+    for _ in range(2):subprocess.run(command,env=env,check=True,capture_output=True,text=True)
+    dest=root/'diloco-resident/recipe-plan.json'
+    assert json.loads(dest.read_text())['handoffs'][-1]['seed_checkpoint']['global_step']==59
+    quarantine=root/'.coreweave/instances/new-learner-0/inherited-previous-run'
+    for name in ('diloco-coordinator','diloco-learner','diloco-resident'):
+        assert (quarantine/name/'old').read_text()==name
+    assert hashlib.sha256(parent.read_bytes()).hexdigest()==sha
+
+
+def test_private_parent_fetch_verifies_complete_bytes_and_preserves_existing(tmp_path):
+    import io
+    fetch=load('diloco_fetch_parent');body=b'full optimizer rng exposure';sha=hashlib.sha256(body).hexdigest()
+    cap=tmp_path/'cap';cap.write_text(json.dumps({'url':'https://storage.googleapis.com/bucket/scoped?signature=private',
+        'sha256':sha,'bytes':len(body),'global_step':59,'requested_stop':50,'full_optimizer_rng_exposure':True}))
+    target=tmp_path/'parent.pt';calls=[]
+    def opener(url,timeout):calls.append(url);return io.BytesIO(body)
+    assert fetch.fetch(cap,target,opener=opener)['global_step']==59
+    assert target.read_bytes()==body and json.loads(Path(str(target)+'.seed.json').read_text())['sha256']==sha
+    fetch.fetch(cap,target,opener=opener);assert len(calls)==1
+    target.write_bytes(b'wrong')
+    with pytest.raises(ValueError,match='existing parent differs'):fetch.fetch(cap,target,opener=opener)
+    bad=tmp_path/'bad.pt'
+    with pytest.raises(ValueError,match='differs from exact pin'):fetch.fetch(cap,bad,opener=lambda *a,**k:io.BytesIO(b'bad'))
+    assert not bad.exists() and not Path(str(bad)+'.seed.json').exists()
+
+
+def test_parent_transfer_cohost_fetches_before_init_and_workers_fetch_before_verify(tmp_path):
+    diloco=load('diloco')
+    trainer=['python','-m','natlang_neuralese.train.native_state_sft','--continue-from','/work/parent.pt','--out','/work/diloco-learner']
+    job=base_job(id='lfm',kind='train',command=trainer,env={'NATLANG_DILOCO_SEED_SHA256':'a'*64},
+                 scratch={'path':'/work','size':'200Gi'})
+    path=tmp_path/'job.json';path.write_text(json.dumps(job))
+    run={'id':'private-run','settings':{'run_id':'private-run','workers':4},'parent_transfer':{'pin':'pin','receipt':'receipt'},
+         'resident':{'directory':'/work/diloco-resident/resident-data','geometry_qualification':'/work/diloco-resident/geometry.json'},
+         'coordinator':{'parent':'/work/parent.pt','prepare_parent':['true']},'learners':{'job':str(path)}}
+    worker=diloco.learner_job(run,1,'https://coord')
+    assert worker['env']['NATLANG_CW_INSTANCE']=='private-run-learner-1'
+    assert worker['command'][2].index('diloco_fetch_parent')<worker['command'][2].index('sha256_file_hex')
+    cohost=diloco.cohosted_job(run,diloco.trainer_command(run,diloco._template(str(path)))[len(diloco.TRAINER):])
+    script=cohost['command'][2]
+    assert script.index('diloco_fetch_parent')<script.index('native_diloco init')
+
+
+def test_fresh_parent_base_fetch_pins_revision_without_credentials(tmp_path):
+    fetch=load('diloco_fetch_parent');revision='a'*40;cache=tmp_path/'hf'
+    snapshot=cache/'models--org--model/snapshots'/revision
+    observed=[]
+    def download(**kwargs):observed.append(kwargs);snapshot.mkdir(parents=True,exist_ok=True);return str(snapshot)
+    base={'repo_id':'org/model','revision':revision,'cache':str(cache),'path':str(snapshot)}
+    assert fetch.ensure_base(base,download=download)['revision']==revision
+    assert observed==[{'repo_id':'org/model','revision':revision,'cache_dir':str(cache),'token':False}]
+    snapshot.rmdir()
+    with pytest.raises(ValueError,match='different snapshot'):
+        fetch.ensure_base(base,download=lambda **kwargs:str(tmp_path))
+
+
+def test_parent_read_secret_requires_verified_receipt_and_binds_capability(tmp_path,monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    diloco=load('diloco');pin={'path':'/work/parent.pt','sha256':'a'*64,'bytes':123,'global_step':59,
+                              'requested_stop':50,'full_optimizer_rng_exposure':True}
+    identity={'sha256':pin['sha256'],'bytes':pin['bytes']}
+    receipt={'private':True,'identity':identity,'independent_verification':identity,
+             'run':'entity/project/run','name':'object','source':'/work/parent.pt'}
+    pin_path=tmp_path/'pin';pin_path.write_text(json.dumps(pin));receipt_path=tmp_path/'receipt';receipt_path.write_text(json.dumps(receipt))
+    job=base_job(id='lfm',kind='train',env={'NATLANG_DILOCO_SEED_SHA256':pin['sha256']})
+    job_path=tmp_path/'job';job_path.write_text(json.dumps(job))
+    remote=SimpleNamespace(size=123,url='https://storage.googleapis.com/private/object?signature=SECRET')
+    fake=SimpleNamespace(Api=lambda:SimpleNamespace(run=lambda x:SimpleNamespace(file=lambda y:remote)))
+    monkeypatch.setitem(sys.modules,'wandb',fake)
+    run={'parent_transfer':{'pin':str(pin_path),'pin_sha256':hashlib.sha256(pin_path.read_bytes()).hexdigest(),'receipt':str(receipt_path),'receipt_sha256':hashlib.sha256(receipt_path.read_bytes()).hexdigest()},'coordinator':{'parent':pin['path']},'learners':{'job':str(job_path)}}
+    cap=json.loads(diloco.parent_read_secret(run)['parent-read'])
+    assert cap['sha256']==pin['sha256'] and cap['global_step']==59 and cap['url']==remote.url
+    receipt['independent_verification']={'sha256':'b'*64,'bytes':123};receipt_path.write_text(json.dumps(receipt))
+    with pytest.raises(diloco.cwctl.ControllerError,match='binding changed'):diloco.parent_read_secret(run)
+    run['parent_transfer']['receipt_sha256']=hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+    with pytest.raises(ValueError,match='independent verification'):diloco.parent_read_secret(run)

@@ -552,22 +552,23 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                 cache.append((gated,))
                 kernel = layer.conv.conv
                 width = kernel.weight.shape[-1]
-                parts = []
+                # Keep the invocation-major cache oracle independent of the
+                # graph gather while batching its finite windows. The old
+                # per-token loop retained one autograd graph per token and
+                # made complete long-chain gradient checks impractical.
+                indices, padding, stopped = [], [], []
                 for local in range(count):
                     history = remap(plan.history(offset+local, width))
-                    if source.dtype==torch.float64:
-                        from .state_gather import gather_convolution_state
-                        data=gather_convolution_state(source,plan.tensor(history,device)).transpose(1,2)
-                    else:
-                        data = source[:, plan.tensor(history, device)].transpose(1, 2)
-                    if plan.slot_stops:
-                        flags=plan.tensor(plan.history_stops(offset+local,width),device,torch.bool)[None,None]
-                        data=torch.where(flags,data.detach(),data)
-                    data = F.pad(data, (width-data.shape[-1], 0))
-                    # Precision selects GEMMs, not a different convolution
-                    # reduction from the layer-major graph's finite histories.
-                    parts.append(_finite_convolution(kernel, data.transpose(1, 2)[:, None], c[:, local:local+1]))
-                out = torch.cat(parts, dim=1)
+                    pad = width-len(history)
+                    indices.append((0,)*pad + history)
+                    padding.append((True,)*pad + (False,)*len(history))
+                    stopped.append((False,)*pad + plan.history_stops(offset+local, width))
+                data = source[:, plan.tensor(indices, device)]
+                if plan.slot_stops:
+                    flags = plan.tensor(stopped, device, torch.bool)[None,:,:,None]
+                    data = torch.where(flags, data.detach(), data)
+                data = data.masked_fill(plan.tensor(padding, device, torch.bool)[None,:,:,None], 0)
+                out = _finite_convolution(kernel, data, c)
             if not gated_delta:
                 h = (actor_bank.execute(node.name,lambda:_finish(port,layer,h,out,attention))
                      if actor_bank is not None else _finish(port,layer,h,out,attention))

@@ -63,7 +63,13 @@ mkdir -p "$NATLANG_REPO"
 # 3. code snapshot from the bundle manifest. Transport "bucket": manifest and objects in object storage. Transport
 # "api": cwctl pushes bundle.json and the objects (named by sha256) into $WORK/.coreweave/inbox through the sandbox
 # file API, then writes $WORK/.coreweave/inputs-ready; nothing in the sandbox needs a credential.
-CW="$WORK/.coreweave"; mkdir -p "$CW/inbox"
+CW="$WORK/.coreweave"
+if [ -n "${NATLANG_CW_INSTANCE:-}" ]; then
+  [ "$NATLANG_CW_INSTANCE" = "$NATLANG_CW_JOB" ] || die instance-mismatch
+  CW="$CW/instances/$NATLANG_CW_INSTANCE"
+fi
+export NATLANG_CW_CONTROL_DIR="$CW"
+mkdir -p "$CW/inbox"
 if [ "${NATLANG_CW_TRANSPORT:-bucket}" = api ]; then
   log waiting-for-inputs
   until [ -f "$CW/inputs-ready" ]; do sleep 2; done
@@ -74,9 +80,10 @@ if [ -n "${NATLANG_CW_BUNDLE:-}" ] || [ "${NATLANG_CW_TRANSPORT:-bucket}" = api 
   python3 - <<'PY' || die code
 import hashlib, json, os, shutil, tarfile
 work, repo = os.environ.get('NATLANG_CW_WORK', '/work'), os.environ['NATLANG_REPO']
+cw = os.environ['NATLANG_CW_CONTROL_DIR']
 api = os.environ.get('NATLANG_CW_TRANSPORT', 'bucket') == 'api'
 if api:
-    manifest = json.load(open(f'{work}/.coreweave/bundle.json'))
+    manifest = json.load(open(f'{cw}/bundle.json'))
 else:
     import boto3
     from botocore.client import Config
@@ -85,24 +92,28 @@ else:
                                     s3={'addressing_style': os.environ.get('NATLANG_CW_S3_ADDRESSING', 'virtual')}))
     bucket = os.environ['NATLANG_CW_BUCKET']
     manifest = json.loads(s3.get_object(Bucket=bucket, Key=os.environ['NATLANG_CW_BUNDLE'])['Body'].read())
-    with open(f'{work}/.coreweave/bundle.json', 'w') as f:
+    with open(f'{cw}/bundle.json', 'w') as f:
         json.dump(manifest, f)
 code = manifest.get('code')
 if code:
-    path = f'{work}/.coreweave/code.tar.gz'
+    path = f'{cw}/code.tar.gz'
     if api:
-        shutil.move(f'{work}/.coreweave/inbox/{code["sha256"]}', path)
+        shutil.move(f'{cw}/inbox/{code["sha256"]}', path)
         os.makedirs(f'{work}/.coreweave/cas', exist_ok=True)
         if not os.path.exists(f'{work}/.coreweave/cas/{code["sha256"]}'):
             os.link(path, f'{work}/.coreweave/cas/{code["sha256"]}')  # reusable by a later bundle on this volume
     else:
         s3.download_file(bucket, code['key'], path)
-    digest = hashlib.sha256(open(path, 'rb').read()).hexdigest()
-    if digest != code['sha256']:
-        raise SystemExit(f'code snapshot sha256 {digest} != {code["sha256"]}')
+    with open(path, 'rb') as archive_stream:
+        code_digest = hashlib.file_digest(archive_stream, 'sha256').hexdigest()
+    if code_digest != code['sha256']:
+        raise SystemExit(f'code snapshot sha256 {code_digest} != {code["sha256"]}')
+    exec(@@NATLANG_CODE_ARCHIVE_HELPER@@)
     with tarfile.open(path) as tar:
-        tar.extractall(repo, filter='data')
-    print(json.dumps({'bootstrap': 'code', 'git_sha': code['git_sha'], 'sha256': digest}))
+        reconciliation = extract_code_archive(tar, repo, work, code_digest,
+            predecessor_manifest_sha256=os.environ.get('NATLANG_CW_PREDECESSOR_BUNDLE_SHA256'))
+    print(json.dumps({'bootstrap': 'code', 'git_sha': code['git_sha'], 'sha256': code_digest,
+                      'reconciliation': reconciliation}))
 PY
   # 4. inputs, verified (pushed inbox objects first, then public URLs, then the bucket)
   python3 "$NATLANG_REPO/scripts/coreweave/bundle.py" fetch ${NATLANG_CW_BUCKET:+--bucket "$NATLANG_CW_BUCKET"} \
@@ -184,7 +195,7 @@ wait $child; status=$?
 while kill -0 $child 2>/dev/null; do wait $child; status=$?; done  # a trapped TERM interrupts wait; keep waiting
 log exited "\"status\":$status"
 if [ -n "$watcher" ]; then kill -TERM $watcher 2>/dev/null; wait $watcher 2>/dev/null; fi
-mkdir -p "$WORK/.coreweave"; echo "$status" > "$WORK/.coreweave/exit-status"
+mkdir -p "$CW"; echo "$status" > "$CW/exit-status"
 publish
 if [ -n "${NATLANG_CW_BUCKET:-}" ]; then
   python3 "$BUNDLE" record-exit --bucket "$NATLANG_CW_BUCKET" --prefix "$NATLANG_CW_OUTPUT_PREFIX" --status "$status" \

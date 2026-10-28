@@ -22,6 +22,18 @@ except ImportError:
     from recovery_inputs import durable_json
 
 
+def inspect_destination_snapshots(destination, destination_id):
+    """Read snapshot origin from the provider's actual sandbox spec, not a client convenience object."""
+    from cwsandbox._proto import sandbox_pb2
+    async def get():
+        await destination._ensure_client()
+        return await destination._stub.GetSandbox(sandbox_pb2.GetSandboxRequest(
+            sandbox_id=destination_id), timeout=30, metadata=destination._auth_metadata)
+    value = destination._loop_manager.run_sync(get())
+    return [volume.scratch.restore_from_snapshot_id for volume in value.spec.volumes
+            if volume.HasField('scratch')]
+
+
 def verify_restored_files(source_id, snapshot_id, destination_id, files, *, inspect_destination, execute):
     """Read the real restored mount and bind exact bytes to its snapshot origin."""
     if source_id == destination_id:
@@ -162,15 +174,7 @@ def main():
             def inspect_destination():
                 # Use the actual backend spec; an operator's declaration or a
                 # destination's self-reported environment is not restore proof.
-                from cwsandbox._proto import sandbox_pb2
-                async def get():
-                    await destination._ensure_client()
-                    return await destination._stub.GetSandbox(sandbox_pb2.GetSandboxRequest(
-                        sandbox_id=args.destination_sandbox_id), timeout=30,
-                        metadata=destination._auth_metadata)
-                value = destination._loop_manager.run_sync(get())
-                return [v.scratch.restore_from_snapshot_id for v in value.spec.volumes
-                        if v.HasField('scratch')]
+                return inspect_destination_snapshots(destination, args.destination_sandbox_id)
 
             def execute(argv):
                 result = destination.exec(argv, timeout_seconds=3600).result(timeout=3660)
