@@ -77,7 +77,9 @@ def test_exact_pairwise_loss_and_all_parameter_gradients_match_analytical_oracle
     example,objective=example_spec(tmp_path)
     actual,detail=packed_graph_loss(model,[example],objective=objective,checkpoint_layers=False)
     expected=manual(reference,example,objective)
-    torch.testing.assert_close(actual,expected,rtol=0,atol=1e-7)
+    # Shared stable softmax numerics (common/stable_softmax.py) differ from this plain
+    # log_softmax oracle by a few FP32 ulps in value; gradients keep their tolerance.
+    torch.testing.assert_close(actual,expected,rtol=0,atol=1e-6)
     actual.backward();expected.backward()
     for left,right in zip(model.parameters(),reference.parameters()):
         torch.testing.assert_close(left.grad,right.grad,rtol=2e-6,atol=1e-7)

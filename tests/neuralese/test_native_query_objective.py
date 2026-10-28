@@ -110,7 +110,9 @@ def test_signed_query_decision_and_stopped_teacher_exact_manual_oracle(rule):
     teacher=log[[3,4]].detach()
     kl=(teacher.exp()*(teacher-log[[0,1]])).sum(-1).mean()
     expected=-.4*proper+.8*kl-.2*(log[0,1]+log[1,2])
-    assert actual.item()==pytest.approx(expected.item(),abs=1e-7)
+    # The objective uses the shared stable softmax numerics (common/stable_softmax.py): a
+    # different FP32 operation order than this plain-PyTorch oracle, equal to a few ulps.
+    assert actual.item()==pytest.approx(expected.item(),abs=1e-6)
     ga=torch.autograd.grad(actual,h,retain_graph=True)[0]
     ge=torch.autograd.grad(expected,h)[0]
     torch.testing.assert_close(ga,ge,rtol=2e-6,atol=2e-7)

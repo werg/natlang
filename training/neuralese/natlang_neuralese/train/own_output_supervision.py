@@ -45,7 +45,11 @@ per-token eligibility mask:
    mass and averages graphs, so a long transcript never outweighs many short
    decisions. An invocation without decisions has weight 0 everywhere (never
    an error).
-6. Optional family balance multiplies each training graph's normalized loss
+6. A finite decision readout (natlang ``decide``; ``data.decision_graph``) is an invocation whose output is the
+   choice over its option set. It is supervised by the option-normalized log score of the readout distribution
+   (``train.decision_supervision``) with mass 1, like any other invocation's decisions. Declared as
+   ``decision_readout: {loss: 'option-log-loss'}`` (the default); ``'off'`` is the explicit opt-out.
+7. Optional family balance multiplies each training graph's normalized loss
    by a bounded census-derived scale so each declared task family contributes
    equally in expectation (mean scale 1, capped at ``max_scale``).
 """
@@ -68,6 +72,7 @@ _REASONING = ROLE_CODES.index('assistant_reasoning')
 _FIXED = {'context_weight': 0., 'feedback_weight': 0., 'failed_assistant_weight': 0.,
           'balance': ['invocation', 'decision']}
 _ROLE_NAMES = ('system', 'user', 'assistant', 'tool')
+DECISION_READOUT = {'loss': 'option-log-loss'}
 _TOOL_RESPONSE_PREFIXES = ('\n<tool_response>', '\n\n<tool_response>')
 _SHA = re.compile('[0-9a-f]{64}')
 
@@ -154,7 +159,8 @@ def resolve(declaration):
         return {'name': LEGACY}
     if name != NAME:
         raise ValueError(f'unknown supervision objective {name!r}')
-    allowed = {'name', 'reasoning_share', 'reasoning_markers', 'family_balance', 'role_tokens', *_FIXED}
+    allowed = {'name', 'reasoning_share', 'reasoning_markers', 'family_balance', 'role_tokens', 'decision_readout',
+               *_FIXED}
     if set(declaration) - allowed:
         raise ValueError('unknown own-output objective fields: ' + ', '.join(sorted(set(declaration) - allowed)))
     for key, fixed in _FIXED.items():
@@ -166,7 +172,11 @@ def resolve(declaration):
     markers = declaration.get('reasoning_markers', 'reply')
     if markers not in ('reply', 'reasoning'):
         raise ValueError("reasoning_markers is 'reply' or 'reasoning'")
+    readout = declaration.get('decision_readout', DECISION_READOUT)
+    if readout != 'off' and readout != DECISION_READOUT:
+        raise ValueError(f"decision_readout is {DECISION_READOUT!r} (default) or 'off'")
     return {'name': NAME, 'reasoning_share': float(share), 'reasoning_markers': markers, **_FIXED,
+            'decision_readout': readout if readout == 'off' else dict(DECISION_READOUT),
             'family_balance': _family_balance(declaration.get('family_balance')),
             'role_tokens': _role_tokens(declaration.get('role_tokens'))}
 
@@ -437,7 +447,8 @@ def apply_to_example(example, row, objective, *, family_scales=None):
         scale = family_scales[example.id]
     from dataclasses import fields
     return OwnOutputGraphExample(**{item.name: getattr(example, item.name) for item in fields(NativeGraphExample)
-                                    if item.name != 'target_weights'},
+                                    if item.name not in ('target_weights', 'decisions')},
+                                 decisions=() if objective['decision_readout'] == 'off' else example.decisions,
                                  target_weights=tuple(weights), objective_categories=tuple(categories),
                                  loss_scale=scale, objective_sha256=digest)
 

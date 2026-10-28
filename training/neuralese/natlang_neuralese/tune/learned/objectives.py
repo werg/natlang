@@ -36,15 +36,17 @@ def supervised_logprobs(model, example, *, external_blocks=None, external_identi
     if not queries:
         raise LearnedOptimizerError('the example has no supervised reply/action positions')
     logits = model.logits(hidden[torch.tensor(queries, device=hidden.device)])
-    return torch.log_softmax(logits.float(), -1), torch.tensor(weights, device=hidden.device, dtype=torch.float32)
+    from ...common import stable_softmax
+    return (stable_softmax.log_softmax(logits.float(), -1),
+            torch.tensor(weights, device=hidden.device, dtype=torch.float32))
 
 
 def distill_loss(target_logp, student_logp, weights):
     """Weighted mean over supervised positions of ``KL(p_target || p_student)``; ``target_logp`` is detached."""
     if target_logp.shape != student_logp.shape:
         raise LearnedOptimizerError('target and student distributions cover different positions')
-    target_logp = target_logp.detach()
-    kl = (target_logp.exp() * (target_logp - student_logp)).sum(-1)
+    from ...common import stable_softmax
+    kl = stable_softmax.forward_kl(student_logp, target_logp.detach())  # log-probs are valid logits
     return (kl * weights).sum() / weights.sum()
 
 

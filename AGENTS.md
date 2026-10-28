@@ -1,5 +1,32 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Start promptly and revise training live (owner, 2026-10-28)
+
+Use the platform maximum sandbox lifetime for training. Do not introduce short
+expiry limits or routine sandbox cycling to control spend: they interrupt
+healthy work and force unnecessary recovery. Supervise actual useful progress,
+export recovery state independently, and explicitly stop finished, failed or
+unused allocations. Quota supervision remains necessary; a maximum lifetime
+is permission for continuity, not a commitment to keep an idle sandbox running.
+
+Launch LFM3 joint training as soon as an initial useful mixture and the required
+runtime checks are ready. Do not wait for all rendering, chain conversion,
+guidance or other improvements to finish. Adopt each useful qualified addition
+promptly, including during the current epoch. Preserve weights, optimizer, RNG
+and earned exposure when continuing; restart only when the concrete defect
+requires it. Immutable source versions and transition journals make changes
+safe; they must not become a reason to freeze the evolving recipe.
+
+Distributed learners use the resident source-update mechanism by default.
+Stage and verify the complete successor recipe, source/CE dependencies and
+geometry on every worker, publish against each actual predecessor, and check
+actual adoption and subsequent exposure on every worker. Move shared named
+source roles together and preserve protected held inputs. A publication
+acknowledgement alone is not adoption or training. Reconcile a partial
+publication before publishing another revision. Useful training continues
+while the next revision is prepared; a necessary code/runtime change uses a
+recorded checkpoint-preserving continuation at a safe update boundary.
+
 ## LFM3 focus: one joint SFT stage, no cross-model dependence, metalearner (owner, 2026-10-28)
 
 The LFM3 line trains natlang execution and native Neuralese together in one

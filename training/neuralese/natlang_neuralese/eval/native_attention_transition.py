@@ -6,7 +6,6 @@ import math
 import time
 
 import torch
-import torch.nn.functional as F
 
 from ..common.hashing import canonical_json_sha256_hex
 from ..model.native_precision import set_native_attention_precision
@@ -257,7 +256,9 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
                         embeddings = model.embed(ids[None])
                         result = model(plan, embeddings=embeddings, reference=execution == 'cached')
                         hidden = result['h_final']
-                        loss = F.cross_entropy(model.logits(hidden[:, positions]).float().flatten(0, 1), labels)
+                        from ..common import stable_softmax
+                        loss = stable_softmax.cross_entropy(model.logits(hidden[:, positions]).float().flatten(0, 1),
+                                                            labels, reduction='mean')
                         outputs[slot] = (hidden.detach().clone(), float(loss.detach()))
                         return loss, embeddings, cotangent_scope
                     except BaseException:

@@ -5,11 +5,19 @@ import torch
 
 
 def masked_log_distribution(logits,temperature,*,allowed=None,banned=None):
-    return torch.log_softmax(masked_logits(logits,temperature,allowed=allowed,banned=banned),dim=-1)
+    from .stable_softmax import log_softmax
+    return log_softmax(masked_logits(logits,temperature,allowed=allowed,banned=banned),dim=-1)
+
+
+def masked_token_logprobs(logits,labels,temperature,*,allowed=None,banned=None,policy=None):
+    """Selected-token probabilities under the exact serving mask and stable gradient law."""
+    from .stable_softmax import token_logprobs
+    return token_logprobs(masked_logits(logits,temperature,allowed=allowed,banned=banned),labels,policy=policy)
 
 
 def masked_logits(logits,temperature,*,allowed=None,banned=None):
-    """Temperature-scaled FP32 logits with masked tokens at -inf (the sampling law before normalization)."""
+    """Temperature-scaled FP32 logits with masked tokens at -inf before normalization."""
+
     if not math.isfinite(float(temperature)) or temperature<=0:
         raise ValueError('sample temperature must be finite and positive')
     width=logits.shape[-1]

@@ -1,0 +1,79 @@
+{
+  "description": "Adaptive LFM3 joint natlang/native-state SFT: one full pass of the initial admitted v3 mixture, then prompt source/recipe continuations as new data and mechanisms qualify. Full BF16 stochastic-rounding backbone, MuonSR matrices and AdamWSR ordinary parameters; own-outputs/1, 10% reasoning, EMA, inline FP8/NVFP4 QAT. Four GPU learners with CPU coordinator cohosted on worker zero. No cross-model dependence or fresh teacher generation. Protected evaluation stays outside training.",
+  "id": "lfm3-joint-sft-20261028-v3",
+  "identity_qualification": "native_state_runtime_qualified",
+  "input_bindings": {
+    "ce_supervision_policy": {
+      "path": "/home/werg/natlang/runs/lfm3-mixture/joint-sft-v3/ce-policy.json",
+      "sha256": "bee51c44eba1416e53021ba330909ffa0cf7fb81af87c25685adf901bdbc97ec"
+    },
+    "native_held_graphs": {
+      "path": "/home/werg/natlang/runs/lfm3-mixture/joint-sft-v3/mixture/held-sources.json",
+      "sha256": "5053ab2b6754f2998294215e7892b5c18443d973f55e6c04239803ffac7b5e7f"
+    },
+    "native_train_graphs": {
+      "path": "/home/werg/natlang/runs/lfm3-mixture/joint-sft-v3/mixture/train-sources.json",
+      "sha256": "2495345c74be777e6e1c3e62c73954f20ee26d32b52ffb6635c76e3e59d409f5"
+    }
+  },
+  "schema": "natlang.neuralese-training-recipe/1",
+  "stages": [
+    {
+      "id": "native_full_sft",
+      "inputs": {
+        "ce_supervision_policy": "ce_supervision_policy",
+        "foundation_native_graphs": "native_train_graphs",
+        "held_native_graphs": "native_held_graphs",
+        "native_graphs": "native_train_graphs"
+      },
+      "kind": "native_state_sft",
+      "parameters": {
+        "async_checkpoint": true,
+        "base": "/work/hf/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd",
+        "batch_graphs": 64,
+        "batch_tokens": 32768,
+        "checkpoint_every": 500,
+        "checkpoint_seconds": 300,
+        "chunk_tokens": 1024,
+        "cotangent_accumulator_backend": "plain",
+        "dtype": "bfloat16",
+        "epochs": 1.0,
+        "eval_every": 500,
+        "forward_atol": 0.0001,
+        "gradient_atol": 1e-05,
+        "held_eval_graphs": 128,
+        "history_reasoning_policy": "keep",
+        "interface_row_learning_rate": 0.001,
+        "learned_row_learning_rate": 0.001,
+        "learning_rate": 2e-05,
+        "lr_warmup": 150,
+        "matrix_telemetry": {
+          "attention_logits": true,
+          "every": 100,
+          "layers": 4,
+          "norms": true
+        },
+        "memory_qualification": {
+          "path": "/home/werg/data/lfm3-sft-20261028/production-v3/sft-capacity-descriptor.json",
+          "sha256": "11ed429f4fb3768d4a34672eb7df21cc49ea40b503dc526a24fc790bb748b421"
+        },
+        "native_ordinary_precision": "bf16-stochastic-rounding-v1",
+        "seed": 20261028,
+        "sft_packed_geometry": {
+          "path": "/home/werg/data/dgxops/claude-recovery-20261028/v3-current-runtime-geometry/packed-capacity-geometry/4f7a24a7ad8902b438cc2d3e76e78195bef6fd0d3c32e551ec23365439086fcb.json",
+          "sha256": "fca163f17775f7a2355b08a218bce15f57320f60bc6ccecc5ffb15ae8d023221"
+        },
+        "share_causal_prefixes": true,
+        "task_eval_every": 0,
+        "weight_decay": 0.1,
+        "weight_ema": {
+          "decay": 0.999,
+          "eval": "ema",
+          "seed": 0,
+          "warmup": 10
+        }
+      },
+      "requires": []
+    }
+  ]
+}

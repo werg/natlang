@@ -111,6 +111,12 @@ field (regenerate the control); `training-guidance-unavailable` means use a
 native-state server (`--neuralese-server`); `guidance-writer-missing` means set
 `NATLANG_GUIDANCE_WRITER` to the package directory.
 
+Decision readouts (`readout: decision`, `decide(fn, ...)`) are trainable model outputs: SFT supervises the choice over
+the option set, and tuning rollouts (`natlang tune`) sample the answer from the scored distribution at the rollout
+temperature for exploration (recorded with the capture) instead of taking the most probable option. Ordinary runs keep
+the most probable option. A tuning rollout needs a native server for decisions (`rollout-capture-unavailable`
+otherwise: serve the student with `natlang serve` or a native profile).
+
 ## Student prompt rendering
 
 Use `promptRendering: "program-header"` in the model profile (or runtime `model`

@@ -4,7 +4,8 @@ from __future__ import annotations
 import math
 
 import torch
-import torch.nn.functional as F
+
+from ..common import stable_softmax
 
 from ..model.shared_state import Invocation, ImportSpan, compile_graph
 
@@ -97,9 +98,11 @@ def graph_loss_from_result(model, example, result, *, chunk_tokens=128, boundary
             raise ValueError('boundary observation requires distinct nonnegative integer token IDs')
         boundaries = hidden.new_zeros((len(boundary_token_ids), 5), dtype=torch.float32)
         observed = torch.tensor(boundary_token_ids, device=hidden.device, dtype=torch.long)
+    numerics = stable_softmax.active_policy()  # bound now: checkpoint recomputation runs in backward
+
     def loss_chunk(states, labels, token_weights, evaluation_weights):
         logits = model.logits(states)
-        ce = F.cross_entropy(logits.float(), labels, reduction='none')
+        ce = stable_softmax.cross_entropy(logits, labels, policy=numerics)
         hits = (logits.argmax(-1) == labels).float()
         loss_outputs = ((ce * token_weights).sum(), (hits * token_weights).sum())
         with torch.no_grad():

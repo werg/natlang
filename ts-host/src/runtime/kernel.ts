@@ -270,7 +270,8 @@ function checkedServices(task: Frame['task'], frame: Frame, services: Readonly<R
     // Outside text enters here: its source is the service method, and the renderer shows it as data from then on.
     if (containsUntrusted(type, env)) registry.markTyped(value, type, env, label);
     if (!containsRefinement(type, env)) return;
-    const failures = await checker.checkValue(value, type, env, { phase: 'service', ...judges, callId, signal, emit }, label);
+    const failures = await checker.checkValue(value, type, env, { phase: 'service', ...judges, callId, signal, emit,
+      trace: traceFor(callId) }, label);
     if (failures.length) throw failureError(failures[0]!);
   }) as Readonly<Record<string, object>>;
 }
@@ -565,7 +566,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       const judges = task.refinementJudges(task.model(definition.model), frame);
       const failures = (await Promise.all(signature.params.map((type, index) => inputs[index] === undefined ? [] :
         checker.checkValue(inputs[index], type, signature.env, { phase: 'argument', ...judges, callId: frame.parentCallId ?? null, signal: frame.signal ?? task.signal,
-          emit: (kind, data) => traceFor(frame.parentCallId)?.emit(kind, { ...data, callee: definition.name }) },
+          trace: frame.parentCallId ? traceFor(frame.parentCallId) : undefined, emit: (kind, data) => traceFor(frame.parentCallId)?.emit(kind, { ...data, callee: definition.name }) },
           definition.params[index]!.name)))).flat();
       if (failures.length) throw failureError(failures[0]!);
     } catch (error) {
@@ -716,7 +717,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     if (signature?.refinedReturns) {
       const failures = await task.refinementChecker().checkValue(result.value, signature.returns, signature.env,
         { phase: 'return', ...task.refinementJudges(model, frame), callId, signal: frame.signal ?? task.signal,
-          emit: (kind, data) => { runtime!.trace.emit(kind, data); } });
+          trace: runtime!.trace, emit: (kind, data) => { runtime!.trace.emit(kind, data); } });
       if (failures.length) {
         outcome = 'failed'; detail = `${failures[0]!.code}: ${failures[0]!.message}`;
         throw new RefinementCallError(failures[0]!.code, definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);
@@ -846,7 +847,7 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
     if (containsRefinement(node.type.returns, env)) {
       const failures = await task.refinementChecker().checkValue(structural, node.type.returns, env,
         { phase: 'return', ...task.refinementJudges(task.model(definition.model), input.frame), callId, signal: input.frame.signal ?? task.signal,
-          emit: (kind, data) => { traceFor(callId)?.emit(kind, data); } });
+          trace: traceFor(callId), emit: (kind, data) => { traceFor(callId)?.emit(kind, data); } });
       if (failures.length) throw failureError(failures[0]!);
     }
     const value = toHost(structural);

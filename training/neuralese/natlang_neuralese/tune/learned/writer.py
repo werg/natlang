@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 import torch
 
 from . import LearnedOptimizerError
+from ...common.stable_softmax import log_softmax
 from .numbers import layout
 
 WRITER_SCHEMA = 'natlang.lopt.writer/1'
@@ -188,7 +189,7 @@ class Writer:
                 value = target
             else:
                 value = None
-            sign_lp = torch.log_softmax(torch.stack([sign_logits[grid.positive], sign_logits[grid.negative]]).float() / self.temperature, 0)
+            sign_lp = log_softmax(torch.stack([sign_logits[grid.positive], sign_logits[grid.negative]]).float() / self.temperature, 0)
             if value is None and greedy:
                 negative = bool(sign_lp[1] > sign_lp[0])
             elif value is None:
@@ -199,9 +200,9 @@ class Writer:
             after_sign = self._step([sign], cache)
             digit_logits = self.model.logits(after_sign['h_final'][0, -1][None])[0]
             index = torch.tensor(grid.digits, device=digit_logits.device)
-            digit_lp = torch.log_softmax(digit_logits[index].float() / self.temperature, 0)
+            digit_lp = log_softmax(digit_logits[index].float() / self.temperature, 0)
             if negative:
-                digit_lp = torch.log_softmax(torch.cat([digit_lp.new_full((1,), -torch.inf), digit_logits[index[1:]].float() / self.temperature]), 0)
+                digit_lp = log_softmax(torch.cat([digit_lp.new_full((1,), -torch.inf), digit_logits[index[1:]].float() / self.temperature]), 0)
             if value is None:
                 magnitude = (int(digit_lp.argmax()) if greedy else
                              int(torch.multinomial(digit_lp.exp().detach().cpu(), 1, generator=generator).item()))

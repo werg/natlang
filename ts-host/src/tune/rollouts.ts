@@ -19,7 +19,7 @@ import { dirname, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import type { ResolvedWeightStack, WeightBinding } from '../adaptation/weights/binding.js';
 import type { WeightManifest } from '../adaptation/weights/manifest.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { neuraleseServerModelTurn, type NeuraleseServerOptions } from '../model/neuralese-server.js';
 import { currentFrame } from '../runtime/context.js';
 import { loadNatlang } from '../runtime/node-files.js';
@@ -49,6 +49,22 @@ export type RolloutSummary = { readonly path: string; readonly written: number; 
 const pythonKey = (items: readonly (string | null)[]) => '[' + items.map(item => JSON.stringify(item)).join(', ') + ']';
 const hash = (...parts: unknown[]) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 /** A 31-bit seed derived from its named parts. */
+/** Seeded categorical draw from softmax(logProbs / temperature) (the decision readout's exploration law). */
+export function sampleOption(logProbs: readonly number[], temperature: number, seed: number): number {
+  if (!(temperature > 0) || !Number.isFinite(temperature)) throw new Error('decision sampling needs a positive temperature');
+  const top = Math.max(...logProbs.map(value => value / temperature));
+  const weights = logProbs.map(value => Math.exp(value / temperature - top));
+  const total = weights.reduce((sum, value) => sum + value, 0);
+  // Mulberry32 from the derived seed: deterministic per (rollout, call, turn).
+  let state = seed >>> 0;
+  state = (state + 0x6d2b79f5) >>> 0;
+  let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+  mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+  let draw = (((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296) * total;
+  for (let index = 0; index < weights.length; index++) { draw -= weights[index]!; if (draw < 0) return index; }
+  return weights.length - 1;
+}
+
 export const derivedSeed = (...parts: unknown[]) => Number.parseInt(hash('natlang.tune-rollout-seed/1', ...parts).slice(0, 8), 16) & 0x7fffffff;
 
 /** The behavior actor of a release as the trainer checks it: node versions, family gates and soft-state versions. */
@@ -113,7 +129,7 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
     behavior: ReturnType<typeof releaseBehavior>): Promise<TuneRollout> {
   const turns: Json[] = [], bindings: Record<string, string | null> = {}, counters = new Map<string, number>();
   const stacks: ResolvedWeightStack[] = [], events: Json[] = [];
-  let transport: unknown, decided = false, refused: string | undefined, fatal: Error | undefined;
+  let transport: unknown, refused: string | undefined, fatal: Error | undefined;
   // A refusal inside the driver surfaces through the runtime as an ordinary failure; remember it so it never scores 0.
   const refuse = (reason: string): never => { refused ??= reason; throw new Skip(reason); };
   const inner = options.driver as (request: ModelTurnRequest, ...rest: unknown[]) => Promise<ModelTurn>;
@@ -141,8 +157,31 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
       replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });
     return reply;
   }, Object.fromEntries(Object.entries(options.driver))) as unknown as ModelDriver;
-  const decide = (options.driver as unknown as { decide?: (...args: unknown[]) => unknown }).decide;
-  if (decide) (driver as unknown as { decide: unknown }).decide = (...args: unknown[]) => { decided = true; return decide(...args); };
+  // A decision readout is an action over its option set: sampled from softmax(scores / T) for exploration, with its
+  // exact scoring capture and sampling receipt as the episode turn (rl/decision_policy.py).
+  const decide = (options.driver as unknown as { decide?: (request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores> }).decide;
+  if (decide) (driver as unknown as { decide: unknown }).decide = async (request: DecisionRequest, signal?: AbortSignal) => {
+    const call = request.invocation_id;
+    if (!call) return refuse('a decision readout has no invocation identity');
+    const turn = (counters.get(call) ?? 0) + 1;
+    counters.set(call, turn);
+    const turnSeed = derivedSeed(seed, call, turn);
+    let scores: DecisionScores;
+    try { scores = await decide({ ...request, native_recording: true }, signal); }
+    catch (error) { transport ??= error; throw error; }
+    const capture = scores.native_decision_capture;
+    if (!capture) throw fatal ??= new Error('rollout-capture-unavailable: decision readouts need the native server\'s '
+      + 'decision capture');
+    const chosen = sampleOption(scores.log_probs, options.temperature, turnSeed);
+    const binding = currentFrame()?.weights?.binding ?? null;
+    if (call in bindings && bindings[call] !== binding) refuse('one invocation ran under two bindings');
+    bindings[call] = binding;
+    turns.push({ messages: structuredClone(request.messages), target: { role: 'assistant', content: request.options[chosen]! },
+      invocation_id: call, sampling: { ...structuredClone(capture), decision_sample: { schema: 'natlang.decision-sample/1',
+        log_probs: [...scores.log_probs], chosen, temperature: options.temperature, seed: turnSeed } },
+      replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });
+    return { ...scores, chosen };
+  };
   const runtime = createNatlangRuntime({ program: options.program, ...await tuneRuntime(driver, options.execution), weights: options.weights,
     ...await rootServices(options.root, options.services, example), trace: trace => {
     const weights = (trace.adaptation as { weights?: ResolvedWeightStack } | undefined)?.weights;
@@ -157,7 +196,6 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
   if (fatal) throw fatal;
   if (refused) throw new Skip(refused);
   if (transport) throw new Skip(`model transport failed: ${transport instanceof Error ? transport.message : String(transport)}`.slice(0, 300));
-  if (decided) throw new Skip('a decision readout is not a captured sampled turn');
   if (!turns.length) throw new Skip('the root made no model turn');
   const degraded = stacks.find(stack => stack.status !== 'ready' && stack.status !== 'untuned' || stack.effective.length < stack.requested.length);
   if (degraded) throw new Skip(`a call did not run its release stack (${degraded.status}${degraded.reason ? `: ${degraded.reason}` : ''})`);

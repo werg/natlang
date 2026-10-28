@@ -1,5 +1,6 @@
 """Actual native gradients release without SGD; target capacity needs target runs."""
 import copy
+import json
 import random
 
 import pytest
@@ -639,3 +640,38 @@ def test_capacity_oom_retains_failing_phase_stack_and_actual_offload_state(tmp_p
     assert_exact(before,model.state_dict());assert_exact(history,optimizer.state_dict())
     assert torch.equal(rng,torch.get_rng_state())
     assert all(p.grad is None for p in model.parameters())
+
+
+def test_sft_descriptor_qualifies_actual_loaded_source_without_updates(tmp_path, monkeypatch):
+    from natlang_neuralese.train import native_resident as resident
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train.native_packed_capacity import geometry_for_source
+    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch)
+    _, geometry, _ = geometry_for_source(train, args.out, allow_build=True)
+    descriptor = {'schema': 'natlang.native-sft-capacity-cases/1', 'source': resident.binding(train.path),
+                  'geometry': geometry}
+    path = tmp_path / 'sft-descriptor.json'; path.write_text(json.dumps(descriptor))
+    args.memory_qualification = json.dumps(resident.binding(path))
+    before=copy.deepcopy(optimizer.state_dict()); weights=copy.deepcopy(model.state_dict()); rng=torch.get_rng_state().clone()
+    result=memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+    assert result['passed'] and result['optimizer_updates']==0
+    assert result['capacity']['cases'][0]['id']==train.entries[0]['id']
+    assert args.resident_geometry_qualification.is_file()
+    assert_exact(before,optimizer.state_dict()); assert_exact(weights,model.state_dict()); assert torch.equal(rng,torch.get_rng_state())
+
+
+def test_sft_descriptor_rejects_wrong_source_and_geometry(tmp_path, monkeypatch):
+    from natlang_neuralese.train import native_resident as resident
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train.native_packed_capacity import geometry_for_source
+    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch)
+    _, geometry, _ = geometry_for_source(train, args.out, allow_build=True)
+    descriptor={'schema':'natlang.native-sft-capacity-cases/1','source':resident.binding(train.path),'geometry':geometry}
+    descriptor['source']={'path':str(tmp_path/'wrong'),'sha256':'0'*64}
+    with pytest.raises(ValueError,match='descriptor source differs'):
+        memory._materialize_sft_capacity_request(train, descriptor, identity={}, runtime_code_sha256='x', request_path=tmp_path/'r')
+    descriptor['source']=resident.binding(train.path)
+    damaged=json.loads(resident.bound(geometry).read_text()); damaged['kv_slots'][0] += 1
+    bad=tmp_path/'damaged.json'; bad.write_text(json.dumps(damaged)); descriptor['geometry']=resident.binding(bad)
+    with pytest.raises(ValueError,match='geometry'):
+        memory._materialize_sft_capacity_request(train, descriptor, identity={}, runtime_code_sha256='x', request_path=tmp_path/'r')

@@ -315,6 +315,7 @@ def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
         assert [s['id'] for s in imports] == ([state] if mode == 'import' else [])
 
 
+
 @pytest.mark.parametrize('scale', [1.0, 1e-4])
 def test_reverse_kl_from_logits_matches_float64_reference_including_near_agreement(scale):
     from natlang_neuralese.rl.jolt import reverse_kl

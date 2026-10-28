@@ -10,7 +10,6 @@ import time
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
 
 
 def _execution_receipt(summary, identity, *, checkpoint_sha256, score, path, digest):
@@ -183,7 +182,8 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
 
         def objective(result):
             logits = model.logits(result['h_final'][:, positions]).float()
-            return F.cross_entropy(logits.flatten(0, 1), labels)
+            from ..common import stable_softmax
+            return stable_softmax.cross_entropy(logits.flatten(0, 1), labels, reduction='mean')
 
         flat_loss = objective(flat)
         reference_loss = None if reference is None else objective(reference)

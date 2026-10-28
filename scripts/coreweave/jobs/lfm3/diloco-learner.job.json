@@ -5,14 +5,14 @@
  "placement": {"where": "coreweave", "reason": "LFM3 joint SFT stage on DiLoCo (owner 2026-10-28, plans/neuralese/LFM3_SCALEOUT_20261028.md phase 2): one of N one-GPU learners on its stable row shard, exchanging BF16 pseudo-gradients with the CPU coordinator. Bounded lifetime; private full-state exports of learner 0 at a cadence; DGX keeps the verified recovery copy."},
  "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
  "resources": {"gpu": 1, "memory": "64Gi"},
- "lifetime_hours": 24,
+ "lifetime_hours": 720,
  "scratch": {"path": "/work", "size": "300Gi"},
  "recovery": {"snapshot_interval_seconds": 3600, "keep": 2},
  "env": {"HF_HUB_OFFLINE": "1", "NATLANG_CW_COLLECT_WAIT": "7200",
          "TORCHINDUCTOR_CACHE_DIR": "/work/.cache/inductor", "TRITON_CACHE_DIR": "/work/.cache/triton"},
  "outputs": ["/work/diloco-learner"],
  "command": ["python", "-m", "natlang_neuralese.train.native_state_sft", "@@TRAINER_ARGS@@"],
- "needs": {"gpu_memory_gb": 60, "hours": 24, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": true},
+ "needs": {"gpu_memory_gb": 60, "hours": 720, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": true},
  "resource_notes": "resources: exactly one GPU plus a RAM minimum (AGENTS.md: CPU, GPU model and GPU memory unspecified; the bootstrap logs the assigned nproc/cgroup memory). 64Gi is provisional: full state of 1.7B in BF16 with Muon/AdamW-SR moments is ~10 GB, loaded with map_location=cpu plus a host-side save in flight; replace it with the phase-1 measured host peak (+25%). The last 32Gi request was assigned 2 CPUs; if data loading starves the GPU, record the evidence and raise it with the owner rather than adding a CPU filter silently.",
  "bundle_plan": "bundle.py plan --recipe @@RECIPE@@ --stage @@STAGE@@ --code-sha SHA --prebuilt wheelhouse --extra @@PARENT@@ -o LEARNER_BUNDLE.json"
 }

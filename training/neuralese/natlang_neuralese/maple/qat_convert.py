@@ -25,9 +25,10 @@ import time
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn.utils import parametrize
+
+from ..common import stable_softmax
 
 from .model import DenseExperts, load_maple
 from .ternary import QUANT_MIX, ramped_ternarize_ste, ternarize_ste
@@ -118,11 +119,9 @@ def windows_from(text_data: str, tokenizer, tokens: int, count: int, split: str 
 
 
 def topk_kl(student_logits: torch.Tensor, teacher_ids: torch.Tensor, teacher_logp: torch.Tensor) -> torch.Tensor:
-    """KL(teacher || student) over the teacher's top-k (its probabilities renormalised over those k)."""
-    t = teacher_logp.float()
-    t = t - torch.logsumexp(t, -1, keepdim=True)
-    s = torch.log_softmax(student_logits.float(), -1).gather(-1, teacher_ids.long())
-    return (t.exp() * (t - s)).sum(-1).mean()
+    """KL(teacher || student) over the teacher's top-k (its probabilities renormalised over those k), with the
+    shared stable gradient (common/stable_softmax.py)."""
+    return stable_softmax.topk_forward_kl(student_logits, teacher_ids.long(), teacher_logp.float()).mean()
 
 
 def hidden_logits(model, ids):
@@ -146,7 +145,7 @@ def run_teacher(a):
             for w in windows:
                 ids = torch.tensor([w], device="cuda")
                 logits = model(ids).logits[0, :-1].float()
-                logp = torch.log_softmax(logits, -1)
+                logp = stable_softmax.log_softmax(logits, -1)
                 values, index = logp.topk(a.k, -1)
                 ce.append(float(-logp.gather(-1, ids[0, 1:, None]).mean()))
                 ids_all.append(ids[0].cpu().int())
@@ -175,7 +174,7 @@ def _teacher_topk(model, ids: torch.Tensor, k: int, chunk: int = 2048):
     h = model.model(input_ids=ids).last_hidden_state[0, :-1]
     top_ids, top_logp, token_logp = [], [], []
     for start in range(0, h.shape[0], chunk):
-        logp = torch.log_softmax(model.lm_head(h[start:start + chunk]).float(), -1)
+        logp = stable_softmax.log_softmax(model.lm_head(h[start:start + chunk]).float(), -1)
         values, index = logp.topk(k, -1)
         top_ids.append(index.int().cpu())
         top_logp.append(values.half().cpu())
@@ -245,12 +244,13 @@ def weighted_topk_kl(model, ids: torch.Tensor, top_ids: torch.Tensor, top_logp: 
     weight = torch.ones(positions, device=h.device)
     weight[:max(0, prompt_len - 1)] = prompt_weight
 
+    numerics = stable_softmax.active_policy()  # bound now: checkpoint recomputation runs in backward
+
     def piece(hidden, t_ids, t_logp, target):
-        logp = torch.log_softmax(model.lm_head(hidden).float(), -1)
-        t = t_logp.float()
-        t = t - torch.logsumexp(t, -1, keepdim=True)
-        kl = (t.exp() * (t - logp.gather(-1, t_ids.long()))).sum(-1)
-        return kl, -logp.gather(-1, target[:, None])[:, 0], (logp.argmax(-1) == t_ids[:, 0].long()).float()
+        logits = model.lm_head(hidden)
+        kl = stable_softmax.topk_forward_kl(logits, t_ids.long(), t_logp.float(), policy=numerics)
+        ce = stable_softmax.cross_entropy(logits, target, policy=numerics)
+        return kl, ce, (logits.argmax(-1) == t_ids[:, 0].long()).float()
 
     kls, ces, agree = [], [], []
     for start in range(0, positions, chunk):
@@ -454,7 +454,7 @@ def run_train(a):
         for i in range(held["ids"].shape[0]):
             ids = held["ids"][i:i + 1].long().cuda()
             logits = hidden_logits(model, ids)[0, :-1]
-            ce.append(float(F.cross_entropy(logits.float(), ids[0, 1:])))
+            ce.append(float(stable_softmax.cross_entropy(logits, ids[0, 1:], reduction="mean")))
             kl.append(float(topk_kl(logits, held["top_ids"][i].cuda(), held["top_logp"][i].cuda())))
         model.train()
         return {"held_ce": sum(ce) / len(ce), "held_kl": sum(kl) / len(kl)}
@@ -469,7 +469,7 @@ def run_train(a):
         i = int(torch.randint(train["ids"].shape[0], (1,), generator=generator))
         ids = train["ids"][i:i + 1].long().cuda()
         logits = hidden_logits(model, ids)[0, :-1]
-        ce = F.cross_entropy(logits.float(), ids[0, 1:])
+        ce = stable_softmax.cross_entropy(logits, ids[0, 1:], reduction="mean")
         kl = topk_kl(logits, train["top_ids"][i].cuda(), train["top_logp"][i].cuda())
         loss = a.ce_weight * ce + kl_weight * kl
         if not torch.isfinite(loss):

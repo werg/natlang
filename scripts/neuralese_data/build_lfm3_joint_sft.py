@@ -144,13 +144,17 @@ def build(args):
     run([PY, 'scripts/neuralese_data/build_native_packed_geometry.py', '--source', str(mixture / 'train-sources.json'),
          '--tokenizer-fingerprint', fingerprint, '--role-ids', *role_ids, '--out', str(out / 'geometry')])
     geometry = json.loads((out / 'geometry' / 'packed-geometry-build.json').read_text())
+    run([PY, 'scripts/coreweave/prepare_sft_capacity_descriptor.py',
+         '--source', str(mixture / 'train-sources.json'), '--geometry', geometry['geometry']['path'],
+         '--out', str(out / 'sft-capacity-descriptor.json')])
     bind = lambda p: {'path': str(p), 'sha256': sha256_file_hex(p)}
     inputs = {'schema': 'natlang.lfm3-joint-sft-learner-inputs/1', 'model_id': line_backbones.model_id('lfm3'),
               'expanded_tokenizer_fingerprint': fingerprint, 'role_token_ids': [int(r) for r in role_ids],
               'native_graph_sources': bind(mixture / 'train-sources.json'),
               'held_sources': bind(mixture / 'held-sources.json'),
               'ce_supervision_policy': bind(out / 'ce-policy.json'),
-              'sft_packed_geometry': geometry['geometry'], 'mixture': bind(mixture / 'mixture.json'),
+              'sft_packed_geometry': geometry['geometry'],
+              'memory_qualification': bind(out / 'sft-capacity-descriptor.json'), 'mixture': bind(mixture / 'mixture.json'),
               'policy': bind(REPO / POLICY), 'config': bind(out / 'config.json'),
               'note': 'pre-tokenized native graph rows and exact packed geometry: learners do no tokenization; '
                       'held/dev rows never in the train manifest; later admissions append as a new version'}

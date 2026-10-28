@@ -1502,3 +1502,30 @@ def test_source03_bridge_geometry_rejects_unbound_or_nonprefix_bridge(tmp_path,m
     with pytest.raises(ValueError):
         resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
     assert not output.exists()
+
+
+def test_diloco_resident_control_stages_publishes_and_adopts_at_update_boundary(tmp_path, monkeypatch):
+    import importlib.util
+    import hashlib
+    path = Path(__file__).resolve().parents[2] / 'scripts/coreweave/diloco_resident_worker.py'
+    spec = importlib.util.spec_from_file_location('resident_worker_test', path)
+    helper = importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    paths, directory, manager, recipe = setup(tmp_path)
+    staged, installed = tmp_path / 'staged', tmp_path / 'immutable' / 'object'
+    staged.write_bytes(b'content')
+    digest = hashlib.sha256(b'content').hexdigest()
+    assert helper.install(staged, installed, digest, 7)['sha256'] == digest
+    staged.write_bytes(b'changed')
+    with pytest.raises(ValueError, match='staged content'):
+        helper.install(staged, installed, digest, 7)
+    prepared = helper.prepare(directory, recipe, 'sft', 'tokenizer-sha', [])
+    assert helper.status(directory)['pending'] is None
+    published = helper.publish(directory, prepared['request'])
+    assert helper.status(directory)['pending'] == prepared['request']
+    old_train = manager.train
+    assert manager.poll(12) is not None
+    assert manager.train is not old_train and len(manager.train) == 3
+    status = helper.status(directory)
+    assert status['generation'] == published['generation'] and status['at_global_step'] == 12
+    assert 'exposure_counts' not in resident.current(directory)

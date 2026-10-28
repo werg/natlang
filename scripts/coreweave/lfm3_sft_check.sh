@@ -23,7 +23,13 @@ facts
     sleep 5
   done ) >> "$OUT/resources.jsonl" &
 sampler=$!
-trap 'kill $sampler 2>/dev/null || true' EXIT
+pid=''
+cleanup() {
+  if [ -n "$pid" ]; then kill -TERM "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+  kill "$sampler" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 143' TERM INT
 # The pinned base comes from the hub at its exact revision (faster than pushing 3.4 GB from DGX); "@@BASE@@" in
 # ARGS.json is replaced by the snapshot directory (the trainer records and checks its base inventory).
 BASE=$(python3 - <<'PY'
@@ -54,8 +60,25 @@ PY
   fi
   sleep 5
 done
-wait $pid; echo "$(date -u +%FT%TZ) phase A exit $?" >> "$OUT/phases.log"
-cp "$OUT/train/progress.json" "$OUT/progress-a.json" 2>/dev/null
+wait "$pid"
+rc=$?
+pid=''
+echo "$(date -u +%FT%TZ) phase A exit $rc" >> "$OUT/phases.log"
+if [ "$rc" -ne 0 ]; then
+  echo "$(date -u +%FT%TZ) phase A failed; no successful seed or phase B" >> "$OUT/phases.log"
+  exit "$rc"
+fi
+# A zero process status without a committed full checkpoint cannot seed distributed continuation.
+if [ ! -s "$OUT/train/checkpoint.pt" ] || ! python3 - "$OUT/train/progress.json" <<'PY_CHECK'
+import json, sys
+p = json.load(open(sys.argv[1]))
+sys.exit(0 if p.get('checkpoint_step', 0) > 0 else 1)
+PY_CHECK
+then
+  echo "$(date -u +%FT%TZ) phase A produced no committed checkpoint" >> "$OUT/phases.log"
+  exit 1
+fi
+cp "$OUT/train/progress.json" "$OUT/progress-a.json" || exit 1
 facts
 [ "${CHECK_PHASE_B:-1}" = 0 ] && { echo "$(date -u +%FT%TZ) phase B skipped (CHECK_PHASE_B=0: seed run)" >> "$OUT/phases.log"; exit 0; }
 echo "$(date -u +%FT%TZ) phase B start (same command: restore from the rolling state)" >> "$OUT/phases.log"
