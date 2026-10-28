@@ -564,6 +564,7 @@ def health_snapshot(record, ownership, *, read_sandbox=None):
             r=box.exec(['python3','-c',_HEALTH_PROBE,json.dumps(role),module],timeout_seconds=30).result(timeout=40)
             if r.returncode:raise ValueError('health probe failed')
             data=json.loads(r.stdout);data.update(sandbox_id=ident,sandbox_status=status)
+            data['process_identity']={key:role[key] for key in ('pid','boot_id','start_ticks')}
             expected_sha=(ownership.get('runtime') or {}).get('new_module_sha256')
             data['runtime_matches']=bool(expected_sha and data.get('runtime_module_sha256')==expected_sha)
             data['state']='live' if status=='running' and data['pid_alive'] and data['runtime_matches'] else 'dead-replaced-or-runtime-mismatch'
@@ -571,12 +572,48 @@ def health_snapshot(record, ownership, *, read_sandbox=None):
         except Exception as error:return str(i),{'sandbox_id':ident,'state':'unavailable','error_type':type(error).__name__}
     with ThreadPoolExecutor(max_workers=len(ids)) as pool:return dict(pool.map(check,range(len(ids))))
 
+def observe_optimizer_progress(workers, previous, now):
+    """Report observed movement without treating elapsed time as process death."""
+    result={}
+    old_workers=(previous or {}).get('workers',{})
+    if not isinstance(old_workers,dict):old_workers={}
+    for worker,data in workers.items():
+        data=dict(data);progress=data.get('progress')
+        step=(progress or {}).get('global_step')
+        if type(step) is not int:step=(progress or {}).get('step')
+        prior=old_workers.get(worker,{})
+        observation=prior.get('optimizer_observation') or {}
+        same=(data.get('state')=='live' and prior.get('state')=='live'
+              and data.get('sandbox_id')==prior.get('sandbox_id')
+              and data.get('process_identity')==prior.get('process_identity'))
+        if data.get('state')!='live' or type(step) is not int or step<0:
+            current={'status':'unavailable'}
+        elif not same or type(observation.get('step')) is not int:
+            current={'status':'baseline','step':step,'observed_since':now,
+                     'last_observed_advance_at':None,'seconds_without_observed_advance':0}
+        else:
+            old_step=observation['step']
+            since=observation.get('observed_since',now)
+            last=observation.get('last_observed_advance_at')
+            if step>old_step:last=now
+            current={'status':'advanced' if step>old_step else 'unchanged' if step==old_step else 'regressed',
+                     'step':step,'observed_since':since,'last_observed_advance_at':last,
+                     'seconds_without_observed_advance':max(0,now-(last if last is not None else since))}
+        data['optimizer_observation']=current;result[worker]=data
+    return result
+
+
 def health_loop(record, ownership_path, destination, interval):
     while True:
         try:
             ownership=json.loads(Path(ownership_path).read_text());workers=health_snapshot(record,ownership)
             current=json.loads((cwctl.STATE/'diloco'/(record['run']['id']+'.json')).read_text())
-            value={'schema':'natlang.diloco-worker-health/1','run_id':record['run']['id'],'journal_state':current.get('state'),'at':time.time(),'workers':workers}
+            now=time.time()
+            try:previous=json.loads(Path(destination).read_text())
+            except (OSError,ValueError):previous=None
+            if not isinstance(previous,dict) or previous.get('run_id')!=record['run']['id']:previous=None
+            workers=observe_optimizer_progress(workers,previous,now)
+            value={'schema':'natlang.diloco-worker-health/1','run_id':record['run']['id'],'journal_state':current.get('state'),'at':now,'workers':workers}
             durable_json(destination,value)
             print(json.dumps({'event':'worker_health','workers':workers},sort_keys=True),flush=True)
         except Exception as error:
