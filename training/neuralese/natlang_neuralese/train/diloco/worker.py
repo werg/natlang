@@ -762,18 +762,29 @@ class DilocoLearner:
                     return False
             time.sleep(0.2)
 
-    def state_dict(self) -> dict:
-        """Baselines, cursors and pending payloads; never live futures or sockets."""
+    def cursors(self) -> dict:
+        """Small committed-fragment counters, without allocating tensor snapshots."""
+        return {'versions': list(self.versions), 'sequences': list(self.sequences)}
+
+    def state_dict(self, *, clone_baselines=True) -> dict:
+        """Baselines, cursors and pending payloads; never live futures or sockets.
+
+        Synchronous writers may borrow the immutable baseline tensors at an
+        optimizer boundary. Updates replace baseline entries rather than
+        modifying their storage. Async callers retain independent copies.
+        """
+        if type(clone_baselines) is not bool:
+            raise TypeError('baseline snapshot copying must be an explicit boolean')
         return {
             "protocol": PROTOCOL,
             "fingerprint": self.manifest["fingerprint"],
             "worker": self.worker,
             "session": self.session,
-            "versions": list(self.versions),
-            "baselines": [None if t is None else t.detach().clone() for t in self.baselines],
+            **self.cursors(),
+            "baselines": [None if t is None else t.detach().clone() if clone_baselines else t.detach()
+                          for t in self.baselines],
             "steps_since": list(self.steps_since),
             "tokens_since": list(self.tokens_since),
-            "sequences": list(self.sequences),
             "local_steps": self.local_steps,
             "local_tokens": self.local_tokens,
             "pending": {
