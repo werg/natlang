@@ -1356,8 +1356,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           const pseudo: ModelTurnRequest = { invocation_id: call, messages: request.messages, tools: [], seed: null, max_tokens: 0 };
           if (slots) await slots.acquire(1);
           try {
-            const reply = await admittedSend(pseudo, async () => ({raw_response: { decision: await decisionTransport(
-              {...request, native_recording: true}, signal ?? providerParentSignal()) }}), true, signal ?? providerParentSignal());
+            const reply = await admittedSend(pseudo, async () => {
+              await recordHttpTransportStart(pseudo, activeSendEntries.get(pseudo)?.request_retry_index ?? 0);
+              return {raw_response: { decision: await decisionTransport(
+                {...request, native_recording: true}, signal ?? providerParentSignal()) }};
+            }, true, signal ?? providerParentSignal());
             scores = reply.raw_response?.decision as DecisionScores;
             const capture = scores.native_decision_capture;
             if (!capture) throw new Error('decision collection needs its exact native capture');
