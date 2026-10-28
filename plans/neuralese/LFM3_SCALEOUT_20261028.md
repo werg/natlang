@@ -2,6 +2,8 @@
 
 ## Execution plan after the owner restructure (2026-10-28, later)
 
+Committed first-run decisions (DiLoCo outer optimizer, 4 learners directly, async RL pattern, phase-1 scope) are in `LFM3_COMMITTED_DECISIONS_20261028.md`, which supersedes the hedges below.
+
 Parallel preparation now (independent agents/ledger units): port A (backbone) completion; part C fork merge and
 converter cutover; Pop corpus recovery (Pop back online, ssh alias pop-os); LFM3 conversion of all usable data and
 the prioritized joint-SFT mixture (natlang execution + Neuralese in one stage); sandbox runtime (prebuilt x86_64
