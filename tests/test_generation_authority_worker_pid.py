@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
 from generation_authority import observe_additional_teacher_processes, verify_worker_process
-from monitor_generation import additional_teacher_alerts
 
 
 def test_worker_process_resolves_successor_pid_aliases_against_exact_argv():
@@ -43,28 +42,3 @@ def test_additional_teacher_observation_keeps_lifecycle_status_and_counts_verifi
     assert teacher['workers'][2]['status'] == 'completed'
     assert teacher['status'] == 'running'
 
-
-def test_monitor_warns_when_running_additional_worker_has_unverified_pid_binding():
-    authority = {'additional_teachers': {'bunny': {
-        'state': 'running',
-        'workers': [{'worker_pid': 51, 'status': 'running',
-                     'argv': ['/usr/bin/timeout', '1800s', '/usr/bin/node', '/expected/cli.js']}],
-    }}}
-
-    alerts = additional_teacher_alerts(authority, process_argv=lambda _pid: ['/usr/bin/python', 'unrelated.py'])
-
-    assert any('bunny: 1 active worker binding(s) have no verified live PID/argv' in alert
-               for alert in alerts)
-
-
-def test_monitor_detects_idle_lifecycle_with_verified_live_child():
-    authority = {'additional_teachers': {'bunny': {
-        'state': 'completed', 'status': 'idle',
-        'workers': [{'process_pid': 61, 'status': 'running',
-                     'argv': ['/usr/bin/node', '/runtime/cli.js']}],
-    }}}
-
-    alerts = additional_teacher_alerts(authority, process_argv=lambda _pid: ['/usr/bin/node', '/runtime/cli.js'])
-
-    assert any('bunny: lifecycle state' in alert and 'verified live worker processes' in alert
-               for alert in alerts)

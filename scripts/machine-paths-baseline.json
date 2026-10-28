@@ -1,6 +1,5 @@
 {
   "files": [
-    "scripts/approve_dgx_v9_pool.py",
     "scripts/build_code_skill_episodes.py",
     "scripts/build_neuralese_counterfactual_reader_proposal.py",
     "scripts/consolidate_dgx_checkout.py",
@@ -19,8 +18,6 @@
     "scripts/neuralese_s3_subset.py",
     "scripts/prepare_training_exclusion_plan.py",
     "scripts/reclaim_file_cache.py",
-    "scripts/recover_reviewed_dgx_data_relocation.py",
-    "scripts/relocate_reviewed_dgx_data.py",
     "scripts/sync_training_corpora.py",
     "tests/neuralese/test_hf_port.py",
     "tests/test_neuralese_port_records.py",
