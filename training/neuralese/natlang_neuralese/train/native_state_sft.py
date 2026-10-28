@@ -2309,6 +2309,21 @@ def _main(argv=None, *, requested_refresh):
     diloco = attach_learner(args, named, parent_continuation=parent_continuation,
                             saved_state=None if parent_continuation else (resume or {}).get('diloco'))
     checkpoint_options['_diloco_learner'] = diloco
+    reopened_diloco=False
+    if diloco is not None and not parent_continuation and resume:
+        previous_delivery=((resume.get('options') or {}).get('diloco_final_delivery') or {})
+        previous_source=resume.get('source_hash')
+        if previous_delivery and previous_source != source_hash:
+            if (previous_delivery.get('schema')!='natlang.diloco-final-delivery/1' or
+                    previous_delivery.get('worker')!=diloco.worker or
+                    previous_delivery.get('fingerprint')!=diloco.manifest['fingerprint']):
+                raise ValueError('cannot reopen without exact prior final delivery custody')
+            diloco.reopen(previous=previous_source,generation=source_hash,sequences=previous_delivery['sequences'])
+            checkpoint_options.setdefault('diloco_reopen_history',[]).append({
+                'previous_source_hash':previous_source,'source_hash':source_hash,
+                'final_delivery':previous_delivery,'global_step':global_step})
+            checkpoint_options.pop('diloco_final_delivery',None)
+            reopened_diloco=True
     if diloco is not None:
         from .diloco import recovery_fence
         recovery_fence.announce(args.out, diloco.worker, diloco.manifest['fingerprint'])
@@ -2512,7 +2527,7 @@ def _main(argv=None, *, requested_refresh):
         admission_record = None  # An actual subsequent update is a new continuation.
     if admission_record is not None:
         checkpoint_options['_pending_source_admission'] = admission_record
-    metadata_dirty = (last_saved_step < 0 or args.native_optimizer_migration is not None
+    metadata_dirty = (reopened_diloco or last_saved_step < 0 or args.native_optimizer_migration is not None
         or source_correction_result.get('changed', False)
         or foundation_declaration_changed
         or foundation_dependencies_changed
@@ -3060,14 +3075,14 @@ def _main(argv=None, *, requested_refresh):
     if diloco is not None:
         try:
             if loop_error is None and step == total_end:
-                diloco.declare_completion(drained=False)
+                diloco.declare_completion(drained=False,generation=source_hash)
                 if not diloco.finish(stop_requested=lambda: policy.signaled):
                     raise RuntimeError('DiLoCo final local updates were not fully delivered; full-state resume required')
-                diloco.declare_completion(drained=True)
+                diloco.declare_completion(drained=True,generation=source_hash)
                 checkpoint_options['diloco_final_delivery'] = {
                     'schema': 'natlang.diloco-final-delivery/1',
                     'worker': diloco.worker, 'fingerprint': diloco.manifest['fingerprint'],
-                    'sequences': list(diloco.sequences)}
+                    'sequences': list(diloco.sequences), 'generation': source_hash}
                 # The final delivery changes DiLoCo state even without another SGD step.
                 metadata_dirty = True
         except BaseException as error:

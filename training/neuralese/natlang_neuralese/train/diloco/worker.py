@@ -556,7 +556,7 @@ class DilocoLearner:
         )
 
     def _queue(self, index: int) -> None:
-        if index in self.pending or index in self.awaiting_global or self.versions[index] < 0:
+        if index in self.pending or index in self.awaiting_global or index in self.downloads or self.versions[index] < 0:
             return
         if not self._flushable(index):
             return
@@ -608,9 +608,22 @@ class DilocoLearner:
                     self.downloads[index] = self.io.submit(self._fetch, index, self.versions[index])
             except RemoteError as exc:
                 if exc.status == 409 and exc.detail.get("stale"):
-                    # Keep the exact outbox and local history for explicit recovery.
-                    # Dropping this update would falsely report complete exposure.
-                    raise RuntimeError("DiLoCo update became stale; final contribution remains undelivered") from exc
+                    # The coordinator explicitly rejected this sequence: restore the
+                    # exact wire delta to the local anchor, then rebase onto its newer
+                    # global before resubmitting the same earned window.
+                    delta = entry.get("delta")
+                    if delta is None:
+                        delta = load_tensors(Path(entry["filename"]))["delta"]
+                    anchor = self.baselines[index]
+                    if anchor is None or entry["sequence"] != self.sequences[index]:
+                        raise ValueError("stale DiLoCo update has no exact recoverable anchor") from exc
+                    self.baselines[index] = anchor + delta.float()
+                    self.steps_since[index] += entry["steps"]
+                    self.tokens_since[index] += entry["tokens"]
+                    self.sequences[index] -= 1
+                    Path(entry["filename"]).unlink(missing_ok=True)
+                    del self.pending[index]
+                    self.downloads[index] = self.io.submit(self._fetch, index, -1)
                 elif 400 <= exc.status < 500 and exc.status not in (408, 409, 425, 429) and entry.get("attempts", 0) >= 3:
                     raise RuntimeError("DiLoCo update was rejected; contribution remains undelivered") from exc
                 else:
@@ -696,10 +709,15 @@ class DilocoLearner:
             if stop_requested() or time.monotonic()>=deadline:return False
             time.sleep(.05)
 
-    def declare_completion(self, *, drained: bool) -> None:
-        body={'worker':self.worker,'session':self.session,'drained':drained}
+    def declare_completion(self, *, drained: bool, generation: str | None = None) -> None:
+        body={'worker':self.worker,'session':self.session,'drained':drained,'generation':generation}
         if drained:body['sequences']=list(self.sequences)
         self._with_lease(lambda:self.transport.json('POST','/v1/completion',body))
+
+    def reopen(self, *, previous: str, generation: str, sequences: list[int]) -> None:
+        body={'worker':self.worker,'session':self.session,'previous':previous,
+              'generation':generation,'sequences':sequences}
+        self._with_lease(lambda:self.transport.json('POST','/v1/reopen',body))
 
     def finish(self, *, stop_requested=lambda: False) -> bool:
         """Send the last partial window and wait until it is delivered (bounded).
