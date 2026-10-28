@@ -1,4 +1,5 @@
 import { trajectoryTurn } from '../runtime/trajectory.js';
+import { checkRequiredActions } from './required-actions.js';
 export { trajectoryTurn } from '../runtime/trajectory.js';
 import { nativeStateRuntimeOptions } from '../model/native-state-client.js';
 import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';
@@ -1654,11 +1655,14 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     const functionEffects = functionSpec && expectedKind === 'done' ?
       checkFunctionEffects(functionSpec, originalFunctionSource(record, functionSpec.function),
         finalFunctionSource(root, runtime, functionSpec.function), actual, record.semantics.inputs ?? {}) : undefined;
+    const requiredActions = checkRequiredActions(record.semantics.required_actions, options.runId,
+      runtime.trace.events as unknown as Record<string, unknown>[]);
     const checks = { seeded_failure_requirement: failureSeen, expected_status: result.outcome.kind === expectedKind,
       honest_stop: honestStop, effects: effectsOk, files: filesOk, world: worldOk,
       file_return_consistency: !actualFiles || !record.semantics.files_oracle ||
         checkFileReturn(actual, actualFiles, folderFiles!, record.semantics.files_oracle),
       answer: expectedKind !== 'done' || !!authoring || !!world || oracle.accepted,
+      ...(record.semantics.required_actions ? { required_actions: requiredActions } : {}),
       ...(functionEffects ? { function_effects: functionEffects.ok } : {}) };
     const rejectionReasons = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
     const accepted = rejectionReasons.length === 0;

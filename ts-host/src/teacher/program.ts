@@ -33,6 +33,8 @@ export type ProgramSemantics = {
   files_oracle?: import('./oracle.js').FilesOracle;
   /** A required repair or forbidden edit of one program function, judged on its final source (function-effects.ts). */
   function_checks?: import('./function-effects.js').FunctionEffectSpec;
+  /** Exact root-side actions needed in addition to the returned value and other effects. */
+  required_actions?: import('./required-actions.js').RequiredAction[];
 };
 export type ProgramRecord = { version: string; id: string; kind: string; semantics: ProgramSemantics; [key: string]: unknown };
 
