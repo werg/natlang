@@ -501,17 +501,28 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dic
     if seen:
         log(json.dumps({'event': 'reused', 'objects': len(seen),
                         'bytes': sum(i['bytes'] for i in items if i['sha256'] in seen)}))
+    missing = []
     for item in items:
         if item['sha256'] in seen:
             continue
         seen.add(item['sha256'])
+        missing.append(item)
+    def push_one(item):
         source = Path(sources[item['key']])
         started = time.time()
         sandbox.write_file_streaming(f"{inbox}/{item['sha256']}", _chunks(source), timeout_seconds=7200).result()
-        pushed += 1
-        bytes_pushed += item['bytes']
-        log(json.dumps({'event': 'pushed', 'path': item.get('path', 'code'), 'bytes': item['bytes'],
-                        'seconds': round(time.time() - started, 1)}))
+        return item, round(time.time() - started, 1)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    concurrency = int(os.environ.get('NATLANG_CW_UPLOAD_WORKERS', '4'))
+    if not 1 <= concurrency <= 16:
+        raise ControllerError('NATLANG_CW_UPLOAD_WORKERS must be between 1 and 16')
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        for future in as_completed([pool.submit(push_one, item) for item in missing]):
+            item, seconds = future.result()
+            pushed += 1
+            bytes_pushed += item['bytes']
+            log(json.dumps({'event': 'pushed', 'path': item.get('path', 'code'), 'bytes': item['bytes'],
+                            'seconds': seconds}))
     for name, value in (secrets or {}).items():
         if not SECRET_NAME.fullmatch(name):
             raise ControllerError(f'secret name {name!r}: lower-case letters, digits, dots and dashes')

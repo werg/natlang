@@ -1564,3 +1564,47 @@ def test_ownership_probe_matches_actual_process_and_boot(tmp_path):
         assert wrong.returncode != 0
     finally:
         process.terminate(); process.wait()
+@pytest.mark.parametrize('fail', [False, True])
+def test_parallel_input_transfer_publishes_ready_only_after_complete_objects(tmp_path, monkeypatch, fail):
+    import hashlib, threading, time
+    from concurrent.futures import Future
+    import cwctl
+    items, sources = [], {}
+    for index in range(8):
+        body = str(index).encode(); path = tmp_path / str(index); path.write_bytes(body)
+        key = hashlib.sha256(body).hexdigest()
+        items.append({'key': key, 'sha256': key, 'bytes': len(body), 'path': str(path)})
+        sources[key] = str(path)
+    manifest = tmp_path / 'bundle.json'
+    manifest.write_text(json.dumps({'files': [*items, items[0]]}))
+    manifest.with_suffix('.sources.json').write_text(json.dumps(sources))
+    class Sandbox:
+        active = peak = 0
+        objects = {}; published = []
+        lock = threading.Lock()
+        def exec(self, argv):
+            future = Future(); future.set_result(type('Result', (), {'returncode': 0, 'stdout': '[]'})()); return future
+        def write_file_streaming(self, path, chunks, **kwargs):
+            with self.lock:
+                self.active += 1; self.peak = max(self.peak, self.active)
+            try:
+                body = b''.join(chunks); time.sleep(.02)
+                if fail and body == b'3': raise RuntimeError('injected transfer failure')
+                with self.lock: self.objects[path] = body
+            finally:
+                with self.lock: self.active -= 1
+            future = Future(); future.set_result(None); return future
+        def write_file(self, path, body):
+            assert len(self.objects) == 8 and self.active == 0
+            self.published.append(path); future = Future(); future.set_result(None); return future
+    box = Sandbox(); monkeypatch.setenv('NATLANG_CW_UPLOAD_WORKERS', '4')
+    job = {'scratch': {'path': '/work'}, 'env': {}}
+    if fail:
+        with pytest.raises(RuntimeError, match='injected transfer failure'):
+            cwctl.push_inputs(box, job, manifest, log=lambda _: None)
+        assert not box.published
+    else:
+        assert cwctl.push_inputs(box, job, manifest, log=lambda _: None) == {'pushed': 8, 'bytes': 8}
+        assert box.published[-1].endswith('/inputs-ready')
+    assert box.peak > 1
+
