@@ -15,7 +15,7 @@ learner ID (NATLANG_DILOCO_WORKER_ID). The coordinator template supplies the ima
 holding the parent checkpoint; its command is replaced by ``native_diloco init`` and ``diloco serve``. A fresh
 bearer token and the coordinator's share token reach the sandboxes only as secret files.
 
-    diloco.py launch RUN.json     start the coordinator, then the learners (stops all on any failure)
+    diloco.py launch RUN.json     start the coordinator, then the learners (preserves partial cohorts on failure)
     diloco.py status RUN_ID       the coordinator's merge status
     diloco.py attach-eval RUN_ID JOB.json BUNDLE.json   an eval sandbox with the coordinator URL and secrets
 
@@ -298,8 +298,8 @@ def parent_read_secret(run):
     cap={**pin,'url':url,**({'base':transfer['base']} if transfer.get('base') else {})}
     return {'parent-read':json.dumps(cap).encode()}
 
-def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: list[str], *, first_worker=0, on_started=None) -> list[str]:
-    """Create every learner sandbox in its own thread; any failure stops all of them (the caller stops ``started``)."""
+def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: list[str], *, first_worker=0, on_started=None, worker_ids=None) -> list[str]:
+    """Create missing learners concurrently; persist ownership immediately after creation."""
     import threading
     if 'NATLANG_CW_CREATE_INTERVAL' not in os.environ:
         cwctl.CREATE_INTERVAL_SECONDS = LEARNER_CREATE_INTERVAL_SECONDS
@@ -310,12 +310,19 @@ def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: li
 
     def one(worker: int) -> None:
         try:
+            def created(sandbox_id):
+                with lock:
+                    started.append(sandbox_id)
+                    if on_started is not None:
+                        on_started(worker, sandbox_id)
             entry = cwctl.launch(learner_job(run, worker, url), False, True, None, Path(run['learners']['bundle_file']),
-                                 secrets={'diloco-token': token.encode(), 'diloco-gateway': gateway, **parent_read_secret(run)})
+                                 secrets={'diloco-token': token.encode(), 'diloco-gateway': gateway, **parent_read_secret(run)},
+                                 on_created=created)
             with lock:
-                started.append(entry['sandbox_id'])
-                if on_started is not None:
-                    on_started(worker, entry['sandbox_id'])
+                if entry['sandbox_id'] not in started:
+                    started.append(entry['sandbox_id'])
+                    if on_started is not None:
+                        on_started(worker, entry['sandbox_id'])
                 if 'wait_error' in entry or 'push' not in entry:
                     raise cwctl.ControllerError(f'learner {worker} did not start: {entry}')
                 results[worker] = entry['sandbox_id']
@@ -323,14 +330,14 @@ def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: li
             with lock:
                 errors.append(error)
 
-    threads = [threading.Thread(target=one, args=(worker,), name=f'learner-{worker}') for worker in range(first_worker, workers)]
+    threads = [threading.Thread(target=one, args=(worker,), name=f'learner-{worker}') for worker in (worker_ids if worker_ids is not None else range(first_worker, workers))]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
     if errors:
         raise errors[0]
-    return [results[worker] for worker in range(first_worker, workers)]
+    return [results[worker] for worker in (worker_ids if worker_ids is not None else range(first_worker, workers))]
 
 
 def launch(run: dict, *, coordinator_only=False) -> dict:
@@ -366,13 +373,18 @@ def launch(run: dict, *, coordinator_only=False) -> dict:
         cohosted = placement == 'cohosted'
         job = cohosted_job(run, trainer_args) if cohosted else coordinator_job(run, trainer_args)
         bundle = run['learners']['bundle_file'] if cohosted else run['coordinator']['bundle_file']
-        coordinator = cwctl.launch(job, False, True, None, Path(bundle), secrets={'diloco-token': token.encode(), **parent_read_secret(run)})
-        started.append(coordinator['sandbox_id'])
-        record['coordinator'] = coordinator['sandbox_id']
-        record['ownership'][coordinator['sandbox_id']] = ['coordinator', 'learner-0'] if cohosted else ['coordinator']
-        if cohosted:
-            record['learners'][0] = coordinator['sandbox_id']
-        save_record()
+        def coordinator_created(sandbox_id):
+            started.append(sandbox_id)
+            record['coordinator'] = sandbox_id
+            record['ownership'][sandbox_id] = ['coordinator', 'learner-0'] if cohosted else ['coordinator']
+            if cohosted:
+                record['learners'][0] = sandbox_id
+            save_record()
+        coordinator = cwctl.launch(job, False, True, None, Path(bundle),
+                                   secrets={'diloco-token': token.encode(), **parent_read_secret(run)},
+                                   on_created=coordinator_created)
+        if record['coordinator'] is None:
+            coordinator_created(coordinator['sandbox_id'])
         if 'service_url' not in coordinator or 'wait_error' in coordinator or 'push' not in coordinator:
             raise cwctl.ControllerError(f"coordinator {coordinator['sandbox_id']} did not start: {coordinator}")
         record['url'] = coordinator['service_url']
@@ -390,20 +402,8 @@ def launch(run: dict, *, coordinator_only=False) -> dict:
         launch_learners(run, coordinator['service_url'], token, gateway, started,
                         first_worker=1 if cohosted else 0, on_started=assigned)
     except BaseException as error:
-        record['state'] = 'failed-stopping'
+        record['state'] = 'launch-incomplete'
         record['error'] = f'{type(error).__name__}: {error}'
-        save_record()
-        stop_errors = {}
-        for sandbox_id in dict.fromkeys(started):
-            try:
-                result = cwctl.passthrough(['stop', sandbox_id])
-                if result not in (None, 0):
-                    stop_errors[sandbox_id] = f'stop returned {result}'
-            except Exception as stop_error:
-                stop_errors[sandbox_id] = f'{type(stop_error).__name__}: {stop_error}'
-            record['stop_requests'] = {**record.get('stop_requests', {}), sandbox_id: stop_errors.get(sandbox_id, 'requested')}
-            save_record()
-        record['state'] = 'failed-stop-incomplete' if stop_errors else 'failed-stop-requested'
         save_record()
         raise
     record['state'] = 'running'
@@ -418,10 +418,18 @@ def launch_remaining(run_id: str) -> dict:
     path = RUNS / f'{run_id}.json'
     record = json.loads(path.read_text())
     run = record['run']
-    if record.get('state') != 'coordinator-ready' or record.get('placement') != 'cohosted':
-        raise cwctl.ControllerError('run is not a paused cohosted coordinator-ready launch')
-    if any(record['learners'][1:]):
-        raise cwctl.ControllerError('remaining learners already assigned; reconcile their actual sandboxes')
+    if record.get('state') not in ('coordinator-ready', 'launch-incomplete', 'remaining-launch-failed') or record.get('placement') != 'cohosted':
+        raise cwctl.ControllerError('run is not a paused or incomplete cohosted launch')
+    missing = [i for i in range(1, run['settings']['workers']) if not record['learners'][i]]
+    for worker, ident in enumerate(record['learners']):
+        if ident is None: continue
+        roles = record.get('ownership', {}).get(ident, [])
+        if f'learner-{worker}' not in roles:
+            raise cwctl.ControllerError('assigned learner ownership requires reconciliation')
+        box = cwctl.read_sandbox(ident)
+        box.get_status()
+        if str(getattr(box.status, 'value', box.status)).lower() != 'running':
+            raise cwctl.ControllerError('assigned learner is not running; reconcile before replacement')
     token = (RUNS / run_id / 'token').read_text()
     gateway = cwctl.share_token(record['coordinator'])
     wait_coordinator(record['url'], token, gateway, sandbox_id=record['coordinator'])
@@ -435,7 +443,7 @@ def launch_remaining(run_id: str) -> dict:
         record['ownership'][sandbox_id] = [f'learner-{worker}']
         save()
     try:
-        launch_learners(run, record['url'], token, gateway, started, first_worker=1, on_started=assigned)
+        launch_learners(run, record['url'], token, gateway, started, first_worker=1, on_started=assigned, worker_ids=missing)
     except BaseException as error:
         record['state'] = 'remaining-launch-failed'
         record['error'] = f'{type(error).__name__}: {error}'

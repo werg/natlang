@@ -963,6 +963,7 @@ def test_diloco_seed_pause_then_resume_launches_only_remaining_workers(tmp_path,
     monkeypatch.setattr(diloco.cwctl, 'launch', fake_launch)
     monkeypatch.setattr(diloco.cwctl, 'share_token', lambda sandbox_id: b'gateway')
     monkeypatch.setattr(diloco.cwctl, 'record', lambda event: None)
+    monkeypatch.setattr(diloco.cwctl, 'read_sandbox', lambda ident: type('Box', (), {'status': 'running', 'get_status': lambda self: None})())
     monkeypatch.setattr(diloco, 'wait_coordinator', lambda *args, **kwargs: None)
     first = diloco.launch(run, coordinator_only=True)
     assert first['state'] == 'coordinator-ready' and calls == ['run-learner-0']
@@ -1504,3 +1505,43 @@ def test_seed_publisher_accepts_only_hash_bound_final_report_for_stale_cadence(t
     assert result['checkpoint_step_observed']==700 and result['global_step']==750
     assert result['final_save_evidence']['checkpoint_sha256']==report['checkpoint_sha256']
     assert result['final_save_evidence']['cadence_progress_stale'] is True
+
+
+def test_diloco_incomplete_cohort_retries_only_missing_slots(tmp_path, monkeypatch):
+    diloco = load('diloco'); monkeypatch.setattr(diloco, 'RUNS', tmp_path)
+    run = {'id': 'run', 'settings': {'workers': 4}}
+    record = {'run': run, 'state': 'launch-incomplete', 'placement': 'cohosted',
+              'coordinator': 'zero', 'url': 'https://coordinator',
+              'learners': ['zero', 'one', None, None],
+              'ownership': {'zero': ['coordinator', 'learner-0'], 'one': ['learner-1']}}
+    (tmp_path / 'run.json').write_text(json.dumps(record))
+    (tmp_path / 'run').mkdir(); (tmp_path / 'run' / 'token').write_text('token')
+    monkeypatch.setattr(diloco.cwctl, 'read_sandbox', lambda ident: type('Box', (), {'status': 'running', 'get_status': lambda self: None})())
+    monkeypatch.setattr(diloco.cwctl, 'share_token', lambda ident: b'gateway')
+    monkeypatch.setattr(diloco.cwctl, 'record', lambda event: None)
+    monkeypatch.setattr(diloco, 'wait_coordinator', lambda *a, **kw: None)
+    def launch_missing(run, url, token, gateway, started, **kw):
+        assert kw['worker_ids'] == [2, 3]
+        for i in kw['worker_ids']: kw['on_started'](i, f'new-{i}')
+    monkeypatch.setattr(diloco, 'launch_learners', launch_missing)
+    result = diloco.launch_remaining('run')
+    assert result['learners'] == ['zero', 'one', 'new-2', 'new-3']
+    assert result['state'] == 'running'
+
+
+def test_create_retry_backoff_releases_cross_process_lock(tmp_path, monkeypatch):
+    import fcntl
+    cwctl = load('cwctl'); monkeypatch.setattr(cwctl, 'STATE', tmp_path)
+    monkeypatch.setattr(cwctl, 'CREATE_INTERVAL_SECONDS', 0)
+    monkeypatch.setattr(cwctl, 'record', lambda event: None)
+    monkeypatch.setattr(cwctl, 'error_facts', lambda error: {'reason': 'capacity', 'metadata': {}, 'retryable': True, 'retry_delay_seconds': 0, 'error': 'capacity'})
+    calls = []
+    def create():
+        calls.append(1)
+        if len(calls) == 1: raise RuntimeError('capacity')
+        return 'ok'
+    def sleep(_):
+        with (tmp_path / 'create.lock').open('a+') as other:
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(other, fcntl.LOCK_UN)
+    assert cwctl.throttled_create(create, sleep=sleep, attempts=2) == 'ok'

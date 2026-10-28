@@ -263,10 +263,11 @@ def throttled_create(create, *, sleep=time.sleep, clock=time.time, attempts: int
     import fcntl
     STATE.mkdir(parents=True, exist_ok=True)
     attempts = attempts or CREATE_ATTEMPTS
-    with (STATE / 'create.lock').open('a+') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        stamp = STATE / 'last-create'
-        for attempt in range(attempts):
+    stamp = STATE / 'last-create'
+    for attempt in range(attempts):
+        # Serialize the actual request, but never monopolize the lock during retry backoff.
+        with (STATE / 'create.lock').open('a+') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
             last = float(stamp.read_text()) if stamp.is_file() else 0.0
             wait = last + CREATE_INTERVAL_SECONDS - clock()
             if wait > 0:
@@ -282,7 +283,7 @@ def throttled_create(create, *, sleep=time.sleep, clock=time.time, attempts: int
                             'current': facts['metadata'].get('current')})
                 if not facts['retryable'] or attempt == attempts - 1:
                     raise
-                sleep(backoff_seconds(attempt, facts['retry_delay_seconds']))
+        sleep(backoff_seconds(attempt, facts['retry_delay_seconds']))
     raise AssertionError('unreachable')
 
 
@@ -340,7 +341,7 @@ def start_startup_log_capture(sandbox_id, timeout=30):
     raise ControllerError('startup log stream did not become ready before input transfer')
 
 def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, bundle_file: Path | None = None,
-           secrets: dict[str, bytes] | None = None) -> dict:
+           secrets: dict[str, bytes] | None = None, on_created=None) -> dict:
     request = jobs.sandbox_request(job, bootstrap_text())
     if bundle_file is not None:
         import prebuilt  # an image-bound prebuilt artifact must match the job's image
@@ -364,6 +365,8 @@ def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, b
              'lifetime_hours': job['lifetime_hours'], 'resources': job['resources'], 'bucket': job.get('bucket'),
              'bundle': job.get('bundle'), 'reason': job['placement']['reason'], 'cost': summary['cost']}
     record(entry)
+    if on_created is not None:
+        on_created(entry["sandbox_id"])
     if wait:
         # GPU sandboxes attach the GPU to a VM and pull the image (NGC PyTorch is ~20 GB): far beyond the client's
         # 300 s default. The first measured GPU start is in plans/COREWEAVE_SANDBOXES.md.
