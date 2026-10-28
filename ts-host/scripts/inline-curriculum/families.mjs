@@ -154,14 +154,15 @@ export const FAMILIES = {
 /**
  * The cases a build makes: `shapes` shapes per family (scaled by its weight) from index `start`, with ids, split
  * groups and pair groups tagged by seed for generated families and by source for sourced ones. `hints` adds each
- * technique case's hinted twin.
+ * technique case's hinted twin. `drawSplit` (default `split`) is the split a family draws source rows from: a packet
+ * built before a family drew test cases from its test partition is regenerated with the partition it actually used.
  */
-export function buildRecords({ seed, shapes, start = 0, families, split = 'train', hints = true }) {
+export function buildRecords({ seed, shapes, start = 0, families, split = 'train', hints = true, drawSplit }) {
   const records = [];
   for (const name of families) {
     const family = FAMILIES[name];
     const count = Math.max(1, Math.round(shapes * (family.weight ?? 1)));
-    for (let index = start; index < start + count; index++) for (const record of family.build(seed, index, split)) {
+    for (let index = start; index < start + count; index++) for (const record of family.build(seed, index, drawSplit ?? split)) {
       if (family.contentIdentity) identifySourceCase(record);
       // Generated problems are distinct per seed; a source's problems are its own (story, world) groups across shards.
       const tag = family.source ? `${family.source}` : `s${seed}`;

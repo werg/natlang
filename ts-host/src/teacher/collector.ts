@@ -21,6 +21,9 @@ import { Folder } from '../native/scoped-fs.js';
 import { dump, MISSING } from '../native/values.js';
 import { externalModule } from '../native/external.js';
 import { checkTrustedExactVerifier } from './trusted-exact-verifier.js';
+import { checkFunctionEffects } from './function-effects.js';
+import { findCodebaseItem } from '../native/runtime.js';
+import type { LambdaNode } from '../native/values.js';
 import { PROGRAM_VERSION, prepareProgramNode, type ProgramRecord } from './program.js';
 import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, FILE_CONTENT_COMPARISON_VERSION, checkOracle } from './oracle.js';
 import { modelOracleJudge } from './model-judge.js';
@@ -1459,7 +1462,20 @@ function itemResultInvocationLedger(runtime: NodeNativeRuntime, bindingSpec?: It
   });
 }
 
-export async function executeProgram(record: ProgramRecord, driver: (request: ModelTurnRequest) => Promise<ModelTurn>,
+/** A program function's source as the case authored it: the module file named after it. */
+function originalFunctionSource(record: ProgramRecord, name: string): string | undefined {
+  const matches = Object.entries(record.semantics.files).filter(([path]) => path === `${name}.ts` || path.endsWith(`/${name}.ts`));
+  return matches.length === 1 ? matches[0]![1] : undefined;
+}
+/** The same function's source as the run left it: the task's program view holds every committed edit_code revision. */
+function finalFunctionSource(root: LambdaNode, runtime: NodeNativeRuntime | undefined, name: string): string | undefined {
+  const found = findCodebaseItem(root.codebase, name);
+  if (!found || found.record.kind === 'namespace') return undefined;
+  const view = runtime?.frame?.task.programView;
+  return (view ? view.record(found.record) : found.record).text;
+}
+
+export async function executeProgram(record: ProgramRecord, driver:(request: ModelTurnRequest) => Promise<ModelTurn>,
   options: ExecuteOptions): Promise<ProgramRun> {
   const root = await prepareProgramNode(record);
   const folderFiles = record.semantics.folder_files;
@@ -1589,11 +1605,17 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
         { value: actual, oracle: record.semantics.trusted_exact_verifier.oracle,
           inputs: record.semantics.inputs, fixture: folderFiles ?? {} }) :
       await checkOracle(actual, answerExpected, record.semantics.oracle, options.judge);
+    // A required repair (or a forbidden edit) of a program function is judged on the function the run left behind.
+    const functionSpec = record.semantics.function_checks;
+    const functionEffects = functionSpec && expectedKind === 'done' ?
+      checkFunctionEffects(functionSpec, originalFunctionSource(record, functionSpec.function),
+        finalFunctionSource(root, runtime, functionSpec.function), actual, record.semantics.inputs ?? {}) : undefined;
     const checks = { seeded_failure_requirement: failureSeen, expected_status: result.outcome.kind === expectedKind,
       honest_stop: honestStop, effects: effectsOk, files: filesOk, world: worldOk,
       file_return_consistency: !actualFiles || !record.semantics.files_oracle ||
         checkFileReturn(actual, actualFiles, folderFiles!, record.semantics.files_oracle),
-      answer: expectedKind !== 'done' || !!authoring || !!world || oracle.accepted };
+      answer: expectedKind !== 'done' || !!authoring || !!world || oracle.accepted,
+      ...(functionEffects ? { function_effects: functionEffects.ok } : {}) };
     const rejectionReasons = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
     const accepted = rejectionReasons.length === 0;
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
@@ -1613,6 +1635,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
       ...(worldScore ? { world: worldScore } : {}),
       ...(hostCertificateRequired ? { host_completion_certificate: hostCertificateReadOk ? hostCertificate ?? null : { read_error: true } } : {}),
       ...(filesCheck ? { files_check: filesCheck } : {}),
+      ...(functionEffects ? { function_effects: functionEffects } : {}),
       ...(qualityPending.length || filesCheck ? { quality_pending: qualityPending } : {}),
       oracle, accepted: accepted && bindingAccepted, checks: outcomeChecks, rejection_reasons: outcomeRejections,
       ...(seededFailure ? { seeded_failure: { observed: seededFailureObserved, replaced_by_handoff: replacesSeed } } : {}),

@@ -3,7 +3,8 @@
 // instruction. Some instructions locate their target by meaning ("delete the paragraph about sport"), others are
 // mechanical (rename a name everywhere, add a title, append a closing line, lowercase, drop commas). The reference
 // applies every edit exactly, so each intermediate state is known; the oracle is the set of code-checked constraints
-// that hold on the final text (evaluation/constraints.ts), so teacher outputs are judged too. (Owner 2026-10-05:
+// that hold on the final text (evaluation/constraints.ts), so teacher outputs are judged too; `edit_fidelity`
+// among them requires the edited document itself. (Owner 2026-10-05:
 // iterate over a stream of instructions doing natural-language modifications.)
 import { checkConstraints } from '../../dist/evaluation/constraints.js';
 import { rowsOf } from './labeled.mjs';
@@ -27,7 +28,7 @@ const EDITS = {
     const marker = words(target.text).filter(w => w.length >= 7 && !s.paras.some(p => p !== target && p.text.includes(w)))[0];
     if (!marker) return null;
     target.deleted = true;
-    return { instruction: `Delete the paragraph about ${TOPIC[target.label]}.`, kind: 'semantic',
+    return { instruction: `Delete the paragraph about ${TOPIC[target.label]}.`, kind: 'semantic', marker,
       apply: text => join(paragraphs(text).filter(p => !p.includes(marker))),
       constraint: () => ({ kind: 'exclude_words', words: [marker] }) };
   },
@@ -37,7 +38,7 @@ const EDITS = {
     const target = rng.pick(live.slice(1));
     const marker = words(target.text).filter(w => w.length >= 7 && !s.paras.some(p => p !== target && p.text.includes(w)))[0];
     if (!marker || s.titled) return null;
-    return { instruction: `Move the paragraph about ${TOPIC[target.label]} to the top.`, kind: 'semantic',
+    return { instruction: `Move the paragraph about ${TOPIC[target.label]} to the top.`, kind: 'semantic', marker,
       apply: text => { const list = paragraphs(text), i = list.findIndex(p => p.includes(marker)); return join([list[i], ...list.filter((_, j) => j !== i)]); },
       constraint: final => paragraphs(final)[0].includes(marker) ? null : null };
   },
@@ -46,7 +47,7 @@ const EDITS = {
     if (!names.length) return null;
     const from = rng.pick(names), to = rng.pick(RENAMES.filter(r => !s.renamed.has(r)));
     s.renamed.add(from); s.renamed.add(to);
-    return { instruction: `Replace "${from}" with "${to}" everywhere.`, kind: 'mechanical',
+    return { instruction: `Replace "${from}" with "${to}" everywhere.`, kind: 'mechanical', rename: { from, to },
       apply: text => text.replace(new RegExp(`\\b${from}\\b`, 'g'), to),
       constraint: () => ({ kind: 'exclude_words', words: [from] }) };
   },
@@ -77,28 +78,60 @@ const EDITS = {
 };
 
 /**
- * Constraints that the edited text still IS the document (2026-10-12 dragnet: the per-edit constraints alone only
- * exclude words and check case, so a reply such as "ok" passed them all and scored a task success). Every kept
- * paragraph must keep a distinctive word of its own, every rename target must appear, and the length must stay within
- * a fifth of the reference's. Derived from the reference final text only; no random draws (the generated documents
- * and instructions are unchanged).
+ * The edit-fidelity oracle (evaluation/constraints.ts `edit_fidelity`, 2026-10-28). The earlier preservation constraints
+ * (a distinctive word per kept paragraph, rename targets present, word count within a fifth; 2026-10-12) accepted 88
+ * unrelated repeated words on a held case (2026-10-26 audit). The reference applies every edit exactly, so the oracle is
+ * the edited document itself: its paragraphs in order (near-exact, formatting the task leaves open aside), the deleted
+ * paragraphs absent, every rename applied everywhere and nowhere else. Computed from the case's structured edits and
+ * source paragraphs only; no random draws (documents and instructions are unchanged).
  */
-function preservation(final, steps) {
-  const excluded = new Set(steps.flatMap(step => {
-    const c = step.constraint(final);
-    return c?.kind === 'exclude_words' ? c.words.map(w => w.toLowerCase()) : [];
-  }));
-  const fixed = new Set([...TITLES, ...CLOSINGS].flatMap(text => words(text).map(w => w.toLowerCase())));
-  const kept = paragraphs(final).filter(p => !/^<<[^<>\n]+>>$/.test(p) && !CLOSINGS.some(line => p.toLowerCase() === line.toLowerCase()));
-  const lower = kept.map(p => new Set(words(p).map(w => w.toLowerCase())));
-  const markers = kept.map((p, i) => words(p).map(w => w.toLowerCase()).find(w => w.length >= 7 && !excluded.has(w) &&
-    !fixed.has(w) && lower.every((other, j) => j === i || !other.has(w)))).filter(Boolean);
-  const renamed = steps.flatMap(step => /^Replace "[^"]+" with "([^"]+)" everywhere\.$/.exec(step.instruction)?.slice(1) ?? [])
-    .filter(name => words(final).some(w => w.toLowerCase() === name.toLowerCase()));
-  const count = words(final).length;
-  const include = [...new Set([...markers, ...renamed])];
-  return [...(include.length ? [{ kind: 'include_words', words: include }] : []),
-    { kind: 'word_count', min: Math.floor(count * 0.8), max: Math.ceil(count * 1.2) }];
+export const EDIT_FIDELITY_TOLERANCE = 0.025;
+function editFidelity(final, steps, state) {
+  return { kind: 'edit_fidelity', version: 'edit-fidelity/1', paragraphs: paragraphs(final),
+    deleted: state.paras.filter(p => p.deleted).map(p => p.text),
+    renames: steps.filter(step => step.rename).map(step => step.rename), tolerance: EDIT_FIDELITY_TOLERANCE };
+}
+
+/**
+ * The same oracle derived from a stored case: its document (docs.document()), its step list (curriculum evidence
+ * `name: instruction`), and the reference's state after every step (reference children). Used to regenerate the oracle
+ * of packet rows whose source pool the current generator no longer draws identically (held v3 predates later ag_news
+ * filtering); on cases the generator reproduces, it equals the generated constraint (regenerate-packet-oracles.mjs
+ * checks this). A deleted paragraph is the one a delete step removed, identified in the original document.
+ */
+export function editFidelityFromRecord(record) {
+  const docs = record.semantics.services?.docs ?? record.semantics.files['apply_edits/docs.ts'];
+  const document = JSON.parse(/const DOCUMENT = (".*");\n/.exec(docs)[1]);
+  const steps = record.curriculum.evidence.world.map(line => /^([a-z_]+): (.*)$/s.exec(line)).map(m => ({ name: m[1], instruction: m[2] }));
+  const states = [document, ...record.curriculum.reference.children.map(child => child.value)];
+  if (states.length !== steps.length + 1 || states.at(-1) !== record.curriculum.reference.root.at(-1)[1].value)
+    throw new Error(`${record.id}: reference states do not match its steps`);
+  const original = paragraphs(document);
+  const grams = text => { const w = words(text.toLowerCase()); return new Set(w.slice(0, -3).map((_, i) => w.slice(i, i + 4).join(' '))); };
+  const deleted = new Set();
+  steps.forEach((step, i) => {
+    if (step.name !== 'delete_topic') return;
+    const after = new Set(paragraphs(states[i + 1]));
+    const removed = paragraphs(states[i]).filter(p => !after.has(p));
+    if (removed.length !== 1) throw new Error(`${record.id}: delete step ${i + 1} removed ${removed.length} paragraphs`);
+    const target = grams(removed[0]);
+    const overlap = original.map(p => [...grams(p)].filter(g => target.has(g)).length);
+    deleted.add(overlap.indexOf(Math.max(...overlap)));
+  });
+  const renames = steps.filter(step => step.name === 'rename')
+    .map(step => /^Replace "(.+)" with "(.+)" everywhere\.$/.exec(step.instruction)).map(m => ({ from: m[1], to: m[2] }));
+  return { kind: 'edit_fidelity', version: 'edit-fidelity/1', paragraphs: paragraphs(states.at(-1)),
+    deleted: [...deleted].sort((a, b) => a - b).map(i => original[i]), renames, tolerance: EDIT_FIDELITY_TOLERANCE };
+}
+
+/** Whether each semantic step changed the reference as its instruction says (its marker word can be renamed away). */
+function referenceApplies(states, steps) {
+  return steps.every((step, i) => {
+    const before = paragraphs(states[i]), after = paragraphs(states[i + 1]);
+    if (step.name === 'delete_topic') return after.length === before.length - 1 && !after.some(p => p.includes(step.marker));
+    if (step.name === 'move_topic_first') return after.length === before.length && after[0].includes(step.marker);
+    return true;
+  });
 }
 
 export function editStream(seed, index, split = 'train') {
@@ -123,7 +156,8 @@ export function editStream(seed, index, split = 'train') {
     const states = [join(paras.map(p => p.text))];
     for (const step of steps) states.push(step.apply(states.at(-1)));
     const final = states.at(-1);
-    const constraints = [...steps.map(step => step.constraint(final)).filter(Boolean), ...preservation(final, steps)];
+    if (!referenceApplies(states, steps)) continue;
+    const constraints = [...steps.map(step => step.constraint(final)).filter(Boolean), editFidelity(final, steps, state)];
     // The reference's lowercasing makes earlier exact-case constraints vacuous only if they are case-insensitive: they are.
     if (!constraints.length || !checkConstraints(final, constraints).passed) continue;
     const instructions = steps.map(step => step.instruction);

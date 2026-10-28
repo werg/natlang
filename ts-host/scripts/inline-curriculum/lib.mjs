@@ -11,7 +11,7 @@ export const GENERATOR_VERSION = 'natlang.inline_curriculum_generator/1';
 export function identifySourceCase(record) {
   const canonical = value => Array.isArray(value) ? value.map(canonical) :
     value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
-  const { expected, expected_files, oracle, files_oracle, ...visible } = record.semantics;
+  const { expected, expected_files, oracle, files_oracle, function_checks, ...visible } = record.semantics;
   const digest = createHash('sha256').update(JSON.stringify(canonical({
     family: record.curriculum.family, visible, dataset: record.dataset,
     sources: record.dataset_records, revisions: record.source_revisions,

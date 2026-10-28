@@ -189,7 +189,9 @@ test('successful direct and delegated judgments are admitted; unwarranted edits 
   const meddling = structuredClone(sound);
   meddling.curriculum.reference.root.splice(1, 0, ['edit_code', { name: 'line_total', find: 'Math.max(0,', replace_with: 'Math.max(0, 0 +' }]);
   const edited = await replayReference(meddling, TOOLS_PROMPT);
-  assert.deepEqual(admitRow({ task: { program_ir: meddling }, outcome: edited.run.outcome, trajectory: edited.trajectory }).reasons, ['unwarranted_edit']);
+  // The function-effect oracle (2026-10-28) also fails the run itself: the sound helper must be left unchanged.
+  assert.equal(edited.run.outcome.checks.function_effects, false);
+  assert.deepEqual(admitRow({ task: { program_ir: meddling }, outcome: edited.run.outcome, trajectory: edited.trajectory }).reasons, ['wrong_return', 'unwarranted_edit']);
   const summary = coverage([admitRow({ task: { program_ir: direct }, outcome: plain.run.outcome, trajectory: plain.trajectory })]);
   assert.equal(summary.rejections.inline_missing, undefined);
 });
