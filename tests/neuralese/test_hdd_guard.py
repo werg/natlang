@@ -318,7 +318,7 @@ def test_directory_rl_bundle_staging_preserves_real_bundle_reader_and_repairs_ta
 
 def test_portable_stage_argv_keeps_logical_inputs_and_local_uses_staging(monkeypatch):
     from natlang_neuralese.train import recipe
-    source = {'path': '/home/werg/logical/train-sources.json', 'sha256': 'a' * 64}
+    source = {'path': '/logical/train-sources.json', 'sha256': 'a' * 64}
     resolved = {'native_graphs': source, 'foundation_native_graphs': source}
     monkeypatch.setattr(recipe, '_staged_inputs', lambda values: {
         key: {**value, 'path': '/private/staged/tree/train-sources.json'}
