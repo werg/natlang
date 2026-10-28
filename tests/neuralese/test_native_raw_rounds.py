@@ -95,41 +95,6 @@ def test_raw_policy_publish_stop_restart_does_not_recollect_and_interleaves_same
     assert result['cycle']==2 and [kind for kind,_ in calls].count('rl')==2
 
 
-def test_independent_local_rl_repeats_without_peer_foundation_and_keeps_sft_debt(tmp_path,monkeypatch):
-    directory,config,stop,calls=fixture(tmp_path,monkeypatch)
-    plan=tmp_path/'sealed-plan.json';write_json_durable(plan,{'schema':'raw-scheduler-fixture'})
-    declaration={'rl_scheduling_policy':'independent-local-cycles-v1',
-        'foundation_readiness_policy':'on-shared-request','foundation_qualification_generation':'peer-wait'}
-    raw._scheduling_controls(config,declaration,plan,{},pending=False)
-    config_path=directory/'config.json';write_json_durable(config_path,config)
-    from natlang_neuralese.rl import native_role_release as roles
-    monkeypatch.setattr(roles,'ownership',lambda _:({'role':'lfm'},{'directory':str(tmp_path/'exchange')}))
-    monkeypatch.setattr(roles,'foundation_request',lambda *args,**kwargs:None)
-    original_job=native_rounds.round_job
-    def no_foundation_job(path,request,out,active_stop):
-        result=original_job(path,request,out,active_stop)
-        if request.get('mandatory_sft_only'):
-            report=Path(result['pending_native_checkpoint']).parent/'native-training-receipt.json'
-            value=json.loads(report.read_text());value['foundation_ready']=False;value['completed']=False
-            write_json_durable(report,value)
-        return result
-    monkeypatch.setattr(native_rounds,'round_job',no_foundation_job)
-    first=raw.student_cycle(plan,declaration,None,directory,stop=stop)
-    assert first['cycle']==1 and first['phase']=='rl' and not first.get('foundation_qualified')
-    assert 'readiness' not in first
-    assert [kind for kind,_ in calls].count('rl')==1
-    assert [kind for kind,_ in calls].count('sft')==1
-    # A second local cycle performs another real bridge operation despite no
-    # peer candidate; mandatory communication training remains scheduled.
-    second=raw.student_cycle(plan,declaration,None,directory,stop=stop)
-    assert second['cycle']==2 and second['phase']=='rl' and not second.get('foundation_qualified')
-    assert 'readiness' not in second
-    assert [kind for kind,_ in calls].count('rl')==2
-    sft=[value for kind,value in calls if kind=='sft']
-    assert len(sft)==2 and all(value['trainer_parameters']['communication_foundation'] for value in sft)
-    assert config['rl_scheduling_control']=={'plan':raw.binding(plan),'policy':'independent-local-cycles-v1'}
-
-
 def test_independent_local_rl_does_not_hide_actual_bridge_failure(tmp_path,monkeypatch):
     directory,config,stop,calls=fixture(tmp_path,monkeypatch)
     plan=tmp_path/'sealed-plan.json';write_json_durable(plan,{'schema':'raw-scheduler-fixture'})
@@ -600,33 +565,6 @@ def test_supervised_retry_rejects_output_mismatch_before_config_or_request(tmp_p
         raw._supervised_job(continuation,tmp_path/'fresh-retry',{}, {},SimpleNamespace(requested=False))
     assert not(tmp_path/'fresh-retry').exists()
     assert not(tmp_path/'old-operation').exists()
-
-
-def test_on_request_history_prevents_old_full_checks_repeating_after_handoff_cancellation(tmp_path,monkeypatch):
-    directory,config,stop,calls=fixture(tmp_path,monkeypatch)
-    from natlang_neuralese.rl import native_role_release as roles
-    config.update(foundation_readiness_policy='on-shared-request',foundation_qualification_generation='repair')
-    write_json_durable(directory/'config.json',config)
-    plan=tmp_path/'plan.json';write_json_durable(plan,{'models':[{'model':name}for name in ('lfm','mellum')],
-        'owned_models':['lfm'],'role_exchange':{'schema':roles.EXCHANGE,'role':'lfm',
-        'semantic_consumer':'mellum','directory':str(tmp_path/'exchange'),
-        'roles':{name:{'owned_models':[name],'source_host_id':name+'-actual'}for name in ('lfm','mellum')}}})
-    requests=[]
-    for generation in ('initial-snapshot','post-VAE-descendant'):
-        path=tmp_path/(generation+'.json');write_json_durable(path,{'generation':generation})
-        requests.append(roles.binding(path))
-    selected=[requests[0]]
-    monkeypatch.setattr(roles,'foundation_request',lambda *a,**kw:selected[0])
-    raw.student_cycle(plan,{},None,directory,stop=stop)
-    selected[0]=requests[1];raw.student_cycle(plan,{},None,directory,stop=stop)
-    # Returning to the original request after an expired/failed handoff must
-    # continue useful work, not rerun that already-consumed full task window.
-    selected[0]=requests[0];result=raw.student_cycle(plan,{},None,directory,stop=stop)
-    checked=[value['foundation_qualification_request']for kind,value in calls
-        if kind=='sft' and value.get('foundation_qualification_request')]
-    assert checked==requests
-    assert set(result['foundation_qualification_history'])=={reference['sha256']for reference in requests}
-    assert result['cycle']==3 and len([kind for kind,_ in calls if kind=='sft'])==3
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

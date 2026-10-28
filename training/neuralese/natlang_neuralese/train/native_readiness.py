@@ -256,58 +256,15 @@ def _manage_raw_bootstrap(config):
         raise ValueError('manage_raw_bootstrap must be an explicit boolean')
     if not value and not config.get('raw_rl_bootstrap'):
         raise ValueError('external RAW ownership requires its bound release plan')
-    if not value and config.get('raw_rl_bootstrap'):
-        from ..rl.native_role_release import preparation_raw_recovery
-        if preparation_raw_recovery(config):return True
     return value
-
-
-def _role_local_released(config):
-    if not config.get('raw_rl_bootstrap'):return False
-    from ..rl.native_role_release import local_released
-    return local_released(config)
 
 
 def ready_participants(config):
     if config.get('raw_rl_bootstrap'):
         raw_plan_path=_bound(config['raw_rl_bootstrap'])
         raw_plan=json.loads(raw_plan_path.read_text())
-        from ..rl import native_role_release as roles
-        if raw_plan.get('local_cycle_source'):
-            try:released=roles.validate_local_cycle_release(raw_plan_path,
-                snapshot=bool(raw_plan.get('snapshot_preparation')))
-            except (ValueError,OSError,KeyError)as error:
-                return [],[{'reason':'local-cycle source-host role handoff needs repair: '+str(error),
-                    'repair_required':True}]
-            if released is None:
-                return [],[{'model_id':item['model_id'],
-                    'reason':'local-cycle source owner has not published the exact current qualified boundary'}
-                    for item in config['participants']]
-            return [released[key]for key in sorted(released)],[ ]
-        from ..rl.native_raw_rounds import raw_out,validate_release
-        if roles.ownership(raw_plan)[1]is not None:
-            try:
-                if raw_plan.get('snapshot_preparation'):
-                    curriculum=json.loads(Path(config['curriculum']).read_text())
-                    if curriculum.get('snapshot_preparation') is True:
-                        if raw_plan.get('consumer_preparation_handoff'):
-                            roles.select_preparation_work(raw_plan,{'path':str(Path(config['curriculum']).resolve()),
-                                'sha256':sha256_file_hex_cached(config['curriculum'])})
-                        ready,pending=roles.ready_participants(raw_plan,snapshot=True)
-                        if raw_plan.get('consumer_preparation_handoff') and not roles.local_released(config):
-                            return [],[{'reason':'frozen VAE awaits genuine consumer allocation release',
-                                'qualified_snapshots':len(ready)}]
-                        return ready,pending
-                    if not config.get('snapshot_adoption_controller'):
-                        raise ValueError('snapshot assets may only launch declared frozen-backbone VAE preparation')
-                    if not roles.local_released(config):
-                        return [],[{'reason':'descendant optimizer remains usefully owned until actual release'}]
-                    return roles.ready_participants(raw_plan,snapshot=False)
-                if not roles.local_released(config):
-                    return [],[{'reason':'local source-host optimizer has not released current checkpoint'}]
-                return roles.ready_participants(raw_plan)
-            except (ValueError,OSError,KeyError)as error:
-                return [],[{'reason':'source-host role handoff needs repair: '+str(error),'repair_required':True}]
+        from ..rl.native_raw_rounds import owned_models,raw_out,validate_release
+        owned_models(raw_plan)
         raw_state=raw_out(config)/'state.json'
         if raw_state.exists():
             try:released=validate_release(raw_state,_bound(config['raw_rl_bootstrap']))
@@ -338,61 +295,10 @@ def ready_participants(config):
 
 
 def snapshot_successor(config,out):
-    """Advance actual frozen preparation to current released descendant adoption.
-
-    Controller output/lease ownership stays unchanged. Only the semantic child's
-    output and curriculum change; the prepared checkpoint remains immutable.
-    """
-    declaration=config.get('snapshot_successor')
-    if not declaration:return config
-    from ..rl import native_role_release as roles
-    plan=json.loads(_bound(config['raw_rl_bootstrap']).read_text())
-    if plan.get('consumer_preparation_handoff') and roles.preparation_raw_recovery(config):
-        _,exchange=roles.ownership(plan)
-        cancellation=json.loads((Path(exchange['directory'])/'preparation-cancelled.json').read_text())
-        if cancellation.get('retry_requires_repair',True):return config
-    preparation=Path(config.get('semantic_out',out))
-    completion=preparation/'shared-stage-completion.json'
-    manifest_path=preparation/'participants.json'
-    if not completion.is_file() or not manifest_path.is_file():return config
-    manifest=json.loads(manifest_path.read_text())
-    curriculum=json.loads(Path(config['curriculum']).read_text())
-    signature=canonical_json_sha256_hex(manifest['models'])
-    if signature!=manifest['signature']:raise ValueError('prepared VAE participants changed')
-    key=(signature,canonical_json_sha256_hex(curriculum))
-    published={key:{'execution_signature':canonical_json_sha256_hex({'controller':config,
-        'participants':key[0],'curriculum':key[1]}),'models':[row['model_id']for row in manifest['models']]}}
-    if json.loads(completion.read_text()).get('preparation_complete') is not True:return config
-    proof,_=validate_snapshot_preparation(completion,published)
-    full_path=_bound(declaration['curriculum']);full=json.loads(full_path.read_text())
-    controller={'curriculum':declaration['curriculum'],'command':declaration['command'],
-        'workdir':config.get('workdir'),'out':str(Path(out)/'joint')}
-    reference=roles.post_vae_request(plan,{'path':str(completion.resolve()),
-        'sha256':sha256_file_hex_cached(completion)},controller)
-    handoff=json.loads(_bound(reference).read_text())
-    full=roles._evidence(handoff['joint_curriculum'])
-    _,exchange=roles.ownership(plan)
-    write_json_durable(Path(exchange['directory'])/'post-vae-handoff.json',reference)
-    # The relay now arms both real owners. Historical preparation is not a
-    # current-weight release and cannot be passed to the joint trainer.
-    ready,pending=roles.ready_participants(plan,snapshot=False)
-    if len(ready)<2:return {**config,'awaiting_descendant_handoff':reference}
-    releases=list({row['source_role_release']['sha256']:row['source_role_release']for row in ready}.values())
-    full['snapshot_preparation']=False
-    full['snapshot_adoption']={'schema':'natlang.native-snapshot-adoption/1',
-        'plan':config['raw_rl_bootstrap'],'releases':releases}
-    destination=Path(out)/'joint-curricula'/canonical_json_sha256_hex(full)
-    destination.mkdir(parents=True,exist_ok=True)
-    path=destination/'curriculum.json';write_json_durable(path,full)
-    # Existing snapshot_adoption validates actual releases, ancestor identities
-    # and preserves the descendants' complete optimizer/RNG/exposure at resume.
-    command=[arg.replace('{joint_curriculum}',str(path)) for arg in declaration['command']]
-    command.extend(['--resume',str(_bound(proof['checkpoint'])),'--refresh-participants'])
-    result={**config,'curriculum':str(path),'command':command,'semantic_out':str(Path(out)/'joint'),
-        'snapshot_adoption_controller':reference}
-    result.pop('snapshot_successor',None)
-    if declaration.get('rl_bootstrap'):result['rl_bootstrap']=declaration['rl_bootstrap']
-    return result
+    """Snapshot successors required the removed cross-model role exchange."""
+    if config.get('snapshot_successor'):
+        raise ValueError('snapshot_successor served the removed cross-model role exchange')
+    return config
 
 
 def validate_snapshot_preparation(path,published):
@@ -693,11 +599,6 @@ def _run(config_path, *, once=False, stop):
                 child_kind = launch['child_kind']
                 active_rl_signature = launch.get('rl_signature')
             else:
-                abandoned=launch.get('semantic_controller')or config
-                if (launch.get('child_kind')=='native-semantic' and abandoned.get('snapshot_successor')
-                        and not Path(launch.get('semantic_completion')or out/'shared-stage-completion.json').is_file()):
-                    from ..rl.native_role_release import cancel_preparation_handoff
-                    cancel_preparation_handoff(abandoned,reason='owned preparation ended while controller was absent')
                 retry = _retry_failure(retry, launch['child_kind'], launch['execution_signature'], interval,
                                        error='previous owned child ended while controller was absent')
                 write_json_durable(launch_path, {**launch, 'status': 'ended-unobserved'})
@@ -757,8 +658,7 @@ def _run(config_path, *, once=False, stop):
             participants = semantic_root/'participants.json'
             retry_ready = retry is None or time.time() >= retry['next_retry_at']
             if (manage_raw and child is None and len(ready)<2 and config.get('raw_rl_bootstrap') and not last_success
-                    and not semantic_publication and not once and not stop.requested and retry_ready
-                    and not _role_local_released(config)):
+                    and not semantic_publication and not once and not stop.requested and retry_ready):
                 try:
                     child,launch=_launch_child(raw_bootstrap_command(config),'native-raw-rl',config,out,execution_signature,None)
                     child_kind='native-raw-rl'
@@ -883,17 +783,11 @@ def _run(config_path, *, once=False, stop):
                 launch={**launch,'status':'exited','exit_code':child.returncode}
                 write_json_durable(launch_path,launch)
                 if stop.requested:
-                    if child_kind=='native-semantic' and curriculum.get('snapshot_preparation'):
-                        from ..rl.native_role_release import cancel_preparation_handoff
-                        cancel_preparation_handoff(config,reason='owned preparation cancelled after child drain',repair_required=False)
                     state['child_pid'] = None
                     state['status'] = 'stopped-after-checkpoint-request'
                     write_json_durable(state_path, state)
                     return state
                 if child.returncode != 0:
-                    if child_kind=='native-semantic' and curriculum.get('snapshot_preparation'):
-                        from ..rl.native_role_release import cancel_preparation_handoff
-                        cancel_preparation_handoff(config,reason='owned semantic child failed')
                     retry = _retry_failure(retry, child_kind, execution_signature, interval, exit_code=child.returncode)
                     state.update(retry=retry, status='retry_wait', child_pid=None, child_kind=None)
                     child, child_kind = None, None
@@ -902,10 +796,8 @@ def _run(config_path, *, once=False, stop):
                     time.sleep(interval)
                     continue
                 if child_kind == 'native-raw-rl':
-                    from ..rl.native_role_release import seal_local
-                    sealed=seal_local(config)
                     from ..rl.native_raw_rounds import raw_out,validate_release
-                    if sealed is None and validate_release(raw_out(config)/'state.json',_bound(config['raw_rl_bootstrap'])) is None:
+                    if validate_release(raw_out(config)/'state.json',_bound(config['raw_rl_bootstrap'])) is None:
                         retry=_retry_failure(retry,child_kind,execution_signature,interval,
                             error='raw owner exited without current checkpoint/readiness release')
                         state.update(retry=retry,status='retry_wait',child_pid=None,child_kind=None)
@@ -925,9 +817,6 @@ def _run(config_path, *, once=False, stop):
                         else:
                             proof, last_success = validate_completion(completion, published)
                     except Exception as error:
-                        if curriculum.get('snapshot_preparation'):
-                            from ..rl.native_role_release import cancel_preparation_handoff
-                            cancel_preparation_handoff(config,reason='semantic completion rejected: '+type(error).__name__)
                         retry = _retry_failure(retry, child_kind, execution_signature, interval, exit_code=0)
                         retry['reason'] = 'shared completion rejected: ' + type(error).__name__ + ': ' + str(error)
                         state.update(retry=retry, status='retry_wait', child_pid=None, child_kind=None)
@@ -946,10 +835,6 @@ def _run(config_path, *, once=False, stop):
                 state['child_kind'] = None
                 child, child_kind = None, None
             if stop.requested and child is None:
-                if (config.get('snapshot_successor') and config.get('raw_rl_bootstrap')
-                        and _role_local_released(config)):
-                    from ..rl.native_role_release import cancel_preparation_handoff
-                    cancel_preparation_handoff(config,reason='preparation controller cancelled after owned child drain',repair_required=False)
                 state['status'] = 'stopped-after-checkpoint-request'
             write_json_durable(state_path, state)
             if once:

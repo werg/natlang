@@ -519,7 +519,6 @@ def test_task_command_missing_or_malformed_spec_rejected_before_launch(tmp_path,
     with pytest.raises(ValueError):deps.dependency_closure({'config':config},namespace=str(tmp_path))
 
 
-
 def test_carried_dpo_external_inputs_are_verified_in_place_not_ferried(tmp_path):
     import torch
     namespace=tmp_path/'production';namespace.mkdir()
@@ -616,7 +615,6 @@ def test_declared_production_alias_still_requires_exact_content(tmp_path,change)
         deps.verify_assets([asset],namespace=str(namespace),readonly_input_roots=[str(readonly)])
 
 
-
 def test_checkpoint_dependency_cannot_use_readonly_input_escape(tmp_path):
     namespace=tmp_path/'production';readonly=tmp_path/'d24'
     external=write(readonly/'checkpoint.pt','immutable binary checkpoint')
@@ -625,7 +623,6 @@ def test_checkpoint_dependency_cannot_use_readonly_input_escape(tmp_path):
         'base_checkpoint':{**external,'path':str(alias)}})
     with pytest.raises(ValueError,match='checkpoint dependency escaped'):
         deps.dependency_closure({'parent_checkpoint':parent},namespace=str(namespace),readonly_input_roots=[str(readonly)])
-
 
 
 def test_separately_bound_operational_inputs_are_in_actual_file_closure(tmp_path):
@@ -666,25 +663,6 @@ def test_foundation_request_is_an_exact_optional_worker_input(tmp_path):
         deps.dependency_closure({'config':config},namespace=str(tmp_path))
     config=write(tmp_path/'config.json',{})
     assert deps.dependency_closure({'config':config},namespace=str(tmp_path))['files']==[config]
-
-
-def test_snapshot_adoption_ferries_exact_current_status_pointer_and_proof(tmp_path):
-    from natlang_neuralese.rl import native_role_release as roles
-    exchange=tmp_path/'exchange';exchange.mkdir()
-    assignment={name:{'source_host_id':name+'-fixture','owned_models':[name]} for name in ('lfm','mellum')}
-    plan=write(tmp_path/'plan.json',{'models':[{'model':name}for name in assignment],
-        'owned_models':['mellum'],'role_exchange':{'schema':roles.EXCHANGE,'role':'mellum',
-            'semantic_consumer':'mellum','directory':str(exchange),'roles':assignment}})
-    release=write(exchange/'release.json',{'schema':roles.SCHEMA,'role':'lfm','kind':'released',
-        'optimizer_released':True,'scope':'typed closure fixture; not numerical qualification'})
-    pointer=write(exchange/'lfm-status.json',release)
-    config=write(tmp_path/'config.json',{'snapshot_adoption':{'schema':'natlang.native-snapshot-adoption/1',
-        'plan':plan,'releases':[release]}})
-    closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
-    assert {row['path']for row in closure['files']}=={row['path']for row in (config,plan,release,pointer)}
-    write(exchange/'lfm-status.json',{**release,'sha256':'a'*64})
-    with pytest.raises(ValueError,match='retired role release'):
-        deps.dependency_closure({'config':config},namespace=str(tmp_path))
 
 
 def test_snapshot_ferry_restores_only_declared_closure_with_original_host_unavailable(tmp_path):

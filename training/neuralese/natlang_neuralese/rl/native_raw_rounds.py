@@ -2001,19 +2001,8 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
             raise StudentConfigurationError('owned completed work requires its actual current runtime configuration')
         reconciliation['runtime_configuration_required']=False;write_json_durable(cursor_path,cursor)
     cycle=cursor['cycle'];work=cycle_work_directory(directory,cursor)
-    qualification_request=None
     if config.get('foundation_readiness_policy')=='on-shared-request':
-        from . import native_role_release as roles
-        plan=json.loads(Path(plan_path).read_text())
-        if roles.ownership(plan)[1] is None:
-            raise StudentConfigurationError('on-request RAW qualification requires its source-host candidate exchange')
-        request=roles.foundation_request(plan,directory/'foundation-requests',
-            generation=config['foundation_qualification_generation'])
-        attempted=cursor.get('foundation_qualification_attempt') or {}
-        history=cursor.get('foundation_qualification_history')or{}
-        if (request and attempted.get('request',{}).get('sha256')!=request['sha256']
-                and request['sha256']not in history):
-            qualification_request=request
+        raise StudentConfigurationError('on-shared-request RAW qualification served the removed cross-model role exchange')
     if cursor['phase']=='rl':
         if stop.requested:return cursor
         production_state=Path(config['out'])/'state.json'
@@ -2045,11 +2034,6 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
         parameters=continuation['trainer_parameters']
         _supervised_quantum(config,parameters)
         is_foundation=stage['id']==config['production_stage']
-        if config.get('foundation_readiness_policy')=='on-shared-request':
-            parameters['foundation_readiness_policy']='on-shared-request'
-            if is_foundation and qualification_request:
-                parameters['foundation_qualification_request']=str(_bound(qualification_request))
-                continuation['foundation_qualification_request']=qualification_request
         # Once the cohort is ready, ordinary mandatory deficits still receive
         # useful finite quanta; a final existing foundation qualification below
         # binds the resulting actual weights before rendezvous.
@@ -2398,18 +2382,27 @@ def _resident_release_requirement(requirement,value,*,transition=None,replay_pac
     return requirement
 
 
-def validate_release(path,plan_path,*,allow_live=False,eligibility=False):
+def owned_models(plan):
+    """The plan's student owners. One host owns every declared student."""
+    names={row['model']for row in plan['models']}
+    for key in ('role_exchange','owned_models','local_cycle_source'):
+        if plan.get(key) is not None:
+            raise ValueError(f'raw plan field {key} served the removed cross-model role exchange')
+    for key in ('consumer_preparation_handoff','snapshot_preparation'):
+        if plan.get(key,False) is not False:
+            raise ValueError(f'raw plan field {key} served the removed cross-model role exchange')
+    return names
+
+
+def validate_release(path,plan_path,*,allow_live=False):
     from ..train.native_resident import owner_alive
     record=json.loads(Path(path).read_text());plan=json.loads(Path(plan_path).read_text())
-    from .native_role_release import ownership
-    owned,exchange=ownership(plan)
+    owned=owned_models(plan)
     if (record.get('schema')!=SCHEMA or record.get('plan_sha256')!=sha256_file_hex_cached(plan_path)
-            or(record.get('released')is not True and not(eligibility and exchange and record.get('released')is False))):return None
+            or record.get('released')is not True):return None
     if not allow_live and owner_alive(record.get('owner') or {}):return None
     models=record.get('models') or {}
     if set(models)!=owned:raise ValueError('raw release omitted an actual student owner')
-    if exchange is not None and record.get('owned_models')!=sorted(owned):
-        raise ValueError('raw release changed its explicit source-host ownership')
     result={}
     from ..train.native_readiness import validate_ready
     for declaration in plan['models']:
@@ -2444,8 +2437,7 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
     if (plan.get('schema')!='natlang.native-raw-rl-bootstrap/1' or not plan.get('models')
             or len({row['model'] for row in plan['models']})!=len(plan['models'])
             or not 0<poll_seconds<=60):raise ValueError('raw bootstrap requires distinct declared students and bounded polling')
-    from . import native_role_release as roles
-    owned_models,exchange=roles.ownership(plan);role_contract=roles.contract(plan)if exchange else None
+    owned_models_=owned_models(plan)
     out=Path(out).resolve();out.mkdir(parents=True,exist_ok=True)
     owned=stop is None;stop=StopSignal().install() if owned else stop
     try:
@@ -2454,13 +2446,10 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
             state_path=out/'state.json'
             if state_path.exists() and validate_release(state_path,plan_path) is not None:return json.loads(state_path.read_text())
             state={'schema':SCHEMA,'plan_sha256':sha256_file_hex_cached(plan_path),'owner':process_owner(),
-                'released':False,'models':{},'production_complete':False,
-                **({'owned_models':sorted(owned_models)}if exchange else {})}
-            counts={name:0 for name in owned_models}
+                'released':False,'models':{},'production_complete':False}
+            counts={name:0 for name in owned_models_}
             eligible=set();rendezvous=False;active={};blocked={}
-            if exchange:
-                write_json_durable(state_path,state);roles.withdraw(plan,state_path)
-            with ThreadPoolExecutor(max_workers=len(owned_models)) as pool:
+            with ThreadPoolExecutor(max_workers=len(owned_models_)) as pool:
                 try:
                     while True:
                         updated=json.loads(plan_path.read_text())
@@ -2472,19 +2461,14 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                                    {row['model']:{key:row['handoff_requirement'].get(key) for key in
                                     ('foundation_sources','foundation_epochs','readiness_boundary')} for row in plan['models']}):
                             raise ValueError('live raw plan cannot silently replace a student optimizer owner')
-                        if roles.ownership(updated)!=(owned_models,exchange)or(exchange and roles.contract(updated)!=role_contract):
-                            raise ValueError('live raw plan cannot change source-host role ownership or fixed cohorts')
+                        if owned_models(updated)!=owned_models_:
+                            raise ValueError('live raw plan cannot change its student owners')
                         plan=updated
                         state['plan_sha256']=sha256_file_hex_cached(plan_path)
-                        models={row['model']:row for row in plan['models']if row['model']in owned_models}
-                        if exchange and eligible==owned_models and not stop.requested:
-                            try:rendezvous=roles.eligible(plan)
-                            except(ValueError,OSError,KeyError)as error:
-                                rendezvous=False;state['role_exchange_error']={'error_type':type(error).__name__,'error':str(error)}
+                        models={row['model']:row for row in plan['models']if row['model']in owned_models_}
                         if not stop.requested and not rendezvous:
                             for name,model in models.items():
                                 if name in active or (cycles is not None and counts[name]>=cycles):continue
-                                if exchange and roles.handoff_hold(plan):continue
                                 if blocked.get(name)==_configuration_signature(model,out/name):continue
                                 blocked.pop(name,None)
                                 state.get('configuration_errors',{}).pop(name,None)
@@ -2493,9 +2477,6 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                                     candidate=out/'handoffs'/(name+'.json')
                                     if candidate.is_file():witness=binding(candidate)
                                 if witness is not None:
-                                    # Retire CURRENT eligibility before any descendant
-                                    # can update. The pinned snapshot pointer survives.
-                                    if exchange:roles.withdraw(plan,state_path)
                                     active[name]=(pool.submit(student_cycle,plan_path,model,witness,out/name,stop=stop,
                                         owned_controller_fd=lease.fileno()),witness,model)
                         write_json_durable(state_path,state)
@@ -2539,18 +2520,7 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                         # Do not idle the first eligible student. Only after every
                         # student has reached an actual eligible boundary do we stop
                         # resubmitting and drain their currently owned operations.
-                        if eligible==set(models):
-                            if exchange:
-                                write_json_durable(state_path,state)
-                                try:
-                                    roles.publish(plan_path,state_path,kind='eligible')
-                                    rendezvous=roles.eligible(plan)
-                                    state.pop('role_exchange_error',None)
-                                except(ValueError,OSError,KeyError)as error:
-                                    rendezvous=False;state['role_exchange_error']={'error_type':type(error).__name__,'error':str(error)}
-                            else:rendezvous=True
-                        elif exchange:
-                            write_json_durable(state_path,state);roles.withdraw(plan,state_path)
+                        if eligible==set(models):rendezvous=True
                 except BaseException:
                     # The executor drains only after every owned worker has
                     # observed this shared stop, including config/IO failures.

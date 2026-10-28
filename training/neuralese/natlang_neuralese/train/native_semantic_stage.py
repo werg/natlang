@@ -232,14 +232,7 @@ def _apply_optimizer_state_storage(optimizer, training_options, *, participant):
 def _qualified_snapshot(name,binding):
     from .native_readiness import validate_ready
     if binding.get('source_role_plan'):
-        from ..rl import native_role_release as roles
-        reference=binding['source_role_release'];proof=json.loads(_bound(reference).read_text())
-        _,models=roles.validate(reference,binding['source_role_plan'],kind=proof['kind'])
-        checked=models.get(name)
-        if (checked is None or checked['native_identity']!=binding['native_identity']
-                or checked['checkpoint']['sha256']!=binding['checkpoint']['sha256']):
-            raise ValueError('snapshot transport changed the actually qualified source weights: '+name)
-        return checked
+        raise ValueError('source-host role snapshots belonged to the removed cross-model role exchange: '+name)
     requirement=binding.get('readiness_requirement')
     if not binding.get('readiness') or not isinstance(requirement,dict) or requirement.get('model_id')!=name:
         raise ValueError('snapshot adoption requires its exact qualified participant policy: '+name)
@@ -252,43 +245,13 @@ def _qualified_snapshot(name,binding):
 
 def _source_readiness(name,binding):
     if binding.get('source_role_plan'):
-        from ..rl import native_role_release as roles
-        _qualified_snapshot(name,binding)
-        proof=json.loads(_bound(binding['source_role_release']).read_text())
-        evidence=next(item for item in proof['models'].values() if item['ready']['model_id']==name)
-        if evidence.get('semantic_evidence'):
-            ready=evidence['ready'];semantic=evidence['semantic_evidence']
-            adapter=roles._evidence(semantic['adapter'])
-            model=adapter['models'][name]
-            return {'recipe':ready['recipe'],'native_identity':ready['native_identity'],
-                'checkpoint':ready['checkpoint'],'stage_id':ready['stage_id'],
-                'mandatory_sft':model.get('mandatory_sft')}
-        return roles._evidence(evidence['readiness'])
+        raise ValueError('source-host role snapshots belonged to the removed cross-model role exchange: '+name)
     return json.loads(_bound(binding['readiness']).read_text())
 
 
 def _snapshot_adoption(config,bindings):
-    """Only real source-host optimizer releases can adopt prepared snapshots."""
-    from ..rl import native_role_release as roles
-    adoption=config.get('snapshot_adoption') or {}
-    if adoption.get('schema')!='natlang.native-snapshot-adoption/1':
-        raise ValueError('prepared VAE needs its explicit descendant optimizer handoff before joint training')
-    plan=json.loads(_bound(adoption['plan']).read_text());released={}
-    _,exchange=roles.ownership(plan)
-    if exchange is None:raise ValueError('snapshot adoption requires its actual source-host ownership exchange')
-    for reference in adoption.get('releases',[]):
-        role,models=roles.validate(reference,plan,kind='released')
-        current,status=roles._status(exchange,role)
-        if current is None or current['sha256']!=reference['sha256'] or status.get('kind')!='released':
-            raise ValueError('snapshot adoption refers to a retired optimizer release')
-        if set(released)&set(models):raise ValueError('snapshot adoption repeated an optimizer release')
-        released.update(models)
-    if set(released)!=set(bindings):raise ValueError('snapshot adoption omitted a participant optimizer owner')
-    for name,binding in bindings.items():
-        if (released[name]['checkpoint']['sha256']!=binding['checkpoint']['sha256']
-                or released[name]['native_identity']!=binding['native_identity']):
-            raise ValueError('snapshot adoption changed the genuinely released optimizer checkpoint: '+name)
-    return adoption
+    """Snapshot adoption required the removed cross-model source-host role exchange."""
+    raise ValueError('snapshot adoption belonged to the removed cross-model role exchange')
 
 
 def load_participant(name, binding, config, device):

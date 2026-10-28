@@ -178,50 +178,6 @@ def test_complete_curriculum_and_interrupted_resume_are_exact(tmp_path, monkeypa
         export['checkpoint']['sha256']}
 
 
-def test_shared_completion_exports_resumable_participant_return_bundle(tmp_path,monkeypatch):
-    from natlang_neuralese.model.native_bundle import export_bundle
-    from natlang_neuralese.rl.local_cycle_semantic_return import _checkpoint_state
-    from natlang_neuralese.common.hashing import sha256_file_hex
-
-    config_path,manifest,_,_=_fixture(tmp_path,monkeypatch)
-    from natlang_neuralese.eval import native_semantic_runtime
-    monkeypatch.setattr(native_semantic_runtime,'qualify_semantic_transport',
-        lambda *args,**kwargs:{'passed':False,'fixture_scope':'bundle-custody-only'})
-    original=stage.load_participant
-    parent=tmp_path/'source-parent.pt';parent.write_bytes(b'actual lineage anchor')
-    parent_sha=sha256_file_hex(parent)
-    def load(name,binding,config,device):
-        entry=original(name,binding,config,device)
-        entry.snapshot_ancestors=[parent_sha]
-        entry.source_rng={'torch_cpu':torch.get_rng_state().clone()}
-        def save_pretrained(directory):
-            directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
-            (directory/'tokenizer.json').write_text(json.dumps({'participant':name}))
-        entry.tokenizer.save_pretrained=save_pretrained
-        entry.tokenizer.chat_template='{{ messages }}'
-        entry.tokenizer.apply_chat_template=lambda messages,**kwargs:'fixture transcript'
-        return entry
-    monkeypatch.setattr(stage,'load_participant',load)
-    out=tmp_path/'shared'
-    result=stage.run(config_path,manifest,out,device='cpu')
-    assert result['completed']
-    completion=json.loads((out/'shared-stage-completion.json').read_text())
-    assert completion['checkpoint']['sha256']==sha256_file_hex(out/'checkpoint.pt')
-    assert completion['adapter']['sha256']==sha256_file_hex(out/'semantic-adapter.json')
-
-    for participant in ('lfm','mellum'):
-        bundle=export_bundle(out/'checkpoint.pt',tmp_path/'returns'/participant,
-            semantic_adapter=out/'semantic-adapter.json',participant=participant)
-        payload,training=_checkpoint_state(bundle['checkpoint']['resolved'],participant)
-        assert payload['optimizer'] and payload['source_rng']
-        assert payload['training_options']['native_snapshot_ancestors']==[parent_sha]
-        assert payload['sft_progress'] is not None
-        assert training['sft_progress']==payload['sft_progress']
-        adapter=json.loads(Path(bundle['semantic_adapter']['resolved']).read_text())
-        assert adapter['models'][participant]['checkpoint']['sha256']==bundle['checkpoint']['sha256']
-        assert adapter['models'][participant]['mandatory_sft'] is not None
-
-
 def test_appended_data_and_larger_epochs_are_not_mistaken_for_finished(tmp_path, monkeypatch):
     path, manifest, config, row = _fixture(tmp_path, monkeypatch)
     first = stage.run(path, manifest, tmp_path/'run', device='cpu')
@@ -712,45 +668,3 @@ def test_new_frozen_work_refreshes_vae_after_real_descendant_sgd_and_resumes_exa
     repeated=stage.run(path,manifest,tmp_path/'frozen-next',resume=checkpoint,refresh_participants=True,device='cpu')
     assert repeated['step']==3 and repeated['preparation_complete']
     equal_tree(CheckpointPolicy.load(checkpoint)['training']['exposure'],saved['training']['exposure'])
-
-
-def test_generated_snapshot_full_multirow_vae_epoch_resumes_after_quantum(tmp_path,monkeypatch):
-    from test_native_role_scheduler_deployment import source
-    from natlang_neuralese.train.native_deployment import prepare_role_scheduler,binding
-    metadata=tmp_path/'metadata';metadata.mkdir()
-    plans,controls,curriculum,provider,states,runtime=source(metadata)
-    declared=json.loads(curriculum.read_text());declared['adaptive_refresh']={'updates_per_phase':1}
-    curriculum.write_text(json.dumps(declared))
-    produced=prepare_role_scheduler(plans,controls,curriculum,provider,metadata/'prepared',
-        raw_states=states,runtime=runtime,rl_bootstrap=binding(metadata/'rl-bootstrap.json'),handoff_lease_seconds=180)
-    controller=json.loads(Path(produced['controller']['path']).read_text())
-    snapshot=json.loads(Path(controller['curriculum']).read_text())
-    assert 'adaptive_refresh'not in snapshot
-    actual=tmp_path/'actual';actual.mkdir()
-    path,manifest,config,row=_fixture(actual,monkeypatch)
-    train=Path(config['pairs']['path']);rows=[]
-    for i in range(3):
-        value=copy.deepcopy(row);value['id']='train:'+str(i);rows.append(value)
-    train.write_text(''.join(json.dumps(value)+'\n'for value in rows))
-    config['pairs']['sha256']=sha256_file_hex(train)
-    config['snapshot_preparation']=snapshot['snapshot_preparation']
-    if 'adaptive_refresh'in snapshot:config['adaptive_refresh']=snapshot['adaptive_refresh']
-    config['inherit_optimizer']=snapshot['inherit_optimizer']
-    _install_source_baseline_eval(monkeypatch,actual,path,config)
-    monkeypatch.setattr(stage,'_qualified_snapshot',lambda name,binding:binding)
-    from natlang_neuralese.train import native_continuation
-    monkeypatch.setattr(native_continuation,'qualified_refresh_config',lambda *a,**k:(config,[]))
-    path.write_text(json.dumps(config));torch.manual_seed(314)
-    full=stage.run(path,manifest,actual/'full',device='cpu')
-    torch.manual_seed(314)
-    paused=stage.run(path,manifest,actual/'paused',device='cpu',max_updates=1)
-    assert paused['step']==1 and not paused['preparation_complete']
-    resumed=stage.run(path,manifest,actual/'paused',device='cpu',resume=actual/'paused/checkpoint.pt')
-    assert full['step']==resumed['step']==3 and full['preparation_complete'] and resumed['preparation_complete']
-    assert not resumed['completed'] and not resumed['production_ready']
-    assert resumed['semantic_obligations']['remaining_pair_visits']==6
-    a=CheckpointPolicy.load(actual/'full/checkpoint.pt');b=CheckpointPolicy.load(actual/'paused/checkpoint.pt')
-    _assert_same(a['vae_optimizer'],b['vae_optimizer']);_assert_same(a['vae_state'],b['vae_state'])
-    _assert_same(a['training']['rng'],b['training']['rng'])
-    _assert_same(a['participants'],b['participants'])
-    assert not any(b['training'].get('model_updates',{}).values())

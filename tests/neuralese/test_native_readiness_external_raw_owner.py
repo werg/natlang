@@ -20,7 +20,7 @@ def test_default_still_manages_raw():
 @pytest.mark.parametrize('ready_count',[0,2])
 def test_controller_checks_readiness_but_only_owned_mode_launches_raw(tmp_path,monkeypatch,manage,ready_count):
     curriculum=tmp_path/'curriculum.json';curriculum.write_text('{}')
-    from natlang_neuralese.rl.native_role_release import binding
+    from natlang_neuralese.rl.native_raw_handoff import binding
     release_plan=tmp_path/'release-plan.json'
     release_plan.write_text(json.dumps({'models':[{'model':'fixture'}]}))
     config={'schema':'natlang.native-shared-stage-controller/1','out':str(tmp_path/'out'),
@@ -32,7 +32,6 @@ def test_controller_checks_readiness_but_only_owned_mode_launches_raw(tmp_path,m
     def readiness(cfg):
         checks.append(cfg['raw_rl_bootstrap']);return [{'model_id':str(i)}for i in range(ready_count)],[{'reason':'actual owner has not released'}]if not ready_count else []
     monkeypatch.setattr(m,'ready_participants',readiness)
-    monkeypatch.setattr(m,'_role_local_released',lambda c:False)
     monkeypatch.setattr(m,'raw_bootstrap_command',lambda c:['real-raw'])
     def launch(argv,kind,*args,**kwargs):
         launches.append((argv,kind));raise OSError('fixture launch failure')
@@ -48,26 +47,6 @@ def test_controller_checks_readiness_but_only_owned_mode_launches_raw(tmp_path,m
         assert launches==([(['real-raw'],'native-raw-rl')] if manage else [])
         assert not (tmp_path/'out'/'participants.json').exists()
 
-
-def test_external_raw_release_autoseals_through_real_role_protocol(tmp_path,monkeypatch):
-    from test_native_role_release import fixture,exchange
-    from natlang_neuralese.rl import native_role_release as roles,native_raw_rounds as raw
-    rows=fixture(tmp_path,monkeypatch);left,right=rows['lfm'],rows['mellum']
-    exchange(left,right)
-    # The external RAW owner has exited; no explicit seal_local or owned child
-    # completion is invoked. ready_participants must seal the actual dead owner.
-    config={**right['config'],'schema':'natlang.native-shared-stage-controller/1',
-            'manage_raw_bootstrap':False,'command':['semantic','{participants}','{out}']}
-    ready,pending=m.ready_participants(config)
-    assert ready==[] and all(row['semantic_assets_required']for row in pending)
-    reference,proof=roles._status(right['plan']['role_exchange'],'mellum')
-    assert proof['kind']=='released' and proof['optimizer_released']is True
-    assert proof['raw_state']['source']==roles.binding(right['state_path'])
-    request=roles.semantic_request(right['plan'])
-    assets={row['receipt']['model_id']:raw.binding(row['receipt']['checkpoint']['path'])for row in rows.values()}
-    roles.install_assets(right['plan_path'],request,assets)
-    ready,pending=m.ready_participants(config)
-    assert len(ready)==2 and not pending
 
 @pytest.mark.parametrize('ready_count',[0,1,2])
 def test_pending_poll_defers_full_pair_index_until_two_ready(tmp_path,monkeypatch,ready_count):
