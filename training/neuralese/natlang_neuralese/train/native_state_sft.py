@@ -420,7 +420,7 @@ def _loss_query_state_chunks(hidden, query_ids, chunk_tokens, *, unique_queries)
 
 def _native_ce_sum(model, hidden, query_ids, target_ids, weights, *, chunk_tokens, collect_accuracy, unique_queries):
     """The shared checkpointed readout kernel; callers own normalization."""
-    import torch.nn.functional as F
+    from ..common import stable_softmax
     from torch.utils.checkpoint import checkpoint
     state_chunks = _loss_query_state_chunks(hidden, query_ids, chunk_tokens,
                                             unique_queries=unique_queries)
@@ -428,10 +428,11 @@ def _native_ce_sum(model, hidden, query_ids, target_ids, weights, *, chunk_token
     weight_chunks = weights.split(chunk_tokens)
     total = hidden.new_zeros((), dtype=torch.float32)
     correct = hidden.new_zeros((), dtype=torch.float32) if collect_accuracy else None
+    numerics = stable_softmax.active_policy()  # bound now: checkpoint recomputation runs in backward
     for states, labels, selected in zip(state_chunks, target_chunks, weight_chunks):
         def loss_chunk(states, labels, selected, *, measure_accuracy):
             logits = model.logits(states)
-            ce = F.cross_entropy(logits.float(), labels, reduction='none')
+            ce = stable_softmax.cross_entropy(logits, labels, policy=numerics)
             loss_sum = (ce * selected).sum()
             if not measure_accuracy:
                 return loss_sum
@@ -1143,6 +1144,9 @@ def build_parser():
         help='store nonreentrant layer-checkpoint inputs on host RAM or explicit file storage; omission inherits the saved mode')
     parser.add_argument('--checkpoint-input-offload-directory', default=None,
         help='private file-backed checkpoint inputs in this directory; omission inherits, empty string selects CPU')
+    parser.add_argument('--softmax-numerics', choices=('stable-softmax-barron2026-v1', 'torch-native-v0'),
+        default=None, help='CE/KL/log-softmax numerics (common/stable_softmax.py); omission selects the stable '
+        'default, recording a transition on continuations; torch-native-v0 is the explicit opt-out')
     parser.add_argument('--cotangent-accumulator-backend', choices=('plain', 'device_fp32', 'cpu_file'),
         default=None, help='parameter-cotangent handling: plain autograd with vendor GEMMs (default; a resume '
         'records the transition), or the exact FP32 carrier stored on the device or in CPU files (opt-out)')
@@ -1602,6 +1606,21 @@ def _main(argv=None, *, requested_refresh):
             saved_options.get('cotangent_accumulator_history') or [])
     checkpoint_options['cotangent_accumulator_backend'] = args.cotangent_accumulator_backend
     model.native_cotangent_accumulator_backend = args.cotangent_accumulator_backend
+    # Softmax/CE numerics (common/stable_softmax.py): continuations adopt the current
+    # default through a recorded transition; --softmax-numerics torch-native-v0 opts out.
+    from ..common import stable_softmax
+    args.softmax_numerics = getattr(args, 'softmax_numerics', None) or stable_softmax.POLICY
+    numerics_history = list(saved_options.get('softmax_numerics_history') or [])
+    if saved_training:
+        numerics_transition = stable_softmax.numerics_transition(saved_options.get('softmax_numerics'),
+                                                                 args.softmax_numerics)
+        if numerics_transition is not None:
+            numerics_history.append({**numerics_transition,
+                'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
+                'weights_optimizer_rng_exposure': 'preserved'})
+    checkpoint_options['softmax_numerics'] = args.softmax_numerics
+    checkpoint_options['softmax_numerics_history'] = numerics_history
+    stable_softmax.set_numerics_policy(args.softmax_numerics)
     previous_state_storage=saved_options.get('optimizer_state_storage','device')
     args.optimizer_state_storage=args.optimizer_state_storage or previous_state_storage
     if args.optimizer_state_storage not in ('device','cpu'):

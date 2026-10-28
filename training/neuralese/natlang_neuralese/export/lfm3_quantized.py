@@ -314,14 +314,15 @@ def measure(model, quantization, windows, points=('fp8', 'nvfp4')):
     ce_bf16, count = 0.0, 0
     for window in windows:
         ids = torch.tensor([window], device=device)
-        reference = torch.log_softmax(model(ids).logits[0, :-1].float(), -1)
+        from ..common import stable_softmax
+        reference = model(ids).logits[0, :-1].float()
         targets_ = ids[0, 1:]
-        ce_bf16 += float(-reference.gather(-1, targets_[:, None]).sum())
+        ce_bf16 += float(stable_softmax.cross_entropy(reference, targets_).sum())
         for point in points:
             with quantization.context(point, 1.0):
-                logp = torch.log_softmax(model(ids).logits[0, :-1].float(), -1)
-            totals[point]['kl'] += float((reference.exp() * (reference - logp)).sum())
-            totals[point]['ce'] += float(-logp.gather(-1, targets_[:, None]).sum())
+                logits = model(ids).logits[0, :-1]
+            totals[point]['kl'] += float(stable_softmax.forward_kl(logits, reference).sum())
+            totals[point]['ce'] += float(stable_softmax.cross_entropy(logits, targets_).sum())
         count += len(window) - 1
     return {'tokens': count, 'bf16_ce': ce_bf16 / count,
             **{p: {'kl': v['kl'] / count, 'ce': v['ce'] / count} for p, v in totals.items()}}

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import torch
 
+from ..common import stable_softmax
 from .chat import RequestError
 from .engine import GenerationRequest, Sequence
 from .targets import target_items
@@ -67,7 +68,7 @@ def _score_from_cache(engine, cache, logits, continuation):
     score = torch.zeros((), dtype=torch.float32, device=logits.device)
     with torch.no_grad():
         for token in continuation:
-            score = score + torch.log_softmax(logits.float(), dim=-1)[0, token]
+            score = score + stable_softmax.token_logprobs(logits[:1], torch.tensor([token], device=logits.device))[0]
             output = engine._native_forward([token], cache)
             cache, logits = output["cache"], engine._native_logits(output["h_final"])
     return float(score), len(continuation)

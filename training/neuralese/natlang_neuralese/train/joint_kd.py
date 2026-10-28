@@ -16,6 +16,8 @@ from pathlib import Path
 
 import torch
 
+from ..common import stable_softmax
+
 IGNORE = -100
 
 
@@ -72,23 +74,19 @@ class _ChunkedCEKL(torch.autograd.Function):
             h = flat[index].float()
             logits = h @ w.T
             target = flat_labels[index]
-            log_p = torch.log_softmax(logits, dim=-1)
-            p = log_p.exp()
-            ce = -log_p.gather(1, target[:, None]).squeeze(1)
-            grad_logits = ce_weight * p
-            grad_logits[torch.arange(index.numel(), device=h.device), target] -= ce_weight
+            # Shared stable numerics (common/stable_softmax.py): zero-sum CE gradient, cancellation-free KL.
+            ce, grad_ce = stable_softmax.cross_entropy_value_and_grad(logits, target)
+            grad_logits = ce_weight * grad_ce
             loss = ce_weight * ce.sum()
             ce_sum += ce.sum().item()
             if teacher_flat is not None and kl_weight:
                 teacher_logits = teacher_flat[index].float() @ tw.T
-                log_q = torch.log_softmax(teacher_logits / temperature, dim=-1)
-                log_p_t = torch.log_softmax(logits / temperature, dim=-1) if temperature != 1 else log_p
-                q = log_q.exp()
-                kl = (q * (log_q - log_p_t)).sum(-1)
+                kl, grad_kl = stable_softmax.divergence_value_and_grad(logits / temperature,
+                                                                       teacher_logits / temperature, 'forward_kl')
                 scale = kl_weight * temperature ** 2
                 loss = loss + scale * kl.sum()
                 kl_sum += kl.sum().item()
-                grad_logits += (kl_weight * temperature) * (log_p_t.exp() - q)
+                grad_logits += (kl_weight * temperature) * grad_kl
             total += loss.item()
             grad_logits /= normaliser
             grad_hidden[index] = grad_logits @ w

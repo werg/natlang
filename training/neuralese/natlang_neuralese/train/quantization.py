@@ -905,15 +905,16 @@ def layer_sensitivity(model, windows, *, group, fmt, options=None, layer_count, 
     forward = forward or (lambda ids: model(ids).logits)
     device = next(model.parameters()).device
     batches = [torch.tensor([w], device=device) for w in windows]
-    reference = [torch.log_softmax(forward(ids).float(), -1) for ids in batches]
+    from ..common import stable_softmax
+    # Near-agreement KL telemetry: the shared cancellation-free value (common/stable_softmax.py).
+    reference = [forward(ids).float() for ids in batches]
     scores = {}
     for layer in range(layer_count):
         total, count = 0.0, 0
         options_layer = {**(options or {}), 'layers': {layer}}
         with active_precision({group: (fmt, 1.0, options_layer)}, 'sensitivity'):
             for ids, ref in zip(batches, reference):
-                logp = torch.log_softmax(forward(ids).float(), -1)
-                total += float((ref.exp() * (ref - logp)).sum(-1).sum())
+                total += float(stable_softmax.forward_kl(forward(ids), ref).sum())
                 count += ids.shape[1]
         scores[str(layer)] = total / max(count, 1)
     return scores

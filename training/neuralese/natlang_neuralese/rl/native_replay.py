@@ -570,10 +570,12 @@ def token_action_logps(model, hidden, actions, *, chunk_tokens=128, readout=None
         groups.setdefault((action['temperature'],tuple(action['allowed_token_ids']) if action['allowed_token_ids'] is not None else None,
                            tuple(action['banned_token_ids']) if action.get('banned_token_ids') is not None else None), []).append(index)
     logps = [None] * len(actions)
+    from ..common.stable_softmax import active_policy
+    numerics=active_policy()  # bound now: checkpoint recomputation runs in backward
     def score(states,labels,temperature,allowed,banned):
-        from ..common.sampling import masked_log_distribution
-        log_probs=masked_log_distribution((readout or model.logits)(states),temperature,allowed=allowed,banned=banned)
-        return log_probs.gather(1,labels[:,None]).squeeze(1)
+        from ..common.sampling import masked_token_logprobs
+        return masked_token_logprobs((readout or model.logits)(states),labels,temperature,allowed=allowed,banned=banned,
+                                     policy=numerics)
     from ..common.native_higher_order import capture_reference_execution,active_reference_arithmetic
     if active_reference_arithmetic() is not None:
         from ..model.native_adapters import capture_native_execution
