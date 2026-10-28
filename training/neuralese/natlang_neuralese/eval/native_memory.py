@@ -667,22 +667,65 @@ def _materialize_preference_capacity_request(source, objective, descriptor, *, i
     return binding(request_path)
 
 
+def _materialize_sft_capacity_request(source, descriptor, *, identity, runtime_code_sha256, request_path):
+    """Select actual maximum complete SFT graphs from the authenticated current geometry sidecar."""
+    from ..train.native_resident import binding, bound, _source_witness
+    from ..train.native_packed_capacity import geometry_for_source
+    from ..common.jsonio import write_json_durable
+    if set(descriptor) != {'schema', 'source', 'geometry'}:
+        raise ValueError('SFT capacity descriptor needs exactly source and geometry bindings')
+    if descriptor['source'] != binding(source.path):
+        raise ValueError('SFT capacity descriptor source differs from the restored training source')
+    geometry = json.loads(bound(descriptor['geometry']).read_text())
+    if geometry.get('source') != binding(source.path):
+        raise ValueError('SFT capacity geometry source differs from the restored training source')
+    # This verifier checks the parser policy, tokenizer, role IDs, complete ordered row bindings and every KV slot.
+    slots, _, _ = geometry_for_source(source, Path(request_path).parent, prior=descriptor['geometry'])
+    if not source.entries:
+        raise ValueError('SFT capacity requires a nonempty training source')
+    selected = list(dict.fromkeys([max(range(len(slots)), key=lambda i: source.entries[i]['forward_tokens']),
+                                  max(range(len(slots)), key=lambda i: slots[i])]))
+    reference = min(range(len(slots)), key=lambda i: source.entries[i]['forward_tokens'])
+    def row(index):
+        entry = source.entries[index]
+        return {'index': index, 'id': entry['id'], 'binding': entry['binding']}
+    for index, example in zip(selected, source.iter_indices(selected), strict=True):
+        if (example.split != 'train' or example.plan.token_count != source.entries[index]['forward_tokens']
+                or len(example.plan.slot_sources) != slots[index]):
+            raise ValueError('SFT capacity maximum differs from the parsed training graph geometry')
+    request = {'schema': 'natlang.native-memory-qualification-request/1', 'identity': identity,
+               'runtime_code_sha256': runtime_code_sha256, 'source': binding(source.path),
+               'indexes': _source_witness(source), 'split': 'train',
+               'cases': [row(index) for index in selected], 'reference': row(reference)}
+    request_path = Path(request_path)
+    request_path.parent.mkdir(parents=True, exist_ok=True)
+    if request_path.exists():
+        if json.loads(request_path.read_text()) != request:
+            raise ValueError('durable SFT capacity request differs from this live restored stage')
+    else:
+        write_json_durable(request_path, request)
+    return binding(request_path)
+
+
 def _resolve_memory_qualification(reference, *, model, optimizer, train, roles, config, args,
                                   backend, objective):
-    """Resolve an opt-in pair-case descriptor into the ordinary capacity request.
+    """Resolve a source-bound SFT or pair-case descriptor into the ordinary capacity request.
 
     All existing prepared requests pass through unchanged. This descriptor
-    path only constructs request metadata after the actual objective, tokenizer,
+    paths only construct request metadata after the actual objective, tokenizer,
     source index, restored configuration and backend are live.
     """
     from ..train.native_resident import bound, binding, code_inventory
     from ..common.hashing import canonical_json_sha256_hex
     descriptor_path = bound(reference)
     descriptor = json.loads(descriptor_path.read_text())
-    if descriptor.get('schema') != 'natlang.native-preference-capacity-case/1':
+    schema = descriptor.get('schema')
+    if schema not in ('natlang.native-preference-capacity-case/1', 'natlang.native-sft-capacity-cases/1'):
         return reference
-    if objective is None or getattr(objective, 'kind', None) not in {
-            'native-offline-pairwise','native-failure-repair-dpo'}:
+    if schema == 'natlang.native-sft-capacity-cases/1' and objective is not None:
+        raise ValueError('SFT capacity descriptor requires the ordinary SFT objective')
+    if schema == 'natlang.native-preference-capacity-case/1' and (objective is None or getattr(objective, 'kind', None) not in {
+            'native-offline-pairwise','native-failure-repair-dpo'}):
         raise ValueError('preference capacity case requires an implemented whole-pair preference objective')
     package = Path(__file__).resolve().parents[1]
     runtime_code_sha = canonical_json_sha256_hex(code_inventory(package))
@@ -694,6 +737,9 @@ def _resolve_memory_qualification(reference, *, model, optimizer, train, roles, 
     })
     request_path = (Path(args.out) / 'memory-qualification-requests' /
                     descriptor_path.stem / request_key / 'request.json')
+    if schema == 'natlang.native-sft-capacity-cases/1':
+        return _materialize_sft_capacity_request(train, descriptor, identity=identity,
+            runtime_code_sha256=runtime_code_sha, request_path=request_path)
     return _materialize_preference_capacity_request(train, objective, descriptor,
         identity=identity, runtime_code_sha256=runtime_code_sha, request_path=request_path)
 
