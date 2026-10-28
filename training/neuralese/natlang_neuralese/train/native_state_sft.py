@@ -2681,6 +2681,7 @@ def _main(argv=None, *, requested_refresh):
                                               'bytes':train.path.stat().st_size}
                         foundation_binding['dependencies'] = [item for item in native_graph_bindings(foundation_binding)
                             if item['path'] != foundation_binding['path']]
+                        checkpoint_options['foundation_native_graphs'] = str(train.path)
                         checkpoint_options['foundation_native_graphs_binding'] = foundation_binding
                         foundation_priority_ids = ({entry['id'] for entry in train.entries if entry.get('communication')}
                             if args.foundation_communication_batches is not None else None)

@@ -1576,6 +1576,7 @@ def test_real_shared_foundation_resident_append_preserves_optimizer_rng_and_expo
     test_real_resident_sgd_matches_all_data_run_and_recovers_old_checkpoint(tmp_path,monkeypatch,crash_after_commit,False,False)
     actual=torch.load(tmp_path/'run'/'sft'/'checkpoint.pt',weights_only=False)
     assert actual['training']['options']['foundation_native_graphs_binding']['sha256']==resident.sha(tmp_path/'new.jsonl')
+    assert actual['training']['options']['foundation_native_graphs']==str(tmp_path/'new.jsonl')
     assert actual['training']['exposure_counts']=={'a':1,'b':1,'c':1}
 
 
