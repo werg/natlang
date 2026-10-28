@@ -1,0 +1,99 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-repair-s52034-s52041-curated-render-20261015-v1-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/luna-repair-s52034-s52041-curated-render-20261015-v1",
+  "files": [
+    {
+      "path": "full/lfm3/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "full/lfm3/text-data.jsonl.zst",
+      "bytes": 29929,
+      "sha256": "a2628bc14cf179da0359c728b2f2ee048a5b13886beb357455c80ea6967ebaa4"
+    },
+    {
+      "path": "native-graphs/program-header/receipt.json",
+      "bytes": 1882,
+      "sha256": "1a913a2c5e2f3c8baf84528ebaec4fb73f545b6a9ad789797f37d28e56ccbcd6"
+    },
+    {
+      "path": "native-graphs/program-header/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "native-graphs/program-header/train/native-graphs.jsonl.zst",
+      "bytes": 14236,
+      "sha256": "8e4b5a4be333d0ca8d2724cacebaa8c2742ac801b327d60318ad66b2173e4b4e"
+    },
+    {
+      "path": "native-graphs/whole-trajectory/receipt.json",
+      "bytes": 2305,
+      "sha256": "7ce39830f8a5b36914b42573e9154e5330bcb144e72983455c4c40e775774dee"
+    },
+    {
+      "path": "native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+      "bytes": 15962,
+      "sha256": "a692b85ba85fdef7611d8d96c5e26eb7fe1b4fc750f6b05ff57baded738a6a40"
+    },
+    {
+      "path": "native-graphs.sh",
+      "bytes": 2229,
+      "sha256": "c243506eb69aae815ab7449d1e1552dabcffc9b6e0ae93b0608190b7b215c822"
+    },
+    {
+      "path": "program-header/lfm3/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "program-header/lfm3/text-data.jsonl.zst",
+      "bytes": 25965,
+      "sha256": "705f29a8d5772668a19499e052d868484ec5b84a6c8691f2abc293ebd6a0cb2b"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 30267,
+      "sha256": "a513b5eaeedd527eff3cc5371f69e58a02f5931c75522ef72f9560bf49e1be5b"
+    },
+    {
+      "path": "render-omissions/lfm3/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "selection-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "student-verification.json",
+      "bytes": 1063,
+      "sha256": "fec940c982b4d1c575d1524f3ff81d765fc63cdc0d56e496f12e0293f3f00b78"
+    },
+    {
+      "path": "whole-trajectory/lfm3/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "whole-trajectory/lfm3/text-data.jsonl.zst",
+      "bytes": 26676,
+      "sha256": "0bc7cc64068f79e4c8b620e34322e5b8a1de7466ddaf28601da33bfc13ebdc8d"
+    }
+  ],
+  "bytes": 150540
+}

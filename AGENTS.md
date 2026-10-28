@@ -31,6 +31,18 @@ flight (e.g. an RL round with a bound journal, which the next round then
 upgrades), keep their recorded behaviour. When a default could be harmful,
 measure and fix it; do not hide it behind a flag.
 
+## Lean codebase and economical testing (owner, 2026-10-28)
+
+Always eliminate legacy infrastructure outside the core direction: code, tests,
+docs, recipes and registry entries. Git history is the archive, so keep a lean
+codebase with clean abstractions. Preserve source/training data, protected held
+data and live recovery dependencies; never keep code "just in case".
+
+Test economically: run the targeted tests for a change, merge, and debug problems
+when they appear. Do not rerun suites on a base commit to tell pre-existing
+failures from new ones. Fix every failure you see whatever its origin; when a
+failing test only covers legacy infrastructure, remove the test and that code.
+
 ## Individual-program tuning (owner, 2026-10-26)
 
 Operate the tuning lane in `plans/TUNING_OPERATIONS_HANDOFF_20261026.md` and
