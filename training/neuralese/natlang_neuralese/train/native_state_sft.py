@@ -1983,8 +1983,8 @@ def _main(argv=None, *, requested_refresh):
                 {'proof_sha256': proof_sha, 'graph_visits_created': 0})
     diloco_withdrawal_changed=False
     if args.retired_native_withdrawal:
-        if resume is None or args.withdrawn_native_graphs:
-            raise ValueError('retired withdrawal needs the earned checkpoint and cannot be reapplied')
+        if resume is None:
+            raise ValueError('retired withdrawal needs the earned checkpoint')
         from .native_continuation import verify_retired_withdrawal
         verify_retired_withdrawal(resume,args.retired_native_withdrawal,
             current_bindings=source_row_bindings,
