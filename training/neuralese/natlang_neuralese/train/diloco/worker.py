@@ -709,6 +709,11 @@ class DilocoLearner:
             if stop_requested() or time.monotonic()>=deadline:return False
             time.sleep(.05)
 
+    def record_identity_transition(self, transition: dict) -> None:
+        value={**transition,'worker':self.worker,'fingerprint':self.manifest['fingerprint']}
+        self._with_lease(lambda:self.transport.json('POST','/v1/identity-transition',
+            {'worker':self.worker,'session':self.session,'transition':value}))
+
     def declare_completion(self, *, drained: bool, generation: str | None = None) -> None:
         body={'worker':self.worker,'session':self.session,'drained':drained,'generation':generation}
         if drained:body['sequences']=list(self.sequences)

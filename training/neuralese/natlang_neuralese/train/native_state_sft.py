@@ -1778,7 +1778,9 @@ def _main(argv=None, *, requested_refresh):
          sorted(source_row_bindings.items()), sorted(held_row_bindings.items())],
         ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
     source_order = train.ordered_ids()
+    diloco_previous_source_hash = (resume or {}).get('source_hash')
     source_correction_result = {'changed': False}
+    diloco_append_changed = False
     from .native_pending_sources import load_pending_sources
     checkpoint_options['_pending_native_source_declarations'] = [
         load_pending_sources(path, tokenizer_fingerprint=fingerprint) for path in args.pending_native_sources]
@@ -1975,6 +1977,7 @@ def _main(argv=None, *, requested_refresh):
         if not any(item['proof_sha256'] == proof_sha for item in checkpoint_options['source_classification_history']):
             checkpoint_options['source_classification_history'].append(
                 {'proof_sha256': proof_sha, 'graph_visits_created': 0})
+    diloco_withdrawal_changed=False
     if args.withdrawn_native_graphs:
         if resume is None:
             raise ValueError('native withdrawal needs the actual checkpoint and exact predecessor source')
@@ -1983,6 +1986,7 @@ def _main(argv=None, *, requested_refresh):
         applied=any(item.get('proof_sha256')==sha256_file_hex_cached(args.withdrawn_native_graphs)
             for item in (resume.get('options') or {}).get('withdrawal_history') or [])
         if not applied:
+            diloco_withdrawal_changed=True
             if args.continued_native_graphs is None:
                 raise ValueError('native withdrawal needs the actual checkpoint and exact predecessor source')
             old_source=NativeGraphSource(args.continued_native_graphs, fingerprint,
@@ -2137,6 +2141,7 @@ def _main(argv=None, *, requested_refresh):
         elif restored_progress or not (parent_continuation and args.objective_continuation):
             prior_bindings = resume.get('source_row_bindings') or {}
             appended_ids = append_only_rows(prior_bindings, source_row_bindings, label='training-source')
+            diloco_append_changed = bool(appended_ids) and diloco_previous_source_hash != source_hash
             prior_order = resume.get('source_row_order') or []
             if source_order[:len(prior_order)] != prior_order:
                 raise ValueError('native SFT continuation reordered prior training rows; exact cursor cannot be resumed')
@@ -2306,9 +2311,26 @@ def _main(argv=None, *, requested_refresh):
         raise ValueError('native MuonSR optimizer omitted its explicit history storage mechanism')
     optimizer.latent.set_state_storage(args.optimizer_state_storage)
     from .native_diloco import attach_learner
+    diloco_identity_transition = None
+    if args.diloco is not None and not parent_continuation and (source_correction_result.get('changed') or diloco_withdrawal_changed or diloco_append_changed):
+        diloco_identity_transition = {'schema':'natlang.diloco-source-identity-transition/1',
+            'correction_verified':True, 'checkpoint_sha256':sha256_file_hex_cached(policy.slot),
+            'correction_sha256':(source_correction_result.get('proof_sha256') if source_correction_result.get('changed') else sha256_file_hex_cached(args.withdrawn_native_graphs) if diloco_withdrawal_changed else source_receipts[0]['sha256']),
+            'transition_kind': 'correction' if source_correction_result.get('changed') else 'withdrawal' if diloco_withdrawal_changed else 'append',
+            'withdrawal_sha256':sha256_file_hex_cached(args.withdrawn_native_graphs) if diloco_withdrawal_changed else None,
+            'previous_source_hash':diloco_previous_source_hash, 'source_hash':source_hash,
+            'stage_id':args.stage_id, 'recipe_binding':args.recipe_binding}
+    if args.diloco is not None and not parent_continuation and diloco_identity_transition is None:
+        carried=((resume or {}).get('options') or {}).get('diloco_identity_transition_history') or []
+        if carried and diloco_previous_source_hash==source_hash:
+            diloco_identity_transition={**carried[-1], 'replay_verified_checkpoint_sha256':sha256_file_hex_cached(policy.slot)}
     diloco = attach_learner(args, named, parent_continuation=parent_continuation,
-                            saved_state=None if parent_continuation else (resume or {}).get('diloco'))
+                            saved_state=None if parent_continuation else (resume or {}).get('diloco'),
+                            argv=argv, source_transition=diloco_identity_transition)
     checkpoint_options['_diloco_learner'] = diloco
+    if diloco is not None and getattr(diloco,'identity_transition',None):
+        history=checkpoint_options.setdefault('diloco_identity_transition_history',list(((resume or {}).get('options') or {}).get('diloco_identity_transition_history') or []))
+        if diloco.identity_transition not in history:history.append(diloco.identity_transition)
     reopened_diloco=False
     if diloco is not None and not parent_continuation and resume:
         previous_delivery=((resume.get('options') or {}).get('diloco_final_delivery') or {})
@@ -2527,7 +2549,7 @@ def _main(argv=None, *, requested_refresh):
         admission_record = None  # An actual subsequent update is a new continuation.
     if admission_record is not None:
         checkpoint_options['_pending_source_admission'] = admission_record
-    metadata_dirty = (reopened_diloco or last_saved_step < 0 or args.native_optimizer_migration is not None
+    metadata_dirty = (bool(diloco_identity_transition) or reopened_diloco or last_saved_step < 0 or args.native_optimizer_migration is not None
         or source_correction_result.get('changed', False)
         or foundation_declaration_changed
         or foundation_dependencies_changed

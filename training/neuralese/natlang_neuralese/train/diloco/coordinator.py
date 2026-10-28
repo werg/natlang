@@ -333,6 +333,25 @@ class Coordinator:
             self._write_progress()
             return self._progress_status()
 
+    def identity_transition(self, worker: int, session: str, transition: dict) -> dict:
+        """Journal a locally verified source correction against this immutable run."""
+        self._lease_valid(worker,session)
+        from ..native_diloco import source_identity_transition
+        if not isinstance(transition,dict) or transition.get('original_identity')!=self.manifest['identity']:
+            raise ValueError('transition does not bind the original coordinator identity')
+        current=transition.get('current_identity')
+        checked=source_identity_transition(self.manifest['identity'],current,transition)
+        if checked.get('worker')!=worker or checked.get('fingerprint')!=self.manifest['fingerprint']:
+            raise ValueError('source transition belongs to a different worker or parameter surface')
+        with self.progress_lock:
+            self._lease_valid(worker,session)
+            history=self.progress.setdefault('identity_transitions',{}).setdefault(str(worker),[])
+            if checked in history:return {'recorded':True,'duplicate':True}
+            if history and history[-1]['source_hash']!=checked['previous_source_hash']:
+                raise Conflict('source identity transition does not continue its recorded predecessor')
+            history.append(checked);self._write_progress()
+        return {'recorded':True,'duplicate':False}
+
     def completion(self, worker: int, session: str, *, drained: bool, sequences: list[int] | None = None, generation: str | None = None) -> dict:
         """Record no-more-local-updates and, separately, delivery of each final window."""
         self._lease_valid(worker, session)
@@ -919,6 +938,9 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 if parsed.path == "/v1/lease":
                     value = self._read_json()
                     result = coordinator.lease(int(value["worker"]), str(value["session"]))
+                elif parsed.path == "/v1/identity-transition":
+                    value=self._read_json()
+                    result=coordinator.identity_transition(int(value['worker']),str(value['session']),value['transition'])
                 elif parsed.path == "/v1/completion":
                     value=self._read_json()
                     result=coordinator.completion(int(value['worker']),str(value['session']),
