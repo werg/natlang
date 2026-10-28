@@ -167,14 +167,41 @@ def coordinator_pin(root, archive, package, *, attempts=5):
     raise RuntimeError('coordinator changed during each recovery pin attempt')
 
 
+
+def release_pin(primary, expected_sha, expected_bytes, *, recovery_root, fenced_source=None, fence_root=None):
+    """Remove only a verified recovery pin, never the learner's live checkpoint."""
+    primary=Path(primary);recovery_root=Path(recovery_root)
+    if primary.is_symlink() or not primary.resolve().is_relative_to(recovery_root.resolve()) or '..' in primary.parts:
+        raise ValueError('recovery pin is outside its exact cycle root')
+    secondary=Path(fenced_source) if fenced_source else None
+    if secondary is not None:
+        if fence_root is None or secondary.is_symlink() or not secondary.resolve().is_relative_to(Path(fence_root).resolve()) or '..' in secondary.parts:
+            raise ValueError('fence pin is outside its exact fence root')
+    paired=False
+    if primary.exists():
+        if not primary.is_file() or primary.stat().st_size!=expected_bytes:
+            raise ValueError('recovery pin byte count changed')
+        paired=(secondary is not None and secondary.is_file() and
+                (primary.stat().st_dev,primary.stat().st_ino)==(secondary.stat().st_dev,secondary.stat().st_ino))
+        if _hash(primary)!=expected_sha:raise ValueError('recovery pin hash changed')
+        primary.unlink()
+    if secondary is not None and secondary.exists():
+        if not secondary.is_file() or secondary.stat().st_size!=expected_bytes or (not paired and _hash(secondary)!=expected_sha):
+            raise ValueError('fence pin differs from exported bytes')
+        secondary.unlink()
+    return {'released':True}
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);sub=p.add_subparsers(dest='action',required=True)
     w=sub.add_parser('worker');w.add_argument('checkpoint');w.add_argument('destination');w.add_argument('worker',type=int)
     w.add_argument('fingerprint');w.add_argument('package')
     c=sub.add_parser('coordinator');c.add_argument('root');c.add_argument('archive');c.add_argument('package')
     r=sub.add_parser('resident');r.add_argument('directory');r.add_argument('archive')
+    d=sub.add_parser('release');d.add_argument('primary');d.add_argument('sha256');d.add_argument('bytes',type=int)
+    d.add_argument('recovery_root');d.add_argument('--fenced-source');d.add_argument('--fence-root')
     a=p.parse_args()
-    value=(worker_pin(a.checkpoint,a.destination,a.worker,a.fingerprint,a.package) if a.action=='worker' else
+    value=(release_pin(a.primary,a.sha256,a.bytes,recovery_root=a.recovery_root,fenced_source=a.fenced_source,fence_root=a.fence_root) if a.action=='release' else
+           worker_pin(a.checkpoint,a.destination,a.worker,a.fingerprint,a.package) if a.action=='worker' else
            coordinator_pin(a.root,a.archive,a.package) if a.action=='coordinator' else resident_pin(a.directory,a.archive))
     print(json.dumps(value,sort_keys=True))
 

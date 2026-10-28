@@ -166,6 +166,35 @@ class Backend:
             raise ValueError('local full-state readback differs')
         return value
 
+    def release_remote_pins(self,cycle):
+        """Release only cycle-owned pins after private GET and local copy verification."""
+        self.verify_ownership()
+        components=cycle['components'];receipts=cycle['receipts']
+        if (cycle.get('phase')!='verified-components-and-dependencies' or
+                not cycle.get('compatibility',{}).get('compatible') or
+                not self.present(cycle['dependency_receipt'])):
+            raise ValueError('unverified recovery cycle cannot release pins')
+        for name,intent in components.items():
+            if not self.present(receipts[name]):raise ValueError('private recovery component disappeared: '+name)
+            local=self.storage/'objects'/intent['sha256']/Path(intent['path']).name
+            if not local.is_file() or local.stat().st_size!=intent['bytes']:
+                raise ValueError('local recovery component is absent: '+name)
+        deps=cycle['dependency_intent']
+        if not Path(deps['path']).is_file() or Path(deps['path']).stat().st_size!=deps['bytes']:
+            raise ValueError('local recovery dependencies are absent')
+        root='/work/.coreweave/recovery-pins/'+cycle['id']
+        def release(name,intent):
+            args=['release',intent['path'],intent['sha256'],intent['bytes'],root]
+            if name.startswith('worker-') and 'fenced' in cycle:
+                worker=int(name.removeprefix('worker-'));fence=cycle['fenced']
+                args += ['--fenced-source',fence['ready'][str(worker)]['checkpoint'],
+                         '--fence-root',self.out+'/diloco/recovery-fence/pins/'+fence['id']]
+            return self._exec(intent['sandbox_id'],args)
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures={name:pool.submit(release,name,intent) for name,intent in components.items()}
+            for future in futures.values():future.result()
+        return {'status':'released','at':time.time(),'scope':'only verified cycle-owned remote pins'}
+
     def prepare_dependencies(self,cycle):
         bundle=Path(self.record['run']['learners']['bundle_file'])
         sources=bundle.with_name(bundle.stem+'.sources.json')
@@ -283,6 +312,12 @@ def run_once(record,state_path,backend):
         if state['run_id']!=record['run']['id']:raise ValueError('recovery state belongs to a different run')
         def save():durable_json(state_path,state)
         if hasattr(backend,'verify_ownership'):backend.verify_ownership()
+        if hasattr(backend,'release_remote_pins'):
+            for previous in state['cycles']:
+                if previous.get('pin_cleanup',{}).get('status')=='pending':
+                    try:previous['pin_cleanup']=backend.release_remote_pins(previous)
+                    except Exception as error:previous['pin_cleanup']={'status':'pending','error':str(error)}
+                    save()
         cycle=state.get('pending')
         if cycle is None:
             cycle={'id':uuid.uuid4().hex,'phase':'pinning','components':{},'receipts':{},'errors':{}}
@@ -292,8 +327,12 @@ def run_once(record,state_path,backend):
                 captured=backend.capture_fenced(cycle['id'])
                 cycle['fenced']={'id':captured['id'],'deadline':captured['deadline'],
                                  'ready':{str(k):v for k,v in captured['ready'].items()}}
-                cycle['components'].update(captured['components']);cycle['errors'].pop('fence',None);save()
+                cycle['components'].update(captured['components']);cycle['errors'].pop('fence',None)
+                state.pop('recovery_blocker',None);save()
             except FenceUnavailable as error:
+                if any(old.get('unfenced') and old.get('phase')=='incompatible-pins' for old in state['cycles']):
+                    state['recovery_blocker']='unsafe unfenced cohort retained; live fence runtime required before another attempt'
+                    state.pop('pending');save();return state
                 cycle['unfenced']={'reason':str(error),'scope':'opportunistic sequence-checked component pins'};save()
             except Exception as error:
                 cycle['phase']='incomplete';cycle['errors']['fence']=str(error);save();return state
@@ -372,6 +411,10 @@ def run_once(record,state_path,backend):
                 cycle['recovery_blocker']='cross-component restore and coordinator sequence replay have not been qualified'
                 if cycle['compatibility']['compatible']:state['latest_exported']=cycle['id']
                 state['cycles'].append(cycle);state.pop('pending');save()
+                if cycle['compatibility']['compatible'] and hasattr(backend,'release_remote_pins'):
+                    try:cycle['pin_cleanup']=backend.release_remote_pins(cycle)
+                    except Exception as error:cycle['pin_cleanup']={'status':'pending','error':str(error)}
+                    save()
         else:
             cycle['phase']='incomplete';save()
         return state
@@ -392,7 +435,7 @@ def main():
             cycle=state.get('pending') or state['cycles'][-1]
             print(json.dumps({'cycle':cycle['id'],'phase':cycle['phase'],'errors':cycle['errors'],
                               'latest_exported':state.get('latest_exported'),
-                              'recovery_blocker':cycle.get('recovery_blocker'),
+                              'recovery_blocker':state.get('recovery_blocker') or cycle.get('recovery_blocker'),
                               'observed_progress':cycle.get('observed_progress')},sort_keys=True),flush=True)
         except Exception as error:
             print(json.dumps({'error':type(error).__name__,'detail':str(error)}),flush=True)

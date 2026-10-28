@@ -449,3 +449,40 @@ def test_http_restore_replays_already_queued_payload_once(tmp_path):
     finally:
         for _,learner,_ in learners:learner.close()
         stop.set();thread.join(timeout=3)
+
+
+def test_release_only_verified_pins_preserves_live_checkpoint(tmp_path):
+    import hashlib,os
+    pin=load('diloco_recovery_pin');live=tmp_path/'live.pt';live.write_bytes(b'checkpoint')
+    recovery=tmp_path/'pins/cycle';recovery.mkdir(parents=True);primary=recovery/'worker.pt';os.link(live,primary)
+    fence=tmp_path/'fence/id';fence.mkdir(parents=True);secondary=fence/'checkpoint.pt';os.link(live,secondary)
+    sha=hashlib.sha256(live.read_bytes()).hexdigest()
+    with pytest.raises(ValueError,match='hash changed'):
+        pin.release_pin(primary,'0'*64,live.stat().st_size,recovery_root=recovery,fenced_source=secondary,fence_root=fence)
+    assert primary.exists() and secondary.exists() and live.read_bytes()==b'checkpoint'
+    assert pin.release_pin(primary,sha,live.stat().st_size,recovery_root=recovery,fenced_source=secondary,fence_root=fence)['released']
+    assert not primary.exists() and not secondary.exists() and live.read_bytes()==b'checkpoint'
+    assert pin.release_pin(primary,sha,live.stat().st_size,recovery_root=recovery,fenced_source=secondary,fence_root=fence)['released']
+    with pytest.raises(ValueError,match='outside'):
+        pin.release_pin(live,sha,live.stat().st_size,recovery_root=recovery)
+
+
+def test_unfenced_incompatible_cohort_is_retained_without_unbounded_retries(tmp_path):
+    service=load('diloco_periodic_recovery');calls=[]
+    class Backend:
+        workers=['s0','s1','s2','s3']
+        def capture_fenced(self,cycle):raise service.FenceUnavailable('old runtime')
+        def pin_worker(self,i,cycle):
+            calls.append(i)
+            return {'fingerprint':'f','source_hash':'s','runtime_code_sha256':'code','recipe_binding':'r',
+                    'ce_supervision_policy_binding':'c','resident_generation':'g','versions':[0],'sequences':[0],
+                    'pending':{},'awaiting_global':[]}
+        def pin_resident(self,i,cycle):return {'generation':'g'}
+        def pin_coordinator(self,cycle):return {'fingerprint':'f','runtime_code_sha256':'code','versions':[1],
+                                                'last_seq':[{'0':1}],'queued':[{}]}
+        def export(self,*args):raise AssertionError('unsafe cohort must not export')
+    path=tmp_path/'state.json';record={'run':{'id':'run'}};backend=Backend()
+    first=service.run_once(record,path,backend)
+    assert first['cycles'][-1]['phase']=='incompatible-pins' and len(calls)==4
+    second=service.run_once(record,path,backend)
+    assert len(calls)==4 and 'live fence runtime required' in second['recovery_blocker']
