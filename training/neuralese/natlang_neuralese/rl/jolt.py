@@ -171,7 +171,8 @@ def privileged_source(rollouts, *, cases, rendering, custody, teacher_trajectori
     Raises ``CustodyError`` (or ValueError for unsupported graphs) when the episode gets no privileged teacher.
     Attempt feedback comes from the same group's earlier scored student attempts.
     """
-    from .privileged_context import CustodyError, privileged_blocks
+    from ..common.custody import CustodyError
+    from .privileged_context import privileged_blocks
     from .privileged_scoring import graph_invocations
     students = {}
     for row in rollouts:
@@ -237,7 +238,7 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
     carry exactly the blocks the learner rebuilds for its student form.
     """
     from ..model.native_graph_plan import compile_graph, invocation_dict
-    from .privileged_context import CustodyError
+    from ..common.custody import CustodyError
     from .privileged_scoring import student_form, teacher_form
     role = rollout.get('jolt_role', 'student')
     if role not in ('student', 'teacher'):
@@ -389,15 +390,14 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
     ``{'entries': [...], 'refusal': None | reason}``; a world without custody or facts gets no teacher attempt.
     """
     import copy
-    from pathlib import Path
     from ..common.jsonio import iter_jsonl_rows, write_json_durable
-    from .privileged_context import CustodyError, ProtectedWorlds, case_facts
+    from ..common.custody import CustodyError, ProtectedWorlds
+    from .privileged_context import case_facts
     if type(attempts) is not int or attempts < 1:
         raise ValueError('JOLT+ teacher attempts must be a positive integer')
     if custody is None:
-        repo = Path(__file__).resolve().parents[4]
         try:
-            custody = ProtectedWorlds.from_registry(repo / 'training/neuralese_corpora.json', repo)
+            custody = ProtectedWorlds.load()
         except CustodyError as error:
             return {'entries': [], 'refusal': str(error)}
     worlds = {case.get('id'): case for _, case in iter_jsonl_rows(Path(cases))}

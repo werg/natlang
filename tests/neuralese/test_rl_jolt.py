@@ -12,7 +12,7 @@ import torch
 from natlang_neuralese.common.sampling import behavior_top_k_declaration, encode_top_k
 from natlang_neuralese.rl.jolt import DEFAULT_JOLT, jolt_declaration, privileged_source, root_calls
 from natlang_neuralese.rl.policy_math import default_policy_loss, policy_loss_declaration
-from natlang_neuralese.rl.privileged_context import ProtectedWorlds
+from natlang_neuralese.common.custody import ProtectedWorlds
 from test_jolt_privileged_context import (TEMPERATURE, custody, load, protected_case, rendering, run_episode,
                                           train_case)
 
@@ -220,7 +220,7 @@ def test_custody_refusal_keeps_the_episode_on_its_outcome_term(tmp_path):
     assert len(graphs) == 2
     for graph in graphs:
         row = spec['rows'][graph['id']]
-        assert row['jolt']['privileged'] is None and 'protected packet' in row['jolt']['refusal']
+        assert row['jolt']['privileged'] is None and 'protected world' in row['jolt']['refusal']
         assert {n['name'] for n in graph['nodes']} == set(row['episode_turns'])  # no twin
         assert all('twin_query' not in action for action in row['actions'])
     objective = objective_for(tmp_path, spec)

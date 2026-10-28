@@ -68,6 +68,12 @@ def correction_exclusion(line_no, row):
     }
 
 
+def _no_protection_intersections(value):
+    """Empty intersections in the shared custody form (protected_worlds) or the earlier three-projection form."""
+    return (isinstance(value, dict) and all(item == [] for item in value.values())
+            and set(value) in ({'protected_worlds'}, {'decision_ids', 'held_groups', 'quality_groups'}))
+
+
 def _resolve_corrected_task_source(manifest_path, manifest):
     """Validate a successor packet as the exact predicate complement of its parent.
 
@@ -194,9 +200,7 @@ def resolve_task_source(manifest_path, *, as_correction_parent=False):
                 or evidence.get('qualified_task_rows') != source_rows
                 or evidence.get('all_train') is not True
                 or evidence.get('all_source_bound') is not True
-                or evidence.get('current_protection_intersections') != {
-                    'decision_ids': [], 'held_groups': [], 'quality_groups': [],
-                }):
+                or not _no_protection_intersections(evidence.get('current_protection_intersections'))):
             raise ValueError('RL task source additional qualification does not attest its exact protected train rows')
         source_count = 0
         source_ids = set()

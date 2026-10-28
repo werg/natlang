@@ -3,8 +3,6 @@
 Content comes from a synthetic TRAINING-split world built here; no development
 or held packet row is used as privileged content.
 """
-import copy
-import json
 import re
 import sys
 import zlib
@@ -16,9 +14,10 @@ import torch
 from natlang_neuralese.model.native_graph_plan import ImportSpan, Invocation, compile_graph
 from natlang_neuralese.model.shared_state import SharedStateModel, concatenate_captures, native_step, splice_block
 from natlang_neuralese.model.state_block import NativeStateBlock
-from natlang_neuralese.rl.native_replay import NativeReplay, compile_replay, replay_logps
-from natlang_neuralese.rl.privileged_context import (CustodyError, PrivilegedBlock, PrivilegedRendering,
-    ProtectedWorlds, case_facts, insert_into_prompt_segments, privileged_blocks, render_block, verify_block)
+from natlang_neuralese.rl.native_replay import compile_replay
+from natlang_neuralese.common.custody import CustodyError, ProtectedWorlds
+from natlang_neuralese.rl.privileged_context import (PrivilegedBlock, PrivilegedRendering, case_facts,
+    insert_into_prompt_segments, privileged_blocks, render_block, verify_block)
 from natlang_neuralese.rl.privileged_scoring import (_rebase_plan, action_distributions, graph_invocations,
     processed_logits, student_form, teacher_form, teacher_role_logps, teacher_scores)
 from natlang_neuralese.serve.store import native_state_id
@@ -197,11 +196,11 @@ def test_custody_refuses_development_confirmation_and_related_worlds(tmp_path):
             protected.check(train_case(split=split))
     related = train_case()
     related['curriculum'] = {**related['curriculum'], 'pair_group': 'jolt-fixture:dev-p0'}
-    with pytest.raises(CustodyError, match='protected packet'):
+    with pytest.raises(CustodyError, match='protected world'):
         protected.check(related)
-    with pytest.raises(CustodyError, match='protected packet'):
+    with pytest.raises(CustodyError, match='protected world'):
         protected.check(train_case(source_groups=['jolt-fixture:dev-g0']))
-    with pytest.raises(CustodyError, match='protected packet'):
+    with pytest.raises(CustodyError, match='protected world'):
         protected.check(train_case(id='jolt-fixture:dev:0'))
     relabelled = protected_case()  # same world content under fresh train labels
     relabelled.update(id='fresh', split='train', source_ids=['fresh'], source_groups=['fresh-g'])
@@ -216,22 +215,7 @@ def test_custody_refuses_development_confirmation_and_related_worlds(tmp_path):
     with pytest.raises(CustodyError, match='earlier attempts'):
         case_facts(train_case(), custody=protected, attempt_feedback=[
             {'case_id': 'jolt-fixture:dev:0', 'attempt': 1, 'feedback': 'x'}])
-    # Registry: every evaluation-only packet must be readable (fail closed).
-    packet = tmp_path / 'runs' / 'dev-packet'
-    registry = tmp_path / 'registry.json'
-    registry.write_text(json.dumps({'corpora': [
-        {'id': 'dev-packet', 'path': 'runs/dev-packet', 'admission': 'evaluation-only-never-training',
-         'include': ['cases.jsonl', 'provenance.json']},
-        {'id': 'train-src', 'path': 'runs/train', 'admission': 'decision-filtered', 'include': ['**/*.jsonl']}]}))
-    with pytest.raises(CustodyError, match='not readable'):
-        ProtectedWorlds.from_registry(registry, tmp_path)
-    packet.mkdir(parents=True)
-    (packet / 'cases.jsonl').write_text(json.dumps(protected_case()) + '\n')
-    loaded = ProtectedWorlds.from_registry(registry, tmp_path)
-    assert loaded.identities == protected.identities
-    with pytest.raises(CustodyError):
-        loaded.check(related)
-    facts = case_facts(train_case(), custody=loaded, teacher_trajectories=[
+    facts = case_facts(train_case(), custody=protected, teacher_trajectories=[
         {'case_id': 'jolt-fixture:train:0', 'split': 'train', 'verified': True, 'actor': 'qwen3.6',
          'actions': [['eval', {'code': 'return 2;'}]]}],
         attempt_feedback=[{'case_id': 'jolt-fixture:train:0', 'attempt': 1, 'feedback': 'TypeError: x'}])[1]

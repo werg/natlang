@@ -122,12 +122,12 @@ def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerpri
     from ..data.render import Renderer
     from ..serve.chat import tokenizer_model_type
     from .jolt import privileged_source
-    from .privileged_context import CustodyError, PrivilegedRendering, ProtectedWorlds
-    repo = Path(__file__).resolve().parents[4]
+    from ..common.custody import CustodyError, ProtectedWorlds
+    from .privileged_context import PrivilegedRendering
     try:
         if cases is None:
             raise CustodyError('no training cases are bound to this learner (--jolt-cases)')
-        custody = ProtectedWorlds.from_registry(registry or repo / 'training/neuralese_corpora.json', repo)
+        custody = ProtectedWorlds.load(registry=registry)
     except CustodyError as error:
         reason = error
         def refused(rollout, replay, turns):
@@ -153,7 +153,7 @@ def main(argv=None):
     # '{"schema":"score-centered/1","k":128,"importance":"tis"}'. Omitted: clipped ratio loss.
     parser.add_argument('--rl-policy-loss')
     # JOLT+ privileged context: the exact train-split cases of the rollouts; custody against every registered
-    # evaluation-only packet (rl.privileged_context.ProtectedWorlds).
+    # declared protected source (common.custody.ProtectedWorlds, training/protected-worlds.json).
     parser.add_argument('--jolt-cases', type=Path)
     parser.add_argument('--rl-actors', type=Path, help='natlang.rl-actors/1 declaration admitting stale or quantized '
                         'actors of earlier lineage checkpoints (importance-corrected)')
