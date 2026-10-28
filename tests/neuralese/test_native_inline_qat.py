@@ -110,6 +110,35 @@ def test_inline_points_are_exact_at_zero_and_quantize_above(base):
     assert isinstance(fresh, Quantization) and not fresh.calibration_due(3)
 
 
+def test_resume_inside_calibration_window_continues_it_exactly(base):
+    """A checkpoint taken inside an open NVFP4 calibration window carries it (start, batches, running maxima): the
+    resumed component commits at the same update with the same ranges as an uninterrupted run, and the window's
+    quantized training passes never enter the ranges."""
+    from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
+    from natlang_neuralese.train.native_state_sft import _quantization_pass
+    first = graph()
+    other = parse_graph({'schema': SCHEMA, 'id': 'second', 'split': 'train', 'source_groups': ['lfm3-qat'],
+                         'tokenizer_fingerprint': '1' * 64,
+                         'nodes': [{'name': 'only', 'token_ids': [9 + (i * 7) % 20 for i in range(26)],
+                                    'target_weights': [0.] + [1.] * 25}]}, tokenizer_fingerprint='1' * 64)
+    model, quantization = model_with_points(base)
+    forward = lambda batch: loss_of(model, batch[0])  # noqa: E731
+    _quantization_pass(quantization, global_step=0, batch=[first], forward=forward, cursor=0)
+    saved = copy.deepcopy(quantization.state_dict())
+    assert saved['window']['start'] == 0 and saved['window']['batches'] == 1 and saved['step'] is None
+    with quantization.context('fp8', 1.0):  # a training pass inside the window observes nothing
+        loss_of(model, other)
+    _quantization_pass(quantization, global_step=1, batch=[other], forward=forward, cursor=1)
+    resumed_model, resumed = model_with_points(base)
+    resumed.load_state_dict(saved)
+    resumed_forward = lambda batch: loss_of(resumed_model, batch[0])  # noqa: E731
+    _quantization_pass(resumed, global_step=1, batch=[other], forward=resumed_forward, cursor=1)
+    assert resumed.calibration == quantization.calibration == {
+        'step': 1, 'batches': 2, 'source': {'start_global_step': 0, 'cursor': 1}}
+    assert resumed.input_amax() == quantization.input_amax()
+    assert 'window' not in resumed.state_dict()
+
+
 def test_quantized_update_routes_straight_through_gradients_to_bf16_latents(base):
     from natlang_neuralese.train.native_state_sft import make_native_optimizer, native_training_update
     example = graph()

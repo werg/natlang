@@ -554,19 +554,34 @@ class Quantization:
         last = self.calibration.get('step')
         return last is None or step - last >= config['refresh']
 
-    def begin_calibration(self):
-        """Start observing the static activation ranges (BF16 forwards follow, then ``commit_calibration``)."""
+    def begin_calibration(self, step=None):
+        """Open a calibration window at update ``step`` (BF16 forwards follow, then ``commit_calibration``). The
+        window (start, batches observed, running maxima) is trainer state: ``state_dict`` saves it, so a resume
+        inside the window continues it exactly instead of restarting."""
         holders = [h for h in self.inputs.values() if h.static]
         for holder in holders:
-            holder.observe, holder.observed = True, None
+            holder.observe, holder.observed = False, None
         self._observed_batches = 0
+        self._calibration_window = {'start': step}
         return bool(holders)
+
+    @property
+    def calibration_window(self):
+        return getattr(self, '_calibration_window', None)
 
     @torch.no_grad()
     def observe_calibration(self, forward, batch):
-        """One BF16 calibration forward of ``batch`` while observing (an incremental ``calibrate``)."""
-        with self.context('bf16', 0.0):
-            forward(batch)
+        """One BF16 calibration forward of ``batch`` (an incremental ``calibrate``). Only this forward observes:
+        the window's training passes (quantized or not) never enter the ranges."""
+        holders = [h for h in self.inputs.values() if h.static]
+        for holder in holders:
+            holder.observe = True
+        try:
+            with self.context('bf16', 0.0):
+                forward(batch)
+        finally:
+            for holder in holders:
+                holder.observe = False
         self._observed_batches = getattr(self, '_observed_batches', 0) + 1
 
     def commit_calibration(self, step, source=None):
@@ -582,12 +597,14 @@ class Quantization:
             holder.amax, holder.observed = holder.observed.detach().float(), None
         self.calibration = {'step': int(step), 'batches': count, 'source': source}
         self._observed_batches = 0
+        self._calibration_window = None
         return {n: float(h.amax) for n, h in holders.items()}
 
     def cancel_calibration(self):
         for holder in self.inputs.values():
             holder.observe, holder.observed = False, None
         self._observed_batches = 0
+        self._calibration_window = None
 
     @torch.no_grad()
     def calibrate(self, forward, batches, step, source=None):
@@ -629,8 +646,15 @@ class Quantization:
             raise ValueError(f'precision point {name} has static activation scales: calibrate before evaluating it')
 
     def state_dict(self):
-        """The component's trainer state: the calibrated static activation ranges (FP32 values, exact in JSON)."""
-        return {'schema': CALIBRATION_SCHEMA, **self.calibration, 'amax': self.input_amax()}
+        """The component's trainer state: the calibrated static activation ranges (FP32 values, exact in JSON) and an
+        open calibration window (its start, observed batches and running maxima)."""
+        state = {'schema': CALIBRATION_SCHEMA, **self.calibration, 'amax': self.input_amax()}
+        window = self.calibration_window
+        if window is not None:
+            state['window'] = {'start': window.get('start'), 'batches': int(getattr(self, '_observed_batches', 0)),
+                               'observed': {n: float(h.observed) for n, h in self.inputs.items()
+                                            if h.static and h.observed is not None}}
+        return state
 
     def load_state_dict(self, state):
         if state.get('schema') != CALIBRATION_SCHEMA:
@@ -641,6 +665,15 @@ class Quantization:
         for name, value in state['amax'].items():
             self.inputs[name].amax = torch.tensor(value, dtype=torch.float32)
         self.calibration = {k: state.get(k) for k in ('step', 'batches', 'source')}
+        self.cancel_calibration()
+        window = state.get('window')
+        if window is not None:
+            if set(window['observed']) - static:
+                raise ValueError('calibration window names other modules than the installed static inputs')
+            self._calibration_window = {'start': window['start']}
+            self._observed_batches = int(window['batches'])
+            for name, value in window['observed'].items():
+                self.inputs[name].observed = torch.tensor(value, dtype=torch.float32)
 
 
 

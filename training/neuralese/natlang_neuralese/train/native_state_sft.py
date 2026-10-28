@@ -1291,10 +1291,10 @@ def _quantization_pass(quantization, *, global_step, batch, forward, cursor):
     static range before the window has its declared batches commits the window early."""
     config = quantization.calibration_config()
     if config is not None:
-        window = getattr(quantization, '_calibration_window', None)
+        window = quantization.calibration_window
         if window is None and quantization.calibration_due(global_step):
-            quantization.begin_calibration()
-            window = quantization._calibration_window = {'start': global_step}
+            quantization.begin_calibration(global_step)
+            window = quantization.calibration_window
         if window is not None:
             quantization.observe_calibration(forward, batch)
             uncalibrated = any(h.static and h.amax is None for h in quantization.inputs.values())
@@ -1303,7 +1303,6 @@ def _quantization_pass(quantization, *, global_step, batch, forward, cursor):
             if quantization._observed_batches >= config['batches'] or needs_now:
                 quantization.commit_calibration(global_step, source={'start_global_step': window['start'],
                                                                      'cursor': cursor})
-                quantization._calibration_window = None
     name, mix, weight = quantization.plan(global_step)[0]
     if name != 'bf16':
         quantization.check_calibrated(name)
