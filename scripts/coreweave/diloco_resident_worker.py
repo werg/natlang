@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 """Host-side immutable data staging and CAS publication for a native resident learner."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
 
 from natlang_neuralese.train import native_resident as resident
 from natlang_neuralese.common.jsonio import write_json_durable
-
-
-def sha(path):
-    with open(path, 'rb') as stream:
-        return hashlib.file_digest(stream, 'sha256').hexdigest()
+from natlang_neuralese.common.hashing import sha256_file_hex as sha
 
 
 def install(staged, target, expected, size):

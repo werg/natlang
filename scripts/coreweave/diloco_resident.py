@@ -23,10 +23,12 @@ import sys
 import threading
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
 import cwctl
+from natlang_neuralese.common import paths
 
 SCHEMA = 'natlang.diloco-resident-source/1'
-REPO = '/home/werg/natlang'
+REPO = str(paths.root('repo'))
 HELPER_SOURCE = Path(__file__).with_name('diloco_resident_worker.py')
 CONTROL_DIRECTORY = '/work/.coreweave/resident-control'
 
