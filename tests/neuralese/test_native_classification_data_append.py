@@ -127,7 +127,7 @@ def test_actual_sgd_and_old_checkpoint_resume_select_committed_proof(tmp_path,mo
     base=tmp_path/'base';tiny_source(base)
     _,_,roles,config=load_native_model(base,dtype=torch.float32,rank=4)
     identity={'model_config':config,'batch_graphs':1,'batch_tokens':0,'checkpoint_layers':True,
-        'chunk_tokens':128,'checkpoint_input_offload':False,
+        'chunk_tokens':1024,'checkpoint_input_offload':False,'cotangent_accumulator_backend':'plain',
         'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16,'input_gradient_precision':None},
         'runtime':{'torch':torch.__version__,'cuda':torch.version.cuda,'device':'cpu'}}
     directory,manager,path,proof,extra=prepared(tmp_path,monkeypatch,

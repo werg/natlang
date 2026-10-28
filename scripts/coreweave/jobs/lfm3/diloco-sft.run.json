@@ -4,6 +4,6 @@
  "settings": {"run_id": "@@RUN_ID@@", "workers": 4, "local_steps": 128, "wire_dtype": "bf16"},
  "coordinator": {"job": "@@OUT@@/diloco-coordinator.job.json", "bundle_file": "@@COORDINATOR_BUNDLE@@",
                  "parent": "@@PARENT@@",
-                 "args": ["--quorum", "3", "--outer-lr", "1.0", "--outer-momentum", "0.0", "--max-staleness", "2"]},
+                 "args": ["--quorum", "3", "--outer-schedule", "[{\"from_round\":0,\"lr\":1.0,\"momentum\":0.0},{\"from_round\":10,\"lr\":0.7,\"momentum\":0.9}]", "--max-staleness", "2"]},
  "learners": {"job": "@@OUT@@/diloco-learner.job.json", "bundle_file": "@@LEARNER_BUNDLE@@"}
 }

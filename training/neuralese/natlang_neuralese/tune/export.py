@@ -128,6 +128,10 @@ def export_gguf(peft_dir, base_config_dir, outfile, *, outtype='f32'):
     script = LLAMA_CPP / 'convert_lora_to_gguf.py'
     if not script.is_file():
         raise NotImplementedError(f'GGUF LoRA export needs {script}, which is absent from vendor/llama.cpp')
+    from ..export.native_gguf import converter_registers
+    architectures = json.loads((Path(base_config_dir) / 'config.json').read_text()).get('architectures') or []
+    if len(architectures) != 1 or not converter_registers(LLAMA_CPP, architectures[0]):
+        raise NotImplementedError(f'the vendored llama.cpp converter does not register {architectures}')
     command = [sys.executable, str(script), '--outtype', outtype, '--outfile', str(outfile),
                '--base', str(base_config_dir), str(peft_dir)]
     env = {**os.environ, 'PYTHONPATH': os.pathsep.join([str(LLAMA_CPP), str(LLAMA_CPP / 'gguf-py'), os.environ.get('PYTHONPATH', '')])}

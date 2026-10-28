@@ -165,9 +165,15 @@ def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: s
                 if (turn.get('raw_response_sha256') != source.get('raw_response_sha256')
                         or turn.get('request_sha256') != source.get('request_sha256')):
                     raise ValueError(f'{package_id}: turn {index} of {row["id"]} differs from its reference binding')
-                decision = source.get('decision_admission') or {}
-                if decision.get('approved') is not True:
-                    raise ValueError(f'{package_id}: reference graph without an approved decision: {ref["id"]}')
+                if 'decision_admission' in source:
+                    decision = source['decision_admission'] or {}
+                    if decision.get('approved') is not True:
+                        raise ValueError(f'{package_id}: reference graph without an approved decision: {ref["id"]}')
+                else:
+                    # Builds before per-turn decision records (2026-10-15 v1-v12 era) admitted every exact-success
+                    # action of their passed receipt; the reference row itself is that admission. No parent hold.
+                    decision = {}
+                    checks['reference_rows_without_decision_record'] += 1
                 context, assistant = turn.get('context'), turn.get('assistant')
                 raw_calls = (turn.get('model_response') or {}).get('raw_calls')
                 tools = turn.get('tools_offered')
@@ -329,16 +335,35 @@ def plan(args):
     print(json.dumps(collections.Counter(i['status'] for i in _load(args.queue)['items'].values())))
 
 
+def _alive(pid) -> bool:
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def _claim(queue_path, shard: int, shards: int):
+    """Claim the next pending package (this shard's own first, then any): every running unit drains the queue."""
+    with Locked(queue_path) as locked:
+        items = locked['items']
+        for item in items.values():  # a claim of a stopped/preempted process returns to pending
+            if item.get('status') == 'claimed' and not _alive(item.get('claim_pid')):
+                item['status'] = 'pending'
+        ids = sorted(items)
+        order = [i for k, i in enumerate(ids) if k % shards == shard] + ids
+        for package_id in order:
+            if items[package_id].get('status') == 'pending':
+                items[package_id].update(status='claimed', claim_pid=os.getpid(), claimed_at=time.time())
+                return package_id
+    return None
+
+
 def run_queue(args):
     queue = _load(args.queue)
-    ids = sorted(queue['items'])
-    mine = [i for k, i in enumerate(ids) if k % args.shards == args.shard]
     out_root = Path(queue['out_root'])
     state = student_tokenizer(queue['model_key'])
-    for package_id in mine:
-        item = queue['items'][package_id]
-        if item.get('status') not in ('pending', 'missing-source'):
-            continue
+    while (package_id := _claim(args.queue, args.shard, args.shards)) is not None:
         started = time.time()
         try:
             receipt = convert(package_id, queue['model_key'], out_root, reference_key=queue['reference_key'],
@@ -348,10 +373,11 @@ def run_queue(args):
                       'omitted': receipt['verification']['omitted_rows'], 'seconds': round(time.time() - started)}
         except FileNotFoundError as error:
             update = {'status': 'missing-source', 'reason': str(error)[:300]}
-        except Exception as error:  # recorded per package; the shard continues
+        except Exception as error:  # recorded per package; the unit continues
             update = {'status': 'failed', 'reason': f'{type(error).__name__}: {error}'[:500]}
         with Locked(args.queue) as locked:
             locked['items'][package_id].update(update)
+            locked['items'][package_id].pop('claim_pid', None)
         print(json.dumps({'package': package_id, **update}), flush=True)
 
 

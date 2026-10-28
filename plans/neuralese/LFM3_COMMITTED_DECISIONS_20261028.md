@@ -25,6 +25,7 @@ this file supersedes it.
 | 14 | Harness ergonomics: about 48 samples per change | One combined variant (all candidate fixes) against the baseline, about 48 samples each on the dev packet; drop a single fix only if the combined variant regresses | Bisect the fixes only on a regression |
 | 15 | Each stage "qualifies" at BF16/FP8/NVFP4 on dev | Monitoring, not a gate: dev evals at all three precisions every N DiLoCo rounds on DGX | none |
 | 16 | Mellum line (legacy sweep asked whether to retire it) | Retire it: remove Mellum-specific trainer/operator/recipe code last in the sweep. Keep its final exported checkpoint (step 39257) and all data | Revive from git history |
+| 17 | RL actor engine (llama.cpp fork only) | Owner 2026-10-28: maintain a vLLM or SGLang fork with the full Neuralese feature set (KV/conv-state import/export, markers, privileged blocks, exact top-k capture, `decide` with imported state, adapters/soft states). One bounded benchmark picks the engine; the port starts right after if it shows a throughput benefit. Actors move to it; the llama.cpp fork stays for local/browser serving | Keep llama.cpp actors if the benchmark shows no benefit |
 
 Bounded checks still on (each is minutes, and each protects the run):
 - the step-0 identity/parity checks;

@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0087-tranche0007-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0087-tranche0007",
+  "files": [
+    {
+      "path": "lfm3/receipt.json",
+      "bytes": 3396,
+      "sha256": "6556126f429ee702cdc4f7f26a9413658f3628f687d19a22ca2151a79b3cadf2"
+    },
+    {
+      "path": "lfm3/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm3/train/native-graphs.jsonl.zst",
+      "bytes": 474863,
+      "sha256": "2d3f6b7602600554df70caece8b2f7895f06923b9b70cf9b49eb6cebc6753c8f"
+    }
+  ],
+  "bytes": 478272
+}

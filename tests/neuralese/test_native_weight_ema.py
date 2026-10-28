@@ -143,6 +143,22 @@ def test_anneal_shapes_and_group_scaling():
     assert [g['lr'] for g in optimizer.param_groups] == [1e-3, 4e-3]
 
 
+
+def test_warmup_is_linear_by_global_step_and_composes_with_an_anneal():
+    from natlang_neuralese.train.lr_anneal import LrAnneal, LrWarmup, parse_lr_anneal
+
+    first = torch.nn.Parameter(torch.ones(2))
+    optimizer = torch.optim.AdamW([{'params': [first], 'lr': 1e-3}])
+    warmup = LrWarmup(optimizer, 4)
+    assert [warmup.factor(k) for k in range(6)] == pytest.approx([.25, .5, .75, 1., 1., 1.])
+    anneal = LrAnneal(optimizer, parse_lr_anneal('{"steps": 4}'), start_global_step=0)
+    anneal.scale(1)
+    assert warmup.scale(1) == .5 and optimizer.param_groups[0]['lr'] == pytest.approx(1e-3 * .75 * .5)
+    warmup.restore()
+    anneal.restore()
+    assert optimizer.param_groups[0]['lr'] == 1e-3
+    assert warmup.scale(7) == 1.0 and optimizer.param_groups[0]['lr'] == 1e-3
+
 # Telemetry ------------------------------------------------------------------------------------------------------
 
 def test_matrix_kinds_are_name_based_for_lfm2_lfm3_and_interface_names():

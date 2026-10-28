@@ -3,7 +3,7 @@
 # Run under the DGX memory ledger, e.g.:
 #   python3 scripts/memory_ledger.py run --unit render-turns-<id> --budget-gb 6 --priority low --resumable -- \
 #     scripts/neuralese_data/render_native_turn_corpus.sh OUT_DIR --corpus-id ID --source F ... [--workers N]
-# The LFM2.5 and Mellum2.1 tokenizers are the pinned snapshots of the existing twin builders.
+# Students: scripts/neuralese_data/student_tokenizers.py (default LFM3-1.7B; LFM2.5 historical, Mellum retired).
 set -euo pipefail
 # A stop (ledger preemption, systemctl stop) is a clean resumable stop: the container is stopped and the wrapper
 # exits 0, so the unit ends with Result=success and the ledger requeues it; the relaunch resumes finished shards.
@@ -12,10 +12,10 @@ set -euo pipefail
 stopped=0
 trap 'stopped=1; docker stop -t 30 "${NAME:-}" >/dev/null 2>&1 || true' TERM INT
 REPO=/home/werg/natlang
-# Students rendered (scripts/neuralese_data/student_tokenizers.py; default the production pair). An LFM3 render of the
-# same selection: STUDENTS="lfm3" (or "lfm25 mellum21 lfm3"); pinned tokenizer bytes are verified before the run.
+# Students rendered (scripts/neuralese_data/student_tokenizers.py; default LFM3). The same selection
+# for a historical student: STUDENTS="lfm25"; pinned tokenizer bytes are verified before the run.
 SELF_DIR=$(cd "$(dirname "$0")" && pwd)
-read -r -a STUDENT_LIST <<< "${STUDENTS:-lfm25 mellum21}"
+read -r -a STUDENT_LIST <<< "${STUDENTS:-lfm3}"
 ARGS_TEXT=$(python3 "$SELF_DIR/student_tokenizers.py" args "${STUDENT_LIST[@]}")  # set -e: a pin mismatch stops here
 MOUNTS_TEXT=$(python3 "$SELF_DIR/student_tokenizers.py" mounts "${STUDENT_LIST[@]}")
 read -r -a TOKENIZER_ARGS <<< "$ARGS_TEXT"

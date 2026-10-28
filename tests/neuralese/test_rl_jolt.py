@@ -10,7 +10,7 @@ import pytest
 import torch
 
 from natlang_neuralese.common.sampling import behavior_top_k_declaration, encode_top_k
-from natlang_neuralese.rl.jolt import DEFAULT_JOLT, jolt_declaration, privileged_source
+from natlang_neuralese.rl.jolt import DEFAULT_JOLT, jolt_declaration, privileged_source, root_calls
 from natlang_neuralese.rl.policy_math import default_policy_loss, policy_loss_declaration
 from natlang_neuralese.rl.privileged_context import ProtectedWorlds
 from test_jolt_privileged_context import (TEMPERATURE, custody, load, protected_case, rendering, run_episode,
@@ -295,3 +295,18 @@ def test_reverse_kl_from_logits_matches_float64_reference_including_near_agreeme
     torch.testing.assert_close(z32.grad.double(), grad, rtol=relative, atol=tolerance * 10)
     with pytest.raises(ValueError, match='mask'):
         reverse_kl(z32.detach(), torch.zeros_like(z32))
+
+
+def test_root_calls_come_from_the_execution_graph_not_turn_order():
+    # The child's turn is captured first; the root is the invocation without a caller edge.
+    turns = [{'graph_turn': 'child-1#turn1'}, {'graph_turn': 'run-1#turn1'}]
+    graph = [{'kind': 'invocation', 'node': 'call:child-1', 'inputs': [{'node': 'call:run-1', 'port': 'caller'}]},
+             {'kind': 'invocation', 'node': 'call:run-1', 'inputs': []},
+             {'kind': 'model_turn', 'node': 'child-1#turn1',
+              'inputs': [{'node': 'call:child-1', 'port': 'invocation'}]}]
+    assert root_calls({'execution_graph': graph}, turns) == {'run-1'}
+    assert root_calls({}, turns) == {'child-1'}  # no invocation events: first captured turn's call
+    cyclic = [{'kind': 'invocation', 'node': 'call:a', 'inputs': [{'node': 'call:b', 'port': 'caller'}]},
+              {'kind': 'invocation', 'node': 'call:b', 'inputs': [{'node': 'call:a', 'port': 'caller'}]}]
+    with pytest.raises(ValueError, match='no root invocation'):
+        root_calls({'execution_graph': cyclic}, turns)
