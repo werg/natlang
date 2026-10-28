@@ -107,16 +107,43 @@ class Cloud:
         actual = json.loads((self.backup_dir/'latest'/'receipt.json').read_text())
         if not actual.get('verified') or actual['sha256'] != receipt['sha256'] or actual['bytes'] != receipt['bytes']:
             raise ValueError('independent seed download differs from earned checkpoint')
-        # Decode real full-state metadata from the independently downloaded bytes on the workstation.
-        code = ("import json,sys; from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy; "
-                "s=CheckpointPolicy.load(sys.argv[1]);t=s['training']; "
-                "assert t['global_step']==int(sys.argv[2]) and t['optimizer'] and t['rng'] and t['exposure_counts']; "
-                "print(json.dumps({'step':t['global_step']}))")
-        repo = paths.root('repo')
-        env = {**os.environ, 'PYTHONPATH':str(repo/'training/neuralese') + os.pathsep + str(repo)}
-        subprocess.run([str(repo/'.venv-neuralese/bin/python'),'-c',code,actual['local'],str(receipt['global_step'])],
-                       env=env,check=True,capture_output=True,text=True)
-        return actual
+        # Large checkpoint decode has its own ledger reservation. The 2 GiB controller can keep
+        # snapshot/worker orchestration moving while this independent 18 GiB unit waits for admission.
+        repo=paths.root('repo'); ident=uuid.uuid4().hex[:8]
+        unit='lfm3-seed-decode-'+receipt['sha256'][:12]+'-'+ident
+        proof=self.backup_dir/('full-state-'+receipt['sha256']+'-'+ident+'.json')
+        status_path=self.backup_dir/('seed-decode-'+receipt['sha256']+'.json')
+        decode_status={'schema':'natlang.seed-decode-status/1','phase':'waiting-ledger','unit':unit+'.service',
+                       'sha256':receipt['sha256'],'bytes':receipt['bytes'],'global_step':receipt['global_step']}
+        durable_json(status_path,decode_status)
+        ledger=repo/'scripts/memory_ledger.py'; verifier=Path(__file__).with_name('qualify_seed_recovery.py')
+        launch=[sys.executable,str(ledger),'run','--unit',unit,'--budget-gb','18','--priority','high','--wait','7200',
+                '--workdir',str(repo),'--env','PYTHONPATH='+str(repo/'training/neuralese')+os.pathsep+str(repo),'--',
+                str(repo/'.venv-neuralese/bin/python'),str(verifier),actual['local'],receipt['sha256'],
+                str(receipt['bytes']),str(receipt['global_step']),str(proof)]
+        try:
+            subprocess.run(launch,check=True)
+        except Exception as error:
+            durable_json(status_path,{**decode_status,'phase':'admission-failed','error':str(error)})
+            raise
+        durable_json(status_path,{**decode_status,'phase':'running'})
+        deadline=time.monotonic()+7200
+        while not proof.exists():
+            status=subprocess.run(['systemctl','--user','show',unit+'.service','-p','ActiveState','--value'],
+                                  capture_output=True,text=True)
+            if status.returncode or status.stdout.strip() in ('failed','inactive',''):
+                durable_json(status_path,{**decode_status,'phase':'failed','unit_state':status.stdout.strip()})
+                raise RuntimeError('seed full-state verification unit ended without a receipt: '+unit)
+            if time.monotonic()>deadline:
+                durable_json(status_path,{**decode_status,'phase':'timed-out'})
+                raise TimeoutError('seed full-state verification did not finish')
+            time.sleep(5)
+        result=json.loads(proof.read_text())
+        if (result.get('passed') is not True or result.get('sha256')!=receipt['sha256']
+                or result.get('bytes')!=receipt['bytes'] or result.get('global_step')!=receipt['global_step']):
+            raise ValueError('seed full-state verification receipt differs from actual intent')
+        durable_json(status_path,{**decode_status,'phase':'verified','receipt':str(proof)})
+        return {**actual,'full_state_verification':result,'verification_unit':unit+'.service'}
 
     def runtime_binding(self):
         repo = paths.root('repo')

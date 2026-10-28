@@ -1258,3 +1258,41 @@ def test_code_archive_refuses_to_delete_modified_predecessor(tmp_path):
         archive.extract_code_archive(tar,repo,work,'b'*64)
     assert (package/'retired.py').read_bytes()==b'user-changes'
     assert '@@NATLANG_CODE_ARCHIVE_HELPER@@' not in cwctl.bootstrap_text()
+
+
+def test_postseed_download_defers_full_decode_to_separate_ledger_unit(tmp_path,monkeypatch):
+    post=load('diloco_post_seed');sha='a'*64;receipt={'sha256':sha,'bytes':123,'global_step':50}
+    cloud=post.Cloud('sandbox','/work/parent.pt',tmp_path)
+    seen=[]
+    def run(argv,**kwargs):
+        seen.append(argv)
+        if argv[1].endswith('recovery_pull.py'):
+            latest=tmp_path/'latest';latest.mkdir();(latest/'receipt.json').write_text(json.dumps(
+                {'verified':True,'sha256':sha,'bytes':123,'local':str(tmp_path/'checkpoint.pt')}))
+        else:
+            assert argv[2]=='run' and argv[argv.index('--budget-gb')+1]=='18'
+            proof=Path(argv[-1]);proof.write_text(json.dumps({'passed':True,'sha256':sha,'bytes':123,'global_step':50}))
+        return SimpleNamespace(returncode=0)
+    from types import SimpleNamespace
+    monkeypatch.setattr(post.subprocess,'run',run)
+    result=cloud.download(receipt)
+    assert len(seen)==2 and result['full_state_verification']['passed']
+    assert result['verification_unit'].startswith('lfm3-seed-decode-')
+
+
+def test_seed_recovery_decoder_verifies_actual_full_state(tmp_path):
+    import torch
+    import hashlib
+    import subprocess
+    from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
+    from natlang_neuralese.train.native_state_sft import TRAINING_SCHEMA
+    path=tmp_path/'seed.pt';state={'schema':CHECKPOINT_SCHEMA,'step':50,'model_config':{'base':'test'},
+        'backbone_state':{'weight':torch.ones(1)},'interface_state':{'weight':torch.ones(1)},
+        'training':{'schema':TRAINING_SCHEMA,'global_step':50,
+        'optimizer':{'state':{'x':1}},'rng':{'x':1},'exposure_counts':{'row':1},'source_receipts':[{'sha256':'x'}]}}
+    torch.save(state,path);sha=hashlib.sha256(path.read_bytes()).hexdigest();out=tmp_path/'receipt.json'
+    command=[sys.executable,str(ROOT/'scripts/coreweave/qualify_seed_recovery.py'),str(path),sha,str(path.stat().st_size),'50',str(out)]
+    subprocess.run(command,check=True,capture_output=True,text=True)
+    assert json.loads(out.read_text())['passed'] is True
+    result=subprocess.run([*command[:-2],'51',str(tmp_path/'wrong.json')],capture_output=True,text=True)
+    assert result.returncode!=0 and not (tmp_path/'wrong.json').exists()
