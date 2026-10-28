@@ -48,9 +48,12 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     if node is None:
         pytest.fail('Node is required for the actual TypeScript native harness')
     port = tiny(family)
-    device=os.environ.get('NATLANG_NATIVE_RECORDED_TEST_DEVICE','cpu') if mode=='recorded' else 'cpu'
+    # Recorded histories run their complete cached-query learning path on the GPU when one is present (the CPU path
+    # exceeded its 180 s allowance on the shared DGX); NATLANG_NATIVE_RECORDED_TEST_DEVICE overrides.
+    default_device='cuda' if torch.cuda.is_available() else 'cpu'
+    device=os.environ.get('NATLANG_NATIVE_RECORDED_TEST_DEVICE',default_device) if mode=='recorded' else 'cpu'
     if device!='cpu':
-        port.hf.to(device=device,dtype=torch.bfloat16 if family=='mellum' else torch.float32)
+        port.hf.to(device=device,dtype=torch.float32)  # the recorded learning objective is checked at FP32
     model = SharedStateModel(port, (60, 61, 62, 63), rank=4).eval()
     torch.nn.init.normal_(model.adapter.up.weight, std=.02)
     for parameter in model.parameters():

@@ -73,7 +73,7 @@ def test_distinct_policy_two_actual_http_updates_and_restart(tmp_path,monkeypatc
     fetch_block=lambda ident:engine.store.get_native_state(ident).block
     policy=invocation_behavior_policy(episodes,identity=engine.native_identity,roles=engine.role_tokens,fetch_block=fetch_block)
     owner=canonical_json_sha256_hex(policy)
-    for change in ({'split':'test'},{'training_admission':'held'},{'reward':{'quality':.5}},
+    for change in ({'split':'test'},{'training_admission':'held'},{'reward':{'quality':1.5}},
                    {'policy':{'checkpoint_sha256':'0'*64}}):
         with pytest.raises(ValueError,match='scored train-only'):
             invocation_behavior_policy([{**episodes[0],**change}],identity=engine.native_identity,
