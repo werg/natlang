@@ -1,5 +1,24 @@
 # LFM3 scale-out: local first, then DiLoCo SFT on 4 sandboxes, then multi-machine RL (owner, 2026-10-28)
 
+## Execution plan after the owner restructure (2026-10-28, later)
+
+Parallel preparation now (independent agents/ledger units): port A (backbone) completion; part C fork merge and
+converter cutover; Pop corpus recovery (Pop back online, ssh alias pop-os); LFM3 conversion of all usable data and
+the prioritized joint-SFT mixture (natlang execution + Neuralese in one stage); sandbox runtime (prebuilt x86_64
+sm_120 fork binaries, bootstrap without compilation, DiLoCo/eval/actor templates, boot validation); score-centered +
+JOLT+ RL learner (default); default-on audit; oracle repairs; tuning lane + learned optimizer on LFM3 with
+teacher-free program supply.
+
+Throughput: time-boxed optimization passes (first box: one working day of wall time from the moment the LFM3
+backbone lands on main) on DGX and on one real sandbox GPU, since the DGX Spark (GB10, unified memory, aarch64) does
+not represent the RTX PRO 6000 sandboxes. Training starts at the end of the first box with the best measured
+configuration; further optimization continues during training and is adopted at safe update boundaries through
+recorded transitions (optimizer/RNG/exposure preserved).
+
+Order: joint SFT (DiLoCo, 4 sandboxes) -> JOLT+ RL -> tuning lane on the trained checkpoint -> metalearner (bank-init,
+corpus, outer training with train_bank/train_basis, meta-RL). No cross-model stage.
+
+
 Owner 2026-10-28: "first iron out the kinks on this machine, then transition to DiLoCo SFT with 4 sandboxes, then
 figure out a good pattern for swift RL, using several machines in concert where useful". This authorizes four
 one-GPU learner sandboxes (plus the CPU DiLoCo coordinator) for the LFM3 SFT stage once the local phase passes.
