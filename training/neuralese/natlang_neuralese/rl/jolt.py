@@ -37,7 +37,7 @@ PRIVILEGED_SUFFIX = {'student': '#privileged', 'teacher': '#unprivileged'}
 # student's policy by at most about e^2 for |A| <= 1, keeping teacher guidance followable. Development
 # measurements tune both; they are recipe parameters.
 DEFAULT_JOLT = {'schema': JOLT_SCHEMA, 'beta_s': 1.0, 'beta_t': 0.5,
-                'outcome': {'schema': 'score-centered/1', 'k': 128, 'importance': 'none', 'eps': 1e-6}}
+                'outcome': {'schema': 'score-centered/1', 'k': 128, 'importance': 'tis', 'eps': 1e-6}}
 MAX_FEEDBACK_ATTEMPTS = 3
 MAX_FEEDBACK_CHARS = 800
 
@@ -124,6 +124,30 @@ def attempt_feedback(rollout):
     return '; '.join(parts)[:MAX_FEEDBACK_CHARS]
 
 
+def root_calls(rollout, turns):
+    """The episode's root invocation ids, read from its execution graph.
+
+    A root is an ``invocation`` node (``call:<id>``) without a ``caller`` input. Rollouts captured
+    without invocation events fall back to the call that owns the first captured turn.
+    """
+    calls, called = set(), set()
+    for event in rollout.get('execution_graph') or ():
+        if not isinstance(event, dict) or event.get('kind') != 'invocation':
+            continue
+        node = event.get('node')
+        if not isinstance(node, str) or not node.startswith('call:'):
+            continue
+        calls.add(node[len('call:'):])
+        if any(isinstance(edge, dict) and edge.get('port') == 'caller' for edge in event.get('inputs') or ()):
+            called.add(node[len('call:'):])
+    roots = calls - called
+    if roots:
+        return roots
+    if calls:
+        raise ValueError('execution graph has no root invocation (every invocation has a caller)')
+    return {(turns[0].get('graph_turn') or '').rsplit('#turn', 1)[0]}
+
+
 def privileged_source(rollouts, *, cases, rendering, custody, teacher_trajectories=None, command=None,
                       policy_root=None):
     """``source(rollout, replay, turns) -> {invocation: PrivilegedBlock}`` over the shared mechanism.
@@ -150,8 +174,8 @@ def privileged_source(rollouts, *, cases, rendering, custody, teacher_trajectori
                 text = attempt_feedback(row)
                 if text:
                     feedback.append({'case_id': case.get('id'), 'attempt': row['sample'], 'feedback': text})
-        root = (turns[0].get('graph_turn') or '').rsplit('#turn', 1)[0]
-        return privileged_blocks(rendering, case, graph_invocations(replay, turns, root_calls={root}),
+        invocations = graph_invocations(replay, turns, root_calls=root_calls(rollout, turns))
+        return privileged_blocks(rendering, case, invocations,
             custody=custody, teacher_trajectories=(teacher_trajectories or {}).get(rollout['task_id'], ()),
             attempt_feedback=feedback[-MAX_FEEDBACK_ATTEMPTS:], command=command, policy_root=policy_root)
     return build

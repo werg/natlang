@@ -130,7 +130,8 @@ def capture_invocation_actors(turns,base):
         'base_native_identity':dict(base),'invocations':actors},base)
 
 
-def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=None, structural=False,semantic_channel=None):
+def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=None, structural=False,semantic_channel=None,
+                   actors=None):
     """Compile real turn captures, preserving exact producer occurrence bindings.
 
     ``turns`` use graph_replay.producer_turns' graph_turn/written_nodes/read_bindings
@@ -154,6 +155,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             raise ValueError('native RL graph turn identities must be unique')
         capture = turn.get('sampling') or {}
         actor_identity=(invocation_actors['invocations'][name]['native_identity'] if invocation_actors is not None else identity)
+        if invocation_actors is None and capture.get('policy') != identity:
+            from .actors import declared_actor
+            if declared_actor(capture.get('policy'), identity, actors):
+                actor_identity = capture['policy']  # a declared stale/quantized actor (rl.actors)
         forced_capture=capture.get('schema')=='natlang.native-teacher-forced-capture/1'
         greedy = capture.get('schema') in ('natlang.native-structural-capture/1','natlang.native-structural-capture/2')
         decision = capture.get('schema') == 'natlang.native-decision-capture/1'
@@ -420,6 +425,9 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     if receipt is not None:
                         external_receipts.setdefault(source, []).append(receipt)
                     else:
+                        if invocation_actors is None and actor_identity != identity:
+                            raise ValueError('a declared stale actor\'s external native state needs re-encoding '
+                                             'under the learner checkpoint')
                         block.require_native(**actor_identity)
                         if getattr(block, 'adapter_binding', None) != binding:
                             raise ValueError('native RL external state adapter binding differs from its actor')
@@ -722,6 +730,16 @@ class NativePolicyObjective:
         else:
             self.identity=self.spec['policy']
             self.archive_owner=self.identity['checkpoint_sha256']
+        self.actors=self.spec.get('actors')
+        if 'actors' in self.spec:
+            from .actors import actor_declaration
+            if (self.behavior_policy is not None
+                    or actor_declaration(self.actors, learner_identity=self.identity) != self.actors
+                    or not any('actor_checkpoint_sha256' in row for row in self.rows.values())):
+                raise ValueError('native policy objective declares a noncanonical or unused stale actor inventory')
+        if any(row.get('actor_checkpoint_sha256') not in (self.actors or {}).get('actors', {})
+               for row in self.rows.values() if 'actor_checkpoint_sha256' in row):
+            raise ValueError('native policy objective row names an undeclared actor')
         self.bound_example=None
         self.evaluation_invocation_actors=None
         self.adapter_binding = self.spec.get('adapter_binding')
@@ -741,6 +759,8 @@ class NativePolicyObjective:
         if self.spec.get('block_bundle'):
             bundle_path = Path(self.spec['block_bundle']).resolve()
             self.bundle = (bundle_path, json.loads(bundle_path.read_text()))
+            if self.actors is not None and self.bundle[1].get('policy_id') in self.actors['actors']:
+                self.archive_owner = self.bundle[1]['policy_id']  # the declared actor that collected the archive
             if (self.bundle[1].get('schema') != 'natlang.rl-block-bundle/1'
                     or self.bundle[1].get('policy_id') != self.archive_owner):
                 raise ValueError('native objective archive belongs to a different actor policy')
@@ -1020,11 +1040,12 @@ def graph_identity(example):
 from ..model.native_actor_graph import validate_invocation_behavior_policy
 
 
-def _require_scored_training_episode(rollout, identity,*,semantic=False):
+def _require_scored_training_episode(rollout, identity,*,semantic=False,actors=None):
     quality = rollout.get('reward', {}).get('quality') if isinstance(rollout.get('reward'), dict) else None
+    actor = (rollout.get('policy') or {}).get('checkpoint_sha256')
     if (rollout.get('split') != 'train' or rollout.get('training_admission') not in (None, 'grpo')
             or type(quality) not in (int, float) or not 0 <= quality <= 1
-            or (rollout.get('policy') or {}).get('checkpoint_sha256') != identity['checkpoint_sha256']):
+            or actor != identity['checkpoint_sha256'] and actor not in (actors or {}).get('actors', {})):
         raise ValueError('native RL requires exact scored train-only actor episodes')
     if not rollout.get('task_id') or not rollout.get('turns') or any(
             not (turn.get('replay') or {}).get('raw_calls_retained') for turn in rollout['turns']):
@@ -1051,7 +1072,7 @@ def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
 
 
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,semantic_channel=None,
-                      min_quality=1., policy_loss=None, privileged=None):
+                      min_quality=1., policy_loss=None, privileged=None, actors=None):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
     [0, 1] (an exact oracle gives 0 or 1). ``grpo`` keeps groups whose qualities differ; ``rft`` (teacher-forced
     whole-graph supervision through every producer/consumer dependency) keeps episodes with quality >= ``min_quality``.
@@ -1059,8 +1080,14 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     clipped ratio loss and its objective bytes unchanged. It is recorded only for grpo, the mode it changes.
     A ``jolt-plus/1`` loss (rl.jolt) admits every scored group, centers returns per (task, group, role) and adds
     each episode's whole-graph privileged/unprivileged twin; ``privileged(rollout, replay, turns)`` returns the
-    shared ``privileged_blocks`` (custody refusal: that episode keeps only its outcome term)."""
+    shared ``privileged_blocks`` (custody refusal: that episode keeps only its outcome term).
+    ``actors`` (rl.actors declaration) admits episodes sampled by declared stale/quantized actors of earlier
+    lineage checkpoints; their score-centered/JOLT+ terms need an importance correction (tis or mis)."""
     from .policy_math import policy_loss_declaration, objective_policy_loss
+    from .actors import actor_declaration
+    actors = actor_declaration(actors, learner_identity=identity)
+    if actors is not None and behavior_policy is not None:
+        raise ValueError('declared stale actors and per-invocation coefficient actors cannot be mixed yet')
     policy_loss = objective_policy_loss(policy_loss_declaration(policy_loss)) if mode == 'grpo' else None
     jolt = policy_loss if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else None
     if jolt is not None and behavior_policy is not None:
@@ -1086,7 +1113,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     for rollout in rollouts:
         if rollout.get('reward') is None:
             continue
-        _require_scored_training_episode(rollout,identity,semantic=semantic_channel is not None)
+        _require_scored_training_episode(rollout,identity,semantic=semantic_channel is not None,actors=actors)
         key = (rollout['task_id'], rollout.get('group'))
         if jolt is not None:
             role = rollout.get('jolt_role', 'student')
@@ -1109,11 +1136,11 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             if mode == 'rft' and rollout['reward']['quality'] < min_quality:
                 continue
             episode_key=canonical_json_sha256_hex(rollout)
-            actors=behavior_policy['episodes'].get(episode_key) if behavior_policy is not None else None
-            if behavior_policy is not None and actors is None:
+            invocation_actors=behavior_policy['episodes'].get(episode_key) if behavior_policy is not None else None
+            if behavior_policy is not None and invocation_actors is None:
                 raise ValueError('native invocation behavior descriptor omits an admitted source episode')
             replay = compile_replay(whole_episode_turns(rollout,semantic=semantic_channel is not None), identity=identity, roles=roles, fetch_block=fetch_block,
-                                    invocation_actors=actors,semantic_channel=semantic_channel)
+                                    invocation_actors=invocation_actors,semantic_channel=semantic_channel,actors=actors)
             from .episode_graph import rollout_turn_names
             episode_turns = rollout_turn_names(rollout['turns'])
             if set(episode_turns) != {node.name for node in replay.plan.invocations}:
@@ -1158,14 +1185,21 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 'external_consumption_receipts': replay.external_receipts or {},
                 **({'external_invocations':replay.external_invocations or {}} if replay.invocation_actors is not None else {}),
                 'task_id': rollout['task_id'], 'sample': rollout.get('sample'),
+                **({'actor_checkpoint_sha256': actor} if (actor := rollout['policy']['checkpoint_sha256'])
+                   != identity['checkpoint_sha256'] else {}),
                 **({'invocation_actors':replay.invocation_actors} if replay.invocation_actors is not None else {})}
             if replay.semantic_dependencies:
                 from dataclasses import asdict
                 objective_rows[identifier]['semantic_dependencies']=[asdict(value) for value in replay.semantic_dependencies]
             graphs.append(graph)
+    stale = any('actor_checkpoint_sha256' in row for row in objective_rows.values())
+    if stale and policy_loss is not None and policy_loss['schema'] != 'clipped-ratio/1' and (
+            policy_loss.get('outcome', policy_loss)['importance'] == 'none'):
+        raise ValueError('declared stale/quantized actor episodes need an importance-corrected loss (tis or mis)')
     return graphs, {'schema': 'natlang.native-policy-objective/2' if behavior_policy is not None else 'natlang.native-policy-objective/1', 'kind': 'native-policy',
         'mode': mode, **({'policy_loss': policy_loss} if policy_loss is not None else {}), 'rows': objective_rows,
         **({'base_native_identity':dict(identity),'behavior_policy':behavior_policy,'behavior_policy_sha256':canonical_json_sha256_hex(behavior_policy)}
            if behavior_policy is not None else {'policy':dict(identity)}),
         **({'adapter_binding': adapter_binding} if adapter_binding else {}),
+        **({'actors': actors} if stale else {}),
         'block_bundle': str(block_bundle) if block_bundle else None}
