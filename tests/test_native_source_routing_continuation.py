@@ -26,13 +26,21 @@ def packages(tmp_path, monkeypatch):
     return old, new
 
 
-def test_actual_production_predecessor_has_only_reviewed_routing_extension(packages):
+def test_decision_aware_predecessor_has_only_reviewed_routing_extension(packages):
     old, new = packages
     proof = prove_source_routing_extension(old, new)
     assert proof['row_metadata_unchanged'] is True
     assert proof['old_policy_sha256'] == classifier.source_policy(old)
     assert proof['new_policy_sha256'] == classifier.source_policy(new)
     assert proof['old_policy_sha256'] != proof['new_policy_sha256']
+
+
+def test_historical_predecessor_with_different_decision_identity_is_rejected(packages):
+    old, new = packages
+    historical = Path(__file__).parent / 'fixtures/native-source-routing-predecessor/data/native_sources-historical.py'
+    shutil.copyfile(historical, old / 'data/native_sources.py')
+    with pytest.raises(ValueError, match='source parsing, masks or row identities'):
+        prove_source_routing_extension(old, new)
 
 
 @pytest.mark.parametrize('name,append', [

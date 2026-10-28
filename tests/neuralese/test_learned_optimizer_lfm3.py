@@ -65,7 +65,11 @@ def test_lfm2_inventories_and_shared_partial_inventories_stay_unambiguous():
     assert T.student_family(lfm2_inventory()) == 'lfm2'
     # An adapter over q_proj and feed-forward only fits both LFM tables with identical modules and classes.
     partial = ['port.hf.model.layers.2.self_attn.q_proj.weight', 'port.hf.model.layers.2.feed_forward.w1.weight']
-    assert T.student_family(partial) in ('lfm2', 'lfm3')
+    with pytest.raises(Exception, match='exactly one student table'):
+        T.student_family(partial)
+    with pytest.raises(Exception, match='exactly one student table'):
+        T.deploy_quantized(partial)
+    assert T.deploy_quantized(partial, family='lfm3')['nvfp4'] == [partial[1]]
     assert T.module_map(partial)[1] == {partial[0]: 'attention', partial[1]: 'mlp'}
     with pytest.raises(Exception, match='not covered by exactly one student table'):
         T.student_family(['port.hf.model.layers.0.self_attn.q_proj.weight', 'port.hf.model.layers.0.unknown.weight'])

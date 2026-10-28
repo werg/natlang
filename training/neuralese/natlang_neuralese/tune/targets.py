@@ -67,12 +67,8 @@ def classify(name, family):
 
 
 def student_family(names):
-    """The student whose table covers every native target; a gap is an error. A partial inventory several tables
-    cover (an adapter over q_proj only fits LFM2 and LFM3) is unambiguous only when every covering table maps every
-    name to the same HF module and class; otherwise it is an error."""
+    """Identify one actual student family; shared mappings do not establish architecture."""
     covering = [family for family in TABLES if all(classify(name, family) for name in names)]
-    if len(covering) > 1 and all(len({repr(classify(name, family)) for family in covering}) == 1 for name in names):
-        return covering[0]
     if len(covering) != 1:
         unmatched = {family: sorted(name for name in names if not classify(name, family))[:3] for family in TABLES}
         raise TuneMathError(f'native target inventory is not covered by exactly one student table: {unmatched}')
@@ -81,7 +77,12 @@ def student_family(names):
 
 def module_map(names, family=None, classes=None):
     """``({native name: ModuleTarget}, {native name: class})`` for the selected target classes."""
-    family = family or student_family(names)
+    if family is None:
+        covering = [candidate for candidate in TABLES if all(classify(name, candidate) for name in names)]
+        if len(covering) > 1 and all(len({repr(classify(name, candidate)) for candidate in covering}) == 1 for name in names):
+            family = covering[0]
+        else:
+            family = student_family(names)
     selected = set(DEFAULT_CLASSES[family] if classes is None else classes)
     unknown = selected - {kind for *_, kind in TABLES[family]}
     if unknown:
