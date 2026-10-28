@@ -12,9 +12,9 @@ what the native server renders through (`serve/chat.py` `bind_history_reasoning`
 
     python -m natlang_neuralese.export.native_gguf CHECKPOINT OUT_DIR [--outtype bf16|f32|q8_0]... [--llama-cpp DIR]
 
-The converter is the vendored upstream snapshot (`vendor/llama.cpp`, its revision in NATLANG_REPLICATION.json). LFM3
-(`Lfm3ForCausalLM`) needs a snapshot at or after upstream d05706b4f (`.development-source-snapshots/llama.cpp-d05706b4`);
-an export whose HF architecture the converter does not register fails before converting. LFM3 needs no q/k row
+The converter is the vendored snapshot of the pinned fork commit (`vendor/llama.cpp`, revision in its
+NATLANG_REPLICATION.json and `training/neuralese/llama-cpp-fork.json`), which registers LFM3 (`Lfm3ForCausalLM`,
+`conversion/lfm3.py`); an export whose HF architecture the converter does not register fails before converting. LFM3 needs no q/k row
 permutation: the converter writes q_proj/k_proj unpermuted and llama.cpp applies NEOX RoPE over the full 128-dim head
 (dims i and i + 64), with the zero-tail partial rotation of full-attention layers as frequency factors 1e30 for the
 trailing 32 pairs (`rope_freqs`), so pre-RoPE keys have HF's layout on both sides.

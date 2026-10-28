@@ -131,7 +131,6 @@ def export_gguf(peft_dir, base_config_dir, outfile, *, outtype='f32'):
     from ..export.native_gguf import converter_registers
     architectures = json.loads((Path(base_config_dir) / 'config.json').read_text()).get('architectures') or []
     if len(architectures) != 1 or not converter_registers(LLAMA_CPP, architectures[0]):
-        # LFM3 (Lfm3ForCausalLM) needs the converter at or after upstream d05706b4f
         raise NotImplementedError(f'the vendored llama.cpp converter does not register {architectures}')
     command = [sys.executable, str(script), '--outtype', outtype, '--outfile', str(outfile),
                '--base', str(base_config_dir), str(peft_dir)]
