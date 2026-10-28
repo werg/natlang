@@ -110,7 +110,8 @@ def build(args):
     config = {'policy': POLICY, 'renders': sorted(renders), 'scores': scores, 'teacher_graphs': teacher_graphs,
               'teacher_graphs_test': teacher_test, 'communication': communication, 'held_packets': HELD_PACKETS,
               'objective_tokenizer': tokenizer, 'expanded_tokenizer_fingerprint': fingerprint,
-              'renders_waiting_for_scores': waiting}
+              'renders_waiting_for_scores': waiting,
+              'prior': [str((REPO / prior).resolve().relative_to(REPO)) for prior in args.prior]}
     (out / 'config.json').write_text(json.dumps(config, indent=1) + '\n')
     mixture = out / 'mixture'
     if not (mixture / 'mixture.json').exists():
@@ -154,6 +155,9 @@ def main():
     sub.add_parser('score-teachers')
     b = sub.add_parser('build')
     b.add_argument('--out', required=True)
+    b.add_argument('--prior', action='append', default=[],
+                   help='earlier version mixture dir (e.g. runs/lfm3-mixture/joint-sft-v1/mixture): an append keeps '
+                        'its train sources unchanged and its rows/decisions/held groups taken')
     a = p.parse_args()
     {'score-teachers': score_teachers, 'build': build}[a.cmd](a)
 

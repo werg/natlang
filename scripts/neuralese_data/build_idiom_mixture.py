@@ -248,10 +248,43 @@ def carve_groups(config, policy) -> set:
     return chosen
 
 
-def candidates(config, policy, decisions, trajectories, held, carve_out=None, carve_set=frozenset()):
+def prior_versions(config):
+    """Earlier mixture versions this one appends to: their train sources stay in the manifest unchanged, their rows,
+    decisions and graphs are taken, and their held groups stay held."""
+    sources, ids, decisions, keys, groups = [], set(), set(), set(), set()
+    for prior in config.get('prior', []):
+        root = (REPO / prior).resolve()
+        manifest = json.loads((root / 'train-sources.json').read_text())
+        for source in manifest['sources']:
+            path = Path(source['path'])
+            path = path if path.is_absolute() else root / path
+            if sha256_file_hex(path) != source['sha256']:
+                raise ValueError(f'prior mixture source changed: {path}')
+            sources.append({**source, 'path': str(path)})
+            if source['kind'] != 'native-graphs':
+                continue
+            for _, raw in iter_lines(path):
+                row = json.loads(raw)
+                conversion = row.get('conversion') or {}
+                teacher = conversion.get('teacher_source')
+                decisions.update([f'{teacher.get("source_row_id")}#{teacher.get("teacher_turn_index")}'] if teacher
+                                 else conversion.get('source_record_ids') or [])
+                ids.add(row['id'])
+                keys.add(content_key(row))
+        held_manifest = json.loads((root / 'held-sources.json').read_text())
+        for source in held_manifest['sources']:
+            for _, raw in iter_lines(root / source['path']):
+                groups.update(json.loads(raw).get('source_groups') or [])
+    return sources, ids, decisions, keys, groups
+
+
+def candidates(config, policy, decisions, trajectories, held, carve_out=None, carve_set=frozenset(), prior=None):
     """Eligible samples with features, tier and category; omissions by reason. Rows of carved held groups go to
     ``carve_out`` (held, up to the declared row cap; beyond it they are dropped, never trained)."""
     out, omitted, covered, seen = [], collections.Counter(), set(), set()
+    if prior is not None:
+        covered |= prior[2]
+        seen |= prior[3]
     carve = policy.get('held_carve')
     feature_cache = {}
     inputs = [('render', view, path) for render in config['renders'] for view, path in graph_files(render, 'train')]
@@ -415,7 +448,9 @@ def main(argv=None):
             held.update(json.loads(raw).get('source_groups') or [])
 
     carve_out, carve_set = [], carve_groups(config, policy)
-    cands, omitted = candidates(config, policy, decisions, trajectories, held, carve_out, carve_set)
+    prior = prior_versions(config)
+    held |= prior[4]
+    cands, omitted = candidates(config, policy, decisions, trajectories, held, carve_out, carve_set, prior)
     chosen, cap_drops = apply_caps(cands, policy)
     resolved = objective(config, policy)
 
@@ -534,6 +569,8 @@ def main(argv=None):
     comm_sources = [{'kind': comm_kind, 'path': str(Path(o['path']).relative_to(out)), 'sha256': o['sha256'],
                      **({'training_priority': priority[1]} if priority[1] else {})} for o in comm_outputs if o['rows']]
     train_sources = comm_sources + train_sources
+    # Appends keep every earlier version's train source first and unchanged (absolute paths).
+    train_sources = [*prior[0], *train_sources]
     (out / 'train-sources.json').write_text(json.dumps({'schema': 'natlang.native-graph-sources/1',
                                                         'sources': train_sources}, indent=1) + '\n')
     (out / 'held-sources.json').write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [
