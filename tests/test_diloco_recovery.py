@@ -343,7 +343,7 @@ def test_stage_verified_topology_keeps_each_worker_and_parent_separate(tmp_path)
     cycle={'id':'cycle','phase':'verified-components-and-dependencies','compatibility':{'compatible':True},
            'components':components,'receipts':receipts,'dependency_intent':{'path':str(dep),**dep_id},
            'dependency_receipt':receipt(dep_id,'dependencies')}
-    state=tmp_path/'state.json';state.write_text(json.dumps({'run_id':'run','cycles':[cycle]}))
+    state=tmp_path/'state.json';state.write_text(json.dumps({'run_id':'run-flex','coordinator_run_id':'run','cycles':[cycle]}))
     parent=tmp_path/'parent.pt';parent.write_bytes(b'parent');parent_id={'sha256':sha(parent.read_bytes()),'bytes':parent.stat().st_size}
     parent_pin=tmp_path/'pin.json';parent_pin.write_text(json.dumps({'path':'/work/parent.pt',**parent_id,'global_step':50}))
     parent_receipt=tmp_path/'parent-receipt.json';parent_receipt.write_text(json.dumps(receipt(parent_id,'parent')))
@@ -354,7 +354,7 @@ def test_stage_verified_topology_keeps_each_worker_and_parent_separate(tmp_path)
         components[f'resident-{i}']['generation']='g'
     components['coordinator'].update(fingerprint='f',runtime_code_sha256='code',versions=[0],last_seq=[{}],queued=[{}],
         manifest={'run_id':'run','identity':{'parent_checkpoint_sha256':parent_id['sha256']}})
-    state.write_text(json.dumps({'run_id':'run','cycles':[cycle]}))
+    state.write_text(json.dumps({'run_id':'run-flex','coordinator_run_id':'run','cycles':[cycle]}))
     out=tmp_path/'staged'
     result=stage.stage(state,'cycle',storage,parent_pin,parent_receipt,parent,out,present=lambda _:True,reserve_bytes=0,external_required=False)
     assert result['recovery_restore_qualified'] is False

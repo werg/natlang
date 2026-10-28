@@ -349,9 +349,11 @@ def run_once(record,state_path,backend):
     state_path=Path(state_path);state_path.parent.mkdir(parents=True,exist_ok=True)
     with state_path.with_suffix('.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
+        coordinator_run_id=(record['run'].get('settings') or {}).get('run_id',record['run']['id'])
         state=json.loads(state_path.read_text()) if state_path.exists() else {'schema':'natlang.diloco-recovery/1',
-            'run_id':record['run']['id'],'cycles':[],'latest_verified':None}
-        if state['run_id']!=record['run']['id']:raise ValueError('recovery state belongs to a different run')
+            'run_id':record['run']['id'],'coordinator_run_id':coordinator_run_id,'cycles':[],'latest_verified':None}
+        if state['run_id']!=record['run']['id'] or state.get('coordinator_run_id')!=coordinator_run_id:
+            raise ValueError('recovery state belongs to a different launch or coordinator run')
         def save():durable_json(state_path,state)
         if hasattr(backend,'verify_ownership'):backend.verify_ownership()
         if hasattr(backend,'release_remote_pins'):

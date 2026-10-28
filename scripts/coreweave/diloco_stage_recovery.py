@@ -55,7 +55,7 @@ def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,tar
             raise ValueError('restore staging must use the mounted external data root')
     pin=json.loads(Path(parent_pin).read_text());parent_identity={'sha256':pin['sha256'],'bytes':pin['bytes']}
     manifest=components.get('coordinator',{}).get('manifest') or {}
-    if manifest.get('run_id')!=state['run_id'] or (manifest.get('identity') or {}).get('parent_checkpoint_sha256')!=pin['sha256']:
+    if manifest.get('run_id')!=state.get('coordinator_run_id') or (manifest.get('identity') or {}).get('parent_checkpoint_sha256')!=pin['sha256']:
         raise ValueError('original parent does not match coordinator identity')
     old_receipt=json.loads(Path(parent_receipt).read_text());validate_receipt(old_receipt,parent_identity)
     if not old_receipt.get('verified_at') or not present(old_receipt):raise ValueError('private original parent is absent')
@@ -95,7 +95,7 @@ def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,tar
             _check(temp/'dependencies'/item['object'],{'sha256':sha,'bytes':item['bytes']})
             bindings[path]=sha
         manifest={'schema':'natlang.diloco-staged-recovery/1','cycle':cycle_id,'run_id':state['run_id'],
-                  'parent':{**pin,'staged':'parent.pt'},'components':components,
+                  'coordinator_run_id':state['coordinator_run_id'],'parent':{**pin,'staged':'parent.pt'},'components':components,
                   'coordinator_staged':'diloco-coordinator','worker_staged':{str(i):f'workers/{i}' for i in range(4)},
                   'scope':'separate worker optimizer/RNG/exposure and coordinator state; not a consolidated checkpoint',
                   'recovery_restore_qualified':False}
