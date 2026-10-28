@@ -42,6 +42,7 @@ invocation.
 | 3 | **+ torch.compile of layer inputs/finish/finite conv (default in plain mode)** | 7.8 | 1,690 | 0.9850 / 0.173 | 10.0 | branch |
 | 4 | **+ `--chunk-tokens` 1024 for new runs (was 128)** | 7.2 | 1,850 | exact (readout chunking) | 10.0 | branch |
 | 5 | + 32k tokens per update (multi-graph packing) | — | 1,970 | — | 13.5 | config |
+| 6 | + 64k tokens per update | 26-31 | 1,990 | — | 22.3 | config |
 | — | no activation checkpointing (13.2k) | 6.6 | 1,985 | exact | 48.0 | not adopted (below) |
 
 Numerics: in the BF16 profile, the plain path is closer to the FP32 gradient than the carried path it replaces.
@@ -86,15 +87,32 @@ Data/collation and the graph-mask build are inside the 0.18 s of idle time.
 - `local_steps`: sync volume for the full backbone is ~3.4 GB BF16 on the wire, plus the merge. Pick `local_steps`
   so that transfer + merge is at most 5% of the round. This needs the sandbox step time and link speed (below).
 
-## Sandbox measurement
+## Sandbox measurement (RTX PRO 6000 Blackwell, 96 GB, 2 CPUs Xeon 8562Y+)
 
-Pending. The launch agent (`af805723812a2b210`) is running a one-GPU RTX PRO 6000 check with host RAM and GPU memory
-sampled every 5 s. It was started with `device_fp32`; the plain + compile configuration replaces it once these
-commits land.
+Measured by the launch agent (`af805723812a2b210`), one sandbox shared rather than a second one, on the code before
+24225f416 (`device_fp32` carrier, chunk 1024, 32k batch tokens, BF16-SR, MuonSR, EMA, matrix telemetry):
+- 4.8 s/update, 6.6-6.8k tok/s per GPU (3.4-3.6x the GB10 at the same configuration class).
+- GPU memory about 20.5 GB in nvidia-smi; torch peak allocated 15.1 GB.
+- Host cgroup RAM: 8 GB steady, 16 GB after held eval, peak 26.8 GiB around the end-of-stage checkpoint save and
+  reload (full-state checkpoint 12.26 GB).
+- 2 CPUs at load ~1.0 with GPU utilization 98-100% at 1 s sampling: no loader starvation seen. Not measured: idle
+  gaps within an update. The plain+compile seed run on 24225f416 replaces these numbers when it reports.
+  Expectation from DGX: the carrier removal plus compile was 1.8x there. Part of that was host-bound file I/O
+  that `device_fp32` had already removed, so expect roughly 1.3-1.5x on the sandbox.
+
+Recommendations:
+- Learner RAM minimum **48Gi**: the measured 26.8 GiB peak at checkpoint save/reload, plus room for a held eval
+  overlapping a background snapshot. The provisional 64Gi template value is also fine.
+- `local_steps`: a round is local_steps × step time. With about 4-4.8 s/update at 32k tokens, 128 local steps is a
+  ~510-615 s round. The 5% rule then allows 26-31 s for pseudo-gradient transfer (3.4 GB BF16 each way) plus the
+  merge. Keep **128** if the first round's measured transfer + merge is ≤ 25 s, which needs ≥ ~270 MB/s each way.
+  Otherwise use local_steps = ceil(20 × (transfer + merge seconds) / step seconds), rounded up to a multiple of 32.
+  Recompute after the seed run reports its plain-path step time.
 
 ## Remaining ideas, ranked by expected gain
 
-1. Larger `--batch-tokens` (64k): NS from 20% to ~5% of the update. Config only.
+1. Larger `--batch-tokens`: NS falls from 20% of the update at 13k tokens to ~5% at 64k. Config only. GB10
+   measured 1,970 tok/s at 32k and 1,990 at 64k, so the gain flattens past 32k on DGX.
 2. Real FP8 GEMMs in the forward once the FP8 QAT point is at λ = 1 (rowwise FP8 is 1.9-2.1x BF16 on both GPUs).
    This is not an exact match to the FP8_BLOCK deploy scaling, which the hardware does not support, so it needs its
    own parity check. Could be ~25-35% of GEMM time.
