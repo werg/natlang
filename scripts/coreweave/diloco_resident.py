@@ -27,7 +27,7 @@ import cwctl
 
 SCHEMA = 'natlang.diloco-resident-source/1'
 REPO = '/home/werg/natlang'
-HELPER = REPO + '/scripts/coreweave/diloco_resident_worker.py'
+HELPER_SOURCE = Path(__file__).with_name('diloco_resident_worker.py')
 
 
 def validate(record, manifest):
@@ -68,9 +68,32 @@ def validate(record, manifest):
     return resident, workers
 
 
-def call(sandbox, args):
+def ensure_helper(sandbox):
+    """Install an exact immutable control helper without touching the learner's runtime package."""
+    content = HELPER_SOURCE.read_bytes()
+    digest = hashlib.sha256(content).hexdigest()
+    directory = '/work/.coreweave/resident-control'
+    target, temporary = f'{directory}/{digest}.py', f'{directory}/{digest}.{os.getpid()}.part'
+    result = sandbox.exec(['mkdir', '-p', directory]).result()
+    if result.returncode:
+        raise RuntimeError('cannot create resident helper directory')
+    sandbox.write_file(temporary, content).result()
+    code = ("import hashlib,os,sys; src,dst,want=sys.argv[1:]; "
+            "actual=hashlib.sha256(open(src,'rb').read()).hexdigest(); "
+            "assert actual==want, 'resident helper transfer mismatch'; "
+            "exec(\"try: os.link(src,dst)\\nexcept FileExistsError: pass\"); "
+            "assert hashlib.sha256(open(dst,'rb').read()).hexdigest()==want, 'resident helper target mismatch'; "
+            "os.unlink(src)")
+    result = sandbox.exec(['python3', '-c', code, temporary, target, digest]).result()
+    if result.returncode:
+        raise RuntimeError(f'resident helper verification failed: {result.stderr}')
+    return target
+
+
+def call(sandbox, args, helper=None):
+    helper = helper or ensure_helper(sandbox)
     command = ['env', 'PYTHONPATH=' + REPO + '/training/neuralese:' + REPO,
-               'python3', HELPER, *map(str, args)]
+               'python3', helper, *map(str, args)]
     result = sandbox.exec(command, cwd=REPO).result()
     if result.returncode:
         raise RuntimeError(f'resident host command failed ({result.returncode}): {result.stderr}')
@@ -89,12 +112,14 @@ def _write_journal(path, journal):
 def publish(record, manifest, journal_path, *, resume=False):
     resident, workers = validate(record, manifest)
     journal_path = Path(journal_path)
+    helper_sha256 = hashlib.sha256(HELPER_SOURCE.read_bytes()).hexdigest()
     if journal_path.exists():
         if not resume:
             raise ValueError('publication journal exists; use --resume for its exact manifest and workers')
         journal = json.loads(journal_path.read_text())
         if (journal.get('schema') != 'natlang.diloco-resident-publication/1'
                 or journal.get('run_id') != record['run']['id'] or journal.get('manifest') != manifest
+                or journal.get('helper_sha256') != helper_sha256
                 or [journal['workers'][str(i)]['sandbox_id'] for i in range(len(workers))] != workers):
             raise ValueError('resume journal does not bind this exact manifest and worker set')
         if journal['state'] == 'published':
@@ -103,7 +128,7 @@ def publish(record, manifest, journal_path, *, resume=False):
         if resume:
             raise ValueError('cannot resume without the original publication journal')
         journal = {'schema': 'natlang.diloco-resident-publication/1', 'run_id': record['run']['id'],
-                   'manifest': manifest, 'state': 'staging', 'workers': {str(i): {'sandbox_id': s} for i, s in enumerate(workers)}}
+                   'manifest': manifest, 'helper_sha256': helper_sha256, 'state': 'staging', 'workers': {str(i): {'sandbox_id': s} for i, s in enumerate(workers)}}
     lock = threading.Lock()
     _write_journal(journal_path, journal)
     def update(i, **value):
@@ -113,21 +138,22 @@ def publish(record, manifest, journal_path, *, resume=False):
     def prepare_worker(pair):
         i, sandbox_id = pair
         sandbox = cwctl.read_sandbox(sandbox_id)
+        helper = ensure_helper(sandbox)
         existing = journal['workers'][str(i)].get('prepared')
         if existing is not None:
-            return sandbox, existing
+            return sandbox, existing, helper
         inbox = '/work/.coreweave/resident-staging'
         result = sandbox.exec(['mkdir', '-p', inbox]).result()
         if result.returncode: raise RuntimeError('cannot create resident staging directory')
         for item in manifest['files']:
             staged = f"{inbox}/{item['sha256']}-{i}.part"
             sandbox.write_file_streaming(staged, cwctl._chunks(Path(item['source'])), timeout_seconds=7200).result()
-            call(sandbox, ['install', staged, item['target'], item['sha256'], item['bytes']])
+            call(sandbox, ['install', staged, item['target'], item['sha256'], item['bytes']], helper)
         args = ['prepare', resident['directory'], manifest['recipe'], manifest['stage'], manifest['tokenizer'], *manifest['roles']]
         if manifest.get('geometry'): args += ['--geometry', manifest['geometry']]
-        prepared = call(sandbox, args)
+        prepared = call(sandbox, args, helper)
         update(i, state='prepared', prepared=prepared)
-        return sandbox, prepared
+        return sandbox, prepared, helper
     try:
         with ThreadPoolExecutor(max_workers=len(workers)) as pool:
             prepared = list(pool.map(prepare_worker, enumerate(workers)))
@@ -137,10 +163,10 @@ def publish(record, manifest, journal_path, *, resume=False):
         if any(identity != identities[0] for identity in identities[1:]):
             raise ValueError('workers prepared different logical source, recipe or CE bindings')
         journal['state'] = 'publishing'; journal['source_identity'] = identities[0]; _write_journal(journal_path, journal)
-        for i, (sandbox, value) in enumerate(prepared):
+        for i, (sandbox, value, helper) in enumerate(prepared):
             if journal['workers'][str(i)].get('state') == 'published':
                 continue
-            result = call(sandbox, ['publish', resident['directory'], json.dumps(value['request'])])
+            result = call(sandbox, ['publish', resident['directory'], json.dumps(value['request'])], helper)
             update(i, state='published', publication=result)
         journal['state'] = 'published'; _write_journal(journal_path, journal)
     except Exception as error:

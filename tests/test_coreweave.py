@@ -805,7 +805,8 @@ def test_diloco_resident_publication_stages_all_before_cas_and_resumes(tmp_path,
             assert b''.join(chunks) == b'recipe'
             return Result()
     monkeypatch.setattr(resident.cwctl, 'read_sandbox', lambda name: FakeSandbox(name))
-    def call(box, args):
+    monkeypatch.setattr(resident, 'ensure_helper', lambda box: '/verified-helper')
+    def call(box, args, helper=None):
         events.append((box.name, args[0]))
         if args[0] == 'prepare':
             return {'request': {'path': '/request', 'sha256': box.name},
