@@ -377,7 +377,7 @@ def test_stage_verified_topology_keeps_each_worker_and_parent_separate(tmp_path)
     assert (out/'diloco-coordinator/manifest.json').read_bytes()==b'coordinator'
     assert (out/'dependencies/objects'/h).read_bytes()==payload
     with pytest.raises(ValueError,match='private original parent is absent'):
-        stage.stage(state,'cycle',storage,parent_pin,parent_receipt,parent,tmp_path/'bad',present=lambda _:False,reserve_bytes=0,external_required=False)
+        stage.stage(state,'cycle',storage,parent_pin,parent_receipt,parent,tmp_path/'bad',present=lambda r:r['name']!='parent',reserve_bytes=0,external_required=False)
 
 
 def test_original_parent_requires_exact_local_private_and_coordinator_binding(tmp_path):

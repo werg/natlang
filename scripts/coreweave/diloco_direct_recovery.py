@@ -1,11 +1,13 @@
 """Validate direct DiLoCo launch custody for full-cohort recovery."""
 import json
+import hashlib
 import os
 from pathlib import Path
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
 
 REQUIRED=('plan','recipe','worker_argv','coordinator_argv','settings','owner_journal','launch_code','recovery_code',
-          'pin_code','direct_code','dependencies_code','archive_code','guard_code','readiness_code','inputs_code','stage_code')
+          'pin_code','direct_code','dependencies_code','archive_code','guard_code','readiness_code','inputs_code','stage_code',
+          'private_export_code','verified_download_code')
 
 
 def _flag(argv,name):
@@ -13,24 +15,28 @@ def _flag(argv,name):
     return argv[argv.index(name)+1]
 
 
-def load_control(path, record):
-    path=Path(path);control=json.loads(path.read_text())
+def load_control(path, record, *, control_bytes=None, read_bound=None, verify_helpers=True):
+    path=Path(path);raw=path.read_bytes() if control_bytes is None else control_bytes;control=json.loads(raw)
     if control.get('schema')!='natlang.diloco-direct-recovery-control/1':raise ValueError('invalid direct control schema')
     bindings=control.get('bindings') or {}
     if not set(REQUIRED)<=set(bindings):raise ValueError('direct control lacks launch, recovery or custody bindings')
+    def read(item):
+        data=read_bound(item) if read_bound else Path(item['path']).read_bytes()
+        if hashlib.sha256(data).hexdigest()!=item['sha256']:raise ValueError('direct control binding differs: '+item['path'])
+        return data
     for name,item in bindings.items():
-        p=Path(item['path'])
-        if not p.is_absolute() or not p.is_file() or sha256_file_hex(p,drop_cache=True)!=item['sha256']:
-            raise ValueError('direct control binding differs: '+name)
+        if not Path(item['path']).is_absolute():raise ValueError('direct control binding path is not absolute: '+name)
+        try:read(item)
+        except (OSError,KeyError,ValueError) as error:raise ValueError('direct control binding differs: '+name) from error
     local=Path(__file__).parent
     for key,name in [('recovery_code','diloco_periodic_recovery.py'),('pin_code','diloco_recovery_pin.py'),
                      ('direct_code','diloco_direct_recovery.py'),('dependencies_code','diloco_recovery_dependencies.py'),
                      ('archive_code','cache_bounded_archive.py'),('guard_code','private_export_guard.py'),
                      ('readiness_code','recovery_readiness.py'),('inputs_code','recovery_inputs.py'),
                      ('stage_code','diloco_stage_recovery.py')]:
-        if sha256_file_hex(local/name,drop_cache=True)!=bindings[key]['sha256']:
+        if verify_helpers and sha256_file_hex(local/name,drop_cache=True)!=bindings[key]['sha256']:
             raise ValueError('executing recovery helper differs: '+key)
-    def data(name):return json.loads(Path(bindings[name]['path']).read_text())
+    def data(name):return json.loads(read(bindings[name]))
     plan=data('plan');argv=data('worker_argv');coord=data('coordinator_argv');settings=data('settings');owner=data('owner_journal')
     paths=control['paths'];out=paths['worker_out'];root=paths['coordinator_root'];runtime=paths['runtime_repo']
     reserve=control.get('storage_reserve_bytes')
@@ -81,7 +87,7 @@ def load_control(path, record):
     for flag,key,parse in [('--quorum','min_quorum',int),('--max-staleness','max_staleness',int),
                            ('--ema','ema',json.loads),('--outer-schedule','outer_schedule',json.loads)]:
         if flag in coord:manifest_checks[key]=parse(_flag(coord,flag))
-    result={'paths':paths,'storage_reserve_bytes':reserve,'component_placement':placement,'control_sha256':sha256_file_hex(path,drop_cache=True),'manifest_checks':manifest_checks,
+    result={'paths':paths,'storage_reserve_bytes':reserve,'component_placement':placement,'control_sha256':hashlib.sha256(raw).hexdigest(),'manifest_checks':manifest_checks,
             'helper_sha256':{key:bindings[key]['sha256'] for key in ('pin_code','archive_code','guard_code','readiness_code','inputs_code')},
             'plan_path':bindings['plan']['path'],'parent':_flag(coord,'--parent'),
             'parent_transfer':control.get('parent_transfer'),
@@ -89,19 +95,21 @@ def load_control(path, record):
             'runtime_code_sha256':control['runtime_code_sha256'],'recipe_binding':recipe,
             'source_receipt_sha256':[stage['native_graphs']['sha256'],stage['held_native_graphs']['sha256']],
             'ce_sha256':stage['ce_supervision_policy']['sha256'],'workers':workers,'coordinator':owner['coordinator'],
-            'bindings':list(bindings.values())+[{'path':str(path),'sha256':sha256_file_hex(path,drop_cache=True)}]}
+            'bindings':list(bindings.values())+[{'path':str(path),'sha256':hashlib.sha256(raw).hexdigest()}]}
     return result
 
 
-def record_from_control(path, run_id):
-    control=json.loads(Path(path).read_text());bindings=control['bindings']
-    owner=json.loads(Path(bindings['owner_journal']['path']).read_text())
-    settings=json.loads(Path(bindings['settings']['path']).read_text())
+def record_from_control(path, run_id, *, control_bytes=None, read_bound=None, verify_helpers=True):
+    raw=Path(path).read_bytes() if control_bytes is None else control_bytes
+    control=json.loads(raw);bindings=control['bindings']
+    read=read_bound or (lambda item:Path(item['path']).read_bytes())
+    owner=json.loads(read(bindings['owner_journal']))
+    settings=json.loads(read(bindings['settings']))
     if settings.get('run_id')!=run_id:raise ValueError('direct run ID differs from settings')
     workers=owner['workers']
     record={'run':{'id':run_id,'settings':settings},'coordinator':owner['coordinator']['sandbox_id'],
             'learners':[workers[str(i)]['sandbox_id'] for i in range(settings['workers'])]}
-    load_control(path,record)
+    load_control(path,record,control_bytes=raw,read_bound=read_bound,verify_helpers=verify_helpers)
     return record
 
 

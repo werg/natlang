@@ -48,9 +48,9 @@ class Backend:
         self.record,self.storage=record,Path(storage).resolve()
         self.direct=load_control(direct_control,record) if direct_control else None
         self.direct_control=Path(direct_control) if direct_control else None
-        external=paths.root('data_hdd').resolve()
+        external=paths.root('data_hdd').resolve();self.nvme=paths.root('data_nvme').resolve()
         if self.direct:
-            nvme=paths.root('data_nvme').resolve()
+            nvme=self.nvme
             if not (self.storage.is_relative_to(nvme) or (external.is_mount() and self.storage.is_relative_to(external))):
                 raise ValueError('direct recovery storage must be on the declared NVMe or mounted external data root')
             self.storage.mkdir(parents=True,exist_ok=True)
@@ -312,6 +312,8 @@ class Backend:
                 not cycle.get('compatibility',{}).get('compatible') or
                 not self.present(cycle['dependency_receipt'])):
             raise ValueError('unverified recovery cycle cannot release pins')
+        if self.direct and (not cycle.get('cohort_control_receipt') or not self.present(cycle['cohort_control_receipt'])):
+            raise ValueError('private cohort control is unavailable')
         for external in cycle['dependency_intent'].get('external_dependencies',[]):
             if not self.present(external['receipt']):raise ValueError('external dependency private object disappeared')
         for name,intent in components.items():
@@ -376,6 +378,9 @@ class Backend:
                 path=Path(item['local_path'])
                 if path.is_relative_to(self.external) and not self.external.is_mount():
                     raise ValueError('external dependency mount is unavailable')
+                resolved=path.resolve()
+                if not (resolved.is_relative_to(self.nvme) or (self.external.is_mount() and resolved.is_relative_to(self.external))):
+                    raise ValueError('external dependency is outside declared local recovery roots')
                 if (not receipt.get('verified_at') or local.get('committed') is not True or
                     local.get('sha256')!=identity['sha256'] or local.get('bytes')!=identity['bytes'] or
                     Path(local.get('path','')).resolve()!=path.resolve() or
@@ -462,6 +467,27 @@ class Backend:
                 or not value.get('verified_at')):
             raise ValueError('dependency export lacks independent complete-object GET')
         return value
+
+    def prepare_cohort_control(self,state,cycle):
+        """Seal the final restore catalog after component and dependency GETs."""
+        snapshot={key:value for key,value in cycle.items() if key not in ('cohort_control_intent','cohort_control_receipt')}
+        snapshot['phase']='verified-components-and-dependencies'
+        value={'schema':'natlang.diloco-recovery/1','run_id':state['run_id'],
+               'coordinator_run_id':state['coordinator_run_id'],'recovery_contract':state['recovery_contract'],
+               'cycles':[snapshot],'latest_exported':cycle['id'],'latest_verified':None,
+               'scope':'export catalog; cross-component restored execution is not yet qualified'}
+        raw=(json.dumps(value,sort_keys=True,indent=2)+'\n').encode()
+        import hashlib
+        sha=hashlib.sha256(raw).hexdigest();target=self.storage/'controls'/(cycle['id']+'-'+sha+'.json')
+        target.parent.mkdir(parents=True,exist_ok=True)
+        try:
+            descriptor=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+        except FileExistsError:
+            if target.read_bytes()!=raw:raise ValueError('existing cohort control differs')
+        else:
+            with os.fdopen(descriptor,'wb') as stream:stream.write(raw);stream.flush();os.fsync(stream.fileno())
+            descriptor=os.open(target.parent,os.O_RDONLY|os.O_DIRECTORY);os.fsync(descriptor);os.close(descriptor)
+        return {'path':str(target),'sha256':sha,'bytes':len(raw)}
 
     def download_parent(self,receipt,identity,destination):
         """Retain one independently verified parent GET when no local copy was supplied."""
@@ -714,6 +740,7 @@ def run_once(record,state_path,backend):
             if worker and type(observed.get('global_step')) is int:
                 observed['updates_since_pinned_checkpoint']=max(0,observed['global_step']-worker['global_step'])
         cycle['errors'].pop('dependencies',None)
+        cycle['errors'].pop('cohort-control',None)
         all_components = len(cycle['components']) == expected_components
         all_exported = all_components and set(cycle['receipts'])==set(cycle['components']) and not cycle['errors']
         if all_exported and cycle['compatibility']['compatible']:
@@ -742,6 +769,16 @@ def run_once(record,state_path,backend):
             if cycle['errors']:
                 cycle['phase']='incomplete';save()
             else:
+                if direct:
+                    try:
+                        if 'cohort_control_intent' not in cycle:
+                            cycle['cohort_control_intent']=backend.prepare_cohort_control(state,cycle);save()
+                        if 'cohort_control_receipt' not in cycle:
+                            cycle['cohort_control_receipt']=backend.export_dependencies(cycle['cohort_control_intent']);save()
+                        if not backend.present(cycle['cohort_control_receipt']):raise ValueError('private cohort control is absent')
+                    except Exception as error:
+                        cycle['errors']['cohort-control']=str(error);cycle['phase']='incomplete';save();return state
+                    cycle['errors'].pop('cohort-control',None)
                 cycle['phase']='verified-components-and-dependencies' if cycle['compatibility']['compatible'] else 'verified-components-incompatible'
                 cycle['verified_at']=time.time()
                 cycle['recovery_blocker']='cross-component restore and coordinator sequence replay have not been qualified'

@@ -31,7 +31,8 @@ def fixture(tmp_path):
            'runtime':{'package':'/work/runtime/training/neuralese/natlang_neuralese'},'plan':planref}
     bindings={'plan':planref,'recipe':recipe,'worker_argv':bind('worker.json',argv),'coordinator_argv':bind('coord.json',coord),
               'settings':bind('settings.json',settings),'owner_journal':bind('owner.json',owner),
-              'launch_code':bind('launch.py','launch')}
+              'launch_code':bind('launch.py','launch'),'private_export_code':bind('export.py','export'),
+              'verified_download_code':bind('download.py','download')}
     helper=Path(__file__).parents[1]/'scripts/coreweave'
     for key,name in [('recovery_code','diloco_periodic_recovery.py'),('pin_code','diloco_recovery_pin.py'),
                      ('direct_code','diloco_direct_recovery.py'),('dependencies_code','diloco_recovery_dependencies.py'),
@@ -96,10 +97,12 @@ def test_direct_fenced_five_component_cycle_has_no_fake_residents(tmp_path):
         def direct_storage_preflight(self,cycle):return {'available_bytes':100,'needed_bytes':20}
         def component_storage(self,name):return (tmp_path,0)
         def prepare_dependencies(self,cycle):assert len(cycle['components'])==5;return {'path':'deps'}
+        def prepare_cohort_control(self,state,cycle):return {'path':'catalog','sha256':'e'*64,'bytes':1}
         def export_dependencies(self,intent):return {'name':'deps'}
         def present(self,receipt):return True
     state=service.run_once(record,tmp_path/'state.json',Backend());cycle=state['cycles'][-1]
     assert cycle['phase']=='verified-components-and-dependencies' and len(cycle['components'])==5
+    assert cycle['cohort_control_receipt']['name']=='deps'
     assert cycle['compatibility']['compatible'] and not any(k.startswith('resident-') for k in cycle['components'])
     changed={**cycle['components'],'worker-0':{**cycle['components']['worker-0'],'source_receipt_sha256':['bad','bad']}}
     assert not service.compatibility(changed,direct=direct)['compatible']
@@ -118,6 +121,17 @@ def test_direct_requires_fence_and_does_not_export_unfenced_pins(tmp_path):
     state=service.run_once(record,tmp_path/'state.json',Backend())
     assert state['pending']['phase']=='incomplete' and 'missing capability' in state['pending']['errors']['fence']
     assert not state['pending'].get('unfenced')
+
+
+def test_final_cohort_catalog_is_self_contained_and_retry_stable(tmp_path):
+    service=load('diloco_periodic_recovery');backend=object.__new__(service.Backend);backend.storage=tmp_path
+    state={'run_id':'run','coordinator_run_id':'run','recovery_contract':{'mode':'direct','control_sha256':'a'*64}}
+    cycle={'id':'cycle','phase':'exporting','components':{'worker-0':{'sha256':'b'*64}},
+           'receipts':{'worker-0':{'name':'private'}},'dependency_intent':{'sha256':'c'*64},
+           'dependency_receipt':{'name':'deps'},'parent_reference':{'pin':{'sha256':'d'*64}}}
+    intent=backend.prepare_cohort_control(state,cycle);assert backend.prepare_cohort_control(state,cycle)==intent
+    saved=json.loads(Path(intent['path']).read_text());assert saved['cycles'][0]['phase']=='verified-components-and-dependencies'
+    assert saved['cycles'][0]['receipts']==cycle['receipts'] and saved['latest_verified'] is None
 
 
 def test_direct_stages_and_hash_checks_runtime_helper_dependencies(tmp_path,monkeypatch):
@@ -188,14 +202,18 @@ def test_direct_dependency_preparation_includes_checkpoint_sources_and_parent_pr
 def test_external_history_requires_verified_local_and_present_private_copies(tmp_path,monkeypatch):
     service=load('diloco_periodic_recovery');mod=load('diloco_direct_recovery');descriptor,_,_,_=fixture(tmp_path)
     direct=mod.load_control(descriptor,mod.record_from_control(descriptor,'run'))
-    path=tmp_path/'history.pt';path.write_bytes(b'earned history');sha=hashlib.sha256(path.read_bytes()).hexdigest()
+    external=tmp_path/'external';external.mkdir();nvme=tmp_path/'nvme';nvme.mkdir()
+    path=nvme/'history.pt';path.write_bytes(b'earned history');logical=external/'history.pt';logical.symlink_to(path)
+    original_is_mount=Path.is_mount
+    monkeypatch.setattr(Path,'is_mount',lambda p:True if p==external else original_is_mount(p))
+    sha=hashlib.sha256(path.read_bytes()).hexdigest()
     identity={'sha256':sha,'bytes':path.stat().st_size}
     receipt={'identity':identity,'private':True,'run':'run','name':'file','source':'/pin','verified_at':1,
-             'independent_verification':{**identity,'local_copy':{**identity,'committed':True,'path':str(path)}}}
+             'independent_verification':{**identity,'local_copy':{**identity,'committed':True,'path':str(logical)}}}
     rp=tmp_path/'history-receipt.json';rp.write_text(json.dumps(receipt));ref={'path':str(rp),'sha256':hashlib.sha256(rp.read_bytes()).hexdigest()}
-    direct['bindings'].append(ref);direct['external_dependencies']=[{**identity,'local_path':str(path),'receipt':ref}]
+    direct['bindings'].append(ref);direct['external_dependencies']=[{**identity,'local_path':str(logical),'receipt':ref}]
     backend=object.__new__(service.Backend);backend.direct=direct;backend.workers=['s0','s1','s2','s3'];backend.storage=tmp_path;backend.storage_reserve_bytes=1024
-    backend.external=tmp_path/'external';backend.external_hash_cache={};backend.present=lambda receipt:True
+    backend.external=external;backend.nvme=nvme;backend.external_hash_cache={};backend.present=lambda receipt:True
     backend.runtime_bundle=tmp_path/'bundle.json';backend.runtime_bundle.write_text('{}');(tmp_path/'bundle.sources.json').write_text('{}')
     required=[{'path':'/base','sha256':'a'*64,'kinds':['base-model-file']},{'path':'/train','sha256':'b'*64,'kinds':['source-manifest']}]
     components={f'worker-{i}':{'required_dependencies':required,'runtime_code_sha256':direct['runtime_code_sha256']} for i in range(4)}
@@ -246,6 +264,23 @@ def test_direct_preflight_accounts_for_all_components_and_dependency_archive(tmp
 def test_stage_direct_split_components_and_verified_external_history(tmp_path):
     import io
     stage=load('diloco_stage_recovery');mod=load('diloco_direct_recovery');descriptor,control,recipe,roles=fixture(tmp_path)
+    # Recovery controls are independent copies: remove them after sealing to
+    # ensure staging reads authenticated archived bytes, not original paths.
+    for key,item in control['bindings'].items():
+        original=Path(item['path'])
+        if not original.is_relative_to(tmp_path):
+            copied=tmp_path/('bound-'+key);copied.write_bytes(original.read_bytes());item['path']=str(copied)
+    def sha(data):return hashlib.sha256(data).hexdigest()
+    def receipt(identity,name):return {'private':True,'identity':identity,'independent_verification':identity,'verified_at':1,'run':'run','name':name,'source':'/pin'}
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'parent');pid={'sha256':sha(parent.read_bytes()),'bytes':parent.stat().st_size}
+    pin=tmp_path/'parent-pin.json';pin.write_text(json.dumps({'path':'/work/parent',**pid,'global_step':1}))
+    parent_receipt=tmp_path/'parent-receipt.json';parent_receipt.write_text(json.dumps(receipt(pid,'parent')))
+    qualification=tmp_path/'qualification.json';qualification.write_text(json.dumps({'schema':'natlang.lfm3-seed-independent-full-state/1','passed':True,'global_step':1,**pid}))
+    copy=tmp_path/'copy.json';copy.write_text(json.dumps({**pid,'local_copy':{'committed':True,**pid}}))
+    parent_refs={key:{'path':str(path),'sha256':sha(path.read_bytes())} for key,path in
+                 [('pin',pin),('receipt',parent_receipt),('qualification',qualification),('copy_receipt',copy)]}
+    control['parent_transfer']={'pin':str(pin),'pin_sha256':parent_refs['pin']['sha256'],
+                                'receipt':str(parent_receipt),'receipt_sha256':parent_refs['receipt']['sha256']}
     disk_a=tmp_path/'disk-a';disk_b=tmp_path/'disk-b';disk_a.mkdir();disk_b.mkdir()
     control['component_placement']={name:{'root':str(disk_b if name=='worker-0' else disk_a),'reserve_bytes':10}
                                     for name in ('worker-0','worker-1','worker-2','worker-3','coordinator')}
@@ -269,32 +304,53 @@ def test_stage_direct_split_components_and_verified_external_history(tmp_path):
             recipe_binding=json.dumps(recipe),ce_supervision_policy_binding={'sha256':direct['ce_sha256']},resident_generation=None,
             source_receipt_sha256=direct['source_receipt_sha256'],versions=[0],sequences=[0],pending={},awaiting_global=[])
     add('coordinator',archive(tmp_path/'coordinator.tar',{'diloco-coordinator/manifest.json':b'coordinator'}))
-    parent=tmp_path/'parent.pt';parent.write_bytes(b'parent');pid={'sha256':sha(parent.read_bytes()),'bytes':parent.stat().st_size}
     components['coordinator'].update(fingerprint='f',runtime_code_sha256=direct['runtime_code_sha256'],versions=[0],last_seq=[{}],queued=[{}],
         manifest={'run_id':'run','identity':{'parent_checkpoint_sha256':pid['sha256']}})
-    history=tmp_path/'history.pt';history.write_bytes(b'history');hid={'sha256':sha(history.read_bytes()),'bytes':history.stat().st_size}
+    history=disk_b/'history.pt';history.write_bytes(b'history');history_link=disk_a/'history-link.pt';history_link.symlink_to(history)
+    hid={'sha256':sha(history.read_bytes()),'bytes':history.stat().st_size}
     historical_receipt=json.dumps(receipt(hid,'history')).encode();rh=sha(historical_receipt)
     control_bytes=descriptor.read_bytes();ch=sha(control_bytes)
     index={'schema':'natlang.diloco-recovery-dependencies/1','bindings':[
        {'path':str(descriptor),'sha256':ch,'bytes':len(control_bytes),'object':'objects/'+ch},
        {'path':'/receipt','sha256':rh,'bytes':len(historical_receipt),'object':'objects/'+rh},
        {'path':'/work/history','sha256':hid['sha256'],'bytes':hid['bytes'],
-        'external':{**hid,'local_path':str(history),'receipt':{'path':'/receipt','sha256':rh}}}]}
-    dep=archive(tmp_path/'deps.tar',{'objects/'+ch:control_bytes,'objects/'+rh:historical_receipt,'dependency-index.json':json.dumps(index).encode()})
+        'external':{**hid,'local_path':str(history_link),'receipt':{'path':'/receipt','sha256':rh}}}]}
+    objects={'objects/'+ch:control_bytes,'objects/'+rh:historical_receipt}
+    for item in [*control['bindings'].values(),*parent_refs.values()]:
+        data=Path(item['path']).read_bytes();assert sha(data)==item['sha256']
+        objects['objects/'+item['sha256']]=data
+        index['bindings'].append({'path':item['path'],'sha256':item['sha256'],'bytes':len(data),'object':'objects/'+item['sha256']})
+    objects['dependency-index.json']=json.dumps(index).encode()
+    dep=archive(tmp_path/'deps.tar',objects)
     depid={'sha256':sha(dep.read_bytes()),'bytes':dep.stat().st_size}
     cycle={'id':'cycle','phase':'verified-components-and-dependencies','compatibility':{'compatible':True},'components':components,
-           'component_local_paths':localpaths,'receipts':receipts,'dependency_intent':{'path':str(dep),**depid},'dependency_receipt':receipt(depid,'deps')}
+           'component_local_paths':localpaths,'parent_reference':parent_refs,'receipts':receipts,'dependency_intent':{'path':str(dep),**depid},'dependency_receipt':receipt(depid,'deps')}
     state=tmp_path/'state.json';state.write_text(json.dumps({'run_id':'run','coordinator_run_id':'run','cycles':[cycle],
         'recovery_contract':{'mode':'direct','control_sha256':ch}}))
-    pin=tmp_path/'parent-pin.json';pin.write_text(json.dumps({'path':'/work/parent',**pid,'global_step':1}))
-    parent_receipt=tmp_path/'parent-receipt.json';parent_receipt.write_text(json.dumps(receipt(pid,'parent')))
+    for item in [*control['bindings'].values(),*parent_refs.values()]:Path(item['path']).unlink()
+    descriptor.unlink()
+    fetched=tmp_path/'fetched';fetched.mkdir();overrides={}
+    for name,old in localpaths.items():
+        target=fetched/(name+'.bin');Path(old).rename(target);overrides[name]=str(target)
+    fetched_dep=fetched/'deps.tar';dep.rename(fetched_dep);overrides['dependencies']=str(fetched_dep)
+    fetched_history=fetched/'history.pt';history.rename(fetched_history);overrides['external']={hid['sha256']:str(fetched_history)}
     result=stage.stage(state,'cycle',disk_a,pin,parent_receipt,parent,tmp_path/'restore',present=lambda _:True,
-                       reserve_bytes=0,external_required=False,direct_control=descriptor)
+                       reserve_bytes=0,external_required=False,inputs=overrides)
     assert result['recovery_restore_qualified'] is False
     manifest=json.loads((tmp_path/'restore/staging.json').read_text())
     assert manifest['external_dependencies']['/work/history']['sha256']==hid['sha256']
     assert (tmp_path/'restore/workers/0/checkpoint.pt').read_bytes()==b'worker0'
-    history.write_bytes(b'corrupt')
+    fetched_history.write_bytes(b'corrupt')
     with pytest.raises(ValueError,match='local recovery component differs'):
         stage.stage(state,'cycle',disk_a,pin,parent_receipt,parent,tmp_path/'bad-restore',present=lambda _:True,
-                    reserve_bytes=0,external_required=False,direct_control=descriptor)
+                    reserve_bytes=0,external_required=False,inputs=overrides)
+    fetched_history.write_bytes(b'history')
+    objects.pop('objects/'+control['bindings']['plan']['sha256'])
+    bad=archive(tmp_path/'missing.tar',objects);badid={'sha256':sha(bad.read_bytes()),'bytes':bad.stat().st_size}
+    cycle['dependency_intent']={'path':str(bad),**badid};cycle['dependency_receipt']=receipt(badid,'deps-missing')
+    overrides['dependencies']=str(bad)
+    state.write_text(json.dumps({'run_id':'run','coordinator_run_id':'run','cycles':[cycle],
+        'recovery_contract':{'mode':'direct','control_sha256':ch}}))
+    with pytest.raises(ValueError,match='binding differs'):
+        stage.stage(state,'cycle',disk_a,pin,parent_receipt,parent,tmp_path/'missing-restore',present=lambda _:True,
+                    reserve_bytes=0,external_required=False,inputs=overrides)
