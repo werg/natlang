@@ -77,7 +77,10 @@ def fetch(capability, parent, *, opener=_open):
     if not 0<receipt['requested_stop']<=step:raise ValueError('invalid parent stop step')
     path=Path(str(parent)+'.seed.json')
     if path.is_symlink():raise ValueError('parent receipt is a symlink')
-    if path.exists() and json.loads(path.read_text())!=receipt:raise ValueError('existing parent receipt differs')
+    if path.exists():
+        existing=json.loads(path.read_text())
+        if any(existing.get(key)!=receipt[key] for key in ('sha256','bytes','global_step','requested_stop','full_optimizer_rng_exposure')):
+            raise ValueError('existing parent receipt differs')
     if not path.exists():write_json_durable(path,receipt)
     if cap.get('base'):ensure_base(cap['base'])
     return {'sha256':sha,'bytes':size,'global_step':step}

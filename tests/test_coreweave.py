@@ -1414,6 +1414,10 @@ def test_private_parent_fetch_verifies_complete_bytes_and_preserves_existing(tmp
     assert fetch.fetch(cap,target,opener=opener)['global_step']==59
     assert target.read_bytes()==body and json.loads(Path(str(target)+'.seed.json').read_text())['sha256']==sha
     fetch.fetch(cap,target,opener=opener);assert len(calls)==1
+    receipt_path=Path(str(target)+'.seed.json');existing=json.loads(receipt_path.read_text())
+    existing['final_save_evidence']={'cadence_progress_stale':True};receipt_path.write_text(json.dumps(existing))
+    fetch.fetch(cap,target,opener=opener)
+    assert json.loads(receipt_path.read_text())['final_save_evidence']['cadence_progress_stale'] is True
     target.write_bytes(b'wrong')
     with pytest.raises(ValueError,match='existing parent differs'):fetch.fetch(cap,target,opener=opener)
     bad=tmp_path/'bad.pt'
