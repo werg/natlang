@@ -1144,9 +1144,13 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     max_model_requests=config.get('max_model_requests', 128),
                     max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native,
                     **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
+                    # The llama.cpp fork does not insert or record privileged guidance blocks (only the Python
+                    # native server does), so its teacher attempts would be unprivileged and refused by the learner.
+                    # JOLT+ there keeps its outcome and student self-teaching terms without teacher twins.
                     teacher_attempts=(config.get('jolt_teacher_attempts', 1)
                                       if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'
-                                      and config.get('update_objective', 'policy') == 'policy' else 0),
+                                      and config.get('update_objective', 'policy') == 'policy'
+                                      and config.get('actor_engine', 'native-python') == 'native-python' else 0),
                     teacher_plan=config.get('jolt_teacher_plan', 'nl'),
                     guidance_stage=config.get('jolt_guidance_stage'),
                     prompt_rendering=config.get('prompt_rendering'))
@@ -1676,6 +1680,10 @@ def configure_native(args):
         from .native_supervised import bind_semantic_recipe_lineage
         bind_semantic_recipe_lineage(config,args.checkpoint,args.native_participant,
             adapter['models'][args.native_participant].get('recipe_binding'))
+    elif coefficient_policy is None and raw['native_identity']['architecture'] == 'lfm3':
+        # Decision 17: ordinary-token turns generate on the SGLang fork (serve/sglang_actor.py); every other turn runs
+        # on the native engine of the same loaded checkpoint. Opt out by removing the flag from the config.
+        config['actor_command'] += ['--engine', 'sglang']
     write_json_durable(args.config, config)
     return config
 

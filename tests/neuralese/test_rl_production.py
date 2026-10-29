@@ -415,3 +415,27 @@ def test_llama_actor_binds_exact_export_and_receipt(tmp_path):
         'native_identity': {**identity, 'embedding_weight_sha256': 'e' * 64}}]}))
     with pytest.raises(ValueError, match='native identity'):
         production.prepare_llama_actor(config, 'unused.pt', policy, raw)
+
+
+def test_llama_actor_collects_no_unprivileged_teacher_attempts(tmp_path, monkeypatch):
+    from natlang_neuralese.rl import native_raw_policy
+    from natlang_neuralese.rl.policy_math import default_policy_loss
+    monkeypatch.setattr(native_raw_policy, 'prepare_raw_policy', lambda *a, **kw: {'tokenizer': 'bound',
+        'native_identity': {}, 'native_participant': None, 'semantic_adapter_sha256': None})
+    monkeypatch.setattr(production, 'prepare_llama_actor', lambda config, checkpoint, policy, raw: (raw, {'actor_gguf': 'x'}))
+    source = tmp_path / 'cases.jsonl'; source.write_text(json.dumps({'id': 't0', 'split': 'train'}) + '\n')
+    checkpoint = tmp_path / 'parent.pt'; checkpoint.write_bytes(b'full state')
+    config = tmp_path / 'config.json'
+    config.write_text(json.dumps({'out': str(tmp_path / 'out'), 'checkpoint': str(checkpoint), 'cases': str(source),
+        'endpoints': ['http://unused'], 'learner_command': ['learn', '--rl-policy-loss', '{rl_policy_loss}',
+        '--jolt-cases', '{cases}'], 'after_update': ['publish'], 'native_state': True, 'base': 'unused',
+        'actor_engine': 'llama-cpp', 'policy_loss': default_policy_loss()}))
+    seen = {}
+    class Stop(Exception):
+        pass
+    def collect(**kwargs):
+        seen['teacher_attempts'] = kwargs.get('teacher_attempts'); raise Stop
+    monkeypatch.setattr(production, 'collect', collect)
+    with pytest.raises(Stop):
+        production.run(config, rounds=1)
+    assert seen['teacher_attempts'] == 0
