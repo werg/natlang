@@ -506,7 +506,7 @@ the noise away.
 | Weights | Successes | Behaviour |
 |---|---:|---|
 | base | 6/8 | `read_code(graph)` then BFS-style exploration, ≤45 requests |
-| base + 0.25·(8341−base) | 5/7 done, 1 running | direct `graph.links` code, short turns |
+| base + 0.25·(8341−base) | 5/8 | direct `graph.links` code, short turns |
 | base + 0.5·(8341−base) | 2/8 | every case: one request, `return_result(null)` |
 | 8341 | 1/8 | 4 cases: 8192-token runaway call then null; 4 cases: the same ~45-token `graph.search` call repeated 147 times |
 
@@ -535,7 +535,8 @@ number per eval. Lower train loss on 4-graph batches is expected either way.
 convolution rounding order (≈1e-3 relative accumulation-order differences,
 orders of magnitude below items 1–3; fine to merge as oracle fidelity).
 
-**Recommended changes (not yet applied; operations owner decides):**
+**Changes (owner 2026-10-29: "let's make the change"; Claude is implementing
+them, and restart decisions belong to the agents):**
 
 1. Accumulate gradients to ≥64 graphs per update (≈16 micro-batches of 32k
    tokens) at the same lr. SR energy per epoch scales with the number of

@@ -1,5 +1,15 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Agents decide; nothing waits on the owner (owner, 2026-10-29)
+
+Operational and technical decisions such as restarting learners, restarting a
+lineage from base, changing the batch or objective, or redoing work are **not**
+the owner's decisions. Every agent has the autonomy to do the work the best
+possible way and must not block anything on the owner. Decide, record why,
+brief the other agents through coordination, and keep going. Agents still
+coordinate with each other on shared resources; that is not a reason to wait
+for the owner.
+
 ## Early on-policy RL and explanatory prompts (owner, 2026-10-29)
 
 Prepare early JOLT+ interleaved with useful SFT instead of requiring completion
