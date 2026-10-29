@@ -74,10 +74,14 @@ def build(request, audit, tokenizer_path, output):
         parsed = parse_graph(original, tokenizer_fingerprint=expanded_fp)
         if _row_bindings([parsed])[selected['id']] != selected['binding']:
             raise ValueError('original graph binding changed')
-        legacy = native_gold_packet(tokenizer, context, target, tools, prompt_rendering='program-header')
-        if len(original['nodes']) != 1 or legacy[1] != original['nodes'][0]['token_ids']:
+        if len(original['nodes']) != 1:
+            raise ValueError('source action is not a single invocation')
+        originals_by_mode = [native_gold_packet(tokenizer, context, target, tools, prompt_rendering=mode)
+                             for mode in ('program-header', 'full')]
+        matched = [packet for packet in originals_by_mode if packet[1] == original['nodes'][0]['token_ids']]
+        if not matched:
             raise ValueError('original historical rendering does not reproduce')
-        expected_target = legacy[1][legacy[2]:]
+        expected_target = matched[0][1][matched[0][2]:]
         for mode in ('full', 'program-header'):
             text, ids, boundary = render_variant(tokenizer, context, target, tools, mode)
             if ids[boundary:] != expected_target:
