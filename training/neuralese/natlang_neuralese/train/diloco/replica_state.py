@@ -6,6 +6,7 @@ journal, post-state seals and an external primary fence before promotion.
 from __future__ import annotations
 import hashlib
 import json
+import os
 import threading
 import time as real_time
 from pathlib import Path
@@ -37,7 +38,24 @@ class ReplayCoordinator:
         c.progress=json.loads((c.root/'progress.json').read_text());c.lock=threading.RLock();c.progress_lock=threading.RLock()
         if not isinstance(quorum_since, dict) or any(type(k) is not int or not isinstance(v, (int, float)) for k, v in quorum_since.items()):
             raise ValueError('replay requires exact baseline quorum timers')
-        c.published_versions=[];c.quorum_since=dict(quorum_since);c._sync_public();c._refresh_published();self.coordinator=c;self.last_clock=clock_anchor
+        c.published_versions=[];c.quorum_since=dict(quorum_since);c._sync_public();c._refresh_published();self.coordinator=c;self.last_clock=clock_anchor;self.hash_cache={}
+
+    def _immutable_hash(self,path):
+        path=Path(path)
+        if path.is_symlink():raise ValueError('replica hash target is a symlink')
+        with path.open('rb') as f:
+            before=os.fstat(f.fileno());key=(before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)
+            digest=self.hash_cache.get(key)
+            if digest is None:
+                h=hashlib.sha256()
+                while block:=f.read(1<<20):h.update(block)
+                digest=h.hexdigest()
+            after=os.fstat(f.fileno());current=path.stat()
+            if key!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns) or key!=(current.st_dev,current.st_ino,current.st_size,current.st_mtime_ns,current.st_ctime_ns):
+                raise ValueError('replica hash target changed during verification')
+        if len(self.hash_cache)>=4096:self.hash_cache.clear()
+        self.hash_cache[key]=digest
+        return digest
 
     def apply(self,event,payload):
         if set(event)!={'kind','args','wall','monotonic'} or not isinstance(event['args'],dict):raise ValueError('invalid replay event')
@@ -73,13 +91,13 @@ class ReplayCoordinator:
             finally:module.time=previous
         self.last_clock={'wall':event['wall'],'monotonic':event['monotonic']}
         after=[c._version(f.index) for f in c.fragments]
-        changed={str(i):_hash(c._path(i)) for i,(a,b) in enumerate(zip(before,after,strict=True)) if a!=b}
+        changed={str(i):self._immutable_hash(c._path(i)) for i,(a,b) in enumerate(zip(before,after,strict=True)) if a!=b}
         indices = ([args['index']] if kind == 'submit' and type(args.get('index')) is int and 0 <= args['index'] < len(c.fragments)
                    else list(range(len(c.fragments))) if kind in ('tick','close','completion') else [])
-        pending={str(i):{f.name:_hash(f) for f in sorted(c._pending_dir(i).glob('*.safetensors'))} for i in indices}
+        pending={str(i):{f.name:self._immutable_hash(f) for f in sorted(c._pending_dir(i).glob('*.safetensors'))} for i in indices}
         timers={str(k):v for k,v in sorted(c.quorum_since.items())}
         return {'result':result,'error':error,'versions':after,'changed_fragments':changed,'pending':pending,
-                'quorum_since':timers,'progress_sha256':_hash(c.root/'progress.json')}
+                'quorum_since':timers,'progress_sha256':self._immutable_hash(c.root/'progress.json')}
 
 
 def replay(journal, root, *, expected_sequence, expected_head, quorum_since, receiver_restart=False, clock_anchor=None):

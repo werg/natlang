@@ -413,3 +413,15 @@ def test_initial_peer_external_baseline_restarts_only_with_exact_pin(tmp_path):
         try:assert witness_head(f'http://127.0.0.1:{port}',token,allow_http=True)==first_head;break
         except OSError:time.sleep(.02)
     stop.set();again.join(8);assert again.exitcode==0
+
+
+def test_pending_hash_cache_revalidates_exact_file_identity(tmp_path,monkeypatch):
+    import hashlib,os
+    root=tmp_path/'base';initialize_coordinator(root,run_id='r',masters={'weight':torch.ones(4)},identity={'parent':'p'},workers=1,min_quorum=1,fragment_bytes=1024)
+    machine=ReplayCoordinator(root,quorum_since={});path=tmp_path/'payload';path.write_bytes(b'first')
+    digest=machine._immutable_hash(path);assert digest==hashlib.sha256(b'first').hexdigest()
+    assert machine._immutable_hash(path)==digest and len(machine.hash_cache)==1
+    before=path.stat();path.write_bytes(b'other');os.utime(path,ns=(before.st_atime_ns,before.st_mtime_ns))
+    assert machine._immutable_hash(path)==hashlib.sha256(b'other').hexdigest()
+    replacement=tmp_path/'replacement';replacement.write_bytes(b'third');os.replace(replacement,path)
+    assert machine._immutable_hash(path)==hashlib.sha256(b'third').hexdigest()
