@@ -10,10 +10,31 @@ from natlang_neuralese.data.native_graph import graph_loss
 from natlang_neuralese.data.native_sources import NativeGraphSource
 from natlang_neuralese.eval import native_memory
 from natlang_neuralese.model.shared_state import SharedStateModel
-from natlang_neuralese.train.native_packed_capacity import geometry_for_source, index_source, maximum_pending_groups, qualify_pending
+from natlang_neuralese.train.native_packed_capacity import geometry_for_source, index_source, prepare_source, GeometryIndexSource, maximum_pending_groups, qualify_pending
 from natlang_neuralese.train.native_state_sft import make_native_optimizer
 from test_native_state_sft import graph
 from test_shared_state import tiny
+
+
+def test_cold_source_preparation_seals_geometry_without_second_parse(tmp_path, monkeypatch):
+    from natlang_neuralese.train.native_resident import binding
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'indexes'))
+    leaves=[]
+    for name in ('a','b'):
+        path=tmp_path/(name+'.jsonl');path.write_text(json.dumps(graph(name))+'\n')
+        leaves.append({'kind':'native-graphs',**binding(path)})
+    manifest=tmp_path/'train.json';manifest.write_text(json.dumps({'schema':'natlang.native-graph-sources/1','sources':leaves}))
+    def no_second_parse(_source,indices):
+        if indices:raise AssertionError('unexpected second row parse')
+        return iter(())
+    monkeypatch.setattr(GeometryIndexSource,'iter_indices',no_second_parse)
+    source,slots,reference,scan=prepare_source(manifest,'tokenizer-sha',(58,59,60,61),tmp_path/'geometry')
+    assert len(source)==len(slots)==2 and scan=={'parsed_rows':0,'indexed_rows':2,'reused_prefix_rows':0}
+    saved=json.loads(Path(reference['path']).read_text())
+    assert saved['source']['sha256']==binding(manifest)['sha256'] and saved['kv_slots']==slots
+    again,again_slots,again_ref,again_scan=prepare_source(manifest,'tokenizer-sha',(58,59,60,61),tmp_path/'geometry',prior=reference)
+    assert again.bindings==source.bindings and again_slots==slots and again_ref==reference
+    assert again_scan=={'parsed_rows':0,'indexed_rows':0,'reused_prefix_rows':2}
 
 
 @pytest.mark.parametrize('device',['cpu','cuda'])

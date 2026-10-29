@@ -235,6 +235,19 @@ def test_real_native_graph_append_deduplicates_without_changing_old_history_or_c
     assert next_recipe['remaining_production_recipe']['private_teacher_append_history'][0]['append'] == \
         old_recipe.get('remaining_production_recipe', {}).get('private_teacher_append_20261025')
     assert next_recipe['remaining_production_recipe']['private_teacher_append_20261026']['training_exposure'] is False
+    prepared = next_recipe['remaining_production_recipe']['private_teacher_append_20261026']['sources']
+    assert len(prepared)==2
+    for item in prepared:
+        geometry=json.loads(Path(item['packed_geometry']['path']).read_text())
+        assert geometry['source']['sha256']==item['source']['sha256']
+        assert len(geometry['kv_slots'])==item['rows']
+        assert item['geometry_scan']['parsed_rows']==0
+    append = next_recipe['remaining_production_recipe']['private_teacher_append_20261026']
+    combined_geometry = json.loads(Path(append['packed_geometry']['path']).read_text())
+    assert combined_geometry['source']['sha256']==_binding(out/'native-training-sources.json')['sha256']
+    assert len(combined_geometry['kv_slots'])==4
+    assert append['geometry_scan']=={'parsed_rows':0,'indexed_rows':2,'reused_prefix_rows':2}
+    assert next_recipe['stages'][0]['parameters']['sft_packed_geometry']==append['packed_geometry']
     old_memory = json.loads(Path(old_recipe['stages'][0]['parameters']['memory_qualification']['path']).read_text())
     new_memory_ref = next_recipe['stages'][0]['parameters']['memory_qualification']
     new_memory = json.loads(Path(new_memory_ref['path']).read_text())
@@ -253,6 +266,8 @@ def test_real_native_graph_append_deduplicates_without_changing_old_history_or_c
 
     next_config = json.loads((out / 'next-config.json').read_text())
     assert next_config['trainer_parameters']['urgent_cohort_fairness'] is True
+    assert next_config['trainer_parameters']['sft_packed_geometry']==append['packed_geometry']
+    assert next_config['seed_trainer_parameters']['sft_packed_geometry']==append['packed_geometry']
     assert next_config['seed_trainer_parameters']['urgent_cohort_fairness'] is True
     assert next_config['seed_trainer_parameters']['checkpoint_every'] == 50
     assert next_config['seed_trainer_parameters']['native_attention_precision'] == 'ieee'

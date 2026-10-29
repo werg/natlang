@@ -7,7 +7,7 @@ import signal
 import time
 from pathlib import Path
 
-from natlang_neuralese.train.native_packed_capacity import geometry_for_source, index_source
+from natlang_neuralese.train.native_packed_capacity import prepare_source
 from natlang_neuralese.train.native_resident import binding
 from natlang_neuralese.common.jsonio import write_json_durable
 
@@ -42,9 +42,8 @@ def main():
                 'seconds_this_attempt':time.monotonic()-started,'optimizer_updates':0,'training_exposure':0}
             write_json_durable(state_path,record)
             print(json.dumps(record),flush=True)
-        source,indexed=index_source(args.source,args.tokenizer_fingerprint,args.role_ids)
-        _,reference,scan=geometry_for_source(source,args.out,prior=prior,
-            allow_build=True,indexed_geometry=indexed,checkpoint_rows=args.checkpoint_rows,progress_callback=progress)
+        _,_,reference,scan=prepare_source(args.source,args.tokenizer_fingerprint,args.role_ids,args.out,
+            prior=prior,checkpoint_rows=args.checkpoint_rows,progress_callback=progress)
     print(json.dumps({'geometry':reference,**scan,'seconds':time.monotonic()-started,
                       'optimizer_updates':0,'training_exposure':0}),flush=True)
 

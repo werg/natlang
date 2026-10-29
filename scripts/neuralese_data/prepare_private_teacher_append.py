@@ -131,6 +131,7 @@ def _load_runtime(runtime_root: Path):
         'natlang_neuralese.data.native_sources',
         'natlang_neuralese.common.jsonio',
         'natlang_neuralese.train.native_resident',
+        'natlang_neuralese.train.native_packed_capacity',
         'natlang_neuralese.train.native_supervision',
         'natlang_neuralese.train.recipe',
         'natlang_neuralese.serve.chat',
@@ -457,6 +458,7 @@ def prepare(descriptor: dict) -> dict:
     resident = runtime['natlang_neuralese.train.native_resident']
     recipe_api = runtime['natlang_neuralese.train.recipe']
     source_api = runtime['natlang_neuralese.data.native_sources']
+    geometry_api = runtime['natlang_neuralese.train.native_packed_capacity']
     jsonio = runtime['natlang_neuralese.common.jsonio']
     supervisor = runtime['natlang_neuralese.rl.native_supervised']
     ce_builder = runtime['scripts.neuralese_data.build_native_ce_supervision_policy']
@@ -533,8 +535,14 @@ def prepare(descriptor: dict) -> dict:
     if source_map_staged_binding['sha256'] != source_map_source_binding['sha256']:
         raise ValueError('copied prior source map changed bytes')
 
-    old_train = source_api.NativeGraphSource(prior_train_path, tokenizer,
-        required_split='train', role_ids=role_ids)
+    old_train, old_cold_geometry = geometry_api.index_source(prior_train_path, tokenizer, role_ids)
+    prior_geometry = parameters.get('sft_packed_geometry')
+    if isinstance(prior_geometry,str):
+        prior_geometry = json.loads(prior_geometry)
+    _, old_geometry_binding, old_geometry_scan = geometry_api.geometry_for_source(
+        old_train, output_root/'source-geometry'/'prior', prior=prior_geometry,
+        allow_build=True, indexed_geometry=old_cold_geometry)
+    del old_cold_geometry
     prefix = [(entry['id'], entry['binding']) for entry in old_train.entries]
     old_bindings = dict(old_train.bindings)
     old_groups = set(old_train.groups)
@@ -585,6 +593,7 @@ def prepare(descriptor: dict) -> dict:
     old_binding_by_path = {str(Path(item['path']).resolve()): item for item in old_tree['sources']}
     prepared_sources, duplicate_sources, already_active, proof_refs = [], [], [], []
     appended_descriptors, appended_ids, appended_bindings = [], set(), {}
+    appended_geometry = {}
     index_additions = []
     appended_groups = set()
     selected_ready_refs = []
@@ -627,8 +636,7 @@ def prepare(descriptor: dict) -> dict:
                 'existing_source': copy.deepcopy(existing), 'equality_proof': proof_ref})
             continue
 
-        graph_source = source_api.NativeGraphSource(source_path, tokenizer,
-            required_split='train', role_ids=role_ids)
+        graph_source, graph_geometry = geometry_api.index_source(source_path, tokenizer, role_ids)
         if not len(graph_source):
             raise ValueError(f'{corpus_id}: admitted source has no complete graph rows')
         original_source_binding = _file_binding(source_path)
@@ -674,6 +682,7 @@ def prepare(descriptor: dict) -> dict:
 
         selected_path = source_path
         selected_source = graph_source
+        selected_geometry = graph_geometry
         if equal_rows:
             selected_path = output_root / 'deduplicated' / corpus_id / 'native-graphs.jsonl.zst'
             selected_path.parent.mkdir(parents=True, exist_ok=True)
@@ -690,8 +699,7 @@ def prepare(descriptor: dict) -> dict:
                 raise ValueError(f'{corpus_id}: filtered whole-graph rows do not match selected graph identities')
             del selected_source, graph_source
             gc.collect()
-            selected_source = source_api.NativeGraphSource(selected_path, tokenizer,
-                required_split='train', role_ids=role_ids)
+            selected_source, selected_geometry = geometry_api.index_source(selected_path, tokenizer, role_ids)
             if selected_source.bindings != keep:
                 raise ValueError(f'{corpus_id}: filtered graph bytes changed a retained complete graph binding')
             selected_binding = _file_binding(selected_path)
@@ -709,14 +717,21 @@ def prepare(descriptor: dict) -> dict:
             derivation = _write_selection_proof(runtime, proof_path, proof)
             proof_refs.append(derivation)
 
-        for graph in selected_source.iter_indices(range(len(selected_source))):
-            tokens, kv = graph.plan.token_count, len(graph.plan.slot_sources)
+        slots, geometry_binding, geometry_scan = geometry_api.geometry_for_source(
+            selected_source, output_root / 'source-geometry' / corpus_id,
+            allow_build=True, indexed_geometry=selected_geometry)
+        for entry, kv in zip(selected_source.entries, slots, strict=True):
+            key = (entry['id'],entry['binding'])
+            if key in appended_geometry and appended_geometry[key] != kv:
+                raise ValueError('repeated admitted row has inconsistent packed geometry')
+            appended_geometry[key] = kv
+            tokens = entry['forward_tokens']
             exceeded = [(ref, max_tokens, max_kv) for ref, max_tokens, max_kv in memory_envelopes
                         if tokens > max_tokens or kv > max_kv]
             if exceeded:
                 details = '; '.join(f'{ref["path"]}: tokens<={max_tokens}, kv_slots<={max_kv}'
                                     for ref, max_tokens, max_kv in exceeded)
-                raise ValueError(f'{corpus_id}/{graph.id}: complete retained graph geometry tokens={tokens}, kv_slots={kv} exceeds at least one existing capacity request: {details}; keep the source and obtain a real larger-case qualification')
+                raise ValueError(f'{corpus_id}/{entry["id"]}: complete retained graph geometry tokens={tokens}, kv_slots={kv} exceeds at least one existing capacity request: {details}; keep the source and obtain a real larger-case qualification')
         overlap_ids = set(selected_source.bindings) & set(held_source.bindings)
         if overlap_ids:
             raise ValueError(f'{corpus_id}: selected graph IDs overlap protected held rows: '
@@ -739,8 +754,8 @@ def prepare(descriptor: dict) -> dict:
             'private_receipt_custody': package['private_receipt_custody'],
             'rows': len(selected_source),
             'original_rows': original_rows, 'communication_rows': sum(bool(entry.get('communication')) for entry in selected_source.entries),
-            'derivation': derivation})
-        del selected_source
+            'derivation': derivation, 'packed_geometry':geometry_binding, 'geometry_scan':geometry_scan})
+        del selected_source, selected_geometry, graph_geometry, slots
         gc.collect()
 
     if not prepared_sources:
@@ -760,6 +775,11 @@ def prepare(descriptor: dict) -> dict:
     if len(combined) != old_count + len(appended_ids):
         raise ValueError('append row count does not equal exact old prefix plus unique complete new rows')
     active_rows = len(combined)
+    _, combined_geometry_binding, combined_geometry_scan = geometry_api.geometry_for_source(
+        combined, output_root/'source-geometry'/'combined', prior=old_geometry_binding,
+        allow_build=True, indexed_geometry=appended_geometry)
+    if combined_geometry_scan['parsed_rows']:
+        raise ValueError('prepared appended rows lack their authenticated per-source geometry')
     del combined, held_source
     gc.collect()
 
@@ -844,6 +864,7 @@ def prepare(descriptor: dict) -> dict:
     # The held role remains its original exact named binding and bytes.
     next_stage = next(item for item in next_recipe['stages'] if item['id'] == descriptor['stage_id'])
     next_stage['parameters']['memory_qualification'] = output_memory_refs if is_memory_list else output_memory_refs[0]
+    next_stage['parameters']['sft_packed_geometry'] = combined_geometry_binding
     if 'urgent_cohort_fairness' not in recipe_api.HANDLERS[next_stage['kind']]['parameters']:
         raise ValueError('teacher-source priority requires the existing urgent cohort fairness trainer')
     next_stage['parameters']['urgent_cohort_fairness'] = True
@@ -861,6 +882,8 @@ def prepare(descriptor: dict) -> dict:
         'source_census': census_binding,
         'source_map': {'source': source_map_source_binding, 'staged': source_map_staged_binding},
         'old_rows': old_count, 'new_rows': len(appended_ids), 'active_rows': active_rows,
+        'packed_geometry':combined_geometry_binding, 'geometry_scan':combined_geometry_scan,
+        'prior_packed_geometry':old_geometry_binding, 'prior_geometry_scan':old_geometry_scan,
         'existing_rows_unchanged': True, 'held_unchanged': True,
         'training_exposure': False, 'new_optimizer_updates': 0,
         'history_policy': expected_history, 'failed_assistant_history_policy': append_failure_policy}
@@ -900,12 +923,13 @@ def prepare(descriptor: dict) -> dict:
     next_config['recipe_lineage_sha256'] = lineage
     recipe_binding = recipe_api.native_recipe_binding(next_recipe_path, lineage)
     next_config['trainer_parameters'] = {**next_config.get('trainer_parameters', {}), 'recipe_binding': recipe_binding,
-        'urgent_cohort_fairness': True}
+        'urgent_cohort_fairness': True, 'sft_packed_geometry': combined_geometry_binding}
     seed_parameters = dict(parameters)
     seed_parameters.update(next_config.get('seed_trainer_parameters', {}))
     seed_parameters['stage_id'] = descriptor['stage_id']
     seed_parameters['recipe_binding'] = recipe_binding
     seed_parameters['memory_qualification'] = next_stage['parameters']['memory_qualification']
+    seed_parameters['sft_packed_geometry'] = combined_geometry_binding
     seed_parameters['urgent_cohort_fairness'] = True
     next_config['seed_trainer_parameters'] = seed_parameters
     seed_sources = _seed_source_bindings(rebound, train=_json_binding(new_tree_path),

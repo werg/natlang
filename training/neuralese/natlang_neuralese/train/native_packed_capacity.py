@@ -40,6 +40,14 @@ def index_source(path, tokenizer, roles):
     return source, observed
 
 
+def prepare_source(path, tokenizer, roles, out, *, prior=None, checkpoint_rows=0, progress_callback=None):
+    """Validate/index a source and seal geometry, reusing every cold parse."""
+    source, observed = index_source(path, tokenizer, roles)
+    slots, reference, scan = geometry_for_source(source, out, prior=prior, allow_build=True,
+        indexed_geometry=observed, checkpoint_rows=checkpoint_rows, progress_callback=progress_callback)
+    return source, slots, reference, scan
+
+
 def _rows_digest(entries):
     digest = hashlib.sha256()
     for entry in entries:
