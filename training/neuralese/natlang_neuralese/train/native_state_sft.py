@@ -980,6 +980,31 @@ def held_cadence_indices(entries, cursor=0, *, token_budget=0, graph_budget=0):
     return sorted(indices, key=lambda i: (i-position) % len(entries)), state['cursor']
 
 
+DILOCO_DRAIN_REQUEST = 'diloco-drain-request.json'
+DILOCO_DRAIN_SCHEMA = 'natlang.diloco-drain-request/1'
+DILOCO_DRAINED_STOP_SCHEMA = 'natlang.diloco-drained-stop/1'
+
+
+def _diloco_drain_request(out, learner):
+    """An operator request to stop at a drained boundary, or None.
+
+    A plain stop keeps undelivered windows in the checkpoint; a supervised
+    source/objective transition at relaunch needs every window delivered,
+    merged and installed first. The request names its exact worker and run.
+    """
+    path = Path(out) / DILOCO_DRAIN_REQUEST
+    if not path.exists():
+        return None
+    request = json.loads(path.read_text())
+    request_id = request.get('id')
+    if (request.get('schema') != DILOCO_DRAIN_SCHEMA or request.get('worker') != learner.worker
+            or request.get('fingerprint') != learner.manifest['fingerprint']
+            or not isinstance(request_id, str) or len(request_id) != 32
+            or any(char not in '0123456789abcdef' for char in request_id)):
+        raise ValueError('DiLoCo drain request does not name this exact worker and coordinator run')
+    return request
+
+
 def _full_held_requested(args):
     return (getattr(args,'held_final_policy','budgeted')=='full'
             or getattr(args,'foundation_qualification_request',None)is not None)
@@ -3743,6 +3768,40 @@ def _main(argv=None, *, requested_refresh):
                             'id':fence_request['id'],'worker':diloco.worker,'error_type':type(error).__name__,
                             'error':str(error)[:1000]})
                     print(json.dumps({'event':'diloco_recovery_fence_failed','error_type':type(error).__name__}),flush=True)
+                drain_request = _diloco_drain_request(args.out, diloco)
+                if drain_request is not None:
+                    # Deliver every window (including partial ones) and install the merges,
+                    # then save the drained full state and stop like an operational stop.
+                    # Peers keep training; a timeout keeps training and retries next update.
+                    if diloco.drain_for_contract(stop_requested=lambda: policy.signaled):
+                        _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                            global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                            source_hash=source_hash, source_row_bindings=source_row_bindings,
+                            held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                            rng=capture_training_rng_state(args.device), metrics=metrics,
+                            architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
+                            fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                        policy.drain_async()
+                        last_saved_step = step
+                        metadata_dirty = False
+                        state = diloco.state_dict(clone_baselines=False)
+                        write_json(args.out / f"diloco-drained-stop-{drain_request['id']}.json", {
+                            'schema': DILOCO_DRAINED_STOP_SCHEMA, 'request': drain_request,
+                            'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': sha256_file_hex_cached(policy.slot),
+                                           'bytes': policy.slot.stat().st_size},
+                            'global_step': global_step, 'local_step': step, 'source_hash': source_hash,
+                            'contract_sha256': state.get('contract_sha256'), 'session': state['session'],
+                            'versions': list(state['versions']), 'sequences': list(state['sequences']),
+                            'pending': bool(state['pending']), 'awaiting_global': list(state.get('awaiting_global') or []),
+                            'steps_since': list(state['steps_since']), 'tokens_since': list(state['tokens_since'])})
+                        os.replace(args.out / DILOCO_DRAIN_REQUEST,
+                                   args.out / f"diloco-drain-request-{drain_request['id']}.consumed.json")
+                        print(json.dumps({'event': 'diloco_drained_stop', 'id': drain_request['id'],
+                                          'global_step': global_step}), flush=True)
+                        policy.stop.request()
+                        break
+                    print(json.dumps({'event': 'diloco_drain_retry', 'id': drain_request['id'],
+                                      'global_step': global_step}), flush=True)
             if requested_refresh.requested or relative_refresh_due or (args.refresh_after_updates is None
                                         and args.refresh_at_checkpoint and due_checkpoint):
                 refresh_boundary = True
