@@ -6,7 +6,7 @@ from scripts.coreweave.diloco_replica_controller import run_promotion
 def test_controller_never_releases_before_exact_ready(tmp_path):
     intent={'run_id':'r','generation_nonce':'n'*48,'activation_nonce':'x'*48,'sequence':4,'head':'h'*64,'new_url':'https://new','new_token_sha256':'t'*64}
     fence=lambda i:[{'sandbox_id':'peer'}]
-    verify=lambda i:{'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64}
+    verify=lambda i:{'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64,'quiesced_workers':[0],'workers':[{'worker':0,'identity':{'sandbox_id':'peer','boot_id':'b','owner_id':'o'}}]}
     called=[]
     def release(i,f):called.append(True);return f
     with pytest.raises(ValueError):
@@ -15,9 +15,9 @@ def test_controller_never_releases_before_exact_ready(tmp_path):
     with pytest.raises(ValueError):
         run_promotion(tmp_path,intent=intent,fence_workers=fence,verify_fence=verify,start_primary=lambda *_:{},release_workers=release)
     good=tmp_path/'good'
-    ready={'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':'t'*64,'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64}}
+    ready={'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':'t'*64,'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64},'owner':{'sandbox_id':'new','boot_id':'b','owner_id':'o','pid':7,'start_ticks':'8'}}
     result=run_promotion(good,intent=intent,fence_workers=fence,verify_fence=verify,start_primary=lambda *_:ready,release_workers=release)
-    assert result['phase']=='released' and called==[True]
+    assert result['phase']=='workers-released' and called==[True]
 
 
 def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch):
@@ -34,9 +34,10 @@ def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch
     monkeypatch.setattr(fm,'owner_reference',lambda *args:{'run_id':'r','workers':{'0':dict(old),'1':dict(entries[0])}})
     calls=[]
     monkeypatch.setattr(fm,'sdk_authorize_coordinator',lambda *a,**k:{})
+    monkeypatch.setattr(fm,'sdk_confirm_promoted_role',lambda role,nonce:{'sandbox_id':role['sandbox_id'],'boot_id':role['boot_id'],'owner_id':role['owner_id'],'pid':7,'start_ticks':'8'})
     monkeypatch.setattr(fm,'sdk_stop_owned_role',lambda *a,**k:{'exit_observed':True})
     monkeypatch.setattr(fm,'sdk_set_worker_authority',lambda ws,nonce,action:(calls.append(action) or [{'sandbox_id':'peer'}]))
-    monkeypatch.setattr(fm,'provider_fence_verifier',lambda **kw:lambda proof:{'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64,'primary':old,'quiesced_workers':[0,1],'provider_observed_at':__import__('time').time()})
+    monkeypatch.setattr(fm,'provider_fence_verifier',lambda **kw:lambda proof:{'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64,'primary':old,'quiesced_workers':[0,1],'workers':[{'worker':0,'identity':old},{'worker':1,'identity':entries[0]}],'provider_observed_at':__import__('time').time()})
     monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)
     class Sandbox:
         def exec(self,argv,**kwargs):
@@ -49,7 +50,7 @@ def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch
         def json(self,*args):
             self.calls+=1
             if self.calls==1:raise OSError('not started')
-            return {'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':intent['new_token_sha256'],'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64}}
+            return {'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':intent['new_token_sha256'],'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64},'owner':{'sandbox_id':'new','boot_id':'b','owner_id':'o','pid':7,'start_ticks':'8'}}
     monkeypatch.setattr(worker,'Transport',Transport)
     monkeypatch.setattr(replica_transport,'witness_head',lambda *a,**k:{'run_id':'r','baseline_sha256':'a'*64,'sequence':4,'head':'h'*64})
     monkeypatch.setattr(replica_transport,'rotate_replica_credential',lambda *a,**k:{})
@@ -60,7 +61,7 @@ def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch
         'activation_config':{'run_id':'r','baseline_sha256':'a'*64,'sequence':4,'head':'h'*64,'activation_nonce':'x'*48,'file_freeze_nonce':'x'*48,'expected_primary':old,'expected_workers':[0,1],
             'session_transition':{'generation_nonce':'n'*48,'new_url':'https://new','new_token_sha256':intent['new_token_sha256']}},
         'primary_role':{'sandbox_id':'target','directory':'/control','owner_id':'oo','boot_id':'bb','stage_directory':'/stage','python':'/usr/bin/python3','publisher':{'path':'/publisher','sha256':'a'*64},'request':{'action':'start','role':'coordinator'}}}
-    assert run_coreweave_promotion(tmp_path/'journal',config)['phase']=='released'
+    assert run_coreweave_promotion(tmp_path/'journal',config)['phase']=='workers-released'
     assert calls==['fence','release']
 
 
@@ -133,8 +134,8 @@ def test_first_outer_source_evidence_binds_real_parent_and_source_bytes(tmp_path
 
 def test_controller_resumes_after_partial_release_without_refencing(tmp_path):
     intent={'run_id':'r','generation_nonce':'n'*48,'activation_nonce':'x'*48,'sequence':4,'head':'h'*64,'new_url':'https://new','new_token_sha256':'t'*64}
-    evidence={'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64}
-    ready={'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':'t'*64,'clock_rebase':{},'sealed_rebase':{'sequence':6,'head':'q'*64}}
+    evidence={'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64,'quiesced_workers':[0],'workers':[{'worker':0,'identity':{'sandbox_id':'a','boot_id':'b','owner_id':'o'}}]}
+    ready={'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':'t'*64,'clock_rebase':{},'sealed_rebase':{'sequence':6,'head':'q'*64},'owner':{'sandbox_id':'new','boot_id':'b','owner_id':'o','pid':7,'start_ticks':'8'}}
     calls=[]
     def fence(_):calls.append('fence');return [{'sandbox_id':'a'},{'sandbox_id':'b'}]
     def verify(_):calls.append('verify');return evidence
@@ -143,7 +144,7 @@ def test_controller_resumes_after_partial_release_without_refencing(tmp_path):
     with pytest.raises(OSError):run_promotion(tmp_path,intent=intent,fence_workers=fence,verify_fence=verify,start_primary=start,release_workers=fail_release)
     def release(_intent,fences):calls.append('resume-release');return fences
     result=run_promotion(tmp_path,intent=intent,fence_workers=fence,verify_fence=verify,start_primary=start,release_workers=release)
-    assert result['phase']=='released' and calls==['fence','verify','confirm-ready','partial-release','confirm-ready','resume-release']
+    assert result['phase']=='workers-released' and calls==['fence','verify','confirm-ready','partial-release','confirm-ready','resume-release']
 
 
 def test_replica_loss_restart_reuses_session_only_after_exact_peer(tmp_path,monkeypatch):
@@ -159,15 +160,16 @@ def test_replica_loss_restart_reuses_session_only_after_exact_peer(tmp_path,monk
     intent={'run_id':'r','generation_nonce':'g'*48,'activation_nonce':nonce,'sequence':0,'head':'h'*64,'new_url':'https://same-session','new_token_sha256':hashlib.sha256(token.encode()).hexdigest()}
     owner_observation={'identity':primary,'nonce':nonce,'process_absent':True,'port_closed':True,'observed_at':time.time()}
     owner_evidence={'schema':'natlang.diloco-owner-restart-fence/1','run_id':'r','primary':primary,'primary_fenced':True,'all_workers_quiesced':True,'quiesced_workers':[0,1],
-        'proof_sha256':'p'*64,'owner_observed_at':time.time(),'owner_observation':owner_observation}
+        'proof_sha256':'p'*64,'owner_observed_at':time.time(),'owner_observation':owner_observation,'workers':[{'worker':0,'identity':primary},{'worker':1,'identity':lost}]}
     monkeypatch.setattr(fm,'owner_reference',lambda *a:{'run_id':'r','workers':{'0':primary,'1':lost}})
-    monkeypatch.setattr(fm,'verify_replacement_owner',lambda *a,**k:{'proof_sha256':'e'*64})
+    monkeypatch.setattr(fm,'verify_replacement_owner',lambda *a,**k:{'proof_sha256':'e'*64,'worker_index':1,'new_identity':successor})
     monkeypatch.setattr(fm,'verify_owned_restart_fence',lambda *a,**k:owner_evidence)
     monkeypatch.setattr(fm,'verify_replica_loss_fence',lambda *a,**k:{'replica_fenced':True,'proof_sha256':'f'*64})
     monkeypatch.setattr(fm,'sdk_worker_probe',lambda *a,**k:None)
     monkeypatch.setattr(fm,'sdk_set_worker_authority',lambda ws,nonce,action:[{'sandbox_id':w['sandbox_id']} for w in ws])
     monkeypatch.setattr(fm,'sdk_stop_owned_role',lambda *a,**k:{'exit_observed':True})
     monkeypatch.setattr(fm,'sdk_authorize_coordinator',lambda *a,**k:{})
+    monkeypatch.setattr(fm,'sdk_confirm_promoted_role',lambda role,nonce:{'sandbox_id':role['sandbox_id'],'boot_id':role['boot_id'],'owner_id':role['owner_id'],'pid':7,'start_ticks':'8'})
     monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)
     class Sandbox:
         def exec(self,argv,**kwargs):
@@ -180,7 +182,7 @@ def test_replica_loss_restart_reuses_session_only_after_exact_peer(tmp_path,monk
         def json(self,*a):
             self.calls+=1
             if self.calls==1:raise OSError('not running')
-            return {'ready':True,'run_id':'r','sequence':0,'head':'h'*64,'url':'https://same-session','token_sha256':intent['new_token_sha256'],'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64}}
+            return {'ready':True,'run_id':'r','sequence':0,'head':'h'*64,'url':'https://same-session','token_sha256':intent['new_token_sha256'],'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64},'owner':{'sandbox_id':'new','boot_id':'b','owner_id':'o','pid':7,'start_ticks':'8'}}
     monkeypatch.setattr(worker,'Transport',Transport)
     monkeypatch.setattr(replica_transport,'witness_head',lambda *a,**k:{'run_id':'r','baseline_sha256':'a'*64,'sequence':0,'head':'h'*64})
     session={'generation_nonce':'g'*48,'new_url':'https://same-session','new_token_sha256':intent['new_token_sha256']}
@@ -190,7 +192,7 @@ def test_replica_loss_restart_reuses_session_only_after_exact_peer(tmp_path,monk
         'control_dirs':{},'token_file':str(tmp_path/'token'),'outgoing_replica':{'url':'https://peer','baseline_sha256':'a'*64},
         'recovered_source_peer_role':{},'activation_config':{'run_id':'r','baseline_sha256':'a'*64,'sequence':0,'head':'h'*64,'activation_nonce':nonce,'expected_primary':primary,'expected_workers':[0,1],'session_transition':session},
         'primary_role':{'sandbox_id':'primary','directory':'/control','owner_id':'owner','boot_id':'boot','stage_directory':'/stage','python':'/usr/bin/python3','publisher':{'path':'/publisher','sha256':'a'*64},'request':{'action':'start','role':'coordinator'}}}
-    assert run_coreweave_replica_loss_restart(tmp_path/'controller',config)['phase']=='released'
+    assert run_coreweave_replica_loss_restart(tmp_path/'controller',config)['phase']=='workers-released'
 
 
 def test_replica_loss_local_recovery_starts_owned_witness(tmp_path,monkeypatch):
@@ -235,3 +237,26 @@ def test_replica_loss_local_recovery_starts_owned_witness(tmp_path,monkeypatch):
         'supervisor_proof':{'journal':{'path':'/journal','sha256':'d'*64}},'expected_primary':primary,'expected_workers':[0,1],
         'control_dirs':{},'activation_config':activation,'source':source,'peer_token_file':str(tmp_path/'token')})
     assert result['witness']['head']=='b'*64 and result['preserve_role']['pid']==42
+
+
+def test_worker_custody_requires_actual_complete_owner_set(tmp_path,monkeypatch):
+    from scripts.coreweave import diloco_replica_fence as fm
+    from scripts.coreweave.diloco_replica_controller import capture_worker_ownership
+    intent={'run_id':'r','generation_nonce':'g'*48,'activation_nonce':'x'*48,'sequence':0,'head':'h'*64,'new_url':'https://new','new_token_sha256':'t'*64}
+    old={'sandbox_id':'old','boot_id':'ob','owner_id':'oo','pid':1,'start_ticks':'1'};newcoord={'sandbox_id':'s1','boot_id':'b1','owner_id':'o1','pid':7,'start_ticks':'8'}
+    w0={'sandbox_id':'s1','boot_id':'b1','owner_id':'o1'};w1={'sandbox_id':'s2','boot_id':'b2','owner_id':'o2'}
+    evidence={'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64,'quiesced_workers':[0,1],
+        'workers':[{'worker':0,'identity':w0},{'worker':1,'identity':w1}]}
+    ready={'ready':True,'run_id':'r','sequence':0,'head':'h'*64,'url':'https://new','token_sha256':'t'*64,'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64},'owner':newcoord}
+    result=run_promotion(tmp_path,intent=intent,fence_workers=lambda _:[{'sandbox_id':'s1'},{'sandbox_id':'s2'}],verify_fence=lambda _:evidence,start_primary=lambda *_:ready,release_workers=lambda _,f:f)
+    assert result['phase']=='workers-released'
+    journal=json.loads((tmp_path/'owner-journal.json').read_text());assert journal['phase']=='awaiting-worker-capture' and journal['workers']=={}
+    monkeypatch.setattr(fm,'sdk_confirm_promoted_role',lambda *a,**k:newcoord)
+    monkeypatch.setattr(fm,'sdk_capture_live_worker',lambda host,nonce:{'nonce':nonce,'identity':{**{k:host[k] for k in ('sandbox_id','boot_id','owner_id')},'pid':host['pid'],'start_ticks':host['start_ticks']},'worker_argv_sha256':host['worker_argv_sha256']})
+    hosts={0:{**w0,'pid':10,'start_ticks':'11','worker_argv_sha256':'a'*64},1:{**w1,'pid':12,'start_ticks':'13','worker_argv_sha256':'b'*64}}
+    with pytest.raises(ValueError):capture_worker_ownership(tmp_path,coordinator_role={},hosts={0:hosts[0]},nonce='x'*48)
+    captured=capture_worker_ownership(tmp_path,coordinator_role={},hosts=hosts,nonce='x'*48)
+    assert captured['coordinator']==newcoord and captured['workers']['1']['pid']==12
+    assert json.loads((tmp_path/'promotion.json').read_text())['phase']=='released'
+    assert fm.owner_reference(captured['path'],captured['sha256'],newcoord)['workers']['0']['pid']==10
+    assert capture_worker_ownership(tmp_path,coordinator_role={},hosts=hosts,nonce='x'*48)['sha256']==captured['sha256']

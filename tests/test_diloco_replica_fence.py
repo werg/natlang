@@ -149,3 +149,35 @@ def test_successor_sdk_observer_executes_against_real_nested_owner(tmp_path,monk
         result=sdk_observe_replacement_owner(journal,'n'*48)
         assert result['owner_live'] and result['worker_absent'] and result['supervisor']==supervisor
     finally:proc.terminate();proc.wait(timeout=8)
+
+
+def test_live_worker_sdk_observer_captures_real_process_identity(tmp_path,monkeypatch):
+    import os,subprocess,sys,time
+    from types import SimpleNamespace
+    from scripts.coreweave import cwctl
+    from scripts.coreweave.diloco_nested_owner import prepare
+    from scripts.coreweave.diloco_replica_fence import sdk_capture_live_worker
+    script=Path(__file__).parents[1]/'scripts/coreweave/diloco_role_supervisor.py'
+    spec=prepare(source=script,expected_sha256=hashlib.sha256(script.read_bytes()).hexdigest(),python=sys.executable,control_directory=str(tmp_path/'owner'),runtime=str(Path(__file__).parents[1]))
+    proc=subprocess.Popen(spec['argv'])
+    class Box:
+        def exec(self,argv,**kwargs):
+            result=subprocess.run(argv,capture_output=True,text=True,timeout=15)
+            return SimpleNamespace(result=lambda **kw:result)
+    try:
+        directory=tmp_path/'owner';statepath=directory/'state.json';end=time.monotonic()+8
+        while not statepath.exists() and time.monotonic()<end:time.sleep(.02)
+        state=json.loads(statepath.read_text());argv=[sys.executable,'-c','import time;time.sleep(30)']
+        request={'schema':'natlang.diloco-role-request/1','id':'worker','owner_id':state['owner_id'],'expected_generation':state['generation'],'role':'worker','action':'start','argv':argv}
+        pending=directory/'request.tmp';pending.write_text(json.dumps(request));os.replace(pending,directory/'request.json')
+        while not (directory/'result.json').exists() and time.monotonic()<end:time.sleep(.02)
+        result=json.loads((directory/'result.json').read_text());assert result['accepted']
+        worker_sha=hashlib.sha256(json.dumps(argv,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+        host={'sandbox_id':'local','boot_id':state['boot_id'],'owner_id':state['owner_id'],'directory':str(directory),
+              'supervisor':{'pid':proc.pid,'start_ticks':state['supervisor_start_ticks'],'cmdline_sha256':spec['supervisor_cmdline_sha256'],'entrypoint_sha256':spec['entrypoint_sha256']},
+              'worker_argv_sha256':worker_sha}
+        monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None);monkeypatch.setattr(cwctl,'read_sandbox',lambda *a,**k:Box())
+        observed=sdk_capture_live_worker(host,'n'*48)
+        assert observed['identity']['pid']==result['pid'] and observed['identity']['start_ticks']
+        with pytest.raises(ValueError):sdk_capture_live_worker(dict(host,worker_argv_sha256='0'*64),'n'*48)
+    finally:proc.terminate();proc.wait(timeout=8)

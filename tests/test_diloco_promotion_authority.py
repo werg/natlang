@@ -159,7 +159,7 @@ def test_fence_preserves_only_exact_existing_peer_role(tmp_path):
         state=wait(lambda:json.loads((tmp_path/'state.json').read_text()));argv=[sys.executable,'-c','import time;time.sleep(30)']
         req={'schema':'natlang.diloco-role-request/1','id':'peer','owner_id':state['owner_id'],'expected_generation':state['generation'],'role':'actor','action':'start','argv':argv}
         temp=tmp_path/'request.tmp';temp.write_text(json.dumps(req));os.replace(temp,tmp_path/'request.json')
-        wait(lambda:json.loads((tmp_path/'result.json').read_text()).get('id')=='peer');state=json.loads((tmp_path/'state.json').read_text());role=state['roles']['actor']
+        wait(lambda:json.loads((tmp_path/'result.json').read_text()).get('id')=='peer');wait(lambda:not (tmp_path/'request.claimed.json').exists());state=json.loads((tmp_path/'state.json').read_text());role=state['roles']['actor']
         preserved={'role':'actor','pid':role['pid'],'start_ticks':role['start_ticks'],'argv_sha256':hashlib.sha256(json.dumps(argv,separators=(',',':')).encode()).hexdigest()}
         args={'expected_owner':state['owner_id'],'expected_boot':state['boot_id'],'nonce':'n'*48}
         with pytest.raises(ValueError):fence(tmp_path,**args,preserve_role=dict(preserved,pid=1))

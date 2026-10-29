@@ -365,10 +365,10 @@ events=[x for x in s.get('events',[]) if x.get('event')=='start' and x.get('role
 if len(events)!=1:raise ValueError('coordinator start history ambiguous')
 publisher=json.loads((d/('publisher-'+events[0]['request_id']+'.json')).read_text())
 if publisher.get('request_sha256')!=a.get('request_sha256'):raise ValueError('running coordinator authorization differs')
-print(json.dumps({'pid':pid,'start_ticks':ticks,'owner_id':owner,'boot_id':boot}))
+print(json.dumps({'sandbox_id':sys.argv[5],'pid':pid,'start_ticks':ticks,'owner_id':owner,'boot_id':boot}))
 '''
     cwctl.load_env_file();cwctl.require_key();box=cwctl.read_sandbox(role['sandbox_id'],patience=60)
-    result=box.exec(['python3','-c',program,role['directory'],role['owner_id'],role['boot_id'],nonce],timeout_seconds=30).result(timeout=60)
+    result=box.exec(['python3','-c',program,role['directory'],role['owner_id'],role['boot_id'],nonce,role['sandbox_id']],timeout_seconds=30).result(timeout=60)
     if result.returncode!=0:raise ValueError('running coordinator owner is not the exact authorized child')
     return json.loads(result.stdout)
 
@@ -435,4 +435,31 @@ def sdk_record_preserved_role(host, nonce, role):
     cwctl.load_env_file();cwctl.require_key();box=cwctl.read_sandbox(host['sandbox_id'],patience=60)
     result=box.exec(['python3','-c',program,host['directory'],host['owner_id'],host['boot_id'],nonce,host['runtime'],json.dumps(role)],timeout_seconds=30).result(timeout=60)
     if result.returncode!=0:raise ValueError('replacement peer role custody was not recorded')
+    return json.loads(result.stdout)
+
+
+def sdk_capture_live_worker(host,nonce):
+    """Read exact live worker and inline role-owner identities on one sandbox."""
+    try:from . import cwctl
+    except ImportError:import cwctl
+    program='''import hashlib,json,sys,time
+from pathlib import Path
+v=json.loads(sys.argv[1]);nonce=sys.argv[2];d=Path(v['directory']);s=json.loads((d/'state.json').read_text());sup=v['supervisor']
+boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+if boot!=v['boot_id'] or s.get('boot_id')!=boot or s.get('owner_id')!=v['owner_id'] or s.get('supervisor_pid')!=sup['pid'] or s.get('supervisor_start_ticks')!=sup['start_ticks']:raise ValueError('worker owner identity differs')
+p=Path('/proc/'+str(sup['pid']));fields=(p/'stat').read_text().rsplit(')',1)[1].split();cmd=(p/'cmdline').read_bytes();args=cmd.split(b'\\0')
+if fields[0]=='Z' or fields[19]!=sup['start_ticks'] or hashlib.sha256(cmd).hexdigest()!=sup['cmdline_sha256'] or b'-c' not in args or hashlib.sha256(args[args.index(b'-c')+1]).hexdigest()!=sup['entrypoint_sha256']:raise ValueError('worker supervisor executable differs')
+r=s.get('roles',{}).get('worker',{});pid=r.get('pid');ticks=r.get('start_ticks')
+if not r.get('alive') or not isinstance(pid,int) or not ticks:raise ValueError('worker role is not live')
+p=Path('/proc/'+str(pid));fields=(p/'stat').read_text().rsplit(')',1)[1].split()
+if fields[0]=='Z' or fields[19]!=ticks:raise ValueError('worker process identity differs')
+events=[x for x in s.get('events',[]) if x.get('event')=='start' and x.get('role')=='worker' and x.get('pid')==pid]
+if len(events)!=1 or events[0].get('argv_sha256')!=v['worker_argv_sha256']:raise ValueError('worker launch identity differs')
+argv=(p/'cmdline').read_bytes().split(b'\\0');argv=[x.decode('utf-8') for x in argv if x]
+if hashlib.sha256(json.dumps(argv,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()!=v['worker_argv_sha256']:raise ValueError('live worker argv differs')
+print(json.dumps({'nonce':nonce,'identity':{'sandbox_id':v['sandbox_id'],'boot_id':boot,'owner_id':v['owner_id'],'pid':pid,'start_ticks':ticks},'worker_argv_sha256':v['worker_argv_sha256'],'observed_at':time.time()}))
+'''
+    cwctl.load_env_file();cwctl.require_key();box=cwctl.read_sandbox(host['sandbox_id'],patience=60)
+    result=box.exec(['python3','-c',program,json.dumps(host,sort_keys=True),nonce],timeout_seconds=30).result(timeout=60)
+    if result.returncode!=0:raise ValueError('live worker owner observation failed')
     return json.loads(result.stdout)

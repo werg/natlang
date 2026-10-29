@@ -31,8 +31,8 @@ def run_promotion(directory, *, intent, fence_workers, verify_fence, start_prima
             record={'schema':'natlang.diloco-promotion-controller/1','intent':intent,'phase':'intent'}
             write_json_durable(journal,record)
         phase=record.get('phase')
-        if phase not in ('intent','workers-fenced','provider-fenced','primary-ready','released'):raise ValueError('invalid promotion phase')
-        if phase=='released':return record
+        if phase not in ('intent','workers-fenced','provider-fenced','primary-ready','workers-released','released'):raise ValueError('invalid promotion phase')
+        if phase in ('workers-released','released'):return record
         if phase=='intent':
             fences=fence_workers(intent);record.update(phase='workers-fenced',workers=fences);write_json_durable(journal,record)
         fences=record['workers']
@@ -52,13 +52,27 @@ def run_promotion(directory, *, intent, fence_workers, verify_fence, start_prima
                 or type(ready['sealed_rebase'].get('sequence')) is not int or ready['sealed_rebase']['sequence']<2
                 or not ready['sealed_rebase'].get('head')):
             raise ValueError('new primary did not prove exact WAL and session identity')
+        owner=ready.get('owner')
+        if (not isinstance(owner,dict) or set(owner)!={'sandbox_id','boot_id','owner_id','pid','start_ticks'} or
+                not all(owner.values())):raise ValueError('new coordinator owner identity was not captured')
         if record['phase']=='primary-ready' and record['primary']!=ready:raise ValueError('promoted primary readiness changed')
-        record.update(phase='primary-ready',primary=ready);write_json_durable(journal,record)
+        evidence=record['fence'];expected={str(item['worker']):{k:item['identity'][k] for k in ('sandbox_id','boot_id','owner_id')} for item in evidence.get('workers',[])}
+        replacement=evidence.get('replacement_owner')
+        if replacement is not None:expected[str(replacement['worker_index'])]=replacement['new_identity']
+        required_workers=sorted(evidence.get('quiesced_workers') or [])
+        if sorted(map(int,expected))!=required_workers:raise ValueError('worker owner lineage is incomplete')
+        custody={'schema':'natlang.diloco-replica-owner-journal/1','run_id':intent['run_id'],'coordinator':owner,
+                 'workers':{},'expected_workers':expected,'phase':'awaiting-worker-capture','promotion_nonce':intent['activation_nonce'],
+                 'source_fence_sha256':evidence['proof_sha256'],'promotion_head':intent['head']}
+        custody_path=directory/'owner-journal.json'
+        if custody_path.exists() and json.loads(custody_path.read_text())!=custody:raise ValueError('new owner custody differs')
+        if not custody_path.exists():write_json_durable(custody_path,custody)
+        record.update(phase='primary-ready',primary=ready,owner_journal=str(custody_path.resolve()));write_json_durable(journal,record)
         released=release_workers(intent,fences)
         if (not isinstance(fences,list) or not fences or not isinstance(released,list) or
                 sorted(x['sandbox_id'] for x in released)!=sorted(x['sandbox_id'] for x in fences)):
             raise ValueError('worker release did not cover exact fenced owners')
-        record.update(phase='released',released=released);write_json_durable(journal,record)
+        record.update(phase='workers-released',released=released);write_json_durable(journal,record)
         return record
 
 
@@ -117,7 +131,7 @@ def run_coreweave_promotion(directory, config):
             if (existing.get('run_id')!=intent['run_id'] or existing.get('sequence')!=intent['sequence'] or
                     existing.get('head')!=intent['head'] or existing.get('token_sha256')!=intent['new_token_sha256']):
                 raise ValueError('existing promoted coordinator identity differs')
-            fence_module.sdk_confirm_promoted_role(config['primary_role'],nonce)
+            existing['owner']=fence_module.sdk_confirm_promoted_role(config['primary_role'],nonce)
             return existing
         replica=config['outgoing_replica'];old_token=Path(replica['old_token_file']).read_text().strip()
         expected={'run_id':intent['run_id'],'baseline_sha256':replica['baseline_sha256'],'sequence':intent['sequence'],'head':intent['head']}
@@ -168,7 +182,8 @@ def run_coreweave_promotion(directory, config):
         if result.returncode!=0 or json.loads(result.stdout).get('accepted') is not True:raise ValueError('coordinator owner did not accept start')
         deadline=time.monotonic()+config.get('readiness_timeout',120)
         while True:
-            try:return client.json('GET','/v1/replica-promotion')
+            try:
+                ready=client.json('GET','/v1/replica-promotion');ready['owner']=fence_module.sdk_confirm_promoted_role(role,nonce);return ready
             except OSError:
                 if time.monotonic()>=deadline:raise
                 time.sleep(1)
@@ -434,7 +449,7 @@ def run_coreweave_replica_loss_restart(directory, config):
         if existing is not None:
             if (existing.get('run_id')!=intent['run_id'] or existing.get('sequence')!=intent['sequence'] or
                     existing.get('head')!=intent['head'] or existing.get('token_sha256')!=intent['new_token_sha256']):raise ValueError('existing restart differs')
-            fences.sdk_confirm_promoted_role(config['primary_role'],nonce);return existing
+            existing['owner']=fences.sdk_confirm_promoted_role(config['primary_role'],nonce);return existing
         peer=config['outgoing_replica'];witness=witness_head(peer['url'],token,allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
         if witness!={'run_id':intent['run_id'],'baseline_sha256':peer['baseline_sha256'],'sequence':intent['sequence'],'head':intent['head']}:
             raise ValueError('replacement peer does not witness recovered head')
@@ -466,7 +481,8 @@ def run_coreweave_replica_loss_restart(directory, config):
         if started.returncode!=0 or json.loads(started.stdout).get('accepted') is not True:raise ValueError('restart owner did not accept coordinator')
         deadline=time.monotonic()+config.get('readiness_timeout',120)
         while True:
-            try:return client.json('GET','/v1/replica-promotion')
+            try:
+                ready=client.json('GET','/v1/replica-promotion');ready['owner']=fences.sdk_confirm_promoted_role(role,nonce);return ready
             except OSError:
                 if time.monotonic()>=deadline:raise
                 time.sleep(1)
@@ -560,3 +576,40 @@ def run_coreweave_prepare_replica_loss(config):
         raise
     return {'schema':'natlang.diloco-owned-replica-loss-stage/1','recovery':receipt,'witness':expected,
             'owner_fence':owner_proof,'lost_replica_fence':loss,'peer_role':peer_role,'preserve_role':preserved}
+
+
+def capture_worker_ownership(directory, *, coordinator_role, hosts, nonce):
+    """Finish a new owner journal using actual live role observations only."""
+    import time
+    try:from . import diloco_replica_fence as fences
+    except ImportError:import diloco_replica_fence as fences
+    directory=Path(directory);journal=directory/'promotion.json';custody_path=directory/'owner-journal.json'
+    with (directory/'controller.lock').open('a+b') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        record=json.loads(journal.read_text());custody=json.loads(custody_path.read_text())
+        if record.get('phase') not in ('workers-released','released') or custody.get('promotion_nonce')!=nonce:
+            raise ValueError('worker capture requires the exact released promotion')
+        if sorted(hosts)!=sorted(map(int,custody['expected_workers'])):raise ValueError('worker capture omits a rank')
+        before=fences.sdk_confirm_promoted_role(coordinator_role,nonce)
+        if before!=custody['coordinator']:raise ValueError('new coordinator owner changed during capture')
+        captured={}
+        for rank in sorted(hosts):
+            host=hosts[rank];expected=custody['expected_workers'][str(rank)]
+            if {k:host.get(k) for k in ('sandbox_id','boot_id','owner_id')}!=expected:raise ValueError('worker host differs from lineage')
+            challenge=__import__('secrets').token_hex(24);start=time.time();value=fences.sdk_capture_live_worker(host,challenge);end=time.time()
+            if (value.get('nonce')!=challenge or value.get('worker_argv_sha256')!=host['worker_argv_sha256'] or
+                    {k:value.get('identity',{}).get(k) for k in expected}!=expected or not value.get('identity',{}).get('pid') or
+                    not value.get('identity',{}).get('start_ticks') or end<start or end-start>120):raise ValueError('live worker capture differs')
+            captured[str(rank)]={**value['identity'],'worker_argv_sha256':value['worker_argv_sha256'],'observed_at':end}
+        after=fences.sdk_confirm_promoted_role(coordinator_role,nonce)
+        if after!=before:raise ValueError('coordinator owner changed during worker capture')
+        if len({(x['sandbox_id'],x['pid'],x['start_ticks']) for x in captured.values()})!=len(captured):raise ValueError('worker roles are not distinct')
+        if custody.get('phase')=='complete':
+            old={rank:{k:v for k,v in value.items() if k!='observed_at'} for rank,value in custody['workers'].items()}
+            new={rank:{k:v for k,v in value.items() if k!='observed_at'} for rank,value in captured.items()}
+            if old!=new:raise ValueError('completed worker custody was superseded; create a new owner generation')
+        else:
+            custody.update(phase='complete',workers=captured,captured_at=time.time());write_json_durable(custody_path,custody)
+        with custody_path.open('rb') as stream:digest=hashlib.file_digest(stream,'sha256').hexdigest()
+        record.update(phase='released',owner_journal_sha256=digest);write_json_durable(journal,record)
+        return {'path':str(custody_path.resolve()),'sha256':digest,'run_id':custody['run_id'],'workers':custody['workers'],'coordinator':before}
