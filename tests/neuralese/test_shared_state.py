@@ -680,3 +680,34 @@ def test_bf16_convolution_graph_matches_cached_invocation_gradients():
     actual,actual_gradient=run(False);expected,expected_gradient=run(True)
     assert torch.equal(actual,expected)
     assert torch.equal(actual_gradient,expected_gradient)
+
+
+def test_convolution_gather_subsets_preserve_invocation_order_and_reject_reordering():
+    from types import SimpleNamespace
+    from natlang_neuralese.model.shared_state import _convolve, _finite_convolution
+    torch.manual_seed(721)
+    plan=compile_graph([Invocation('a',(1,2,3,4),producing=((1,3),)),
+        Invocation('empty',(),imports=(ImportSpan(0,'a',1,3),)),Invocation('b',(5,6,7),imports=(ImportSpan(1,'a',1,3),))])
+    rows=[0,2,4,6];width=3;channels=8
+    layer=SimpleNamespace(conv=SimpleNamespace(conv=SimpleNamespace(weight=torch.randn(channels,1,width).bfloat16(),bias=torch.randn(channels).bfloat16())))
+    source=torch.randn(1,plan.token_count,channels).bfloat16();gate=torch.randn(1,len(rows),channels).bfloat16()
+    def execute(reference):
+        x=source.clone().requires_grad_()
+        if not reference:out=_convolve(layer,x,gate,plan,rows)
+        else:
+            pieces=[]
+            for invocation in sorted({plan.node_ids[row] for row in rows}):
+                selected=[row for row in rows if plan.node_ids[row]==invocation]
+                indices=[];padding=[]
+                for row in selected:
+                    history=plan.history(row,width);n=width-len(history)
+                    indices.append((0,)*n+history);padding.append((True,)*n+(False,)*len(history))
+                start=sum(plan.node_ids[row]<invocation for row in rows)
+                data=x[:,torch.tensor(indices)].masked_fill(torch.tensor(padding)[None,:,:,None],0)
+                pieces.append(_finite_convolution(layer.conv.conv,data,gate[:,start:start+len(selected)]))
+            out=torch.cat(pieces,dim=1)
+        return out.detach(),torch.autograd.grad(out.float().square().sum(),x)[0]
+    actual,agrad=execute(False);expected,egrad=execute(True)
+    assert torch.equal(actual,expected) and torch.equal(agrad,egrad)
+    with pytest.raises(ValueError,match='graph order'):_convolve(layer,source,gate,plan,list(reversed(rows)))
+    with pytest.raises(ValueError,match='graph order'):_convolve(layer,source,gate,plan,[0,0,4,6])
