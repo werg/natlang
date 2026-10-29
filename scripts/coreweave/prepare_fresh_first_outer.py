@@ -51,7 +51,7 @@ def prepare(a):
             or witness.get('process_start_ticks')!=accepted.get('process_start_ticks') or accepted.get('accepted') is not True):
         raise ValueError('peer1 newer parent lacks exact continuous fresh-writer custody')
     if len(source_hashes)!=1 or any(not isinstance(x,str) or len(x)!=64 for x in source_hashes):raise ValueError('peer source hash differs')
-    source_hash=source_hashes.pop();settings={'run_id':a.run_id,'workers':4,'coordinator_url':a.coordinator_url,'local_steps':8,'wire_dtype':'bf16','start_grace_seconds':30};DilocoSettings.from_dict(settings)
+    source_hash=source_hashes.pop();settings={'run_id':a.run_id,'workers':4,'coordinator_url':a.coordinator_url,'local_steps':getattr(a,'local_steps',32),'wire_dtype':'bf16','start_grace_seconds':30};DilocoSettings.from_dict(settings)
     a.out.mkdir(parents=True,exist_ok=False);declarations=[]
     for rank,record in enumerate(records):
         parent=record['parent'];fork=first_outer_rng_seed(sha,rank) if parent['sha256']==sha else None
@@ -80,6 +80,7 @@ def prepare(a):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--inventory',type=Path,required=True);p.add_argument('--inventory-sha256',required=True);p.add_argument('--recipe',type=Path,required=True);p.add_argument('--recipe-sha256',required=True);p.add_argument('--out',type=Path,required=True)
+    p.add_argument('--local-steps',type=int,default=32)
     for name in ('seed-logical','worker-out','coordinator-root','coordinator-url','run-id'):p.add_argument('--'+name,required=True)
     a=p.parse_args();a.inventory={'path':str(a.inventory),'sha256':a.inventory_sha256};a.recipe={'path':str(a.recipe),'sha256':a.recipe_sha256};print(json.dumps(prepare(a)))
 if __name__=='__main__':main()
