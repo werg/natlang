@@ -26,6 +26,15 @@ aggregate training loss. A numerical/recovery-qualified checkpoint is not a
 behaviorally qualified production model. Diagnose regressions and use a better
 demonstrated parent rather than repeatedly training through unexplained harm.
 
+## Work lands on main, not in worktrees (owner, 2026-10-29)
+
+No work may be lost or abandoned in worktrees: where possible, do work directly on main in the canonical checkout
+(stage only your own paths). A worktree is a short-lived tool, not a home for work: merge its commits to main
+promptly and remove it once its commits are on main and nothing live or recorded depends on it. Runs, tests and
+jobs execute the code on main. On 2026-10-29, 69 worktrees held commits not on main
+(`/home/werg/data/dgxops/worktrees-with-unmerged-work-20261029.txt`); each owner merges or deliberately
+discards that work.
+
 ## Agents decide; nothing waits on the owner (owner, 2026-10-29)
 
 Operational and technical decisions such as restarting learners, restarting a
