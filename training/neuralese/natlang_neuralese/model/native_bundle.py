@@ -148,7 +148,9 @@ def prepare_actor_transport(checkpoint, out, recovery_receipt):
     import hashlib
     source=_file_binding(checkpoint);recovery=_file_binding(recovery_receipt)
     proof=json.loads(Path(recovery_receipt).read_text())
-    if (proof.get('private') is not True or proof.get('identity',{}).get('sha256')!=source['sha256']
+    if (proof.get('private') is not True or proof.get('upload_commit_notified') is not True
+            or proof.get('upload',{}).get('status_code') not in (200,201)
+            or proof.get('identity',{}).get('sha256')!=source['sha256']
             or proof.get('identity',{}).get('bytes')!=source['bytes']
             or proof.get('independent_verification',{}).get('sha256')!=source['sha256']
             or proof.get('independent_verification',{}).get('bytes')!=source['bytes']
@@ -188,9 +190,12 @@ def load_transported_actor_view(view, *, transport, view_receipt, recovery_recei
             or any(manifest.get('view_receipt',{}).get(k)!=view_receipt.get(k) for k in ('sha256','bytes'))
             or any(manifest.get('recovery_receipt',{}).get(k)!=recovery_receipt.get(k) for k in ('sha256','bytes'))
             or proof.get('schema')!=ACTOR_VIEW_SCHEMA or proof.get('training_resume') is not False
+            or proof.get('logical_identity')!='original full source checkpoint'
             or any(proof.get('source',{}).get(k)!=source.get(k) for k in ('sha256','bytes'))
             or any(proof.get('view',{}).get(k)!=actual.get(k) for k in ('sha256','bytes'))
             or recovery.get('private') is not True
+            or recovery.get('upload_commit_notified') is not True
+            or recovery.get('upload',{}).get('status_code') not in (200,201)
             or not isinstance(recovery.get('independent_verification',{}).get('readback_location'),str)
             or not recovery['independent_verification']['readback_location']
             or any(recovery.get('identity',{}).get(k)!=source.get(k) for k in ('sha256','bytes'))

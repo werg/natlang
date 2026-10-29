@@ -10,7 +10,8 @@ from test_native_actor_view import source
 def test_transported_view_matches_actual_full_actor_without_source(source,tmp_path,monkeypatch):
     engine,path,state,_=source;binding=_file_binding(path)
     recovery=tmp_path/'recovery.json';verified={**binding,'readback_location':'independent-test-receiver'}
-    recovery.write_text(json.dumps({'private':True,'identity':binding,'independent_verification':verified}))
+    receipt={'private':True,'upload_commit_notified':True,'upload':{'status_code':200},'identity':binding,'independent_verification':verified}
+    recovery.write_text(json.dumps(receipt))
     manifest=prepare_actor_transport(path,tmp_path/'views',recovery);m=json.loads(Path(manifest['path']).read_text())
     folder=Path(manifest['path']).parent
     view=folder/m['view']['path']
@@ -62,9 +63,9 @@ def test_transported_view_matches_actual_full_actor_without_source(source,tmp_pa
         changed=copy.deepcopy(m);changed['python_runtime']['sha256']='0'*64
         forged.write_text(json.dumps(changed))
         with pytest.raises(ValueError):load_transported_actor_view(view,**{**refs,'transport':_file_binding(forged)})
-        recovery.write_text(json.dumps({'private':False,'identity':binding,'independent_verification':verified}))
+        recovery.write_text(json.dumps({**receipt,'private':False}))
         with pytest.raises(ValueError):load_transported_actor_view(view,**refs)
-        recovery.write_text(json.dumps({'private':True,'identity':binding,'independent_verification':verified}))
+        recovery.write_text(json.dumps(receipt))
         view.write_bytes(b'tampered')
         with pytest.raises(ValueError):load_transported_actor_view(view,**refs)
     finally:
