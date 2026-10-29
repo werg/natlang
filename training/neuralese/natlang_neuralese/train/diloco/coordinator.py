@@ -354,27 +354,81 @@ class Coordinator:
                 if contract.get('predecessor_contract_sha256')!=previous or len(matches)!=1:
                     raise ValueError('supervised continuation must follow its exact prior contract')
                 if matches[0].get('kind')=='sft':
-                    transition=contract.get('source_transition') or {}
-                    if (transition.get('schema')!='natlang.diloco-source-contract-transition/1'
-                            or transition.get('kind')!='append' or transition.get('verified') is not True
-                            or not re.fullmatch('[0-9a-f]{64}',str(transition.get('checkpoint_sha256','')))):
-                        raise ValueError('supervised source append lacks its exact verified transition')
-                    def value(role,flag):
-                        argv=role['identity']['trainer_argv'];indices=[i for i,v in enumerate(argv[:-1]) if v==flag]
-                        if len(indices)!=1:raise ValueError('source transition lacks '+flag)
-                        path=argv[indices[0]+1];refs=[r for r in role['dependencies'] if r['path']==path]
-                        if len(refs)!=1:raise ValueError('source transition lacks exact input binding')
-                        return refs[0]['sha256']
-                    if (value(matches[0],'--native-graphs')!=transition.get('prior_source_sha256')
-                            or value(contract,'--continued-native-graphs')!=transition.get('prior_source_sha256')
-                            or value(contract,'--native-graphs')!=transition.get('source_sha256')
-                            or value(matches[0],'--held-native-graphs')!=value(contract,'--held-native-graphs')):
-                        raise ValueError('supervised source append changed predecessor or held custody')
-                    if '--foundation-native-graphs' in matches[0]['identity']['trainer_argv']:
-                        old_foundation=value(matches[0],'--foundation-native-graphs')
-                        new_foundation=value(contract,'--foundation-native-graphs')
-                        if (old_foundation==transition['prior_source_sha256'] and new_foundation!=transition['source_sha256']) or (old_foundation!=transition['prior_source_sha256'] and new_foundation!=old_foundation):
-                            raise ValueError('supervised source append changed foundation custody')
+                    objective=contract.get('objective_transition');optimizer=contract.get('optimizer_transition')
+                    if objective and optimizer:raise ValueError('one role transition must have one objective')
+                    if optimizer:
+                        if (optimizer.get('schema')!='natlang.diloco-optimizer-contract-transition/1' or optimizer.get('verified') is not True
+                                or not re.fullmatch('[0-9a-f]{64}',str(optimizer.get('checkpoint_sha256','')))
+                                or (optimizer.get('from'),optimizer.get('to')) not in (('stochastic','kahan'),('kahan','stochastic'))):
+                            raise ValueError('optimizer transition lacks an exact drained mode change')
+                        def mode(role):
+                            argv=role['identity']['trainer_argv'];indices=[i for i,v in enumerate(argv[:-1]) if v=='--muon-rounding']
+                            if len(indices)!=1:raise ValueError('optimizer transition requires an explicit rounding mode')
+                            return argv[indices[0]+1]
+                        if mode(matches[0])!=optimizer['from'] or mode(contract)!=optimizer['to']:
+                            raise ValueError('optimizer transition mode differs from role argv')
+                        def fixed(argv):
+                            out=[];i=0
+                            while i<len(argv):
+                                if argv[i] in ('--recipe-binding','--muon-rounding'):i+=2
+                                else:out.append(argv[i]);i+=1
+                            return out
+                        if (matches[0]['identity']['parent_checkpoint_sha256']!=contract['identity']['parent_checkpoint_sha256']
+                                or fixed(matches[0]['identity']['trainer_argv'])!=fixed(contract['identity']['trainer_argv'])):
+                            raise ValueError('optimizer transition changed fixed trainer identity')
+                        before={(x['path'],x['sha256']) for x in matches[0]['dependencies']}
+                        after={(x['path'],x['sha256']) for x in contract['dependencies']}
+                        old_recipe=json.loads(matches[0]['identity']['trainer_argv'][matches[0]['identity']['trainer_argv'].index('--recipe-binding')+1])['path']
+                        new_recipe=json.loads(contract['identity']['trainer_argv'][contract['identity']['trainer_argv'].index('--recipe-binding')+1])['path']
+                        if {x for x in before if x[0]!=old_recipe}!={x for x in after if x[0]!=new_recipe}:
+                            raise ValueError('optimizer transition changed source or objective dependencies')
+                    elif objective:
+                        if (objective.get('schema')!='natlang.diloco-objective-contract-transition/1' or objective.get('verified') is not True
+                                or not re.fullmatch('[0-9a-f]{64}',str(objective.get('checkpoint_sha256','')))):
+                            raise ValueError('supervised objective change lacks a verified checkpoint')
+                        def value(role,flag):
+                            argv=role['identity']['trainer_argv'];indices=[i for i,v in enumerate(argv[:-1]) if v==flag]
+                            if len(indices)!=1:raise ValueError('objective transition lacks '+flag)
+                            refs=[r for r in role['dependencies'] if r['path']==argv[indices[0]+1]]
+                            if len(refs)!=1:raise ValueError('objective transition lacks exact input binding')
+                            return refs[0]['sha256']
+                        for flag in ('--native-graphs','--held-native-graphs','--foundation-native-graphs'):
+                            if flag in matches[0]['identity']['trainer_argv'] or flag in contract['identity']['trainer_argv']:
+                                if value(matches[0],flag)!=value(contract,flag):raise ValueError('objective transition changed source custody')
+                        if (value(matches[0],'--ce-supervision-policy')!=(objective.get('old_policy') or {}).get('sha256')
+                                or value(contract,'--ce-supervision-policy')!=(objective.get('new_policy') or {}).get('sha256')):
+                            raise ValueError('objective transition policy differs from role bindings')
+                        def fixed(argv):
+                            out=[];i=0
+                            while i<len(argv):
+                                if argv[i] in ('--recipe-binding','--ce-supervision-policy'):i+=2
+                                else:out.append(argv[i]);i+=1
+                            return out
+                        if (matches[0]['identity']['parent_checkpoint_sha256']!=contract['identity']['parent_checkpoint_sha256']
+                                or fixed(matches[0]['identity']['trainer_argv'])!=fixed(contract['identity']['trainer_argv'])):
+                            raise ValueError('objective transition changed fixed trainer identity')
+                    else:
+                        transition=contract.get('source_transition') or {}
+                        if (transition.get('schema')!='natlang.diloco-source-contract-transition/1'
+                                or transition.get('kind')!='append' or transition.get('verified') is not True
+                                or not re.fullmatch('[0-9a-f]{64}',str(transition.get('checkpoint_sha256','')))):
+                            raise ValueError('supervised source append lacks its exact verified transition')
+                        def value(role,flag):
+                            argv=role['identity']['trainer_argv'];indices=[i for i,v in enumerate(argv[:-1]) if v==flag]
+                            if len(indices)!=1:raise ValueError('source transition lacks '+flag)
+                            path=argv[indices[0]+1];refs=[r for r in role['dependencies'] if r['path']==path]
+                            if len(refs)!=1:raise ValueError('source transition lacks exact input binding')
+                            return refs[0]['sha256']
+                        if (value(matches[0],'--native-graphs')!=transition.get('prior_source_sha256')
+                                or value(contract,'--continued-native-graphs')!=transition.get('prior_source_sha256')
+                                or value(contract,'--native-graphs')!=transition.get('source_sha256')
+                                or value(matches[0],'--held-native-graphs')!=value(contract,'--held-native-graphs')):
+                            raise ValueError('supervised source append changed predecessor or held custody')
+                        if '--foundation-native-graphs' in matches[0]['identity']['trainer_argv']:
+                            old_foundation=value(matches[0],'--foundation-native-graphs')
+                            new_foundation=value(contract,'--foundation-native-graphs')
+                            if (old_foundation==transition['prior_source_sha256'] and new_foundation!=transition['source_sha256']) or (old_foundation!=transition['prior_source_sha256'] and new_foundation!=old_foundation):
+                                raise ValueError('supervised source append changed foundation custody')
                 elif matches[0].get('kind')!='jolt':raise ValueError('invalid previous supervised contract')
             if not any(canonical_json_sha256_hex(x)==digest for x in current['roles'][str(worker)]):
                 current['roles'][str(worker)].append(contract)

@@ -21,8 +21,7 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     before, after = old.get(role), new.get(role)
     if before == after:
         return None
-    if old.get('native_graphs') == new.get('native_graphs'):
-        raise ValueError('resident CE coverage extension requires an actual source append')
+    same_source = old.get('native_graphs') == new.get('native_graphs')
     if not before or not after:
         raise ValueError('resident CE append requires both prior and successor policies')
     from .recipe import _ce_supervision_input_continuation, native_source_dependencies
@@ -32,6 +31,9 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     a, b = _public(prior), _public(policy)
     excluded = {'sources', 'source_contract', 'inventory', 'first_row_observations'}
     old_objective,new_objective=a.get('objective'),b.get('objective')
+    declared_transition = ((old_objective or {}).get('family_balance',{}).get('normalization') == 'bounded-mean-one/1' and (new_objective or {}).get('family_balance',{}).get('normalization') == 'declared/1')
+    if same_source and not declared_transition:
+        raise ValueError('same-source CE change requires an explicit measured family-scale transition')
     if old_objective != new_objective:
         from .own_output_supervision import identity,policy_objective
         from .native_logical_families import _verified_bytes,load_map
@@ -41,6 +43,8 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
         if old_family.get('key')!='logical-family' or new_family.get('key')!='logical-family':
             raise ValueError('resident CE objective change is not a logical-family map extension')
         old_map=old_family.pop('map',None);new_map=new_family.pop('map',None)
+        if same_source and old_map != new_map:
+            raise ValueError('same-source objective transition cannot change family labels')
         # A declared objective transition may replace row-count balancing with
         # explicit measured own-output family scales. Keep all other objective
         # settings and the cap identical; load_policy validates the scales.

@@ -1812,12 +1812,15 @@ def _main(argv=None, *, requested_refresh):
     checkpoint_options['accumulate_batches_history'] = accumulation_history
     # Checkpoints from before Kahan rounding wrote MuonSR matrices stochastically; a switch starts a zero residual.
     rounding_history = list(saved_options.get('muon_rounding_history') or [])
-    if saved_training and (saved_options.get('muon_rounding') or 'stochastic') != args.muon_rounding:
+    rounding_changed=bool(saved_training and (saved_options.get('muon_rounding') or 'stochastic') != args.muon_rounding)
+    if rounding_changed:
         rounding_history.append({'schema': 'natlang.muon-rounding-transition/1',
             'from': saved_options.get('muon_rounding') or 'stochastic', 'to': args.muon_rounding,
             'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0)) or 0),
             'compensation': 'starts at zero', 'weights_optimizer_rng_exposure': 'preserved'})
     checkpoint_options['muon_rounding_history'] = rounding_history
+    outer_compensation_history=list(saved_options.get('muon_outer_install_history') or [])
+    previous_outer_compensation=saved_options.get('muon_outer_install_policy')
     checkpoint_options['source_predecessor_retirement_history'] = list(saved_options.get('source_predecessor_retirement_history') or [])
     prior_service_policy = saved_options.get('cohort_service_policy', 'absolute-token-service-v1')
     service_history = list(saved_options.get('cohort_service_policy_history') or [])
@@ -2514,6 +2517,12 @@ def _main(argv=None, *, requested_refresh):
         if added_names:load_options['allow_added_names'] = added_names
         if promoted_names:load_options['allow_promoted_names'] = promoted_names
         optimizer.load_state_dict(resume['optimizer'], **load_options)
+        if rounding_changed and optimizer.latent is not None:
+            cleared=0
+            for state in optimizer.latent.state.values():
+                if 'compensation' in state:
+                    state.pop('compensation');cleared+=1
+            checkpoint_options['muon_rounding_history'][-1]['cleared_compensation_buffers']=cleared
         # Adaptive production may tune the step size without discarding moments.
         # The new value is recorded in optimizer_options while moments/RNG stay exact.
         from .native_learning_rates import apply_native_learning_rates
@@ -2681,10 +2690,24 @@ def _main(argv=None, *, requested_refresh):
     if resident_state is not None and args.diloco is not None:
         from .diloco.role_contract import resident_argv
         effective_argv=resident_argv(sys.argv[1:] if argv is None else argv,resident_state['payload'],args.stage_id)
+    if rounding_changed and args.diloco is not None and not parent_continuation and (resume or {}).get('diloco'):
+        from ..rl.diloco_contract import register_optimizer_transition
+        previous_mode=saved_options.get('muon_rounding') or 'stochastic'
+        transition={'schema':'natlang.diloco-optimizer-contract-transition/1','verified':True,
+            'checkpoint_sha256':sha256_file_hex_cached(policy.slot),'from':previous_mode,'to':args.muon_rounding}
+        register_optimizer_transition(args,sys.argv[1:] if effective_argv is None else effective_argv,(resume or {})['diloco'],transition)
+    if args.diloco is not None and args.muon_rounding=='kahan':
+        current_outer_compensation='preserve-local-plus-install-roundoff/1'
+        if previous_outer_compensation!=current_outer_compensation:
+            outer_compensation_history.append({'schema':'natlang.muon-outer-install-transition/1',
+                'from':previous_outer_compensation or 'install-roundoff-untracked',
+                'to':current_outer_compensation,'at_global_step':global_step})
+        checkpoint_options['muon_outer_install_policy']=current_outer_compensation
+    checkpoint_options['muon_outer_install_history']=outer_compensation_history
     diloco = attach_learner(args, named, parent_continuation=parent_continuation,
                             saved_state=carried_diloco if carried_diloco is not None else None if parent_continuation or (args.diloco is None and args.standalone_diloco_parent is not None) else (resume or {}).get('diloco'),
                             argv=effective_argv, source_transition=diloco_identity_transition,
-                            new_outer=new_outer_proof is not None and not new_outer_resumed)
+                            new_outer=new_outer_proof is not None and not new_outer_resumed,optimizer=optimizer)
     checkpoint_options['_diloco_learner'] = diloco
     if new_outer_proof is not None:
         checkpoint_options['new_outer_reanchor'] = ((resume or {}).get('options') or {}).get('new_outer_reanchor') or {
@@ -3225,13 +3248,17 @@ def _main(argv=None, *, requested_refresh):
                             fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
                         policy.drain_async();last_saved_step=step;metadata_dirty=False
                         from .diloco.role_contract import resident_argv
-                        from ..rl.diloco_contract import register_source_append
+                        from ..rl.diloco_contract import register_source_append,register_objective_transition
                         new_argv=resident_argv(sys.argv[1:] if argv is None else argv,payload,args.stage_id)
                         transition={'schema':'natlang.diloco-source-contract-transition/1','kind':'append','verified':True,
                             'checkpoint_sha256':sha256_file_hex_cached(policy.slot),'prior_source_sha256':source_receipts[0]['sha256'],
                             'source_sha256':candidate_train.file_sha256}
                         try:
-                            _,identity=register_source_append(args,new_argv,diloco.state_dict(clone_baselines=False),transition)
+                            if candidate_train.file_sha256==source_receipts[0]['sha256'] and candidate_ce is not None:
+                                transition={'schema':'natlang.diloco-objective-contract-transition/1','verified':True,'checkpoint_sha256':transition['checkpoint_sha256']}
+                                _,identity=register_objective_transition(args,new_argv,diloco.state_dict(clone_baselines=False),transition,ce_binding)
+                            else:
+                                _,identity=register_source_append(args,new_argv,diloco.state_dict(clone_baselines=False),transition)
                         except (OSError,TimeoutError) as error:
                             raise ResidentRetry('resident role publication temporarily unavailable') from error
                         except Exception as error:
@@ -3248,9 +3275,10 @@ def _main(argv=None, *, requested_refresh):
                         diloco.switch_role_contract(pending_role_contract['identity'])
                     schedule.close()
                     metadata_dirty = True
-                    checkpoint_options['source_predecessors'] = {
-                        'continued_native_graphs': source_receipts[0]['sha256'],
-                        'continued_held_native_graphs': source_receipts[1]['sha256']}
+                    if expanded[0].file_sha256 != source_receipts[0]['sha256']:
+                        checkpoint_options['source_predecessors'] = {
+                            'continued_native_graphs': source_receipts[0]['sha256'],
+                            'continued_held_native_graphs': source_receipts[1]['sha256']}
                     train, held = expanded
                     from .native_resident_ce import adopt_policy_update
                     ce_update = adopt_policy_update(resident.ce_policy_update, current_binding=ce_binding,

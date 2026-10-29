@@ -315,3 +315,21 @@ def test_resident_logical_family_extension_preserves_old_rows_and_records_transi
     damaged=json.loads((tmp_path/'new-family.json').read_text());damaged['rows'][0]['family']='changed';write_json(tmp_path/'new-family.json',damaged);newdoc['objective']['family_balance']['map']=resident.binding(tmp_path/'new-family.json');write_json(paths['new_ce'],newdoc);new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
     with pytest.raises(ValueError,match='changed prior source row families'):
         extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
+
+
+def test_same_source_declared_objective_transition_requires_exact_predecessor(tmp_path):
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.train.own_output_supervision import identity,policy_objective
+    from test_own_output_supervision import objective
+    paths,old,_=fixture(tmp_path);source=NativeGraphSource(paths['old_train'],'tokenizer-sha',required_split='train')
+    mapping=tmp_path/'family.json';write_json(mapping,{'schema':'natlang.logical-family-map/1','source_sha256':source.file_sha256,'rows':[{'id':e['id'],'binding':e['binding'],'family':'ordinary'} for e in source.entries]})
+    olddoc=json.loads(paths['old_ce'].read_text());olddoc['objective']=objective(mass='token',family_balance={'key':'logical-family','max_scale':8.,'normalization':'bounded-mean-one/1','map':resident.binding(mapping)})
+    write_json(paths['old_ce'],olddoc);before=copy.deepcopy(old['stage_inputs']['sft']);before['ce_supervision_policy']={**resident.binding(paths['old_ce']),'binding':'ce'}
+    newdoc=copy.deepcopy(olddoc);newdoc['objective']['family_balance'].update(normalization='declared/1',scales={'ordinary':1.2});newdoc['objective_transition']={'from':identity(policy_objective(olddoc))['sha256']};write_json(paths['new_ce'],newdoc)
+    after=copy.deepcopy(before);after['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+    assert extension_policy(before,after,prior_train=source,candidate_train=source)['objective']['family_balance']['normalization']=='declared/1'
+    oldplan=copy.deepcopy(old);newplan=copy.deepcopy(old);oldplan['stage_inputs']['sft']=before;newplan['stage_inputs']['sft']=after
+    oldplan['recipe']['input_bindings']['ce']=resident.binding(paths['old_ce']);newplan['recipe']['input_bindings']['ce']=resident.binding(paths['new_ce'])
+    resident._contract(oldplan,newplan,'sft')
+    bad=copy.deepcopy(newdoc);bad['objective_transition']['from']='0'*64;write_json(paths['new_ce'],bad);after['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+    with pytest.raises(ValueError,match='predecessor'):extension_policy(before,after,prior_train=source,candidate_train=source)

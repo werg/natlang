@@ -131,3 +131,61 @@ def register_source_append(args,trainer_args,saved,transition):
           'continuation_parent_sha256':parent_sha,'continuation_parent':{'path':str(parent),'sha256':parent_sha},
           'predecessor_contract_sha256':saved['contract_sha256'],'source_transition':transition}
     return _publish(item,saved,settings,args.out),item['identity']
+
+
+def register_objective_transition(args,trainer_args,saved,transition,old_policy):
+    """Publish a measured same-source CE transition at a drained checkpoint."""
+    settings=DilocoSettings.from_dict(json.loads(_flag(trainer_args,'--diloco')));worker=settings.resolved_worker_id
+    if (saved.get('worker')!=worker or not saved.get('session') or not saved.get('contract_sha256') or saved.get('pending') or saved.get('awaiting_global') or any(saved.get('steps_since') or []) or any(saved.get('tokens_since') or [])):
+        raise ValueError('objective transition needs a drained exact worker checkpoint')
+    checkpoint=Path(args.out)/'checkpoint.pt'
+    if sha256_file_hex_cached(checkpoint)!=transition.get('checkpoint_sha256'):raise ValueError('objective transition checkpoint differs')
+    recipe=json.loads(_flag(trainer_args,'--recipe-binding'));paths=[Path(recipe['path']),Path(old_policy['path'])]
+    flags=('--native-graphs','--held-native-graphs','--foundation-native-graphs','--pending-focus','--ce-supervision-policy')
+    for name in flags:
+        if name in trainer_args:paths.append(Path(_flag(trainer_args,name)))
+    for name in ('--native-graphs','--held-native-graphs','--foundation-native-graphs'):
+        if name in trainer_args:paths.extend(_logical_source_paths(Path(_flag(trainer_args,name))))
+    from ..train.native_supervision import ce_policy_dependencies
+    for reference in (old_policy,{'path':_flag(trainer_args,'--ce-supervision-policy'),'sha256':sha256_file_hex_cached(_flag(trainer_args,'--ce-supervision-policy'))}):
+        paths.extend(Path(x['path']) for x in ce_policy_dependencies(reference))
+    refs=[];seen=set()
+    for path in paths:
+        path=Path(os.path.abspath(path))
+        if not path.is_file():raise ValueError('objective transition dependency missing')
+        if str(path) not in seen:refs.append({'path':str(path),'sha256':sha256_file_hex_cached(path)});seen.add(str(path))
+    before=next(x for x in refs if x['path']==str(Path(old_policy['path']).absolute()));after=next(x for x in refs if x['path']==str(Path(_flag(trainer_args,'--ce-supervision-policy')).absolute()))
+    if before['sha256']!=old_policy['sha256']:raise ValueError('prior CE policy changed')
+    parent=Path(args.continue_from).resolve(strict=True);parent_sha=sha256_file_hex_cached(parent)
+    item={'kind':'sft','identity':identity(parent,trainer_args,settings),'dependencies':refs,
+          'continuation_parent_sha256':parent_sha,'continuation_parent':{'path':str(parent),'sha256':parent_sha},
+          'predecessor_contract_sha256':saved['contract_sha256'],'objective_transition':{**transition,'old_policy':before,'new_policy':after}}
+    return _publish(item,saved,settings,args.out),item['identity']
+
+
+def register_optimizer_transition(args,trainer_args,saved,transition):
+    """Publish a drained, exact-checkpoint Muon rounding transition."""
+    settings=DilocoSettings.from_dict(json.loads(_flag(trainer_args,'--diloco')));worker=settings.resolved_worker_id
+    if (saved.get('worker')!=worker or not saved.get('session') or not saved.get('contract_sha256') or saved.get('pending') or saved.get('awaiting_global') or any(saved.get('steps_since') or []) or any(saved.get('tokens_since') or [])):
+        raise ValueError('optimizer transition needs a drained exact worker checkpoint')
+    checkpoint=Path(args.out)/'checkpoint.pt'
+    if sha256_file_hex_cached(checkpoint)!=transition.get('checkpoint_sha256'):raise ValueError('optimizer transition checkpoint differs')
+    recipe=json.loads(_flag(trainer_args,'--recipe-binding'));paths=[Path(recipe['path'])]
+    flags=('--native-graphs','--held-native-graphs','--foundation-native-graphs','--continued-native-graphs','--continued-held-native-graphs','--pending-focus','--ce-supervision-policy')
+    for name in flags:
+        if name in trainer_args:paths.append(Path(_flag(trainer_args,name)))
+    for name in ('--native-graphs','--held-native-graphs','--foundation-native-graphs','--continued-native-graphs','--continued-held-native-graphs'):
+        if name in trainer_args:paths.extend(_logical_source_paths(Path(_flag(trainer_args,name))))
+    if '--ce-supervision-policy' in trainer_args:
+        from ..train.native_supervision import ce_policy_dependencies
+        ce=Path(_flag(trainer_args,'--ce-supervision-policy'));paths.extend(Path(x['path']) for x in ce_policy_dependencies({'path':str(ce),'sha256':sha256_file_hex_cached(ce)}))
+    refs=[];seen=set()
+    for path in paths:
+        path=Path(os.path.abspath(path))
+        if not path.is_file():raise ValueError('optimizer transition dependency missing')
+        if str(path) not in seen:refs.append({'path':str(path),'sha256':sha256_file_hex_cached(path)});seen.add(str(path))
+    parent=Path(args.continue_from).resolve(strict=True);parent_sha=sha256_file_hex_cached(parent)
+    item={'kind':'sft','identity':identity(parent,trainer_args,settings),'dependencies':refs,
+          'continuation_parent_sha256':parent_sha,'continuation_parent':{'path':str(parent),'sha256':parent_sha},
+          'predecessor_contract_sha256':saved['contract_sha256'],'optimizer_transition':transition}
+    return _publish(item,saved,settings,args.out),item['identity']

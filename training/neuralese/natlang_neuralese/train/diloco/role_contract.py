@@ -1,5 +1,5 @@
 """Exact per-worker native trainer contracts for heterogeneous DiLoCo rounds."""
-import json,re
+import copy,json,re
 from pathlib import Path
 from ...common.hashing import canonical_json_sha256_hex,sha256_file_hex_cached
 SCHEMA='natlang.diloco-heterogeneous-identity/1'
@@ -62,6 +62,32 @@ def validate(contract,workers,*,verify_files=False,only_digest=None,resolver=Non
                         or {((x.get('source') or {}).get('sha256')) for x in results}!=candidates
                         or any(x.get('conflicts') or x.get('conflict_counts') or x.get('ungrouped') for x in [base,*results])):
                     raise ValueError('source append protection union or candidate custody failed')
+            if item['kind']=='sft' and item.get('optimizer_transition'):
+                t=item['optimizer_transition']
+                if (t.get('schema')!='natlang.diloco-optimizer-contract-transition/1' or t.get('verified') is not True
+                        or not _digest(t.get('checkpoint_sha256')) or (t.get('from'),t.get('to')) not in (('stochastic','kahan'),('kahan','stochastic'))
+                        or _flag(argv,'--muon-rounding')!=t.get('to')):
+                    raise ValueError('invalid optimizer mode transition')
+            if check_files and item['kind']=='sft' and item.get('objective_transition'):
+                transition=item['objective_transition'];before=transition.get('old_policy');after=transition.get('new_policy')
+                if (transition.get('schema')!='natlang.diloco-objective-contract-transition/1' or transition.get('verified') is not True
+                        or not _digest(transition.get('checkpoint_sha256')) or before not in refs or after not in refs
+                        or after.get('path')!=_flag(argv,'--ce-supervision-policy')):
+                    raise ValueError('objective transition lacks exact policy and checkpoint bindings')
+                old_doc=json.loads(resolve(before).read_text());new_doc=json.loads(resolve(after).read_text())
+                from ..own_output_supervision import identity,policy_objective
+                old_obj,new_obj=policy_objective(old_doc),policy_objective(new_doc)
+                left,right=copy.deepcopy(old_obj),copy.deepcopy(new_obj)
+                lf,rf=left.get('family_balance') or {},right.get('family_balance') or {}
+                if (lf.get('key')!='logical-family' or rf.get('key')!='logical-family'
+                        or lf.get('normalization')!='bounded-mean-one/1' or rf.get('normalization')!='declared/1'
+                        or lf.get('map')!=rf.get('map') or (new_doc.get('objective_transition') or {}).get('from')!=identity(old_obj)['sha256']):
+                    raise ValueError('objective transition differs from its measured family-scale predecessor')
+                lf.pop('normalization');rf.pop('normalization');rf.pop('scales',None)
+                if left!=right or {k:v for k,v in old_doc.items() if k not in ('objective','objective_transition')}!={k:v for k,v in new_doc.items() if k not in ('objective','objective_transition')}:
+                    raise ValueError('objective transition changed unrelated CE law or custody')
+                if not any(x.get('path')==lf['map']['path'] and x.get('sha256')==lf['map']['sha256'] for x in refs):
+                    raise ValueError('objective transition family map missing')
             if check_files and item['kind']=='jolt':
                 receipt=json.loads(resolve(item['collector_receipt']).read_text())
                 by_path={x['path']:x['sha256'] for x in refs}

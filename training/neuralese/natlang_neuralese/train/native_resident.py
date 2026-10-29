@@ -1498,7 +1498,9 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
                     and plan['stage_inputs'][stage_id].get('pending_native_sources') ==
                         proposed['stage_inputs'][stage_id].get('pending_native_sources')
                     and plan['stage_inputs'][stage_id].get('pending_focus') ==
-                        proposed['stage_inputs'][stage_id].get('pending_focus'))):
+                        proposed['stage_inputs'][stage_id].get('pending_focus')
+                    and plan['stage_inputs'][stage_id].get('ce_supervision_policy') ==
+                        proposed['stage_inputs'][stage_id].get('ce_supervision_policy'))):
             raise ValueError('resident append must preserve every prior row, order and scheduling priority')
         if train.groups & held.groups:
             raise ValueError('resident train/held groups overlap')
@@ -1693,7 +1695,9 @@ class ResidentAdoption:
                         and self.plan['stage_inputs'][self.stage_id].get('pending_native_sources') ==
                             payload['plan']['stage_inputs'][self.stage_id].get('pending_native_sources')
                         and self.plan['stage_inputs'][self.stage_id].get('pending_focus') ==
-                            payload['plan']['stage_inputs'][self.stage_id].get('pending_focus'))
+                            payload['plan']['stage_inputs'][self.stage_id].get('pending_focus')
+                        and self.plan['stage_inputs'][self.stage_id].get('ce_supervision_policy') ==
+                            payload['plan']['stage_inputs'][self.stage_id].get('ce_supervision_policy'))
                     or len(train) != payload['rows'] or (delta is None and full_validation['entries_sha256'] != payload['entries_sha256'])):
                 raise ValueError('resident rows are not an exact protected append')
             declarations = pending_declarations(payload['plan'], self.stage_id, train.tokenizer_fingerprint)
