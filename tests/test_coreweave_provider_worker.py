@@ -2,6 +2,21 @@ import importlib.util
 import json
 import os
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def restore_inline_child_environment():
+    """Generated sandbox code executes inline here; keep its env in that test."""
+    import os
+    import sys
+    environment=dict(os.environ)
+    search_path=list(sys.path)
+    try:
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(environment)
+        sys.path[:]=search_path
 from pathlib import Path
 import subprocess
 import sys

@@ -13,7 +13,7 @@ SOURCE_ARGUMENTS=frozenset({'--native-graphs','--held-native-graphs','--foundati
     '--continued-native-graphs','--continued-held-native-graphs','--source-correction',
     '--source-classification-migration','--ce-supervision-policy','--sft-packed-geometry',
     '--memory-qualification','--recipe-binding','--pending-native-sources','--withdrawn-native-graphs',
-    '--retired-native-withdrawal'})
+    '--retired-native-withdrawal','--retired-native-withdrawal-set'})
 
 
 def _flag(argv,name):

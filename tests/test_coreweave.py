@@ -641,7 +641,7 @@ def test_diloco_launch_records_shared_ownership_once(tmp_path, monkeypatch, plac
         assert calls[0][1] == 'learner.bundle'
 
 
-def test_diloco_cohost_failure_journals_roles_and_stops_each_sandbox_once(tmp_path, monkeypatch):
+def test_diloco_partial_launch_keeps_accepted_sandboxes_and_exact_roles(tmp_path, monkeypatch):
     diloco = load('diloco')
     monkeypatch.setattr(diloco, 'RUNS', tmp_path / 'records')
     trainer = ['python', '-m', 'natlang_neuralese.train.native_state_sft', '--continue-from', '/work/in/parent.pt']
@@ -663,9 +663,11 @@ def test_diloco_cohost_failure_journals_roles_and_stops_each_sandbox_once(tmp_pa
     with pytest.raises(diloco.cwctl.ControllerError, match='did not start'):
         diloco.launch(run)
     record = json.loads((tmp_path / 'records/run.json').read_text())
-    assert record['state'] == 'failed-stop-requested'
+    assert record['state'] == 'launch-incomplete'
     assert record['ownership'] == {'shared': ['coordinator', 'learner-0'], 'worker1': ['learner-1']}
-    assert sorted(stops) == ['shared', 'worker1']
+    # An observation error is not proof either accepted sandbox is terminal.
+    assert stops == []
+    assert 'did not start' in record['error']
 
 
 @pytest.mark.parametrize('scenario', ['worker_fail', 'coordinator_fail', 'worker_success', 'signal', 'prepare_success', 'prepare_fail'])
@@ -982,7 +984,7 @@ def test_diloco_detects_terminal_sandbox_during_seed_startup(monkeypatch):
         diloco.wait_coordinator('http://localhost', 'x' * 32, b'g', timeout=30, sandbox_id='worker0')
 
 
-def test_diloco_seed_startup_failure_is_journaled_before_stop(tmp_path, monkeypatch):
+def test_diloco_seed_observation_failure_is_journaled_without_discarding_owner(tmp_path, monkeypatch):
     diloco = load('diloco'); monkeypatch.setattr(diloco, 'RUNS', tmp_path / 'records')
     trainer = ['python', '-m', 'natlang_neuralese.train.native_state_sft', '--continue-from', '/parent']
     learner = tmp_path / 'learner.json'; learner.write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer)))
@@ -1000,8 +1002,9 @@ def test_diloco_seed_startup_failure_is_journaled_before_stop(tmp_path, monkeypa
     with pytest.raises(diloco.cwctl.ControllerError, match='seed failed'):
         diloco.launch(run, coordinator_only=True)
     record = json.loads((tmp_path / 'records/run.json').read_text())
-    assert record['state'] == 'failed-stop-requested' and record['learners'] == ['shared', None, None, None]
-    assert record['ownership'] == {'shared': ['coordinator', 'learner-0']} and stopped == ['shared']
+    assert record['state'] == 'launch-incomplete' and record['learners'] == ['shared', None, None, None]
+    assert record['ownership'] == {'shared': ['coordinator', 'learner-0']} and stopped == []
+    assert 'seed failed' in record['error']
 
 
 def test_diloco_restored_workers_isolate_stale_control_and_verify_seed(tmp_path):

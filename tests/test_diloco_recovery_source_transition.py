@@ -5,6 +5,16 @@ from test_diloco_recovery import load
 from test_diloco_direct_recovery import fixture
 
 
+def test_lightweight_backup_identity_policy_matches_native_trainer():
+    from natlang_neuralese.train import native_diloco
+    mod=load('diloco_direct_recovery')
+    assert mod.SOURCE_ARGUMENTS==native_diloco._SOURCE_ARGUMENTS
+    args=['--epochs','1','--diloco','{}','--native-graphs','new',
+          '--retired-native-withdrawal-set=history.json','--seed','7']
+    assert mod._identity_argv(args)==native_diloco.trainer_argv(args)
+    assert mod._fixed_identity_argv(mod._identity_argv(args))==native_diloco._fixed_trainer_argv(native_diloco.trainer_argv(args))
+
+
 def transitioned(tmp_path):
     mod=load('diloco_direct_recovery');path,control,recipe,_=fixture(tmp_path)
     plan_ref=control['bindings']['plan'];plan_path=Path(plan_ref['path']);plan=json.loads(plan_path.read_text())
