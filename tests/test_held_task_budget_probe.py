@@ -36,7 +36,7 @@ record(1);time.sleep(.08);record(-1)
     popen = subprocess.Popen
     monkeypatch.setattr(probe.subprocess, 'Popen',
         lambda command, **options: popen([sys.executable, str(script), str(events)], **options))
-    args = SimpleNamespace(server='http://localhost:1234', model_concurrency=1, case_seconds=1200)
+    args = SimpleNamespace(server='http://localhost:1234', model_id='served-model', model_concurrency=1, case_seconds=1200)
     assert probe.collect_queues(queues(tmp_path, 5), {'workers': 2}, args, dict(os.environ)) == [0] * 5
     running = peak = 0
     for event in events.read_text().splitlines():
@@ -65,7 +65,7 @@ time.sleep(60)
         raise RuntimeError('dispatcher failed')
     monkeypatch.setattr(probe.task_cadence, 'wait_collectors', fail)
     handlers = {value: signal.getsignal(value) for value in (signal.SIGTERM, signal.SIGINT)}
-    args = SimpleNamespace(server='http://localhost:1234', model_concurrency=1, case_seconds=1200)
+    args = SimpleNamespace(server='http://localhost:1234', model_id='served-model', model_concurrency=1, case_seconds=1200)
     with pytest.raises(RuntimeError, match='dispatcher failed'):
         probe.collect_queues(queues(tmp_path, 1), {'workers': 1}, args, dict(os.environ))
     assert all(signal.getsignal(value) == handler for value, handler in handlers.items())

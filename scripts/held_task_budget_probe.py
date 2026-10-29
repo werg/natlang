@@ -20,6 +20,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +59,7 @@ def collect_queues(queues, spec, args, env):
                 [sys.executable, str(ROOT / 'scripts' / 'run_bonsai_queue.py'), str(queue), str(journal),
                  '--runtime', str(spec.get('runtime') or ROOT / 'ts-host'), '--server', args.server,
                  '--chat-completions-url', args.server.rstrip('/') + '/v1/chat/completions',
+                 '--model-id', args.model_id,
                  '--model-concurrency', str(args.model_concurrency), '--case-seconds', str(args.case_seconds)],
                 cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         except BaseException:
@@ -81,6 +83,12 @@ def collect_queues(queues, spec, args, env):
             log.close()
         for value, handler in handlers.items():
             signal.signal(value, handler)
+
+
+def served_model_id(server: str) -> str:
+    """The id the server reports for its model, so results do not carry the collector's default teacher name."""
+    with urllib.request.urlopen(server.rstrip('/') + '/v1/models', timeout=30) as response:
+        return json.loads(response.read())['data'][0]['id']
 
 
 def recipe_spec(path: Path) -> dict:
@@ -116,7 +124,10 @@ def main(argv=None) -> int:
     parser.add_argument('--cases', help='comma-separated packet row indices instead of the spec subset (e.g. the '
                         'tasks a stopped probe did not finish)')
     parser.add_argument('--report-only', action='store_true', help='rescore an existing --out without running')
+    parser.add_argument('--model-id', help='model id recorded in each result\'s provenance and sent to the server '
+                        '(default: the first id the server lists at /v1/models)')
     args = parser.parse_args(argv)
+    model_id = args.model_id = args.model_id or (None if args.report_only else served_model_id(args.server))
 
     if args.spec and not args.spec.lstrip().startswith('{'):
         args.spec = Path(args.spec).read_text()  # a task_eval JSON file (lfm3_serve.sh eval passes a path)
@@ -161,7 +172,7 @@ def main(argv=None) -> int:
                       'completion_tokens': finish.get('completion_tokens'),
                       'resource_limit_reason': finish.get('resource_limit_reason'),
                       'status': finish.get('status')})
-    report = {'schema': 'natlang.held-task-budget-probe/1', 'server': args.server,
+    report = {'schema': 'natlang.held-task-budget-probe/1', 'server': args.server, 'model_id': model_id,
               'packet_sha256': spec['packet']['sha256'], 'case_indices': spec['cases'],
               'budgets': {k: spec[k] for k in ('case_seconds', 'max_model_requests', 'max_turns', 'workers')},
               'model_concurrency_per_worker': args.model_concurrency, 'wall_seconds': round(time.time() - started, 1),
