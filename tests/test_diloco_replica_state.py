@@ -444,8 +444,8 @@ def test_first_outer_bootstrap_has_no_failed_primary_fence(tmp_path):
     def port():
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));return sock.getsockname()[1]
     pp=port();lp=port()
-    def peer():serve_peer(baseline=baseline,baseline_sha256=receipt['sha256'],store=tmp_path/'peerstore',work_root=tmp_path/'peerroot',host='127.0.0.1',port=pp,token=token,max_transaction_bytes=1<<20,stop=peerstop)
-    p=ctx.Process(target=peer);p.start();time.sleep(.2)
+    def peer(root):serve_peer(baseline=baseline,baseline_sha256=receipt['sha256'],store=tmp_path/'peerstore',work_root=root,host='127.0.0.1',port=pp,token=token,max_transaction_bytes=1<<20,stop=peerstop)
+    p=ctx.Process(target=peer,args=(tmp_path/'peerroot',));p.start();time.sleep(.2)
     def first():
         j=ReplicaJournal(tmp_path/'wal',run_identity='fresh',baseline_sha256=receipt['sha256'])
         serve_new_primary(baseline=baseline,baseline_sha256=receipt['sha256'],store=tmp_path/'store',root=tmp_path/'root',host='127.0.0.1',port=lp,token=token,peer_url=f'http://127.0.0.1:{pp}',supervisor_proof={},verify_supervisor_fence=lambda _:{'run_id':'fresh','source_verified':True},expected_primary=None,expected_workers=None,stop=stop,journal=j,sequence=0,head=j.head,session_transition={'new_url':'http://new','new_token_sha256':hashlib.sha256(token.encode()).hexdigest(),'generation_nonce':'n'*48},previous_token=None,bootstrap=True,allow_http=True)
@@ -459,6 +459,20 @@ def test_first_outer_bootstrap_has_no_failed_primary_fence(tmp_path):
         payload=tmp_path/'source';payload.write_bytes(b'actual-source-custody')
         assert client.upload_file(payload,'source.bin',chunk_bytes=8)['status'] in ('present','committed')
         assert (tmp_path/'peerstore'/'replica-uploads'/'source.bin').read_bytes()==payload.read_bytes()
+        peerstop.set();p.join(8);assert p.exitcode==0;peerstop.clear()
+        import pytest
+        from natlang_neuralese.train.diloco.worker import RemoteError
+        later=tmp_path/'later';later.write_bytes(b'pending-after-peer-loss')
+        with pytest.raises((RemoteError,OSError)):client.upload_file(later,'later.bin',chunk_bytes=100,attempts=1)
+        assert (tmp_path/'root'/'uploads'/'.replication-pending'/'later.bin').exists()
+        p=ctx.Process(target=peer,args=(tmp_path/'peerroot2',));p.start()
+        from natlang_neuralese.train.diloco.replica_transport import witness_head
+        for _ in range(150):
+            try:witness_head(f'http://127.0.0.1:{pp}',token,allow_http=True);break
+            except OSError:time.sleep(.02)
+        assert client.upload_file(later,'later.bin',chunk_bytes=100,attempts=1)['status']=='present'
+        assert not (tmp_path/'root'/'uploads'/'.replication-pending'/'later.bin').exists()
+        assert (tmp_path/'peerstore'/'replica-uploads'/'later.bin').read_bytes()==later.read_bytes()
         from natlang_neuralese.train.diloco.replica_transport import freeze_replica_files
         from natlang_neuralese.train.diloco.replica_seed import restore_replica_uploads
         freeze_replica_files(f'http://127.0.0.1:{pp}',token,'f'*48,allow_http=True)

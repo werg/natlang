@@ -87,3 +87,21 @@ def test_coreweave_seed_stage_uses_direct_owned_roles_and_stops_source(tmp_path,
     assert result['source_seed_server_stopped'] and result['witness']==witness
     assert ('authorize','seed-serve') in calls and ('authorize','peer') in calls
     assert all(b'sssssssss' not in raw for _,_,raw in staged)
+
+
+def test_first_outer_source_evidence_binds_real_parent_and_source_bytes(tmp_path):
+    import hashlib,torch
+    from scripts.coreweave.diloco_replica_controller import verify_bootstrap_inputs
+    from natlang_neuralese.train.diloco.coordinator import initialize_coordinator
+    from natlang_neuralese.train.diloco.replica_baseline import capture
+    from natlang_neuralese.train.diloco.replica_state import ReplayCoordinator
+    root=tmp_path/'root';initialize_coordinator(root,run_id='new',masters={'w':torch.ones(4)},identity={'parent':'earned'},workers=1,min_quorum=1,fragment_bytes=1024,seed_source={'sha256':'a'*64})
+    machine=ReplayCoordinator(root,quorum_since={})
+    class Capture:
+        def __init__(self):self.machine=machine
+        def read(self,fn):return fn()
+    baseline=tmp_path/'baseline';receipt=capture(Capture(),baseline)
+    source=tmp_path/'source.json';source.write_bytes(b'actual-source');proof=tmp_path/'receipt.json';proof.write_bytes(b'actual-receipt')
+    kw=dict(baseline=baseline,baseline_sha256=receipt['sha256'],source_manifest=source,source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),source_receipt=proof,receipt_sha256=hashlib.sha256(proof.read_bytes()).hexdigest(),expected_parent_sha256='a'*64)
+    assert verify_bootstrap_inputs(**kw)['earned_parent_sha256']=='a'*64
+    with pytest.raises(ValueError):verify_bootstrap_inputs(**dict(kw,expected_parent_sha256='b'*64))
