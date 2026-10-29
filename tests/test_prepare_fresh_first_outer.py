@@ -32,7 +32,7 @@ def test_first_outer_builder_exact_receipts_and_common_identity(tmp_path):
     # Launch may use the live, fully decoded newest rank-0 pin while its
     # immutable seed remains independently owner-readback and present.
     fallback=put('fallback',{'private':True,'identity':{'sha256':base},'independent_verification':{'sha256':base,'bytes':size,'readback_location':'owner'},'verified_at':1})
-    fallback_presence=put('fallback-presence',{'sha256':base,'bytes':size,'owner_access':True,'private_object_present':True,'observed_at':2})
+    fallback_presence=put('fallback-presence',{'sha256':base,'bytes':size,'owner_access':True,'private_object_present':True,'observed_at':2,'receipt_sha256':fallback['sha256']})
     live=json.loads(Path(inv['path']).read_text());live['peers'][0].update(parent_custody='live-with-verified-seed-fallback',private_receipt=fallback,owner_presence_receipt=fallback_presence)
     args.inventory=put('live-inventory',live);args.out=tmp_path/'liveout';r=prepare(args)
     assert r['peers'][0]['parent_private_readback']=='pending' and r['peers'][0]['fallback_sha256']==base
