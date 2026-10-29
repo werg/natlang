@@ -930,7 +930,9 @@ def latent_options(latent_optimizer: str, *, weight_decay: float = 0.0, skip_idl
     if latent_optimizer in ('lionsr', 'adaminisr'):
         options.update(skip_idle=skip_idle, cautious=cautious)
     if latent_optimizer == 'muonsr':
-        options.update(ns=ns, rounding=rounding)
+        options['ns'] = ns
+        if rounding != 'stochastic':  # stochastic is MuonSR's default; existing option sets keep their identity
+            options['rounding'] = rounding
     if latent_optimizer == 'adaminisr' and betas is not None:
         options['betas'] = tuple(betas)
     return options

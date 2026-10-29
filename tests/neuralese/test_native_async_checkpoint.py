@@ -183,7 +183,8 @@ def test_native_trainer_drains_on_update_and_schedule_close_errors_without_savin
         release.set()
         raise RuntimeError('deliberate partial optimizer-update failure')
     monkeypatch.setattr(trainer,'native_training_update',fail_inside_second_update)
-    original_schedule=trainer.stream_pending_batches
+    from natlang_neuralese.train import native_diversity
+    original_schedule=native_diversity.stream_windows
     class CloseFailure:
         def __init__(self,*args,**kwargs):self.iterator=original_schedule(*args,**kwargs)
         def __iter__(self):return self
@@ -191,7 +192,7 @@ def test_native_trainer_drains_on_update_and_schedule_close_errors_without_savin
         def close(self):
             self.iterator.close()
             raise OSError('deliberate schedule close failure')
-    monkeypatch.setattr(trainer,'stream_pending_batches',lambda *args,**kwargs:CloseFailure(*args,**kwargs))
+    monkeypatch.setattr(native_diversity,'stream_windows',lambda *args,**kwargs:CloseFailure(*args,**kwargs))
     drains=[]
     original_drain=trainer.CheckpointPolicy.drain_async
     def observed_drain(policy):
