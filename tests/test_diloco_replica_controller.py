@@ -25,6 +25,7 @@ def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch
     from scripts.coreweave import cwctl,diloco_replica_fence as fm
     from scripts.coreweave.diloco_replica_controller import run_coreweave_promotion
     from natlang_neuralese.train.diloco import worker
+    from natlang_neuralese.train.diloco import replica_transport
     import hashlib
     token='new-secret-'+'x'*32;(tmp_path/'token').write_text(token)
     intent={'run_id':'r','generation_nonce':'n'*48,'sequence':4,'head':'h'*64,'new_url':'https://new','new_token_sha256':hashlib.sha256(token.encode()).hexdigest()}
@@ -43,8 +44,11 @@ def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch
         def __init__(self,*args,**kwargs):pass
         def json(self,*args):return {'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':intent['new_token_sha256'],'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64}}
     monkeypatch.setattr(worker,'Transport',Transport)
+    monkeypatch.setattr(replica_transport,'witness_head',lambda *a,**k:{'run_id':'r','baseline_sha256':'a'*64,'sequence':4,'head':'h'*64})
+    monkeypatch.setattr(replica_transport,'rotate_replica_credential',lambda *a,**k:{})
+    (tmp_path/'old-token').write_text('o'*32)
     config={'intent':intent,'workers':entries,'expected_primary':old,'expected_workers':[0,1],'control_dirs':{},
         'supervisor_proof':{'journal':{'path':'p','sha256':'x'}},'new_token_file':str(tmp_path/'token'),
-        'primary_role':{'sandbox_id':'target','directory':'/control','publisher':{'path':'/publisher','sha256':'a'*64},'request':{'action':'start','role':'coordinator'}}}
+        'outgoing_replica':{'url':'https://replica','old_token_file':str(tmp_path/'old-token'),'baseline_sha256':'a'*64},'primary_role':{'sandbox_id':'target','directory':'/control','publisher':{'path':'/publisher','sha256':'a'*64},'request':{'action':'start','role':'coordinator'}}}
     assert run_coreweave_promotion(tmp_path/'journal',config)['phase']=='released'
     assert calls==['fence','release']

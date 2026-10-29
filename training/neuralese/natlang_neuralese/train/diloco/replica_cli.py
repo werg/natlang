@@ -15,7 +15,7 @@ from .replica_attestation import load_owned_config,verify_attestation
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('role',choices=('peer','promote','restart'));parser.add_argument('--config',required=True);parser.add_argument('--config-sha256',required=True)
+    parser=argparse.ArgumentParser();parser.add_argument('role',choices=('peer','bootstrap','promote','restart'));parser.add_argument('--config',required=True);parser.add_argument('--config-sha256',required=True)
     args=parser.parse_args();config=load_owned_config(args.config,args.config_sha256);stop=threading.Event()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set())
     token=Path(config['token_file']).read_text().strip()
@@ -23,7 +23,7 @@ def main():
     common=dict(baseline=config['baseline'],baseline_sha256=config['baseline_sha256'],store=config['store'],
                 host=config['host'],port=config['port'],token=token,stop=stop)
     if args.role=='peer':
-        return serve_peer(**common,work_root=config['work_root'],max_transaction_bytes=config['max_transaction_bytes'])
+        return serve_peer(**common,work_root=config['work_root'],max_transaction_bytes=config['max_transaction_bytes'],token_path=config['token_file'])
     evidence=verify_attestation(config,mode=args.role)
     verify=lambda _proof:evidence
     journal_path=Path(config['journal'])
@@ -33,10 +33,10 @@ def main():
     try:
         return serve_new_primary(**common,root=config['work_root'],peer_url=config['peer_url'],
             supervisor_proof=config['supervisor_proof'],verify_supervisor_fence=verify,
-            expected_primary=config['expected_primary'],expected_workers=config['expected_workers'],
+            expected_primary=config.get('expected_primary'),expected_workers=config.get('expected_workers'),
             journal=journal,sequence=config['sequence'],head=config['head'],session_transition=config['session_transition'],
-            previous_token=Path(config['previous_token_file']).read_text().strip(),
-            restart=(args.role=='restart'),gateway=config.get('gateway'),allow_http=config.get('allow_http',False),max_generations=config.get('max_generations',3))
+            previous_token=(Path(config['previous_token_file']).read_text().strip() if args.role!='bootstrap' else None),
+            restart=(args.role=='restart'),bootstrap=(args.role=='bootstrap'),gateway=config.get('gateway'),allow_http=config.get('allow_http',False),max_generations=config.get('max_generations',3))
     finally:journal.close()
 
 

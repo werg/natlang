@@ -2,6 +2,7 @@
 from __future__ import annotations
 import base64
 import hmac
+import hashlib
 import http.client
 import json
 import os
@@ -14,26 +15,40 @@ from urllib.parse import urlsplit
 from .replica_journal import CHUNK
 
 
-def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared=None, store_root=None, allow_unmaterialized_for_test=False):
+def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared=None, store_root=None, allow_unmaterialized_for_test=False, token_path=None):
     if machine is None and not allow_unmaterialized_for_test:
         raise ValueError('replica service requires a recovered state machine')
     guard = threading.Lock()
     failure = []
-    active = {'journal':journal,'machine':machine,'prepared':prepared}
+    active = {'journal':journal,'machine':machine,'prepared':prepared,'token':token}
     store_root=Path(store_root) if store_root is not None else journal.root.parent
+    credential_receipt=store_root/'credential-rotation.json'
+    if credential_receipt.exists():
+        from ...common.jsonio import write_json_durable
+        previous=json.loads(credential_receipt.read_text());actual=hashlib.sha256(token.encode()).hexdigest()
+        if previous.get('state')=='prepared' and actual==previous.get('new_token_sha256'):
+            previous['state']='committed'
+            historical=store_root/'credential-history'/(previous['nonce']+'.json')
+            if not historical.is_file():raise ValueError('credential transition history is missing')
+            write_json_durable(historical,previous);write_json_durable(credential_receipt,previous)
+        elif actual not in (previous.get('old_token_sha256'),previous.get('new_token_sha256')):
+            raise ValueError('replica token does not match credential transition')
+        elif previous.get('state')=='committed' and actual!=previous.get('new_token_sha256'):
+            raise ValueError('replica token rolled back after credential transition')
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args): pass
         def do_GET(self):
-            if not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+token):self.send_error(403);return
+            if not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+active['token']):self.send_error(403);return
             if self.path!='/v1/head':self.send_error(404);return
             with guard:
+                if not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+active['token']):self.send_error(403);return
                 current=active['journal']
                 if failure or current.sequence%2:self.send_error(409);return
                 value={'run_id':current.identity['run_identity'],'baseline_sha256':current.identity['baseline_sha256'],
                        'sequence':current.sequence,'head':current.head}
             data=json.dumps(value,sort_keys=True).encode();self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
         def do_PUT(self):
-            if not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer '+token):
+            if not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer '+active['token']):
                 self.send_error(403); return
             if self.path != '/v1/transaction':
                 self.send_error(404); return
@@ -52,6 +67,7 @@ def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared
                         out.write(block);left -= len(block)
                     out.flush();os.fsync(out.fileno())
                 with guard:
+                    if not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+active['token']):raise ValueError('replica credential changed')
                     if failure:raise ValueError('replica materialization is fenced')
                     current=active['journal'];replica_machine=active['machine']
                     duplicate = header['sequence'] == current.sequence
@@ -74,16 +90,46 @@ def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared
             finally:
                 if temp is not None:temp.unlink(missing_ok=True)
         def do_POST(self):
-            if not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer '+token):
+            if not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer '+active['token']):
                 self.send_error(403);return
             try:
                 length=int(self.headers.get('Content-Length','0'))
                 if not 0<length<=65536:raise ValueError('invalid generation request')
                 value=json.loads(self.rfile.read(length))
                 with guard:
+                    if not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+active['token']):raise ValueError('replica credential changed')
                     if failure or active['machine'] is None:raise ValueError('replica cannot rotate')
                     current=active['journal']
-                    if self.path=='/v1/generation/prepare':
+                    if self.path=='/v1/credential/rotate':
+                        import hashlib
+                        if (token_path is None or set(value)!={'sequence','head','new_token','nonce'} or
+                                value['sequence']!=current.sequence or value['head']!=current.head or current.sequence%2 or
+                                not isinstance(value['nonce'],str) or not re.fullmatch('[A-Za-z0-9_-]{32,128}',value['nonce']) or
+                                not isinstance(value['new_token'],str) or len(value['new_token'])<24 or value['new_token']==active['token']):
+                            raise ValueError('invalid replica credential transition')
+                        from ...common.jsonio import write_json_durable
+                        credential={'schema':'natlang.diloco-replica-credential-rotation/1','state':'prepared',
+                            'sequence':current.sequence,'head':current.head,'nonce':value['nonce'],
+                            'old_token_sha256':hashlib.sha256(active['token'].encode()).hexdigest(),
+                            'new_token_sha256':hashlib.sha256(value['new_token'].encode()).hexdigest()}
+                        history=store_root/'credential-history';history.mkdir(exist_ok=True)
+                        historical=history/(value['nonce']+'.json')
+                        if historical.exists():raise ValueError('credential rotation nonce was already used')
+                        write_json_durable(historical,credential)
+                        write_json_durable(credential_receipt,credential)
+                        target=Path(token_path)
+                        fd,name=tempfile.mkstemp(prefix='.replica-token-',dir=target.parent)
+                        try:
+                            with os.fdopen(fd,'wb') as stream:
+                                stream.write(value['new_token'].encode());stream.flush();os.fsync(stream.fileno())
+                            os.replace(name,target);active['token']=value['new_token'];directory_fd=os.open(target.parent,os.O_DIRECTORY)
+                            try:os.fsync(directory_fd)
+                            finally:os.close(directory_fd)
+                        finally:
+                            if os.path.exists(name):os.unlink(name)
+                        credential['state']='committed';write_json_durable(historical,credential);write_json_durable(credential_receipt,credential)
+                        reply={'sequence':current.sequence,'head':current.head,'new_token_sha256':hashlib.sha256(active['token'].encode()).hexdigest(),'nonce':value['nonce']}
+                    elif self.path=='/v1/generation/prepare':
                         if set(value)!={'id','previous','captured_monotonic','captured_wall'} or not re.fullmatch('[0-9a-f]{32}',value['id']):
                             raise ValueError('invalid generation identity')
                         prepared=active['prepared']
@@ -206,3 +252,23 @@ def witness_head(url,token,*,timeout=30,allow_http=False,gateway=None):
     if set(result)!={'run_id','baseline_sha256','sequence','head'} or type(result['sequence']) is not int or result['sequence']%2:
         raise ValueError('peer has no sealed witnessed head')
     return result
+
+
+def rotate_replica_credential(url,old_token,new_token,*,sequence,head,nonce,allow_http=False,gateway=None,timeout=30):
+    import hashlib
+    address=urlsplit(url)
+    if address.scheme not in ('https','http') or (address.scheme=='http' and not allow_http) or not address.hostname or address.path not in ('','/'):
+        raise ValueError('replica credential endpoint must be an HTTPS origin')
+    body=json.dumps({'sequence':sequence,'head':head,'new_token':new_token,'nonce':nonce},sort_keys=True,separators=(',',':')).encode()
+    cls=http.client.HTTPSConnection if address.scheme=='https' else http.client.HTTPConnection
+    conn=cls(address.hostname,address.port,timeout=timeout)
+    try:
+        headers={'Authorization':'Bearer '+old_token,'Content-Type':'application/json'}
+        if gateway:headers['X-Sandbox-Share-Token']=gateway
+        conn.request('POST','/v1/credential/rotate',body=body,headers=headers)
+        response=conn.getresponse();raw=response.read(65537)
+        if response.status!=200 or len(raw)>65536:raise ValueError('peer credential rotation not confirmed')
+        result=json.loads(raw);expected={'sequence':sequence,'head':head,'nonce':nonce,'new_token_sha256':hashlib.sha256(new_token.encode()).hexdigest()}
+        if result!=expected:raise ValueError('peer credential rotation binding differs')
+        return result
+    finally:conn.close()

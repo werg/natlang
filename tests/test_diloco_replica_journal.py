@@ -74,3 +74,32 @@ def test_storage_budget_fails_closed_without_discarding_acknowledged_events(tmp_
     with pytest.raises(ValueError,match='budget exhausted'):j.append({'kind':'second'},payload,expected_sequence=2,expected_previous=j.head)
     assert j.verify(expected_sequence=1,expected_head=first['head'])==first
     j.close()
+
+
+def test_live_peer_credential_rotation_rejects_old_token_and_survives_restart(tmp_path):
+    import multiprocessing as mp,socket,time
+    from natlang_neuralese.train.diloco.replica_transport import serve,witness_head,rotate_replica_credential
+    from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
+    from natlang_neuralese.train.diloco.worker import RemoteError
+    old='o'*32;new='n'*32;tokenpath=tmp_path/'token';tokenpath.write_text(old)
+    with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+    ctx=mp.get_context('fork');stop=ctx.Event();ready=ctx.Pipe(duplex=False);root=tmp_path/'wal'
+    def peer():
+        journal=ReplicaJournal(root,run_identity='r',baseline_sha256='a'*64)
+        ready[1].send(True);serve(journal,'127.0.0.1',port,tokenpath.read_text(),max_bytes=1024,stop=stop,machine=object(),token_path=tokenpath);journal.close()
+    p=ctx.Process(target=peer);p.start();ready[0].recv();url=f'http://127.0.0.1:{port}'
+    try:
+        for _ in range(100):
+            try:head=witness_head(url,old,allow_http=True);break
+            except OSError:time.sleep(.02)
+        rotate_replica_credential(url,old,new,sequence=head['sequence'],head=head['head'],nonce='z'*48,allow_http=True)
+        assert tokenpath.read_text()==new and tokenpath.stat().st_mode & 0o077==0
+        with pytest.raises(RemoteError):witness_head(url,old,allow_http=True)
+        assert witness_head(url,new,allow_http=True)==head
+        stop.set();p.join(8);assert p.exitcode==0;stop.clear()
+        p=ctx.Process(target=peer);p.start();ready[0].recv()
+        for _ in range(100):
+            try:assert witness_head(url,new,allow_http=True)==head;break
+            except OSError:time.sleep(.02)
+    finally:stop.set();p.join(8)
+    assert p.exitcode==0

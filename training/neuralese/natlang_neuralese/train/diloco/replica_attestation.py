@@ -25,6 +25,11 @@ def verify_attestation(config, *, mode, now=None):
     if not isinstance(expected['activation_nonce'],str) or len(expected['activation_nonce'])<32:raise ValueError('invalid activation nonce')
     if att.get('binding')!=expected:raise ValueError('supervisor attestation binding differs')
     evidence=att.get('evidence',{})
+    if mode=='bootstrap':
+        if (evidence.get('run_id')!=expected['run_id'] or evidence.get('source_verified') is not True or
+                not evidence.get('source_receipt_sha256') or not evidence.get('bootstrap_source_sha256')):
+            raise ValueError('bootstrap lacks earned source verification')
+        return evidence
     if (evidence.get('run_id')!=expected['run_id'] or evidence.get('primary_fenced') is not True
             or evidence.get('all_workers_quiesced') is not True or not evidence.get('proof_sha256')
             or evidence.get('primary')!=config['expected_primary']

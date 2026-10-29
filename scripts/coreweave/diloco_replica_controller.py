@@ -77,6 +77,13 @@ def run_coreweave_promotion(directory, config):
     def install(_):return fence_module.sdk_set_worker_authority(workers,nonce=nonce,action='fence')
     def verify(_):return verifier(config['supervisor_proof'])
     def start(_,evidence):
+        from natlang_neuralese.train.diloco.replica_transport import witness_head,rotate_replica_credential
+        replica=config['outgoing_replica'];old_token=Path(replica['old_token_file']).read_text().strip()
+        witnessed=witness_head(replica['url'],old_token,allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
+        if witnessed!={'run_id':intent['run_id'],'baseline_sha256':replica['baseline_sha256'],'sequence':intent['sequence'],'head':intent['head']}:
+            raise ValueError('outgoing replica does not witness exact promoted head')
+        rotate_replica_credential(replica['url'],old_token,token,sequence=intent['sequence'],head=intent['head'],nonce=nonce,
+            allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
         role=config['primary_role'];publisher=role['publisher']
         if not Path(publisher['path']).is_absolute() or len(publisher['sha256'])!=64:raise ValueError('invalid role publisher identity')
         program=('import hashlib,json,runpy,sys\nfrom pathlib import Path\n'
@@ -109,15 +116,19 @@ def prepare_owned_activation(config, *, mode, supervisor_evidence, now, owner_st
     process/port observation; no provider credential is included in the file.
     """
     import copy
-    if mode not in ('promote','restart'):raise ValueError('invalid replica activation mode')
+    if mode not in ('bootstrap','promote','restart'):raise ValueError('invalid replica activation mode')
     result=copy.deepcopy(config);transition=result['session_transition']
     binding={'run_id':result['run_id'],'baseline_sha256':result['baseline_sha256'],'sequence':result['sequence'],
              'head':result['head'],'generation_nonce':transition['generation_nonce'],'activation_nonce':result['activation_nonce'],'new_url':transition['new_url'],
              'new_token_sha256':transition['new_token_sha256']}
-    observed=supervisor_evidence.get('owner_observed_at' if mode=='restart' else 'provider_observed_at')
-    if not isinstance(observed,(int,float)) or not 0<=now-observed<=120:raise ValueError('supervisor fence observation is not fresh')
+    observed=supervisor_evidence.get('source_verified_at' if mode=='bootstrap' else 'owner_observed_at' if mode=='restart' else 'provider_observed_at')
+    if not isinstance(observed,(int,float)) or not 0<=now-observed<=120:raise ValueError('supervisor observation is not fresh')
     if not isinstance(binding['activation_nonce'],str) or len(binding['activation_nonce'])<32:raise ValueError('invalid activation nonce')
-    if supervisor_evidence.get('run_id')!=binding['run_id'] or supervisor_evidence.get('primary_fenced') is not True or supervisor_evidence.get('all_workers_quiesced') is not True or not supervisor_evidence.get('proof_sha256') or supervisor_evidence.get('primary')!=result['expected_primary'] or sorted(supervisor_evidence.get('quiesced_workers') or [])!=sorted(result['expected_workers']):
+    if mode=='bootstrap':
+        if (supervisor_evidence.get('run_id')!=binding['run_id'] or supervisor_evidence.get('source_verified') is not True or
+                not supervisor_evidence.get('bootstrap_source_sha256') or not supervisor_evidence.get('source_receipt_sha256')):
+            raise ValueError('bootstrap source is not verified')
+    elif supervisor_evidence.get('run_id')!=binding['run_id'] or supervisor_evidence.get('primary_fenced') is not True or supervisor_evidence.get('all_workers_quiesced') is not True or not supervisor_evidence.get('proof_sha256') or supervisor_evidence.get('primary')!=result['expected_primary'] or sorted(supervisor_evidence.get('quiesced_workers') or [])!=sorted(result['expected_workers']):
         raise ValueError('unverified supervisor fence')
     att={'schema':'natlang.diloco-replica-supervisor-attestation/1','mode':mode,'verified_at':now,'expires_at':now+300,
          'binding':binding,'evidence':supervisor_evidence}
