@@ -311,6 +311,13 @@ def parse_coordinator_ema(text):
 def init(args):
     settings = DilocoSettings.from_dict(json.loads(args.settings))
     masters = _coordinator_surface(args.parent, args.base)
+    from .checkpoint_policy import CheckpointPolicy
+    from .diloco.protocol import MappedInputEvictor
+    architecture = (CheckpointPolicy.load(args.parent).get('model_config') or {}).get('architecture')
+    # The LFM3 surface retains immutable mmap views. Release consumed pages as
+    # bounded seed/fragment writes finish, rather than retaining the entire
+    # source mapping alongside the coordinator's FP32 output cache.
+    input_evictor = MappedInputEvictor(args.parent) if architecture == 'lfm3' else None
     coordinator_identity = json.loads(Path(args.role_contract).read_text()) if args.role_contract else identity(args.parent, json.loads(args.trainer_argv), settings)
     if args.role_contract and coordinator_identity.get('diloco') != settings.identity():
         raise ValueError('heterogeneous contract optimizer settings differ')
@@ -321,6 +328,7 @@ def init(args):
         outer_lr=args.outer_lr, outer_momentum=args.outer_momentum, grace_seconds=args.grace_seconds,
         max_staleness=args.max_staleness,
         seed_source={'path': str(args.parent), 'sha256': sha256_file_hex_cached(args.parent)},
+        input_evictor=input_evictor,
         ema=parse_coordinator_ema(args.ema),
         outer_schedule=json.loads(args.outer_schedule) if args.outer_schedule else None)
     print(json.dumps({'run_id': manifest['run_id'], 'fragments': len(manifest['fragments']),
