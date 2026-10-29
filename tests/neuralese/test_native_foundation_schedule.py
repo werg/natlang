@@ -143,6 +143,22 @@ def test_actual_tiny_stop_append_resume_keeps_optimizer_rng_and_all_row_visits(t
     assert urgent_transition['from'] is False and urgent_transition['to'] is True and urgent_transition['at_global_step']==2
     assert final['global_step']==10 and all(v==1 for v in final['exposure_counts'].values())
     assert final['optimizer'] and final['metrics']['held']['scope']=='full'
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    pin=out/'checkpoint.pt';proof=tmp_path/'retire.json'
+    proof.write_text(json.dumps({'schema':'natlang.native-source-predecessor-retirement/1',
+        'checkpoint_sha256':sha256_file_hex(pin),'train_sha256':final['source_receipts'][0]['sha256'],
+        'held_sha256':final['source_receipts'][1]['sha256'],
+        'predecessor_sha256':final['options']['source_predecessors']['continued_native_graphs']}))
+    retired=continued.copy();index=retired.index('--continued-native-graphs');del retired[index:index+2]
+    retired+=['--source-predecessor-retirement',str(proof)]
+    retired[retired.index('--epochs')+1]='2'
+    assert trainer.main(retired)==0
+    retired_training=torch.load(pin,weights_only=False)['training']
+    assert len(retired_training['options']['source_predecessor_retirement_history'])==1
+    assert retired_training['options']['source_predecessors']==final['options']['source_predecessors']
+    assert trainer.main(retired)==0
+    replayed=torch.load(pin,weights_only=False)['training']
+    assert len(replayed['options']['source_predecessor_retirement_history'])==1
 
 
 

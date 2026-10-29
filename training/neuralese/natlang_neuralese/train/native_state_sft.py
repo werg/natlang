@@ -1641,6 +1641,7 @@ def _main(argv=None, *, requested_refresh):
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
     saved_options = saved_training.get('options') or {}
+    checkpoint_options['source_predecessor_retirement_history'] = list(saved_options.get('source_predecessor_retirement_history') or [])
     urgent_prior = bool(saved_options.get('urgent_cohort_fairness', False))
     urgent_history = list(saved_options.get('urgent_cohort_fairness_history') or [])
     communication_prior = bool(saved_options.get('communication_cohort_fairness', False))
@@ -2104,9 +2105,13 @@ def _main(argv=None, *, requested_refresh):
         from .native_predecessor_retirement import load_retirement, verify_retirement
         source_pin = args.continue_from if parent_continuation else policy.slot
         proof = load_retirement(args.source_predecessor_retirement)
-        verify_retirement(resume, proof, checkpoint_sha256=sha256_file_hex_cached(source_pin),
+        proof_sha = sha256_file_hex_cached(args.source_predecessor_retirement)
+        history = list((resume.get('options') or {}).get('source_predecessor_retirement_history') or [])
+        recorded = dict(proof, proof_sha256=proof_sha)
+        already_committed = recorded in history
+        verify_retirement(resume, proof, checkpoint_sha256=proof['checkpoint_sha256'] if already_committed else sha256_file_hex_cached(source_pin),
                           train_sha256=source_receipts[0]['sha256'], held_sha256=source_receipts[1]['sha256'])
-        checkpoint_options['source_predecessor_retirement_history'] = list((resume.get('options') or {}).get('source_predecessor_retirement_history') or []) + [dict(proof, proof_sha256=sha256_file_hex_cached(args.source_predecessor_retirement))]
+        checkpoint_options['source_predecessor_retirement_history'] = history if already_committed else history + [recorded]
     if resume is not None:
         if mandatory_objective:
             checkpoint_options['_objective_required_visits']=dict((resume.get('options') or {}).get('_objective_required_visits') or {})
