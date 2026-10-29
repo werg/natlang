@@ -39,7 +39,7 @@ export type CollectedTurn = {
   readonly schema: 'natlang.tune-turn/v1';
   readonly root: string; readonly component: string; readonly partition: Partition;
   readonly binding: string | null; readonly definition: string | null; readonly call: string | null; readonly turn: number;
-  readonly messages: unknown[]; readonly tools: unknown[]; readonly reply: Pick<ModelTurn, 'calls' | 'text' | 'reasoning' | 'truncated'>;
+  readonly messages: unknown[]; readonly tools: unknown[]; readonly response_tools?: unknown[]; readonly reply: Pick<ModelTurn, 'calls' | 'text' | 'reasoning' | 'truncated'>;
   readonly decision?: { readonly options: readonly string[]; readonly chosen: number };
   readonly teacher: string; readonly source: 'real' | 'synthetic';
   /** The invocation's exact instruction text and disclosed skill documents, where training places soft states. */
@@ -174,6 +174,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
       pending.push({ schema: 'natlang.tune-turn/v1', root: example.id, component: example.component, partition: example.partition,
         binding: frame?.weights?.binding ?? null, definition: frame?.chain.at(-1) ?? null, call, turn,
         messages: structuredClone(request.messages), tools: structuredClone(request.tools),
+        ...(request.response_tools ? {response_tools: structuredClone(request.response_tools)} : {}),
         reply: { ...(reply.calls ? { calls: reply.calls } : {}), ...(reply.text !== undefined ? { text: reply.text } : {}),
           ...(reply.reasoning ? { reasoning: reply.reasoning } : {}), ...(reply.truncated ? { truncated: true } : {}) },
         rawCallIds: (reply.raw_calls ?? []).map(item => item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string'

@@ -326,10 +326,12 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         });
         // A tool call the server could not parse arrives as markup in the text: it is a malformed call, not a reply.
         const replyText = contentText(message?.content);
+        let parsedNative = false;
         if (!calls.length && TOOL_MARKUP.test(replyText)) {
           if (responseTools && !truncated) {
             try {
               calls.push(...parseNativeXmlCalls(replyText, responseTools).map(([name,args]) => [reverse[name] ?? name,args] as [string,Json]));
+              parsedNative = true;
             } catch { throw new LeakedCall('the tool call came back as invalid native XML'); }
           } else throw new LeakedCall('the tool call came back as text');
         }
@@ -337,7 +339,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         const written = calls.length ? undefined : callWrittenAsText(replyText, tools);
         if (written) calls.push([reverse[written[0]] ?? written[0], written[1]]);
         const reasoning = message?.reasoning_content ?? message?.reasoning;
-        return finish({ calls, text: responseTools && calls.length && !rawCalls?.length ? '' : replyText, raw_calls: rawCalls,
+        return finish({ calls, text: parsedNative ? '' : replyText, raw_calls: rawCalls,
+          ...(parsedNative ? {tool_parse: {schema:'natlang.native-xml-tool-parse/1' as const, source:'assistant-content' as const, schema_custody:'response_tools' as const}} : {}),
           ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}),
           ...(truncated ? { truncated: true } : {}), ...counts(), raw_response: body });
       } catch (error) {
