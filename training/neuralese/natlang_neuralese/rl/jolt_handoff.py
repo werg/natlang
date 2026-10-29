@@ -101,7 +101,13 @@ def prepare(args):
         semantic_adapter=None,semantic_refresh_config=None,seed_native_graphs=source,held_native_graphs=held,
         production_recipe=recipe,production_stage=args.production_stage,port=args.port,rl_policy_loss=None,
         task_eval=eval_spec,task_eval_every=args.task_eval_every)
-    return configure_native(parameters)
+    configured=configure_native(parameters)
+    if args.fresh_checkpoint:
+        from ..common.jsonio import write_json_durable
+        configured['initial_capacity_collection']={'schema':'natlang.initial-whole-graph-collection/1',
+            'rows':1,'group':2,'workers':1}
+        write_json_durable(config,configured)
+    return configured
 
 
 def main():

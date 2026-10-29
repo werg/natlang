@@ -873,6 +873,16 @@ def qualified_seed_boundary(config,mode,progress,checkpoint):
     return boundary.get('checkpoint_sha256')==sha256_file_hex_cached(checkpoint)
 
 
+def initial_capacity_collection(config,state):
+    """Keep the first real update bounded; later rounds restore the declared curriculum."""
+    declaration=config.get('initial_capacity_collection')
+    if declaration is None:return config
+    if declaration!={'schema':'natlang.initial-whole-graph-collection/1','rows':1,'group':2,'workers':1}:
+        raise ValueError('invalid initial whole-graph collection declaration')
+    if state.get('trained_rounds',0)>0:return config
+    return {**config,'rows_per_round':1,'group':2,'workers':1}
+
+
 def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
     """Hot-reload configuration at round boundaries; preserve actual state/exposure."""
     from ..common.hashing import sha256_file_hex
@@ -906,6 +916,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
             if config.get('native_state') is not True:
                 raise ValueError('RL production hot reload cannot switch away from the native shared-state actor')
             config = adopt_policy_loss_defaults(config, state, state_path)
+            config = initial_capacity_collection(config,state)
             state_participant=state.get('native_participant')
             if state_participant is not None:
                 if config.get('native_participant') not in (None,state_participant):
