@@ -68,17 +68,18 @@ class ReplayCoordinator:
                 'quorum_since':timers,'progress_sha256':_hash(c.root/'progress.json')}
 
 
-def replay(journal, root, *, expected_sequence, expected_head, quorum_since):
+def replay(journal, root, *, expected_sequence, expected_head, quorum_since, receiver_restart=False):
     """Apply only complete sealed transactions from an authenticated baseline.
 
     The caller must establish baseline integrity and a supervisor fence before
     exposing the result. A valid shorter prefix is not a promotion proof.
     """
     journal.verify(expected_sequence=expected_sequence, expected_head=expected_head)
-    if expected_sequence % 2:
+    if expected_sequence % 2 and not receiver_restart:
         raise ValueError('replica log ends with an unsealed coordinator operation')
+    sealed_sequence=expected_sequence-(expected_sequence % 2)
     machine=ReplayCoordinator(root, quorum_since=quorum_since)
-    for sequence in range(1,expected_sequence+1,2):
+    for sequence in range(1,sealed_sequence+1,2):
         operation=journal.root/f'{sequence:020d}'
         seal=journal.root/f'{sequence+1:020d}'
         op=json.loads((operation/'record.json').read_text())

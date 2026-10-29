@@ -37,7 +37,7 @@ def _identity(value):
 
 class ReplicaJournal:
     """Single-writer ordered transactions, published only after durable payloads."""
-    def __init__(self, root, *, run_identity, baseline_sha256, max_payload_bytes=8 << 30, max_transactions=20000):
+    def __init__(self, root, *, run_identity, baseline_sha256, max_payload_bytes=8 << 30, max_transactions=20000, previous_generation=None):
         if type(max_payload_bytes) is not int or max_payload_bytes <= 0:raise ValueError('invalid replica journal budget')
         if type(max_transactions) is not int or max_transactions <= 0:raise ValueError('invalid replica journal transaction budget')
         self.max_payload_bytes=max_payload_bytes;self.max_transactions=max_transactions
@@ -49,7 +49,12 @@ class ReplicaJournal:
         except BlockingIOError:
             self._lock.close()
             raise ValueError('replica journal already has a writer') from None
-        self.identity = {'run_identity': run_identity, 'baseline_sha256': baseline_sha256}
+        self.identity = {'run_identity': run_identity, 'baseline_sha256': baseline_sha256,
+                         'max_payload_bytes':max_payload_bytes,'max_transactions':max_transactions}
+        if previous_generation is not None:
+            if not isinstance(previous_generation,dict) or set(previous_generation)!={'sequence','head'}:
+                raise ValueError('invalid previous replica generation')
+            self.identity['previous_generation']=previous_generation
         p = self.root / 'identity.json'
         if p.exists():
             if json.loads(p.read_text()) != self.identity: raise ValueError('replica baseline or run differs')

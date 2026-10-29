@@ -14,7 +14,7 @@ from .replica_transport import transmit
 class ReplicatedExecutor:
     def __init__(self, journal, endpoint, token, *, allow_http=False, timeout=30, gateway=None):
         self.journal=journal;self.endpoint=endpoint;self.token=token;self.allow_http=allow_http;self.timeout=timeout;self.gateway=gateway
-        self.queue=queue.Queue();self.failure=None;self.thread=threading.Thread(target=self._run,daemon=True);self.thread.start()
+        self.queue=queue.Queue(maxsize=256);self.failure=None;self.rollover_callback=None;self.thread=threading.Thread(target=self._run,daemon=True);self.thread.start()
 
     def submit(self, event, payload, apply, *, seal=False, deferred=False):
         done=threading.Event();item={'event':event,'payload':payload,'apply':apply,'done':done,'seal':seal,'deferred':deferred};self.queue.put(item);done.wait()
@@ -35,6 +35,11 @@ class ReplicatedExecutor:
                 if 'read' in item:
                     item['result']=item['read']()
                     continue
+                def over_budget():
+                    return item['seal'] and (self.journal.sequence+2 > self.journal.max_transactions or
+                        self.journal.payload_bytes+__import__('pathlib').Path(item['payload']).stat().st_size > self.journal.max_payload_bytes)
+                if over_budget() and self.rollover_callback is not None:self.rollover_callback()
+                if over_budget():raise ValueError('replica generation must rotate before this operation')
                 event=item['event']() if item['deferred'] else item['event']
                 sequence=self.journal.sequence+1;previous=self.journal.head
                 local=self.journal.append(event,item['payload'],expected_sequence=sequence,expected_previous=previous)

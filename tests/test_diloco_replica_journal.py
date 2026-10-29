@@ -31,7 +31,7 @@ def test_streamed_replica_ack_is_durable_and_retry_safe_across_process(tmp_path)
     def child():
         j=ReplicaJournal(root,run_identity='run',baseline_sha256='a'*64)
         ready[1].send(j.head)
-        serve(j,'127.0.0.1',port,'s'*32,max_bytes=4<<20,stop=stop)
+        serve(j,'127.0.0.1',port,'s'*32,max_bytes=4<<20,stop=stop,allow_unmaterialized_for_test=True)
         j.close()
     proc=ctx.Process(target=child);proc.start();initial=ready[0].recv()
     payload=tmp_path/'payload';payload.write_bytes(b'x'*(3<<20));url=f'http://127.0.0.1:{port}'
