@@ -526,8 +526,21 @@ class DilocoLearner:
         return True
 
     def _fetch_all(self) -> None:
-        for index in range(len(self.fragments)):
-            self._install(index, self._fetch(index, self.versions[index]))
+        # Startup used one HTTP round trip per fragment while the GPU waited.
+        # Reuse the existing bounded I/O pool and retain at most one window of
+        # decoded fragments; submitting the entire model at once lets completed
+        # futures accumulate gigabytes on small training hosts. Install in the
+        # original order on the training thread so residual handling is unchanged.
+        width = self.settings.io_workers
+        for start in range(0, len(self.fragments), width):
+            batch = [(index, self.io.submit(self._fetch, index, self.versions[index]))
+                     for index in range(start, min(start + width, len(self.fragments)))]
+            try:
+                for index, future in batch:
+                    self._install(index, future.result())
+            finally:
+                for _, future in batch:
+                    future.cancel()
 
     def _upload(self, index: int, entry: dict) -> dict:
         file = self._write_outbox(entry)
