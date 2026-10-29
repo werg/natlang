@@ -7,7 +7,7 @@ import random
 import pytest
 import torch
 
-from natlang_neuralese.train import native_state_sft as trainer
+from natlang_neuralese.train import native_state_sft as trainer, native_diversity
 from test_native_state_sft import graph
 
 
@@ -91,7 +91,7 @@ def test_fetch_failure_checkpoint_matches_completed_reference_and_resumes(tmp_pa
         patch.setattr(trainer,'_save',capture_save)
         assert run(base,paths,reference,refresh=3)==0
     reference_three=torch.load(reference/'checkpoint.pt',weights_only=False,map_location='cpu')
-    original_stream=trainer.stream_pending_batches;failure=ValueError('injected source CE failure before update four');boundary={}
+    original_stream=native_diversity.stream_windows;failure=ValueError('injected source CE failure before update four');boundary={}
     def broken_stream(*args,**kwargs):
         stream=original_stream(*args,**kwargs)
         try:
@@ -111,7 +111,7 @@ def test_fetch_failure_checkpoint_matches_completed_reference_and_resumes(tmp_pa
         return original_save(policy,*args,**kwargs)
     interrupted=tmp_path/'interrupted'
     with monkeypatch.context()as patch:
-        patch.setattr(trainer,'stream_pending_batches',broken_stream)
+        patch.setattr(native_diversity,'stream_windows',broken_stream)
         patch.setattr(trainer,'_save',save)
         with pytest.raises(ValueError)as caught:run(base,paths,interrupted)
     assert caught.value is failure
@@ -145,7 +145,7 @@ def test_initial_fetch_failure_has_no_update_credit_or_checkpoint(tmp_path,monke
         boundary['rng']=trainer.capture_training_rng_state('cpu');random.random();torch.rand(9)
         raise failure
         yield
-    monkeypatch.setattr(trainer,'stream_pending_batches',fail)
+    monkeypatch.setattr(native_diversity,'stream_windows',fail)
     monkeypatch.setattr(trainer,'native_training_update',lambda *a,**k:pytest.fail('bad batch reached update'))
     monkeypatch.setattr(trainer,'_save',lambda *a,**k:pytest.fail('zero updates earned a recovery checkpoint'))
     out=tmp_path/'out'
