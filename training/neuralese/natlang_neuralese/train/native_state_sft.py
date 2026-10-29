@@ -2107,7 +2107,7 @@ def _main(argv=None, *, requested_refresh):
         proof = load_retirement(args.source_predecessor_retirement)
         proof_sha = sha256_file_hex_cached(args.source_predecessor_retirement)
         history = list((resume.get('options') or {}).get('source_predecessor_retirement_history') or [])
-        recorded = dict(proof, proof_sha256=proof_sha)
+        recorded = dict(proof, proof_sha256=proof_sha, proof_path=str(args.source_predecessor_retirement.resolve()))
         already_committed = recorded in history
         verify_retirement(resume, proof, checkpoint_sha256=proof['checkpoint_sha256'] if already_committed else sha256_file_hex_cached(source_pin),
                           train_sha256=source_receipts[0]['sha256'], held_sha256=source_receipts[1]['sha256'])

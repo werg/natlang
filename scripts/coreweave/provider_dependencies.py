@@ -239,6 +239,17 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             for reference in dependency_bindings(recovery):
                 bound(reference)
 
+    def retired_source_predecessor_inputs(options):
+        if not isinstance(options, dict):
+            return
+        from natlang_neuralese.train.native_predecessor_retirement import load_retirement
+        for item in options.get('source_predecessor_retirement_history') or []:
+            reference = {'path': item.get('proof_path'), 'sha256': item.get('proof_sha256')}
+            path = bound(reference)
+            proof = load_retirement(path)
+            if any(item.get(key) != value for key, value in proof.items()):
+                raise ValueError('retired source predecessor proof history differs')
+
     def source_correction_inputs(options):
         if not isinstance(options, dict):
             return
@@ -310,6 +321,8 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         foundation_inputs(training.get('training_options') or {})
         packed_capacity_inputs(training.get('options') or {})
         packed_capacity_inputs(training.get('training_options') or {})
+        retired_source_predecessor_inputs(training.get('options') or {})
+        retired_source_predecessor_inputs(training.get('training_options') or {})
         source_correction_inputs(training.get('options') or {})
         source_correction_inputs(training.get('training_options') or {})
         held_correction_inputs(training.get('options') or {})
@@ -335,6 +348,7 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             # completed carried frame; inspect before the source-frame skip.
             foundation_inputs(frame.get('options') or {})
             packed_capacity_inputs(frame.get('options') or {})
+            retired_source_predecessor_inputs(frame.get('options') or {})
             source_correction_inputs(frame.get('options') or {})
             held_correction_inputs(frame.get('options') or {})
             supervision = (frame.get('options') or {}).get('ce_supervision_policy_binding')

@@ -17,3 +17,15 @@ def test_exact_earned_source_and_history_are_required(tmp_path):
     assert _source_predecessor_retirement(old,new)
     assert not _source_predecessor_retirement(old,{**new,'held_native_graphs':{'sha256':'e'*64}})
     path.write_text('{}');assert not _source_predecessor_retirement(old,new)
+
+
+def test_retired_source_proof_is_provider_dependency_and_tampering_rejected(tmp_path):
+    from scripts.coreweave.provider_dependencies import dependency_closure
+    proof={'schema':'natlang.native-source-predecessor-retirement/1','checkpoint_sha256':'a'*64,'train_sha256':'b'*64,'held_sha256':'c'*64,'predecessor_sha256':'d'*64}
+    path=tmp_path/'proof.json';path.write_text(json.dumps(proof))
+    record=dict(proof,proof_path=str(path),proof_sha256=sha256_file_hex(path))
+    payload={'training':{'options':{'source_predecessor_retirement_history':[record]}}}
+    closure=dependency_closure({},namespace=str(tmp_path),_checkpoint_payload=payload)
+    assert str(path) in {item['path'] for item in closure['files']}
+    path.write_text('{}')
+    with pytest.raises(ValueError):dependency_closure({},namespace=str(tmp_path),_checkpoint_payload=payload)
