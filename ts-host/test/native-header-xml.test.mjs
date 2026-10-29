@@ -13,6 +13,9 @@ test('complete captured-style call preserves code and handles native typed value
   assert.deepEqual(parseNativeXmlCalls(call('eval',{code:'if (a < b && b > 0) x.push(a);',finish:'true',timeout_ms:'10'})+'\n'+call('return_result',{status:'success',value:'null'}),tools),[['eval',{code:'if (a < b && b > 0) x.push(a);',finish:true,timeout_ms:10}],['return_result',{status:'success',value:null}]]);
   const arrayTool=tool('array',{items:{type:'array',items:{type:'integer'}}},['items']);
   assert.deepEqual(parseNativeXmlCalls(call('array',{items:'[1,2]'}),[arrayTool]),[['array',{items:[1,2]}]]);
+  const extra=tool('extra',{}); extra.function.parameters.required=[]; extra.function.parameters.additionalProperties={type:'number'};
+  assert.deepEqual(parseNativeXmlCalls(call('extra',{count:'3'}),[extra]),[['extra',{count:3}]]);
+  assert.throws(()=>parseNativeXmlCalls(call('extra',{count:'bad'}),[extra]));
 });
 test('unknown, malformed, truncated, ambiguous and mixed prose frames fail closed',()=>{
   for(const text of [compact.slice(0,-12), 'explanation '+compact, compact+' trailing',call('unknown',{code:'x'}),call('eval',{code:'x',extra:'bad'}),call('eval',{finish:'true'}),call('eval',{code:'x',finish:'maybe'}),call('return_result',{status:'invented'}),call('eval',{code:'x',timeout_ms:'0'})]) assert.throws(()=>parseNativeXmlCalls(text,tools));

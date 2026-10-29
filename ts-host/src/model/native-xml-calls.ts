@@ -26,13 +26,18 @@ function matches(type: string, value: unknown): boolean {
     default: return false;
   }
 }
+function renderedJson(value: unknown): string {
+  if (Array.isArray(value)) return '[' + value.map(renderedJson).join(', ') + ']';
+  if (value && typeof value === 'object') return '{' + Object.entries(value as Record<string, unknown>).map(([k,v]) => JSON.stringify(k) + ': ' + renderedJson(v)).join(', ') + '}';
+  return JSON.stringify(value);
+}
 function valueFor(text: string, schema: Schema): unknown {
   const kinds = types(schema);
   if (kinds?.length === 1 && kinds[0] === 'string') return text;
   let value: unknown;
   try { value = JSON.parse(text); }
   catch { if (kinds && !kinds.includes('string')) throw new Error('parameter is not declared JSON type'); return text; }
-  if (!kinds) return typeof value === 'string' ? (JSON.stringify(value) === text ? value : text) : value;
+  if (!kinds) return typeof value === 'string' ? (JSON.stringify(value) === text ? value : text) : (renderedJson(value) === text ? value : text);
   if (kinds.some(kind => matches(kind, value)) && (typeof value !== 'string' || JSON.stringify(value) === text)) return value;
   if (kinds.includes('string')) return text;
   throw new Error('parameter differs from declared type');
@@ -93,8 +98,10 @@ export function parseNativeXmlCalls(text: string, offered: Tool[]): [string, Rec
       if (!param) break;
       const key=param[1]!; at += param[0].length;
       const end=text.indexOf(CLOSE,at);
-      if (end < 0 || Object.hasOwn(args,key) || !Object.hasOwn(props,key)) throw new Error('incomplete, duplicate or unknown parameter');
-      args[key]=valueFor(text.slice(at,end),props[key]!); at=end+CLOSE.length;
+      if (end < 0 || Object.hasOwn(args,key)) throw new Error('incomplete or duplicate parameter');
+      const parameterSchema = Object.hasOwn(props,key) ? props[key] : (schema as Schema).additionalProperties;
+      if (parameterSchema === false) throw new Error('unknown parameter');
+      args[key]=valueFor(text.slice(at,end), parameterSchema && typeof parameterSchema === 'object' ? parameterSchema as Schema : {}); at=end+CLOSE.length;
     }
     const tail=/^<\/function>\s*<\/tool_call>/.exec(text.slice(at));
     if (!tail) throw new Error('incomplete tool frame');
