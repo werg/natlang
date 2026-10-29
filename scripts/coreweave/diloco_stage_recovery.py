@@ -197,6 +197,7 @@ def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,tar
             restored['journal'].close()
         manifest={'schema':'natlang.diloco-staged-recovery/1','cycle':cycle_id,'run_id':state['run_id'],
                   'coordinator_run_id':state['coordinator_run_id'],'parent':{**pin,'staged':'parent.pt'},'components':components,
+                  'dependency_index_sha256':sha256_file_hex(temp/'dependencies'/'dependency-index.json',drop_cache=True),
                   'coordinator_staged':('replica-restored/coordinator' if replicated else 'diloco-coordinator'),
                   **({'replica_baseline_staged':'diloco-replica-recovery/current','replica_journal_staged':'replica-restored/journal'} if replicated else {}),'worker_staged':{str(i):f'workers/{i}' for i in range(4)},
                   **({'direct_control_sha256':direct['control_sha256'],'external_dependencies':external_objects} if direct else {}),

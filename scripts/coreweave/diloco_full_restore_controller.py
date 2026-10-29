@@ -239,6 +239,71 @@ def start_restored_peer(host, *, nonce, seed_record, cwctl, fences, token, gatew
             'preserve_role':preserved,'witness':expected}
 
 
+
+def stage_worker_dependencies(staging, hosts, *, cwctl):
+    """Install every authenticated logical dependency and verify the runtime."""
+    staging=Path(staging).resolve();manifest=json.loads((staging/'staging.json').read_text());index_path=staging/'dependencies'/'dependency-index.json'
+    if _sha(index_path)!=manifest.get('dependency_index_sha256'):raise ValueError('dependency index changed')
+    index=json.loads(index_path.read_text())
+    if index.get('schema')!='natlang.diloco-recovery-dependencies/1':raise ValueError('invalid dependency index')
+    items={}
+    for item in index['bindings']:
+        logical=item['path'];sha=item['sha256'];size=item['bytes']
+        if logical.startswith('@'):continue
+        if not logical.startswith('/') or os.path.normpath(logical)!=logical:raise ValueError('invalid logical dependency path')
+        prior=items.get(logical)
+        if prior and (prior['sha256']!=sha or prior['bytes']!=size):raise ValueError('logical dependency collision')
+        if 'external' in item:
+            source=(manifest.get('external_dependencies') or {}).get(logical,{}).get('resolved_local_path')
+            if not source:raise ValueError('external recovery dependency is unavailable')
+        else:
+            if item.get('object')!='objects/'+sha:raise ValueError('invalid dependency object binding')
+            source=staging/'dependencies'/item['object']
+        items[logical]={'source':Path(source),'sha256':sha,'bytes':size}
+    parent=manifest['parent'];parent_file=staging/parent['staged']
+    if parent_file.stat().st_size!=parent['bytes'] or _sha(parent_file)!=parent['sha256']:raise ValueError('staged parent differs')
+    verified=set()
+    for item in items.values():
+        key=(str(item['source']),item['sha256'],item['bytes'])
+        if key not in verified:
+            if item['source'].stat().st_size!=item['bytes'] or _sha(item['source'])!=item['sha256']:raise ValueError('dependency object differs')
+            verified.add(key)
+    result={}
+    for rank,host in sorted(hosts.items()):
+        argv=host['argv']
+        if argv.count('--continue-from')!=1:raise ValueError('worker lacks original lineage parent')
+        parent_path=argv[argv.index('--continue-from')+1]
+        if not parent_path.startswith('/') or os.path.normpath(parent_path)!=parent_path:raise ValueError('invalid original parent path')
+        own=dict(items);existing=own.get(parent_path)
+        if existing and (existing['sha256']!=parent['sha256'] or existing['bytes']!=parent['bytes']):raise ValueError('parent dependency collides')
+        own[parent_path]={'source':parent_file,'sha256':parent['sha256'],'bytes':parent['bytes']}
+        box=cwctl.read_sandbox(host['sandbox_id'],patience=60)
+        for logical,item in sorted(own.items()):
+            check=('import hashlib,pathlib,sys\np=pathlib.Path(sys.argv[1]);s=sys.argv[2];n=int(sys.argv[3])\n'
+                   'if not p.exists():print("missing");sys.exit(0)\n'
+                   'if p.is_symlink() or not p.is_file() or p.stat().st_size!=n or hashlib.file_digest(p.open("rb"),"sha256").hexdigest()!=s:raise ValueError("dependency differs")\nprint("verified")\n')
+            check_result=box.exec(['python3','-c',check,logical,item['sha256'],str(item['bytes'])],timeout_seconds=7200).result(timeout=7230)
+            if check_result.returncode:raise ValueError('existing dependency differs: '+logical)
+            if check_result.stdout.strip()=='verified':continue
+            temporary=logical+'.recovery-'+uuid.uuid4().hex
+            made=box.exec(['mkdir','-p',str(Path(logical).parent)],timeout_seconds=30).result(timeout=60)
+            if made.returncode:raise ValueError('dependency directory unavailable')
+            box.write_file_streaming(temporary,_chunks(item['source']),timeout_seconds=7200).result(timeout=7230)
+            publish=('import hashlib,os,pathlib,sys\np=pathlib.Path(sys.argv[1]);q=pathlib.Path(sys.argv[2]);s=sys.argv[3];n=int(sys.argv[4])\n'
+                     'if p.is_symlink() or p.stat().st_size!=n or hashlib.file_digest(p.open("rb"),"sha256").hexdigest()!=s:raise ValueError("dependency upload differs")\n'
+                     'with p.open("rb") as f:os.fsync(f.fileno())\nos.link(p,q);p.unlink();fd=os.open(q.parent,os.O_DIRECTORY);os.fsync(fd);os.close(fd)\n')
+            done=box.exec(['python3','-c',publish,temporary,logical,item['sha256'],str(item['bytes'])],timeout_seconds=7200).result(timeout=7230)
+            if done.returncode:raise ValueError('dependency upload failed: '+logical)
+        expected=manifest['components']['worker-'+str(rank)]['runtime_code_sha256']
+        program=('import sys\nfrom pathlib import Path\nfrom natlang_neuralese.train.native_resident import code_inventory,digest\n'
+                 'assert digest(code_inventory(Path(sys.argv[1])))==sys.argv[2]\n')
+        code=box.exec(['env','PYTHONPATH='+host['runtime']+'/training/neuralese',host['python'],'-c',program,
+            host['runtime']+'/training/neuralese/natlang_neuralese',expected],timeout_seconds=180).result(timeout=210)
+        if code.returncode:raise ValueError('worker runtime inventory differs')
+        result[str(rank)]={'sandbox_id':host['sandbox_id'],'dependencies':len(own),'runtime_code_sha256':expected}
+    return result
+
+
 def run_full_restore(directory, config):
     """Restore one previously exported outer; never reanchor or allocate hosts."""
     import fcntl
@@ -258,7 +323,9 @@ def run_full_restore(directory, config):
         else:
             state={'schema':'natlang.diloco-full-restore-controller/1','config_sha256':binding,'phase':'intent'};write_json_durable(journal,state)
         promotion=config['promotion'];intent=promotion['intent'];nonce=intent['activation_nonce'];staging=Path(config['staging']).resolve()
-        manifest=json.loads((staging/'staging.json').read_text());verified=json.loads((staging/'replica-restored'/'verified-restore.json').read_text())
+        manifest_path=staging/'staging.json'
+        if _sha(manifest_path)!=config['staging_manifest_sha256']:raise ValueError('staging manifest differs from controller binding')
+        manifest=json.loads(manifest_path.read_text());verified=json.loads((staging/'replica-restored'/'verified-restore.json').read_text())
         if (manifest['coordinator_run_id']!=intent['run_id'] or verified['owner_journal_sha256']!=promotion['supervisor_proof']['journal']['sha256']):
             raise ValueError('staged cohort and supervisor ownership differ')
         workers={int(k):v for k,v in config['worker_hosts'].items()};peers=config['peer_hosts']
@@ -277,7 +344,8 @@ def run_full_restore(directory, config):
             fences.sdk_set_worker_authority(authority,nonce=nonce,action='fence')
             state.update(phase='fenced',fence=evidence);write_json_durable(journal,state)
         if state['phase']=='fenced':
-            pins=stage_worker_checkpoints(staging,workers,cwctl=cwctl);state.update(phase='workers-staged',pins=pins);write_json_durable(journal,state)
+            dependencies=stage_worker_dependencies(staging,workers,cwctl=cwctl)
+            pins=stage_worker_checkpoints(staging,workers,cwctl=cwctl);state.update(phase='workers-staged',pins=pins,dependencies=dependencies);write_json_durable(journal,state)
         if state['phase']=='workers-staged':
             seed=directory/'seed';seed_store=directory/'seed-store';closure=staging/'diloco-replica-recovery'
             if not seed.exists():
