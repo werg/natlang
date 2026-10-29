@@ -52,6 +52,9 @@ def refresh_references(roots, previous, references, digests, scan, *, attempts=3
             fresh=scan(digests,existing)
             for digest in digests:refs[digest].update(fresh[digest])
         after=snapshot(roots)
-        if current==after:return after,refs
+        # Directory identities guard each walk, but unrelated non-JSON writes
+        # need not invalidate a completed scan of the JSON namespace.
+        def json_files(items):return {p:v for p,v in items.items() if p.endswith('.json')}
+        if json_files(current)==json_files(after):return after,refs
         previous=current
     raise RuntimeError('reference namespace did not stabilize within bounded retries')

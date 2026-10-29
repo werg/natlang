@@ -21,3 +21,12 @@ def test_delta_refresh_includes_new_references_and_forgets_deleted(tmp_path):
     assert refs[d]=={str(p),str(q)}
     q.unlink();_,refs=refresh_references([tmp_path],current,refs,[d],scan)
     assert refs[d]=={str(p)}
+
+
+def test_delta_refresh_discovers_consumer_created_after_original_scan(tmp_path):
+    from pathlib import Path
+    from scripts.coreweave.retention_snapshot import refresh_references
+    digest='b'*64;old=snapshot([tmp_path]);new=tmp_path/'consumer.json';new.write_text(digest)
+    def scan(ds,paths):return {d:{str(p) for p in map(Path,paths) if d in p.read_text()} for d in ds}
+    _,refs=refresh_references([tmp_path],old,{digest:set()},[digest],scan)
+    assert refs[digest]=={str(new)}
