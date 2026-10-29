@@ -1218,6 +1218,7 @@ def _pending_focus_continuation(old, new):
             or _priority_only_native_source_continuation(before, after)
             or _pending_source_continuation(before, after)
             or _combined_native_source_continuation(before, after)
+            or _ce_supervision_input_continuation(before, after)
             or _classification_input_continuation(before, after)
             or _source_correction_continuation(before, after)):
         return False
