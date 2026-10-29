@@ -1,5 +1,8 @@
 import copy
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -35,6 +38,18 @@ def test_cold_source_preparation_seals_geometry_without_second_parse(tmp_path, m
     again,again_slots,again_ref,again_scan=prepare_source(manifest,'tokenizer-sha',(58,59,60,61),tmp_path/'geometry',prior=reference)
     assert again.bindings==source.bindings and again_slots==slots and again_ref==reference
     assert again_scan=={'parsed_rows':0,'indexed_rows':0,'reused_prefix_rows':2}
+
+
+def test_geometry_builder_cli_seals_cold_index_in_same_pass(tmp_path):
+    source=tmp_path/'train.jsonl';source.write_text(json.dumps(graph('a'))+'\n'+json.dumps(graph('b'))+'\n')
+    out=tmp_path/'geometry';script=Path(__file__).resolve().parents[2]/'scripts/neuralese_data/build_native_packed_geometry.py'
+    env={**os.environ,'NATLANG_ROW_INDEX_CACHE':str(tmp_path/'indexes')}
+    result=subprocess.run([sys.executable,str(script),'--source',str(source),'--tokenizer-fingerprint','tokenizer-sha',
+        '--role-ids','58','59','60','61','--out',str(out)],env=env,text=True,capture_output=True,check=True)
+    summary=json.loads(result.stdout.strip().splitlines()[-1])
+    assert summary['parsed_rows']==0 and summary['indexed_rows']==2
+    state=json.loads((out/'packed-geometry-build.json').read_text())
+    assert state['complete'] and state['rows']==2 and state['optimizer_updates']==state['training_exposure']==0
 
 
 @pytest.mark.parametrize('device',['cpu','cuda'])
