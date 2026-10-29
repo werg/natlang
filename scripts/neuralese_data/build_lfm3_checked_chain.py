@@ -28,6 +28,8 @@ def main():
     p.add_argument('--tokenizer', type=Path, required=True)
     p.add_argument('--protection', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--prompt-variant', choices=('full', 'program-header'),
+                   help='new static variant retaining the exact supplied tool schemas')
     p.add_argument('--current-source-reviews', type=Path,
                    default=paths.resolve('repo', 'training/source-reviews'),
                    help='live review authority; set explicitly when running a frozen or relocated checkout')
@@ -114,13 +116,19 @@ def main():
     if fingerprint != '133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3' or list(role_ids) != [125033,125034,125035,125036]:
         raise ValueError('LFM3 tokenizer or role marker fingerprint differs')
     pieces = [json.loads(line) for line in (args.source/'pieces.jsonl').open()]
-    rendered = render_chain(chain, records, edges, pieces, tokenizer=tok, tokenizer_fingerprint=fingerprint)
+    rendered = render_chain(chain, records, edges, pieces, tokenizer=tok, tokenizer_fingerprint=fingerprint,
+        prompt_rendering=args.prompt_variant or 'program-header', retain_prompt_tools=bool(args.prompt_variant))
     nodes = materialize(rendered, records, edges, tokenizer=tok, role_ids=role_ids)
     binding = {'source_corpus_id': args.source_corpus_id,
                'extraction_receipt': {'path': str(receipt_path.resolve()), 'sha256': sha256_file_hex(receipt_path)},
                'files': refs, 'protection': protection['proof'], 'decision_holds': hold_bindings}
     graph = assemble(chain, records, edges, nodes, tokenizer=tok, tokenizer_fingerprint=fingerprint,
                      role_ids=role_ids, source_binding=binding)
+    if args.prompt_variant:
+        original_id = graph['id']
+        graph['id'] = original_id + ':tool-contract-prompt-variant:' + args.prompt_variant
+        graph.setdefault('conversion', {})['prompt_variant'] = {'schema': 'natlang.prompt-variant-source/1',
+            'original_id': original_id, 'mode': args.prompt_variant, 'retain_supplied_tool_schemas': True}
     if any(sha256_file_hex(Path(path)) != sha for path, sha in code.items()):
         raise ValueError('chain renderer code changed during this source conversion')
     if stat_key((args.source/'records.jsonl').stat()) != before:
@@ -146,7 +154,8 @@ def main():
     data = (json.dumps(graph, ensure_ascii=False, sort_keys=True, separators=(',', ':'))+'\n').encode()
     graph_path = args.out/'native-graphs.jsonl'; graph_path.write_bytes(data)
     result = {'schema': 'natlang.lfm3-checked-source-chain/1', 'source': binding, 'code': code, 'reviews': reviews, 'trajectory': args.trajectory,
-              'split': chain['split'], 'prompt_rendering': 'program-header', 'nodes': len(graph['nodes']), 'edges': len(edges),
+              'split': chain['split'], 'prompt_rendering': args.prompt_variant or 'program-header',
+              'retain_supplied_tool_schemas': bool(args.prompt_variant), 'nodes': len(graph['nodes']), 'edges': len(edges),
               'imports': sum(len(x['imports']) for x in graph['nodes']), 'fingerprint': fingerprint,
               'graph': {'path': str(graph_path.resolve()), 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)},
               'note': 'source-bound parse only; actual one-pass model and gradient qualification remains required'}

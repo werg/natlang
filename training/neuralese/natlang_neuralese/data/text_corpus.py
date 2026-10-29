@@ -2078,7 +2078,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                    prompt_rendering: str = "full", target_reasoning: bool = False,
                    include_token_offsets: bool = False, tokenizer_sha256: str | None = None,
                    static_derivations: Mapping[str, Any] | None = None,
-                   writer_context_records: Iterable[Mapping[str, Any]] | None = None):
+                   writer_context_records: Iterable[Mapping[str, Any]] | None = None,
+                   retain_prompt_tools: bool = False):
     """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
 
     Each row has the shared ``native_text_rows.load_native_text_rows`` schema. Text is a
@@ -2099,7 +2100,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                            ordinary_text_admission_receipt_sha256=ordinary_text_admission_receipt_sha256,
                            prompt_rendering=prompt_rendering, target_reasoning=target_reasoning,
                            include_token_offsets=include_token_offsets, tokenizer_sha256=tokenizer_sha256,
-                           static_derivations=static_derivations,writer_context_records=writer_context_records)
+                           static_derivations=static_derivations,writer_context_records=writer_context_records,
+                           retain_prompt_tools=retain_prompt_tools)
 
 
 def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
@@ -2196,7 +2198,8 @@ def bind_ordinary_text_admission(records, receipt, receipt_sha256):
 def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_independent_splits=True,
                     ordinary_text_admission_receipt=None,
                     ordinary_text_admission_receipt_sha256=None, prompt_rendering="full",
-                    target_reasoning=False, include_token_offsets=False, tokenizer_sha256=None, static_derivations=None, writer_context_records=None):
+                    target_reasoning=False, include_token_offsets=False, tokenizer_sha256=None, static_derivations=None, writer_context_records=None,
+                    retain_prompt_tools=False):
     from .trajectory_text import crisp_messages, handover_notes
     from .prompt_rendering import PROMPT_RENDERINGS
     if prompt_rendering not in PROMPT_RENDERINGS:
@@ -2314,8 +2317,15 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             request_rendered_span = isinstance(producer_span, (Mapping, list, tuple))
             context_tags = [item['render_tag'] for item in ((derivation or {}).get('context_replacements') or [])
                             if item.get('render_tag') is not None]
-            rendered = native_gold_packet(tokenizer, messages, target, record.get("tools") or [],
-                prompt_rendering='full' if native_xml else prompt_rendering, return_offsets=include_token_offsets,
+            render_messages, render_tools = messages, record.get("tools") or []
+            render_mode = 'full' if native_xml else prompt_rendering
+            if retain_prompt_tools and not native_xml:
+                from .prompt_rendering import apply_prompt_rendering
+                render_messages, render_tools = apply_prompt_rendering(
+                    messages, render_tools, prompt_rendering, keep_supplied_tools=True)
+                render_mode = 'full'
+            rendered = native_gold_packet(tokenizer, render_messages, target, render_tools,
+                prompt_rendering=render_mode, return_offsets=include_token_offsets,
                 response_tools=record.get('response_tools') if native_xml else None, producer_span=producer_span, return_producer_span=request_rendered_span, context_tags=context_tags)
             text, token_ids, suffix_start = rendered[:3]
             token_offsets = rendered[3] if include_token_offsets else None
@@ -2429,6 +2439,7 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                   "deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks hydrate only from a unique approved same-split writer source sharing a source group or source-row hash, or from an explicit exact provider-expanded runtime read receipt bound to body, type, request, graph and source row; context-only receipts never create a writer target or recurrence edge; typed eval-finish marker outputs are rendered from validated exact code sidecars; hash-bound full capture snapshots omitted from historical previews are supplied only as separately labeled same-invocation context augmentations; hydrated context and capture augmentation never create separate target rows; duplicate identical augmentations are emitted once per target; complete source-group split retained; train copies of held complete documents excluded; serving generation prompt and assistant reply rendered separately with native chat content escaping; no tools executed",
         "rendering": "natlang.native_gold_chat/3", "tokenizer_sha256": fingerprint,
         **({"prompt_rendering": prompt_rendering} if prompt_rendering != "full" else {}),
+        **({"retain_supplied_tool_schemas": True} if retain_prompt_tools else {}),
         "history_reasoning": history_reasoning,
         "supervision": "serving generation prompt is context-only; loss begins at the exact token length of that prompt and covers the assistant_reply-rendered target; no historical tool outputs or prior assistant turns are target tokens",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,

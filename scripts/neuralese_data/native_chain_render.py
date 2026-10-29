@@ -23,7 +23,8 @@ def edge_digest(edge):
     return hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
-def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerprint):
+def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerprint,
+                 prompt_rendering='program-header', retain_prompt_tools=False):
     """Render each complete source decision once, with every witnessed write and read.
 
     Returned rows are not yet native graphs: role marker materialization and
@@ -92,7 +93,8 @@ def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerpr
         if reads[rid]: item['context_replacements'] = [x['replacement'] for x in reads[rid]]
         derivations[rid] = item
     rows, receipt, omissions, provenance = gold_text_rows(source_rows, pieces, tokenizer=tokenizer,
-        require_independent_splits=False, prompt_rendering='program-header', target_reasoning=True, include_token_offsets=True,
+        require_independent_splits=False, prompt_rendering=prompt_rendering, target_reasoning=True, include_token_offsets=True,
+        retain_prompt_tools=retain_prompt_tools,
         tokenizer_sha256=tokenizer_fingerprint, static_derivations=derivations, writer_context_records=source_rows)
     by_id = {row['id']: row for row in rows}
     if omissions or set(by_id) != set(custody['records']) or len(rows) != len(custody['records']):
