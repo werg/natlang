@@ -7,7 +7,7 @@ from pathlib import Path
 from natlang_neuralese.common.jsonio import write_json_durable
 
 
-def fence(directory, *, expected_owner, expected_boot, nonce):
+def fence(directory, *, expected_owner, expected_boot, nonce, preserve_role=None):
     directory=Path(directory).resolve(strict=True)
     if not isinstance(nonce,str) or len(nonce)<32: raise ValueError('invalid supervisor generation nonce')
     with (directory/'promotion-authority.lock').open('a+b') as lock:
@@ -17,8 +17,18 @@ def fence(directory, *, expected_owner, expected_boot, nonce):
             raise ValueError('role owner identity changed')
         if state.get('pending_start') or (directory/'request.json').exists() or (directory/'request.claimed.json').exists():
             raise ValueError('role request remains in flight')
-        if any(role.get('alive') for role in state.get('roles',{}).values()):
-            raise ValueError('owned roles must be quiesced first')
+        for name,role in state.get('roles',{}).items():
+            if not role.get('alive'):continue
+            events=[event for event in state.get('events',[]) if event.get('event')=='start' and event.get('role')==name and event.get('pid')==role.get('pid')]
+            if (not isinstance(preserve_role,dict) or name not in ('actor','coordinator') or
+                    set(preserve_role)!={'role','pid','start_ticks','argv_sha256'} or preserve_role.get('role')!=name or
+                    preserve_role.get('pid')!=role.get('pid') or preserve_role.get('start_ticks')!=role.get('start_ticks') or
+                    len(events)!=1 or events[0].get('argv_sha256')!=preserve_role.get('argv_sha256')):
+                raise ValueError('owned roles must be quiesced or exactly preserved')
+        preserved=directory/'promotion-preserved-role.json'
+        declaration={'schema':'natlang.diloco-promotion-preserved-role/1','nonce':nonce,'role':preserve_role}
+        if preserved.exists() and json.loads(preserved.read_text())!=declaration:raise ValueError('preserved role binding differs')
+        if not preserved.exists():write_json_durable(preserved,declaration)
         path=directory/'promotion-fence.json'
         value={'schema':'natlang.diloco-role-promotion-fence/1','owner_id':expected_owner,'boot_id':expected_boot,'nonce':nonce}
         if path.exists():
@@ -31,13 +41,22 @@ def release(directory, *, expected_owner, expected_boot, nonce):
     directory=Path(directory).resolve(strict=True)
     with (directory/'promotion-authority.lock').open('a+b') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
-        path=directory/'promotion-fence.json';value=json.loads(path.read_text())
-        if value!={'schema':'natlang.diloco-role-promotion-fence/1','owner_id':expected_owner,'boot_id':expected_boot,'nonce':nonce}:
-            raise ValueError('promotion fence identity differs')
+        import re
+        if not isinstance(nonce,str) or not re.fullmatch('[A-Za-z0-9_-]{32,128}',nonce):raise ValueError('invalid promotion nonce')
+        path=directory/'promotion-fence.json';released=directory/('promotion-release-'+nonce+'.json')
+        expected={'schema':'natlang.diloco-role-promotion-fence/1','owner_id':expected_owner,'boot_id':expected_boot,'nonce':nonce}
         state=json.loads((directory/'state.json').read_text())
         if state.get('owner_id')!=expected_owner or state.get('boot_id')!=expected_boot:raise ValueError('role owner identity changed')
-        (directory/'promotion-coordinator.json').unlink(missing_ok=True)
+        if not path.exists():
+            if released.is_file() and json.loads(released.read_text())==expected:return
+            raise ValueError('promotion fence is absent without matching release receipt')
+        if json.loads(path.read_text())!=expected:raise ValueError('promotion fence identity differs')
+        if released.exists() and json.loads(released.read_text())!=expected:raise ValueError('promotion release receipt differs')
+        if not released.exists():write_json_durable(released,expected)
+        authorization=directory/'promotion-coordinator.json'
+        if authorization.exists():os.replace(authorization,directory/('promotion-coordinator-'+nonce+'.json'))
         (directory/'promotion-seed-server.json').unlink(missing_ok=True)
+        (directory/'promotion-preserved-role.json').unlink(missing_ok=True)
         path.unlink();fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY)
         try:os.fsync(fd)
         finally:os.close(fd)

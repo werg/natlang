@@ -177,14 +177,15 @@ def sdk_set_worker_authority(workers, *, nonce, action):
     if action not in ('fence','release') or not isinstance(nonce,str) or len(nonce)<32:
         raise ValueError('invalid controller authority transition')
     function=getattr(authority,action)
+    tail=(',preserve_role=json.loads(sys.argv[6])' if action=='fence' else '')
     program=('import fcntl,json,os,sys\nfrom pathlib import Path\n'
              'sys.path.insert(0,sys.argv[5]+"/training/neuralese")\nfrom natlang_neuralese.common.jsonio import write_json_durable\n'+inspect.getsource(function)+
-             '\nprint(json.dumps('+action+'(sys.argv[1],expected_owner=sys.argv[2],expected_boot=sys.argv[3],nonce=sys.argv[4])))\n')
+             '\nprint(json.dumps('+action+'(sys.argv[1],expected_owner=sys.argv[2],expected_boot=sys.argv[3],nonce=sys.argv[4]'+tail+')))\n')
     results=[]
     for worker in workers:
-        if set(worker)!={'sandbox_id','directory','owner_id','boot_id','runtime'}:raise ValueError('invalid worker owner binding')
+        if set(worker)-{'sandbox_id','directory','owner_id','boot_id','runtime','preserve_role'} or not {'sandbox_id','directory','owner_id','boot_id','runtime'}<=set(worker):raise ValueError('invalid worker owner binding')
         cwctl.load_env_file();cwctl.require_key();sandbox=cwctl.read_sandbox(worker['sandbox_id'],patience=60)
-        result=sandbox.exec(['python3','-c',program,worker['directory'],worker['owner_id'],worker['boot_id'],nonce,worker['runtime']],timeout_seconds=30).result(timeout=60)
+        result=sandbox.exec(['python3','-c',program,worker['directory'],worker['owner_id'],worker['boot_id'],nonce,worker['runtime'],json.dumps(worker.get('preserve_role'))],timeout_seconds=30).result(timeout=60)
         if result.returncode!=0:raise ValueError('worker authority transition failed; previous fences remain in force')
         results.append({'sandbox_id':worker['sandbox_id'],'authority':json.loads(result.stdout) if action=='fence' else None})
     return results
@@ -309,4 +310,58 @@ def sdk_authorize_seed_server(role, nonce):
     cwctl.load_env_file();cwctl.require_key();sandbox=cwctl.read_sandbox(role['sandbox_id'],patience=60)
     result=sandbox.exec(['python3','-c',program,role['directory'],request['owner_id'],role['boot_id'],nonce,role['runtime'],json.dumps(request,sort_keys=True)],timeout_seconds=30).result(timeout=60)
     if result.returncode!=0:raise ValueError('seed server authorization failed; worker fence remains active')
+    return json.loads(result.stdout)
+
+
+def sdk_stop_owned_role(role):
+    """Stop and observe one exact role; never infer exit from acceptance."""
+    try:from . import cwctl
+    except ImportError:import cwctl
+    request=role['request'];publisher=role['publisher']
+    if request.get('action')!='stop' or request.get('role') not in ('actor','coordinator'):
+        raise ValueError('invalid owned role stop')
+    program=('import hashlib,json,runpy,sys\nfrom pathlib import Path\n'
+        'p=Path(sys.argv[1]);actual=hashlib.sha256(p.read_bytes()).hexdigest()\n'
+        'if actual!=sys.argv[2]:raise ValueError("owner publisher differs")\n'
+        'print(json.dumps(runpy.run_path(str(p))["submit"](sys.argv[3],json.loads(sys.argv[4]),timeout=60)))\n')
+    cwctl.load_env_file();cwctl.require_key();box=cwctl.read_sandbox(role['sandbox_id'],patience=60)
+    result=box.exec(['python3','-c',program,publisher['path'],publisher['sha256'],role['directory'],json.dumps(request)],timeout_seconds=90).result(timeout=120)
+    if result.returncode!=0 or json.loads(result.stdout).get('accepted') is not True:raise ValueError('owned role stop not accepted')
+    probe=('import json,sys,time\nfrom pathlib import Path\n'
+        'deadline=time.monotonic()+60\n'
+        'while time.monotonic()<deadline:\n'
+        ' s=json.loads(Path(sys.argv[1]).read_text());r=s.get("roles",{}).get(sys.argv[2],{})\n'
+        ' if r.get("pid")==int(sys.argv[3]) and r.get("alive") is False:break\n'
+        ' time.sleep(.2)\n'
+        'else:raise SystemExit(1)\n')
+    observed=box.exec(['python3','-c',probe,role['directory'].rstrip('/')+'/state.json',request['role'],str(request['expected_pid'])],timeout_seconds=70).result(timeout=90)
+    if observed.returncode!=0:raise ValueError('owned role exit not observed')
+    return {'pid':request['expected_pid'],'start_ticks':request['expected_process_start_ticks'],'exit_observed':True}
+
+
+def sdk_confirm_promoted_role(role,nonce):
+    """Prove an already-running coordinator is the exactly authorized owner child."""
+    try:from . import cwctl
+    except ImportError:import cwctl
+    program='''import hashlib,json,sys
+from pathlib import Path
+d=Path(sys.argv[1]);owner=sys.argv[2];boot=sys.argv[3];nonce=sys.argv[4]
+s=json.loads((d/'state.json').read_text());fp=d/'promotion-fence.json';ap=d/'promotion-coordinator.json'
+if not fp.exists():fp=d/('promotion-release-'+nonce+'.json')
+if not ap.exists():ap=d/('promotion-coordinator-'+nonce+'.json')
+f=json.loads(fp.read_text());a=json.loads(ap.read_text())
+if s.get('owner_id')!=owner or s.get('boot_id')!=boot or f.get('owner_id')!=owner or f.get('boot_id')!=boot or f.get('nonce')!=nonce or a.get('nonce')!=nonce:raise ValueError('owner authorization differs')
+r=s.get('roles',{}).get('coordinator',{});pid=r.get('pid');ticks=r.get('start_ticks')
+if not r.get('alive') or not isinstance(pid,int) or not ticks:raise ValueError('coordinator role is not alive')
+parts=Path('/proc/'+str(pid)+'/stat').read_text().rsplit(')',1)[1].split()
+if parts[0]=='Z' or parts[19]!=ticks:raise ValueError('coordinator process identity changed')
+events=[x for x in s.get('events',[]) if x.get('event')=='start' and x.get('role')=='coordinator' and x.get('pid')==pid]
+if len(events)!=1:raise ValueError('coordinator start history ambiguous')
+publisher=json.loads((d/('publisher-'+events[0]['request_id']+'.json')).read_text())
+if publisher.get('request_sha256')!=a.get('request_sha256'):raise ValueError('running coordinator authorization differs')
+print(json.dumps({'pid':pid,'start_ticks':ticks,'owner_id':owner,'boot_id':boot}))
+'''
+    cwctl.load_env_file();cwctl.require_key();box=cwctl.read_sandbox(role['sandbox_id'],patience=60)
+    result=box.exec(['python3','-c',program,role['directory'],role['owner_id'],role['boot_id'],nonce],timeout_seconds=30).result(timeout=60)
+    if result.returncode!=0:raise ValueError('running coordinator owner is not the exact authorized child')
     return json.loads(result.stdout)

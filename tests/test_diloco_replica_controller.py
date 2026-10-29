@@ -34,22 +34,32 @@ def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch
     monkeypatch.setattr(fm,'owner_reference',lambda *args:{'run_id':'r','workers':{'0':dict(old),'1':dict(entries[0])}})
     calls=[]
     monkeypatch.setattr(fm,'sdk_authorize_coordinator',lambda *a,**k:{})
+    monkeypatch.setattr(fm,'sdk_stop_owned_role',lambda *a,**k:{'exit_observed':True})
     monkeypatch.setattr(fm,'sdk_set_worker_authority',lambda ws,nonce,action:(calls.append(action) or [{'sandbox_id':'peer'}]))
-    monkeypatch.setattr(fm,'provider_fence_verifier',lambda **kw:lambda proof:{'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64})
+    monkeypatch.setattr(fm,'provider_fence_verifier',lambda **kw:lambda proof:{'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64,'primary':old,'quiesced_workers':[0,1],'provider_observed_at':__import__('time').time()})
     monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)
     class Sandbox:
-        def exec(self,*args,**kwargs):return SimpleNamespace(result=lambda **kw:SimpleNamespace(returncode=0,stdout='{"accepted":true}'))
+        def exec(self,argv,**kwargs):
+            output=json.dumps({'owner_id':'oo','boot_id':'bb','generation':3}) if argv[0]=='cat' else '{"accepted":true}'
+            return SimpleNamespace(result=lambda **kw:SimpleNamespace(returncode=0,stdout=output))
+        def write_file(self,*args):return SimpleNamespace(result=lambda **kw:None)
     monkeypatch.setattr(cwctl,'read_sandbox',lambda *args,**kwargs:Sandbox())
     class Transport:
-        def __init__(self,*args,**kwargs):pass
-        def json(self,*args):return {'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':intent['new_token_sha256'],'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64}}
+        def __init__(self,*args,**kwargs):self.calls=0
+        def json(self,*args):
+            self.calls+=1
+            if self.calls==1:raise OSError('not started')
+            return {'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':intent['new_token_sha256'],'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64}}
     monkeypatch.setattr(worker,'Transport',Transport)
     monkeypatch.setattr(replica_transport,'witness_head',lambda *a,**k:{'run_id':'r','baseline_sha256':'a'*64,'sequence':4,'head':'h'*64})
     monkeypatch.setattr(replica_transport,'rotate_replica_credential',lambda *a,**k:{})
     (tmp_path/'old-token').write_text('o'*32)
     config={'intent':intent,'workers':entries,'expected_primary':old,'expected_workers':[0,1],'control_dirs':{},
         'supervisor_proof':{'journal':{'path':'p','sha256':'x'}},'new_token_file':str(tmp_path/'token'),
-        'outgoing_replica':{'url':'https://replica','old_token_file':str(tmp_path/'old-token'),'baseline_sha256':'a'*64},'primary_role':{'sandbox_id':'target','directory':'/control','publisher':{'path':'/publisher','sha256':'a'*64},'request':{'action':'start','role':'coordinator'}}}
+        'outgoing_replica':{'url':'https://replica','old_token_file':str(tmp_path/'old-token'),'baseline_sha256':'a'*64},'promoted_replica_role':{},
+        'activation_config':{'run_id':'r','baseline_sha256':'a'*64,'sequence':4,'head':'h'*64,'activation_nonce':'x'*48,'file_freeze_nonce':'x'*48,'expected_primary':old,'expected_workers':[0,1],
+            'session_transition':{'generation_nonce':'n'*48,'new_url':'https://new','new_token_sha256':intent['new_token_sha256']}},
+        'primary_role':{'sandbox_id':'target','directory':'/control','owner_id':'oo','boot_id':'bb','stage_directory':'/stage','python':'/usr/bin/python3','publisher':{'path':'/publisher','sha256':'a'*64},'request':{'action':'start','role':'coordinator'}}}
     assert run_coreweave_promotion(tmp_path/'journal',config)['phase']=='released'
     assert calls==['fence','release']
 

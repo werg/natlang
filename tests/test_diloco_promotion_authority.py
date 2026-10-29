@@ -27,7 +27,7 @@ def test_fence_rejects_direct_worker_start_until_exact_release(tmp_path):
         result=wait(lambda: json.loads((tmp_path/'result.json').read_text()))
         assert result['accepted'] is False and 'fenced' in result['error']
         with pytest.raises(ValueError):release(tmp_path,**dict(args,nonce='b'*48))
-        release(tmp_path,**args)
+        release(tmp_path,**args);release(tmp_path,**args)
     finally:
         owner.terminate();owner.wait(timeout=8)
 
@@ -134,3 +134,31 @@ def test_simultaneous_start_and_fence_cannot_both_succeed(tmp_path):
             assert not (a.result() and b.result())
     finally:
         owner.terminate();owner.wait(timeout=8)
+
+
+def test_fence_preserves_only_exact_existing_peer_role(tmp_path):
+    import hashlib
+    script=Path(__file__).parents[1]/'scripts/coreweave/diloco_role_supervisor.py';owner=subprocess.Popen([sys.executable,str(script),str(tmp_path)])
+    def wait(fn):
+        end=time.monotonic()+8
+        while time.monotonic()<end:
+            try:
+                v=fn()
+                if v:return v
+            except (OSError,ValueError,KeyError):pass
+            time.sleep(.02)
+        raise AssertionError('timeout')
+    try:
+        state=wait(lambda:json.loads((tmp_path/'state.json').read_text()));argv=[sys.executable,'-c','import time;time.sleep(30)']
+        req={'schema':'natlang.diloco-role-request/1','id':'peer','owner_id':state['owner_id'],'expected_generation':state['generation'],'role':'actor','action':'start','argv':argv}
+        temp=tmp_path/'request.tmp';temp.write_text(json.dumps(req));os.replace(temp,tmp_path/'request.json')
+        wait(lambda:json.loads((tmp_path/'result.json').read_text()).get('id')=='peer');state=json.loads((tmp_path/'state.json').read_text());role=state['roles']['actor']
+        preserved={'role':'actor','pid':role['pid'],'start_ticks':role['start_ticks'],'argv_sha256':hashlib.sha256(json.dumps(argv,separators=(',',':')).encode()).hexdigest()}
+        args={'expected_owner':state['owner_id'],'expected_boot':state['boot_id'],'nonce':'n'*48}
+        with pytest.raises(ValueError):fence(tmp_path,**args,preserve_role=dict(preserved,pid=1))
+        fence(tmp_path,**args,preserve_role=preserved)
+        assert json.loads((tmp_path/'promotion-preserved-role.json').read_text())['role']==preserved
+        request={'schema':'natlang.diloco-role-request/1','id':'worker','owner_id':state['owner_id'],'expected_generation':state['generation'],'role':'worker','action':'start','argv':[sys.executable,'-c','pass']}
+        temp.write_text(json.dumps(request));os.replace(temp,tmp_path/'request.json')
+        result=wait(lambda:(x if (x:=json.loads((tmp_path/'result.json').read_text())).get('id')=='worker' else None));assert not result['accepted']
+    finally:owner.terminate();owner.wait(timeout=8)

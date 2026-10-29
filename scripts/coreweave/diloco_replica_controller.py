@@ -16,22 +16,35 @@ def run_promotion(directory, *, intent, fence_workers, verify_fence, start_prima
     primary must acknowledge the exact witnessed WAL head before release.
     """
     required={'run_id','generation_nonce','activation_nonce','sequence','head','new_url','new_token_sha256'}
-    if not isinstance(intent,dict) or set(intent)!=required or not all(intent.values()) or len(intent['generation_nonce'])<32 or len(intent['activation_nonce'])<32:
+    if (not isinstance(intent,dict) or set(intent)!=required or type(intent.get('sequence')) is not int or intent['sequence']<0 or
+            not all(intent.get(k) for k in required-{'sequence'}) or len(intent['generation_nonce'])<32 or len(intent['activation_nonce'])<32):
         raise ValueError('invalid promotion intent')
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
     with (directory/'controller.lock').open('a+b') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         journal=directory/'promotion.json'
-        if journal.exists():raise ValueError('promotion generation already exists; reconcile its journal')
-        record={'schema':'natlang.diloco-promotion-controller/1','intent':intent,'phase':'intent'}
-        write_json_durable(journal,record)
-        fences=fence_workers(intent);record.update(phase='workers-fenced',workers=fences);write_json_durable(journal,record)
-        evidence=verify_fence(intent)
-        if (evidence.get('primary_fenced') is not True or evidence.get('all_workers_quiesced') is not True
-                or evidence.get('run_id')!=intent['run_id'] or not evidence.get('proof_sha256')):
-            raise ValueError('invalid supervisor fence evidence')
-        record.update(phase='provider-fenced',fence=evidence);write_json_durable(journal,record)
-        ready=start_primary(intent,evidence)
+        if journal.exists():
+            record=json.loads(journal.read_text())
+            if record.get('schema')!='natlang.diloco-promotion-controller/1' or record.get('intent')!=intent:
+                raise ValueError('promotion journal belongs to another generation')
+        else:
+            record={'schema':'natlang.diloco-promotion-controller/1','intent':intent,'phase':'intent'}
+            write_json_durable(journal,record)
+        phase=record.get('phase')
+        if phase not in ('intent','workers-fenced','provider-fenced','primary-ready','released'):raise ValueError('invalid promotion phase')
+        if phase=='released':return record
+        if phase=='intent':
+            fences=fence_workers(intent);record.update(phase='workers-fenced',workers=fences);write_json_durable(journal,record)
+        fences=record['workers']
+        if record['phase'] in ('workers-fenced','provider-fenced'):
+            evidence=verify_fence(intent)
+            if (evidence.get('primary_fenced') is not True or evidence.get('all_workers_quiesced') is not True
+                    or evidence.get('run_id')!=intent['run_id'] or not evidence.get('proof_sha256')):
+                raise ValueError('invalid supervisor fence evidence')
+            record.update(phase='provider-fenced',fence=evidence);write_json_durable(journal,record)
+        # The adapter must recognize an already-running exact promoted role and
+        # return its authenticated readiness on retries, rather than launch it twice.
+        ready=start_primary(intent,record['fence'])
         if (ready.get('run_id')!=intent['run_id'] or ready.get('sequence')!=intent['sequence']
                 or ready.get('head')!=intent['head'] or ready.get('url')!=intent['new_url']
                 or ready.get('token_sha256')!=intent['new_token_sha256'] or ready.get('ready') is not True
@@ -39,6 +52,7 @@ def run_promotion(directory, *, intent, fence_workers, verify_fence, start_prima
                 or type(ready['sealed_rebase'].get('sequence')) is not int or ready['sealed_rebase']['sequence']<2
                 or not ready['sealed_rebase'].get('head')):
             raise ValueError('new primary did not prove exact WAL and session identity')
+        if record['phase']=='primary-ready' and record['primary']!=ready:raise ValueError('promoted primary readiness changed')
         record.update(phase='primary-ready',primary=ready);write_json_durable(journal,record)
         released=release_workers(intent,fences)
         if (not isinstance(fences,list) or not fences or not isinstance(released,list) or
@@ -46,6 +60,7 @@ def run_promotion(directory, *, intent, fence_workers, verify_fence, start_prima
             raise ValueError('worker release did not cover exact fenced owners')
         record.update(phase='released',released=released);write_json_durable(journal,record)
         return record
+
 
 
 def run_coreweave_promotion(directory, config):
@@ -78,12 +93,31 @@ def run_coreweave_promotion(directory, config):
     def verify(_):return verifier(config['supervisor_proof'])
     def start(_,evidence):
         from natlang_neuralese.train.diloco.replica_transport import witness_head,rotate_replica_credential
+        from natlang_neuralese.train.diloco.worker import RemoteError
+        client=Transport(intent['new_url'],token,5,gateway=config.get('gateway'),allow_http=config.get('allow_http',False))
+        try:existing=client.json('GET','/v1/replica-promotion')
+        except OSError:existing=None
+        except RemoteError as exc:
+            if exc.status not in (404,503):raise
+            existing=None
+        if existing is not None:
+            if (existing.get('run_id')!=intent['run_id'] or existing.get('sequence')!=intent['sequence'] or
+                    existing.get('head')!=intent['head'] or existing.get('token_sha256')!=intent['new_token_sha256']):
+                raise ValueError('existing promoted coordinator identity differs')
+            fence_module.sdk_confirm_promoted_role(config['primary_role'],nonce)
+            return existing
         replica=config['outgoing_replica'];old_token=Path(replica['old_token_file']).read_text().strip()
-        witnessed=witness_head(replica['url'],old_token,allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
-        if witnessed!={'run_id':intent['run_id'],'baseline_sha256':replica['baseline_sha256'],'sequence':intent['sequence'],'head':intent['head']}:
-            raise ValueError('outgoing replica does not witness exact promoted head')
-        rotate_replica_credential(replica['url'],old_token,token,sequence=intent['sequence'],head=intent['head'],nonce=nonce,
-            allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
+        expected={'run_id':intent['run_id'],'baseline_sha256':replica['baseline_sha256'],'sequence':intent['sequence'],'head':intent['head']}
+        try:witnessed=witness_head(replica['url'],token,allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
+        except RemoteError as exc:
+            if exc.status!=403:raise
+            witnessed=None
+        if witnessed is None:
+            witnessed=witness_head(replica['url'],old_token,allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
+            if witnessed!=expected:raise ValueError('outgoing replica does not witness exact promoted head')
+            rotate_replica_credential(replica['url'],old_token,token,sequence=intent['sequence'],head=intent['head'],nonce=nonce,
+                allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
+        elif witnessed!=expected:raise ValueError('rotated replica does not witness exact promoted head')
         # The surviving receiver owns the journal lock. Stop only that exact
         # role after its replacement has witnessed the head, before promotion.
         fence_module.sdk_stop_owned_role(config['promoted_replica_role'])
@@ -119,7 +153,6 @@ def run_coreweave_promotion(directory, config):
         fence_module.sdk_authorize_coordinator(role,nonce)
         result=sandbox.exec(['python3','-c',program,publisher['path'],publisher['sha256'],role['directory'],json.dumps(request)],timeout_seconds=90).result(timeout=120)
         if result.returncode!=0 or json.loads(result.stdout).get('accepted') is not True:raise ValueError('coordinator owner did not accept start')
-        client=Transport(intent['new_url'],token,5,gateway=config.get('gateway'),allow_http=config.get('allow_http',False))
         deadline=time.monotonic()+config.get('readiness_timeout',120)
         while True:
             try:return client.json('GET','/v1/replica-promotion')
@@ -256,44 +289,51 @@ def run_coreweave_seed_stage(config):
     if len(receipt_sha)!=64:raise ValueError('invalid seed receipt hash')
     serve=config_argv(source_box,source,'seed-serve',{'seed':source['seed_directory'],'host':source['seed_host'],'port':source['seed_port'],'token_file':source['seed_token_file']})
     source_role=owned_start(source,serve,'seed-source-'+unique)
-    fetch=config_argv(target_box,target,'seed-fetch',{'url':source['seed_url'],'token_file':target['seed_token_file'],
-        'gateway_file':target.get('source_gateway_file'),'destination':target['seed_directory'],'receipt_sha256':receipt_sha,'allow_http':config.get('allow_http',False)})
-    execute(target_box,target,fetch,config.get('transfer_timeout',21600))
-    install=config_argv(target_box,target,'seed-install',{'seed':target['seed_directory'],'store':target['store'],'receipt_sha256':receipt_sha})
-    execute(target_box,target,install,config.get('install_timeout',3600))
-    peer_config={'baseline':target['store']+'/baseline','baseline_sha256':witness['baseline_sha256'],'store':target['store'],
-        'work_root':target['work_root'],'host':target['peer_host'],'port':target['peer_port'],'token_file':target['peer_token_file'],'max_transaction_bytes':target['max_transaction_bytes']}
-    peer_argv=config_argv(target_box,target,'peer',peer_config);target_role=owned_start(target,peer_argv,'seed-peer-'+unique)
-    target_token=Path(config['target_token_file']).read_text().strip();deadline=time.monotonic()+config.get('readiness_timeout',300)
-    while True:
-        try:
-            actual=witness_head(target['replica_url'],target_token,allow_http=config.get('allow_http',False),gateway=target_gateway)
-            if actual!=witness:raise ValueError('replacement peer witnessed a different head')
-            break
-        except OSError:
-            if time.monotonic()>=deadline:raise
-            time.sleep(1)
-    release=config_argv(source_box,source,'seed-release',{'store':source['store'],'seed_receipt':source['seed_directory']+'/seed-receipt.json',
-        'receipt_sha256':receipt_sha,'peer_url':target['replica_url'],'token_file':source['target_peer_token_file'],
-        'gateway_file':source.get('target_gateway_file'),'allow_http':config.get('allow_http',False)})
-    execute(source_box,source,release,120)
-    stop_request={'schema':'natlang.diloco-role-request/1','id':'seed-stop-'+unique,'owner_id':source_role['owner_id'],
-        'expected_generation':source_role['generation'],'role':source.get('seed_role','actor'),'action':'stop','expected_pid':source_role['pid'],
-        'expected_process_start_ticks':source_role['process_start_ticks']}
-    publisher=source['publisher'];program=('import hashlib,json,runpy,sys\nfrom pathlib import Path\n'
-        'p=Path(sys.argv[1]);actual=hashlib.sha256(p.read_bytes()).hexdigest()\n'
-        'if actual!=sys.argv[2]:raise ValueError("owner publisher differs")\n'
-        'print(json.dumps(runpy.run_path(str(p))["submit"](sys.argv[3],json.loads(sys.argv[4]),timeout=60)))\n')
-    stopped=source_box.exec(['python3','-c',program,publisher['path'],publisher['sha256'],source['directory'],json.dumps(stop_request)],timeout_seconds=90).result(timeout=120)
-    if stopped.returncode!=0 or json.loads(stopped.stdout).get('accepted') is not True:raise ValueError('seed actor stop was not accepted')
-    probe=('import json,sys,time\nfrom pathlib import Path\n'
-        'deadline=time.monotonic()+60\n'
-        'while time.monotonic()<deadline:\n'
-        ' s=json.loads(Path(sys.argv[1]).read_text());r=s.get("roles",{}).get(sys.argv[3],{})\n'
-        ' if r.get("pid")==int(sys.argv[2]) and r.get("alive") is False:break\n'
-        ' time.sleep(.2)\n'
-        'else:raise SystemExit(1)\n')
-    observed=source_box.exec(['python3','-c',probe,source['directory'].rstrip('/')+'/state.json',str(source_role['pid']),source.get('seed_role','actor')],timeout_seconds=70).result(timeout=90)
-    if observed.returncode!=0:raise ValueError('seed actor exit not observed')
+    def stop_source():
+        stop_request={'schema':'natlang.diloco-role-request/1','id':'seed-stop-'+unique,'owner_id':source_role['owner_id'],
+            'expected_generation':source_role['generation'],'role':source.get('seed_role','actor'),'action':'stop','expected_pid':source_role['pid'],
+            'expected_process_start_ticks':source_role['process_start_ticks']}
+        publisher=source['publisher'];program=('import hashlib,json,runpy,sys\nfrom pathlib import Path\n'
+            'p=Path(sys.argv[1]);actual=hashlib.sha256(p.read_bytes()).hexdigest()\n'
+            'if actual!=sys.argv[2]:raise ValueError("owner publisher differs")\n'
+            'print(json.dumps(runpy.run_path(str(p))["submit"](sys.argv[3],json.loads(sys.argv[4]),timeout=60)))\n')
+        stopped=source_box.exec(['python3','-c',program,publisher['path'],publisher['sha256'],source['directory'],json.dumps(stop_request)],timeout_seconds=90).result(timeout=120)
+        if stopped.returncode!=0:raise ValueError('seed actor stop was not accepted')
+        stopped_value=json.loads(stopped.stdout)
+        if stopped_value.get('accepted') is not True:raise ValueError('seed actor stop was not accepted')
+        probe=('import json,sys,time\nfrom pathlib import Path\n'
+            'deadline=time.monotonic()+60\n'
+            'while time.monotonic()<deadline:\n'
+            ' s=json.loads(Path(sys.argv[1]).read_text());r=s.get("roles",{}).get(sys.argv[3],{})\n'
+            ' if r.get("pid")==int(sys.argv[2]) and r.get("alive") is False:break\n'
+            ' time.sleep(.2)\n'
+            'else:raise SystemExit(1)\n')
+        observed=source_box.exec(['python3','-c',probe,source['directory'].rstrip('/')+'/state.json',str(source_role['pid']),source.get('seed_role','actor')],timeout_seconds=70).result(timeout=90)
+        if observed.returncode!=0:raise ValueError('seed actor exit not observed')
+        return stopped_value
+    try:
+        fetch=config_argv(target_box,target,'seed-fetch',{'url':source['seed_url'],'token_file':target['seed_token_file'],
+            'gateway_file':target.get('source_gateway_file'),'destination':target['seed_directory'],'receipt_sha256':receipt_sha,'allow_http':config.get('allow_http',False)})
+        execute(target_box,target,fetch,config.get('transfer_timeout',21600))
+        install=config_argv(target_box,target,'seed-install',{'seed':target['seed_directory'],'store':target['store'],'receipt_sha256':receipt_sha})
+        execute(target_box,target,install,config.get('install_timeout',3600))
+        peer_config={'baseline':target['store']+'/baseline','baseline_sha256':witness['baseline_sha256'],'store':target['store'],
+            'work_root':target['work_root'],'host':target['peer_host'],'port':target['peer_port'],'token_file':target['peer_token_file'],'max_transaction_bytes':target['max_transaction_bytes']}
+        peer_argv=config_argv(target_box,target,'peer',peer_config);target_role=owned_start(target,peer_argv,'seed-peer-'+unique)
+        target_token=Path(config['target_token_file']).read_text().strip();deadline=time.monotonic()+config.get('readiness_timeout',300)
+        while True:
+            try:
+                actual=witness_head(target['replica_url'],target_token,allow_http=config.get('allow_http',False),gateway=target_gateway)
+                if actual!=witness:raise ValueError('replacement peer witnessed a different head')
+                break
+            except OSError:
+                if time.monotonic()>=deadline:raise
+                time.sleep(1)
+        release=config_argv(source_box,source,'seed-release',{'store':source['store'],'seed_receipt':source['seed_directory']+'/seed-receipt.json',
+            'receipt_sha256':receipt_sha,'peer_url':target['replica_url'],'token_file':source['target_peer_token_file'],
+            'gateway_file':source.get('target_gateway_file'),'allow_http':config.get('allow_http',False)})
+        execute(source_box,source,release,120)
+    finally:
+        stopped_value=stop_source()
     return {'schema':'natlang.diloco-third-peer-stage/1','witness':witness,'receipt_sha256':receipt_sha,
-            'source_role':source_role,'target_role':target_role,'source_seed_server_stopped':True}
+            'source_role':source_role,'target_role':target_role,'source_generation_after_seed_stop':stopped_value['generation'],'source_seed_server_stopped':True}

@@ -115,12 +115,10 @@ def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared
                     from ...common.jsonio import write_bytes_durable
                     if target.exists() or sidecar.exists():
                         if not target.is_file() or target.stat().st_size!=length:raise ValueError('replica file name conflicts')
-                        if sidecar.exists():
-                            if not sidecar.is_file() or sidecar.read_text().strip()!=expected:raise ValueError('replica file name conflicts')
-                        else:
-                            with target.open('rb') as check:
-                                if hashlib.file_digest(check,'sha256').hexdigest()!=expected:raise ValueError('unsealed replica file conflicts')
-                            write_bytes_durable(sidecar,(expected+'\n').encode())
+                        if sidecar.exists() and (not sidecar.is_file() or sidecar.read_text().strip()!=expected):raise ValueError('replica file name conflicts')
+                        with target.open('rb') as check:
+                            if hashlib.file_digest(check,'sha256').hexdigest()!=expected:raise ValueError('existing replica file bytes differ')
+                        if not sidecar.exists():write_bytes_durable(sidecar,(expected+'\n').encode())
                     else:
                         os.replace(temp,target);temp=None;write_bytes_durable(sidecar,(expected+'\n').encode())
                     reply={'name':name,'sha256':expected,'bytes':length}

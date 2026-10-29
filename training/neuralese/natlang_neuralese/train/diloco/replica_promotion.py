@@ -89,7 +89,9 @@ def recover_after_replica_loss(*, baseline, baseline_sha256, journal, sequence, 
         _identity(json.loads((journal.root/f'{sealed_sequence:020d}'/'record.json').read_text())))
     target=Path(destination);target.mkdir(parents=True,exist_ok=False)
     if not isinstance(freeze_nonce,str) or len(freeze_nonce)<32:raise ValueError('replica loss file freeze nonce is invalid')
-    uploads=Path(source_work_root)/'uploads';target_uploads=target/'replica-uploads';files=[]
+    source_root=Path(source_work_root).resolve(strict=True)
+    if not source_root.is_dir():raise ValueError('old primary work root is not a directory')
+    uploads=source_root/'uploads';target_uploads=target/'replica-uploads';files=[]
     if uploads.exists():
         target_uploads.mkdir()
         for item in sorted(uploads.iterdir()):
@@ -121,7 +123,7 @@ def recover_after_replica_loss(*, baseline, baseline_sha256, journal, sequence, 
             'source_journal':str(journal.root.resolve()),'source_sequence':sequence,'source_head':head,
             'sealed_predecessor':previous,'unsealed_tail_retained':bool(sequence%2),
             'new_baseline_sha256':captured['sha256'],'new_head':new_head,'owner_evidence':verified_owner_evidence,
-            'source_work_root':str(Path(source_work_root).resolve()),'retained_complete_files':files,'partial_source_retained':True}
+            'source_work_root':str(source_root),'retained_complete_files':files,'partial_source_retained':True}
         write_json_durable(target/'recovery.json',receipt)
         write_json_durable(target/'replica-active.json',{'schema':'natlang.diloco-replica-active-generation/1','id':'seeded',
             'previous':previous,'baseline':str((target/'baseline').resolve()),'baseline_sha256':captured['sha256'],
