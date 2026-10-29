@@ -8,6 +8,7 @@ from .retention_eligibility import eligible_pair
 from .retention_presence import current_presence
 from .retention_transaction import retire_pair
 from .retention_leases import leased_roles
+from .private_export_guard import has_owner_readback
 
 
 def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, lock_path, state_path, remove, present, write_durable, apply=False):
@@ -40,8 +41,7 @@ def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, loc
             receipt=by_role[role];identity=receipt.get('identity') or {};verification=receipt.get('independent_verification') or {}
             if verification.get('sha256')!=identity.get('sha256') or verification.get('bytes')!=identity.get('bytes'):
                 raise ValueError('receipt does not bind verified bytes')
-        fallback=by_role[live['eligibility']['fallback_role']]['independent_verification']
-        if fallback.get('readback_location')!='owner':raise ValueError('fallback lacks independent owner GET')
+        if not has_owner_readback(by_role[live['eligibility']['fallback_role']]):raise ValueError('fallback lacks independent owner GET')
         for role,key in ((value['role'],'sha256'),(value['control_role'],'control_sha256')):
             if role in by_role and by_role[role]['identity']['sha256']!=value[key]:raise ValueError('pair receipt identity changed')
         current_presence(api,[by_role[role] for role in sorted(required)])
@@ -75,7 +75,7 @@ def guarded_full(*, candidate, roots, scan, reference_scope, read_live, api, loc
         for role in required:
             r=by_role[role];identity=r.get('identity') or {};verification=r.get('independent_verification') or {}
             if verification.get('sha256')!=identity.get('sha256') or verification.get('bytes')!=identity.get('bytes'):raise ValueError('receipt does not bind verified bytes')
-        if by_role[live['eligibility']['fallback_role']]['independent_verification'].get('readback_location')!='owner':raise ValueError('fallback lacks independent owner GET')
+        if not has_owner_readback(by_role[live['eligibility']['fallback_role']]):raise ValueError('fallback lacks independent owner GET')
         if value['role'] in by_role and by_role[value['role']]['identity']['sha256']!=value['sha256']:raise ValueError('full receipt identity changed')
         current_presence(api,[by_role[role] for role in sorted(required)])
     if not apply:
