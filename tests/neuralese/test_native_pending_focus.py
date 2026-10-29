@@ -209,3 +209,27 @@ def test_started_recipe_handoff_records_focus_without_changing_source(tmp_path):
     assert changes['sft']['kind']=='pending_focus_continuation'
     before,after=_without_unstarted_bindings(old['recipe'],new['recipe'],changes)
     assert before==after
+
+
+def test_focus_composes_with_authenticated_source_and_ce_append(tmp_path):
+    import copy
+    import pytest
+    from test_native_resident_ce import fixture
+    from natlang_neuralese.train.recipe import unstarted_stage_input_changes
+    from natlang_neuralese.train import native_resident as resident
+    paths, old, new = fixture(tmp_path)
+    evidence = tmp_path/'focus-evidence'; evidence.write_text('verified')
+    request = tmp_path/'focus-combined.json'
+    request.write_text(json.dumps({'schema':'natlang.native-pending-focus/1','rows':[{
+        'id':'extra','binding':'a'*64,'source_sha256':'b'*64,'split':'train',
+        'evidence':[resident.binding(evidence)]}]}))
+    binding = resident.binding(request)
+    new['recipe']['input_bindings']['focus'] = binding
+    new['recipe']['stages'][0]['inputs']['pending_focus'] = 'focus'
+    new['stage_inputs']['sft']['pending_focus'] = {**binding, 'binding':'focus'}
+    changes = unstarted_stage_input_changes(old,new,tmp_path,started_stage_ids=('sft',))
+    assert changes['sft']['kind'] == 'pending_focus_continuation'
+    bad = copy.deepcopy(new)
+    bad['stage_inputs']['sft']['continued_native_graphs']['sha256'] = '0'*64
+    with pytest.raises(ValueError, match='handoff refused'):
+        unstarted_stage_input_changes(old,bad,tmp_path,started_stage_ids=('sft',))
