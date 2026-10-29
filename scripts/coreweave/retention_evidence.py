@@ -78,7 +78,10 @@ def authenticated_owner_epochs(bindings):
 
 
 def owner_for_intent(intent, owners):
-    matches=[o for o in owners if all(intent.get(k)==o.get(k) for k in ('sandbox_id','plan_sha256','runtime_commit')) and intent.get('step',-1)>o['parent_step']]
+    keys=('owner_id','generation','boot_id','pid','process_start_ticks')
+    selected=intent.get('owner') or {}
+    if any(selected.get(k) is None for k in keys):raise ValueError('intent lacks exact owner process binding')
+    matches=[o for o in owners if all(intent.get(k)==o.get(k) for k in ('sandbox_id','plan_sha256','runtime_commit')) and all(selected[k]==o['accepted'].get(k) for k in keys) and intent.get('step',-1)>o['parent_step']]
     if len(matches)!=1:raise ValueError('intent does not identify exactly one authenticated owner epoch')
     if intent.get('outer_credit') is not False:raise ValueError('unexpected outer credit')
     return matches[0]

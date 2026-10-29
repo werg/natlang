@@ -42,3 +42,26 @@ def retire_pair(*, lock_path, state_path, candidate, inspect, remove, present, w
             op['phase']='deleted';state['retired_roles']=list(dict.fromkeys([*state['retired_roles'],candidate['role'],candidate['control_role']]));write_durable(state_path,state)
         if op['phase']!='deleted':raise ValueError('unknown retirement phase')
         return op
+
+
+def retire_full(*, lock_path, state_path, candidate, inspect, remove, present, write_durable):
+    """Retire an authenticated historical full-only record with durable intent."""
+    if candidate.get('control_required') or candidate.get('control'):raise ValueError('control-bearing record needs paired retirement')
+    if not candidate.get('role') or not candidate.get('sha256'):raise ValueError('incomplete full candidate')
+    with Path(lock_path).open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        state_path=Path(state_path);state=json.loads(state_path.read_text()) if state_path.exists() else {'retired_roles':[],'operations':[]}
+        previous=[x for x in state['operations'] if x.get('role')==candidate['role']]
+        if len(previous)>1:raise ValueError('duplicate retirement operation')
+        if previous:
+            op=previous[0]
+            if op.get('sha256')!=candidate['sha256'] or op.get('control_role'):raise ValueError('retirement identity changed')
+            if op.get('phase')=='deleted':return op
+        else:
+            inspect(candidate,'prepare');op={**candidate,'phase':'intent'};state['operations'].append(op);write_durable(state_path,state)
+        if op.get('phase')!='intent':raise ValueError('unknown retirement phase')
+        inspect(candidate,'intent')
+        if present(candidate['role'],candidate['sha256']):remove(candidate['role'],candidate['sha256'])
+        if present(candidate['role'],candidate['sha256']):raise RuntimeError('checkpoint remains present')
+        op['phase']='deleted';state['retired_roles']=list(dict.fromkeys([*state['retired_roles'],candidate['role']]));write_durable(state_path,state)
+        return op

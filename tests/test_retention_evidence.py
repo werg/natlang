@@ -22,11 +22,13 @@ def test_pending_and_completed_control_retirements_never_retry():
 def test_authenticated_owner_epoch_binds_runtime_and_parent(tmp_path):
     import hashlib,json
     from scripts.coreweave.retention_evidence import authenticated_owner_epochs,owner_for_intent
-    p=tmp_path/'owner';o={'accepted':{'accepted':True},'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','parent_sha256':'a'*64,'parent_step':5};p.write_text(json.dumps(o));b={'path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
-    owners=authenticated_owner_epochs([b]);i={'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','step':6,'outer_credit':False}
+    owner={'accepted':True,'owner_id':'o','generation':1,'boot_id':'b','pid':4,'process_start_ticks':'5'}
+    p=tmp_path/'owner';o={'accepted':owner,'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','parent_sha256':'a'*64,'parent_step':5};p.write_text(json.dumps(o));b={'path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+    owners=authenticated_owner_epochs([b]);i={'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','step':6,'outer_credit':False,'owner':owner}
     assert owner_for_intent(i,owners)==o
     import pytest
     with pytest.raises(ValueError):owner_for_intent({**i,'runtime_commit':'other'},owners)
     with pytest.raises(ValueError):owner_for_intent({**i,'step':5},owners)
+    with pytest.raises(ValueError):owner_for_intent({**i,'owner':{**owner,'pid':8}},owners)
     p.write_text('{}')
     with pytest.raises(ValueError,match='digest'):authenticated_owner_epochs([b])
