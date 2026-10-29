@@ -30,7 +30,12 @@ def test_new_cohort_no_longer_waits_behind_old_source_and_resume_keeps_every_cre
     _,old=pending_exposure_batches(entries,credits,epochs=1)
     assert names(entries,old)[0]=='old-10'
     quotas,batches=pending_exposure_batches(entries,credits,epochs=1,cohort_ids=cohorts)
-    assert names(entries,batches)[:8]==[f'new-{i}' for i in range(8)]
+    scheduled=names(entries,batches)
+    assert scheduled[0]=='new-0'
+    # One new visit completes 12.5% of the small cohort, above the old
+    # cohort's 10% service. Old debt must catch up before new finishes.
+    assert 'old-10' in scheduled[1:4]
+    assert scheduled.index('old-10') < scheduled.index('new-7')
     for _,indices,_ in batches[:3]:
         for i in indices:credits[entries[i]['id']]=credits.get(entries[i]['id'],0)+1
     entries.append(dict(id='fresh',forward_tokens=99,training_priority=4));cohorts.append('fresh')
@@ -43,14 +48,16 @@ def test_new_cohort_no_longer_waits_behind_old_source_and_resume_keeps_every_cre
     assert entries[:108]==before
 
 
-def test_token_service_balances_work_and_priority_breaks_ties():
+def test_required_token_mass_balances_progress_and_priority_breaks_ties():
     entries=[dict(id='long',forward_tokens=100,training_priority=4)]+[
         dict(id=f'short-{i}',forward_tokens=10,training_priority=3) for i in range(20)]
     _,batches=pending_exposure_batches(entries,{},epochs=2,cohort_ids=['long']+['short']*20)
     actual=names(entries,batches)
     assert actual[0]=='long'
-    assert actual[1:11]==[f'short-{i}' for i in range(10)]
-    assert actual[11]=='long'
+    # Both cohorts reach 50% before the higher-priority long row repeats:
+    # 100/200 long tokens and 200/400 short tokens.
+    assert actual[1:21]==[f'short-{i}' for i in range(20)]
+    assert actual[21]=='long'
     for index,(visit,_,last) in enumerate(batches):
         assert last==all(other!=visit for other,_,_ in batches[index+1:])
 
