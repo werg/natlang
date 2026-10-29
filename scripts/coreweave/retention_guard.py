@@ -1,6 +1,6 @@
 """Two-phase, fail-closed paired retention; provider operations are explicit."""
 from __future__ import annotations
-import fcntl
+import fcntl,time
 from pathlib import Path
 from .retention_snapshot import snapshot,refresh_references,refresh_point_in_time
 from .retention_evidence import external_references
@@ -48,9 +48,11 @@ def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, loc
     if not apply:
         with Path(lock_path).open('a') as lock:
             fcntl.flock(lock,fcntl.LOCK_EX)
+            locked_at=time.monotonic()
             if {candidate['role'],candidate['control_role']} & leased_roles(Path(state_path).parent/'standalone-retention-consumer-leases.json'):raise ValueError('active consumer lease protects retirement pair')
             inspect(candidate,'prepare')
-        return {'mode':'dry','role':candidate['role'],'control_role':candidate['control_role'],'deletion_authorized':False,'scope':'point-in-time JSON scan; managed consumer leases and owner state require the shared commit lock'}
+            lock_seconds=time.monotonic()-locked_at
+        return {'mode':'dry','role':candidate['role'],'control_role':candidate['control_role'],'deletion_authorized':False,'lock_seconds':lock_seconds,'scope':'point-in-time JSON scan; managed consumer leases and owner state require the shared commit lock'}
     return retire_pair(lock_path=lock_path,state_path=state_path,candidate=candidate,inspect=inspect,remove=remove,present=present,write_durable=write_durable)
 
 
@@ -81,7 +83,9 @@ def guarded_full(*, candidate, roots, scan, reference_scope, read_live, api, loc
     if not apply:
         with Path(lock_path).open('a') as lock:
             fcntl.flock(lock,fcntl.LOCK_EX)
+            locked_at=time.monotonic()
             if candidate['role'] in leased_roles(Path(state_path).parent/'standalone-retention-consumer-leases.json'):raise ValueError('active consumer lease protects checkpoint')
             inspect(candidate,'prepare')
-        return {'mode':'dry','role':candidate['role'],'deletion_authorized':False,'scope':'point-in-time JSON scan; managed consumer leases and owner state require the shared commit lock'}
+            lock_seconds=time.monotonic()-locked_at
+        return {'mode':'dry','role':candidate['role'],'deletion_authorized':False,'lock_seconds':lock_seconds,'scope':'point-in-time JSON scan; managed consumer leases and owner state require the shared commit lock'}
     return retire_full(lock_path=lock_path,state_path=state_path,candidate=candidate,inspect=inspect,remove=remove,present=present,write_durable=write_durable)
