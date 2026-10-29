@@ -3,6 +3,48 @@
 This document records recovery milestones. The newest update comes first;
 the later sections describe historical boundaries.
 
+## Update, 06:45 Berlin: four learners earning new graph exposure
+
+All four learners have resumed on the591119-row source1aa7 and native runtime1f0
+with normalized cohort fairness, preserving their own earned full states. Actual
+saved checkpoints prove Big2 communication visits on every rank: peer1 step10500
+has34 distinct graphs/457954 forward tokens; peer2 step9711 has410/5730905;
+peer3 step9758 has2/25366; peer4 step8960 has36/484101. These checkpoints have
+different ages and are not comparable throughput samples. The latest health
+window observed all four advancing, approximately7.8k–12.9k physical forward
+tokens/second each, without OOM kills; publication and batch shapes vary.
+
+All four v7 publication watchers now use exact owner-epoch guards, CPU niceness15
+and single numerical-library threads. Durable complete cloud-GET receipts, rather
+than an owner-GET's transient progress phase, determine earned full verification.
+This fixed duplicate readbacks. Owner verification no longer sleeps while holding
+the shared retention lock. Full-state fallback continues when strict control
+collection rejects a changing checkpoint pin. Current independently exported
+new-source checkpoints include peer1 step10500, peer2 step9711 and peer3 step9758;
+peer4 step8960 export remains in progress. Full workstation readbacks remain
+separate obligations. The exact finalfair runtime/plan capsule and peer2's9419
+retirement-rebind control capsule both passed private owner GET/hash.
+
+Periodic retention remains disabled while scoped historical-epoch and paired
+retirement integration finishes. Unrelated changing diagnostic JSON cannot offer
+a globally atomic namespace: use explicit managed-consumer leases and fresh
+per-file reference observations without claiming such atomicity. No deletion
+through the new guard has been authorized from a diagnostic dry run alone.
+
+Tranche001 verification is complete:112674 train and2269 protected test graphs,
+with114943 exact producer-call and consumer-span checks. Full protection-union,
+deduplication, custody, capacity and source admission remain to be executed before
+exposure; conversion/verification are not training credit.
+
+The local step8341 development evaluation exposes premature graph-search answers.
+Its first four completed cases incorrectly returned null; the official base solved
+those exact cases. One trace first exhausted8192 output tokens without a tool call,
+then queried only the start node's neighbours and returned null. A focused cached
+GGUF/native comparison agreed on the top prediction at32 sampled positions across
+two exact contexts; this does not establish whole-task equivalence or a training
+cause. Preserve this diagnostic and inspect actual generated tokens and source
+exposure before changing the recipe or attributing the regression.
+
 ## Update, 06:15 Berlin: expanded recipe and exporter fencing
 
 All four allocations remain assigned to useful training; rolling continuations
