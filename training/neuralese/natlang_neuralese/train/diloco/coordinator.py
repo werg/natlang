@@ -804,12 +804,22 @@ class FileStore:
         return (self.root / name).open("rb"), sha256
 
 
-def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, stop: threading.Event | None = None) -> None:
+def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, stop: threading.Event | None = None, replication=None) -> None:
     """Serve on a private host, behind the sandbox gateway or an authenticated TLS proxy."""
     if not token or len(token) < 24:
         raise ValueError(f"Set {TOKEN_ENV} to a random secret (>=24 chars)")
-    coordinator = Coordinator(root)
+    coordinator = Coordinator(root) if replication is None else replication.machine.coordinator
+    if coordinator.root.resolve() != Path(root).resolve():
+        raise ValueError('replicated coordinator root differs')
     files = FileStore(coordinator.root)
+    def read(function):
+        return function() if replication is None else replication.read(function)
+    def operation(kind, args, payload=None):
+        if replication is not None:
+            return replication.call(kind, args, payload)
+        if kind == 'submit': args = {**args, 'incoming': payload}
+        return getattr(coordinator, kind)(**args)
+
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -900,7 +910,7 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 if parsed.path == "/v1/manifest":
                     self._json(200, coordinator.manifest)
                 elif parsed.path == "/v1/status":
-                    self._json(200, coordinator.status())
+                    self._json(200, read(coordinator.status))
                 elif parsed.path.startswith("/v1/files/"):
                     name = parsed.path[len("/v1/files/"):]
                     query = parse_qs(parsed.query)
@@ -930,19 +940,23 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                     if coordinator.manifest.get("ema") is None:
                         self._json(404, {"error": "this run keeps no EMA of its global versions"})
                     else:
-                        with coordinator.lock:
-                            path = coordinator._path(index)
-                            version = int(_metadata(path)["version"])
-                            ema = load_tensors(path)["ema"]
-                        payload = io.BytesIO(save({"ema": ema}, metadata={"version": str(version)}))
+                        def read_ema():
+                            with coordinator.lock:
+                                path = coordinator._path(index)
+                                version = int(_metadata(path)["version"])
+                                ema = load_tensors(path)["ema"]
+                            return version, io.BytesIO(save({"ema": ema}, metadata={"version": str(version)}))
+                        version, payload = read(read_ema)
                         self._stream(payload, version)
                 elif re.fullmatch(r"/v1/fragments/[0-9]+", parsed.path):
                     index = int(parsed.path.rsplit("/", 1)[-1])
-                    with coordinator.lock:
-                        version = coordinator._version(index)
-                        unchanged = parse_qs(parsed.query).get("after") == [str(version)]
-                        # Open under the lock, but never hold it while a slow client streams.
-                        file = None if unchanged else coordinator._published(index).open("rb")
+                    def read_fragment():
+                        with coordinator.lock:
+                            version = coordinator._version(index)
+                            unchanged = parse_qs(parsed.query).get("after") == [str(version)]
+                            file = None if unchanged else coordinator._published(index).open("rb")
+                        return version, file
+                    version, file = read(read_fragment)
                     if file is None:
                         self._empty()
                     else:
@@ -961,37 +975,29 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
             try:
                 if parsed.path == "/v1/lease":
                     value = self._read_json()
-                    result = coordinator.lease(int(value["worker"]), str(value["session"]))
+                    result = operation("lease", {"worker": int(value["worker"]), "session": str(value["session"])})
                 elif parsed.path == "/v1/identity-transition":
                     value=self._read_json()
-                    result=coordinator.identity_transition(int(value['worker']),str(value['session']),value['transition'])
+                    result=operation('identity_transition', {'worker':int(value['worker']),'session':str(value['session']),'transition':value['transition']})
                 elif parsed.path == "/v1/completion":
                     value=self._read_json()
-                    result=coordinator.completion(int(value['worker']),str(value['session']),
-                                                  drained=value['drained'],sequences=value.get('sequences'),generation=value.get('generation'))
+                    result=operation('completion', {'worker':int(value['worker']),'session':str(value['session']),'drained':value['drained'],'sequences':value.get('sequences'),'generation':value.get('generation')})
                 elif parsed.path == "/v1/reopen":
                     value=self._read_json()
-                    result=coordinator.reopen(int(value['worker']),str(value['session']),previous=value['previous'],generation=value['generation'],sequences=value['sequences'])
+                    result=operation('reopen', {'worker':int(value['worker']),'session':str(value['session']),'previous':value['previous'],'generation':value['generation'],'sequences':value['sequences']})
                 elif parsed.path == "/v1/progress":
                     value = self._read_json()
-                    result = coordinator.heartbeat(
-                        int(value["worker"]), str(value["session"]), value["steps"], value["tokens"], value.get("metrics")
-                    )
+                    result = operation('heartbeat', {'worker':int(value['worker']),'session':str(value['session']),
+                        'steps':value['steps'],'tokens':value['tokens'],'metrics':value.get('metrics')})
                 elif re.fullmatch(r"/v1/updates/[0-9]+", parsed.path):
                     index = int(parsed.path.rsplit("/", 1)[-1])
                     coordinator._path(index)
                     filename = self._receive(coordinator.fragments[index].length * 4 + 8192)
                     try:
-                        result = coordinator.submit(
-                            index,
-                            int(self._header("X-Worker")),
-                            self._header("X-Session"),
-                            int(self._header("X-Sequence")),
-                            int(self._header("X-Base-Version")),
-                            int(self._header("X-Steps")),
-                            int(self._header("X-Tokens")),
-                            filename,
-                        )
+                        result = operation('submit', {'index':index,'worker':int(self._header("X-Worker")),
+                            'session':self._header("X-Session"),'sequence':int(self._header("X-Sequence")),
+                            'base_version':int(self._header("X-Base-Version")),
+                            'steps':int(self._header("X-Steps")),'tokens':int(self._header("X-Tokens"))}, filename)
                     finally:
                         filename.unlink(missing_ok=True)
                 else:
@@ -1030,7 +1036,22 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
     def reconcile() -> None:
         while not stop.wait(1):
             try:
-                coordinator.tick()
+                def pending_tick_due():
+                    if coordinator._all_completion_declared():
+                        return any(any(coordinator._pending_dir(f.index).glob("*.safetensors")) for f in coordinator.fragments)
+                    for fragment in coordinator.fragments:
+                        files=list(coordinator._pending_dir(fragment.index).glob("*.safetensors"))
+                        if len(files)>=coordinator.manifest['min_quorum']:
+                            return True
+                        meta=_metadata(coordinator._path(fragment.index));version=int(meta['version'])
+                        last_seq=json.loads(meta.get('last_seq','{}'))
+                        if any((version-int(item['base_version'])>coordinator.manifest['max_staleness']
+                                or int(item['sequence'])<=last_seq.get(item['worker'],0))
+                               for item in map(_metadata,files)):
+                            return True
+                    return False
+                if replication is None or read(pending_tick_due):
+                    operation("tick", {})
             except Exception:
                 traceback.print_exc()  # a failed merge must not end the loop serving later rounds
                 sys.stderr.flush()
@@ -1048,4 +1069,4 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
         stop.set()
         server.server_close()
         threads[0].join(timeout=2)
-        coordinator.close()
+        operation("close", {})
