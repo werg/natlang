@@ -23,10 +23,14 @@ def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,m
     for role,step,sha in [('old',6,'a'*64),('middle',7,'c'*64),('new',8,'b'*64)]:
         intent=put(root/(role+'.json'),base|{'step':step,'sha256':sha});exports.append({'role':role,'step':step,'worker':1,'unit':role+'-unit','intent':str(intent),'phase_path':str(root/(role+'-phase.json'))});put(ops/('coreweave-production-'+role+'-private-export-receipt-20261014.json'),receipt(role,sha))
     if paired:
-        control_role='old-control';control_sha='d'*64;control_receipt=receipt(control_role,control_sha)
+        control_role='old-control';control_sha='d'*64;control_receipt=receipt(control_role,control_sha);control_receipt['source']='/work/'+('a'*64)+'-archive'
         put(ops/('coreweave-production-'+control_role+'-private-export-receipt-20261014.json'),control_receipt)
-        control_progress=put(root/'control-progress.json',{'role':control_role,'source':'/work/archive'})
-        exports[0]['control_required']=True;exports[0]['control']={'role':control_role,'unit':'control-unit','status':'independently_verified','phase_path':str(control_progress),'archive':{'path':'/work/archive','sha256':control_sha,'bytes':2}}
+        control_progress=put(root/'control-progress.json',{'role':control_role,'source':control_receipt['source']})
+        exports[0]['control_required']=True;exports[0]['control']={'role':control_role,'unit':'control-unit','status':'independently_verified','phase_path':str(control_progress),'archive':{'path':control_receipt['source'],'sha256':control_sha,'bytes':2}}
+    if paired:
+        full_receipt=json.loads((ops/'coreweave-production-old-private-export-receipt-20261014.json').read_text())
+        put(ops/'private-export-cache/full.json',{'schema':'natlang.private-export-cache/1','identity':full_receipt['identity'],'receipt':full_receipt})
+        put(ops/'private-export-cache/control.json',{'schema':'natlang.private-export-cache/1','identity':control_receipt['identity'],'receipt':control_receipt})
     journals=[]
     for rank in range(1,5):journals.append(put(root/f'journal{rank}.json',{'exports':exports if rank==1 else []}))
     config={'cycle_index':0,'max_attempts_per_rank':2,'state_root':str(root),'operations_root':str(ops),'reference_roots':[str(root)],'fallback_role':'backup','qualified_local_parents':[str(qual)],'active_roles':str(manifest),'owner_state':str(owner_state),'roles':[{'rank':i+1,'journal':str(journals[i]),'owner_epochs':[str(owners[i])]} for i in range(4)]}
@@ -34,6 +38,8 @@ def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,m
     scans=[]
     def scan(ds,roots):
         if list(map(str,roots))==[str(root)]:scans.append(set(ds))
+        cache=ops/'private-export-cache'
+        if list(map(str,roots))==[str(cache)]:return {d:{str(p) for p in cache.glob('*.json') if d in p.read_text()} for d in ds}
         return {d:set() for d in ds}
     monkeypatch.setattr(retention_periodic,'reference_paths',scan)
     def guarded(**kw):
@@ -41,6 +47,8 @@ def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,m
         if not paired and kw['candidate']['role']=='old':raise ValueError('external reference')
         live=kw['read_live'](kw['candidate'],'prepare')
         if paired:
+            assert str(ops/'private-export-cache/full.json') in kw['reference_scope']['allowed_paths']
+            assert str(ops/'private-export-cache/control.json') in kw['reference_scope']['allowed_paths']
             from scripts.coreweave.retention_eligibility import eligible_pair
             assert eligible_pair(kw['candidate'],**live['eligibility'])
         else:assert eligible_full(kw['candidate'],**live['eligibility'])

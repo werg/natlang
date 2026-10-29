@@ -103,16 +103,18 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
         try:
             entry=next(x for x in exports if x['role']==candidate['role']);intent=read(entry['intent']);receipt=next(x for x in receipts if x['role']==candidate['role'])
             phase=ops/('coreweave-production-'+candidate['role']+'-private-upload-phase-20261014.json');cache_root=ops/'private-export-cache';cache_refs=reference_paths([candidate['sha256']],[cache_root])[candidate['sha256']]
-            if len(cache_refs)>1:raise ValueError('ambiguous candidate export cache')
+            own_caches=[p for p in cache_refs if (value:=read(p)).get('identity')==receipt.get('identity') and value.get('receipt')==receipt]
             reviews=[Path(x) for x in config.get('reviews',[]) if candidate['sha256'] in Path(x).read_text()]
-            own=own_bookkeeping(role=candidate['role'],digest=candidate['sha256'],receipt=receipt,receipt_path=receipt_path(candidate['role']),phase=phase if phase.exists() else None,cache=next(iter(cache_refs),None),reviews=reviews,retirement_state=retired if retired.exists() else None)
+            own=own_bookkeeping(role=candidate['role'],digest=candidate['sha256'],receipt=receipt,receipt_path=receipt_path(candidate['role']),phase=phase if phase.exists() else None,reviews=reviews,retirement_state=retired if retired.exists() else None)
+            for path in own_caches:own.update(own_bookkeeping(role=candidate['role'],digest=candidate['sha256'],receipt=receipt,cache=path))
             control=entry.get('control') or {}
             if candidate['control_required']:
                 control_receipt=next(x for x in receipts if x['role']==candidate['control_role'])
                 control_phase=ops/('coreweave-production-'+candidate['control_role']+'-private-upload-phase-20261014.json')
                 control_cache=reference_paths([candidate['control_sha256']],[cache_root])[candidate['control_sha256']]
-                if len(control_cache)>1:raise ValueError('ambiguous control export cache')
-                own.update(own_bookkeeping(role=candidate['control_role'],digest=candidate['control_sha256'],receipt=control_receipt,receipt_path=receipt_path(candidate['control_role']),phase=control_phase if control_phase.exists() else None,cache=next(iter(control_cache),None),watched_digests=(candidate['sha256'],)))
+                own_control_caches=[p for p in control_cache if (value:=read(p)).get('identity')==control_receipt.get('identity') and value.get('receipt')==control_receipt]
+                own.update(own_bookkeeping(role=candidate['control_role'],digest=candidate['control_sha256'],receipt=control_receipt,receipt_path=receipt_path(candidate['control_role']),phase=control_phase if control_phase.exists() else None,watched_digests=(candidate['sha256'],)))
+                for path in own_control_caches:own.update(own_bookkeeping(role=candidate['control_role'],digest=candidate['control_sha256'],receipt=control_receipt,cache=path,watched_digests=(candidate['sha256'],)))
             allowed=[str(Path(entry['intent'])),*own]
             manual_journal=root/('standalone-peer%d-manual-cloud-journal.json'%rank)
             is_manual=manual_journal.exists() and any(x['role']==candidate['role'] for x in read(manual_journal)['exports'])
