@@ -311,3 +311,6 @@ def test_production_stock_arithmetic_uses_tf32_tensor_cores(monkeypatch):
     finally:
         monkeypatch.setenv('NATLANG_STOCK_ARITHMETIC', 'ieee')
         configure_native_precision()
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

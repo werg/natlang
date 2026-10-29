@@ -142,3 +142,6 @@ def test_real_trainer_continues_after_payload_loss_and_reactivates_exact_remaini
     assert final['training']['global_step']==t['global_step']+2
     assert final['training']['exposure_counts']=={'a':1,'b':1,'c':1}
     assert json.loads((tmp_path/'run/report.json').read_text())['mandatory_sft']['complete']
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

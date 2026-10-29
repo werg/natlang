@@ -403,3 +403,6 @@ def test_actual_shared_semantic_resume_and_policy_extension_preserve_optimizer(t
     config_path.write_text(json.dumps(config))
     with pytest.raises(ValueError, match='cannot silently drop'):
         stage.run(config_path, participants_path, tmp_path/'continued', resume=checkpoint, device='cpu')
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

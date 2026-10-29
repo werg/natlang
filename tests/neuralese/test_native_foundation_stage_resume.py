@@ -268,3 +268,6 @@ def test_inherited_foundation_requalifies_after_completed_new_source_boundary(tm
     assert len(calls)-before==1  # one terminal qualification, not one per checkpoint/update
     assert calls[-1]==report['checkpoint_sha256']
     assert task_calls[before_task:]==[(report['task_eval']['step'],True)]
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

@@ -429,3 +429,6 @@ def test_transported_foundation_requires_each_exact_completed_row(tmp_path,damag
     else:changed['rows']['lfm:b']['graph_visits']=True
     with pytest.raises(ValueError,match='communication foundation'):
         validate_communication_foundation(changed,epochs=1,source_sha256=expected)
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

@@ -341,3 +341,6 @@ def test_stream_preparation_uses_one_derivation_and_constant_fingerprint_work(tm
     path.write_text(json.dumps(bad)+'\n')
     with pytest.raises(ValueError,match='actual source row tokenizer'):
         producer.build([path],tokenizer=tokenizer,out=tmp_path/'bad-fingerprint')
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

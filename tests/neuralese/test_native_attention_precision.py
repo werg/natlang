@@ -237,3 +237,6 @@ def test_actual_attention_transition_keeps_optimizer_rng_and_completed_exposure(
     assert event['reference_check']['passed']
     assert any(not torch.equal(value,after['backbone_state'][name])
                for name,value in before['backbone_state'].items())
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

@@ -433,3 +433,6 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
             assert newest['options']['standalone_diloco_rejoin']==final['options']['standalone_diloco_rejoin']
         finally:new_stop.set();new_server.join(timeout=3)
     finally:stop.set();server.join(timeout=3)
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

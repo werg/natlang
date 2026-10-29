@@ -166,3 +166,6 @@ def test_actual_sgd_and_old_checkpoint_resume_select_committed_proof(tmp_path,mo
     assert training['options']['source_classification_migration']==str(proof)
     assert training['options']['source_classification_history'][-1]=={
         'proof_sha256':resident.sha(proof),'graph_visits_created':0}
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

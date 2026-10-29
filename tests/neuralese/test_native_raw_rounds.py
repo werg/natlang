@@ -627,3 +627,6 @@ def test_on_request_history_prevents_old_full_checks_repeating_after_handoff_can
     assert checked==requests
     assert set(result['foundation_qualification_history'])=={reference['sha256']for reference in requests}
     assert result['cycle']==3 and len([kind for kind,_ in calls if kind=='sft'])==3
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

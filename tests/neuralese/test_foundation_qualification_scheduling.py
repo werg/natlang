@@ -157,3 +157,6 @@ def test_actual_deferred_foundation_continues_and_exactly_resumes_optimizer(tmp_
     for key in ('backbone_state','interface_state'):equal(after[key],expected[key])
 
 
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

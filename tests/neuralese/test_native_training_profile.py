@@ -219,3 +219,6 @@ def test_real_native_factory_tuple_and_preference_alias_load_phase(monkeypatch, 
     events = [json.loads(line) for line in (tmp_path/'native-startup-phases.jsonl').read_text().splitlines()]
     assert any(e['phase']=='restore/optimizer-state' and e['status']=='end' for e in events)
     assert not phases['diagnostic_errors']
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

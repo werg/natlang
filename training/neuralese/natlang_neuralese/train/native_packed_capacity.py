@@ -179,7 +179,8 @@ def qualify_pending(model, optimizer, train, pending_batches, args, *, backend, 
     try:
         report = qualify_capacity(model,optimizer,batches,backend=backend,
             checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
-            checkpoint_sha256=checkpoint_sha256,source_binding=binding(train.path),production_packing=True)
+            checkpoint_sha256=checkpoint_sha256,source_binding=binding(train.path),production_packing=True,
+            retained_gradients=getattr(args,'accumulate_batches',1)>1)
     finally:
         for parameter,gradient in prior_gradients.values():
             parameter.grad=gradient

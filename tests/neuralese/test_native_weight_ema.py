@@ -567,3 +567,6 @@ def test_full_parent_resumes_as_diloco_with_explicit_ema_handoff(tmp_path, monke
     assert custody['weights_optimizer_rng_exposure']=='preserved'
     assert trained['diloco']['worker']==0 and trained['optimizer'] and trained['rng'] and trained['exposure_counts']
     assert hashlib.sha256(parent.read_bytes()).hexdigest()==parent_sha
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

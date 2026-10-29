@@ -161,3 +161,6 @@ def test_actual_partial_trainer_retry_updates_once_and_retains_exact_source_cred
         assert audit['mode']=='seed'
         assert audit['operation_receipt']['scope']=='seed-supervised-exposure'
         assert not result['production_complete']
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

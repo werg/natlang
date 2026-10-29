@@ -307,3 +307,6 @@ def test_forced_sync_save_and_finalize_drain_writer_before_consumption(tmp_path,
     assert event['committed'] and released
     policy.finalize({'weights':torch.ones(1)})
     assert torch.load(policy.slot,weights_only=False)['step']==2
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

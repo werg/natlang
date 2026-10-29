@@ -1656,3 +1656,6 @@ def test_expanded_shared_foundation_carries_only_exact_prior_row_exposure(tmp_pa
     stale={**new.bindings,'lfm:b':'stale'}
     guarded=communication_foundation(new,{'lfm:a':1,'lfm:b':9},epochs=1,trained_bindings=stale)
     assert guarded['rows']['lfm:b']['graph_visits']==0 and not guarded['rows']['lfm:b']['admitted_to_training']
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

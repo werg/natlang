@@ -99,3 +99,6 @@ def test_actual_nonaligned_resume_quantum_matches_uninterrupted_state(tmp_path, 
     for key in ('optimizer', 'rng', 'step', 'global_step', 'exposure_counts',
                 'epoch', 'cursor', 'source_row_bindings', 'source_row_order'):
         _same(resumed['training'][key], uninterrupted['training'][key])
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

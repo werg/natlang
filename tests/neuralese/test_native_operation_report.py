@@ -237,3 +237,6 @@ def test_actual_trainer_proofs_resolve_without_changing_optimizer_or_source_cred
 ])
 def test_inventory_hash_preserves_existing_canonical_json_contract(value):
     assert report._digest(value)==canonical_json_sha256_hex(value)
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
