@@ -1,30 +1,98 @@
-# LFM3 RL actor serving engine: measurement and fork decision (2026-10-28)
+# LFM3 RL actor serving engine (2026-10-28, revised 2026-10-29)
 
-**Decision.** Fork **vLLM 0.32.0** and port the Neuralese actor feature set to it. Move the RL actors over in stages:
+**Decision (owner, 2026-10-29).** The RL actors run on natlang's **SGLang fork**
+([werg/sglang-natlang](https://github.com/werg/sglang-natlang), branch `natlang`, pin `training/neuralese/sglang-fork.json`).
+LFM3 comes from Liquid's own upstream implementation, sgl-project/sglang PR #46858. The reason is dependability of
+building on upstream-maintained code as much as speed: the model file, the width-7 CuTe DSL gated-conv kernel and the
+hybrid conv/SWA/full-attention cache are Liquid's and SGLang's to maintain, and we follow their branch. The vLLM port of
+2026-10-28 is dropped (its `lfm3.py` never loaded weights, so nothing about LFM3 numerics was established there).
+The llama.cpp fork stays for local, browser and GGUF serving (committed decision 17).
 
-1. While the port lands, actors stay on the llama.cpp fork.
-2. Once `lfm3.py` and the compact top-k path pass parity, vLLM serves the episodes without Neuralese.
-3. Once span/conv import and export, the producer adapter and the markers pass parity against `serve/engine.py` and the
-   fork, vLLM serves all episodes.
+Stages:
 
-The llama.cpp fork stays for local, browser and GGUF serving (committed decision 17). This supersedes the engine named in
-committed decision 10.
+1. Ordinary-token episodes: SGLang serves the exact trained checkpoint (HF export with the native sparse rows merged)
+   and returns the exact post-temperature sampled-token logprob and top-k compactly. Episodes that need Neuralese are
+   refused explicitly by the front and stay on the Python native server.
+2. Neuralese features in the order of the table below; each lands with parity against `serve/engine.py` and moves the
+   remaining episode kinds over.
 
-The reasons, in order:
+## Architecture
 
-- **llama.cpp falls behind badly at RL concurrency.** It decodes at about 17.6 tok/s per slot with 32 slots. Its
-  sampler and top-k run on the CPU in a single-threaded server loop. Its best valid aggregate on real dev-packet turns
-  was about 400 output tok/s.
-- **vLLM and SGLang are far faster on the same prompts.** vLLM produced 10,660 output tok/s at 256 concurrent requests
-  without logprobs (prefix cache warm). SGLang produced 4,422 tok/s with a cold cache. Both measurements used the
-  LFM2-family proxy.
-- **vLLM is the more extensible base for our features.** Prompt embeddings compose with prefix caching in vLLM, while
-  SGLang's `input_embeds` forces `--disable-radix-cache`. `processed_logprobs` is exactly our post-temperature law, and
-  vLLM has plugin entry points for models, endpoints, logits processors and LoRA resolution.
-- **Neither engine supports LFM3 today.** No vLLM release or vLLM main registers `Lfm3ForCausalLM`. SGLang support is
-  only in the open PR #46858. Writing the vLLM `lfm3.py` is therefore the first port item.
+- **Fork** (`werg/sglang-natlang`): only mechanism. Hooks in the sampler/output path and, for Neuralese, in Liquid's
+  `models/lfm3.py` and small scheduler/runner hooks. `NATLANG_FORK.md` there records the base, our commits and the
+  rebase procedure.
+- **Front** (`serve/sglang_actor.py`, `SglangEngine`): the native `Engine` with generation delegated. It renders and
+  tokenizes requests, inserts privileged guidance, parses replies and builds the exact `x_natlang_rl_capture`, so the
+  collector, receipts and learner replay are unchanged. Started by
+  `scripts/neuralese_data/serve_native_checkpoint.py --engine sglang`, which exports the checkpoint
+  (`export/native_hf.py`, cached by checkpoint SHA-256), launches the fork's server on `--port + 1000` and serves the
+  native HTTP API on `--port`. `rl_policy_binding.serving_engine` names the fork commit, export weights SHA-256 and the
+  banned role markers.
+- **Export** (`export/native_hf.py`): the backbone state with the four role-marker rows and the reasoning-boundary
+  override rows written into the (tied) embedding; exact for every ordinary token. The low-rank producer adapter is
+  recorded as not represented; until feature 3 lands the front bans all four role markers (logit bias -1e30) and records
+  `banned_token_ids` in every sample, so the learner replays the same law.
 
-## What was measured
+## SGLang fork status
+
+Fork `werg/sglang-natlang` `natlang` = PR #46858 head `8f6196da0b` (upstream main `cb55d77d37` inside) + natlang
+commit(s) (`training/neuralese/sglang-fork.json`). Current upstream main does not run the PR's model (its 2026-10-29
+recurrent-state refactor removed the pool accessor `lfm3.py` uses: CUDA-graph capture fails), so the fork follows the
+PR branch and rebases when Liquid updates it (`NATLANG_FORK.md`).
+
+Measured on DGX (GB10, sm_121, aarch64, CUDA 13.0, torch 2.14.1+cu130, shared GPU with an RL helper, a llama-server
+eval and data jobs running):
+
+- **CuTe gated conv runs on GB10.** `_use_cute_conv` is true: the PR gates on sm90/sm100/sm120 and SGLang's sm120 test
+  is `major == 12`, so sm_121 qualifies. The PR states numerical validation on H100 (sm_90) and RTX PRO 6000 (sm_120).
+- **Logit parity, LFM3-1.7B BF16** (`check_sglang_lfm3_parity.py`, 6 real episode turns of 4.5k–7.2k tokens, chunked
+  prefill 2048, 48 greedy decode steps; reference HF FP32; HF BF16 as the noise floor):
+
+  | | SGLang vs FP32: mean / max \|Δ logp\| | top-1 | HF BF16 vs FP32: mean / max | top-1 |
+  |---|---|---|---|---|
+  | prefill (33,055 positions) | 0.078 / 5.77 | 0.962 | 0.091 / 4.42 | 0.957 |
+  | cached decode (288) | 0.0061 / 0.064 | 0.993 | 0.0069 / 0.109 | 0.993 |
+
+  SGLang is closer to FP32 than HF's own BF16 forward. Prompt tokens are low-probability text, where any BF16 forward
+  is ~0.1 nats off; SGLang's decode and a re-prefill of its own generated tokens agree to 0.003–0.011 mean. Varying
+  FlashInfer vs Triton attention and the fast input-logprob path changed nothing (ruled out).
+- **Compact capture law** (`custom_params.natlang_top_k`, 576 sampled tokens at T=1.0 and 0.7 vs FP32
+  `log_softmax(logits/T)`): sampled-token logp mean 0.013 / max 0.24, top-1 0.991, top-20 overlap 0.982, records
+  sorted.
+- **End to end actor** (`check_sglang_actor_capture.py`, RL checkpoint `jolt-r1/round-000000` sha `81b6d5af…`, HF
+  export with merged rows, 16 real episode turns, T=1, k=128, 128 max tokens): 1,809 sampled tokens in 10.1 s at
+  concurrency 16 (179 tok/s including the ~92k prompt tokens of prefill) while the GPU was shared; the native Python
+  server serves ~12 tok/s. Replay against the native model (BF16 at the time): sampled logp mean 0.020, top-1 0.986,
+  top-128 overlap 0.981. The capture is the native engine's schema (`natlang.native-rl-sampling/2`, behaviour top-k
+  receipt, `banned_token_ids` per sample), so the learner replays it unchanged.
+
+RL wiring: `rl.production` configs for LFM3 raw policies (no semantic adapter or coefficient policy) add
+`--engine sglang` to `actor_command`. The actor exports the round's checkpoint (cached under
+`<store-dir>/sglang-hf/<sha>`), starts the fork's server on `--port + 1000` (`--sglang-mem-fraction`, default 0.8 for a
+dedicated sandbox GPU; use ~0.2 on the shared DGX) and serves the native API on `--port`. Turns SGLang cannot serve
+yet run on the native engine of the same loaded checkpoint (`/metrics`: `natlang_native_fallback_requests_total`).
+
+## Neuralese feature plan on SGLang
+
+Policy stays in the natlang front; the fork carries mechanism. Shared mechanism for the state features: a
+content-addressed pseudo-modality "native_state". SGLang's multimodal path already replaces placeholder positions with
+`pad_values` derived from the item's identity hash (`managers/schedule_batch.py` `_compute_pad_values`), so the radix
+key of a prompt that imports a state is its content hash and the radix/mamba prefix cache stays on (this is how LFM3-VL
+images are cached in the same PR). `input_embeds` (which forces `--disable-radix-cache`) is not used.
+
+| # | Feature | Effort | Insertion point | Approach | Blocking unknowns |
+|---|---|---|---|---|---|
+| 1 | Compact exact top-k + sampled logp | done | `layers/sampler.py`, `sampling_batch_info.py` | see status | none |
+| 2 | Privileged blocks | done (front) | `serve/sglang_actor.py` | `_insert_privileged` on the plan before token ids, as the native engine | none |
+| 3 | Producer adapter + markers | M | `Lfm3Model.forward` embedding; a per-request GPU `producing` flag in the decode CUDA-graph buffers | `h = e + producing·up(down(e))`, always computed (static graphs). `producing` flips on the GPU from the sampled token (`inside' = (inside or tok==open) and tok!=close`); lift the role-marker ban | adapter weights in the export; flag state through overlap scheduling |
+| 4 | KV span import/export | M | `Lfm3Attention.forward` after `apply_qk_norm`, before `rotary_emb` | Import: `k = where(import_mask, store.k[layer][rows], k)`, same for v, then RoPE at the consumer positions; the span's later layers are also overridden, so it is exact. Rows come from a GPU state store indexed by the native_state items of the batch. Export: copy raw pre-RoPE k, v of producing positions to a staging buffer | radix key per (state hash, position): KV after RoPE depends on the consumer position, so the pad values must include the start position |
+| 5 | Conv-state import/export | S–M | `Lfm3ShortConv.forward` before the CuTe kernel | The kernel forms `Bx = B_gate·x` from `proj`; at imported positions set `B_gate = 1` and `x = stored Bx`, so the carried window becomes `(prefix ‖ span)[-6:]` (`splice_block`'s `ConvState`) without a kernel change. Export: `B_gate·x` of producing positions | mamba checkpoint boundaries (`track_conv_indices`) inside an imported span |
+| 6 | `decide` with imported state | S–M | existing `logprob_start_len` | SGLang caps the radix match at `logprob_start_len` (`schedule_batch.py`), so one request per option reads the shared prefix from the cache and returns input logprobs only past it. Score with raw log-softmax (`SGLANG_RETURN_ORIGINAL_LOGPROB` or a per-request flag) | per-request raw vs post-temperature switch |
+| 7 | LoRA on LFM3 | S (declare) / M (mixtures) | `lora/utils.py` known modules; `models/lfm3.py` | Declare `qkv_proj`, `o_proj`, `gate_up_proj`, `w2` (named `down_proj` in PEFT; needs a name map), `in_proj`/`out_proj` of the conv layers, not the conv weight; hybrid models (qwen3_5, nemotron_h) already run LoRA. Mixtures: register a bank as one rank-ΣR adapter and scale the shrink output by a per-request coefficient row (kernel change in the LoRA backend) | per-request coefficient rows in the csgmv/triton backend |
+| 8 | CUDA graphs | — | decode graphs | Imports and exports happen in extend (prefill) batches, which run eager; decode only needs the producing flag and the adapter as static buffers | piecewise prefill graphs if enabled |
+| — | Guidance rewind | M–L | not in SGLang | Re-submit a truncated request (prefix cache makes it cheap), or keep guidance off for SGLang actors | conv-state checkpoint at the rewind point |
+
+## 2026-10-28 measurement (sandbox, LFM2.5 proxy for vLLM/SGLang)
 
 Sandbox `e74dc2d0-3715-48f1-922b-611a4c0c070f`:
 
@@ -151,68 +219,9 @@ requests).
 - **Single stream.** About 180 tok/s for the fork (on LFM3, k=128), 287 for vLLM and 264 for SGLang (on the proxy,
   k=128). This is not where the RL architecture is decided.
 
-## Engine choice for the fork
+## Not established
 
-| | vLLM 0.32.0 | SGLang 0.5.22 (+ PR #46858) |
-|---|---|---|
-| LFM3 support | None (no model file, no open PR). We write `lfm3.py` from `lfm2.py` plus a width-7 conv kernel (Triton `causal_conv1d` branches only to width 5–6) | Unmerged PR #46858: 33 files, +4,234. The text-only part we would carry is about 1.6k lines (`models/lfm3.py` 965, `configs/lfm3.py` 147, `cutedsl_gated_conv.py` 390, overrides/hooks), on a moving target until it merges |
-| Measured throughput (proxy) | 10,660 tok/s k=0 c=256 (warm), 3,669 k=20, 612 k=128 (API-bound) | 4,422 tok/s k=0 c=256 (cold), 1,471 k=128 c=32 |
-| Prompt embeddings | Yes. Mixed token/embeds, prefix-cache hash includes an embeds digest (`kv_cache_utils._gen_prompt_embeds_extra_hash_keys`) | `input_embeds` requires `--disable-radix-cache`, which would lose the shared-prompt throughput RL depends on |
-| Post-temperature top-k | `logprobs_mode=processed_logprobs`, the law after temperature/top-k/top-p | Post-temperature by default, `top_logprobs_num` arbitrary |
-| Hybrid conv state | `ShortConv` as `MambaSpec`, align-mode prefix caching | `MambaPool` + unified radix cache (FULL+MAMBA) |
-| LoRA on LFM | `Lfm2ForCausalLM` is `SupportsLoRA`; punica kernels; dynamic adapters | `lfm2.py` declares no LoRA modules |
-| Plugin surface | `vllm.general_plugins` (model registry), endpoint and logits-processor plugins, `LoRAResolver` | `SGLANG_EXTERNAL_MODEL_PACKAGE`, custom logit processors |
-
-**Fork vLLM.** It wins on throughput at k=0 (with a warm prefix cache, as in RL), and on the two features that are hard
-in SGLang: prompt embeddings with prefix caching, and LoRA on the LFM family. Its plugin surface keeps most of our code
-outside the fork. SGLang's measured advantage (cheaper k=128 JSON) disappears once top-k is returned compactly, which
-the port does anyway. The cost of vLLM is writing `lfm3.py` ourselves rather than carrying the PR.
-
-## Feature port: insertion points, approach, verification (vLLM 0.32.0)
-
-Shape: a thin core patch set in the fork, about 500–800 lines estimated, plus a `natlang-vllm` plugin package holding
-the model, endpoints, logits processors, LoRA resolver and the native state store.
-
-**Shared mechanism.** A per-step native metadata object on the forward context, built in
-`v1/worker/gpu_model_runner.py` (`GPUModelRunner._prepare_inputs`). It holds static-address GPU buffers so that CUDA
-graphs remain valid:
-
-- `producing[num_tokens]`;
-- `import_mask[num_tokens]`;
-- `import_rows[num_tokens]`, which indexes a GPU-resident `NativeStateStore` of span tensors;
-- `capture_slot[num_tokens]`.
-
-Policy stays in the plugin.
-
-| # | Feature | Effort | Insertion point | Approach | Verify against | Blocking unknowns |
-|---|---|---|---|---|---|---|
-| 0 | LFM3 model | M | Plugin `Lfm3ForCausalLM`, registered with `ModelRegistry.register_model`; based on `model_executor/models/lfm2.py` and `layers/mamba/short_conv.py` | Per-layer type (conv / full attention with partial rotary 0.5 and θ 1e6 / sliding window 256 with θ 1e4); QK RMSNorm; per-head sigmoid output gate; sandwich norms; `embedding_norm`; tied head; width-7 (`conv_L_cache` 7) causal conv kernel, varlen and state-indexed (port HF `lfm3_conv.py` or the PR's `cutedsl_gated_conv.py`); hybrid KV groups full + SWA + Mamba via `HybridKVCacheCoordinator` | Logits vs HF `modeling_lfm3.py` and `serve/engine.py` on dev-packet prompts (max \|Δlogit\|, top-1 agreement); cached decode vs full forward; FP8 `LiquidAI/LFM3-1.7B-FP8` (compressed-tensors FP8_BLOCK) loads with unfused gate/conv names | 3-group hybrid cache plus align-mode prefix caching untested; conv kernel numerics |
-| 1 | Positional KV span import/export | M | Plugin `Lfm3Attention.forward` (after qkv proj and q/k norm, **before** RoPE); scheduling through the multimodal placeholder path (`PlaceholderRange`, `mm_hash` = content-addressed state id) as a pseudo-modality "native_state" | `k = where(import_mask, store.k[layer][import_rows], k)` and the same for v, then RoPE at the actual consumer positions. The span's own later layers are also overridden, so this is exact (the same argument as the fork's virtual tokens). Export: `capture_slot` writes raw k, v (pre-RoPE) to a static staging buffer, copied asynchronously to host per request. Not the KV connector API: `KVConnectorBase_V1` loads post-RoPE prefix blocks only, with no mid-prompt splice | `model/shared_state.py::splice_block`, `serve/engine.py::_native_consume_impl`; fork `llama_state_span_register` (keys after the key norm, before RoPE; SWA keys rotated at their own position); `llama-state-span-dump` fixtures | Whether the encoder-cache budget tolerates a non-encoder modality (otherwise use an extra block-hash key); spans crossing align-mode Mamba block boundaries |
-| 2 | LFM3 conv-state import/export | M | Plugin `Lfm3ShortConv` (from `short_conv.py`) | Import: `Bx = where(import_mask, store.bx[layer][import_rows], B*x)` before the conv kernel, so the state becomes `(prefix ‖ span)[-6:]`, exactly `splice_block`'s `ConvState`. Export: per-token `B*x` for the whole producer span into the capture staging buffer, not just the last-window state | `engine.py::_native_finish_block`, `_native_store_capture`; fork `llama_state_capture_get` kinds K, V, CONV, EMBD | Capture buffer sizing for long producer spans |
-| 3 | Prompt embeddings + producer adapter | S (embeds) / M (adapter) | `EngineCoreRequest.prompt_is_token_ids` mixed prompts (existing); `Lfm3ForCausalLM.embed_input_ids`; GPU toggle in the runner's sampled-token path | Stored text Neuralese through mixed `prompt_embeds`. Adapter `h = e + producing·up(down(e))`, always computed (static graphs). `producing` is updated on the GPU from the sampled token: `inside' = (inside \| tok==open) & tok≠close` | `LowRankTokenEmbedding.forward`, `native_step(..., producing=)`, `_native_prefill_impl`; fork `llama_set_seq_producing` | Async scheduling: the toggle must stay on the GPU |
-| 4 | Exact post-temperature top-k (k=128) | S, plus M for the compact output (required: the measured JSON path costs 17x) | `--logprobs-mode processed_logprobs --max-logprobs 128`; guidance bans as a v1 `LogitsProcessor` (`v1/sample/logits_processor/interface.py`); endpoint plugin encodes `LogprobsTensors` directly | Return `encode_top_k` arrays (`<i4` ids, `<f2` logps, base64), with no per-token `Logprob` objects or detokenization | `common/sampling.py::masked_log_distribution`, `behavior_top_k_declaration('post-processing-normalized')`, `engine.py::_native_token`; KL and top-k overlap on shared prompts. The RNG differs (only the law must match) | none |
-| 5 | Privileged-block insertion | S | Plugin request renderer | Port `serve/engine.py::_insert_privileged` unchanged; it acts on the plan before token ids; segments are marked `privileged: True` in the capture | Same plans rendered by `serve/engine.py` | none |
-| 6 | `decide` with imported state | M | Endpoint plugin `/v1/neuralese/decide[_many]`; small patch to the prompt-logprob path (`sampling_params.py` forces `skip_reading_prefix_cache=True`) | One request per option (plan + imports + option tokens, `max_tokens=1`, `prompt_logprobs`). Read the shared prefix from the cache and emit logprobs only past the uncached boundary. Score with **raw** log_softmax (no temperature) | `serve/native_learning.py::decide_native`, `_score_from_cache`; fork `server-decision.cpp` | Prompt logprobs with prefix-cache reads enabled |
-| 7 | Adapters, native soft states, LoRA mixtures | S (stacks as LoRA) / M (per-request mixture coefficients) | Plugin `LoRAResolver` or `LoRAModel.from_lora_tensors`; `lora/punica_wrapper/punica_gpu.py` (`add_lora_linear`, between `add_shrink` and `add_expand`) | Each adapter stack becomes one LoRA (basis `left@core@rightᵀ·scale`, free LoRA `B·A·α/r`, stacks concatenated along rank). Bank mixtures: register the bank as one rank-ΣR LoRA and scale the shrink output by a per-request coefficient row. Never wrap the conv weight. Native soft states are stored blocks served by feature 1 | `model/native_adapters.py::_effective_replacements`, `InferenceReplacementCache`; fork `llama_set_adapter_lora_seq_scales` | LoRA with the width-7 conv and FP8 together; `max_lora_rank` |
-| 8 | Producer/consumer markers | S | Tokenizer/checkpoint export; the toggle of feature 3 | Distinct begin/end markers as ordinary special tokens; the plugin emits consume-open / span / consume-close like `_native_consume_impl` | `provision_role_tokenizer`; GGUF `natlang.identity.*` ids | Vocabulary size if the markers extend past 128,000 |
-| — | Guidance rewind (`native_guidance.check`, `seq.bans`) | M–L | Not in vLLM | Re-submit a truncated request, relying on the prefix cache; or keep guidance off for vLLM actors | `serve/guidance.py` behavior | Conv-state checkpointing for an in-place rewind |
-
-Parity method for every row: the exact-reference approach used for the fork's native-state production (llama.cpp-neuralese
-commit b153171a0): the same prompts, imports and adapters through `serve/engine.py`, the fork and the vLLM port; compare
-logits, top-k laws and exported spans.
-
-## Order of work for the port agent
-
-1. `lfm3.py` plus the width-7 conv kernel, with logit parity against HF and `serve/engine.py`. Then run this benchmark
-   again with LFM3 itself: `runs/lfm3-engine-bench-20261028/inputs`, with a vLLM-only run order.
-2. Compact top-k output (feature 4). This alone makes vLLM usable for episodes without Neuralese.
-3. Feature 5 (renderer), then features 3, 8, 1 and 2 (span/conv import and export, shared native metadata), then 6, then 7.
-4. Actor job template: a CPU request for actor sandboxes. This bench showed 2 vCPUs binding both Python engines.
-
-## Not established here
-
-- LFM3 throughput on vLLM or SGLang. Those numbers are from the LFM2.5-1.2B sibling.
-- A corrected-configuration llama.cpp high-concurrency number. The `-kvu` bench rows are confounded; the
-  capture-run row is valid at ≤32 slots.
-- SGLang k=128 at 256 concurrency, and the vLLM vs SGLang k=0 comparison at equal cache state.
-- NVFP4/FP8 throughput on any engine.
+- SGLang throughput on LFM3 against the Python native server and llama.cpp at RL shape on the sandbox GPU (H100 /
+  RTX PRO 6000). DGX GB10 numbers are relative only.
+- The CuTe gated-conv kernel on H100 (sm_90) and RTX PRO 6000 (sm_120) in our runs; the PR states it was validated
+  numerically on both, and gates it on sm90/sm100/sm120 (sm_121 GB10 counts as sm120).
