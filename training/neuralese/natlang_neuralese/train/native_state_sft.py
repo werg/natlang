@@ -2704,12 +2704,9 @@ def _main(argv=None, *, requested_refresh):
             'schema':'natlang.diloco-standalone-rejoin/1', 'parent':new_outer_proof['parent'],
             'global_step':global_step, 'outer_history':'new',
             'historical_outer_checkpoint':prior_outer_history[-1]['checkpoint'] if prior_outer_history else None}
-    diloco_identity_history_changed=False
     if diloco is not None and getattr(diloco,'identity_transition',None):
         history=checkpoint_options.setdefault('diloco_identity_transition_history',list(((resume or {}).get('options') or {}).get('diloco_identity_transition_history') or []))
-        if diloco.identity_transition not in history:
-            history.append(diloco.identity_transition)
-            diloco_identity_history_changed=True
+        if diloco.identity_transition not in history:history.append(diloco.identity_transition)
     reopened_diloco=False
     if diloco is not None and (not parent_continuation or carried_diloco is not None) and resume and new_outer_proof is None:
         previous_delivery=((resume.get('options') or {}).get('diloco_final_delivery') or {})
@@ -3054,7 +3051,7 @@ def _main(argv=None, *, requested_refresh):
         admission_record = None  # An actual subsequent update is a new continuation.
     if admission_record is not None:
         checkpoint_options['_pending_source_admission'] = admission_record
-    metadata_dirty = (diloco_identity_history_changed or diloco_withdrawal_changed or reopened_diloco or last_saved_step < 0 or args.native_optimizer_migration is not None
+    metadata_dirty = (bool(diloco_identity_transition) or reopened_diloco or last_saved_step < 0 or args.native_optimizer_migration is not None
         or source_correction_result.get('changed', False)
         or foundation_declaration_changed
         or foundation_dependencies_changed
