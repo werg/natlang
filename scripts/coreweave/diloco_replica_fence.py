@@ -100,6 +100,7 @@ def observe_local_worker(identity, nonce, control_dir):
     if (state.get('schema')!='natlang.diloco-role-supervisor/1' or
             Path('/proc/sys/kernel/random/boot_id').read_text().strip()!=identity['boot_id'] or
             state.get('boot_id')!=identity['boot_id'] or state.get('owner_id')!=identity['owner_id'] or
+            type(state.get('supervisor_pid')) is not int or not state.get('supervisor_start_ticks') or
             ticks(state.get('supervisor_pid'))!=state.get('supervisor_start_ticks')):
         raise ValueError('role supervisor identity is not live and exact')
     role=state.get('roles',{}).get('worker',{})
