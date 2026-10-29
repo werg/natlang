@@ -22,5 +22,11 @@ def test_fresh_initialization_saves_zero_update_and_refuses_parent(tmp_path, mon
     assert state['global_step']==state['step']==0 and not any(state['exposure_counts'].values())
     assert state['optimizer'] and state['rng'] and state['sft_progress']
     assert state['options']['fresh_initialization']['parent_checkpoint'] is None
+    import hashlib
+    from natlang_neuralese.rl.jolt_handoff import checked_fresh_parent
+    checkpoint=tmp_path/'out/checkpoint.pt'
+    digest=hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    assert checked_fresh_parent(checkpoint,expected_sha256=digest,
+        source_sha256=state['source_receipts'][0]['sha256'])==checkpoint
     with pytest.raises(ValueError,match='fresh output'):
         trainer.main(args)
