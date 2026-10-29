@@ -3,7 +3,7 @@ import argparse,json,os,resource,shutil,time,uuid
 from pathlib import Path
 import torch
 from natlang_neuralese.train.diloco.coordinator import initialize_coordinator
-from natlang_neuralese.train.diloco.protocol import load_tensors,save_tensors
+from natlang_neuralese.train.diloco.protocol import load_tensors,save_tensors,plan_fragments
 from natlang_neuralese.train.diloco.replica_baseline import capture,reconstruct,verify
 from natlang_neuralese.train.diloco.replica_generation import rotate
 from natlang_neuralese.train.diloco.replica_retention import Retention
@@ -14,6 +14,20 @@ from natlang_neuralese.train.diloco.replica_executor import ReplicatedExecutor
 from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
 from natlang_neuralese.train.diloco.replica_state import ReplayCoordinator,replay
 from natlang_neuralese.train.native_diloco import _checkpoint_surface
+
+
+def select_first_fragment(surface, *, target_bytes=64<<20):
+    """Select the production-ordered first fragment as mmap-backed tensor views."""
+    fragment=plan_fragments(surface,target_bytes=target_bytes)[0]
+    selected={};custody=[]
+    for part in fragment.slices:
+        if part.name in selected:raise ValueError('duplicate parameter slice in first fragment')
+        tensor=surface[part.name];selected[part.name]=tensor.reshape(-1)[part.offset:part.offset+part.length]
+        custody.append({'name':part.name,'original_shape':list(tensor.shape),'offset':part.offset,'length':part.length})
+    derived=plan_fragments(selected,target_bytes=target_bytes)[0]
+    if [(x.name,x.length) for x in derived.slices]!=[(x.name,x.length) for x in fragment.slices]:
+        raise ValueError('selected slice layout differs from production fragment')
+    return selected,{'original_fragment':fragment.to_dict(),'source_slices':custody,'elements':fragment.length}
 
 
 def sample():
@@ -37,16 +51,15 @@ def main():
         if not a.checkpoint or not a.base:raise ValueError('actual checkpoint and exact base are required')
         if shutil.disk_usage(out).free<a.minimum_free_bytes:raise ValueError('qualification scratch reserve is insufficient')
         surface=_checkpoint_surface(a.checkpoint,a.base)
+        selection=None
         if a.full:masters=surface
-        else:
-            name,tensor=next((name,tensor) for name,tensor in surface.items() if tensor.numel()>=16_777_216)
-            masters={name:tensor.reshape(-1)[:16_777_216]}
+        else:masters,selection=select_first_fragment(surface)
         root=out/'coordinator';manifest=initialize_coordinator(root,run_id='physical-qualification',masters=masters,identity={'purpose':'isolated-physical-qualification'},workers=a.workers,min_quorum=a.quorum,fragment_bytes=64<<20,grace_seconds=30,ema={'decay':.88,'warmup':0})
         machine=ReplayCoordinator(root,quorum_since={})
         class Pin:
             def __init__(self):self.machine=machine
             def read(self,fn):return fn()
-        receipt=capture(Pin(),out/'baseline');result={'mode':'prepare','full':a.full,'workers':a.workers,'quorum':a.quorum,'fragments':len(manifest['fragments']),'fingerprint':manifest['fingerprint'],'baseline_sha256':receipt['sha256']}
+        receipt=capture(Pin(),out/'baseline');result={'mode':'prepare','full':a.full,'workers':a.workers,'quorum':a.quorum,'fragments':len(manifest['fragments']),'fingerprint':manifest['fingerprint'],'baseline_sha256':receipt['sha256'],'source_selection':selection}
     else:
         if not all((a.baseline,a.baseline_sha256,a.peer_url,a.token_file)):raise ValueError('baseline, exact digest, peer and token required')
         active_baseline=Path(a.baseline);active_sha=a.baseline_sha256

@@ -32,3 +32,14 @@ def test_cpu_runner_uses_four_real_proposals_and_replay(tmp_path):
         assert [x['version'] for x in summary['proposal_states']]==[0,0,0,1]
     finally:stop.set();proc.join(8)
     assert proc.exitcode==0
+
+
+def test_first_fragment_uses_multiple_smaller_exact_named_slices():
+    import importlib.util
+    path=Path(__file__).parents[1]/'scripts/coreweave/diloco_replica_physical_bench.py'
+    spec=importlib.util.spec_from_file_location('physical_bench_test',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    first=torch.arange(200,dtype=torch.float32).reshape(10,20);second=torch.arange(200,400,dtype=torch.float32).reshape(10,20)
+    selected,custody=module.select_first_fragment({'layer.b':second,'layer.a':first},target_bytes=1024)
+    assert custody['elements']==256 and [(x['name'],x['offset'],x['length'],x['original_shape']) for x in custody['source_slices']]==[('layer.a',0,200,[10,20]),('layer.b',0,56,[10,20])]
+    assert torch.equal(selected['layer.a'],first.reshape(-1)) and torch.equal(selected['layer.b'],second.reshape(-1)[:56])
+    assert selected['layer.a'].untyped_storage().data_ptr()==first.untyped_storage().data_ptr()
