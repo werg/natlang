@@ -54,6 +54,10 @@ def test_server_args_are_single_sequence_without_prompt_cache_and_apply_logit_bi
     assert args[args.index('-np') + 1] == '1' and '--no-cache-prompt' in args
     assert args[args.index('--logit-bias') + 1] == '125033-100'
     assert json.loads(args[args.index('--chat-template-kwargs') + 1]) == {'preserve_thinking': True}
+    batched = gate.server_args('/bin/llama-server', 'm.gguf', {}, 8170, 'batched')
+    slots = int(batched[batched.index('-np') + 1])
+    assert slots == gate.SERVING['batched']['workers'] and '--logit-bias' not in batched
+    assert int(batched[batched.index('-c') + 1]) == slots * 32768
 
 
 def test_read_run_refuses_wall_budget_and_mixed_harness(tmp_path):

@@ -1,32 +1,42 @@
 #!/usr/bin/env python3
-"""Decision-grade behavioral eval of an LFM3 checkpoint against the base: all 128 cases of the protected dev packet
-(16 shapes x 8 worlds), executed deterministically, compared case by case.
+"""Decision-grade behavioral eval of LFM3 checkpoints against the base: all 128 cases of the protected dev packet
+(16 shapes x 8 worlds), compared case by case with paired statistics.
 
-  lfm3_checkpoint_gate.py CHECKPOINT.pt|GGUF_EXPORT_DIR --out DIR [--port 8170] [--repeat-base]
+  lfm3_checkpoint_gate.py MODEL [MODEL ...] --out DIR [--serving batched|deterministic] [--repeat-base]
 
-Determinism (root cause 2026-10-29, plans/neuralese/LFM3_DECISION_EVAL_20261029.md). The old gate ran 8 llama-server
-slots with continuous batching. llama.cpp picks the BF16 matmul kernel by the number of tokens in a batch (MMVF for one
-column, MMF for a few, cuBLAS beyond), so a reply depends on what the other slots were doing: byte-identical requests
-gave different greedy replies (7 of 7 measured). Its 3600 s wall budget also made the outcome of long cases depend on
-server speed, and a ts-host/dist rebuild between runs changed the system prompt and tool surface. This eval therefore
-  1. serves one sequence at a time without prompt-cache reuse (-np 1 --no-cache-prompt), so every reply is computed
-     from scratch with batch-size-1 decode: identical requests give identical replies (verified bitwise);
-  2. bounds cases only by counts (64 model requests; successful base/trained cases used at most 51), never wall time;
-  3. executes a frozen copy of the TS runtime identified by its complete inventory digest, the same for both arms;
-  4. applies the export's serving settings (chat-template kwargs and logit bias) to both the trained and base model.
-Separate server processes (base and trained in parallel, other GPU jobs) do not affect the numerics, only the speed.
+MODEL is a native checkpoint (.pt, exported to BF16 GGUF under DIR) or an existing GGUF export directory. Each model's
+report is DIR/<label>/decision.json; the base runs are cached under --eval-root keyed by everything that determines
+them. All arms execute concurrently, each with its own llama-server.
+
+Noise (root cause 2026-10-29, plans/neuralese/LFM3_DECISION_EVAL_20261029.md). The old gate's 33/38 vs 26/38 on one
+base GGUF came from (a) a ts-host/dist rebuild between the runs (different system prompt and tool surface), (b) a
+3600 s wall budget that ended long cases depending on server speed, and (c) batch-dependent greedy decoding:
+llama.cpp picks the BF16 matmul kernel by the number of tokens in a batch (MMVF for one column, MMF for a few, cuBLAS
+beyond) and reuses prompt-cache KV computed under other batch shapes, so byte-identical requests gave different
+greedy replies (7 of 7 measured). Every mode here therefore
+  1. bounds cases only by counts (64 model requests; successful cases have used at most 51), never wall time;
+  2. executes a frozen copy of the TS runtime identified by its complete inventory digest, the same for all arms, and
+     refuses a run whose rows carry more than one harness identity;
+  3. applies the export's serving settings (chat-template kwargs and logit bias) to the trained models and the base.
+Serving modes:
+  deterministic  one sequence at a time without prompt-cache reuse (-np 1 --no-cache-prompt): identical requests give
+                 identical replies (verified bitwise, also under concurrent GPU load); about 60 tok/s alone on the GB10
+                 and a few tok/s while training shares the GPU, so a 128-case run takes many hours.
+  batched        16 slots with continuous batching (default): ~4-5x the throughput, replies vary with load; use
+                 --repeat-base to measure the base-vs-base flips, which the McNemar test tolerates as noise.
 
 Decision rule (recommendation): count paired flips on the same cases, b = base fails / trained succeeds and
-c = base succeeds / trained fails; exact two-sided McNemar p on (b, c). The checkpoint materially improves task
+c = base succeeds / trained fails; exact two-sided McNemar p on (b, c). A checkpoint materially improves task
 behavior when b > c with p < 0.05 and no shape loses net 3 or more of its 8 worlds; it regresses when c > b with
-p < 0.05; otherwise there is no significant change. Exact determinism makes base-vs-base noise zero; --repeat-base
-re-executes the base to verify that on the full packet.
+p < 0.05; otherwise there is no significant change. With batched serving the verdict must hold against both base
+executions (the report gives both comparisons).
 """
 from __future__ import annotations
 
 import argparse
 import collections
 import concurrent.futures
+import fcntl
 import hashlib
 import json
 import math
@@ -46,9 +56,10 @@ DATA = paths.root('repo')  # protected packets and the built ts-host collector l
 PY = str(DATA / '.venv-neuralese/bin/python')
 PACKET = 'runs/natlang-dev-task-packet-v2-20261028/cases.jsonl'
 PACKET_SHA256 = '6fa6ca6c2e3a46c4b050da535e1a246c8f34d70f355ea047bcfe19a0653aa560'
-SERVER_FLAGS = ('-np', '1', '-c', '32768', '--no-cache-prompt')
+SERVING = {'deterministic': {'flags': ('-np', '1', '-c', '32768', '--no-cache-prompt'), 'workers': 8},
+           'batched': {'flags': ('-np', '16', '-c', str(16 * 32768)), 'workers': 16}}
 BUDGETS = {'max_model_requests': 64, 'max_turns': 64, 'case_seconds': 172800}
-WORKERS, MODEL_CONCURRENCY = 8, 2
+MODEL_CONCURRENCY = 2
 SHAPE_NET_LOSS_LIMIT = 3
 ALPHA = 0.05
 SCHEMA = 'natlang.lfm3-decision-eval/1'
@@ -103,16 +114,16 @@ def snapshot_runtime(root, live=None):
     return runtime, digest
 
 
-def server_args(binary, gguf, serving, port):
-    args = [str(binary), '-m', str(gguf), '--jinja', '-ngl', '999', *SERVER_FLAGS, '--host', '127.0.0.1',
+def server_args(binary, gguf, serving, port, mode='deterministic'):
+    args = [str(binary), '-m', str(gguf), '--jinja', '-ngl', '999', *SERVING[mode]['flags'], '--host', '127.0.0.1',
             '--port', str(port), '--chat-template-kwargs', json.dumps(serving.get('chat_template_kwargs') or {})]
     for token, bias in sorted((serving.get('logit_bias') or {}).items()):
         args += ['--logit-bias', f'{int(token)}{int(bias):+d}']
     return args
 
 
-def serve(binary, gguf, serving, port, log):
-    process = subprocess.Popen(server_args(binary, gguf, serving, port), stdout=log, stderr=subprocess.STDOUT)
+def serve(binary, gguf, serving, port, log, mode):
+    process = subprocess.Popen(server_args(binary, gguf, serving, port, mode), stdout=log, stderr=subprocess.STDOUT)
     for _ in range(300):
         try:
             urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=2)
@@ -125,24 +136,31 @@ def serve(binary, gguf, serving, port, log):
     raise RuntimeError('llama-server did not become healthy')
 
 
-def execute(binary, gguf, serving, out, port, cases, runtime):
-    """Run the cases against one GGUF (once; a completed run in `out` is reused). Returns the run record."""
+def execute(binary, gguf, serving, out, port, cases, runtime, mode):
+    """Run the cases against one GGUF (once; a completed run in `out` is reused, and a concurrent gate executing the
+    same run is waited for). Returns the run record."""
     out.mkdir(parents=True, exist_ok=True)
-    if (out / 'run.json').exists():
-        return json.loads((out / 'run.json').read_text())
+    with (out / '.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if (out / 'run.json').exists():
+            return json.loads((out / 'run.json').read_text())
+        return _execute(binary, gguf, serving, out, port, cases, runtime, mode)
+
+
+def _execute(binary, gguf, serving, out, port, cases, runtime, mode):
     spec = {'async': True, 'cases': cases, 'min_successes': 0, 'noise_successes': 0, 'reference_successes': None,
-            'workers': WORKERS, 'runtime': str(runtime), **BUDGETS,
+            'workers': SERVING[mode]['workers'], 'runtime': str(runtime), **BUDGETS,
             'packet': {'path': str(DATA / PACKET), 'sha256': PACKET_SHA256}}
     started = time.time()
     with (out / 'server.log').open('w') as log:
-        server = serve(binary, gguf, serving, port, log)
+        server = serve(binary, gguf, serving, port, log, mode)
         try:
             with (out / 'probe.log').open('w') as probe_log:
                 subprocess.run([PY, str(DATA / 'scripts/held_task_budget_probe.py'), '--spec', json.dumps(spec),
                                 '--server', f'http://127.0.0.1:{port}', '--out', str(out / 'probe'),
                                 '--case-seconds', str(BUDGETS['case_seconds']),
                                 '--max-model-requests', str(BUDGETS['max_model_requests']),
-                                '--max-turns', str(BUDGETS['max_turns']), '--workers', str(WORKERS),
+                                '--max-turns', str(BUDGETS['max_turns']), '--workers', str(SERVING[mode]['workers']),
                                 '--model-concurrency', str(MODEL_CONCURRENCY)],
                                stdout=probe_log, stderr=subprocess.STDOUT, check=True, cwd=DATA)
         finally:
@@ -150,6 +168,7 @@ def execute(binary, gguf, serving, out, port, cases, runtime):
             server.wait(timeout=60)
     record = read_run(out)
     record['wall_seconds'] = round(time.time() - started, 1)
+    record['serving'] = mode
     (out / 'run.json').write_text(json.dumps(record, indent=1) + '\n')
     return record
 
@@ -224,60 +243,91 @@ def compare(trained, base):
             'shape_regressions': shape_regressions, 'verdict': verdict, 'shapes': dict(sorted(shapes.items()))}
 
 
-def base_key(binary, base_gguf, serving, runtime_sha, cases):
+def base_key(binary, base_gguf, serving, runtime_sha, cases, mode):
     """Everything that determines a base run's actions; a cached base run is reused only under the same key."""
     material = {'binary': sha256_file_hex(binary), 'gguf': sha256_file_hex(base_gguf), 'serving': serving,
-                'flags': SERVER_FLAGS, 'budgets': BUDGETS, 'workers': WORKERS, 'model_concurrency': MODEL_CONCURRENCY,
+                'mode': SERVING[mode], 'budgets': BUDGETS, 'model_concurrency': MODEL_CONCURRENCY,
                 'runtime': runtime_sha, 'packet': PACKET_SHA256, 'cases': cases}
     return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def export(model, out, base):
+    """GGUF export directory and manifest of a checkpoint (exported once) or of an existing export directory."""
+    gguf_dir = model if model.is_dir() else out / 'gguf'
+    if not (gguf_dir / 'manifest.json').exists():
+        subprocess.run([PY, '-m', 'natlang_neuralese.export.native_gguf', str(model), str(gguf_dir),
+                        '--outtype', 'bf16', '--base', str(base)], check=True, cwd=REPO)
+    return gguf_dir, json.loads((gguf_dir / 'manifest.json').read_text())
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('model', type=Path, help='native checkpoint (.pt, exported here) or an existing GGUF export dir')
+    parser.add_argument('models', type=Path, nargs='+',
+                        help='native checkpoints (.pt, exported here) or existing GGUF export directories')
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--serving', choices=sorted(SERVING), default='batched')
     parser.add_argument('--base', type=Path, default=Path.home() / '.cache/huggingface/hub/models--LiquidAI--'
                         'LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
     parser.add_argument('--base-gguf', type=Path, default=paths.resolve('data_nvme', 'lfm3-eval/LFM3-1.7B-BF16.gguf'))
     parser.add_argument('--eval-root', type=Path, default=paths.resolve('data_nvme', 'lfm3-eval/decision'),
-                        help='holds frozen runtimes and cached base runs (keyed by everything that determines them)')
+                        help='holds frozen runtimes and cached base runs')
+    parser.add_argument('--runtime', type=Path, help='an existing frozen ts-host under --eval-root/runtimes '
+                        '(default: freeze the live checkout)')
     parser.add_argument('--llama-server', type=Path, default=paths.resolve('data_nvme',
         'dgxops/claude-recovery-20261028/data/llama-actor-worktree/build-cuda-121/bin/llama-server'))
-    parser.add_argument('--port', type=int, default=8170, help='trained server port; the base uses port+1/+2')
+    parser.add_argument('--port', type=int, default=8170, help='first server port; each arm uses the next one')
     parser.add_argument('--repeat-base', action='store_true', help='also re-execute the base and report its flips')
     args = parser.parse_args(argv)
     cases = decision_cases(DATA / PACKET)
     args.out.mkdir(parents=True, exist_ok=True)
-    gguf_dir = args.model if args.model.is_dir() else args.out / 'gguf'
-    if not (gguf_dir / 'manifest.json').exists():
-        subprocess.run([PY, '-m', 'natlang_neuralese.export.native_gguf', str(args.model), str(gguf_dir),
-                        '--outtype', 'bf16', '--base', str(args.base)], check=True, cwd=REPO)
-    manifest = json.loads((gguf_dir / 'manifest.json').read_text())
-    serving = {'chat_template_kwargs': manifest['serving']['chat_template_kwargs'],
-               'logit_bias': manifest['serving'].get('logit_bias') or {}}
-    runtime, runtime_sha = snapshot_runtime(args.eval_root / 'runtimes')
-    base_dir = args.eval_root / f'base-{base_key(args.llama_server, args.base_gguf, serving, runtime_sha, cases)}'
-    gguf = gguf_dir / manifest['files'][0]['file']
-    jobs = {'trained': (gguf, args.out / 'eval', args.port), 'base': (args.base_gguf, base_dir / 'run-1', args.port + 1)}
+    exports = [export(model, args.out / f'model-{index}', args.base) for index, model in enumerate(args.models)]
+    servings = {json.dumps({'chat_template_kwargs': manifest['serving']['chat_template_kwargs'],
+                            'logit_bias': manifest['serving'].get('logit_bias') or {}}, sort_keys=True)
+                for _, manifest in exports}
+    if len(servings) != 1:
+        raise SystemExit(f'the models need different serving settings, so no common base run: {servings}')
+    serving = json.loads(servings.pop())
+    if args.runtime:
+        runtime = args.runtime
+        runtime_sha = runtime_digest(runtime_files(runtime))
+    else:
+        runtime, runtime_sha = snapshot_runtime(args.eval_root / 'runtimes')
+    base_dir = args.eval_root / f'base-{base_key(args.llama_server, args.base_gguf, serving, runtime_sha, cases, args.serving)}'
+    jobs = {'base': (args.base_gguf, base_dir / 'run-1')}
     if args.repeat_base:
-        jobs['base_repeat'] = (args.base_gguf, base_dir / 'run-2', args.port + 2)
+        jobs['base_repeat'] = (args.base_gguf, base_dir / 'run-2')
+    labels = []
+    for index, (gguf_dir, manifest) in enumerate(exports):
+        label = f"step{manifest.get('step')}" if manifest.get('step') is not None else f'model-{index}'
+        labels.append(label)
+        jobs[label] = (gguf_dir / manifest['files'][0]['file'], args.out / label / f'eval-{args.serving}')
     with concurrent.futures.ThreadPoolExecutor(len(jobs)) as pool:
-        futures = {name: pool.submit(execute, args.llama_server, model, serving, out, port, cases, runtime)
-                   for name, (model, out, port) in jobs.items()}
+        futures = {name: pool.submit(execute, args.llama_server, model, serving, out, args.port + offset, cases,
+                                     runtime, args.serving)
+                   for offset, (name, (model, out)) in enumerate(jobs.items())}
         runs = {name: future.result() for name, future in futures.items()}
-    report = {'schema': SCHEMA, 'checkpoint': str(args.model), 'step': manifest.get('step'),
-              'runtime_sha256': runtime_sha, 'server_flags': list(SERVER_FLAGS), 'budgets': BUDGETS,
-              'serving': serving, 'base_dir': str(base_dir),
-              'wall_seconds': {name: run.get('wall_seconds') for name, run in runs.items()},
-              **compare(runs['trained'], runs['base'])}
+    summary = {'schema': SCHEMA, 'serving': args.serving, 'flags': list(SERVING[args.serving]['flags']),
+               'budgets': BUDGETS, 'runtime_sha256': runtime_sha, 'base_dir': str(base_dir), 'serving_settings': serving,
+               'wall_seconds': {name: run.get('wall_seconds') for name, run in runs.items()}, 'models': {}}
     if 'base_repeat' in runs:
         noise = compare(runs['base_repeat'], runs['base'])
-        report['base_repeat_flips'] = len(noise['gained']) + len(noise['lost'])
-    (args.out / 'decision.json').write_text(json.dumps(report, indent=1) + '\n')
-    print(json.dumps({key: report.get(key) for key in ('step', 'successes', 'base_successes', 'gained', 'lost',
-                                                         'mcnemar_p', 'shape_regressions', 'verdict',
-                                                         'base_repeat_flips', 'wall_seconds')}))
-    return 1 if report['verdict'] == 'regressed' else 0
+        summary['base_noise'] = {'successes': [runs['base']['successes'], runs['base_repeat']['successes']],
+                                 'flips': len(noise['gained']) + len(noise['lost']), 'mcnemar_p': noise['mcnemar_p']}
+    regressed = False
+    for label, model in zip(labels, args.models):
+        report = {'checkpoint': str(model), **compare(runs[label], runs['base'])}
+        if 'base_repeat' in runs:
+            report['against_base_repeat'] = {key: value for key, value in compare(runs[label], runs['base_repeat']).items()
+                                             if key != 'shapes'}
+        (args.out / label / 'decision.json').write_text(json.dumps(report, indent=1) + '\n')
+        summary['models'][label] = {key: report[key] for key in ('successes', 'base_successes', 'gained', 'lost',
+                                                                 'mcnemar_p', 'shape_regressions', 'verdict')}
+        if 'against_base_repeat' in report:
+            summary['models'][label]['verdict_against_base_repeat'] = report['against_base_repeat']['verdict']
+        regressed |= report['verdict'] == 'regressed'
+    (args.out / 'decision.json').write_text(json.dumps(summary, indent=1) + '\n')
+    print(json.dumps(summary))
+    return 1 if regressed else 0
 
 
 if __name__ == '__main__':

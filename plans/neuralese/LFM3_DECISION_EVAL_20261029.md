@@ -36,10 +36,18 @@ Two executions of the same base GGUF gave 33/38 and 26/38. Root causes, each ver
 - The export's serving settings (chat-template kwargs, producer-marker logit bias) apply to both arms.
 - All 128 cases (16 shapes × 8 worlds).
 
-Cost: single-stream decode is ~60 tok/s versus ~280 tok/s aggregate for 8 batched slots on the GB10, so a
-128-case run takes hours; base and trained run concurrently in separate servers. A batch-invariant llama.cpp
-mode (one kernel path per column regardless of batch size, plus attention) would restore batched throughput
-with determinism; not implemented.
+Cost: single-stream decode is ~60 tok/s on the idle GB10 versus ~280 tok/s aggregate for 8 batched slots. With
+the DGX RL learner on the GPU (21:30) three single-sequence servers got ~8 tok/s each; a 128-case run (≈1.3M
+completion tokens for the base) would take well over a day. The gate therefore has two modes:
+
+- `--serving deterministic`: exact replay, for an idle GPU.
+- `--serving batched` (default): 16 slots, continuous batching, count budgets, frozen runtime; replies vary with
+  load, so `--repeat-base` executes the base twice and the report gives the base-vs-base flips and both paired
+  comparisons. McNemar stays valid under this noise (under H0 the discordant directions are exchangeable); the
+  noise only costs power.
+
+A batch-invariant llama.cpp mode (one per-column kernel path regardless of batch size, plus attention) would give
+determinism at batched throughput; not implemented.
 
 ## Decision rule (recommended)
 
@@ -50,8 +58,8 @@ two-sided McNemar p on (b, c).
 - **regressed**: c > b, p < 0.05.
 - otherwise **no-significant-change** (or improved-with-shape-regressions).
 
-Continue SFT only on **improved**; on no-significant-change or regressed, reset and go to RL/self-distillation.
-Exact determinism makes base-vs-base noise zero; `--repeat-base` re-executes the base to check that.
+Continue SFT only on **improved** against both base executions (batched mode); on no-significant-change or
+regressed, reset and go to RL/self-distillation.
 
 ## Measurements
 
