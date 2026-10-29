@@ -26,14 +26,33 @@ aggregate training loss. A numerical/recovery-qualified checkpoint is not a
 behaviorally qualified production model. Diagnose regressions and use a better
 demonstrated parent rather than repeatedly training through unexplained harm.
 
+## Act on current facts; nothing continues just because it started (owner, 2026-10-29)
+
+Owner: don't leave potentially valuable work untouched, problems undiagnosed, or processes running merely because
+they already started when the facts have changed or something better exists. Concretely:
+
+- **A finding is not done until it is acted on.** Whoever finds a defect or a better setup affecting live work
+  implements the fix and drives the cutover at the next safe update boundary. A recommendation alone is an
+  unfinished task. "Already running", "after the next milestone/merge" and "the other agent owns it" are not
+  reasons to keep spending compute on a known-worse setup. Fresh runs start on the corrected setup.
+- **Re-justify running work every monitoring cycle.** For each running learner, job, conversion or eval, check
+  that it is still the best use of its resources given today's facts: objective, data, code, newer findings.
+  If not, stop or cut over, and record why.
+- **Verify, don't assume.** Claims about state, ownership or other agents must come from a check made now:
+  processes, coord activity, files, logs. Work whose author shows no activity (no process and no coord message in
+  the last 24 h) is orphaned. The supervising agent owns it: review it and integrate or deliberately discard it.
+  Don't address it to absent owners.
+- **Diagnose surprises immediately.** An unexpected number, failure or regression gets a root-cause investigation
+  in the same session, not a note for later.
+
 ## Work lands on main, not in worktrees (owner, 2026-10-29)
 
 No work may be lost or abandoned in worktrees: where possible, do work directly on main in the canonical checkout
 (stage only your own paths). A worktree is a short-lived tool, not a home for work: merge its commits to main
 promptly and remove it once its commits are on main and nothing live or recorded depends on it. Runs, tests and
-jobs execute the code on main. On 2026-10-29, 69 worktrees held commits not on main
-(`/home/werg/data/dgxops/worktrees-with-unmerged-work-20261029.txt`); each owner merges or deliberately
-discards that work.
+jobs execute the code on main. On 2026-10-29, 69 worktrees held commits not on main, mostly from agents no longer running
+(`/home/werg/data/dgxops/worktrees-with-unmerged-work-20261029.txt`). The supervisor reviews them and
+integrates or discards each one with a recorded reason.
 
 ## Agents decide; nothing waits on the owner (owner, 2026-10-29)
 
