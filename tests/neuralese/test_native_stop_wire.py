@@ -110,3 +110,42 @@ def test_cached_splice_constant_blocks_kv_and_hybrid_adjoints_without_mutating_a
         assert magnitude==0 if stopped else magnitude>0
     assert torch.equal(*outputs)
     assert all(value.requires_grad for value in leaves)
+
+
+@pytest.mark.parametrize(('wire', 'expected'), [
+    ('"hello"', 'hello'),
+    ('{"value":"hello"}', {'value': 'hello'}),
+    ('[1,2]', [1, 2]),
+    ('7', 7),
+    ('true', True),
+    ('false', False),
+    ('null', None),
+    ('"{\\"value\\":1}"', '{"value":1}'),
+])
+def test_render_decodes_json_tool_arguments_once(wire, expected):
+    original = {'role': 'assistant', 'tool_calls': [{'type': 'function', 'function': {
+        'name': 'return_result', 'arguments': wire}}]}
+    seen = []
+
+    def apply(messages, tools=None):
+        seen.append(messages[0]['tool_calls'][0]['function']['arguments'])
+        return '<assistant>done'
+
+    render_messages([original], None, apply)
+    assert seen == [expected]
+    assert original['tool_calls'][0]['function']['arguments'] == wire
+
+
+def test_render_still_decodes_json_text_joined_from_argument_parts():
+    parts = [{'type': 'text', 'text': '{"code":"1 + 1"}'}]
+    original = {'role': 'assistant', 'tool_calls': [{'type': 'function', 'function': {
+        'name': 'eval', 'arguments': parts}}]}
+    seen = []
+
+    def apply(messages, tools=None):
+        seen.append(messages[0]['tool_calls'][0]['function']['arguments'])
+        return '<assistant>done'
+
+    render_messages([original], None, apply)
+    assert seen == [{'code': '1 + 1'}]
+    assert original['tool_calls'][0]['function']['arguments'] == parts

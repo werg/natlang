@@ -1,5 +1,18 @@
 # Model-facing changes and their measurement
 
+### 2026-10-17 — decoded JSON tool arguments are not decoded twice
+
+The serving renderer already converts JSON-text tool arguments to their JSON
+value, but then attempted to parse any remaining string a second time. Valid
+string scalars such as `"hello"` therefore failed even though object, array,
+number, and null arguments parsed correctly. The renderer now decodes only text
+joined from content-part arguments; ordinary decoded values pass through. Raw
+source messages remain unchanged. This behavior change landed unmeasured.
+**Measurement debt:** sample about48 live executor tool calls per runtime
+variant in the next teacher window, including JSON scalar and structured
+argument paths. Static render tests establish the parsing contract, not task
+quality or live recovery.
+
 ### 2026-10-28 — learned optimizer component-token decision (unmeasured debt)
 
 The joint learned optimizer's LoRA mixture is now a component-token distribution (owner decision 2026-10-28;
