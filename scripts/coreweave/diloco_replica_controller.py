@@ -82,15 +82,28 @@ def run_coreweave_promotion(directory, config):
     if owner['run_id']!=intent['run_id']:raise ValueError('owner journal run differs from promotion')
     expected={(w['sandbox_id'],w['boot_id'],w['owner_id']) for w in owner['workers'].values()
               if w['sandbox_id']!=config['expected_primary']['sandbox_id']}
-    if {(w['sandbox_id'],w['boot_id'],w['owner_id']) for w in workers}!=expected:
-        raise ValueError('worker authority set differs from exact owner journal')
+    actual={(w['sandbox_id'],w['boot_id'],w['owner_id']) for w in workers}
+    if not expected<=actual:raise ValueError('worker authority omits an exact surviving owner')
+    extra=actual-expected;replacement_proof=None
+    if extra:
+        replacement=config.get('replacement_owner')
+        if len(extra)!=1 or not isinstance(replacement,dict):raise ValueError('unverified replacement owner')
+        target=replacement['target'];identity=(target['sandbox_id'],target['boot_id'],target['owner_id'])
+        if extra!={identity}:raise ValueError('replacement owner differs from authority set')
+        replacement_proof=fence_module.verify_replacement_owner(replacement['reference'],owner_journal=owner,expected_primary=config['expected_primary'],
+            expected_target=target,worker_index=replacement['worker_index'],nonce=nonce,get_sandbox=fence_module.sdk_get_sandbox,observe_owner=fence_module.sdk_observe_replacement_owner)
     verifier=fence_module.provider_fence_verifier(expected_primary=config['expected_primary'],
         expected_workers=config['expected_workers'],control_dirs=config['control_dirs'])
     token=Path(config['new_token_file']).read_text().strip()
     if hashlib.sha256(token.encode()).hexdigest()!=intent['new_token_sha256']:
         raise ValueError('new token file does not match promotion intent')
     def install(_):return fence_module.sdk_set_worker_authority(workers,nonce=nonce,action='fence')
-    def verify(_):return verifier(config['supervisor_proof'])
+    def verify(_):
+        evidence=verifier(config['supervisor_proof'])
+        if replacement_proof is not None:
+            evidence={**evidence,'replacement_owner':replacement_proof}
+            evidence['proof_sha256']=hashlib.sha256(json.dumps({k:v for k,v in evidence.items() if k!='proof_sha256'},sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        return evidence
     def start(_,evidence):
         from natlang_neuralese.train.diloco.replica_transport import witness_head,rotate_replica_credential
         from natlang_neuralese.train.diloco.worker import RemoteError
@@ -245,8 +258,16 @@ def run_coreweave_seed_stage(config):
     source=config['source'];target=config['target']
     authorized={(item['identity']['sandbox_id'],item['identity']['boot_id'],item['identity']['owner_id']) for item in evidence.get('workers',[])}
     source_id=(source['sandbox_id'],source['boot_id'],source['owner_id']);target_id=(target['sandbox_id'],target['boot_id'],target['owner_id'])
-    if source_id==target_id or source_id not in authorized or target_id not in authorized:
-        raise ValueError('seed endpoints are not distinct verified worker owners')
+    if source_id==target_id or source_id not in authorized:raise ValueError('seed source is not a distinct verified survivor')
+    if target_id not in authorized:
+        replacement=config.get('replacement_owner')
+        if not isinstance(replacement,dict):raise ValueError('seed target is not an authenticated successor owner')
+        ref=config['supervisor_proof']['journal'];old_owner=fences.owner_reference(ref['path'],ref['sha256'],config['expected_primary'])
+        proof=fences.verify_replacement_owner(replacement['reference'],owner_journal=old_owner,expected_primary=config['expected_primary'],
+            expected_target=target,worker_index=replacement['worker_index'],nonce=nonce,get_sandbox=fences.sdk_get_sandbox,observe_owner=fences.sdk_observe_replacement_owner)
+        fences.sdk_set_worker_authority([{'sandbox_id':target['sandbox_id'],'boot_id':target['boot_id'],'owner_id':target['owner_id'],
+            'directory':target['directory'],'runtime':target['runtime']}],nonce=nonce,action='fence')
+    else:proof=None
     cwctl.load_env_file();cwctl.require_key()
     source_box=cwctl.read_sandbox(source['sandbox_id'],patience=60);target_box=cwctl.read_sandbox(target['sandbox_id'],patience=60)
     source_token=Path(config['source_token_file']).read_text().strip()
@@ -326,6 +347,9 @@ def run_coreweave_seed_stage(config):
         peer_config={'baseline':target['store']+'/baseline','baseline_sha256':witness['baseline_sha256'],'store':target['store'],
             'work_root':target['work_root'],'host':target['peer_host'],'port':target['peer_port'],'token_file':target['peer_token_file'],'max_transaction_bytes':target['max_transaction_bytes']}
         peer_argv=config_argv(target_box,target,'peer',peer_config);target_role=owned_start(target,peer_argv,'seed-peer-'+unique)
+        preserved={'role':target.get('seed_role','actor'),'pid':target_role['pid'],'start_ticks':target_role['process_start_ticks'],
+                   'argv_sha256':hashlib.sha256(json.dumps(peer_argv,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()}
+        fences.sdk_record_preserved_role(target,nonce,preserved)
         target_token=Path(config['target_token_file']).read_text().strip();deadline=time.monotonic()+config.get('readiness_timeout',300)
         while True:
             try:
@@ -349,4 +373,4 @@ def run_coreweave_seed_stage(config):
                     'publisher':target['publisher'],'request':request})
         finally:stopped_value=stop_source()
     return {'schema':'natlang.diloco-third-peer-stage/1','witness':witness,'receipt_sha256':receipt_sha,
-            'source_role':source_role,'target_role':target_role,'source_generation_after_seed_stop':stopped_value['generation'],'source_seed_server_stopped':True}
+            'source_role':source_role,'target_role':target_role,'replacement_owner_proof':proof,'target_preserve_role':preserved,'source_generation_after_seed_stop':stopped_value['generation'],'source_seed_server_stopped':True}

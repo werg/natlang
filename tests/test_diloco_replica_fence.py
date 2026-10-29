@@ -104,3 +104,23 @@ def test_real_owned_stopped_coordinator_and_closed_port(tmp_path):
             sock.bind(('127.0.0.1',port));sock.listen()
             with pytest.raises(ValueError):observe_coordinator_stop(identity,nonce,statepath.parent,port,spec['supervisor_cmdline_sha256'],spec['entrypoint_sha256'])
     finally:proc.terminate();proc.wait(timeout=8)
+
+
+def test_replacement_owner_requires_exact_failed_worker_lineage(tmp_path):
+    from scripts.coreweave.diloco_replica_fence import verify_replacement_owner
+    old={'sandbox_id':'failed','boot_id':'old-boot','owner_id':'old-owner','pid':7,'start_ticks':'11'}
+    new={'sandbox_id':'replacement','boot_id':'new-boot','owner_id':'new-owner'}
+    supervisor={'pid':1,'start_ticks':'22','cmdline_sha256':'a'*64,'entrypoint_sha256':'b'*64}
+    target={**new,'directory':'/control','runtime':'/runtime','supervisor':supervisor}
+    record={'schema':'natlang.diloco-replacement-owner/1','worker_index':0,'old_identity':old,'new_identity':new,
+            'control_directory':'/control','owner_runtime':'/runtime','supervisor':supervisor}
+    path=tmp_path/'replacement.json';path.write_text(json.dumps(record));ref={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+    roster={'workers':{'0':old}};provider=lambda _:SimpleNamespace(sandbox_id='replacement',status=SimpleNamespace(state=2))
+    observe=lambda journal,nonce:{'nonce':nonce,'new_identity':new,'supervisor':supervisor,'owner_live':True,'worker_absent':True}
+    def check(target_value=target,provider_fn=provider,observed=observe):
+        return verify_replacement_owner(ref,owner_journal=roster,expected_primary=old,expected_target=target_value,worker_index=0,nonce='n'*48,get_sandbox=provider_fn,observe_owner=observed)
+    assert check()['new_identity']==new
+    with pytest.raises(ValueError):check(dict(target,boot_id='wrong'))
+    with pytest.raises(ValueError):check(provider_fn=lambda _:SimpleNamespace(sandbox_id='replacement',status=SimpleNamespace(state=3)))
+    with pytest.raises(ValueError):check(observed=lambda journal,nonce:dict(observe(journal,nonce),worker_absent=False))
+    with pytest.raises(ValueError):verify_replacement_owner(ref,owner_journal={'workers':{'0':dict(old,sandbox_id='other')}},expected_primary=old,expected_target=target,worker_index=0,nonce='n'*48,get_sandbox=provider,observe_owner=observe)

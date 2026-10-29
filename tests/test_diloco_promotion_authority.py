@@ -68,7 +68,7 @@ def test_nested_owner_handoff_fences_old_and_new_publishers(tmp_path):
         fence(nested,**authority)
         assert not start(nested,'nested-fenced',[sys.executable,'-c','pass'])['accepted']
         import socket
-        from scripts.coreweave.diloco_promotion_authority import authorize_coordinator,authorize_seed_server
+        from scripts.coreweave.diloco_promotion_authority import authorize_coordinator,authorize_seed_server,record_preserved_role
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));seedport=sock.getsockname()[1]
         seed=tmp_path/'seed';seed.mkdir();(seed/'seed-receipt.json').write_text(json.dumps({'files':[]}));tokenfile=tmp_path/'seed-token';tokenfile.write_text('s'*32)
         config=tmp_path/'seed-config.json';config.write_text(json.dumps({'seed':str(seed),'host':'127.0.0.1','port':seedport,'token_file':str(tokenfile)}))
@@ -76,12 +76,19 @@ def test_nested_owner_handoff_fences_old_and_new_publishers(tmp_path):
         seedrequest={'schema':'natlang.diloco-role-request/1','id':'seed-server','owner_id':ownerstate['owner_id'],
             'expected_generation':ownerstate['generation'],'role':'coordinator','action':'start','promotion_nonce':authority['nonce'],
             'argv':[sys.executable,'-m','natlang_neuralese.train.diloco.replica_cli','seed-serve','--config',str(config),'--config-sha256',configsha]}
-        authorize_seed_server(nested,request=seedrequest,**authority);seedpid=submit(nested,seedrequest)['pid']
+        authorize_seed_server(nested,request=seedrequest,**authority)
+        requestsha=hashlib.sha256(json.dumps(seedrequest,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+        (nested/'publisher-seed-server.json').write_text(json.dumps({'request_sha256':requestsha}))
+        seedpid=submit(nested,seedrequest)['pid']
         def seed_ready():
             try:
                 with socket.create_connection(('127.0.0.1',seedport),timeout=.1):return True
             except OSError:return False
         wait(seed_ready);assert not start(nested,'worker-during-seed',[sys.executable,'-c','pass'])['accepted']
+        live=state(nested)['roles']['coordinator']
+        preserve={'role':'coordinator','pid':seedpid,'start_ticks':live['start_ticks'],'argv_sha256':hashlib.sha256(json.dumps(seedrequest['argv'],separators=(',',':')).encode()).hexdigest()}
+        record_preserved_role(nested,preserve_role=preserve,**authority)
+        fence(nested,preserve_role=preserve,**authority)
         ownerstate=state(nested);assert submit(nested,{'schema':'natlang.diloco-role-request/1','id':'stop-seed','owner_id':ownerstate['owner_id'],
             'expected_generation':ownerstate['generation'],'role':'coordinator','action':'stop','expected_pid':seedpid})['accepted']
         wait(lambda:not state(nested)['roles']['coordinator']['alive'])

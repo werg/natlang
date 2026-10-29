@@ -104,3 +104,28 @@ def authorize_seed_server(directory, *, expected_owner, expected_boot, nonce, re
         if path.exists() and json.loads(path.read_text())!=value:raise ValueError('another seed request is authorized')
         if not path.exists():write_json_durable(path,value)
         return value
+
+
+def record_preserved_role(directory, *, expected_owner, expected_boot, nonce, preserve_role):
+    """Record the exact already-authorized peer role before a later re-fence."""
+    directory=Path(directory).resolve(strict=True)
+    with (directory/'promotion-authority.lock').open('a+b') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        marker=json.loads((directory/'promotion-fence.json').read_text());state=json.loads((directory/'state.json').read_text())
+        if marker!={'schema':'natlang.diloco-role-promotion-fence/1','owner_id':expected_owner,'boot_id':expected_boot,'nonce':nonce} or state.get('owner_id')!=expected_owner or state.get('boot_id')!=expected_boot:
+            raise ValueError('preserved role fence differs')
+        if not isinstance(preserve_role,dict) or set(preserve_role)!={'role','pid','start_ticks','argv_sha256'} or preserve_role['role'] not in ('actor','coordinator'):
+            raise ValueError('invalid preserved role')
+        current=state.get('roles',{}).get(preserve_role['role'],{})
+        events=[event for event in state.get('events',[]) if event.get('event')=='start' and event.get('role')==preserve_role['role'] and event.get('pid')==preserve_role['pid']]
+        if (not current.get('alive') or current.get('pid')!=preserve_role['pid'] or current.get('start_ticks')!=preserve_role['start_ticks'] or
+                len(events)!=1 or events[0].get('argv_sha256')!=preserve_role['argv_sha256']):raise ValueError('preserved role is not the exact live child')
+        authorization=json.loads((directory/'promotion-seed-server.json').read_text())
+        publisher=json.loads((directory/('publisher-'+events[0]['request_id']+'.json')).read_text())
+        if authorization.get('nonce')!=nonce or authorization.get('request_sha256')!=publisher.get('request_sha256'):
+            raise ValueError('preserved role was not authorized by this fence')
+        path=directory/'promotion-preserved-role.json';old=json.loads(path.read_text())
+        if old!={'schema':'natlang.diloco-promotion-preserved-role/1','nonce':nonce,'role':None} and old.get('role')!=preserve_role:
+            raise ValueError('another role is already preserved')
+        value={'schema':'natlang.diloco-promotion-preserved-role/1','nonce':nonce,'role':preserve_role};write_json_durable(path,value)
+        return value

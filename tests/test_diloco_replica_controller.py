@@ -87,6 +87,7 @@ def test_coreweave_seed_stage_uses_direct_owned_roles_and_stops_source(tmp_path,
     monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)
     monkeypatch.setattr(cwctl,'read_sandbox',lambda sid,**k:boxes[sid])
     monkeypatch.setattr(fm,'sdk_authorize_seed_server',lambda role,nonce:calls.append(('authorize',role['request']['argv'][3])))
+    monkeypatch.setattr(fm,'sdk_record_preserved_role',lambda *a,**k:{})
     monkeypatch.setattr(fm,'provider_fence_verifier',lambda **kw:lambda proof:{'primary_fenced':True,'all_workers_quiesced':True,'run_id':'r','proof_sha256':'d'*64,'workers':[{'identity':{'sandbox_id':'source','boot_id':'boot','owner_id':'owner'}},{'identity':{'sandbox_id':'target','boot_id':'boot','owner_id':'owner'}}]})
     monkeypatch.setattr(replica_transport,'witness_head',lambda *a,**k:witness)
     monkeypatch.setattr(replica_transport,'freeze_replica_files',lambda *a,**k:calls.append(('freeze',a[2])))
@@ -98,6 +99,18 @@ def test_coreweave_seed_stage_uses_direct_owned_roles_and_stops_source(tmp_path,
     assert result['source_seed_server_stopped'] and result['witness']==witness
     assert ('authorize','seed-serve') in calls and ('authorize','peer') in calls
     assert all(b'sssssssss' not in raw for _,_,raw in staged)
+    # A newly allocated successor is not in the old owner roster; it must
+    # pass its own bound lineage proof and receive an explicit authority fence.
+    old_primary={'sandbox_id':'failed','boot_id':'old','owner_id':'old-owner','pid':1,'start_ticks':'1'}
+    monkeypatch.setattr(fm,'provider_fence_verifier',lambda **kw:lambda proof:{'primary_fenced':True,'all_workers_quiesced':True,'run_id':'r','proof_sha256':'d'*64,'workers':[{'identity':{'sandbox_id':'source','boot_id':'boot','owner_id':'owner'}}]})
+    monkeypatch.setattr(fm,'owner_reference',lambda *args:{'run_id':'r','workers':{'0':old_primary}})
+    monkeypatch.setattr(fm,'verify_replacement_owner',lambda *a,**k:{'schema':'natlang.diloco-replacement-owner-proof/1','proof_sha256':'e'*64})
+    monkeypatch.setattr(fm,'sdk_set_worker_authority',lambda ws,nonce,action:(calls.append(('replacement-fence',ws[0]['sandbox_id'])) or [{'sandbox_id':ws[0]['sandbox_id']}]))
+    result=run_coreweave_seed_stage({'expected_primary':old_primary,'expected_workers':[0,1],'control_dirs':{},
+        'supervisor_proof':{'journal':{'path':'/journal','sha256':'f'*64}},'witness':witness,'activation_nonce':'n'*48,
+        'replacement_owner':{'reference':{'path':'/replacement','sha256':'a'*64},'worker_index':0},
+        'source':source,'target':target,'source_token_file':str(tmp_path/'token'),'target_token_file':str(tmp_path/'token')})
+    assert result['replacement_owner_proof']['proof_sha256']=='e'*64 and ('replacement-fence','target') in calls
 
 
 def test_first_outer_source_evidence_binds_real_parent_and_source_bytes(tmp_path):

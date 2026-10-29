@@ -365,3 +365,68 @@ print(json.dumps({'pid':pid,'start_ticks':ticks,'owner_id':owner,'boot_id':boot}
     result=box.exec(['python3','-c',program,role['directory'],role['owner_id'],role['boot_id'],nonce],timeout_seconds=30).result(timeout=60)
     if result.returncode!=0:raise ValueError('running coordinator owner is not the exact authorized child')
     return json.loads(result.stdout)
+
+
+def verify_replacement_owner(ref, *, owner_journal, expected_primary, expected_target, worker_index, nonce, get_sandbox, observe_owner, now=time.time):
+    """Bind a fresh replacement owner to one exact failed worker lineage."""
+    path=Path(ref['path']).resolve(strict=True);before=path.stat();raw=path.read_bytes();after=path.stat()
+    if hashlib.sha256(raw).hexdigest()!=ref['sha256'] or (before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)!=(after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns):
+        raise ValueError('replacement owner journal changed or hash differs')
+    value=json.loads(raw);old=owner_journal['workers'][str(worker_index)]
+    old_identity={k:old.get(k) for k in ('sandbox_id','boot_id','owner_id','pid','start_ticks')};old_identity['start_ticks']=old.get('start_ticks') or old.get('process_start_ticks')
+    new_identity={k:expected_target.get(k) for k in ('sandbox_id','boot_id','owner_id')}
+    if (value.get('schema')!='natlang.diloco-replacement-owner/1' or value.get('worker_index')!=worker_index or
+            value.get('old_identity')!=old_identity or value.get('new_identity')!=new_identity or
+            old_identity['sandbox_id']!=expected_primary['sandbox_id'] or new_identity['sandbox_id']==old_identity['sandbox_id'] or
+            value.get('control_directory')!=expected_target.get('directory') or value.get('owner_runtime')!=expected_target.get('runtime') or
+            value.get('supervisor')!=expected_target.get('supervisor')):
+        raise ValueError('replacement journal does not bind the failed worker and successor owner')
+    started=now();sandbox=get_sandbox(new_identity['sandbox_id'])
+    if _top_state(sandbox,new_identity['sandbox_id'])!=2:raise ValueError('replacement sandbox is not top-level Running')
+    observed=observe_owner(value,nonce);finished=now()
+    if (finished<started or finished-started>120 or not isinstance(observed,dict) or observed.get('nonce')!=nonce or
+            observed.get('new_identity')!=new_identity or observed.get('supervisor')!=value.get('supervisor') or
+            observed.get('owner_live') is not True or observed.get('worker_absent') is not True):
+        raise ValueError('replacement owner is not freshly verified and quiescent')
+    if hashlib.sha256(path.read_bytes()).hexdigest()!=ref['sha256']:raise ValueError('replacement journal changed during verification')
+    result={'schema':'natlang.diloco-replacement-owner-proof/1','worker_index':worker_index,'old_identity':old_identity,
+            'new_identity':new_identity,'journal_sha256':ref['sha256'],'nonce':nonce,'provider_state':'STATE_RUNNING',
+            'observed_at':finished,'supervisor':observed['supervisor']}
+    result['proof_sha256']=hashlib.sha256(json.dumps(result,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    return result
+
+
+def sdk_observe_replacement_owner(journal,nonce):
+    """Observe exact inline nested-owner process on the proposed successor box."""
+    try:from . import cwctl
+    except ImportError:import cwctl
+    program='''import hashlib,json,sys
+from pathlib import Path
+v=json.loads(sys.argv[1]);nonce=sys.argv[2];n=v['new_identity'];sup=v['supervisor'];d=Path(v['control_directory'])
+s=json.loads((d/'state.json').read_text());boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+if boot!=n['boot_id'] or s.get('boot_id')!=boot or s.get('owner_id')!=n['owner_id'] or s.get('supervisor_pid')!=sup['pid'] or s.get('supervisor_start_ticks')!=sup['start_ticks']:raise ValueError('successor owner identity changed')
+p=Path('/proc/'+str(sup['pid']));fields=(p/'stat').read_text().rsplit(')',1)[1].split();command=(p/'cmdline').read_bytes();args=command.split(b'\\0')
+if fields[0]=='Z' or fields[19]!=sup['start_ticks'] or hashlib.sha256(command).hexdigest()!=sup['cmdline_sha256'] or b'-c' not in args or hashlib.sha256(args[args.index(b'-c')+1]).hexdigest()!=sup['entrypoint_sha256']:raise ValueError('successor owner executable differs')
+r=s.get('roles',{}).get('worker',{})
+if r.get('alive') or s.get('pending_start') or (d/'request.json').exists() or (d/'request.claimed.json').exists():raise ValueError('successor worker is not quiescent')
+print(json.dumps({'nonce':nonce,'new_identity':n,'supervisor':sup,'owner_live':True,'worker_absent':True}))
+'''
+    cwctl.load_env_file();cwctl.require_key();box=cwctl.read_sandbox(journal['new_identity']['sandbox_id'],patience=60)
+    result=box.exec(['python3','-c',program,json.dumps(journal,sort_keys=True),nonce],timeout_seconds=30).result(timeout=60)
+    if result.returncode!=0:raise ValueError('replacement owner observation failed')
+    return json.loads(result.stdout)
+
+
+def sdk_record_preserved_role(host, nonce, role):
+    import inspect
+    try:from . import cwctl,diloco_promotion_authority as authority
+    except ImportError:
+        import cwctl
+        import diloco_promotion_authority as authority
+    program=('import fcntl,json,os,sys\nfrom pathlib import Path\n'
+        'sys.path.insert(0,sys.argv[5]+"/training/neuralese")\nfrom natlang_neuralese.common.jsonio import write_json_durable\n'+inspect.getsource(authority.record_preserved_role)+
+        '\nprint(json.dumps(record_preserved_role(sys.argv[1],expected_owner=sys.argv[2],expected_boot=sys.argv[3],nonce=sys.argv[4],preserve_role=json.loads(sys.argv[6]))))\n')
+    cwctl.load_env_file();cwctl.require_key();box=cwctl.read_sandbox(host['sandbox_id'],patience=60)
+    result=box.exec(['python3','-c',program,host['directory'],host['owner_id'],host['boot_id'],nonce,host['runtime'],json.dumps(role)],timeout_seconds=30).result(timeout=60)
+    if result.returncode!=0:raise ValueError('replacement peer role custody was not recorded')
+    return json.loads(result.stdout)
