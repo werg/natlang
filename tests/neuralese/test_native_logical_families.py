@@ -28,3 +28,19 @@ def test_bounded_mean_one_scales_ignore_chunk_boundaries():
     assert first==second and max(first.values())<=8.
     assert sum(first.values())==pytest.approx(len(entries))
     assert census['families']['coding']['scale']==8.
+
+def test_append_keeps_old_labels_and_rejects_tampering(tmp_path):
+    path=tmp_path/'families.json'
+    def make(source, rows):
+        path.write_text(json.dumps({'schema':'natlang.logical-family-map/1',
+            'source_sha256':source.file_sha256,'rows':rows}))
+        return {'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+    a={'id':'a','binding':'a'*64,'family':'structural-iteration'}
+    b={'id':'b','binding':'b'*64,'family':'native-communication'}
+    c={'id':'c','binding':'c'*64,'family':'unclassified'}
+    src=lambda digest,rows:SimpleNamespace(file_sha256=digest,entries=[
+        {'id':r['id'],'binding':r['binding']} for r in rows])
+    old=src('c'*64,[a,b]);new=src('d'*64,[a,b,c])
+    assert load_map(make(old,[a,b]),old)==load_map(make(new,[a,b,c]),new)[:2]
+    ref=make(new,[a,b,c]);path.write_text(path.read_text()+' ')
+    with pytest.raises(ValueError,match='SHA mismatch'):load_map(ref,new)
