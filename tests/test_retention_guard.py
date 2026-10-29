@@ -21,8 +21,8 @@ def test_pair_guard_dry_then_apply_and_fence_new_reference(tmp_path):
     assert guarded_pair(**args)['deletion_authorized'] is False and len(objects)==2
     assert guarded_pair(**args,apply=True)['phase']=='deleted' and not objects
     def changed(digests,roots):
-        (root/'new.json').write_text('{}');return {x:set() for x in digests}
-    with pytest.raises(RuntimeError,match='namespace did not stabilize'):guarded_pair(**(args|{'scan':changed}))
+        (root/'new.json').write_text(digests[0]);return {x:set() for x in digests}
+    with pytest.raises(ValueError,match='external dependency'):guarded_pair(**(args|{'scan':changed}))
 
 
 def test_historical_full_only_retirement_never_accepts_a_control_record(tmp_path):

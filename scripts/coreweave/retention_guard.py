@@ -17,13 +17,13 @@ def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, loc
     """
     before=snapshot(roots)
     refs=scan([candidate['sha256'],candidate['control_sha256']],roots)
-    before,refs=refresh_references(roots,before,refs,[candidate['sha256'],candidate['control_sha256']],scan)
+    before,refs=refresh_references(roots,before,refs,[candidate['sha256'],candidate['control_sha256']],scan,allow_busy=True)
     for digest in (candidate['sha256'],candidate['control_sha256']):
         if external_references(digest,refs[digest],**reference_scope):
             raise ValueError('external dependency protects candidate')
     def inspect(value,phase):
         if phase=='prepare':
-            _,updated=refresh_references(roots,before,refs,[value['sha256'],value['control_sha256']],scan)
+            _,updated=refresh_references(roots,before,refs,[value['sha256'],value['control_sha256']],scan,allow_busy=True)
             for digest in (value['sha256'],value['control_sha256']):
                 if external_references(digest,updated[digest],**reference_scope):raise ValueError('new external dependency protects candidate')
         live=read_live(value,phase)
@@ -44,7 +44,7 @@ def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, loc
         current_presence(api,[by_role[role] for role in sorted(required)])
     if not apply:
         inspect(candidate,'dry')
-        return {'mode':'dry','role':candidate['role'],'control_role':candidate['control_role'],'deletion_authorized':False}
+        return {'mode':'dry','role':candidate['role'],'control_role':candidate['control_role'],'deletion_authorized':False,'scope':'point-in-time JSON scan; managed consumer leases and owner state require the shared commit lock'}
     return retire_pair(lock_path=lock_path,state_path=state_path,candidate=candidate,inspect=inspect,remove=remove,present=present,write_durable=write_durable)
 
 
@@ -53,11 +53,11 @@ def guarded_full(*, candidate, roots, scan, reference_scope, read_live, api, loc
     from .retention_eligibility import eligible_full
     from .retention_transaction import retire_full
     if candidate.get('control_required') or candidate.get('control'):raise ValueError('control-bearing record needs paired retirement')
-    before=snapshot(roots);refs=scan([candidate['sha256']],roots);before,refs=refresh_references(roots,before,refs,[candidate['sha256']],scan)
+    before=snapshot(roots);refs=scan([candidate['sha256']],roots);before,refs=refresh_references(roots,before,refs,[candidate['sha256']],scan,allow_busy=True)
     if external_references(candidate['sha256'],refs[candidate['sha256']],**reference_scope):raise ValueError('external dependency protects candidate')
     def inspect(value,phase):
         if phase=='prepare':
-            _,updated=refresh_references(roots,before,refs,[value['sha256']],scan)
+            _,updated=refresh_references(roots,before,refs,[value['sha256']],scan,allow_busy=True)
             if external_references(value['sha256'],updated[value['sha256']],**reference_scope):raise ValueError('new external dependency protects candidate')
         live=read_live(value,phase);eligible_full(value,**live['eligibility'])
         receipts=live['receipts'];by_role={r.get('role'):r for r in receipts}
@@ -72,5 +72,5 @@ def guarded_full(*, candidate, roots, scan, reference_scope, read_live, api, loc
         if value['role'] in by_role and by_role[value['role']]['identity']['sha256']!=value['sha256']:raise ValueError('full receipt identity changed')
         current_presence(api,[by_role[role] for role in sorted(required)])
     if not apply:
-        inspect(candidate,'dry');return {'mode':'dry','role':candidate['role'],'deletion_authorized':False}
+        inspect(candidate,'dry');return {'mode':'dry','role':candidate['role'],'deletion_authorized':False,'scope':'point-in-time JSON scan; managed consumer leases and owner state require the shared commit lock'}
     return retire_full(lock_path=lock_path,state_path=state_path,candidate=candidate,inspect=inspect,remove=remove,present=present,write_durable=write_durable)

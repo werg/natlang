@@ -4,6 +4,7 @@ from __future__ import annotations
 import fcntl
 import json
 from pathlib import Path
+from .retention_leases import leased_roles
 
 
 def retire_pair(*, lock_path, state_path, candidate, inspect, remove, present, write_durable):
@@ -20,6 +21,8 @@ def retire_pair(*, lock_path, state_path, candidate, inspect, remove, present, w
     lock_path=Path(lock_path);state_path=Path(state_path)
     with lock_path.open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
+        if {candidate['role'],candidate['control_role']} & leased_roles(state_path.parent/'standalone-retention-consumer-leases.json'):
+            raise ValueError('active consumer lease protects retirement pair')
         state=json.loads(state_path.read_text()) if state_path.exists() else {'retired_roles':[],'operations':[]}
         prior=[x for x in state['operations'] if x.get('role')==candidate['role']]
         if len(prior)>1:raise ValueError('duplicate retirement operation')
@@ -50,7 +53,9 @@ def retire_full(*, lock_path, state_path, candidate, inspect, remove, present, w
     if not candidate.get('role') or not candidate.get('sha256'):raise ValueError('incomplete full candidate')
     with Path(lock_path).open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
-        state_path=Path(state_path);state=json.loads(state_path.read_text()) if state_path.exists() else {'retired_roles':[],'operations':[]}
+        state_path=Path(state_path)
+        if candidate['role'] in leased_roles(state_path.parent/'standalone-retention-consumer-leases.json'):raise ValueError('active consumer lease protects checkpoint')
+        state=json.loads(state_path.read_text()) if state_path.exists() else {'retired_roles':[],'operations':[]}
         previous=[x for x in state['operations'] if x.get('role')==candidate['role']]
         if len(previous)>1:raise ValueError('duplicate retirement operation')
         if previous:

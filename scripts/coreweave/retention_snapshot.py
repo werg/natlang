@@ -36,7 +36,28 @@ def revalidate(roots, expected):
     if snapshot(roots)!=expected:raise RuntimeError('reference namespace changed since scan')
 
 
-def refresh_references(roots, previous, references, digests, scan, *, attempts=3):
+def _checked_changed(paths, digests, *, attempts=3):
+    results={d:set() for d in digests}
+    def sig(s):return (s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    for path in paths:
+        for attempt in range(attempts):
+            try:
+                with open(path,'rb') as handle:
+                    before=sig(os.fstat(handle.fileno()));tail=b'';found=set()
+                    while block:=handle.read(1<<20):
+                        data=tail+block
+                        for digest in digests:
+                            if digest.encode('ascii') in data:found.add(digest)
+                        tail=data[-63:]
+                    if sig(os.fstat(handle.fileno()))!=before or sig(os.stat(path))!=before:raise RuntimeError('changed during checked read')
+                for digest in found:results[digest].add(path)
+                break
+            except (FileNotFoundError,RuntimeError):
+                if attempt+1==attempts:raise
+    return results
+
+
+def refresh_references(roots, previous, references, digests, scan, *, attempts=3, allow_busy=False):
     """Refresh only JSON names whose five-field identity changed or appeared.
 
     Deleted names are removed from the reference map. Rescan changed files and
@@ -57,4 +78,13 @@ def refresh_references(roots, previous, references, digests, scan, *, attempts=3
         def json_files(items):return {p:v for p,v in items.items() if p.endswith('.json')}
         if json_files(current)==json_files(after):return after,refs
         previous=current
-    raise RuntimeError('reference namespace did not stabilize within bounded retries')
+    if not allow_busy:raise RuntimeError('reference namespace did not stabilize within bounded retries')
+    # Managed consumers participate in the retention lock. Other writers do
+    # not, so this final refresh is explicitly a point-in-time observation,
+    # not an assertion of a globally atomic filesystem namespace.
+    current=snapshot(roots)
+    changed={p for p in set(previous)|set(current) if p.endswith('.json') and previous.get(p)!=current.get(p)}
+    for paths in refs.values():paths.difference_update(changed)
+    fresh=_checked_changed([p for p in changed if p in current],digests)
+    for digest in digests:refs[digest].update(fresh[digest])
+    return current,refs
