@@ -13,3 +13,7 @@ def test_actual_epoch_process_and_pending_state_are_bound():
     with pytest.raises(ValueError):live_facts(**(args|{'intents':{'old':intent|{'owner':accepted|{'pid':99}},'new':ni}}))
     with pytest.raises(ValueError):live_facts(**(args|{'candidate':args['candidate']|{'control_role':'fake'}}))
     with pytest.raises(ValueError,match='successor'):live_facts(**(args|{'intents':{'old':intent,'new':ni|{'step':4}}}))
+    current=owner|{'parent_sha256':'d'*64,'parent_step':9,'accepted':accepted|{'pid':8}}
+    transition={'full_state_verified':True,'immutable_pin_verified':True,'optimizer_verified':True,'rng_verified':True,'sha256':'d'*64,'step':9,'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','boot_id':'boot','pid':7,'start_ticks':'9'}
+    assert live_facts(**(args|{'owners':[owner,current],'current_owner':current,'transition':transition}))
+    with pytest.raises(ValueError,match='continuation'):live_facts(**(args|{'owners':[owner,current],'current_owner':current,'transition':transition|{'pid':99}}))

@@ -3,7 +3,7 @@ from __future__ import annotations
 from .retention_evidence import owner_for_intent
 
 
-def live_facts(*, candidate, exports, intents, owners, current_owner, owner_state, receipts, successor_role, fallback_role, active_units):
+def live_facts(*, candidate, exports, intents, owners, current_owner, owner_state, receipts, successor_role, fallback_role, active_units, transition=None):
     """Validate the selected journal entry and derive current protection facts.
 
     Inputs must be freshly read while holding the retention lock; all owner
@@ -22,6 +22,10 @@ def live_facts(*, candidate, exports, intents, owners, current_owner, owner_stat
         raise ValueError('successor worker or step differs')
     successor_owner=owner_for_intent(successor_intent,owners)
     if successor_owner!=candidate_owner:raise ValueError('successor is not from the same authenticated owner epoch')
+    if current_owner!=candidate_owner:
+        t=transition or {};accepted=candidate_owner['accepted']
+        if not (t.get('full_state_verified') is True and t.get('immutable_pin_verified') is True and t.get('optimizer_verified') is True and t.get('rng_verified') is True and t.get('sha256')==current_owner.get('parent_sha256') and t.get('step')==current_owner.get('parent_step') and t.get('step',-1)>=successor['step'] and all(t.get(k)==candidate_owner.get(k) for k in ('sandbox_id','plan_sha256','runtime_commit')) and t.get('boot_id')==accepted.get('boot_id') and t.get('pid')==accepted.get('pid') and str(t.get('start_ticks'))==str(accepted.get('process_start_ticks'))):
+            raise ValueError('current owner lacks authenticated continuation from successor epoch')
     if entry.get('unit')!=candidate['full_unit']:raise ValueError('candidate full unit differs')
     if bool(entry.get('control_required')) != bool(candidate.get('control_role')):raise ValueError('candidate control requirement differs')
     if entry.get('control_required'):
