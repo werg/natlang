@@ -42,7 +42,7 @@ def test_restored_workers_start_only_after_ready_and_resume(tmp_path,monkeypatch
     hosts={};pins={};alive={};starts=[]
     for i in range(4):
         argv=['python3','train.py','--out',f'/work/worker{i}','--diloco',json.dumps({'worker_id':i,'workers':4,'run_id':'run','coordinator_url':'https://coordinator'})];sha=hashlib.sha256(json.dumps(argv,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
-        hosts[i]={'sandbox_id':f'host{i}','directory':'/owner','owner_id':'o','boot_id':'b','argv':argv,'worker_argv_sha256':sha,'publisher':{'path':'/publisher','sha256':'a'*64}}
+        hosts[i]={'sandbox_id':f'host{i}','directory':'/owner','owner_id':'o','boot_id':'b','argv':argv,'worker_argv_sha256':sha,'publisher':{'path':'/publisher','sha256':'a'*64},'env':{'NATLANG_CW_SECRETS':f'/work/secrets{i}'}}
         pins[str(i)]={'sandbox_id':f'host{i}','path':f'/work/worker{i}/checkpoint.pt','sha256':'b'*64,'bytes':5}
     class Future:
         def __init__(self,value):self.value=value
@@ -74,16 +74,18 @@ def test_full_restore_orchestrates_and_resumes_without_restarting(tmp_path,monke
     stage=tmp_path/'staged';(stage/'replica-restored').mkdir(parents=True);(stage/'diloco-replica-recovery').mkdir()
     (stage/'staging.json').write_text(json.dumps({'coordinator_run_id':'run'}))
     (stage/'replica-restored'/'verified-restore.json').write_text(json.dumps({'owner_journal_sha256':'o'*64,'receipt_sha256':'c'*64}))
-    token=tmp_path/'token';token.write_text('secret');nonce='n'*48
-    workers={str(i):{'sandbox_id':f'h{i}','directory':f'/owner{i}','owner_id':f'o{i}','boot_id':f'b{i}','runtime':'/runtime'} for i in range(4)}
-    peers=[{**workers[str(i)],'store':f'/work/store{i}','url':f'https://h{i}'} for i in range(2)]
+    token=tmp_path/'token';token.write_text('secret');token.chmod(0o600);nonce='n'*48
+    workers={str(i):{'sandbox_id':f'h{i}','directory':f'/owner{i}','owner_id':f'o{i}','boot_id':f'b{i}','runtime':'/runtime','env':{'NATLANG_CW_SECRETS':f'/work/secrets{i}'},'gateway_credential':{'local_file':str(token),'sha256':hashlib.sha256(b'secret').hexdigest()}} for i in range(4)}
+    peers=[{**workers[str(i)],'store':f'/work/store{i}','url':f'https://h{i}','token_file':f'/work/old-token{i}'} for i in range(2)]
     config={'mode':'continue-existing-outer','staging_manifest_sha256':hashlib.sha256((stage/'staging.json').read_bytes()).hexdigest(),'staging':str(stage),'worker_hosts':workers,'peer_hosts':peers,'old_token_file':str(token),
-        'promotion':{'intent':{'activation_nonce':nonce,'run_id':'run','sequence':0,'head':'h'},'supervisor_proof':{'journal':{'sha256':'o'*64}},
+        'old_token_sha256':hashlib.sha256(b'secret').hexdigest(),'promotion':{'intent':{'activation_nonce':nonce,'run_id':'run','sequence':0,'head':'h','new_token_sha256':hashlib.sha256(b'secret').hexdigest()},'supervisor_proof':{'journal':{'sha256':'o'*64}},
         'expected_primary':{},'expected_workers':list(range(4)),'full_restore':{'replacements':{str(i):{} for i in range(4)}},
-        'primary_role':{'sandbox_id':'h0','directory':'/owner0'},'activation_config':{'baseline':'/work/store0/baseline','journal':'/work/store0/journal','file_custody_store':'/work/store0','baseline_sha256':'base'},'outgoing_replica':{'baseline_sha256':'base','url':'https://h1'}}}
+        'primary_role':{'sandbox_id':'h0','directory':'/owner0'},'activation_config':{'baseline':'/work/store0/baseline','journal':'/work/store0/journal','file_custody_store':'/work/store0','baseline_sha256':'base','token_file':'/work/new-token'},'new_token_file':str(token),'outgoing_replica':{'baseline_sha256':'base','url':'https://h1','old_token_file':str(token)}}}
     calls=[];monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)
     monkeypatch.setattr(fences,'verify_full_restore_fence',lambda **kw:(calls.append('verify') or {'proof_sha256':'f'}))
     monkeypatch.setattr(fences,'sdk_set_worker_authority',lambda *a,**kw:calls.append('fence'))
+    monkeypatch.setattr(ctl,'verify_runtime_prerequisites',lambda *a,**kw:(calls.append('runtime') or {}))
+    monkeypatch.setattr(ctl,'stage_scoped_credential',lambda *a,**kw:(calls.append('credential') or {}))
     monkeypatch.setattr(ctl,'stage_worker_dependencies',lambda *a,**kw:(calls.append('dependencies') or {}))
     monkeypatch.setattr(ctl,'stage_worker_checkpoints',lambda *a,**kw:(calls.append('workers') or {str(i):{} for i in range(4)}))
     def seed(**kw):
@@ -102,7 +104,7 @@ def test_full_restore_orchestrates_and_resumes_without_restarting(tmp_path,monke
     with pytest.raises(RuntimeError):ctl.run_full_restore(tmp_path/'journal',config)
     assert json.loads((tmp_path/'journal'/'restore.json').read_text())['phase']=='peers-ready' and 'start' not in calls
     assert ctl.run_full_restore(tmp_path/'journal',config)['phase']=='complete'
-    expected=['verify','fence','dependencies','workers','seed','transfer','peer','peer','promote','promote','start']
+    expected=['verify','fence','runtime','dependencies','workers','seed','transfer',*(['credential']*11),'peer','peer','promote','promote','start']
     assert calls==expected
     ctl.run_full_restore(tmp_path/'journal',config)
     assert calls==expected
@@ -139,3 +141,28 @@ def test_dependency_staging_preserves_exact_logical_paths_and_parent(tmp_path):
     assert (boxes['h3'].base/'source.json').read_bytes()==data and (boxes['h3'].base/'parent/checkpoint.pt').read_bytes()==parent
     (boxes['h2'].base/'source.json').write_bytes(b'wrong')
     with pytest.raises(ValueError):stage_worker_dependencies(stage,hosts,cwctl=sdk)
+
+
+def test_scoped_token_transfer_private_and_no_secret_in_argv(tmp_path):
+    import os,stat
+    from scripts.coreweave.diloco_full_restore_controller import stage_scoped_credential
+    secret=b'private-scoped-credential-value';local=tmp_path/'token';local.write_bytes(secret);local.chmod(0o600)
+    sha=hashlib.sha256(secret).hexdigest();commands=[];base=tmp_path/'remote';base.mkdir()
+    class Future:
+        def __init__(self,value):self.value=value
+        def result(self,**kwargs):return self.value
+    class Box:
+        def map(self,value):return str(base/value.removeprefix('/work/')) if value.startswith('/work/') else value
+        def exec(self,argv,**kwargs):
+            commands.append(argv);return Future(subprocess.run([self.map(v) for v in argv],capture_output=True,text=True))
+        def write_file(self,path,data):
+            with open(self.map(path),'wb') as f:f.write(data)
+            return Future(None)
+    sdk=SimpleNamespace(read_sandbox=lambda *a,**kw:Box());host={'sandbox_id':'box'}
+    result=stage_scoped_credential(host,local_file=local,expected_sha256=sha,remote_file='/work/credentials/token',cwctl=sdk)
+    assert result['sha256']==sha and (base/'credentials'/'token').read_bytes()==secret
+    assert stat.S_IMODE((base/'credentials'/'token').stat().st_mode)==0o600
+    assert all(secret.decode() not in str(command) for command in commands)
+    stage_scoped_credential(host,local_file=local,expected_sha256=sha,remote_file='/work/credentials/token',cwctl=sdk)
+    local.chmod(0o644)
+    with pytest.raises(ValueError):stage_scoped_credential(host,local_file=local,expected_sha256=sha,remote_file='/work/credentials/token',cwctl=sdk)

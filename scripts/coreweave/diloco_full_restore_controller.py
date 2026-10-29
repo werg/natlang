@@ -162,6 +162,9 @@ def start_restored_workers(directory, hosts, pins, *, nonce, coordinator_role, c
         if (worker_id!=rank or settings.get('workers')!=4 or settings.get('run_id')!=record['intent']['run_id'] or
                 settings.get('coordinator_url')!=record['intent']['new_url']):
             raise ValueError('worker rank or restored coordinator session differs')
+        env=host.get('env',{});secret_dir=env.get('NATLANG_CW_SECRETS','')
+        if not secret_dir.startswith('/work/') or env.get('NATLANG_DILOCO_TOKEN') or env.get('NATLANG_DILOCO_GATEWAY_TOKEN'):
+            raise ValueError('restored worker needs scoped credential files')
         if any('COREWEAVE' in key.upper() or key.upper().startswith('CW_') for key in host.get('env',{})):
             raise ValueError('provider credentials cannot enter worker environment')
         try:
@@ -244,6 +247,57 @@ def start_restored_peer(host, *, nonce, seed_record, cwctl, fences, token, gatew
     return {'sandbox_id':host['sandbox_id'],'directory':host['directory'],'publisher':host['publisher'],'request':stop,
             'preserve_role':preserved,'witness':expected}
 
+
+
+
+def verify_runtime_prerequisites(hosts, *, cwctl):
+    """Qualify preinstalled, owned runtime environments before any transfer."""
+    result={}
+    for rank,host in sorted(hosts.items()):
+        spec=host.get('runtime_prerequisite')
+        if (not isinstance(spec,dict) or set(spec)!={'python_sha256','packages'} or
+                not isinstance(spec['packages'],dict) or not {'torch','transformers','safetensors','accelerate'}<=set(spec['packages']) or
+                not all(isinstance(k,str) and isinstance(v,str) and v for k,v in spec['packages'].items())):
+            raise ValueError('exact preinstalled Python and package prerequisite required')
+        program=('import hashlib,importlib.metadata,json,pathlib,sys\n'
+                 's=json.loads(sys.argv[1]);p=pathlib.Path(sys.executable).resolve()\n'
+                 'if hashlib.file_digest(p.open("rb"),"sha256").hexdigest()!=s["python_sha256"]:raise ValueError("python executable differs")\n'
+                 'actual={k:importlib.metadata.version(k) for k in s["packages"]}\n'
+                 'if actual!=s["packages"]:raise ValueError("runtime package versions differ")\n'
+                 'import torch,transformers,safetensors,accelerate\nprint(json.dumps({"python":str(p),"packages":actual}))\n')
+        box=cwctl.read_sandbox(host['sandbox_id'],patience=60)
+        checked=box.exec([host['python'],'-c',program,json.dumps(spec,sort_keys=True)],timeout_seconds=120).result(timeout=150)
+        if checked.returncode:raise ValueError('owned host runtime prerequisite failed')
+        result[str(rank)]={'sandbox_id':host['sandbox_id'],'python_sha256':spec['python_sha256'],'packages':spec['packages']}
+    return result
+
+
+def stage_scoped_credential(host, *, local_file, expected_sha256, remote_file, cwctl):
+    """Install a scoped credential through SDK file transfer, never argv or logs."""
+    import stat
+    local=Path(local_file);before=local.stat();secret=local.read_bytes();after=local.stat()
+    if (not stat.S_ISREG(before.st_mode) or stat.S_IMODE(before.st_mode)!=0o600 or
+            (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns) or
+            hashlib.sha256(secret).hexdigest()!=expected_sha256 or not secret or secret!=secret.strip() or not remote_file.startswith('/work/') or os.path.normpath(remote_file)!=remote_file):
+        raise ValueError('scoped credential source or destination differs')
+    box=cwctl.read_sandbox(host['sandbox_id'],patience=60)
+    check=('import hashlib,pathlib,stat,sys\np=pathlib.Path(sys.argv[1])\n'
+           'if not p.exists():print("missing");sys.exit(0)\n'
+           'if p.is_symlink() or not p.is_file() or stat.S_IMODE(p.stat().st_mode)!=0o600 or hashlib.sha256(p.read_bytes()).hexdigest()!=sys.argv[2]:raise ValueError("scoped credential differs")\nprint("verified")\n')
+    observed=box.exec(['python3','-c',check,remote_file,expected_sha256],timeout_seconds=30).result(timeout=60)
+    if observed.returncode:raise ValueError('existing scoped credential differs')
+    if observed.stdout.strip()!='verified':
+        temporary=remote_file+'.pending-'+uuid.uuid4().hex+'/value'
+        create=('import os,pathlib,sys\np=pathlib.Path(sys.argv[1]);p.parent.parent.mkdir(parents=True,exist_ok=True);os.mkdir(p.parent,0o700);fd=os.open(p,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600);os.close(fd)\n')
+        made=box.exec(['python3','-c',create,temporary],timeout_seconds=30).result(timeout=60)
+        if made.returncode:raise ValueError('credential private file creation failed')
+        box.write_file(temporary,secret).result(timeout=60)
+        publish=('import hashlib,os,pathlib,stat,sys\np=pathlib.Path(sys.argv[1]);q=pathlib.Path(sys.argv[2])\n'
+                 'if p.is_symlink() or stat.S_IMODE(p.stat().st_mode)!=0o600 or hashlib.sha256(p.read_bytes()).hexdigest()!=sys.argv[3]:raise ValueError("scoped credential transfer differs")\n'
+                 'with p.open("rb") as f:os.fsync(f.fileno())\nos.link(p,q);p.unlink();p.parent.rmdir();fd=os.open(q.parent,os.O_DIRECTORY);os.fsync(fd);os.close(fd)\n')
+        sent=box.exec(['python3','-c',publish,temporary,remote_file,expected_sha256],timeout_seconds=30).result(timeout=60)
+        if sent.returncode:raise ValueError('scoped credential transfer was not published')
+    return {'sandbox_id':host['sandbox_id'],'path':remote_file,'sha256':expected_sha256}
 
 
 def stage_worker_dependencies(staging, hosts, *, cwctl):
@@ -350,8 +404,9 @@ def run_full_restore(directory, config):
             fences.sdk_set_worker_authority(authority,nonce=nonce,action='fence')
             state.update(phase='fenced',fence=evidence);write_json_durable(journal,state)
         if state['phase']=='fenced':
+            prerequisites=verify_runtime_prerequisites(workers,cwctl=cwctl)
             dependencies=stage_worker_dependencies(staging,workers,cwctl=cwctl)
-            pins=stage_worker_checkpoints(staging,workers,cwctl=cwctl);state.update(phase='workers-staged',pins=pins,dependencies=dependencies);write_json_durable(journal,state)
+            pins=stage_worker_checkpoints(staging,workers,cwctl=cwctl);state.update(phase='workers-staged',pins=pins,dependencies=dependencies,runtime_prerequisites=prerequisites);write_json_durable(journal,state)
         if state['phase']=='workers-staged':
             seed=directory/'seed';seed_store=directory/'seed-store';closure=staging/'diloco-replica-recovery'
             if not (seed/'seed-receipt.json').is_file():
@@ -369,6 +424,21 @@ def run_full_restore(directory, config):
             transferred=stage_replica_seed(seed,peers,cwctl=cwctl,archive_path=directory/'seed.tar')
             state.update(phase='seeds-staged',seed=seed_record,seed_sha256=seed_sha,transfer=transferred);write_json_durable(journal,state)
         if state['phase']=='seeds-staged':
+            old_sha=config['old_token_sha256'];new_sha=intent['new_token_sha256']
+            if _sha(config['old_token_file'])!=old_sha or _sha(promotion['outgoing_replica']['old_token_file'])!=old_sha or _sha(promotion['new_token_file'])!=new_sha:
+                raise ValueError('scoped credential bindings differ')
+            for host in peers:stage_scoped_credential(host,local_file=config['old_token_file'],expected_sha256=old_sha,remote_file=host['token_file'],cwctl=cwctl)
+            stage_scoped_credential(peers[0],local_file=promotion['new_token_file'],expected_sha256=new_sha,remote_file=promotion['activation_config']['token_file'],cwctl=cwctl)
+            if promotion['activation_config']['token_file']==peers[0]['token_file']:raise ValueError('old and new coordinator token paths must differ')
+            for rank,host in sorted(workers.items()):
+                env=host.get('env',{});secret_dir=env.get('NATLANG_CW_SECRETS','')
+                if (not secret_dir.startswith('/work/') or os.path.normpath(secret_dir)!=secret_dir or
+                        env.get('NATLANG_DILOCO_TOKEN') or env.get('NATLANG_DILOCO_GATEWAY_TOKEN')):
+                    raise ValueError('workers require private secret files, not token environment variables')
+                stage_scoped_credential(host,local_file=promotion['new_token_file'],expected_sha256=new_sha,remote_file=secret_dir+'/diloco-token',cwctl=cwctl)
+                gateway=host.get('gateway_credential')
+                if not isinstance(gateway,dict) or set(gateway)!={'local_file','sha256'}:raise ValueError('exact worker gateway credential required')
+                stage_scoped_credential(host,local_file=gateway['local_file'],expected_sha256=gateway['sha256'],remote_file=secret_dir+'/diloco-gateway',cwctl=cwctl)
             token=Path(config['old_token_file']).read_text().strip();started=[]
             for host in peers:started.append(start_restored_peer(host,nonce=nonce,seed_record=state['seed'],cwctl=cwctl,fences=fences,token=token,gateway=host.get('gateway')))
             state.update(phase='peers-ready',peers=started);write_json_durable(journal,state)
