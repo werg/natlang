@@ -33,7 +33,7 @@ def source_cohort_ids(source):
 
 def balance_urgent_batches(entries, batches, exposure_counts, cohort_ids, *, foundation_ids=(), lane="urgent"):
     """Choose least served pending cohort; saved row visits are the history."""
-    if lane not in ("urgent", "ordinary"):
+    if lane not in ("urgent", "ordinary", "communication"):
         raise ValueError("unknown cohort service lane")
     queues = {}
     for batch in batches:
@@ -45,9 +45,9 @@ def balance_urgent_batches(entries, batches, exposure_counts, cohort_ids, *, fou
     service = dict.fromkeys(queues, 0)
     for index, entry in enumerate(entries):
         key = cohort_ids[index]
-        if key in service and entry['id'] not in foundation_ids and (
-                entry.get('training_priority', 0) > 0 if lane == 'urgent'
-                else entry.get('training_priority', 0) == 0 and not entry.get('communication')):
+        if key in service and ((bool(entry.get('communication')) if lane == 'communication' else
+                (entry['id'] not in foundation_ids and (entry.get('training_priority', 0) > 0 if lane == 'urgent'
+                else entry.get('training_priority', 0) == 0 and not entry.get('communication'))))):
             credit = exposure_counts.get(entry['id'], 0)
             if type(credit) is not int or credit < 0:
                 raise ValueError('cohort service requires nonnegative integer row credits')
