@@ -37,6 +37,29 @@ def checked_parent(receipt, *, sandbox_id, boot_id, min_step, source_sha256):
     return path,pin
 
 
+def checked_fresh_parent(checkpoint, *, expected_sha256, source_sha256):
+    """Bind a real zero-update initializer; never manufacture a drain receipt."""
+    import torch
+    path=Path(checkpoint).resolve(strict=True)
+    before=path.stat()
+    if not re.fullmatch('[0-9a-f]{64}',expected_sha256) or sha256_file_hex_cached(path)!=expected_sha256:
+        raise ValueError('fresh initialization checkpoint digest mismatch')
+    state=torch.load(path,map_location='cpu',weights_only=False,mmap=True)
+    training=state['training']; init=(training.get('options') or {}).get('fresh_initialization') or {}
+    optimizer=training.get('optimizer') or {}
+    if (init.get('schema')!='natlang.fresh-native-initialization/1' or init.get('parent_checkpoint') is not None
+            or init.get('optimizer_updates')!=0 or init.get('earned_exposure')!=0
+            or training.get('step')!=0 or training.get('global_step')!=0
+            or any((training.get('exposure_counts') or {}).values()) or not training.get('rng')
+            or not training.get('sft_progress') or optimizer.get('state')
+            or (training.get('source_receipts') or [{}])[0].get('sha256')!=source_sha256):
+        raise ValueError('fresh checkpoint has inherited training, exposure, or wrong source')
+    after=path.stat()
+    if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns):
+        raise ValueError('fresh checkpoint changed during verification')
+    return path
+
+
 def prepare(args):
     from .production import configure_native
     source=Path(args.source).resolve(strict=True);cases=Path(args.cases).resolve(strict=True)
@@ -52,8 +75,16 @@ def prepare(args):
     rows=read_jsonl(cases)
     if not rows or len(rows)!=proof.get('rows'):raise ValueError('JOLT train-case count changed')
     for row in rows:custody.check(row)
-    parent,pin=checked_parent(args.pin_receipt,sandbox_id=args.sandbox_id,boot_id=args.boot_id,
-        min_step=args.min_step,source_sha256=args.source_sha256)
+    if args.fresh_checkpoint:
+        if args.pin_receipt or not args.fresh_checkpoint_sha256:
+            raise ValueError('fresh initialization requires its digest and no drained parent')
+        parent=checked_fresh_parent(args.fresh_checkpoint,expected_sha256=args.fresh_checkpoint_sha256,
+            source_sha256=args.source_sha256)
+    else:
+        if not args.pin_receipt or not args.sandbox_id or not args.boot_id or args.min_step is None:
+            raise ValueError('earned continuation requires exact drained-parent identity')
+        parent,_=checked_parent(args.pin_receipt,sandbox_id=args.sandbox_id,boot_id=args.boot_id,
+            min_step=args.min_step,source_sha256=args.source_sha256)
     if Path(args.out).exists() and any(Path(args.out).iterdir()):raise ValueError('JOLT controller output must be a new namespace')
     config=Path(args.out)/'config.json'
     eval_spec=json.loads(Path(args.task_eval).read_text())
@@ -68,11 +99,13 @@ def prepare(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    for name in ('pin-receipt','sandbox-id','boot-id','source','source-sha256','cases','cases-sha256',
+    for name in ('source','source-sha256','cases','cases-sha256',
                  'held-native-graphs','held-sha256','production-recipe','recipe-sha256','protection-proof',
                  'base','runtime','out','task-eval'):
         parser.add_argument('--'+name,required=True)
-    parser.add_argument('--min-step',type=int,required=True)
+    for name in ('pin-receipt','sandbox-id','boot-id','fresh-checkpoint','fresh-checkpoint-sha256'):
+        parser.add_argument('--'+name)
+    parser.add_argument('--min-step',type=int)
     parser.add_argument('--production-stage',default='native_full_sft')
     parser.add_argument('--task-eval-every',type=int,default=25)
     parser.add_argument('--port',type=int,default=8097)

@@ -52,3 +52,19 @@ def test_parametric_handoff_requires_exact_drained_checkpoint_and_source(tmp_pat
     for changes in ({'step':13999},{'sandbox_id':'other'},{'rng_verified':False},{'train_source_sha256':'b'*64}):
         bad={**pin,**changes};receipt.write_text(json.dumps(bad))
         with pytest.raises(ValueError):checked_parent(receipt,sandbox_id='peer',boot_id='boot',min_step=14000,source_sha256=source)
+
+
+def test_fresh_parent_rejects_inherited_updates_or_wrong_bytes(tmp_path):
+    import hashlib,pytest,torch
+    from natlang_neuralese.rl.jolt_handoff import checked_fresh_parent
+    path=tmp_path/'fresh.pt';source='a'*64
+    init={'schema':'natlang.fresh-native-initialization/1','parent_checkpoint':None,'optimizer_updates':0,'earned_exposure':0}
+    training={'step':0,'global_step':0,'exposure_counts':{'row':0},'rng':{'a':1},'sft_progress':{'sft':1},
+        'optimizer':{'state':{},'param_groups':[{}]},'options':{'fresh_initialization':init},
+        'source_receipts':[{'sha256':source}]}
+    def save():
+        torch.save({'training':training},path)
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    sha=save();assert checked_fresh_parent(path,expected_sha256=sha,source_sha256=source)==path
+    training['optimizer']['state']={'1':{'step':1}};sha=save()
+    with pytest.raises(ValueError):checked_fresh_parent(path,expected_sha256=sha,source_sha256=source)
