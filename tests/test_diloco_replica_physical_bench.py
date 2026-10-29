@@ -28,5 +28,7 @@ def test_cpu_runner_uses_four_real_proposals_and_replay(tmp_path):
         assert result.returncode==0,result.stderr
         summary=json.loads((tmp_path/'measure'/'qualification.json').read_text())
         assert summary['workers']==4 and summary['quorum']==3 and summary['fragments_completed']==1 and len(summary['update_ack_seconds'])==4
+        assert [x['pending'] for x in summary['proposal_states']]==[1,2,3,0]
+        assert [x['version'] for x in summary['proposal_states']]==[0,0,0,1]
     finally:stop.set();proc.join(8)
     assert proc.exitcode==0

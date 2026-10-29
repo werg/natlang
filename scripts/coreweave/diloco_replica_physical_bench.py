@@ -28,10 +28,10 @@ def sample():
 def main():
     p=argparse.ArgumentParser();p.add_argument('mode',choices=('prepare','measure'));p.add_argument('--out',required=True)
     p.add_argument('--checkpoint');p.add_argument('--base');p.add_argument('--full',action='store_true');p.add_argument('--minimum-free-bytes',type=int,default=40<<30)
-    p.add_argument('--workers',type=int,default=1);p.add_argument('--quorum',type=int,default=1);p.add_argument('--all-fragments',action='store_true')
+    p.add_argument('--workers',type=int,default=1);p.add_argument('--quorum',type=int,default=1);p.add_argument('--all-fragments',action='store_true');p.add_argument('--heartbeat-seconds',type=float,default=90)
     p.add_argument('--baseline');p.add_argument('--baseline-sha256');p.add_argument('--peer-url');p.add_argument('--token-file');p.add_argument('--gateway-file');p.add_argument('--allow-http',action='store_true')
     a=p.parse_args();
-    if not 1<=a.quorum<=a.workers:raise ValueError('invalid worker quorum')
+    if not 1<=a.quorum<=a.workers or not 0<a.heartbeat_seconds<=120:raise ValueError('invalid worker quorum or heartbeat interval')
     torch.set_num_threads(1);out=Path(a.out);out.mkdir(parents=True,exist_ok=False);before=sample();started=time.monotonic()
     if a.mode=='prepare':
         if not a.checkpoint or not a.base:raise ValueError('actual checkpoint and exact base are required')
@@ -69,20 +69,30 @@ def main():
             retention=Retention(store);retention.register(generation=ident,baseline_sha256=receipt['baseline_sha256'],head=receipt['new_head'],previous=retention.latest(),replica_confirmation=confirmation,active_pointer=pointer);retention.collect()
             active_baseline=directory/'baseline';active_sha=receipt['baseline_sha256'];rotations.append(receipt['new_head'])
         writer.rollover_callback=rollover
-        sessions=[str(uuid.UUID(int=i+1)) for i in range(a.workers)];lease_seconds=[]
+        sessions=[str(uuid.UUID(int=i+1)) for i in range(a.workers)];lease_seconds=[];heartbeats=[];last_heartbeat={}
         for worker,session in enumerate(sessions):
-            t=time.monotonic();dispatch.call('lease',{'worker':worker,'session':session});lease_seconds.append(time.monotonic()-t)
-        count=len(machine.coordinator.fragments) if a.all_fragments else 1;acks=[];completed=0
+            t=time.monotonic();dispatch.call('lease',{'worker':worker,'session':session});lease_seconds.append(time.monotonic()-t);last_heartbeat[worker]=time.monotonic()
+        count=len(machine.coordinator.fragments) if a.all_fragments else 1;acks=[];proposal_states=[];completed=0
+        def renew_due():
+            for worker,session in enumerate(sessions):
+                if time.monotonic()-last_heartbeat[worker]>=a.heartbeat_seconds:
+                    t=time.monotonic();dispatch.call('heartbeat',{'worker':worker,'session':session,'steps':1,'tokens':1,'metrics':None})
+                    elapsed=time.monotonic()-t
+                    if elapsed>300:raise ValueError('heartbeat exceeded safe serialized operation bound')
+                    last_heartbeat[worker]=time.monotonic();heartbeats.append({'worker':worker,'elapsed_seconds':elapsed})
         for index in range(count):
             if shutil.disk_usage(out).free<a.minimum_free_bytes:raise ValueError('qualification stopped at scratch reserve')
             theta=load_tensors(out/'coordinator'/'fragments'/f'{index:05d}.safetensors')['theta'];delta=out/'delta.safetensors';save_tensors(delta,{'delta':torch.zeros_like(theta)})
             for worker,session in enumerate(sessions):
-                t=time.monotonic();dispatch.call('submit',{'index':index,'worker':worker,'session':session,'sequence':1,'base_version':0,'steps':1,'tokens':1},delta);acks.append(time.monotonic()-t)
+                renew_due();t=time.monotonic();dispatch.call('submit',{'index':index,'worker':worker,'session':session,'sequence':1,'base_version':0,'steps':1,'tokens':1},delta);elapsed=time.monotonic()-t;acks.append(elapsed)
+                if elapsed>300:raise ValueError('proposal exceeded safe serialized operation bound')
+                proposal_states.append({'fragment':index,'worker':worker,'pending':len(list(machine.coordinator._pending_dir(index).glob('*.safetensors'))),'version':machine.coordinator._version(index)})
+            if proposal_states[-1]['version']!=1 or proposal_states[-1]['pending']!=0:raise ValueError('fragment did not complete its quorum merge')
             completed+=1
         writer.close();j=writer.journal;t=time.monotonic();value=verify(active_baseline,active_sha);reconstruct(active_baseline,out/'replay',expected_sha256=active_sha)
         recovered=replay(j,out/'replay',expected_sequence=j.sequence,expected_head=j.head,quorum_since={int(k):v for k,v in value['quorum_since'].items()},clock_anchor={'wall':value['captured_wall'],'monotonic':value['captured_monotonic']})
         if recovered.coordinator.progress!=machine.coordinator.progress:raise ValueError('replayed progress differs')
-        replay_seconds=time.monotonic()-t;result={'mode':'measure','workers':a.workers,'quorum':a.quorum,'all_fragments_requested':a.all_fragments,'fragments_completed':completed,'delta_bytes_last':delta.stat().st_size,'lease_ack_seconds':lease_seconds,'update_ack_seconds':acks,'replay_seconds':replay_seconds,'rollovers':rotations,'sequence':j.sequence,'head':j.head};j.close()
+        replay_seconds=time.monotonic()-t;result={'mode':'measure','workers':a.workers,'quorum':a.quorum,'all_fragments_requested':a.all_fragments,'fragments_completed':completed,'delta_bytes_last':delta.stat().st_size,'lease_ack_seconds':lease_seconds,'update_ack_seconds':acks,'proposal_states':proposal_states,'heartbeats':heartbeats,'replay_seconds':replay_seconds,'rollovers':rotations,'sequence':j.sequence,'head':j.head};j.close()
     result.update(wall_seconds=time.monotonic()-started,before=before,after=sample());(out/'qualification.json').write_text(json.dumps(result,sort_keys=True,indent=2));print(json.dumps(result,sort_keys=True))
 
 
