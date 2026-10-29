@@ -5,7 +5,7 @@ from scripts.coreweave.retention_guard import guarded_pair
 
 def test_pair_guard_dry_then_apply_and_fence_new_reference(tmp_path):
     root=tmp_path/'refs';root.mkdir();(root/'a.json').write_text('{}');journal=tmp_path/'journal';journal.write_text('{}')
-    c={'role':'old','sha256':'a'*64,'control_role':'ctl','control_sha256':'b'*64,'full_unit':'u','control_unit':'v'}
+    c={'role':'old','sha256':'a'*64,'control_role':'ctl','control_sha256':'b'*64,'full_unit':'u','control_unit':'v','successor_role':'new','successor_sha256':'c'*64,'fallback_role':'backup','fallback_sha256':'d'*64}
     scope={'allowed_paths':[],'journal_path':journal,'role':'old','intent_path':tmp_path/'intent'}
     eligibility={'latest_role':'new','latest_owner_role':'new','pending_roles':[],'protected_sha256s':[],'active_units':[],'verified_roles':['old','ctl','new','backup'],'successor_role':'new','fallback_role':'backup'}
     class Obj:

@@ -15,7 +15,7 @@ def retire_pair(*, lock_path, state_path, candidate, inspect, remove, present, w
     same lock is shared with publication retries. No network or path assumption is
     hidden here: the caller supplies its real provider operations.
     """
-    required=('role','sha256','control_role','control_sha256')
+    required=('role','sha256','control_role','control_sha256','successor_role','successor_sha256','fallback_role','fallback_sha256')
     if any(not candidate.get(k) for k in required):raise ValueError('incomplete paired candidate')
     if candidate['role']==candidate['control_role']:raise ValueError('full and control roles must differ')
     lock_path=Path(lock_path);state_path=Path(state_path)
