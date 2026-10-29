@@ -70,3 +70,28 @@ the archived parent and must not be replayed or labeled merged.
 
 Operational receipts, ownership records, export intents and health observations
 are under `/home/werg/data/lfm3-sft-20261028/production-v3-live/`.
+
+## 01:54 Berlin update
+
+All three survivors have resumed actual standalone SGD: observed steps
+5000, 3999 and 4082; committed full saves were 4921, 3915 and 4000.
+These are distinct peer histories, not a global distributed step count.
+Each saved continuation is checked for corrected source/proof and its actual
+historical parent. Per-rank private cloud publication is separate from the
+serialized workstation GET lane. The newest verified workstation copy still
+lags; a retained step4519 GET is in progress, and the previous parents remain.
+
+Replacement b166 has verified step4519 and historical step1211 parents and
+has received the expanded 480754-row source. Its actual schedule must differ
+from the live peer1 continuation: cloning its RNG/cursor would not establish
+useful additional training. Exact-parent scheduling comparison and target
+QAT/memory checks precede launch.
+
+Fresh-outer recovery is integrated in main `a2992cc7e`; 99 independent root
+integration tests passed, including actual four-process HTTP/quorum tests,
+a separate real native trainer transition-save test, common recipe identity,
+publication closure and bounded parallel startup. This is preparation for a
+real four-native-worker cutover, which has not happened yet. All workers must
+use the same current source and common manifest; each retains its own newest
+weights, optimizer, RNG and exposure. Coordinator replication is still being
+implemented and is not qualified by these tests.
