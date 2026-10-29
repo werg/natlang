@@ -3,6 +3,7 @@
 import hashlib,json,subprocess,sys,time,fcntl,types
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent));from native_remote_budget import bounded_remote
+from native_publication_state import full_readback_verified
 from natlang_neuralese.common.paths import resolve
 sys.path.insert(0,str(resolve('repo','scripts/coreweave')));import cwctl
 from natlang_neuralese.common.jsonio import write_json_durable
@@ -126,8 +127,10 @@ while True:
      subprocess.run(['systemd-run','--user','--unit='+e['unit'],'--property=MemoryMax=2G',*[f'--setenv={k}={x}' for k,x in env.items()],str(CW_PYTHON),str(EXPORTER),e['role'],v['path']],check=True)
     e['full_launch_pending']=False;write_json_durable(journal,s)
    p=Path(e['phase_path']);phase=json.loads(p.read_text()).get('phase') if p.exists() else None
-   e['full_backup_verified']=phase in ('independently_verified','reused_independently_verified');e.setdefault('publication_complete',False);refresh_publication(e);write_json_durable(journal,s)
-   if phase not in ('independently_verified','reused_independently_verified'):
+   pin=json.loads(Path(e['intent']).read_text());receipt_path=OPS/('coreweave-production-'+e['role']+'-private-export-receipt-20261014.json')
+   receipt=json.loads(receipt_path.read_text()) if receipt_path.exists() else None
+   e['full_backup_verified']=full_readback_verified(e,pin,receipt);e.setdefault('publication_complete',False);refresh_publication(e);write_json_durable(journal,s)
+   if not e['full_backup_verified']:
     unit=e.get('retry_unit',e['unit']);active=subprocess.run(['systemctl','--user','is-active','--quiet',unit]).returncode==0
     if not active:
      v=json.loads(Path(e['intent']).read_text());import wandb
