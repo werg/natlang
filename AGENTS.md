@@ -482,6 +482,12 @@ OOM, but experienced substantial memory-limit pressure; its current replacement
 uses 24Gi. These observations apply to evaluation, not training capacity.
 Prefer an unconstrained one-GPU request when capacity is scarce and adapt to the
 actual assigned resources.
+Owner correction (2026-10-29): "1 CPU for the H100 sandbox is ludicrous; fix things immediately." Leaving CPU and
+RAM unspecified gave every learner the platform default (requests = limits = 1 CPU, 16Gi). On 1 CPU the cohosted
+DiLoCo coordinator was starved by its own learner, timed out a replica ack and fenced; 16Gi caused worker OOMs on
+outer catch-up. Learner sandboxes now request an explicit CPU and RAM minimum (initially 8 CPU, 64Gi), and the
+DiLoCo coordinator primary and replica run on dedicated CPU-only sandboxes, never cohosted with a learner. Check
+`resource_requests`/`cpu.max` on every new sandbox; a provider default is not a measured choice.
 Owner decision (2026-10-28): GPU sandboxes running inference engines (RL actors,
 evaluators, serving) request a CPU minimum of 8 cores. vLLM/SGLang were CPU-bound on
 the 2 CPUs an unconstrained request receives (GPU 13-68% busy). Learner sandboxes keep
