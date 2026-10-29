@@ -413,6 +413,20 @@ function tieredCall(frame: Frame, definition: CallableDefinition, positional: un
   });
 }
 
+/** Comparable key of a call's inputs; values without a JSON form compare by identity. */
+const inputIdentities = new WeakMap<object, number>();
+let nextInputIdentity = 0;
+function inputsKey(inputs: readonly unknown[]): string {
+  return JSON.stringify(inputs, (_key, value) => {
+    if (typeof value === 'function' || (value !== null && typeof value === 'object' && !Array.isArray(value)
+        && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) {
+      if (!inputIdentities.has(value)) inputIdentities.set(value, nextInputIdentity++);
+      return `<object ${inputIdentities.get(value)}>`;
+    }
+    return typeof value === 'bigint' ? `${value}n` : value;
+  }) ?? '';
+}
+
 async function runDefinitionBody(frame: Frame, definition: CallableDefinition, positional: unknown[],
   options: InvokeOptions, transactions: Set<FolderTransaction>): Promise<unknown> {
   const task = frame.task;
@@ -457,10 +471,11 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   // An ad hoc nl call inside an ad hoc call with the same instructions hands the same question down again: the
   // enclosing call already has that responsibility (LFM3-1.7B on the dev packet copied a prompt example into nested
   // calls until the case budget ran out, plans/neuralese/LFM3_HARNESS_ERGONOMICS_20261028.md).
-  const question = adHoc ? (options.instructions ?? definition.body).replace(/\s+/g, ' ').trim().toLowerCase() : '';
+  // The same instructions on different inputs (recursion on a smaller argument) are a new question.
+  const question = adHoc ? (options.instructions ?? definition.body).replace(/\s+/g, ' ').trim().toLowerCase() + '\u0000' + inputsKey(positional) : '';
   if (question && !fileRoot && (frame.adHocQuestions ?? []).includes(question))
     throw new NatlangCallError(definition.name, 'quiesced',
-      'this call was itself created with these same instructions; make the judgment here from its inputs and return it instead of delegating it again', '', []);
+      'this call was itself created with these same instructions and inputs; make the judgment here from its inputs and return it instead of delegating it again', '', []);
   const adHocQuestions = fileRoot ? [] : question ? [...(frame.adHocQuestions ?? []), question] : frame.adHocQuestions;
   // Definitions from separate programs may share the same relative source ID.
   // Ownership scopes recursion without changing persisted component identities.

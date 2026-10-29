@@ -1408,7 +1408,7 @@ test('five ad hoc layers are allowed, and the sixth is refused with matching pro
     const depth = child.runtime.frame.adHocDepth;
     depths.push(depth);
     if (depth < 5) {
-      const next = await child.applyAsync('eval', { code: 'return await nl<number>`Continue this subproblem.`()' });
+      const next = await child.applyAsync('eval', { code: `return await nl<number>\`Continue subproblem ${depth + 1}.\`()` });
       assert.equal(next.kind, 'ok', next.text);
     } else {
       const refused = await child.applyAsync('eval', { code: 'return await nl<number>`Sixth layer.`()' });

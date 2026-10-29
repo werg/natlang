@@ -288,5 +288,25 @@ test('an inline nl call that hands its own question down again is told to answer
   } });
   const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nJudge name.\n' }, 'root.nl');
   await runtime.run(() => fn('Ada'));
-  assert.ok(seen.some(text => /this call was itself created with these same instructions; make the judgment here/.test(text)), seen.join('\n---\n'));
+  assert.ok(seen.some(text => /this call was itself created with these same instructions and inputs; make the judgment here/.test(text)), seen.join('\n---\n'));
+});
+
+test('an inline nl call with the same instructions on a different input is a new question and runs', async () => {
+  const seen = [];
+  let childOpenings = 0;
+  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: async request => {
+    const opening = String(request.messages[1].content), last = request.messages.at(-1);
+    const child = opening.startsWith('You are inside this call: nl@');
+    if (last.role === 'tool' && last.tool_call_id !== 'scope_0') {
+      seen.push(String(last.content));
+      return { calls: [['return_result', { status: 'success', value: child ? true : 'done' }]] };
+    }
+    if (!child) return { calls: [['eval', { code: 'const v = await nl<boolean>`Decide whether name is short.`(name); v' }]] };
+    if (++childOpenings > 1) return { calls: [['return_result', { status: 'success', value: true }]] };
+    return { calls: [['eval', { code: 'const w = await nl<boolean>`Decide whether name is short.`(name.slice(0, 1)); w' }]] };
+  } });
+  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nJudge name.\n' }, 'root.nl');
+  assert.equal(await runtime.run(() => fn('Ada')), 'done');
+  assert.equal(childOpenings, 2);
+  assert.ok(!seen.some(text => /same instructions and inputs/.test(text)), seen.join('\n---\n'));
 });
