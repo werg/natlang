@@ -1,5 +1,62 @@
 # LFM3 capability regression: investigation brief for independent review
 
+## Operational update, 10:05 Berlin
+
+The original brief below is a timestamped account, not current launch state.
+The overall task regression is still unexplained; none of these engineering
+findings establishes restored capabilities.
+
+- The convolution fix and its BF16-only, sparse/empty-invocation and fast-path
+  follow-ups are integrated in main through `cc3551dbd`. The full-size cached
+  comparison and an actual8341 FP8 shared-graph update-schedule comparison passed;
+  the latter is not graph-versus-cached parameter-gradient proof. Integrated
+  shared-state/optimizer/focus checks passed95 tests.
+- A further objective bug was confirmed: balancing by file SHA changes weights
+  when identical data is divided into different numbers of files. The old
+  declared cap8 became actual maxima around15.2 after normalization. Current
+  20.92% communication rows received only1.748% of one-visit graph-weight mass.
+  These are graph-weight figures, not token or realized-gradient percentages.
+- Source-bound logical maps and bounded mean-one normalization are integrated
+  through `2b12a1579`;28 focused integrated objective/map/focus tests passed.
+  The first corrected policy deliberately uses only authenticated mechanism
+  classes: communication, two identified coding sources, and remaining ordinary
+  sources. It does not pretend to be a curated semantic taxonomy. Actual cap8,
+  mean1; further task-family refinement remains work.
+- Peer1 resumed from its earned13846 checkpoint with corrected convolution,
+  weighting,38 prompt variants,57 focused examples and fresh EMA. Saved13887
+  proves all57 received one new visit (including all38 variants), unchanged old
+  exposure credits, new objective `cf3fd663...` and41 EMA updates. This is actual
+  saved training, not capability lift. Other peers are being changed one at a time.
+- Exact evidence: `prompt-variants-pilot-v1/source-weighting-audit.json`,
+  `rechunk-weight-sensitivity.json`, `mechanism-family-proposal-v1/report.json`,
+  `peer1-13887-saved-state-audit.json` and `peer1-13887-focus-exposure.json` under
+  the data directory named below. Full/control exports and independent owner GET
+  remain distinct obligations; consult actual receipts for current status.
+- The newer local full-state12957 recovery is qualified under
+  `/mnt/external/natlang-training-recovery/lfm3-v3-live-20261028/peer1-step12957/`.
+  Its GGUF export is running for refreshed evaluation. A first14GiB export job
+  hit its own memory limit; the bounded28GiB retry is separate. No new capability
+  score has been earned yet.
+- A complete predecessor-source census found131,666,941 own-output target tokens;
+  the two identified coding sources supply17,701,133 (13.44% unweighted one-pass
+  target supply). This is not realized weighted SGD exposure or the entire coding
+  provenance census.
+- Actual first1024-batch sequencing has2398/4313 adjacent row pairs with the same
+  authenticated named task template, including1813/3290 within-batch pairs.
+  Missing identifiers remain unknown. The first bounded batch-reordering
+  prototype gave little benefit and is not deployed; diversity work continues.
+- Owner explicitly requires early JOLT+ with full explanatory prompts, complete
+  schemas and valid idiom examples. Executable on-policy preparation, current
+  protection/oracle checks and sandbox Node/collector staging are underway.
+  No actual JOLT+ policy update is claimed. The eight requalified training cases
+  are eight cases, not the full planned curriculum.
+- The old b37 full-check attempt was preempted and restarted; it did not complete.
+  Its replacement tests frozen `cc3551dbd` plus a recorded WIP overlay, ledger
+  `natlang-main-frozen-cc355-1029`, log `check-cc3551dbd-full.log` under the ops
+  directory. It does not include the later logical-weighting module changes.
+
+## Original investigation snapshot
+
 Status captured 2026-10-29, approximately 09:10 Europe/Berlin. This is a
 collaborative investigation brief, not a claim that the regression is understood
 or fixed. Supervision and training continue. Read the actual files and live

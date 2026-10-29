@@ -1,5 +1,41 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Early on-policy RL and explanatory prompts (owner, 2026-10-29)
+
+Prepare early JOLT+ interleaved with useful SFT instead of requiring completion
+of all SFT before outcome learning can begin. Collect from the actual trained
+checkpoint being updated, preserving actor/checkpoint identity, sampled token
+probabilities, complete execution graphs and unfinished SFT obligations. Historical
+teacher continuations and a different checkpoint's attempts are not current-policy
+rollouts. Correct task outcomes remain eligible without Neuralese; actual graphs
+receive whole-graph updates under the standing producer/consumer custody rules.
+
+Early RL must use the full explanatory prompt and complete tool schemas so correct
+idiomatic behavior is accessible. Include valid examples of awaited per-item `nl`,
+exact sorting/filtering/counting in code, `iterateOn` with stopping/effect checks,
+direct use of inputs/services without shadow bindings, typed concise child answers,
+and `finish:true`. Bind the actual prompt, tokenizer/template and runtime in both
+collection and replay, including the privileged JOLT+ context. Never put protected
+answers or held trajectories in that guidance. Compact prompts are a later explicit
+robustness target, not the initial RL default.
+
+Sample diversity and loss weighting are separate from cohort service fairness.
+Measure program/template/world repetition within and across actual packed groups;
+missing identifiers are unknown coverage, not zero repetition. Preserve complete
+graphs, exact row quotas and optimizer/RNG/exposure when improving order, with
+bounded source buffering and qualified packed geometry. Do not repeatedly rescan
+compressed sources to obtain random order.
+
+Engineering finding, 2026-10-29: physical source-file boundaries are not task
+families. The previous source-cohort CE weighting changed objective mass when
+identical rows were rechunked and exceeded its declared scale cap after
+renormalization. New objectives use explicit source/row-bound logical groups and
+bounded mean-one normalization with a true cap, through recorded objective
+continuations. Preserve exact historical objective/exposure history. Coarse
+communication/coding/ordinary mechanism groups do not establish semantic task
+taxonomy or the realized coding-token mixture. Lower aggregate loss across
+changing samples, weights or QAT points is not a comparable learning curve.
+
 ## Program adaptation follows a trained backbone (owner, 2026-10-28 evening)
 
 Collect program-tuning executions and metalearner targets once the backbone has
