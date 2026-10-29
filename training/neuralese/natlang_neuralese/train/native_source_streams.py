@@ -6,7 +6,7 @@ def scheduling_rank(entry):
     return (not bool(entry.get('communication')), -entry.get('training_priority', 0))
 
 
-def stream_pending_batches(source, pending_batches, *, priority_ids=None, cohort_ids=None, rotation_index=None, urgent_cohort_fairness=True, ordinary_cohort_fairness=True, communication_cohort_fairness=True):
+def stream_pending_batches(source, pending_batches, *, priority_ids=None, cohort_ids=None, rotation_index=None, urgent_cohort_fairness=True, ordinary_cohort_fairness=True, communication_cohort_fairness=True, focus_ids=None):
     """Keep exact batch order without rescanning sources at every rank switch.
 
     Each rank/visit is already monotone in the production scheduler. Separate
@@ -14,6 +14,7 @@ def stream_pending_batches(source, pending_batches, *, priority_ids=None, cohort
     parser and row-binding checks rather than caching parsed graph tensors.
     """
     priority_ids = set(priority_ids or ())
+    focus_ids = set(focus_ids or ())
     if cohort_ids is not None and len(cohort_ids) != len(source.entries):
         raise ValueError('native source cohorts do not cover indexed rows')
     def stream_key(visit, rank, indices):
@@ -24,7 +25,7 @@ def stream_pending_batches(source, pending_batches, *, priority_ids=None, cohort
             if len(selected) != 1:
                 raise ValueError('native pending batch mixes source cohorts')
             cohort = next(iter(selected))
-        return (visit, rank, foundation, cohort, bool(rotation_index is not None and indices[0] < rotation_index))
+        return (visit, rank, foundation, cohort, bool(rotation_index is not None and indices[0] < rotation_index), any(source.entries[index]['id'] in focus_ids for index in indices))
     requests = {}
     for visit, indices, _ in pending_batches:
         if not indices:

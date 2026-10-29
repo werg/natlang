@@ -1101,6 +1101,7 @@ def build_parser():
                         help='Exact ancestor-bound recovery of an unavailable historical foundation declaration; grants no exposure or qualification')
     parser.add_argument('--source-predecessor-retirement', type=Path, help='Exact earned checkpoint proof retiring a consumed source predecessor')
     parser.add_argument('--pending-native-sources', action='append', default=[])
+    parser.add_argument('--pending-focus', type=Path, default=None, help='SHA-bound, source-authenticated one-time pending-batch focus request')
     parser.add_argument('--refresh-at-checkpoint', action=argparse.BooleanOptionalAction, default=False,
         help='return an explicit incomplete continuation for semantic refresh at the next declared checkpoint boundary')
     parser.add_argument('--refresh-after-updates', type=int,
@@ -1810,6 +1811,13 @@ def _main(argv=None, *, requested_refresh):
         # normal progress restore selects later with the same optimizer/RNG.
         source_resume = ((carried_progress.get(args.stage_id or 'native-graph-ce') or resume)
             if parent_continuation and args.objective_spec is None else resume)
+        resident_focus_reference = resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('pending_focus')
+        if resident_focus_reference:
+            args.pending_focus = Path(resident_focus_reference['path'])
+            if sha256_file_hex_cached(args.pending_focus) != resident_focus_reference['sha256']:
+                raise ValueError('resident pending focus request differs from its plan')
+        else:
+            args.pending_focus = None
         pending_reference = resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('pending_native_sources')
         args.pending_native_sources = [Path(pending_reference['path'])] if pending_reference else []
         checkpoint_options['pending_native_sources'] = [str(path) for path in args.pending_native_sources]
@@ -2589,6 +2597,7 @@ def _main(argv=None, *, requested_refresh):
     prior_rotation = (saved_options or {}).get('pending_batch_rotation') or {}
     rotation_history = list((saved_options or {}).get('pending_batch_rotation_history') or [])
     rotation_has_saved_parent = bool(saved_training)
+    saved_focus_history = list((saved_options or {}).get('pending_focus_history') or [])
     saved_options = ce_prior_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
@@ -2722,7 +2731,27 @@ def _main(argv=None, *, requested_refresh):
                 'anchor_id':args.pending_rotation_anchor,'anchor_binding':binding,'anchor_index':rotation_index,
                 'parent_checkpoint_sha256':sha256_file_hex_cached(args.standalone_diloco_parent),
                 'at_global_step':global_step,'original_cursor':cursor,'optimizer_rng_exposure':'preserved'}
-    urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness or args.ordinary_cohort_fairness or args.communication_cohort_fairness else None
+    from .native_pending_focus import dependencies as focus_dependencies, resolve as resolve_focus, promote as promote_focus
+    focus_history=saved_focus_history
+    focus_request=None;focus_record=None;focus_active=set()
+    if args.pending_focus is not None:
+        focus_path=args.pending_focus.resolve(strict=True);focus_reference={'path':str(focus_path),'sha256':sha256_file_hex_cached(focus_path)}
+        focus_request,_=focus_dependencies(focus_reference)
+        if focus_history and focus_history[-1]['request']['sha256']==focus_reference['sha256']:
+            focus_record=focus_history[-1]
+        else:
+            if focus_history and focus_history[-1].get('state')!='complete':raise ValueError('prior pending focus has not completed')
+            focus_record={'schema':'natlang.native-pending-focus-history/1','request':focus_reference,'at_global_step':global_step,
+                'initial_credits':{row['id']:exposure_counts.get(row['id'],0) for row in focus_request['rows']},'state':'active','consumed':[],'withdrawn':[]}
+            focus_history.append(focus_record)
+    elif focus_history and focus_history[-1].get('state')!='complete':
+        focus_record=focus_history[-1];focus_request,_=focus_dependencies(focus_record['request'])
+    urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness or args.ordinary_cohort_fairness or args.communication_cohort_fairness or focus_request else None
+    if focus_request:
+        focus_active,focus_withdrawn=resolve_focus(focus_request,train.entries,train.bindings,urgent_cohort_ids,checkpoint_options['withdrawal_history'])
+        focus_record['withdrawn']=focus_withdrawn
+        if focus_record['state']=='complete':focus_active=set()
+    checkpoint_options['pending_focus_history']=focus_history
     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
         foundation_ids=foundation_priority_ids,
@@ -2730,6 +2759,14 @@ def _main(argv=None, *, requested_refresh):
         minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
         cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None, rotation_index=rotation_index,
         urgent_cohort_fairness=args.urgent_cohort_fairness, ordinary_cohort_fairness=args.ordinary_cohort_fairness, communication_cohort_fairness=args.communication_cohort_fairness)
+    def pending_focus_ids():
+        return {ident for ident in focus_active if ident in required_visits and exposure_counts.get(ident,0)<required_visits[ident]
+                and exposure_counts.get(ident,0)==focus_record['initial_credits'][ident]} if focus_record else set()
+    focus_ids=pending_focus_ids()
+    if focus_record:
+        pending_batches=promote_focus(pending_batches,train.entries,focus_ids)
+        focus_record['consumed']=[x for x in focus_record['initial_credits'] if x in focus_active and exposure_counts.get(x,0)>focus_record['initial_credits'][x]]
+        if not focus_ids:focus_record['state']='complete'
     if args.memory_qualification and objective is None:
         from .native_packed_capacity import qualify_pending
         from ..eval.native_memory import capacity_identity
@@ -2767,7 +2804,7 @@ def _main(argv=None, *, requested_refresh):
     if args.refresh_at_checkpoint and args.refresh_after_updates is None and not (args.checkpoint_every or args.checkpoint_seconds):
         raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
-                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index,
+                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index, focus_ids=focus_ids,
                                       urgent_cohort_fairness=args.urgent_cohort_fairness, ordinary_cohort_fairness=args.ordinary_cohort_fairness, communication_cohort_fairness=args.communication_cohort_fairness)
     resident = None
     if args.resident_data_directory is not None:
@@ -3024,7 +3061,19 @@ def _main(argv=None, *, requested_refresh):
                     pending_frame = _retain_pending_sources({
                         'source_row_bindings': source_row_bindings, 'source_row_order': source_order,
                         'exposure_counts': dict(exposure_counts), 'options': checkpoint_options}, pending_frame)
-                    urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness or args.ordinary_cohort_fairness or args.communication_cohort_fairness else None
+                    resident_focus = resident.plan['stage_inputs'][args.stage_id].get('pending_focus')
+                    if resident_focus and (not focus_record or resident_focus['sha256'] != focus_record['request']['sha256']):
+                        if focus_record and focus_record['state'] != 'complete':
+                            raise ValueError('prior pending focus has not completed')
+                        focus_path = resident_bound(resident_focus)
+                        focus_reference = {'path':str(focus_path), 'sha256':resident_focus['sha256']}
+                        focus_request,_ = focus_dependencies(focus_reference)
+                        focus_record = {'schema':'natlang.native-pending-focus-history/1', 'request':focus_reference,
+                            'at_global_step':global_step, 'initial_credits':{row['id']:exposure_counts.get(row['id'],0) for row in focus_request['rows']},
+                            'state':'active', 'consumed':[], 'withdrawn':[]}
+                        focus_history.append(focus_record)
+                        checkpoint_options['pending_focus_history'] = focus_history
+                    urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness or args.ordinary_cohort_fairness or args.communication_cohort_fairness or focus_request else None
                     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
                         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
                         foundation_ids=foundation_priority_ids,
@@ -3033,6 +3082,13 @@ def _main(argv=None, *, requested_refresh):
                         cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None, rotation_index=rotation_index,
                         urgent_cohort_fairness=args.urgent_cohort_fairness,
                         ordinary_cohort_fairness=args.ordinary_cohort_fairness, communication_cohort_fairness=args.communication_cohort_fairness)
+                    if focus_request:
+                        focus_active,focus_withdrawn=resolve_focus(focus_request,train.entries,train.bindings,urgent_cohort_ids,checkpoint_options['withdrawal_history'])
+                        focus_record['withdrawn']=focus_withdrawn
+                        if focus_record['state']=='complete':focus_active=set()
+                        focus_ids=pending_focus_ids()
+                        pending_batches=promote_focus(pending_batches,train.entries,focus_ids)
+                        if not focus_ids:focus_record['state']='complete'
                     if args.memory_qualification and objective is None:
                         packed = resident.packed_capacity_update
                         if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
@@ -3044,7 +3100,7 @@ def _main(argv=None, *, requested_refresh):
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
                     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
-                                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index,
+                                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index, focus_ids=focus_ids,
                                                       urgent_cohort_fairness=args.urgent_cohort_fairness,
                                                       ordinary_cohort_fairness=args.ordinary_cohort_fairness, communication_cohort_fairness=args.communication_cohort_fairness)
             if anneal is not None:
@@ -3132,6 +3188,9 @@ def _main(argv=None, *, requested_refresh):
                     row=foundation_template['rows'][example.id]
                     if row['admitted_to_training'] and row['required_visits']>0 and exposure_counts[example.id]>=row['required_visits']:
                         foundation_missing.remove(example.id)
+            if focus_record:
+                focus_record['consumed']=[x for x in focus_record['initial_credits'] if x in focus_active and exposure_counts.get(x,0)>focus_record['initial_credits'][x]]
+                if not pending_focus_ids():focus_record['state']='complete'
             epoch = min(exposure_counts[key] for key, required in required_visits.items() if required > 0)
             if pass_end and all(exposure_counts[key] >= required for key, required in required_visits.items()):
                 cursor = 0

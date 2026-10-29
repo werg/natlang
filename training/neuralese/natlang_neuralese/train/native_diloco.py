@@ -120,7 +120,7 @@ def identity(parent_checkpoint, argv, settings):
 # These arguments name authenticated data/recipe inputs, not the distributed
 # optimizer surface or transport layout. A change still requires an actual
 # full-checkpoint source-correction proof in the native trainer.
-_SOURCE_ARGUMENTS = frozenset({'--native-graphs','--held-native-graphs','--foundation-native-graphs',
+_SOURCE_ARGUMENTS = frozenset({'--native-graphs','--held-native-graphs','--foundation-native-graphs','--pending-focus',
     '--continued-native-graphs','--continued-held-native-graphs','--source-correction',
     '--source-classification-migration','--ce-supervision-policy','--sft-packed-geometry',
     '--memory-qualification','--recipe-binding','--pending-native-sources','--withdrawn-native-graphs',

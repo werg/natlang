@@ -37,7 +37,7 @@ HANDLERS = {
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'source_predecessor_retirement', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request', 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'source_predecessor_retirement', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request', 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'pending_focus', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
@@ -356,6 +356,11 @@ def _bind_native_source_dependencies(inputs, *, source_route=None):
         from .native_source_correction import source_correction_dependencies
         inputs['source_correction']['dependencies'] = source_correction_dependencies(
             inputs['source_correction'])
+    if 'pending_focus' in inputs:
+        from .native_pending_focus import dependencies as focus_dependencies
+        reference = inputs['pending_focus']
+        _, dependencies = focus_dependencies({'path': reference['path'], 'sha256': reference['sha256']})
+        reference['dependencies'] = dependencies[1:]
     if 'pending_native_sources' in inputs:
         from .native_pending_sources import pending_source_dependencies
         inputs['pending_native_sources']['dependencies'] = pending_source_dependencies(inputs['pending_native_sources']['path'])
@@ -424,7 +429,7 @@ def stage_input_args(resolved, kind, *, target='portable'):
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'native_graphs', 'held_native_graphs', 'continued_native_graphs', 'source_predecessor_retirement',
                  'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request',
-                 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction',
+                 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'pending_focus', 'unavailable_native_sources', 'source_classification_migration', 'source_correction',
                  'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
@@ -1201,6 +1206,28 @@ def _pending_source_continuation(old, new):
 
 
 
+def _pending_focus_continuation(old, new):
+    """Add a bound one-time scheduler request without changing source semantics."""
+    role = 'pending_focus'
+    reference = new.get(role)
+    if not isinstance(reference, dict) or old.get(role) == reference:
+        return False
+    before = {key:value for key,value in old.items() if key != role}
+    after = {key:value for key,value in new.items() if key != role}
+    if before != after and not (_data_continuation(before, after)
+            or _priority_only_native_source_continuation(before, after)
+            or _pending_source_continuation(before, after)
+            or _combined_native_source_continuation(before, after)
+            or _classification_input_continuation(before, after)
+            or _source_correction_continuation(before, after)):
+        return False
+    if not all(reference.get(key) for key in ('path', 'sha256', 'binding')):
+        raise ValueError('pending focus continuation requires its exact declared binding')
+    from .native_pending_focus import dependencies
+    dependencies({'path':reference['path'],'sha256':reference['sha256']})
+    return True
+
+
 def _ce_supervision_input_continuation(old, new):
     """Bind explicit CE algebra while preserving the source continuation guards."""
     role = 'ce_supervision_policy'
@@ -1468,6 +1495,7 @@ def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
                     _source_predecessor_retirement(old, new) or _priority_only_native_source_continuation(old, new) or _data_continuation(old, new)
                     or _new_outer_continuation(old, new)
                     or _pending_source_continuation(old, new)
+                    or _pending_focus_continuation(old, new)
                     or _combined_native_source_continuation(old, new)
                     or _source_correction_continuation(old, new)
                     or (next(s for s in plan['recipe']['stages'] if s['id'] == stage_id)['kind'] == 'native_state_sft'
@@ -1476,7 +1504,7 @@ def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
                 raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
                                  'that has not started may take new inputs, and the active stage only by an explicit metadata classification or declared '
                                  'data continuation that retains the exact authenticated native predecessor')
-            changes[stage_id] = {'kind': ('source_predecessor_retirement' if _source_predecessor_retirement(old,new) else 'new_outer_continuation'
+            changes[stage_id] = {'kind': ('pending_focus_continuation' if _pending_focus_continuation(old,new) else 'source_predecessor_retirement' if _source_predecessor_retirement(old,new) else 'new_outer_continuation'
                 if _new_outer_continuation(old, new) else 'source_correction_continuation'
                 if _source_correction_continuation(old, new) else 'ce_supervision_continuation'
                 if _ce_supervision_input_continuation(old, new) else 'metadata_classification_continuation'
@@ -1515,7 +1543,7 @@ def _without_unstarted_bindings(old_recipe, new_recipe, changes):
         for name in changed:
             value.get('input_bindings', {}).pop(name, None)
         for stage in value.get('stages', []):
-            if changes.get(stage['id'], {}).get('kind') in {'source_predecessor_retirement', 'new_outer_continuation', 'data_continuation', 'scheduling_priority_continuation', 'metadata_classification_continuation', 'ce_supervision_continuation'}:
+            if changes.get(stage['id'], {}).get('kind') in {'source_predecessor_retirement', 'new_outer_continuation', 'data_continuation', 'scheduling_priority_continuation', 'metadata_classification_continuation', 'ce_supervision_continuation', 'pending_focus_continuation'}:
                 stage.pop('inputs', None)  # exact old inputs are preserved by the continuation predecessor binding
     return old_value, new_value
 

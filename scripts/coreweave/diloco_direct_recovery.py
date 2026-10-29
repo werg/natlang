@@ -9,7 +9,7 @@ from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_f
 REQUIRED=('plan','recipe','worker_argv','coordinator_argv','settings','owner_journal','launch_code','recovery_code',
           'pin_code','direct_code','dependencies_code','archive_code','guard_code','readiness_code','inputs_code','stage_code',
           'private_export_code','verified_download_code')
-SOURCE_ARGUMENTS=frozenset({'--native-graphs','--held-native-graphs','--foundation-native-graphs',
+SOURCE_ARGUMENTS=frozenset({'--native-graphs','--held-native-graphs','--foundation-native-graphs','--pending-focus',
     '--continued-native-graphs','--continued-held-native-graphs','--source-correction',
     '--source-classification-migration','--ce-supervision-policy','--sft-packed-geometry',
     '--memory-qualification','--recipe-binding','--pending-native-sources','--withdrawn-native-graphs',

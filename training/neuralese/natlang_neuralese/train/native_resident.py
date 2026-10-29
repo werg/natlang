@@ -192,7 +192,10 @@ def _contract(plan, proposed, stage_id):
     if pending_changed and (not isinstance(new.get(pending_role), dict) or
             not _pending_source_continuation(old, {**old, pending_role: new[pending_role]})):
         raise ValueError('resident pending declarations must preserve all prior rows, quotas and dependencies')
-    without_pending = lambda values: {k:v for k,v in values.items() if k != pending_role}
+    focus_changed = old.get('pending_focus') != new.get('pending_focus')
+    if focus_changed and not isinstance(new.get('pending_focus'), dict):
+        raise ValueError('resident focus must be an authenticated request')
+    without_pending = lambda values: {k:v for k,v in values.items() if k not in (pending_role, 'pending_focus')}
     active_changed = without_pending(old) != without_pending(new)
     ce_changed = old.get('ce_supervision_policy') != new.get('ce_supervision_policy')
     if ce_changed:
@@ -200,7 +203,7 @@ def _contract(plan, proposed, stage_id):
     if active_changed and not (_data_continuation(without_pending(old), without_pending(new))
             or ce_changed):
         raise ValueError('resident append requires the exact training-source predecessor')
-    if not active_changed and not pending_changed:
+    if not active_changed and not pending_changed and not focus_changed:
         raise ValueError('resident request must add active data or mandatory pending work')
     recipes = []
     old_external = plan['recipe'].get('external_provenances')
@@ -217,7 +220,7 @@ def _contract(plan, proposed, stage_id):
                 if stage['kind'] != 'native_state_sft':
                     raise ValueError('resident append supports supervised native graphs only')
                 for key in ('native_graphs', 'continued_native_graphs', 'held_native_graphs', 'continued_held_native_graphs', pending_role,
-                            'source_classification_migration'):
+                            'source_classification_migration', 'pending_focus'):
                     stage.get('inputs', {}).pop(key, None)
                 if ce_changed:
                     stage.get('inputs', {}).pop('ce_supervision_policy', None)
@@ -1493,7 +1496,9 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
                 or len(train) < len(old) or len(held) < len(old_held)
                 or (len(train) == len(old) and len(held) == len(old_held)
                     and plan['stage_inputs'][stage_id].get('pending_native_sources') ==
-                        proposed['stage_inputs'][stage_id].get('pending_native_sources'))):
+                        proposed['stage_inputs'][stage_id].get('pending_native_sources')
+                    and plan['stage_inputs'][stage_id].get('pending_focus') ==
+                        proposed['stage_inputs'][stage_id].get('pending_focus'))):
             raise ValueError('resident append must preserve every prior row, order and scheduling priority')
         if train.groups & held.groups:
             raise ValueError('resident train/held groups overlap')
@@ -1682,7 +1687,9 @@ class ResidentAdoption:
                     or len(train) < len(self.train) or train.groups & held.groups
                     or (len(train) == len(self.train) and len(held) == len(self.held)
                         and self.plan['stage_inputs'][self.stage_id].get('pending_native_sources') ==
-                            payload['plan']['stage_inputs'][self.stage_id].get('pending_native_sources'))
+                            payload['plan']['stage_inputs'][self.stage_id].get('pending_native_sources')
+                        and self.plan['stage_inputs'][self.stage_id].get('pending_focus') ==
+                            payload['plan']['stage_inputs'][self.stage_id].get('pending_focus'))
                     or len(train) != payload['rows'] or (delta is None and full_validation['entries_sha256'] != payload['entries_sha256'])):
                 raise ValueError('resident rows are not an exact protected append')
             declarations = pending_declarations(payload['plan'], self.stage_id, train.tokenizer_fingerprint)

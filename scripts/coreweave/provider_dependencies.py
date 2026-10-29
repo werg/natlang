@@ -294,11 +294,26 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             for dependency in source_correction_dependencies(ref):
                 bound(dependency)
 
+    def focus_inputs(value):
+        from natlang_neuralese.train.native_pending_focus import dependencies as focus_dependencies
+        references = ([value['pending_focus']] if value.get('pending_focus') else [])
+        references += [record['request'] for record in value.get('pending_focus_history', [])]
+        for reference in references:
+            if isinstance(reference, dict):
+                path = bound(reference)
+                reference = {'path': str(path), 'sha256': reference['sha256']}
+            else:
+                path = add(reference)
+                reference = {'path': str(path), 'sha256': sha256_file_hex_cached(path)}
+            for item in focus_dependencies(reference)[1]:
+                bound(item)
+
     def training_inputs(training):
         if not isinstance(training, dict):
             return
         for options in (training.get('options') or {}, training.get('training_options') or {}):
             external_source_provenance(options)
+            focus_inputs(options)
             transition = options.get('new_outer_reanchor')
             if transition is not None:
                 if transition.get('schema') != 'natlang.diloco-new-outer-transition/1':
@@ -612,6 +627,7 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             from natlang_neuralese.model.native_bundle import actor_view_dependencies
             for reference in actor_view_dependencies(value['native_actor_view']):
                 bound(reference)
+        focus_inputs(value)
         if value.get('pending_native_sources'):
             from natlang_neuralese.train.native_pending_sources import pending_source_dependencies
             reference = value['pending_native_sources']
