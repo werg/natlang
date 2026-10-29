@@ -18,7 +18,7 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, Callable
 
 import torch
 from safetensors.torch import load_file
@@ -75,6 +75,7 @@ class TensorSurface:
 
     masters: Mapping[str, torch.Tensor]
     frozen_names: frozenset[str] = frozenset()
+    install_hook: Callable | None = None
 
     @classmethod
     def from_module(cls, module: torch.nn.Module) -> TensorSurface:
@@ -150,6 +151,11 @@ def install_fragment(surface: ParameterSurface, fragment: Fragment, values: torc
     """Overwrite masters (and served copies); inner optimizer moments are preserved."""
     if values.ndim != 1 or values.numel() != fragment.length or not values.isfinite().all():
         raise ValueError("Invalid synchronized parameter fragment")
+    hook=getattr(surface,'install_hook',None)
+    if hook is not None:
+        hook(fragment,values)
+        surface.after_install({part.name for part in fragment.slices})
+        return
     cursor = 0
     touched: set[str] = set()
     for part in fragment.slices:

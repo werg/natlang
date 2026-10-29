@@ -165,7 +165,51 @@ def source_identity_transition(original, current, proof):
         raise ValueError('source correction cannot change coordinator surface, parent, transport or fixed trainer arguments')
     return {**proof,'original_identity':original,'current_identity':current}
 
-def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, source_transition=None, new_outer=False):
+def compensated_install_hook(named, optimizer):
+    """Preserve Kahan residual and install-rounding error for exact fragment slices."""
+    import torch
+    latent=getattr(optimizer,'latent',None)
+    if latent is None or getattr(latent,'rounding',None)!='kahan':return None
+    eligible={id(p) for group in latent.param_groups for p in group['params']}
+    named=dict(named)
+    def install(fragment,values):
+        prepared=[];created=[];cursor=0
+        try:
+            for part in fragment.slices:
+                p=named[part.name];target=p.detach().reshape(-1)[part.offset:part.offset+part.length]
+                source=values[cursor:cursor+part.length].to(device=p.device,dtype=torch.float32);cursor+=part.length
+                rounded=source.to(p.dtype)
+                comp=None;before_comp=None;new_comp=None
+                if id(p) in eligible and p.dtype==torch.bfloat16:
+                    was_present=p in latent.state
+                    state=latent.state[p]
+                    if 'compensation' not in state:
+                        device='cpu' if getattr(latent,'state_storage','device')=='cpu' else p.device
+                        state['compensation']=torch.zeros(p.shape,dtype=torch.bfloat16,device=device);created.append((p,state,was_present))
+                    tensor=state['compensation']
+                    if tensor.shape!=p.shape or tensor.dtype!=torch.bfloat16:
+                        raise ValueError('Muon compensation shape or dtype differs from its parameter')
+                    comp=tensor.reshape(-1)[part.offset:part.offset+part.length]
+                    before_comp=comp.clone()
+                    new_comp=(comp.to(device=p.device,dtype=torch.float32)+(source-rounded.float())).to(device=comp.device,dtype=comp.dtype)
+                prepared.append((target,target.clone(),rounded,comp,before_comp,new_comp))
+            with torch.no_grad():
+                for target,_,rounded,comp,_,new_comp in prepared:
+                    target.copy_(rounded)
+                    if comp is not None:comp.copy_(new_comp)
+        except BaseException:
+            with torch.no_grad():
+                for target,old,_,comp,old_comp,_ in prepared:
+                    target.copy_(old)
+                    if comp is not None:comp.copy_(old_comp)
+            for p,state,was_present in created:
+                state.pop('compensation',None)
+                if not was_present and not state:latent.state.pop(p,None)
+            raise
+    return install
+
+
+def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, source_transition=None, new_outer=False, optimizer=None):
     """Join the stage's coordinator after the trainer restored its parent or own state."""
     if args.diloco is None:
         if saved_state is not None:
@@ -223,7 +267,7 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
             else:
                 transition=source_identity_transition(original,current_identity,source_transition)
             effective=original
-    learner = DilocoLearner(settings, surface=TensorSurface(dict(named)),
+    learner = DilocoLearner(settings, surface=TensorSurface(dict(named),install_hook=compensated_install_hook(named,optimizer) if optimizer is not None else None),
                             identity=effective, output=args.out / 'diloco', transport=transport)
     if new_outer:
         learner.reanchor_deviations = learner.reanchor_fresh()

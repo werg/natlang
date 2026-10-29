@@ -49,3 +49,49 @@ def test_kahan_residual_survives_a_state_round_trip_and_rounding_is_validated():
         assert 'rounding' in str(error)
     else:
         raise AssertionError('unknown rounding accepted')
+
+def test_outer_fragment_install_preserves_kahan_residual_and_rounding_across_restart():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.diloco.protocol import Fragment,Slice,TensorSurface,install_fragment
+    from natlang_neuralese.train.native_diloco import compensated_install_hook
+    p=torch.nn.Parameter(torch.tensor([[1.,2.],[3.,4.]],dtype=torch.bfloat16))
+    latent=MuonSR([{'params':[p],'lr':1e-4,'name':'weight'}],lr=1e-4,rounding='kahan')
+    latent.set_state_storage('cpu')
+    latent.state[p]['compensation']=torch.tensor([[.001,.002],[.003,.004]],dtype=torch.bfloat16)
+    latent.state[p]['momentum']=torch.ones_like(p)
+    owner=SimpleNamespace(latent=latent);named=[('weight',p)]
+    surface=TensorSurface(dict(named),install_hook=compensated_install_hook(named,owner))
+    fragment=Fragment(0,(Slice('weight',1,2),));values=torch.tensor([2.003,3.006])
+    old_p=p.detach().clone();old_c=latent.state[p]['compensation'].clone()
+    install_fragment(surface,fragment,values)
+    comp=latent.state[p]['compensation']
+    assert torch.equal(p.flatten()[[0,3]],old_p.flatten()[[0,3]])
+    assert torch.equal(comp.flatten()[[0,3]],old_c.flatten()[[0,3]])
+    expected=(old_c.flatten()[1:3].float()+values-p.detach().flatten()[1:3].float()).to(torch.bfloat16)
+    assert torch.equal(comp.flatten()[1:3],expected)
+    assert torch.equal(latent.state[p]['momentum'],torch.ones_like(p))
+    saved=latent.state_dict();p2=torch.nn.Parameter(p.detach().clone())
+    resumed=MuonSR([{'params':[p2],'lr':1e-4,'name':'weight'}],lr=1e-4,rounding='kahan')
+    resumed.load_state_dict(saved);resumed.set_state_storage('cpu')
+    assert torch.equal(resumed.state[p2]['compensation'],comp)
+    s2=TensorSurface({'weight':p2},install_hook=compensated_install_hook([('weight',p2)],SimpleNamespace(latent=resumed)))
+    another=Fragment(1,(Slice('weight',0,1),));v2=torch.tensor([1.003])
+    install_fragment(surface,another,v2);install_fragment(s2,another,v2)
+    assert torch.equal(p,p2) and torch.equal(latent.state[p]['compensation'],resumed.state[p2]['compensation'])
+
+
+def test_outer_fragment_install_refuses_bad_compensation_before_any_write():
+    import pytest
+    from types import SimpleNamespace
+    from natlang_neuralese.train.diloco.protocol import Fragment,Slice,TensorSurface,install_fragment
+    from natlang_neuralese.train.native_diloco import compensated_install_hook
+    first=torch.nn.Parameter(torch.ones((2,2),dtype=torch.bfloat16))
+    second=torch.nn.Parameter(torch.ones((2,2),dtype=torch.bfloat16))
+    latent=MuonSR([{'params':[first,second],'lr':1e-4}],lr=1e-4,rounding='kahan')
+    latent.state[second]['compensation']=torch.zeros(1,dtype=torch.bfloat16)
+    named=[('first',first),('second',second)];surface=TensorSurface(dict(named),install_hook=compensated_install_hook(named,SimpleNamespace(latent=latent)))
+    fragment=Fragment(0,(Slice('first',0,2),Slice('second',0,2)))
+    with pytest.raises(ValueError,match='shape or dtype'):
+        install_fragment(surface,fragment,torch.tensor([1.003,1.004,1.005,1.006]))
+    assert torch.equal(first,torch.ones_like(first)) and torch.equal(second,torch.ones_like(second))
+    assert 'compensation' not in latent.state[first]
