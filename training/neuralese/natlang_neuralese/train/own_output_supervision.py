@@ -140,6 +140,12 @@ def _role_tokens(value):
             'generation_prompt': list(prompt), 'tool_response_prefixes': [list(p) for p in prefixes]}
 
 
+# bounded-mean-one/1 equalizes TRAIN rows per family; token-mass-mean-one/1 equalizes supervised tokens (each row
+# counts its ``supervised_tokens``), the matching census for ``mass: 'token'``, where a row's loss mass is its tokens.
+# Row counts under token mass gave 0.3% of rows (long coding trajectories at the 8x cap) 49% of the loss mass.
+LOGICAL_NORMALIZATIONS = ('bounded-mean-one/1', 'token-mass-mean-one/1')
+
+
 def _family_balance(value):
     if value is None:
         return None
@@ -152,7 +158,7 @@ def _family_balance(value):
     result = {'key': value['key'], 'max_scale': float(scale)}
     if value['key'] == 'logical-family':
         ref = value['map']
-        if (value['normalization'] != 'bounded-mean-one/1' or not isinstance(ref, dict)
+        if (value['normalization'] not in LOGICAL_NORMALIZATIONS or not isinstance(ref, dict)
                 or set(ref) != {'path', 'sha256'} or not isinstance(ref['path'], str) or not ref['path']
                 or not isinstance(ref['sha256'], str) or not _SHA.fullmatch(ref['sha256'])):
             raise ValueError('logical family balance requires an exact map and bounded normalization version')
@@ -551,10 +557,14 @@ def family_scales(objective, entries, *, cohort_ids=None, logical_ids=None):
                     family = match.group(1) if match.groups() else match.group(0)
                     break
             families.append(family)
+    by_tokens = balance.get('normalization') == 'token-mass-mean-one/1'
+    if by_tokens and objective.get('mass') != 'token':
+        raise ValueError("token-mass-mean-one/1 family balance requires the objective's mass: 'token'")
     counts = {}
-    for family in families:
-        counts[family] = counts.get(family, 0) + 1
-    total, number = len(families), len(counts)
+    for entry, family in zip(entries, families):
+        counts[family] = counts.get(family, 0) + (max(0, int(entry['supervised_tokens'])) if by_tokens else 1)
+    counts = {family: count for family, count in counts.items() if count}
+    total, number = sum(counts.values()), len(counts)
     raw = {family: total / (number * count) for family, count in counts.items()}
     if balance['key'] == 'logical-family':
         cap = balance['max_scale']; lo, hi = 0., 1.
@@ -569,9 +579,10 @@ def family_scales(objective, entries, *, cohort_ids=None, logical_ids=None):
         capped = {family: min(balance['max_scale'], raw[family]) for family in counts}
         normal = total / sum(capped[family] * count for family, count in counts.items())
         per_family = {family: capped[family] * normal for family in counts}
-    scales = {entry['id']: per_family[family] for entry, family in zip(entries, families)}
-    census = {'families': {family: {'rows': counts[family], 'scale': per_family[family]} for family in sorted(counts)},
-              'rows': total, 'key': balance['key']}
+    scales = {entry['id']: per_family.get(family, 0.) for entry, family in zip(entries, families)}
+    unit = 'supervised_tokens' if by_tokens else 'rows'
+    census = {'families': {family: {unit: counts[family], 'scale': per_family[family]} for family in sorted(counts)},
+              unit: total, 'key': balance['key']}
     census['sha256'] = canonical_json_sha256_hex(census)
     return scales, census
 
