@@ -72,7 +72,8 @@ def initial_training_world(rows, cases_sha256):
     candidates=[]
     for row in rows:
         curriculum=row.get('curriculum') or {};ref=curriculum.get('reference') or {};rl=curriculum.get('rl') or {}
-        root=ref.get('root');children=ref.get('children')
+        # A reference without child calls declares no ``children`` key: zero children, not missing geometry.
+        root=ref.get('root');children=ref.get('children',[])
         if row.get('split')!='train' or not isinstance(root,list) or not isinstance(children,list) or type(rl.get('level')) is not int:
             raise ValueError('initial JOLT world lacks train split and authenticated reference geometry')
         actions=len(root)+sum(len(child.get('calls') or []) for child in children)
