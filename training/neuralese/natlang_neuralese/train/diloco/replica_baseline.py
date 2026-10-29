@@ -14,7 +14,7 @@ def _hash(path):
     return h.hexdigest()
 
 
-def capture(dispatch, destination, *, captured_monotonic=None, captured_wall=None):
+def capture(dispatch, destination, *, captured_monotonic=None, captured_wall=None, pin_extra=None, on_pinned=None):
     """Hardlink exact serialized state inside the queue; hash only after release."""
     target=Path(destination)
     def pin():
@@ -36,11 +36,18 @@ def capture(dispatch, destination, *, captured_monotonic=None, captured_wall=Non
             fd=os.open(directory,os.O_RDONLY | getattr(os,'O_DIRECTORY',0))
             try:os.fsync(fd)
             finally:os.close(fd)
+        extra=pin_extra(c) if pin_extra is not None else None
         return {'files':files,'quorum_since':{str(k):v for k,v in c.quorum_since.items()},
                 'captured_monotonic':(__import__('time').monotonic() if captured_monotonic is None else captured_monotonic),
                 'captured_wall':(__import__('time').time() if captured_wall is None else captured_wall),'run_id':c.manifest['run_id'],
-                'fingerprint':c.manifest['fingerprint']}
+                'fingerprint':c.manifest['fingerprint'],'extra':extra}
     pinned=dispatch.read(pin)
+    if on_pinned is not None:on_pinned(pinned)
+    return finish_pinned(target,pinned)
+
+
+def finish_pinned(target,pinned):
+    target=Path(target);pinned=dict(pinned)
     inventory=[]
     for name in pinned.pop('files'):
         path=target/name;before=path.stat();digest=_hash(path);after=path.stat()

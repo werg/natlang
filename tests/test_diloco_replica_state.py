@@ -473,6 +473,15 @@ def test_first_outer_bootstrap_has_no_failed_primary_fence(tmp_path):
         assert client.upload_file(later,'later.bin',chunk_bytes=100,attempts=1)['status']=='present'
         assert not (tmp_path/'root'/'uploads'/'.replication-pending'/'later.bin').exists()
         assert (tmp_path/'peerstore'/'replica-uploads'/'later.bin').read_bytes()==later.read_bytes()
+        manifest=client.json('GET','/v1/manifest');fence='local-fence';ready={'0':{'id':fence,'worker':0,'checkpoint':'/worker/pin.pt','versions':[0],'sequences':[0],
+            'fingerprint':manifest['fingerprint'],'deadline':time.time()+60,'global_step':0}}
+        pinned=client.json('POST','/v1/replica-recovery-pin',{'fence_id':fence,'workers':ready,'owner_journal_sha256':'a'*64})
+        assert pinned['state']=='pinned'
+        for _ in range(200):
+            capture_status=client.json('GET','/v1/replica-recovery-status/'+fence)
+            if capture_status['state'] in ('complete','failed'):break
+            time.sleep(.02)
+        assert capture_status['state']=='complete' and capture_status['receipt']['value']['workers']==ready
         from natlang_neuralese.train.diloco.replica_transport import freeze_replica_files
         from natlang_neuralese.train.diloco.replica_seed import restore_replica_uploads
         freeze_replica_files(f'http://127.0.0.1:{pp}',token,'f'*48,allow_http=True)

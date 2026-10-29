@@ -104,7 +104,7 @@ def test_real_backend_constructs_from_nonresident_control(tmp_path,monkeypatch):
     record=mod.record_from_control(descriptor,'run');manifest={'run_id':'run','workers':4,'fingerprint':'actual'}
     class Future:
         def result(self,timeout):return json.dumps(manifest)
-    box=SimpleNamespace(read_file=lambda path:Future())
+    box=SimpleNamespace(read_file=lambda path:Future(),exec=lambda *args,**kwargs:SimpleNamespace(result=lambda **kw:SimpleNamespace(returncode=1)))
     monkeypatch.setattr(service.cwctl,'read_sandbox',lambda ident:box)
     monkeypatch.setattr(service.paths,'root',lambda name:tmp_path if name=='data_nvme' else tmp_path/'external' if name=='data_hdd' else Path(__file__).parents[1])
     backend=service.Backend(record,tmp_path/'backups',runtime_bundle=tmp_path/'bundle.json',direct_control=descriptor)

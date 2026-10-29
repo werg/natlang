@@ -725,6 +725,7 @@ class FileStore:
         self.partial = self.root / ".partial"
         self.locks: dict[str, threading.Lock] = {}
         self.guard = threading.Lock()
+        self.snapshot_gate = threading.RLock()
 
     @staticmethod
     def check(name: str, sha256: str | None = None) -> None:
@@ -926,6 +927,9 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                     path=coordinator.root / "replica-session.json"
                     if not path.is_file():self._json(404, {"error":"no promoted session"})
                     else:self._json(200, json.loads(path.read_text()))
+                elif re.fullmatch(r'/v1/replica-recovery-status/[A-Za-z0-9_-]{1,128}',parsed.path) and replication is not None:
+                    ident=parsed.path.rsplit('/',1)[-1];path=Path(replication.recovery_store)/'recovery-pins'/(ident+'.status.json')
+                    self._json(200,json.loads(path.read_text()) if path.exists() else {'state':'pending'})
                 elif parsed.path == "/v1/status":
                     self._json(200, read(coordinator.status))
                 elif parsed.path.startswith("/v1/files/"):
@@ -999,6 +1003,31 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 return
             parsed = urlsplit(self.path)
             try:
+                if parsed.path == '/v1/replica-recovery-pin' and replication is not None:
+                    value=self._read_json()
+                    if set(value)!={'fence_id','workers','owner_journal_sha256'} or not re.fullmatch('[A-Za-z0-9_-]{1,128}',str(value['fence_id'])):
+                        raise ValueError('invalid replicated recovery request')
+                    from .replica_recovery import capture_recovery
+                    event=threading.Event();result={};destination=Path(replication.recovery_store)/'recovery-pins'/value['fence_id']
+                    def pinned(pinned_value):
+                        write_json_durable(Path(replication.recovery_store)/'recovery-pins'/(value['fence_id']+'.status.json'),
+                            {'state':'pinned','fence_id':value['fence_id'],'head':pinned_value['extra'],'workers':value['workers'],
+                             'owner_journal_sha256':value['owner_journal_sha256'],
+                             'boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                             'pid':os.getpid(),'start_ticks':Path(f'/proc/{os.getpid()}/stat').read_text().split(') ',1)[1].split()[19]})
+                        result['pinned']=True;event.set()
+                    def run():
+                        try:
+                            receipt=capture_recovery(replication,files,replication.recovery_store,destination,
+                                fence_id=value['fence_id'],workers=value['workers'],owner_journal_sha256=value['owner_journal_sha256'],on_pinned=pinned)
+                            write_json_durable(Path(replication.recovery_store)/'recovery-pins'/(value['fence_id']+'.status.json'),{'state':'complete','receipt':receipt})
+                        except BaseException as exc:
+                            result['error']=str(exc);event.set()
+                            write_json_durable(Path(replication.recovery_store)/'recovery-pins'/(value['fence_id']+'.status.json'),{'state':'failed','error':str(exc)})
+                    threading.Thread(target=run,daemon=True).start()
+                    if not event.wait(300):raise ValueError('replica recovery pin timed out')
+                    if result.get('error'):raise ValueError(result['error'])
+                    self._json(200,{'state':'pinned','fence_id':value['fence_id'],'path':str(destination)});return
                 if parsed.path == "/v1/lease":
                     value = self._read_json()
                     result = operation("lease", {"worker": int(value["worker"]), "session": str(value["session"])})
@@ -1036,6 +1065,9 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 self._json(400, {"error": str(exc)})
 
         def do_PUT(self) -> None:
+            with files.snapshot_gate:return self._file_put()
+
+        def _file_put(self) -> None:
             if not self._auth():
                 return
             parsed = urlsplit(self.path)

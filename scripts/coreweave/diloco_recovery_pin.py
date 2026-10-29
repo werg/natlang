@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import tempfile
@@ -247,6 +248,49 @@ def release_pin(primary, expected_sha, expected_bytes, *, recovery_root, fenced_
         secondary.unlink()
     return {'released':True}
 
+def archive_replicated_closure(tree, archive, receipt_sha256):
+    tree=Path(tree);archive=Path(archive);receipt_path=tree/'recovery-closure.json'
+    if _hash(receipt_path)!=receipt_sha256:raise ValueError('replicated recovery receipt differs')
+    receipt=json.loads(receipt_path.read_text());seen=set()
+    if receipt.get('schema')!='natlang.diloco-replicated-recovery/1':raise ValueError('invalid replicated recovery receipt')
+    for item in receipt['files']:
+        relative=Path(item['path']);path=tree/relative
+        if relative.is_absolute() or '..' in relative.parts or str(relative) in seen or path.is_symlink() or not path.resolve().is_relative_to(tree.resolve()):raise ValueError('invalid replicated closure path')
+        seen.add(str(relative))
+        if not path.is_file() or path.stat().st_size!=item['bytes'] or _hash(path)!=item['sha256']:raise ValueError('replicated closure file differs')
+    actual={str(path.relative_to(tree)) for path in tree.rglob('*') if path.is_file() and path!=receipt_path}
+    if actual!=seen:raise ValueError('replicated closure inventory differs')
+    temp=archive.with_name(archive.name+'.tmp');archive.parent.mkdir(parents=True,exist_ok=True)
+    seal=archive.with_name(archive.name+'.seal.json')
+    if archive.exists() and seal.exists():
+        result=json.loads(seal.read_text())
+        if result.get('replicated_receipt_sha256')!=receipt_sha256 or result.get('bytes')!=archive.stat().st_size or result.get('sha256')!=_hash(archive):
+            raise ValueError('replicated recovery archive retry differs')
+        return result
+    if archive.exists():archive.unlink()
+    temp.unlink(missing_ok=True)
+    try:
+        with open_recovery_tar(temp) as tar:tar.add(tree,arcname='diloco-replica-recovery')
+        os.link(temp,archive);temp.unlink()
+        result={'path':str(archive),'sha256':_hash(archive),'bytes':archive.stat().st_size,'binding_kind':'replicated-recovery-archive',
+                'replicated_receipt_sha256':receipt_sha256,**receipt['coordinator']}
+        from natlang_neuralese.common.jsonio import write_json_durable
+        write_json_durable(seal,result)
+        return result
+    finally:temp.unlink(missing_ok=True)
+
+
+def release_replicated_closure(tree, receipt_sha256, recovery_root):
+    tree=Path(tree);root=Path(recovery_root).resolve()
+    if tree.is_symlink() or not tree.is_dir() or tree.resolve().parent!=root or not re.fullmatch('[A-Za-z0-9_-]{1,128}',tree.name):
+        raise ValueError('replicated closure is outside the exact recovery pin root')
+    if _hash(tree/'recovery-closure.json')!=receipt_sha256:raise ValueError('replicated closure receipt differs')
+    shutil.rmtree(tree);fd=os.open(root,os.O_DIRECTORY)
+    try:os.fsync(fd)
+    finally:os.close(fd)
+    return {'released':True,'receipt_sha256':receipt_sha256}
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);sub=p.add_subparsers(dest='action',required=True)
     w=sub.add_parser('worker');w.add_argument('checkpoint');w.add_argument('destination');w.add_argument('worker',type=int)
@@ -254,11 +298,15 @@ def main():
     c=sub.add_parser('coordinator');c.add_argument('root');c.add_argument('archive');c.add_argument('package')
     ct=sub.add_parser('coordinator-tree');ct.add_argument('root');ct.add_argument('archive');ct.add_argument('package')
     ca=sub.add_parser('coordinator-tree-archive');ca.add_argument('tree');ca.add_argument('archive');ca.add_argument('identity')
+    rr=sub.add_parser('replica-release');rr.add_argument('tree');rr.add_argument('receipt_sha256');rr.add_argument('recovery_root')
+    ra=sub.add_parser('replica-archive');ra.add_argument('tree');ra.add_argument('archive');ra.add_argument('receipt_sha256')
     r=sub.add_parser('resident');r.add_argument('directory');r.add_argument('archive')
     d=sub.add_parser('release');d.add_argument('primary');d.add_argument('sha256');d.add_argument('bytes',type=int)
     d.add_argument('recovery_root');d.add_argument('--fenced-source');d.add_argument('--fence-root')
     a=p.parse_args()
-    value=(archive_coordinator_tree(a.tree,a.archive,a.identity) if a.action=='coordinator-tree-archive' else
+    value=(release_replicated_closure(a.tree,a.receipt_sha256,a.recovery_root) if a.action=='replica-release' else
+           archive_replicated_closure(a.tree,a.archive,a.receipt_sha256) if a.action=='replica-archive' else
+           archive_coordinator_tree(a.tree,a.archive,a.identity) if a.action=='coordinator-tree-archive' else
            coordinator_pin(a.root,a.archive,a.package,tree_only=True) if a.action=='coordinator-tree' else
            release_pin(a.primary,a.sha256,a.bytes,recovery_root=a.recovery_root,fenced_source=a.fenced_source,fence_root=a.fence_root) if a.action=='release' else
            worker_pin(a.checkpoint,a.destination,a.worker,a.fingerprint,a.package) if a.action=='worker' else

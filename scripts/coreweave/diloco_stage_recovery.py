@@ -148,7 +148,8 @@ def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,tar
             shutil.copyfile(inputs['worker-'+str(i)],worker/'checkpoint.pt')
             _check(worker/'checkpoint.pt',{'sha256':components['worker-'+str(i)]['sha256'],'bytes':components['worker-'+str(i)]['bytes']})
             if not direct:_extract(inputs['resident-'+str(i)],worker,prefix='diloco-resident')
-        _extract(inputs['coordinator'],temp,prefix='diloco-coordinator')
+        replicated=components['coordinator'].get('binding_kind')=='replicated-recovery-archive'
+        _extract(inputs['coordinator'],temp,prefix='diloco-replica-recovery' if replicated else 'diloco-coordinator')
         shutil.copyfile(parent_local,temp/'parent.pt');_check(temp/'parent.pt',parent_identity)
         _extract(inputs['dependencies'],temp/'dependencies',prefix='objects')
         index=json.loads((temp/'dependencies/dependency-index.json').read_text())
@@ -181,9 +182,23 @@ def stage(state_path,cycle_id,storage,parent_pin,parent_receipt,parent_local,tar
                 if item.get('object')!='objects/'+sha:raise ValueError('invalid dependency object')
                 _check(temp/'dependencies'/item['object'],{'sha256':sha,'bytes':item['bytes']})
             bindings[path]=sha
+        if replicated:
+            from natlang_neuralese.train.diloco.replica_recovery import restore_recovery
+            closure=temp/'diloco-replica-recovery';closure_value=json.loads((closure/'recovery-closure.json').read_text())
+            owner_sha=closure_value['owner_journal_sha256'];owner_path=temp/'dependencies'/'objects'/owner_sha
+            if not owner_path.is_file():
+                matching=[Path(item['resolved_local_path']) for item in external_objects.values() if item.get('sha256')==owner_sha]
+                if len(matching)!=1:raise ValueError('replicated recovery owner journal is not independently present')
+                owner_path=matching[0]
+            worker_components={str(i):components['worker-'+str(i)] for i in range(4)}
+            worker_paths={str(i):temp/'workers'/str(i)/'checkpoint.pt' for i in range(4)}
+            restored=restore_recovery(closure,temp/'replica-restored',receipt_sha256=components['coordinator']['replicated_receipt_sha256'],
+                workers=closure_value['workers'],worker_components=worker_components,owner_journal_sha256=owner_sha,owner_journal_path=owner_path,worker_paths=worker_paths)
+            restored['journal'].close()
         manifest={'schema':'natlang.diloco-staged-recovery/1','cycle':cycle_id,'run_id':state['run_id'],
                   'coordinator_run_id':state['coordinator_run_id'],'parent':{**pin,'staged':'parent.pt'},'components':components,
-                  'coordinator_staged':'diloco-coordinator','worker_staged':{str(i):f'workers/{i}' for i in range(4)},
+                  'coordinator_staged':('replica-restored/coordinator' if replicated else 'diloco-coordinator'),
+                  **({'replica_baseline_staged':'diloco-replica-recovery/current','replica_journal_staged':'replica-restored/journal'} if replicated else {}),'worker_staged':{str(i):f'workers/{i}' for i in range(4)},
                   **({'direct_control_sha256':direct['control_sha256'],'external_dependencies':external_objects} if direct else {}),
                   'scope':'separate worker optimizer/RNG/exposure and coordinator state; not a consolidated checkpoint',
                   'recovery_restore_qualified':False}

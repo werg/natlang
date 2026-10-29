@@ -154,7 +154,14 @@ def load_control(path, record, *, control_bytes=None, read_bound=None, verify_he
     for flag,key,parse in [('--quorum','min_quorum',int),('--max-staleness','max_staleness',int),
                            ('--ema','ema',json.loads),('--outer-schedule','outer_schedule',json.loads)]:
         if flag in coord:manifest_checks[key]=parse(_flag(coord,flag))
-    result={'paths':paths,'storage_reserve_bytes':reserve,'component_placement':placement,'control_sha256':hashlib.sha256(raw).hexdigest(),'manifest_checks':manifest_checks,
+    replica=control.get('replica_recovery')
+    if replica is not None:
+        if (not isinstance(replica,dict) or set(replica)!={'url','token_file','store','owner_journal_sha256'} or
+                not isinstance(replica['url'],str) or not replica['url'].startswith('http://127.0.0.1:') or
+                not all(isinstance(replica[k],str) and Path(replica[k]).is_absolute() for k in ('token_file','store')) or
+                replica['owner_journal_sha256']!=bindings['owner_journal']['sha256']):
+            raise ValueError('replicated recovery control differs from exact owner and local endpoint')
+    result={'replica_recovery':replica,'paths':paths,'storage_reserve_bytes':reserve,'component_placement':placement,'control_sha256':hashlib.sha256(raw).hexdigest(),'manifest_checks':manifest_checks,
             'original_identity_argv':_identity_argv(original_argv),'current_identity_argv':_identity_argv(argv),
             'transition_required':_identity_argv(original_argv)!=_identity_argv(argv),
             'helper_sha256':{key:bindings[key]['sha256'] for key in ('pin_code','archive_code','guard_code','readiness_code','inputs_code')},

@@ -130,7 +130,7 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
             'journal':str(journal.root.resolve()),'work_root':str(Path(root).resolve()),'baseline_sha256':baseline_sha256,'head':_identity(journal.identity)})
     empty=store/'empty-payload';write_bytes_durable(empty,b'')
     writer=ReplicatedExecutor(journal,peer_url,token,allow_http=allow_http,gateway=gateway)
-    dispatch=ReplicatedDispatch(machine,writer,empty)
+    dispatch=ReplicatedDispatch(machine,writer,empty);dispatch.recovery_store=store
     def rollover():
         existing=[p for p in store.glob('generation-*') if p.is_dir()]
         if len(existing)>max_generations:raise ValueError('replica generation retention exceeds its local bound')
