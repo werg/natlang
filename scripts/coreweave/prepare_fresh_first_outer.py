@@ -12,7 +12,7 @@ from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.train import recipe as R,native_resident as resident
 from natlang_neuralese.train.native_diloco import trainer_argv, first_outer_rng_seed, IDENTITY_SCHEMA
 from natlang_neuralese.train.diloco.worker import DilocoSettings
-from natlang_neuralese.train.native_state_sft import build_parser
+from natlang_neuralese.train.native_state_sft import build_parser,validate_static_args
 
 def bound(ref):
     p=Path(ref['path']).resolve(strict=True)
@@ -60,7 +60,7 @@ def prepare(a):
         parent=record['parent'];fork=first_outer_rng_seed(sha,rank) if parent['sha256']==sha else None
         proof={'schema':'natlang.diloco-first-outer/1','worker':rank,'parent':{k:parent[k] for k in ('path','sha256','bytes')},'historical_outer_checkpoint':None,'seed_sha256':sha,'source_hash':source_hash,'held_sha256':held,'rng_fork_seed':fork};path=a.out/f'peer-{rank}.json';write_json_durable(path,proof);declarations.append({**resident.binding(path),'bytes':path.stat().st_size})
     manifest=a.out/'manifest.json';write_json_durable(manifest,{'schema':'natlang.diloco-new-outer-manifest/1','workers':4,'peers':declarations})
-    recipe=copy.deepcopy(prior);stage=recipe['stages'][0];stage['inputs']['diloco_new_outer']='first_outer_manifest';recipe['input_bindings']['first_outer_manifest']=resident.binding(manifest);stage['parameters']['diloco']=settings;stage['parameters']['muon_rounding']='stochastic'
+    recipe=copy.deepcopy(prior);stage=recipe['stages'][0];stage['inputs']['diloco_new_outer']='first_outer_manifest';recipe['input_bindings']['first_outer_manifest']=resident.binding(manifest);stage['parameters']['diloco']=settings;stage['parameters']['muon_rounding']='kahan';stage['parameters']['weight_ema']='off'
     ce_ref=getattr(a,'ce_policy',None);old_for_outer=copy.deepcopy(old)
     if ce_ref is not None:
         from natlang_neuralese.train.own_output_supervision import identity,policy_objective
@@ -86,7 +86,7 @@ def prepare(a):
           'code':runtime_code,
           'stage_inputs':{stage['id']:resolved},'inputs':{dep['path']:dep['sha256'] for value in resolved.values() for dep in R._binding_files(value)}}
     plan_file=a.out/'worker-plan.json';write_json_durable(plan_file,plan)
-    binding=R.native_recipe_binding(path,lineage);argv=R.stage_input_args(resolved,'native_state_sft',target='portable')+['--device','cuda']+R.stage_parameter_args(R.effective_stage_parameters(stage,[],recipe))+['--recipe-binding',json.dumps(binding,sort_keys=True,separators=(',',':')),'--stage-id',stage['id'],'--prerequisite-stages','[]','--continue-from',a.seed_logical,'--out',a.worker_out,'--resident-data-directory',str(Path(a.worker_out)/'resident-data')];build_parser().parse_args(argv)
+    binding=R.native_recipe_binding(path,lineage);argv=R.stage_input_args(resolved,'native_state_sft',target='portable')+['--device','cuda']+R.stage_parameter_args(R.effective_stage_parameters(stage,[],recipe))+['--recipe-binding',json.dumps(binding,sort_keys=True,separators=(',',':')),'--stage-id',stage['id'],'--prerequisite-stages','[]','--continue-from',a.seed_logical,'--out',a.worker_out,'--resident-data-directory',str(Path(a.worker_out)/'resident-data')];validate_static_args(build_parser().parse_args(argv),check_output=False)
     identities=[{'schema':IDENTITY_SCHEMA,'parent_checkpoint_sha256':sha,'trainer_argv':trainer_argv(argv),'diloco':DilocoSettings.from_dict({**settings,'worker_id':i}).identity()} for i in range(4)]
     if any(x!=identities[0] for x in identities[1:]):raise ValueError('worker coordinator identities differ')
     argfile=a.out/'worker-args.json';write_json_durable(argfile,argv)

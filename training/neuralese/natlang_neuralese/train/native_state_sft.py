@@ -1594,6 +1594,42 @@ def training_precision_pass(quantization, *, policy_operation, checkpoint_option
     return precision
 
 
+def validate_static_args(args, *, check_output=True):
+    """Validate pre-model argument semantics, also used by launch builders."""
+    if check_output and args.initialize_only and (args.continue_from is not None or (args.out / 'checkpoint.pt').exists()):
+        raise ValueError('initialize-only requires a fresh output and no checkpoint parent')
+    if args.checkpoint_direct_token_limit < 0 or (args.checkpoint_direct_token_limit and not args.checkpoint_layers):
+        raise ValueError('checkpoint-direct-token-limit requires a nonnegative limit and enabled layer checkpointing')
+    if args.ffn_chunk_tokens is not None and args.ffn_chunk_tokens<0:
+        raise ValueError('ffn-chunk-tokens must be a nonnegative integer')
+    if args.refresh_after_updates is not None and args.refresh_after_updates < 1:
+        raise ValueError('refresh-after-updates must be a positive integer')
+    from .weight_ema import parse_weight_ema
+    from .lr_anneal import parse_lr_anneal
+    from .matrix_telemetry import parse_matrix_telemetry
+    ema_spec = parse_weight_ema(args.weight_ema)
+    anneal_spec = parse_lr_anneal(args.lr_anneal)
+    telemetry_spec = parse_matrix_telemetry(args.matrix_telemetry)
+    if anneal_spec is not None and args.continue_from is None:
+        raise ValueError('an lr anneal branch starts from a full-state parent: pass --continue-from and its own --out')
+    if ema_spec and not ema_spec.get('off') and args.diloco is not None:
+        raise ValueError('DiLoCo learners do not keep a local weight EMA; the coordinator keeps the EMA of global versions')
+    if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
+            args.chunk_tokens or 1, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens, args.held_eval_tokens, args.held_eval_graphs) < 0:
+        raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
+    if not math.isfinite(args.checkpoint_seconds) or args.checkpoint_seconds < 0:
+        raise ValueError('checkpoint-seconds must be finite and nonnegative')
+    if args.checkpoint_every and args.checkpoint_every % args.eval_every:
+        raise ValueError('checkpoint cadence must be an evaluation cadence multiple')
+    tolerances = [value for value in (args.forward_atol, args.gradient_atol) if value is not None]
+    if args.task_eval_every < 0 or any(not math.isfinite(value) or value <= 0 for value in tolerances):
+        raise ValueError('task cadence must be nonnegative and supplied native numerical tolerances positive')
+    if args.qualify_training_backend and (args.fp8_training == 'off' or
+            args.forward_atol is None or args.gradient_atol is None):
+        raise ValueError('training backend qualification needs an enabled backend and declared tolerances')
+    return ema_spec, anneal_spec, telemetry_spec
+
+
 def main(argv=None):
     from .loop import StopSignal
     requested_refresh = StopSignal().install((signal.SIGUSR2,))
@@ -1605,14 +1641,7 @@ def main(argv=None):
 
 def _main(argv=None, *, requested_refresh):
     args = build_parser().parse_args(argv)
-    if args.initialize_only and (args.continue_from is not None or (args.out / 'checkpoint.pt').exists()):
-        raise ValueError('initialize-only requires a fresh output and no checkpoint parent')
-    if args.checkpoint_direct_token_limit < 0 or (args.checkpoint_direct_token_limit and not args.checkpoint_layers):
-        raise ValueError('checkpoint-direct-token-limit requires a nonnegative limit and enabled layer checkpointing')
-    if args.ffn_chunk_tokens is not None and args.ffn_chunk_tokens<0:
-        raise ValueError('ffn-chunk-tokens must be a nonnegative integer')
-    if args.refresh_after_updates is not None and args.refresh_after_updates < 1:
-        raise ValueError('refresh-after-updates must be a positive integer')
+    static_specs = validate_static_args(args)
     history_reasoning_transition = None
     if args.foundation_communication_batches is not None and args.foundation_communication_batches < 1:
         raise ValueError('foundation communication batches must be a positive integer')
@@ -1644,29 +1673,8 @@ def _main(argv=None, *, requested_refresh):
                   if args.ce_supervision_policy else None)
     ce_policy = load_policy(ce_binding)
     checkpoint_options['ce_supervision_policy_binding'] = ce_binding
-    from .weight_ema import parse_weight_ema
-    from .lr_anneal import parse_lr_anneal, LrAnneal, SCHEMA as LR_ANNEAL_SCHEMA
-    from .matrix_telemetry import parse_matrix_telemetry
-    ema_spec = parse_weight_ema(args.weight_ema)
-    anneal_spec = parse_lr_anneal(args.lr_anneal)
-    telemetry_spec = parse_matrix_telemetry(args.matrix_telemetry)
-    if anneal_spec is not None and args.continue_from is None:
-        raise ValueError('an lr anneal branch starts from a full-state parent: pass --continue-from and its own --out')
-    if ema_spec and not ema_spec.get('off') and args.diloco is not None:
-        raise ValueError('DiLoCo learners do not keep a local weight EMA; the coordinator keeps the EMA of global versions')
-    if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
-            args.chunk_tokens or 1, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens, args.held_eval_tokens, args.held_eval_graphs) < 0:
-        raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
-    if not math.isfinite(args.checkpoint_seconds) or args.checkpoint_seconds < 0:
-        raise ValueError('checkpoint-seconds must be finite and nonnegative')
-    if args.checkpoint_every and args.checkpoint_every % args.eval_every:
-        raise ValueError('checkpoint cadence must be an evaluation cadence multiple')
-    tolerances = [value for value in (args.forward_atol, args.gradient_atol) if value is not None]
-    if args.task_eval_every < 0 or any(not math.isfinite(value) or value <= 0 for value in tolerances):
-        raise ValueError('task cadence must be nonnegative and supplied native numerical tolerances positive')
-    if args.qualify_training_backend and (args.fp8_training == 'off' or
-            args.forward_atol is None or args.gradient_atol is None):
-        raise ValueError('training backend qualification needs an enabled backend and declared tolerances')
+    from .lr_anneal import LrAnneal, SCHEMA as LR_ANNEAL_SCHEMA
+    ema_spec, anneal_spec, telemetry_spec = static_specs
     args.out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(args.seed)
     random.seed(args.seed)

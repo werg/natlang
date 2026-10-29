@@ -31,7 +31,12 @@ def test_first_outer_builder_exact_receipts_and_common_identity(tmp_path):
     declarations=[json.loads(Path(x['path']).read_text()) for x in result['peer_declarations']]
     assert declarations[0]['rng_fork_seed'] is None and len({x['rng_fork_seed'] for x in declarations[1:]})==3
     assert all(x['owner_get']=='pending' for x in result['peers'])
-    argv=json.loads(Path(result['worker_args']['path']).read_text());assert argv[argv.index('--resident-data-directory')+1]=='/work/fresh/learner/resident-data';assert argv[argv.index('--muon-rounding')+1]=='stochastic'
+    argv=json.loads(Path(result['worker_args']['path']).read_text());assert argv[argv.index('--resident-data-directory')+1]=='/work/fresh/learner/resident-data';assert argv[argv.index('--muon-rounding')+1]=='kahan';assert argv[argv.index('--weight-ema')+1]=='off'
+    from natlang_neuralese.train.native_state_sft import build_parser,validate_static_args
+    validate_static_args(build_parser().parse_args(argv),check_output=False)
+    badargs=list(argv);badargs[badargs.index('--weight-ema')+1]=json.dumps({'decay':.99,'warmup':0,'eval':'raw'})
+    with pytest.raises(ValueError,match='DiLoCo learners do not keep a local weight EMA'):
+        validate_static_args(build_parser().parse_args(badargs),check_output=False)
     init=json.loads(Path(result['coordinator_init_args']['path']).read_text());assert init[init.index('--grace-seconds')+1]=='30'
     plan=json.loads(Path(result['worker_plan']['path']).read_text());assert result['worker_plan_target']=='/work/fresh/learner/recipe-plan.json'
     assert plan['stage_inputs']['native_full_sft']['native_graphs']==plan['stage_inputs']['native_full_sft']['foundation_native_graphs'] and plan['code']
