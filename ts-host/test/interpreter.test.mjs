@@ -220,6 +220,15 @@ test('two provider-confirmed empty EOS replies end an absent result as model-inc
   assert.match(result.outcome.detail, /^model_incomplete: terminated_without_result/);
 });
 
+test('an action that keeps failing the same way ends the call as model-incomplete instead of running for ever', async () => {
+  let turns = 0;
+  const agent = new NativeToolAgent(() => { turns++; return { calls: [['eval', { code: 'console.log(q);' }]], completion_tokens: 5 }; });
+  const result = await run({ type: '() => string', instructions: 'Answer.' }, { agent: session => agent.run(session) });
+  assert.equal(result.outcome.kind, 'quiesced');
+  assert.match(result.outcome.detail, /^model_incomplete: repeated_failed_action .*q is not defined/);
+  assert.ok(turns >= 4 && turns <= 6, `stopped after ${turns} turns`);
+});
+
 test('one empty EOS may recover into a valid result, and empty text without exact EOS proof is not classified', async () => {
   const emptyEos = { calls: [], text: '', completion_tokens: 0,
     raw_response: { choices: [{ finish_reason: 'stop', message: { content: null } }] } };

@@ -165,6 +165,11 @@ class FileCredentials implements CredentialStore {
   async delete(id: string) { await this.locked(id, async () => { await rm(this.path(id), { force: true }); }); }
 }
 
+/** The credential store `natlang auth` and the dashboard write (one 0600 file per provider under config/credentials). */
+export function piCredentials(environment: NodeJS.ProcessEnv = process.env): CredentialStore {
+  return new FileCredentials(join(defaultNatlangConfigDirectory(environment), 'credentials'));
+}
+
 export function piModels(environment: NodeJS.ProcessEnv = process.env, scopedEnv: Record<string, unknown> = {}) {
   const base = defaultProviderAuthContext();
   return builtinModels({ credentials: new FileCredentials(join(defaultNatlangConfigDirectory(environment), 'credentials')),

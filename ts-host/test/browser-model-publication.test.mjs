@@ -97,7 +97,7 @@ test('a native GGUF export becomes the CLI default with its serving settings and
   assert.deepEqual(result.request, { temperature: 0, chat_template_kwargs: { preserve_thinking: true }, logit_bias: { 64402: -100 } });
   assert.equal(await readFile(join(root, 'models/templates', result.template), 'utf8'), '{{ messages }}');
   const source = await readFile(join(root, 'ts-host/src/model-default.ts'), 'utf8');
-  assert.match(source, /export const DEFAULT_MODEL_RELEASE = Object\.freeze\(/);
+  assert.match(source, /export const BROWSER_MODEL_RELEASE = Object\.freeze\(/);
   assert.ok(source.includes(result.sha256) && source.includes('"logit_bias"'));
   manifest.files[0].sha256 = 'cd'.repeat(32);
   await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest));

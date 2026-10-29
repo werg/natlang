@@ -68,6 +68,7 @@
   "files": [
     "dist",
     "model-assets",
+    "dashboard",
     "vendor",
     "prelude.js",
     "README.md",

@@ -45,10 +45,17 @@ Rerun the same command to move to a newer checkpoint. Every run says when the so
 
 ## The default model of a fresh install
 
-Without a configured profile, natlang downloads and runs `DEFAULT_MODEL_RELEASE` (`ts-host/src/model-default.ts`) on
-managed llama.cpp. It is a GGUF export of one of our native checkpoints, published as a GitHub release asset with its
-chat template under `models/templates/` and its serving settings (template arguments, the banned producer marker,
-greedy decoding), which apply whenever a profile runs the default model. Publish a newer export with
+Without a configured profile, natlang runs the stock instruction model `LiquidAI/LFM3-1.7B` (Q8_0) on managed
+llama.cpp while our own LFM3 checkpoints train. The stock GGUFs are listed in `ts-host/src/model-catalog.ts`, pinned to
+one repository revision and checked by size and SHA-256 (Q4_K_M, Q5_K_M, Q6_K, Q8_0, BF16); a profile picks another
+with `"local": { "stock": "lfm3-1.7b-q4_k_m" }`, and `natlang setup` downloads the selected one. Their chat template is
+the GGUF's own, extracted verbatim to `models/templates/LFM3-1.7B.jinja`, and they are served greedily with reasoning
+kept in the history (the settings of the base evaluation). LFM3 needs llama.cpp build 11938 or later; the managed
+runtime is pinned to v0.8.0 (b11960). An explicitly chosen older build (`NATLANG_LLAMA_SERVER`, `local.server`, such
+as the Neuralese fork) still runs, with a warning.
+
+The browser default (`ts-host/src/model-default.ts`, `BROWSER_MODEL_RELEASE`) stays the published LFM2.5 export:
+the vendored wllama build predates LFM3. Publish a newer browser export with
 
 ```sh
 node scripts/publish_browser_model.mjs --native-gguf ~/.local/share/natlang/native-models/gguf-<sha12> --release natlang-lfm-step<STEP>
@@ -255,8 +262,8 @@ source file in `setup --native` points at; the identities each lineage records (
 `lfm3:<inventory sha>`, tokenizer fingerprints, production directories) are declared in one place,
 `natlang_neuralese/common/line_backbones.py`, so LFM2.5 checkpoints and their data keep validating.
 
-- The GGUF path (`--gguf`) and the browser default release (`ts-host/src/model-default.ts`) stay on the published
-  LFM2.5 file until an LFM3 GGUF is exported by the llama.cpp fork and published with
+- The CLI default is already the stock LFM3-1.7B (above). The GGUF path (`--gguf`) and the browser default release
+  (`ts-host/src/model-default.ts`) stay on the published LFM2.5 file until an LFM3 GGUF is exported by the llama.cpp fork and published with
   `scripts/publish_browser_model.mjs`. That script derives the producer-marker `logit_bias` from the exported
   manifest, so an LFM3 release carries its own marker id (125033 for the LFM3 role markers) rather than LFM2.5's 64402.
 - LFM3 tool calls are XML (`<tool_call><function=NAME><parameter=K>VALUE</parameter></function></tool_call>`), not the

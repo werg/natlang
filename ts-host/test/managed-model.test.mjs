@@ -25,7 +25,7 @@ test('managed model startup can be prepared eagerly and its child is closed with
   const template = join(root, 'template.jinja');
   writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.5.0 (build 11146, commit 7fe450e19)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 11960, commit 8642541b2)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
 fs.appendFileSync(${JSON.stringify(marker)}, 'started\\n');
@@ -67,7 +67,7 @@ test('a host can grant managed runtime installation at the first semantic turn',
   const template = join(root, 'template.jinja');
   writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.5.0 (build 11146, commit 7fe450e19)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 11960, commit 8642541b2)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
 fs.appendFileSync(${JSON.stringify(marker)}, 'started\\n');
@@ -104,7 +104,7 @@ test('tuned soft states load as native state spans and requests carry them as na
     const executable = join(root, 'fake-llama-server'), log = join(root, 'log'), model = join(root, 'model.gguf'), template = join(root, 'template.jinja');
     writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
     writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.5.0 (build 11146, commit 7fe450e19)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 11960, commit 8642541b2)'); process.exit(0); }
 if (process.argv.includes('--help')) { console.log(${JSON.stringify(supports ? '--lora-per-sequence\n--native-state FNAME' : '--lora')}); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);

@@ -8,13 +8,17 @@ import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, defaultNatlangConfigDirectory, satisfiesVersion } from '../package/store.js';
 import { modelStatus, programForStatus } from './status.js';
+import { commandProgress, parseProgressMode } from './progress.js';
+import { lockFor, readProgramManifest, warmProgram } from './build-lock.js';
+import { readBuildLock, warmDirectory, writeBuildLock, type BuildLock } from '../package/warm.js';
 import { defaultNativePython, ensureNativeServer, ownsNativeServer, pinNativeCheckpoint, readCheckpointPointer, removeNativePin, exportNativeGguf, findNativeCheckpoint,
   stopNativeServer, type NativeModelSettings } from '../model/native-managed.js';
 import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
+import { discoverLocalApplications, isApplicationManifest } from '../package/discover.js';
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
 import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
-  installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites, localSlotPlan,
+  installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites, localSlotPlan, ensureStockModel,
   type LlamaRuntimeDiscovery, type LlamaServerInspection, type LoadedModelConfiguration,
   type ResolvedModelChoice } from '../model/index.js';
 import type { AuthPrompt } from '@earendil-works/pi-ai';
@@ -49,7 +53,8 @@ Usage:
   natlang improve CASE.json --out DIR        Run the authored source-improvement program.
   natlang optimize SUITE                     Optimize instructions through the runtime.
   natlang check [PROJECT]                    Type-check and natlang-check a project.
-  natlang build [PROJECT] [--out DIR]        Compile a project (lowering nl, embedding .nl functions).
+  natlang build [PROJECT] [--warm]           Compile a project and write its lock (model, runtime, tuning); --warm
+                                             also runs its warmup calls and prefills their prompts.
   natlang call NAME|FILE.nl                  Call a natural-language function.
   natlang apply REDUCER DIR                  Apply a directory reducer to a folder.
   natlang ask INSTRUCTION...                 Ask over stdin, local files, or the folder.
@@ -63,6 +68,7 @@ Usage:
   natlang runtime status|install             Inspect or install the model runtime.
   natlang models [PROVIDER]                   List Pi providers and models.
   natlang auth login|status|logout ...        Manage Pi subscription credentials.
+  natlang dashboard [--port N] [--root DIR]  Open the local dashboard: models, programs, runs and traces.
   natlang doctor                             Check this natlang installation.
   natlang traces status|hot|list|show ...    Inspect the machine's record of natlang calls.
   natlang compilations list|show|why ...     Inspect compiled cases and the calls they serve.
@@ -92,13 +98,24 @@ Options:
   --store DIR         Package store for installed applications.
   --plain             Disable interactive terminal formatting.
   --no-color          Disable terminal color.
-  --yes               Permit a required managed runtime download.`;
+  --yes               Permit a required managed runtime download.
+  --progress MODE     auto (a status line on a terminal), line (a line every 15 s) or off;
+                      also NATLANG_PROGRESS. A call that fails is always reported.`;
   if (topic === 'check' || topic === 'build') return `Check or compile a project:
   natlang check [PROJECT] [--json] [--fusion] [--fusion-planner crisp|nl|shadow]
-  natlang build [PROJECT] [--out DIR] [--target node|browser] [--json]
+  natlang build [PROJECT] [--out DIR] [--target node|browser] [--warm] [--profile NAME] [--json]
 
 PROJECT is a directory or tsconfig.json (default: .). Both commands write a
-typed foo.d.nl.ts beside every foo.nl so editors and tsc see typed imports.`;
+typed foo.d.nl.ts beside every foo.nl so editors and tsc see typed imports.
+
+build also writes .natlang/build/natlang.lock.json: the model the program runs
+with (natlang.json "model", else the selected profile; a stock model pinned by
+revision and SHA-256), the llama.cpp build, the active tuning release and the
+program's functions. --warm is the ahead-of-time tracing run: each natlang.json
+"warmup" call ({ "function": "x.nl", "inputs": {...} }) runs with traces kept
+under .natlang/build/warm/traces, and the prompt prefixes those calls send are
+prefilled once and saved; natlang run restores them into every server slot, so
+the first calls skip that prefill.`;
   if (topic === 'call') return `Call a named natural-language function:
   natlang call NAME|FILE.nl [--inputs FILE] [--lines|--jsonl] [--trace DIR]
 
@@ -150,6 +167,14 @@ NATLANG_CALL_STORE=off. A program's natlang.json can exclude values: "recording"
   natlang specialize [--definition NAME] [--program DIR] [--loop] [--interval SECONDS] [--dry-run]
 The runtime loads the current compilation of a function by itself: a new case starts in shadow and is
 promoted by evidence; a case that fails hands the call back to the function.`;
+  if (topic === 'dashboard') return `The local dashboard:
+  natlang dashboard [--port N] [--host ADDRESS] [--root DIR] [--open]
+
+Serves a web UI on loopback (default port 8780, the next free one when taken) for the
+programs under DIR (default: .): configure model profiles, stock models and provider keys,
+run programs and functions and watch their calls live, browse and annotate traces, ask the
+model in a playground, and supervise builds, tuning and the specializer. The printed URL
+carries the session's access token; --open also opens it in a browser.`;
   if (topic === 'apps') return `Discover applications:
   natlang apps [DIRECTORY] [--json]`;
   if (topic === 'inspect') return `Resolve a source without running it:
@@ -210,7 +235,7 @@ type Parsed = { words: string[]; options: Map<string, string | true>; rest: stri
 function parseArgs(args: string[]): Parsed {
   const words: string[] = [], options = new Map<string, string | true>(), rest: string[] = [];
   const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes', '--refresh',
-    '--lines', '--jsonl', '--filter', '--no-adaptation', '--no-weights', '--fusion', '--default']);
+    '--lines', '--jsonl', '--filter', '--no-adaptation', '--no-weights', '--fusion', '--default', '--warm', '--open']);
   let separated = false;
   for (let index = 0; index < args.length; index++) {
     const value = args[index]!;
@@ -429,28 +454,6 @@ function selectTarget(manifest: { name: string; targets?: Record<string, unknown
 }
 
 
-function discoverLocalApplications(value = '.'): Array<{ path: string; name: string; version: string;
-  targets: string[]; description: string }> {
-  const root = resolve(value);
-  if (!existsSync(root)) throw new Error(`application search path does not exist: ${value}`);
-  const manifests: string[] = [], ignored = new Set(['.git', '.natlang', 'node_modules', '.venv', 'dist']);
-  const visit = (path: string, explicitRoot = false) => {
-    const status = explicitRoot ? statSync(path) : lstatSync(path);
-    if (status.isSymbolicLink()) return;
-    if (status.isFile()) { if ((basename(path) === 'natlang.json' || path.endsWith('.natlang.json')) && isApplicationManifest(path)) manifests.push(path); return; }
-    if (!status.isDirectory() || ignored.has(basename(path))) return;
-    for (const name of readdirSync(path).sort()) visit(join(path, name));
-  };
-  visit(root, true);
-  return manifests.map(path => {
-    const manifest = JSON.parse(readFileSync(path, 'utf8')) as { name: string; version: string;
-      description?: string; targets?: Record<string, unknown> };
-    return { path, name: manifest.name, version: manifest.version,
-      targets: Object.keys(manifest.targets ?? {}), description: manifest.description ?? '' };
-  }).sort((left, right) => left.path.localeCompare(right.path));
-}
-
-
 function checkEngines(engines: { node?: string; natlang?: string } | undefined): void {
   if (engines?.node && !satisfiesVersion(process.versions.node, engines.node))
     throw new Error(`package needs Node ${engines.node}; this process is ${process.versions.node}`);
@@ -465,8 +468,8 @@ function commandAvailable(command: string): boolean {
 
 async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise<{ report: Record<string, unknown>; okay: boolean }> {
   const selected = modelSelection(parsed), choice = selected.choice;
-  const local = choice.kind === 'managed-local' ? localModelPrerequisites() : null;
-  const slotPlan = choice.kind === 'managed-local' ? localSlotPlan(choice.local, process.env, local?.modelPath ?? null) : null;
+  const local = choice.kind === 'managed-local' ? localModelPrerequisites(process.env, choice.release) : null;
+  const slotPlan = choice.kind === 'managed-local' ? localSlotPlan(choice.local, process.env, local?.modelPath ?? null, choice.release) : null;
   let piReady = false;
   if (choice.kind === 'pi-provider') {
     let session: ReturnType<typeof createResolvedModelSession> | undefined;
@@ -515,14 +518,6 @@ function applicationSpecifier(store: NatlangPackageStore, query: string, request
 }
 
 
-function isApplicationManifest(path: string): boolean {
-  if (!existsSync(path) || !lstatSync(path).isFile()) return false;
-  try {
-    const value = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-    return value.schema === 'natlang.package/v2' && Boolean(value.targets && typeof value.targets === 'object');
-  } catch { return false; }
-}
-
 /** Nearest directory at or above `start` holding a project marker. */
 function projectRoot(start: string): string {
   let dir = statSync(start).isDirectory() ? start : dirname(start);
@@ -567,17 +562,24 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   if (option(parsed, '--adaptation') && parsed.options.has('--no-adaptation')) throw new Error('--adaptation and --no-adaptation are mutually exclusive');
   const artifact = !parsed.options.has('--no-adaptation') && selection ? parseAdaptation(readFileSync(
     option(parsed, '--adaptation') ? resolve(selection) : resolve(spec.root, selection), 'utf8')) : null;
-  const compiled = compileFor(spec.root, entry, spec.installed ? join(stateDirectory, 'build', spec.package?.digest ?? 'local') :
-    join(spec.root, '.natlang', 'build'), spec.installed === true, artifact?.program.id);
+  const buildDirectory = spec.installed ? join(stateDirectory, 'build', spec.package?.digest ?? 'local') : join(spec.root, '.natlang', 'build');
+  const compiled = compileFor(spec.root, entry, buildDirectory, spec.installed === true, artifact?.program.id);
   const inventory = buildProject({ project: spec.root, programId: artifact?.program.id, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
   if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
   const manifest = spec.package ? readManifestSettings(spec.root) : {};
   // Crisp checkers of refined predicates come from the program's `refinements.ts`, which its compiled `.nl` modules load.
   const refinements = manifest.refinements;
-  const natlang = await natlangRuntime({ ...selectionOptions(parsed), programRoot: spec.root, program: inventory.manifest.adaptation!,
+  const progress = progressFor(parsed);
+  // The compiled program's own model and warm prompt prefixes (natlang build --warm); the command's selection wins.
+  const declared = spec.package ? (() => { try { return readProgramManifest(spec.root); } catch { return undefined; } })() : undefined;
+  const lock = readBuildLock(buildDirectory);
+  const natlang = await natlangRuntime({ ...selectionOptions(parsed), ...(declared?.model ? { programModel: declared.model } : {}),
+    ...(lock?.warm?.prefixes.length ? { warm: { directory: warmDirectory(buildDirectory), lock } } : {}),
+    programRoot: spec.root, program: inventory.manifest.adaptation!,
     weights: !parsed.options.has('--no-weights'), escalate: escalateOption(parsed), ...(artifact ? { adaptation: artifact } : {}),
     ensureRuntime: discovery => ensureRuntime(discovery, parsed.options.has('--yes')),
-    runtime: { trace: fileTraceSink(traceDirectory), programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}) } });
+    runtime: { trace: fileTraceSink(traceDirectory), programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}),
+      ...(progress.live ? { onLive: progress.live } : {}) } });
   const { runtime, driver, executorIdentity, adaptation } = natlang, program = natlang.program!, choice = natlang.selection.choice;
   try {
     // Fused hand-offs (plans/FUSED_PIPELINES.md): off unless natlang.json says otherwise.
@@ -601,11 +603,11 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
       try { return Number(await executable.run() ?? 0); } finally { await executable.close?.(); }
     }
     return Number(value ?? 0);
-  } finally { await natlang.close(); }
+  } finally { progress.close(); await natlang.close(); }
 }
 
 async function runCommand(parsed: Parsed, value = '.'): Promise<number> {
-  acceptOptions(parsed, ['--target', '--export', '--profile', '--provider', '--model', '--escalate', '--workspace', '--state', '--traces', '--store',
+  acceptOptions(parsed, ['--progress', '--target', '--export', '--profile', '--provider', '--model', '--escalate', '--workspace', '--state', '--traces', '--store',
     '--plain', '--no-color', '--yes', '--adaptation', '--no-adaptation', '--no-weights']);
   const path = resolve(value);
   if (existsSync(path) && statSync(path).isFile() && /\.(?:m?ts|m?js)$/.test(path)) {
@@ -659,6 +661,35 @@ async function fusionForCheck(parsed: Parsed, project: string) {
   }
 }
 
+/** `natlang build`: write the program's lock; with --warm, run its warm-up calls and prefill their prompt prefixes first. */
+async function buildLock(parsed: Parsed, root: string): Promise<{ lock: BuildLock; path: string }> {
+  if (parsed.options.has('--warm')) {
+    const progress = progressFor(parsed);
+    try {
+      return await warmProgram(root, { ...selectionOptions(parsed), version: NATLANG_CLI_VERSION, log: process.stderr,
+        ...(progress.live ? { live: progress.live } : {}), ensureRuntime: discovery => ensureRuntime(discovery, parsed.options.has('--yes')) });
+    } finally { progress.close(); }
+  }
+  const manifest = (() => { try { return readProgramManifest(root); } catch { return undefined; } })();
+  const lock = lockFor(root, selectModel({ ...selectionOptions(parsed), ...(manifest?.model ? { programModel: manifest.model } : {}) }), NATLANG_CLI_VERSION);
+  return { lock, path: writeBuildLock(join(root, '.natlang', 'build'), lock) };
+}
+
+function describeLock(lock: BuildLock, path: string): string {
+  const warm = lock.warm;
+  return [`lock: ${relative(process.cwd(), path) || path}`,
+    `model: ${lock.model.release ? `${lock.model.release.id} (${lock.model.release.source}@${lock.model.release.revision.slice(0, 8)})` : lock.model.model}` +
+      ` via ${lock.model.kind}${lock.model.runtime ? `, llama.cpp build ${lock.model.runtime.build}` : ''} (profile ${lock.model.profile})`,
+    `tuning: ${lock.tuning ? `release ${lock.tuning.release.slice(0, 12)} on ${lock.tuning.base.slice(0, 12)}` : 'none'}`,
+    `functions: ${lock.functions.map(item => item.name).join(', ') || '(none)'}`,
+    warm ? `warm: ${warm.cases.filter(item => item.outcome === 'done').length}/${warm.cases.length} warm-up calls done, ` +
+      `${warm.prefixes.length} prompt prefix${warm.prefixes.length === 1 ? '' : 'es'} prefilled (${warm.prefixes.map(item => item.tokens).join(', ') || 0} tokens)` :
+      'warm: none (natlang build --warm runs the natlang.json warmup calls and prefills their prompts)'].join('\n');
+}
+
+/** The progress display of a command that runs natural-language calls (`--progress`, NATLANG_PROGRESS). */
+const progressFor = (parsed: Parsed) => commandProgress(process.stderr, parseProgressMode(option(parsed, '--progress') ?? process.env.NATLANG_PROGRESS));
+
 async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime) => Promise<T>): Promise<T> {
   const trace = option(parsed, '--trace'), weights = !parsed.options.has('--no-weights');
   if (option(parsed, '--adaptation') && parsed.options.has('--no-adaptation')) throw new Error('--adaptation and --no-adaptation are mutually exclusive');
@@ -668,12 +699,13 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
   const inventory = artifact || release ? buildProject({ project: process.cwd(), programId: artifact?.program.id ?? release?.manifest.program.id,
     emit: false, write: false, runtimeModule: RUNTIME_MODULE }) : null;
   if (inventory && !inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
+  const progress = progressFor(parsed);
   const natlang = await natlangRuntime({ ...selectionOptions(parsed), ...(inventory ? { programRoot: process.cwd(), program: inventory.manifest.adaptation } : {}),
     weights, escalate: escalateOption(parsed), ...(artifact ? { adaptation: artifact } : {}),
     ensureRuntime: discovery => ensureRuntime(discovery, parsed.options.has('--yes')),
-    runtime: trace ? { trace: fileTraceSink(resolve(trace)) } : {} });
+    runtime: { ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}), ...(progress.live ? { onLive: progress.live } : {}) } });
   try { await natlang.prepare(); return await fn(natlang.runtime); }
-  finally { await natlang.close(); }
+  finally { progress.close(); await natlang.close(); }
 }
 
 const tunedProject = (parsed: Parsed) => !parsed.options.has('--no-weights') && !!currentRelease(process.cwd());
@@ -723,7 +755,7 @@ const pipelineValue = (value: unknown) =>
   value === null || typeof value === 'object' ? JSON.stringify(value) : String(value);
 
 async function callCommand(parsed: Parsed, name: string): Promise<number> {
-  acceptOptions(parsed, ['--inputs', '--trace', '--profile', '--provider', '--model', '--json', '--yes', '--lines', '--jsonl', '--adaptation', '--no-adaptation', '--no-weights', '--escalate']);
+  acceptOptions(parsed, ['--progress', '--inputs', '--trace', '--profile', '--provider', '--model', '--json', '--yes', '--lines', '--jsonl', '--adaptation', '--no-adaptation', '--no-weights', '--escalate']);
   noTrailingArguments(parsed);
   if (parsed.options.has('--lines') && parsed.options.has('--jsonl')) throw new Error('--lines and --jsonl are mutually exclusive');
   if (option(parsed, '--inputs') && (parsed.options.has('--lines') || parsed.options.has('--jsonl')))
@@ -744,7 +776,7 @@ async function callCommand(parsed: Parsed, name: string): Promise<number> {
 }
 
 async function applyCommand(parsed: Parsed, name: string, directory: string): Promise<number> {
-  acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--json', '--yes', '--adaptation', '--no-adaptation', '--no-weights', '--escalate']); noTrailingArguments(parsed);
+  acceptOptions(parsed, ['--progress', '--trace', '--profile', '--provider', '--model', '--json', '--yes', '--adaptation', '--no-adaptation', '--no-weights', '--escalate']); noTrailingArguments(parsed);
   const fn = commandCallable(name, option(parsed, '--adaptation') || tunedProject(parsed) ? process.cwd() : undefined), definition = fn[Symbol.for('natlang.callable')]!.definition;
   if (definition.subtype !== 'directory-reducer') throw new Error(`${name} is not a directory reducer`);
   if (definition.params.length) throw new Error(`${name} needs parameters; natlang apply accepts a folder-only reducer`);
@@ -757,7 +789,7 @@ async function applyCommand(parsed: Parsed, name: string, directory: string): Pr
 
 async function askCommand(parsed: Parsed, instruction: string): Promise<number> {
   if (parsed.options.has('--adaptation') || parsed.options.has('--no-adaptation')) throw new Error('ad hoc ask functions are not registered persistent adaptation components');
-  acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--yes', '--lines', '--jsonl', '--filter', '--escalate',
+  acceptOptions(parsed, ['--progress', '--trace', '--profile', '--provider', '--model', '--yes', '--lines', '--jsonl', '--filter', '--escalate',
     '--returns', '--files', '--jobs']); noTrailingArguments(parsed);
   const context = applicationContextRecords(process.cwd());
   const folder = openFolder(process.cwd());
@@ -893,7 +925,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     output(topic ? topicHelp(topic) : help(), false); return 0;
   }
   if (command === 'check' || command === 'build') {
-    acceptOptions(parsed, command === 'build' ? ['--out', '--target', '--json'] : ['--json', '--fusion', '--fusion-planner', '--profile', '--provider', '--model', '--yes']);
+    acceptOptions(parsed, command === 'build' ? ['--out', '--target', '--json', '--warm', '--profile', '--provider', '--model', '--yes', '--progress'] :
+      ['--json', '--fusion', '--fusion-planner', '--profile', '--provider', '--model', '--yes']);
     noTrailingArguments(parsed);
     const target = option(parsed, '--target');
     if (target && target !== 'node' && target !== 'browser') throw new Error('--target must be node or browser');
@@ -902,9 +935,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       ...(target ? { target: target as 'node' | 'browser' } : {}) });
     // Fused pipelines (plans/FUSED_PIPELINES.md): the candidate hand-offs and the selected planner's plan.
     const fusion = command === 'check' && result.ok ? await fusionForCheck(parsed, words[0] ?? '.') : undefined;
+    // The compiled program's lock: its model, runtime, tuning and functions, and with --warm its ahead-of-time run.
+    const lock = command === 'build' && result.ok && target !== 'browser' ? await buildLock(parsed, projectRoot(resolve(words[0] ?? '.'))) : undefined;
     if (json) output({ ok: result.ok, diagnostics: result.diagnostics, outDir: result.outDir, manifest: result.manifest,
-      ...(result.refinedSlots ? { refinedSlots: result.refinedSlots } : {}), ...(fusion ? { fusion } : {}) }, true);
+      ...(result.refinedSlots ? { refinedSlots: result.refinedSlots } : {}), ...(fusion ? { fusion } : {}), ...(lock ? { lock } : {}) }, true);
     else output(result.ok ? `${command === 'build' ? `built ${Object.keys(result.outputs).length} files into ${result.outDir}` : 'ok'}` +
+      (lock ? `\n${describeLock(lock.lock, lock.path)}` : '') +
       (result.refinedSlots?.length ? `\nrefined slots (checked at run time):\n${result.refinedSlots.map(slot =>
         `  ${slot.function} ${slot.slot}: ${JSON.stringify(slot.predicate)}`).join('\n')}` : '') +
       (fusion && fusion.counts.edges ? `\n${formatFusionReport(fusion, parsed.options.has('--fusion'))}` : '') +
@@ -952,7 +988,13 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       const selected = await ensureRuntime(discovery, parsed.options.has('--yes'), action === 'install');
       if (!selected && action === 'ensure') { outputRuntime(discovery, json); return 0; }
       if (!selected) throw new Error('llama.cpp installation was declined; run natlang setup when ready');
-      outputRuntime(discoverLlamaRuntime(), json); return 0;
+      // setup also fetches and verifies the profile's stock model, so the first run does not wait on a download.
+      const { choice } = action === 'ensure' ? modelSelection(parsed) : { choice: undefined };
+      const release = choice?.kind === 'managed-local' && !process.env.NATLANG_MODEL_PATH ? choice.release : undefined;
+      const modelPath = release ? await ensureStockModel(release) : undefined;
+      if (json) output({ ...runtimeReport(), ...(release ? { model: release.id, modelPath } : {}) }, true);
+      else { outputRuntime(discoverLlamaRuntime(), false); if (release) output(`model: ${release.label} (${modelPath})`, false); }
+      return 0;
     }
     throw new Error('usage: natlang runtime status|install');
   }
@@ -998,6 +1040,20 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       output(installed.length === 1 ? installed[0] : installed, json); return 0;
     }
     throw new Error('usage: natlang package pack|verify|install ...');
+  }
+  if (command === 'dashboard') {
+    acceptOptions(parsed, ['--port', '--host', '--root', '--open']); noTrailingArguments(parsed);
+    const { startDashboard } = await import('../dashboard/server.js');
+    const port = numericOption(parsed, '--port', 1);
+    const dashboard = await startDashboard({ version: NATLANG_CLI_VERSION, root: option(parsed, '--root') ?? '.',
+      ...(port ? { port } : {}), ...(option(parsed, '--host') ? { host: option(parsed, '--host')! } : {}) });
+    if (parsed.options.has('--open')) {
+      const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open';
+      try { spawnSync(opener, [dashboard.url], { stdio: 'ignore', timeout: 5000 }); } catch { /* the URL is printed */ }
+    }
+    await new Promise<void>(resolveStop => { process.once('SIGINT', () => resolveStop()); process.once('SIGTERM', () => resolveStop()); });
+    await dashboard.close();
+    return 0;
   }
   if (command === 'doctor') {
     acceptOptions(parsed, ['--store', '--profile', '--provider', '--model', '--program', '--json']); noTrailingArguments(parsed);

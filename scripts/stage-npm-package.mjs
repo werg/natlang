@@ -21,9 +21,9 @@ function copyTree(from, to, keep, skip = []) {
 }
 
 if (kind === 'node') {
-  const { DEFAULT_MODEL_RELEASE } = await import(new URL('../ts-host/dist/model-default.js', import.meta.url));
-  if (!DEFAULT_MODEL_RELEASE.downloadUrl || new URL(DEFAULT_MODEL_RELEASE.downloadUrl).protocol !== 'https:')
-    throw new Error('the published default model needs an HTTPS downloadUrl before @natlang/node can be packed');
+  const { STOCK_MODELS } = await import(new URL('../ts-host/dist/model-catalog.js', import.meta.url));
+  if (STOCK_MODELS.some(model => new URL(model.downloadUrl).protocol !== 'https:'))
+    throw new Error('every stock model needs an HTTPS downloadUrl before @natlang/node can be packed');
   const adaptationExamples = join(root, 'npm-packages', 'node', 'examples', 'adaptation');
   mkdirSync(adaptationExamples, { recursive: true });
   copyTree(join(root, 'examples', 'adaptation'), adaptationExamples, () => true);
@@ -39,9 +39,13 @@ if (kind === 'node') {
   mkdirSync(axVendorTarget, { recursive: true });
   for (const name of ['LICENSE', 'CHANGES.md', 'UPSTREAM.json'])
     cpSync(join(axVendorSource, name), join(axVendorTarget, name));
+  // The dashboard's static UI sits beside dist/ as in ts-host (src/dashboard/server.ts resolves ../../dashboard).
+  const dashboardAssets = join(root, 'npm-packages', 'node', 'dashboard');
+  rmSync(dashboardAssets, { recursive: true, force: true }); cpSync(join(root, 'ts-host', 'dashboard'), dashboardAssets, { recursive: true });
   const modelAssets = join(root, 'npm-packages', 'node', 'model-assets');
   rmSync(modelAssets, { recursive: true, force: true }); mkdirSync(modelAssets, { recursive: true });
-  cpSync(join(root, 'models', 'templates', DEFAULT_MODEL_RELEASE.template), join(modelAssets, 'default.jinja'));
+  for (const template of new Set(STOCK_MODELS.map(model => model.template)))
+    cpSync(join(root, 'models', 'templates', template), join(modelAssets, template));
 } else {
   // The single-file bundle and its WASM assets at the package root; declarations keep the build's layout.
   for (const name of readdirSync(join(source, 'browser')))

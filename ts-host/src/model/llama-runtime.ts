@@ -101,8 +101,13 @@ export function discoverLlamaRuntime(environment: NodeJS.ProcessEnv = process.en
   const candidates: LlamaServerInspection[] = [];
   if (environment.NATLANG_LLAMA_SERVER) {
     const explicit = commandPath(environment.NATLANG_LLAMA_SERVER, environment) ?? resolve(environment.NATLANG_LLAMA_SERVER);
-    candidates.push(inspectLlamaServer(explicit, 'explicit', release, environment));
-    return { selected: candidates[0]!.compatible ? candidates[0]! : null, candidates, artifact, runtimeRoot };
+    const inspected = inspectLlamaServer(explicit, 'explicit', release, environment);
+    candidates.push(inspected);
+    // An explicitly chosen build (a CUDA build, the Neuralese fork) runs even when it predates the pinned release; the
+    // reason stays as a warning (LFM3, the default model, needs build 11938 or later).
+    const selected = inspected.compatible ? inspected : inspected.version ? { ...inspected, compatible: true,
+      reason: `older than natlang's pinned llama.cpp ${release.version} (${inspected.reason}); used because it was chosen explicitly` } : null;
+    return { selected, candidates, artifact, runtimeRoot };
   }
   if (artifact) {
     const managed = managedExecutable(runtimeRoot, release, artifact);

@@ -31,7 +31,16 @@ export type NatlangPackageManifest = {
   refinements?: Record<string, unknown>;
   /** Fused hand-offs between functions: mode, planner, certificate (plans/FUSED_PIPELINES.md); validated by `parseFusionSettings`. */
   fusion?: Record<string, unknown>;
+  /** The model the program is built, warmed and run with unless the command selects another (`--profile`, `--provider`,
+   * `--model`, NATLANG_PROFILE/SERVER/PROVIDER): a machine profile by name, a stock model, or profile fields. */
+  model?: ProgramModel;
+  /** The calls `natlang build --warm` runs ahead of time: their traces are recorded and their prompt prefixes prefilled. */
+  warmup?: WarmupCase[];
 };
+export type ProgramModel = { profile?: string; stock?: string; provider?: string; model?: string; endpoint?: string;
+  request?: Record<string, unknown>; contextTokens?: number; parallel?: number; escalate?: string };
+/** One warm-up call: a named `.nl` function of the package and its inputs by parameter name. */
+export type WarmupCase = { name?: string; function: string; inputs: Record<string, unknown> };
 
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -60,7 +69,7 @@ export function parsePackageManifest(value: unknown): NatlangPackageManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('package manifest must be an object');
   const raw = value as Record<string, unknown>;
   const known = new Set(['schema', 'name', 'version', 'description', 'include', 'targets', 'exports', 'dependencies', 'engines',
-    'recording', 'specialization', 'refinements', 'fusion']);
+    'recording', 'specialization', 'refinements', 'fusion', 'model', 'warmup']);
   for (const key of Object.keys(raw)) if (!known.has(key)) throw new TypeError(`unknown package manifest field: ${key}`);
   if (raw.schema !== PACKAGE_SCHEMA) throw new TypeError(`package schema must be ${PACKAGE_SCHEMA}`);
   if (typeof raw.name !== 'string' || !PACKAGE_NAME.test(raw.name)) throw new TypeError('invalid package name');
@@ -109,7 +118,23 @@ export function parsePackageManifest(value: unknown): NatlangPackageManifest {
   const refinements = raw.refinements as Record<string, unknown> | undefined;
   if (raw.fusion !== undefined && (!raw.fusion || typeof raw.fusion !== 'object' || Array.isArray(raw.fusion))) throw new TypeError('fusion must be an object');
   const fusion = raw.fusion as Record<string, unknown> | undefined;
-  return { schema: PACKAGE_SCHEMA, name: raw.name, version: raw.version, include,
+  const model = raw.model === undefined ? undefined : programModel(raw.model);
+  let warmup: WarmupCase[] | undefined;
+  if (raw.warmup !== undefined) {
+    if (!Array.isArray(raw.warmup)) throw new TypeError('warmup must be an array of { function, inputs } calls');
+    warmup = raw.warmup.map((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) throw new TypeError(`warmup[${index}] must be an object`);
+      const fields = item as Record<string, unknown>;
+      for (const key of Object.keys(fields)) if (!['name', 'function', 'inputs'].includes(key)) throw new TypeError(`unknown field in warmup[${index}]: ${key}`);
+      const fn = packagePath(fields.function, `warmup[${index}].function`);
+      if (!fn.endsWith('.nl')) throw new TypeError(`warmup[${index}].function must name a .nl file of the package`);
+      if (!fields.inputs || typeof fields.inputs !== 'object' || Array.isArray(fields.inputs))
+        throw new TypeError(`warmup[${index}].inputs must be an object keyed by parameter name`);
+      return { ...(fields.name === undefined ? {} : { name: requireString(fields.name, `warmup[${index}].name`) }), function: fn,
+        inputs: fields.inputs as Record<string, unknown> };
+    });
+  }
+  return { ...(model ? { model } : {}), ...(warmup ? { warmup } : {}), schema: PACKAGE_SCHEMA, name: raw.name, version: raw.version, include,
     ...(recording ? { recording } : {}),
     ...(refinements ? { refinements } : {}), ...(fusion ? { fusion } : {}),
     ...(raw.specialization !== undefined ? { specialization: raw.specialization as 'off' | 'shadow' | 'on' } : {}),
@@ -126,4 +151,23 @@ function requireStrings(value: unknown, label: string): string[] {
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || !item))
     throw new TypeError(`${label} must be an array of nonempty strings`);
   return [...new Set(value)].sort();
+}
+
+function programModel(value: unknown): ProgramModel {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('model must be an object');
+  const raw = value as Record<string, unknown>, out: ProgramModel = {};
+  for (const [key, item] of Object.entries(raw)) {
+    if (['profile', 'stock', 'provider', 'model', 'endpoint', 'escalate'].includes(key)) (out as Record<string, unknown>)[key] = requireString(item, `model.${key}`);
+    else if (key === 'request') {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) throw new TypeError('model.request must be an object');
+      out.request = item as Record<string, unknown>;
+    } else if (key === 'contextTokens' || key === 'parallel') {
+      if (!Number.isSafeInteger(item) || (item as number) < 1) throw new TypeError(`model.${key} must be a positive integer`);
+      out[key] = item as number;
+    } else throw new TypeError(`unknown model field: ${key}`);
+  }
+  if (out.provider && out.endpoint) throw new TypeError('model cannot set both provider and endpoint');
+  if (out.stock && (out.provider || out.endpoint)) throw new TypeError('model.stock is a local model; it cannot be combined with provider or endpoint');
+  if (out.provider && !out.model) throw new TypeError('model.provider needs model.model');
+  return out;
 }

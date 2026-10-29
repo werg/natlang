@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultNatlangConfigDirectory } from '../package/store.js';
-import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
+import { DEFAULT_LOCAL_MODEL, stockModel, type LocalModelRelease } from '../model-catalog.js';
 import { fingerprint } from '../adaptation/identity.js';
+import type { ProgramModel } from '../package/manifest.js';
 import type { ModelConfig, NatlangRuntimeOptions } from '../runtime/runtime.js';
 import { nativeEndpoint, validateNativeSettings, type NativeModelSettings } from './native-managed.js';
 
@@ -44,6 +45,8 @@ export type ModelProfile = {
     /** A GGUF to serve instead of the pinned default, its chat template and model ID (`natlang setup --native SOURCE
      * --gguf TYPE` writes these); NATLANG_MODEL_PATH and NATLANG_TEMPLATE still override them. */
     modelPath?: string; template?: string; modelId?: string;
+    /** A stock model of model-catalog.ts by ID (e.g. lfm3-1.7b-q4_k_m) instead of the default; downloaded and verified. */
+    stock?: string;
     /** llama-server executable for this profile (e.g. a CUDA build); NATLANG_LLAMA_SERVER still overrides it. */
     server?: string };
   /** Model requests in flight at once from this process (turns and decision scoring together). A managed local server
@@ -56,7 +59,9 @@ export type ModelProfile = {
 
 type Common = { promptRendering?: ModelProfile['promptRendering']; headers?: Record<string, string>; runtime?: ModelProfile['runtime']; concurrency?: number; batching?: BatchingSettings };
 export type ResolvedModelChoice =
-  | (Common & { kind: 'managed-local'; model: string; request?: Record<string, unknown>; local?: ModelProfile['local'] })
+  | (Common & { kind: 'managed-local'; model: string; request?: Record<string, unknown>; local?: ModelProfile['local'];
+    /** The stock model served (undefined for a configured local.modelPath). */
+    release?: LocalModelRelease })
   | (Common & { kind: 'external'; endpoint: string; chatCompletionsUrl?: string; model: string; apiKeyEnv: string; request?: Record<string, unknown>;
     neuraleseServer?: true; vllm?: true; managedNative?: NativeModelSettings })
   | (Common & { kind: 'pi-provider'; provider: string; model: string; apiKeyEnv?: string;
@@ -111,11 +116,15 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
       if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum))
         throw new Error(`local.${key} must be an integer >= ${minimum}`);
     }
-    for (const key of ['modelPath', 'template', 'modelId', 'server'] as const)
+    for (const key of ['modelPath', 'template', 'modelId', 'server', 'stock'] as const)
       if (profile.local[key] !== undefined && (typeof profile.local[key] !== 'string' || !profile.local[key]))
         throw new Error(`local.${key} must be a nonempty string`);
     if ((profile.local.template || profile.local.modelId) && !profile.local.modelPath)
       throw new Error('local.template and local.modelId describe local.modelPath; set it too');
+    if (profile.local.stock !== undefined) {
+      if (profile.local.modelPath) throw new Error('local.stock and local.modelPath are alternatives; set one');
+      stockModel(profile.local.stock);
+    }
     if (profile.local.args && (!Array.isArray(profile.local.args) ||
       profile.local.args.some(value => typeof value !== 'string')))
       throw new Error('local.args must be an array of strings');
@@ -148,25 +157,43 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
     apiKeyEnv: profile.apiKeyEnv ?? 'NATLANG_API_KEY', request: profile.request, neuraleseServer: true, managedNative: profile.native };
   if (profile.endpoint) return { ...common, kind: 'external', endpoint: profile.endpoint,
     ...(profile.chatCompletionsUrl ? { chatCompletionsUrl: profile.chatCompletionsUrl } : {}),
-    model: profile.model ?? DEFAULT_MODEL_RELEASE.id, apiKeyEnv: profile.apiKeyEnv ?? 'NATLANG_API_KEY',
+    model: profile.model ?? DEFAULT_LOCAL_MODEL.id, apiKeyEnv: profile.apiKeyEnv ?? 'NATLANG_API_KEY',
     request: profile.request, ...(profile.neuraleseServer ? { neuraleseServer: true as const } : {}),
     ...(profile.vllm ? { vllm: true as const } : {}) };
   if (profile.model) throw new Error('a configured model ID needs an endpoint; omit both to use the managed local default');
-  // The default model's own serving settings (a natlang export: its template arguments, banned marker tokens, greedy
-  // decoding) apply when the profile runs it; the profile's request overrides them.
-  const usesDefault = !profile.local?.modelPath && !profile.local?.modelId;
-  const defaults = usesDefault ? (DEFAULT_MODEL_RELEASE as { request?: Record<string, unknown> }).request : undefined;
-  return { ...common, kind: 'managed-local', model: profile.local?.modelId ?? (profile.local?.modelPath ? 'local-gguf' : DEFAULT_MODEL_RELEASE.id),
-    request: defaults ? { ...defaults, ...profile.request } : profile.request, local: profile.local };
+  // A stock model's own serving settings (greedy decoding, template arguments) apply when the profile runs it; the
+  // profile's request overrides them.
+  const release = profile.local?.modelPath ? undefined : profile.local?.stock ? stockModel(profile.local.stock) : DEFAULT_LOCAL_MODEL;
+  const defaults = release?.request as Record<string, unknown> | undefined;
+  return { ...common, kind: 'managed-local', model: profile.local?.modelId ?? release?.id ?? 'local-gguf',
+    request: defaults ? { ...structuredClone(defaults), ...profile.request } : profile.request, local: profile.local, ...(release ? { release } : {}) };
+}
+
+/**
+ * A program's declared model (natlang.json `model`) as a profile: a machine profile it names (when that exists), else
+ * the stock model, endpoint or provider it declares, with its request and slot settings.
+ */
+export function programModelProfile(model: ProgramModel, profiles: Record<string, ModelProfile> = {}): { name: string; profile: ModelProfile } {
+  const { profile: named, stock, provider, model: id, endpoint, request, contextTokens, parallel, escalate } = model;
+  if (named && profiles[named]) return { name: named, profile: profiles[named]! };
+  const local = contextTokens !== undefined || parallel !== undefined || stock ? { ...(stock ? { stock } : {}),
+    ...(contextTokens !== undefined ? { contextTokens } : {}), ...(parallel !== undefined ? { parallel } : {}) } : undefined;
+  const profile: ModelProfile = provider ? { provider, model: id } : endpoint ? { endpoint, ...(id ? { model: id } : {}), ...(request ? { request } : {}) } :
+    { ...(local ? { local } : {}), ...(request ? { request } : {}) };
+  if (provider && local) throw new Error('model.contextTokens and model.parallel apply to a local model, not a provider');
+  return { name: 'program', profile: { ...profile, ...(escalate && profiles[escalate] ? { escalate } : {}) } };
 }
 
 export function loadModelConfiguration(name?: string, overrides: ModelSelectionOverrides = {},
-  environment: NodeJS.ProcessEnv = process.env): LoadedModelConfiguration {
+  environment: NodeJS.ProcessEnv = process.env, program?: ProgramModel): LoadedModelConfiguration {
   const configPath = join(defaultNatlangConfigDirectory(environment), 'config.json');
   let config: { defaultProfile?: string; profiles?: Record<string, ModelProfile>; nativeSources?: Record<string, string> } = {};
   if (existsSync(configPath)) config = JSON.parse(readFileSync(configPath, 'utf8')) as typeof config;
-  const selected = name ?? environment.NATLANG_PROFILE ?? config.defaultProfile ?? 'default';
-  const configured = config.profiles?.[selected] ?? {};
+  // The program's model applies unless this command or its environment selects one.
+  const declared = program && !name && !overrides.provider && !overrides.model && !environment.NATLANG_PROFILE && !environment.NATLANG_PROVIDER
+    && !environment.NATLANG_SERVER && !environment.NATLANG_MODEL ? programModelProfile(program, config.profiles) : undefined;
+  const selected = declared?.name ?? name ?? environment.NATLANG_PROFILE ?? config.defaultProfile ?? 'default';
+  const configured = declared?.profile ?? config.profiles?.[selected] ?? {};
   const provider = overrides.provider ?? environment.NATLANG_PROVIDER;
   const endpoint = environment.NATLANG_SERVER;
   const profile: ModelProfile = { ...configured,
@@ -202,4 +229,18 @@ export function executorIdentityForChoice(choice: ResolvedModelChoice): import('
     const url = new URL(choice.endpoint); configuration.endpoint = url.origin + url.pathname;
   }
   return { id: choice.kind + ':' + ('provider' in choice ? choice.provider + ':' : '') + choice.model, configuration };
+}
+
+/**
+ * An API key for an endpoint profile's `apiKeyEnv` saved by the dashboard (the Pi credential store, entry `env:NAME`),
+ * used when the environment variable is unset. Provider profiles keep their keys under the provider's own entry.
+ */
+export function storedApiKey(name: string, environment: NodeJS.ProcessEnv = process.env): string | undefined {
+  const value = environment[name];
+  if (value) return value;
+  try {
+    const credential = JSON.parse(readFileSync(join(defaultNatlangConfigDirectory(environment), 'credentials',
+      `${encodeURIComponent(`env:${name}`)}.json`), 'utf8')) as { type?: string; key?: string };
+    return credential.type === 'api_key' && credential.key ? credential.key : undefined;
+  } catch { return undefined; }
 }

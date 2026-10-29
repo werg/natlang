@@ -122,6 +122,74 @@
         "on"
       ],
       "description": "How far stored compilations may serve this program's calls; the machine setting still bounds it."
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The model the program is built, warmed and run with unless the command or environment selects one (natlang build writes it into .natlang/build/natlang.lock.json): a machine profile by name, a stock model (ts-host/src/model-catalog.ts), an OpenAI-compatible endpoint or a Pi provider model, with request and slot settings.",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stock": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "escalate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request": {
+          "type": "object"
+        },
+        "contextTokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "parallel": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "warmup": {
+      "type": "array",
+      "description": "Calls natlang build --warm runs ahead of time with tracing; the prompt prefixes they send are prefilled and saved for natlang run.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "function",
+          "inputs"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "function": {
+            "$ref": "#/$defs/path",
+            "description": "A .nl file of the package."
+          },
+          "inputs": {
+            "type": "object",
+            "description": "Arguments by parameter name."
+          }
+        }
+      }
     }
   },
   "$defs": {

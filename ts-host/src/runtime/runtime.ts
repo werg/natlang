@@ -56,8 +56,12 @@ export type TraceSink = (trace: InvocationTrace) => void;
  * again: discard what the call's turn showed so far. Live events are hints: the call's trace and records are
  * unchanged by them, and a turn its driver received whole has none.
  */
-export type LiveEvent = { type: 'model_delta'; taskId: string; callId: string; parentCallId: string | null;
-  definitionId: string; name: string; turn: number; delta: ModelTurnDelta };
+type LiveCall = { taskId: string; callId: string; parentCallId: string | null; definitionId: string; name: string };
+/** A call's progress as it happens: model deltas, its start and end, and its trace events (`event.kind`: model_request,
+ * action, scope_failure, model_incomplete, ...; scope snapshots are left out). */
+export type LiveEvent = (LiveCall & { type: 'model_delta'; turn: number; delta: ModelTurnDelta }) |
+  (LiveCall & { type: 'call_start' }) | (LiveCall & { type: 'call_end'; outcome: string; detail: string }) |
+  (LiveCall & { type: 'trace'; event: Record<string, unknown> });
 /** Receives live events synchronously as they occur; it must be quick, and what it throws is ignored. */
 export type LiveSink = (event: LiveEvent) => void;
 /** A decision with its distribution (`runtime.decide`): every allowed value's probability, highest is `value`. */

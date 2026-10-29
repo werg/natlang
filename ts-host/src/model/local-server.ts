@@ -10,23 +10,26 @@ import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { defaultNatlangCacheDirectory } from '../package/store.js';
-import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
+import { DEFAULT_LOCAL_MODEL, type LocalModelRelease } from '../model-catalog.js';
 import { openAICompatibleModelTurn, serverContextWindow, type OpenAICompatibleOptions } from './openai-compatible.js';
 import { neuraleseServerModelTurn } from './neuralese-server.js';
 import { ensureNativeServer, stopNativeServer } from './native-managed.js';
 import { randomUUID } from 'node:crypto';
 import { schedulerForSettings, type Scheduler } from './scheduler.js';
 import { planServerSlots, type SlotPlan } from './server-slots.js';
+import { restorePrefixes } from '../package/warm.js';
 import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest, SessionTurnOptions } from '../contracts.js';
 import { describeLlamaRuntime, discoverLlamaRuntime, type LlamaRuntimeDiscovery,
   type LlamaServerInspection } from './llama-runtime.js';
-import { resolveModelChoice, type ModelProfile, type ResolvedModelChoice } from './config.js';
+import { resolveModelChoice, storedApiKey, type ModelProfile, type ResolvedModelChoice } from './config.js';
 
-export const DEFAULT_LOCAL_MODEL = DEFAULT_MODEL_RELEASE;
+export { DEFAULT_LOCAL_MODEL, STOCK_MODELS, stockModel, type LocalModelRelease } from '../model-catalog.js';
 
 export type { ModelProfile } from './config.js';
 export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-provider'; endpoint: string | null;
-  model: string; executable: string | null; modelPath: string | null; running: boolean };
+  model: string; executable: string | null; modelPath: string | null; running: boolean;
+  /** A managed server's stock model and llama.cpp build (undefined for other backends and configured GGUFs). */
+  release?: LocalModelRelease; runtimeBuild?: number | null };
 export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   /** A native reference server's artifact store, for uploading tuned artifacts and states; undefined otherwise. */
   nativeArtifacts?(): import('./neuralese-server.js').HttpNeuraleseStore | undefined;
@@ -55,31 +58,41 @@ export type ManagedModelRuntimeOptions = { ensureRuntime?:
   loraAdapters?: () => readonly { readonly id: string; readonly path: string }[];
   /** Native state span files (tuned soft states) the managed server loads with `--native-state` (the llama.cpp fork). */
   nativeStates?: () => readonly { readonly id: string; readonly path: string }[];
+  /** Pre-warmed prompt prefixes (package/warm.ts): the server saves and restores slot states in `directory`, and each
+   * slot starts from one of `states` (prefilled by `natlang build --warm` for exactly this model file and build). */
+  warm?: { directory: string; states?: readonly { readonly id: string; readonly path: string }[] };
   /** Native reference server: request exact sampling receipts (`x_natlang_rl_capture`) on every turn, for RL rollouts. */
   rlCapture?: boolean;
   /** With rlCapture: also record the sampler's top-k log-probs at each sampled position (`x_natlang_rl_top_k`,
    * score-centered RL). */
   rlTopK?: number };
 
-export function localModelPrerequisites(environment: NodeJS.ProcessEnv = process.env) {
+/** Where a stock model is downloaded to (the checkout's models/ directory is used first when it holds the file). */
+export function stockModelPath(release: LocalModelRelease, environment: NodeJS.ProcessEnv = process.env): string {
+  return join(defaultNatlangCacheDirectory(environment), 'models', `${release.sha256.slice(0, 12)}-${release.file}`);
+}
+
+export function localModelPrerequisites(environment: NodeJS.ProcessEnv = process.env, release: LocalModelRelease = DEFAULT_LOCAL_MODEL) {
   const runtime = discoverLlamaRuntime(environment), found = runtime.selected?.path ?? null;
   const explicitModel = environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null;
-  const checkoutModel = resolve('models', DEFAULT_LOCAL_MODEL.file);
-  const cachedModel = join(defaultNatlangCacheDirectory(environment), 'models',
-    `${DEFAULT_LOCAL_MODEL.sha256.slice(0, 12)}-${DEFAULT_LOCAL_MODEL.file}`);
-  const modelPath = [explicitModel, checkoutModel, cachedModel].find((value): value is string => Boolean(value && existsSync(value))) ?? null;
-  const template = templateCandidates(environment).find(existsSync) ?? null;
-  const modelAvailable = Boolean(modelPath || DEFAULT_LOCAL_MODEL.downloadUrl);
-  return { executable: found, available: Boolean(found && modelAvailable && template),
+  const checkoutModel = resolve('models', release.file);
+  const modelPath = (explicitModel ? [explicitModel] : [checkoutModel, stockModelPath(release, environment)])
+    .find((value): value is string => Boolean(value && existsSync(value))) ?? null;
+  const template = templateCandidates(environment, release).find(existsSync) ?? null;
+  const modelAvailable = Boolean(modelPath || (!explicitModel && release.downloadUrl));
+  // A configured GGUF without a template uses the one it carries.
+  const templateAvailable = Boolean(template || (explicitModel && !environment.NATLANG_TEMPLATE));
+  return { executable: found, available: Boolean(found && modelAvailable && templateAvailable),
     command: environment.NATLANG_LLAMA_SERVER ?? 'llama-server', runtime,
-    model: DEFAULT_LOCAL_MODEL.id, modelPath, template, downloadable: Boolean(DEFAULT_LOCAL_MODEL.downloadUrl) };
+    model: explicitModel ? basename(explicitModel) : release.id, modelPath, template,
+    downloadable: !explicitModel && Boolean(release.downloadUrl), downloadBytes: explicitModel ? null : release.bytes };
 }
 
 /** The slot count a managed local server would start with, and why (`natlang doctor`). */
 export function localSlotPlan(local: ModelProfile['local'], environment: NodeJS.ProcessEnv = process.env,
-  modelPath: string | null = localModelPrerequisites(environment).modelPath): SlotPlan {
-  const modelBytes = modelPath && existsSync(modelPath) ? statSync(modelPath).size : DEFAULT_LOCAL_MODEL.bytes;
-  return planServerSlots({ local, modelBytes, defaultContextTokens: DEFAULT_LOCAL_MODEL.contextTokens, environment });
+  modelPath: string | null = localModelPrerequisites(environment).modelPath, release: LocalModelRelease = DEFAULT_LOCAL_MODEL): SlotPlan {
+  const modelBytes = modelPath && existsSync(modelPath) ? statSync(modelPath).size : release.bytes;
+  return planServerSlots({ local, modelBytes, defaultContextTokens: release.contextTokens, environment });
 }
 
 async function fileHash(path: string): Promise<string> {
@@ -92,8 +105,8 @@ async function fileHash(path: string): Promise<string> {
  * The sha256 of the base GGUF the managed server runs: the pinned default's declared hash, or the configured file's
  * content hash (cached beside it by size and mtime). Tuned GGUF adapters must bind exactly this file.
  */
-export async function managedModelSha256(environment: NodeJS.ProcessEnv = process.env): Promise<string> {
-  if (!environment.NATLANG_MODEL_PATH) return DEFAULT_LOCAL_MODEL.sha256;
+export async function managedModelSha256(environment: NodeJS.ProcessEnv = process.env, release: LocalModelRelease = DEFAULT_LOCAL_MODEL): Promise<string> {
+  if (!environment.NATLANG_MODEL_PATH) return release.sha256;
   const path = resolve(environment.NATLANG_MODEL_PATH), stat = statSync(path);
   const cache = join(defaultNatlangCacheDirectory(environment), 'model-hashes', createHash('sha256').update(path).digest('hex').slice(0, 24));
   const stamp = `${stat.size}:${stat.mtimeMs}`;
@@ -118,49 +131,72 @@ const supportsPerSequenceLora = (executable: string) => serverSupports(executabl
 /** Whether a llama-server binary imports native state spans exactly (`--native-state`, the llama.cpp fork). */
 export const supportsNativeStates = (executable: string) => serverSupports(executable, '--native-state');
 
-async function verifiedDefault(path: string): Promise<boolean> {
-  if (!existsSync(path) || statSync(path).size !== DEFAULT_LOCAL_MODEL.bytes) return false;
-  return await fileHash(path) === DEFAULT_LOCAL_MODEL.sha256;
+/** A verified file is remembered by size and mtime beside it, so a 2 GB model is hashed once, not at every start. */
+async function verifiedRelease(path: string, release: LocalModelRelease): Promise<boolean> {
+  if (!existsSync(path)) return false;
+  const stat = statSync(path), stamp = `${path}.verified`, expected = `${stat.size}:${stat.mtimeMs}:${release.sha256}`;
+  if (stat.size !== release.bytes) return false;
+  try { if (readFileSync(stamp, 'utf8') === expected) return true; } catch { /* not verified yet */ }
+  if (await fileHash(path) !== release.sha256) return false;
+  try { writeFileSync(stamp, expected); } catch { /* a read-only location is verified again next time */ }
+  return true;
 }
 
-async function ensureModel(environment: NodeJS.ProcessEnv, error: NodeJS.WritableStream): Promise<string> {
+/** The stock model's verified local file, downloaded first when absent (with progress on `error`). */
+export async function ensureStockModel(release: LocalModelRelease, environment: NodeJS.ProcessEnv = process.env,
+  error: NodeJS.WritableStream = process.stderr, onProgress?: (received: number, total: number) => void): Promise<string> {
+  const checkout = resolve('models', release.file);
+  if (await verifiedRelease(checkout, release)) return checkout;
+  const destination = stockModelPath(release, environment);
+  if (await verifiedRelease(destination, release)) return destination;
+  mkdirSync(dirname(destination), { recursive: true });
+  const temporary = `${destination}.partial-${process.pid}`;
+  error.write(`natlang: downloading ${release.label} from ${release.source.repository} (${Math.ceil(release.bytes / 1_000_000)} MB, once)\n`);
+  try {
+    const response = await fetch(release.downloadUrl, { redirect: 'follow' });
+    if (!response.ok || !response.body) throw new Error(`model download failed: HTTP ${response.status}`);
+    let received = 0, reported = 0;
+    const counted = async function* (body: AsyncIterable<Uint8Array>) {
+      for await (const chunk of body) {
+        received += chunk.length; onProgress?.(received, release.bytes);
+        if (!onProgress && 'isTTY' in error && error.isTTY && received - reported > 16_000_000) {
+          reported = received; error.write(`\r\x1b[2Knatlang: ${Math.round(received / 1_000_000)} of ${Math.ceil(release.bytes / 1_000_000)} MB`);
+        }
+        yield chunk;
+      }
+    };
+    await pipeline(Readable.from(counted(response.body as AsyncIterable<Uint8Array>)), createWriteStream(temporary, { flags: 'wx' }));
+    if (reported) error.write('\r\x1b[2K');
+    if (!await verifiedRelease(temporary, release)) throw new Error(`downloaded ${release.file} failed its size or SHA-256 check`);
+    try { renameSync(temporary, destination); renameSync(`${temporary}.verified`, `${destination}.verified`); }
+    catch (failure) { if (!await verifiedRelease(destination, release)) throw failure; }
+    return destination;
+  } finally { rmSync(temporary, { force: true }); rmSync(`${temporary}.verified`, { force: true }); }
+}
+
+async function ensureModel(environment: NodeJS.ProcessEnv, error: NodeJS.WritableStream, release: LocalModelRelease): Promise<string> {
   if (environment.NATLANG_MODEL_PATH) {
     const path = resolve(environment.NATLANG_MODEL_PATH);
     if (!existsSync(path)) throw new Error(`NATLANG_MODEL_PATH does not exist: ${path}`);
     return path;
   }
-  const checkout = resolve('models', DEFAULT_LOCAL_MODEL.file);
-  if (await verifiedDefault(checkout)) return checkout;
-  const directory = join(defaultNatlangCacheDirectory(environment), 'models');
-  const destination = join(directory, `${DEFAULT_LOCAL_MODEL.sha256.slice(0, 12)}-${DEFAULT_LOCAL_MODEL.file}`);
-  if (await verifiedDefault(destination)) return destination;
-  mkdirSync(directory, { recursive: true });
-  const temporary = `${destination}.partial-${process.pid}`;
-  if (!DEFAULT_LOCAL_MODEL.downloadUrl) throw new Error(`default model ${DEFAULT_LOCAL_MODEL.id} is not installed locally and has no distribution URL`);
-  error.write(`natlang: downloading default model ${DEFAULT_LOCAL_MODEL.id} (${Math.ceil(DEFAULT_LOCAL_MODEL.bytes / 1_000_000)} MB)\n`);
-  try {
-    const response = await fetch(DEFAULT_LOCAL_MODEL.downloadUrl, { redirect: 'follow' });
-    if (!response.ok || !response.body) throw new Error(`model download failed: HTTP ${response.status}`);
-    await pipeline(Readable.from(response.body as AsyncIterable<Uint8Array>),
-      createWriteStream(temporary, { flags: 'wx' }));
-    if (!await verifiedDefault(temporary)) throw new Error('downloaded default model failed its size or SHA-256 check');
-    try { renameSync(temporary, destination); }
-    catch (failure) { if (!await verifiedDefault(destination)) throw failure; }
-    return destination;
-  } finally { rmSync(temporary, { force: true }); }
+  return ensureStockModel(release, environment, error);
 }
 
-function templateCandidates(environment: NodeJS.ProcessEnv): string[] {
-  return [environment.NATLANG_TEMPLATE && resolve(environment.NATLANG_TEMPLATE),
-    resolve('models', 'templates', DEFAULT_LOCAL_MODEL.template),
-    fileURLToPath(new URL(`../../../models/templates/${DEFAULT_LOCAL_MODEL.template}`, import.meta.url)),
-    fileURLToPath(new URL('../../model-assets/default.jinja', import.meta.url))]
-    .filter((value): value is string => Boolean(value));
+function templateCandidates(environment: NodeJS.ProcessEnv, release: LocalModelRelease): string[] {
+  if (environment.NATLANG_TEMPLATE) return [resolve(environment.NATLANG_TEMPLATE)];
+  if (environment.NATLANG_MODEL_PATH) return [];
+  return [resolve('models', 'templates', release.template),
+    fileURLToPath(new URL(`../../../models/templates/${release.template}`, import.meta.url)),
+    fileURLToPath(new URL(`../../model-assets/${release.template}`, import.meta.url))];
 }
 
-function templatePath(environment: NodeJS.ProcessEnv): string {
-  const selected = templateCandidates(environment).find(existsSync);
-  if (!selected) throw new Error(`missing the template for default model ${DEFAULT_LOCAL_MODEL.id}`);
+/** The chat template file to pass, or null for a configured GGUF without one (it is served with its own). */
+function templatePath(environment: NodeJS.ProcessEnv, release: LocalModelRelease): string | null {
+  const candidates = templateCandidates(environment, release);
+  if (!candidates.length) return null;
+  const selected = candidates.find(existsSync);
+  if (!selected) throw new Error(`missing the chat template ${candidates[0]} for ${environment.NATLANG_TEMPLATE ? 'NATLANG_TEMPLATE' : release.id}`);
   return selected;
 }
 
@@ -218,7 +254,8 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   };
   let child: ChildProcess | null = null, local: OpenAICompatibleOptions | null = null;
   let starting: Promise<OpenAICompatibleOptions> | null = null, recentError = '', closed = false;
-  let prerequisites = localModelPrerequisites(environment);
+  const release = (choice.kind === 'managed-local' ? choice.release : undefined) ?? DEFAULT_LOCAL_MODEL;
+  let prerequisites = localModelPrerequisites(environment, release);
   // One scheduler over every request of the session; a server found unable to score is not asked again. A managed
   // server's concurrency is its slot count unless configured, and is set once the server has started.
   const scheduler = choice.kind === 'pi-provider' ? undefined : schedulerForSettings(choice);
@@ -231,7 +268,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   // A native reference server: one driver whose requests carry the exact native adapter stack and state parts.
   let native: ReturnType<typeof neuraleseServerModelTurn> | undefined;
   const nativeDriver = () => native ??= neuraleseServerModelTurn({ endpoint: external!.endpoint, model: external!.model,
-    headers: external!.headers, apiKey: environment[external!.apiKeyEnv], owner: randomUUID(),
+    headers: external!.headers, apiKey: storedApiKey(external!.apiKeyEnv, environment), owner: randomUUID(),
     request: runtimeOptions.rlCapture ? { ...external!.request, x_natlang_rl_capture: true,
       ...(runtimeOptions.rlTopK !== undefined ? { x_natlang_rl_top_k: runtimeOptions.rlTopK } : {}) } : external!.request });
   // vLLM: a call's whole stack is one loaded LoRA, selected by name; the base model name serves untuned calls.
@@ -258,31 +295,32 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     if (external?.managedNative) await ensureNativeServer(external.managedNative, environment, error);
     if (external) return { endpoint: external.endpoint, chatCompletionsUrl: external.chatCompletionsUrl,
       model: external.model, headers: external.headers,
-      request: external.request, apiKey: environment[external.apiKeyEnv] };
+      request: external.request, apiKey: storedApiKey(external.apiKeyEnv, environment) };
     if (local) return local;
     if (starting) return starting;
     starting = (async () => {
       if (!prerequisites.executable && runtimeOptions.ensureRuntime) {
         const installed = await runtimeOptions.ensureRuntime(prerequisites.runtime);
-        if (installed?.compatible) prerequisites = { ...localModelPrerequisites(environment), executable: installed.path };
+        if (installed?.compatible) prerequisites = { ...localModelPrerequisites(environment, release), executable: installed.path };
       }
       if (!prerequisites.executable) {
         const explicit = prerequisites.runtime.candidates.find(candidate => candidate.source === 'explicit');
         if (explicit) throw new Error(`NATLANG_LLAMA_SERVER is incompatible: ${describeLlamaRuntime(prerequisites.runtime)}`);
         throw new Error(`managed model server is unavailable: ${describeLlamaRuntime(prerequisites.runtime)}; run natlang --setup or natlang --runtime install`);
       }
-      const modelPath = await ensureModel(environment, error);
+      const modelPath = await ensureModel(environment, error, release);
       if (closed) throw new Error('model session is closed');
       const port = await freePort();
       const endpoint = `http://127.0.0.1:${port}`;
       // `-c` is shared among the slots, so it is the per-slot context times the slot count.
-      plan = localSlotPlan(localSettings, environment, modelPath);
+      plan = localSlotPlan(localSettings, environment, modelPath, release);
       if (scheduler && choice.kind === 'managed-local' && choice.batching?.maxConcurrent === undefined && choice.concurrency === undefined)
         scheduler.setMaxConcurrent(plan.slots);
+      const template = templatePath(environment, release);
       const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel', String(plan.slots),
         '-c', String(plan.totalContext), '-ngl',
         String(localSettings?.gpuLayers ?? 99), '--cache-ram', String(localSettings?.cacheRamMiB ?? 256), '--no-webui',
-        '--jinja', '--chat-template-file', templatePath(environment), ...(localSettings?.args ?? [])];
+        '--jinja', ...(template ? ['--chat-template-file', template] : []), ...(localSettings?.args ?? [])];
       loraIndex.clear();
       const adapters = runtimeOptions.loraAdapters?.() ?? [];
       if (adapters.length) {
@@ -291,6 +329,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
         args.push('--lora-init-without-apply', ...(supportsPerSequenceLora(prerequisites.executable) ? ['--lora-per-sequence'] : []));
         for (const adapter of adapters) { loraIndex.set(adapter.id, loraIndex.size); args.push('--lora', adapter.path); }
       }
+      if (runtimeOptions.warm) { mkdirSync(runtimeOptions.warm.directory, { recursive: true }); args.push('--slot-save-path', runtimeOptions.warm.directory); }
       nativeStatesLoaded.clear();
       const states = runtimeOptions.nativeStates?.() ?? [];
       if (states.length) {
@@ -302,11 +341,15 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       child = spawn(prerequisites.executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });
       child.stderr?.on('data', chunk => { recentError = (recentError + String(chunk)).slice(-16000); });
       child.once('error', failure => { recentError = `${recentError}\n${failure.message}`.slice(-16000); });
-      const deadline = Date.now() + Number(environment.NATLANG_MODEL_START_TIMEOUT_MS ?? 120000);
+      const startedAt = Date.now(), deadline = startedAt + Number(environment.NATLANG_MODEL_START_TIMEOUT_MS ?? 120000);
       while (Date.now() < deadline) {
         if (child.exitCode !== null || child.signalCode !== null)
           throw new Error(`managed model server exited during startup\n${recentError.trim()}`);
         try { const response = await fetch(endpoint + '/health'); if (response.ok) {
+          const states = runtimeOptions.warm?.states ?? [];
+          const restored = states.length ? await restorePrefixes(endpoint, states, plan!.slots, line => error.write(line + '\n')) : 0;
+          error.write(`natlang: model ready in ${((Date.now() - startedAt) / 1000).toFixed(1)} s` +
+            `${restored ? `; ${restored} slot${restored === 1 ? '' : 's'} start from the build's warm prompt prefix` : ''}\n`);
           local = { endpoint, model: environment.NATLANG_MODEL ?? choice.model,
             // Prefix caching: a slot keeps the previous prompt's KV, so calls that share a prefix skip its prefill.
             headers: choice.headers, request: choice.kind === 'managed-local' ? { cache_prompt: true, ...choice.request } : undefined }; return local;
@@ -355,7 +398,8 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       executable: null, modelPath: null, running: false } : external ? { source: 'external', endpoint: external.endpoint, model: external.model,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,
       model: environment.NATLANG_MODEL ?? choice.model, executable: prerequisites.executable,
-      modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child) }; },
+      modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child),
+      ...(environment.NATLANG_MODEL_PATH ? {} : { release }), runtimeBuild: prerequisites.runtime.selected?.build ?? null }; },
     scheduler,
     /** The native reference server's artifact store (uploads of tuned artifacts and states), when this is one. */
     nativeArtifacts() { return external?.neuraleseServer ? nativeDriver().artifacts : undefined; },
