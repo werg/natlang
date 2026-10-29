@@ -22,6 +22,13 @@ def main() -> None:
     parser.add_argument('--native-participant', help='named model within a shared native checkpoint')
     parser.add_argument('--native-actor-view', type=Path, help='optional exact source-bound compact actor receipt')
     parser.add_argument('--native-actor-view-sha256')
+    parser.add_argument('--transport-receipt',type=Path)
+    parser.add_argument('--transport-receipt-sha256')
+    parser.add_argument('--transport-view-receipt',type=Path)
+    parser.add_argument('--transport-view-receipt-sha256')
+    parser.add_argument('--transport-recovery-receipt',type=Path)
+    parser.add_argument('--transport-recovery-receipt-sha256')
+    parser.add_argument('--training-source-sha256')
     parser.add_argument('--semantic-adapter', type=Path, help='checkpoint-bound shared semantic adapter receipt')
     parser.add_argument('--semantic-adapter-sha256')
     parser.add_argument('--coefficient-policy', type=Path)
@@ -38,6 +45,11 @@ def main() -> None:
     args = parser.parse_args()
     if bool(args.native_actor_view) != bool(args.native_actor_view_sha256):
         parser.error('native actor view requires its exact receipt SHA-256')
+    transport_values=(args.transport_receipt,args.transport_receipt_sha256,args.transport_view_receipt,
+        args.transport_view_receipt_sha256,args.transport_recovery_receipt,args.transport_recovery_receipt_sha256,
+        args.training_source_sha256)
+    if any(transport_values) and (not all(transport_values) or args.native_actor_view or args.native_participant):
+        parser.error('transported actor requires all exact receipt bindings and no full-source actor view or participant')
     if bool(args.semantic_adapter) != bool(args.semantic_adapter_sha256):
         parser.error('semantic adapter requires its exact SHA-256')
     if bool(args.coefficient_policy) != bool(args.coefficient_policy_sha256):
@@ -56,6 +68,10 @@ def main() -> None:
         bindings.append(('coefficient policy', args.coefficient_policy.resolve(strict=True), args.coefficient_policy_sha256))
     if args.native_actor_view:
         bindings.append(('actor view', args.native_actor_view.resolve(strict=True), args.native_actor_view_sha256))
+    if args.transport_receipt:
+        bindings.extend([('transport receipt',args.transport_receipt.resolve(strict=True),args.transport_receipt_sha256),
+            ('transport view receipt',args.transport_view_receipt.resolve(strict=True),args.transport_view_receipt_sha256),
+            ('transport recovery receipt',args.transport_recovery_receipt.resolve(strict=True),args.transport_recovery_receipt_sha256)])
     for label, path, expected in bindings:
         actual = sha256_file_hex_cached(path)
         if actual != expected:
@@ -64,6 +80,12 @@ def main() -> None:
     view_options = ({'actor_view': {'path': str(args.native_actor_view.resolve(strict=True)),
         'sha256': args.native_actor_view_sha256, 'bytes': args.native_actor_view.stat().st_size}}
         if args.native_actor_view else {})
+    if args.transport_receipt:
+        def ref(path,sha):return {'path':str(path.resolve(strict=True)),'sha256':sha,'bytes':path.stat().st_size}
+        view_options={'transported_actor':{'transport':ref(args.transport_receipt,args.transport_receipt_sha256),
+            'view_receipt':ref(args.transport_view_receipt,args.transport_view_receipt_sha256),
+            'recovery_receipt':ref(args.transport_recovery_receipt,args.transport_recovery_receipt_sha256),
+            'source_sha256':args.training_source_sha256}}
     engine = load_native_engine(str(checkpoint), base=str(args.base) if args.base else None,
         device=args.device, prompt_rendering=args.prompt_rendering, participant=args.native_participant,
         semantic_adapter=str(args.semantic_adapter) if args.semantic_adapter else None, **view_options)
@@ -90,7 +112,8 @@ def main() -> None:
     server = serve(engine, args.host, args.port)
     print(json.dumps({'event': 'native_training_checkpoint_serving',
         'native_state': True,
-        'checkpoint_sha256': args.checkpoint_sha256,
+        'checkpoint_sha256': args.training_source_sha256 if args.transport_receipt else args.checkpoint_sha256,
+        **({'transport_view_sha256':args.checkpoint_sha256,'inference_only':True} if args.transport_receipt else {}),
         'rl_policy_binding': engine.rl_policy_binding,
         'prompt_rendering': args.prompt_rendering,
         'listening': f'http://{server.server_address[0]}:{server.server_address[1]}'}), flush=True)

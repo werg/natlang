@@ -307,14 +307,16 @@ def _bind_backbone_revision(model, checkpoint_sha256):
 
 
 def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, participant=None, allow_weights_only=False,
-                           actor_view=None, preloaded_checkpoint=None):
+                           actor_view=None, preloaded_checkpoint=None, transported_actor=None):
     """Return (model, tokenizer, roles, model_config, full_checkpoint_state)."""
     from pathlib import Path
     path = Path(path).resolve(strict=True)
-    if preloaded_checkpoint is not None and (actor_view is not None or allow_weights_only):
+    if preloaded_checkpoint is not None and (actor_view is not None or transported_actor is not None or allow_weights_only):
         raise ValueError('preloaded checkpoint is only for the exact full-state restore')
     if actor_view is not None and (not allow_weights_only or participant is not None):
         raise ValueError('actor view is only for explicit read-only native inference')
+    if transported_actor is not None and (not allow_weights_only or participant is not None or actor_view is not None):
+        raise ValueError('transported actor is only for explicit read-only native inference')
     with path.open('rb') as stream:
         prefix = stream.read(1)
     if prefix == b'{':
@@ -328,7 +330,10 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
             return load_native_composite_checkpoint(path, base=base, device=device, dtype=dtype,
                                                     allow_weights_only=allow_weights_only)
     from ..train.checkpoint_policy import CheckpointPolicy
-    if actor_view is None:
+    if transported_actor is not None:
+        from .native_bundle import load_transported_actor_view
+        state=load_transported_actor_view(path,**transported_actor)
+    elif actor_view is None:
         if preloaded_checkpoint is None:
             state = CheckpointPolicy.load(path, shared_participant=participant)
         else:
@@ -425,5 +430,6 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     if accumulator_backend not in COTANGENT_BACKENDS:
         raise ValueError('native checkpoint has an invalid cotangent accumulator backend')
     model.native_cotangent_accumulator_backend = accumulator_backend
-    _bind_backbone_revision(model, sha256_file_hex_cached(path))
+    _bind_backbone_revision(model, transported_actor['source_sha256'] if transported_actor is not None
+                            else sha256_file_hex_cached(path))
     return model, tokenizer, roles, config, state

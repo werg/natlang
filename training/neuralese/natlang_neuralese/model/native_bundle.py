@@ -19,6 +19,7 @@ from .native_composite import SCHEMA, resolve_composite_artifact
 
 BUNDLE_SCHEMA = 'natlang.native-checkpoint-bundle/1'
 ACTOR_VIEW_SCHEMA = 'natlang.native-actor-view/1'
+TRANSPORT_SCHEMA = 'natlang.native-actor-transport/1'
 
 
 def _file_binding(path):
@@ -138,6 +139,74 @@ def prepare_actor_view(checkpoint, out):
     if reference is not None:
         load_actor_view(source,reference)
     return reference
+
+
+def prepare_actor_transport(checkpoint, out, recovery_receipt):
+    """Seal an inference view to a separately verified private full-state recovery."""
+    from ..common.runtime_inventory import python_runtime_binding
+    from .native_composite import _durable_immutable
+    import hashlib
+    source=_file_binding(checkpoint);recovery=_file_binding(recovery_receipt)
+    proof=json.loads(Path(recovery_receipt).read_text())
+    if (proof.get('private') is not True or proof.get('identity',{}).get('sha256')!=source['sha256']
+            or proof.get('identity',{}).get('bytes')!=source['bytes']
+            or proof.get('independent_verification',{}).get('sha256')!=source['sha256']
+            or proof.get('independent_verification',{}).get('bytes')!=source['bytes']
+            or not isinstance(proof.get('independent_verification',{}).get('readback_location'),str)
+            or not proof['independent_verification']['readback_location']):
+        raise ValueError('actor transport requires independent complete private full-source verification')
+    view_ref=prepare_actor_view(checkpoint,out)
+    if view_ref is None:raise ValueError('actor transport requires a single-model native checkpoint')
+    view_proof=json.loads(Path(view_ref['path']).read_text())
+    value={'schema':TRANSPORT_SCHEMA,'source':{'sha256':source['sha256'],'bytes':source['bytes']},
+        'recovery_receipt':{'sha256':recovery['sha256'],'bytes':recovery['bytes']},
+        'view_receipt':{'sha256':view_ref['sha256'],'bytes':view_ref['bytes']},
+        'view':view_proof['view'],'model_config':view_proof['model_config'],
+        'step':view_proof['step'],'python_runtime':python_runtime_binding(),
+        'training_resume':False,'verification':'source tensor equality and independent full-source readback'}
+    raw=(json.dumps(value,sort_keys=True,indent=2)+'\n').encode()
+    target=Path(view_ref['path']).parent/(hashlib.sha256(raw).hexdigest()+'.transport.json')
+    _durable_immutable(target,raw)
+    return _file_binding(target)
+
+
+def load_transported_actor_view(view, *, transport, view_receipt, recovery_receipt, source_sha256):
+    """Verify an out-of-band trusted transport without needing the full source locally."""
+    from ..common.runtime_inventory import python_runtime_binding
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from .native_model import CHECKPOINT_SCHEMA
+    def bound(reference):
+        if not isinstance(reference,dict) or set(reference)!={'path','sha256','bytes'}:
+            raise ValueError('transport input requires exact trusted binding')
+        if _file_binding(reference['path'])!=reference:raise ValueError('transport input binding changed')
+        return json.loads(Path(reference['path']).read_text())
+    manifest=bound(transport);proof=bound(view_receipt);recovery=bound(recovery_receipt)
+    source=manifest.get('source') or {}; actual=_file_binding(view)
+    if (manifest.get('schema')!=TRANSPORT_SCHEMA or manifest.get('training_resume') is not False
+            or source.get('sha256')!=source_sha256 or manifest.get('python_runtime')!=python_runtime_binding()
+            or any(manifest.get('view',{}).get(k)!=actual.get(k) for k in ('sha256','bytes'))
+            or any(manifest.get('view_receipt',{}).get(k)!=view_receipt.get(k) for k in ('sha256','bytes'))
+            or any(manifest.get('recovery_receipt',{}).get(k)!=recovery_receipt.get(k) for k in ('sha256','bytes'))
+            or proof.get('schema')!=ACTOR_VIEW_SCHEMA or proof.get('training_resume') is not False
+            or any(proof.get('source',{}).get(k)!=source.get(k) for k in ('sha256','bytes'))
+            or any(proof.get('view',{}).get(k)!=actual.get(k) for k in ('sha256','bytes'))
+            or recovery.get('private') is not True
+            or not isinstance(recovery.get('independent_verification',{}).get('readback_location'),str)
+            or not recovery['independent_verification']['readback_location']
+            or any(recovery.get('identity',{}).get(k)!=source.get(k) for k in ('sha256','bytes'))
+            or any(recovery.get('independent_verification',{}).get(k)!=source.get(k) for k in ('sha256','bytes'))):
+        raise ValueError('transport source, view, recovery, or runtime binding mismatch')
+    state=CheckpointPolicy.load(view)
+    if (state.get('schema')!=CHECKPOINT_SCHEMA or state.get('inference_only') is not True
+            or state.get('optimizer_pruned') is not True or 'training' in state
+            or state.get('model_config')!=manifest.get('model_config') or state.get('model_config')!=proof.get('model_config')
+            or state.get('step')!=manifest.get('step') or state.get('step')!=proof.get('step')
+            or state.get('inference_source')!={'schema':'natlang.native-inference-source/1',
+                'training_checkpoint_sha256':source_sha256,'training_checkpoint_bytes':source['bytes'],'step':state.get('step')}):
+        raise ValueError('transported actor payload differs from authenticated source proof')
+    state['actor_view']={'transport':transport,'view_receipt':view_receipt,'view':actual,
+        'source':source,'recovery_receipt':recovery_receipt,'training_resume':False}
+    return state
 
 
 def _actor_view_files(checkpoint, reference):
@@ -381,9 +450,13 @@ def main():
     export = commands.add_parser('export');export.add_argument('--checkpoint',required=True);export.add_argument('--out',required=True);export.add_argument('--semantic-adapter');export.add_argument('--participant')
     verify = commands.add_parser('verify');verify.add_argument('--bundle',required=True)
     view = commands.add_parser('actor-view');view.add_argument('--checkpoint',required=True);view.add_argument('--out',required=True)
+    transport = commands.add_parser('actor-transport');transport.add_argument('--checkpoint',required=True);transport.add_argument('--out',required=True);transport.add_argument('--recovery-receipt',required=True)
     args = parser.parse_args()
     if args.action == 'actor-view':
         print(json.dumps(prepare_actor_view(args.checkpoint,args.out),sort_keys=True))
+        return
+    if args.action == 'actor-transport':
+        print(json.dumps(prepare_actor_transport(args.checkpoint,args.out,args.recovery_receipt),sort_keys=True))
         return
     print(json.dumps(export_bundle(args.checkpoint,args.out,semantic_adapter=args.semantic_adapter,participant=args.participant) if args.action=='export' else verify_bundle(args.bundle),sort_keys=True))
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 def load_native_engine(checkpoint: str, *, base: str | None = None, device: str = "cpu", dtype=None,
                        prompt_rendering: str = "full", participant: str | None = None,
-                       semantic_adapter: str | None = None, actor_view: dict | None = None,
+                       semantic_adapter: str | None = None, actor_view: dict | None = None, transported_actor: dict | None = None,
                        store=None):
     """Restore a native-state checkpoint through the shared model loader and serving engine."""
     from ..common.hashing import sha256_file_hex_cached
@@ -13,14 +13,16 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     from .engine import Engine
     from .store import TensorStore
 
-    view_options = {'actor_view':actor_view} if actor_view is not None else {}
+    view_options = ({'actor_view':actor_view} if actor_view is not None else
+                    {'transported_actor':transported_actor} if transported_actor is not None else {})
     model, tokenizer, roles, config, _state = load_native_checkpoint(
         checkpoint, base=base, device=device, dtype=dtype, participant=participant, allow_weights_only=True,
         **view_options)
     model.eval()
     for parameter in model.parameters():
         parameter.requires_grad_(False)
-    checkpoint_sha256 = sha256_file_hex_cached(checkpoint)
+    checkpoint_sha256 = (_state['inference_source']['training_checkpoint_sha256'] if transported_actor is not None
+                         else sha256_file_hex_cached(checkpoint))
     identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha256)
     engine = Engine(model.port, tokenizer, store if store is not None else TensorStore(), f"native-state/{config['architecture']}",
                     model_name=f"native-{config['architecture']}", device=device,

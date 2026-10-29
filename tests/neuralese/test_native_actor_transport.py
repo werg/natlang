@@ -1,0 +1,71 @@
+import copy,json
+from pathlib import Path
+import pytest,torch
+from natlang_neuralese.model.native_bundle import prepare_actor_transport,load_transported_actor_view,_file_binding
+from natlang_neuralese.serve import load_native_engine
+from natlang_neuralese.model.shared_state import Invocation,compile_graph
+from test_native_actor_view import source
+
+
+def test_transported_view_matches_actual_full_actor_without_source(source,tmp_path,monkeypatch):
+    engine,path,state,_=source;binding=_file_binding(path)
+    recovery=tmp_path/'recovery.json';verified={**binding,'readback_location':'independent-test-receiver'}
+    recovery.write_text(json.dumps({'private':True,'identity':binding,'independent_verification':verified}))
+    manifest=prepare_actor_transport(path,tmp_path/'views',recovery);m=json.loads(Path(manifest['path']).read_text())
+    folder=Path(manifest['path']).parent
+    view=folder/m['view']['path']
+    proof=next(folder.glob('*.json'))
+    if proof.name.endswith('.transport.json'):proof=next(p for p in folder.glob('*.json') if not p.name.endswith('.transport.json'))
+    refs={'transport':manifest,'view_receipt':_file_binding(proof),'recovery_receipt':_file_binding(recovery),'source_sha256':binding['sha256']}
+    original=load_native_engine(str(path),device='cpu')
+    path.unlink()
+    transported=load_native_engine(str(view),device='cpu',transported_actor=refs)
+    try:
+        assert transported.native_identity['checkpoint_sha256']==binding['sha256']
+        assert transported.native_inference_only and transported.native_training_state=={}
+        assert transported.native_actor_view['view']['sha256']==m['view']['sha256']
+        plan=compile_graph([Invocation('x',(4,5,6,7))])
+        with torch.no_grad():
+            a=original.shared_model.logits(original.shared_model(plan)['h_final'])
+            b=transported.shared_model.logits(transported.shared_model(plan)['h_final'])
+        assert torch.equal(a,b)
+        def greedy(engine):
+            cache=None;tokens=[4,5,6]
+            with torch.no_grad():
+                for token in tokens:out=engine._native_forward([token],cache);cache=out['cache']
+                generated=[]
+                for _ in range(4):
+                    token=int(engine.shared_model.logits(out['h_final'])[:,-1].argmax(-1).item())
+                    generated.append(token);out=engine._native_forward([token],cache);cache=out['cache']
+            return generated
+        assert greedy(original)==greedy(transported)
+        import importlib.util,sys
+        from types import SimpleNamespace
+        cli_path=Path(__file__).parents[2]/'scripts/neuralese_data/serve_native_checkpoint.py'
+        spec=importlib.util.spec_from_file_location('transport_actor_cli',cli_path)
+        cli=importlib.util.module_from_spec(spec);spec.loader.exec_module(cli)
+        seen=[]
+        def serve(actual,host,port):
+            seen.append(actual.native_identity['checkpoint_sha256'])
+            return SimpleNamespace(server_address=(host,port),serve_forever=lambda:None,server_close=lambda:None)
+        monkeypatch.setattr(cli,'serve',serve)
+        monkeypatch.setattr(sys,'argv',['serve','--checkpoint',str(view),'--checkpoint-sha256',m['view']['sha256'],
+            '--transport-receipt',manifest['path'],'--transport-receipt-sha256',manifest['sha256'],
+            '--transport-view-receipt',str(proof),'--transport-view-receipt-sha256',refs['view_receipt']['sha256'],
+            '--transport-recovery-receipt',str(recovery),'--transport-recovery-receipt-sha256',refs['recovery_receipt']['sha256'],
+            '--training-source-sha256',binding['sha256'],'--device','cpu','--threads','1'])
+        cli.main();assert seen==[binding['sha256']]
+        with pytest.raises(ValueError):load_transported_actor_view(view,**{**refs,'source_sha256':'b'*64})
+        changed=copy.deepcopy(m);changed['model_config']['marker_ids']=[1,2,3,4]
+        forged=tmp_path/'forged.json';forged.write_text(json.dumps(changed))
+        with pytest.raises(ValueError):load_transported_actor_view(view,**{**refs,'transport':_file_binding(forged)})
+        changed=copy.deepcopy(m);changed['python_runtime']['sha256']='0'*64
+        forged.write_text(json.dumps(changed))
+        with pytest.raises(ValueError):load_transported_actor_view(view,**{**refs,'transport':_file_binding(forged)})
+        recovery.write_text(json.dumps({'private':False,'identity':binding,'independent_verification':verified}))
+        with pytest.raises(ValueError):load_transported_actor_view(view,**refs)
+        recovery.write_text(json.dumps({'private':True,'identity':binding,'independent_verification':verified}))
+        view.write_bytes(b'tampered')
+        with pytest.raises(ValueError):load_transported_actor_view(view,**refs)
+    finally:
+        original.store.close();transported.store.close()
