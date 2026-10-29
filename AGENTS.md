@@ -43,6 +43,22 @@ Coordinator durability must cover accepted queues, sequence/session and source
 transitions as well as global weights. Measure replication and export overhead;
 check actual durable commits before relying on failover.
 
+Managed consumers of retirable private checkpoints or controls register an exact
+role/consumer/identity lease before fetching or resolving the object, using
+`scripts/coreweave/retention_leases.py` in the same retention namespace. Release
+the lease after actual use ends; do not guess expiry. Current owner parents,
+pending owner GETs and in-flight publications retain their explicit protections.
+Retirement and new consumer registration share the commit lock. Scan immutable
+dependency references outside that lock and refresh changed JSON through checked
+five-field reads at commit; report this as a point-in-time observation, not a
+globally atomic guarantee across unrelated diagnostic writers. Scope a
+candidate's own receipts, completed retirement history and diagnostic entries
+exactly; historical hash mentions alone are not live dependencies. Bind actual
+successor and fallback hashes into durable retirement intent, and verify current
+private presence before deleting anything. Provider zero-byte tombstones require
+fresh HTTP404 confirmation and do not establish physical backend garbage
+collection. Keep long scans and idle sleeps outside the shared lock.
+
 Source admission checks the complete current protection union, including acquired
 held manifests and reserved related invocation worlds, not only the active held
 file. Distinguish held connections from quality-only exclusions. When broader
