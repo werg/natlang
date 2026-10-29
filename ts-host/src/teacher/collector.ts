@@ -1634,6 +1634,17 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
       same(actualFiles, record.semantics.expected_files ?? folderFiles));
     // A blocked case needs the model's own blocked or failed call; running out of turns also quiesces.
     const honestStop = expectedKind !== 'quiesced' || /^(?:blocked|error): /.test(String(result.outcome.detail ?? ''));
+    const trace = runtime.trace.events as unknown as Record<string, unknown>[];
+    const childInvocationTraces = runtime.frame?.task.traces ?? [];
+    const invocationTraces = [trace, ...childInvocationTraces.map(child => child.events)];
+    const executionGraph = invocationTraces.flat().filter(event => typeof event.node === 'string' && Array.isArray(event.inputs));
+    // An expected stop is honest only after the obstacle was actually observed: every decisive observation the case
+    // declares must appear in the run's own execution graph. Otherwise giving up at once would earn the stop's reward.
+    const decisive = ((record as { curriculum?: { decisive?: { marker: string }[] } }).curriculum?.decisive ?? [])
+      .map(item => item.marker).filter(marker => typeof marker === 'string' && marker.length > 0);
+    const observedGraph = expectedKind === 'quiesced' && decisive.length ? JSON.stringify(executionGraph) : '';
+    const stopEvidence = expectedKind !== 'quiesced' || decisive.every(marker =>
+      observedGraph.includes(marker) || observedGraph.includes(JSON.stringify(marker).slice(1, -1)));
     const worldScore = world ? await world.request('score') as { score: number; done: boolean } : undefined;
     // Some source-backed worlds are in-process external modules rather than WorldBridge processes. Their
     // certificate is trusted host state: a returned literal alone must not satisfy the world objective.
@@ -1667,7 +1678,8 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     const requiredActions = checkRequiredActions(record.semantics.required_actions, options.runId,
       runtime.trace.events as unknown as Record<string, unknown>[]);
     const checks = { seeded_failure_requirement: failureSeen, expected_status: result.outcome.kind === expectedKind,
-      honest_stop: honestStop, effects: effectsOk, files: filesOk, world: worldOk,
+      honest_stop: honestStop, ...(decisive.length && expectedKind === 'quiesced' ? { stop_evidence: stopEvidence } : {}),
+      effects: effectsOk, files: filesOk, world: worldOk,
       file_return_consistency: !actualFiles || !record.semantics.files_oracle ||
         checkFileReturn(actual, actualFiles, folderFiles!, record.semantics.files_oracle),
       answer: expectedKind !== 'done' || !!authoring || !!world || oracle.accepted,
@@ -1680,10 +1692,6 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
       ...(functionEffects ? { function_effects: functionEffects.ok } : {}) };
     const rejectionReasons = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
     const accepted = rejectionReasons.length === 0;
-    const trace = runtime.trace.events as unknown as Record<string, unknown>[];
-    const childInvocationTraces = runtime.frame?.task.traces ?? [];
-    const invocationTraces = [trace, ...childInvocationTraces.map(child => child.events)];
-    const executionGraph = invocationTraces.flat().filter(event => typeof event.node === 'string' && Array.isArray(event.inputs));
     const invocationLedger = itemResultInvocationLedger(runtime, bindingSpec);
     const itemResultBinding = bindingSpec ? checkItemResultBinding(bindingSpec, invocationLedger) : undefined;
     const bindingAccepted = !bindingSpec || itemResultBinding?.status === 'pass';
