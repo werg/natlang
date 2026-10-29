@@ -242,7 +242,12 @@ def run_coreweave_seed_stage(config):
             evidence.get('run_id')!=witness['run_id'] or not evidence.get('proof_sha256')):
         raise ValueError('seed stage requires a verified old-primary and worker fence')
     if len(nonce)<32 or witness['sequence']%2:raise ValueError('invalid seed boundary')
-    source=config['source'];target=config['target'];cwctl.load_env_file();cwctl.require_key()
+    source=config['source'];target=config['target']
+    authorized={(item['identity']['sandbox_id'],item['identity']['boot_id'],item['identity']['owner_id']) for item in evidence.get('workers',[])}
+    source_id=(source['sandbox_id'],source['boot_id'],source['owner_id']);target_id=(target['sandbox_id'],target['boot_id'],target['owner_id'])
+    if source_id==target_id or source_id not in authorized or target_id not in authorized:
+        raise ValueError('seed endpoints are not distinct verified worker owners')
+    cwctl.load_env_file();cwctl.require_key()
     source_box=cwctl.read_sandbox(source['sandbox_id'],patience=60);target_box=cwctl.read_sandbox(target['sandbox_id'],patience=60)
     source_token=Path(config['source_token_file']).read_text().strip()
     source_gateway=Path(config['source_gateway_file']).read_text().strip() if config.get('source_gateway_file') else None
@@ -311,6 +316,7 @@ def run_coreweave_seed_stage(config):
         observed=source_box.exec(['python3','-c',probe,source['directory'].rstrip('/')+'/state.json',str(source_role['pid']),source.get('seed_role','actor')],timeout_seconds=70).result(timeout=90)
         if observed.returncode!=0:raise ValueError('seed actor exit not observed')
         return stopped_value
+    target_role=None;completed=False
     try:
         fetch=config_argv(target_box,target,'seed-fetch',{'url':source['seed_url'],'token_file':target['seed_token_file'],
             'gateway_file':target.get('source_gateway_file'),'destination':target['seed_directory'],'receipt_sha256':receipt_sha,'allow_http':config.get('allow_http',False)})
@@ -332,8 +338,15 @@ def run_coreweave_seed_stage(config):
         release=config_argv(source_box,source,'seed-release',{'store':source['store'],'seed_receipt':source['seed_directory']+'/seed-receipt.json',
             'receipt_sha256':receipt_sha,'peer_url':target['replica_url'],'token_file':source['target_peer_token_file'],
             'gateway_file':source.get('target_gateway_file'),'allow_http':config.get('allow_http',False)})
-        execute(source_box,source,release,120)
+        execute(source_box,source,release,120);completed=True
     finally:
-        stopped_value=stop_source()
+        try:
+            if not completed and target_role is not None:
+                request={'schema':'natlang.diloco-role-request/1','id':'seed-target-stop-'+unique,'owner_id':target_role['owner_id'],
+                    'expected_generation':target_role['generation'],'role':target.get('seed_role','actor'),'action':'stop',
+                    'expected_pid':target_role['pid'],'expected_process_start_ticks':target_role['process_start_ticks']}
+                fences.sdk_stop_owned_role({'sandbox_id':target['sandbox_id'],'directory':target['directory'],
+                    'publisher':target['publisher'],'request':request})
+        finally:stopped_value=stop_source()
     return {'schema':'natlang.diloco-third-peer-stage/1','witness':witness,'receipt_sha256':receipt_sha,
             'source_role':source_role,'target_role':target_role,'source_generation_after_seed_stop':stopped_value['generation'],'source_seed_server_stopped':True}

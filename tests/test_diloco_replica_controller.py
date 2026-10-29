@@ -87,7 +87,7 @@ def test_coreweave_seed_stage_uses_direct_owned_roles_and_stops_source(tmp_path,
     monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)
     monkeypatch.setattr(cwctl,'read_sandbox',lambda sid,**k:boxes[sid])
     monkeypatch.setattr(fm,'sdk_authorize_seed_server',lambda role,nonce:calls.append(('authorize',role['request']['argv'][3])))
-    monkeypatch.setattr(fm,'provider_fence_verifier',lambda **kw:lambda proof:{'primary_fenced':True,'all_workers_quiesced':True,'run_id':'r','proof_sha256':'d'*64})
+    monkeypatch.setattr(fm,'provider_fence_verifier',lambda **kw:lambda proof:{'primary_fenced':True,'all_workers_quiesced':True,'run_id':'r','proof_sha256':'d'*64,'workers':[{'identity':{'sandbox_id':'source','boot_id':'boot','owner_id':'owner'}},{'identity':{'sandbox_id':'target','boot_id':'boot','owner_id':'owner'}}]})
     monkeypatch.setattr(replica_transport,'witness_head',lambda *a,**k:witness)
     monkeypatch.setattr(replica_transport,'freeze_replica_files',lambda *a,**k:calls.append(('freeze',a[2])))
     (tmp_path/'token').write_text('s'*32)
@@ -116,3 +116,18 @@ def test_first_outer_source_evidence_binds_real_parent_and_source_bytes(tmp_path
     kw=dict(baseline=baseline,baseline_sha256=receipt['sha256'],source_manifest=source,source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),source_receipt=proof,receipt_sha256=hashlib.sha256(proof.read_bytes()).hexdigest(),expected_parent_sha256='a'*64)
     assert verify_bootstrap_inputs(**kw)['earned_parent_sha256']=='a'*64
     with pytest.raises(ValueError):verify_bootstrap_inputs(**dict(kw,expected_parent_sha256='b'*64))
+
+
+def test_controller_resumes_after_partial_release_without_refencing(tmp_path):
+    intent={'run_id':'r','generation_nonce':'n'*48,'activation_nonce':'x'*48,'sequence':4,'head':'h'*64,'new_url':'https://new','new_token_sha256':'t'*64}
+    evidence={'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64}
+    ready={'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':'t'*64,'clock_rebase':{},'sealed_rebase':{'sequence':6,'head':'q'*64}}
+    calls=[]
+    def fence(_):calls.append('fence');return [{'sandbox_id':'a'},{'sandbox_id':'b'}]
+    def verify(_):calls.append('verify');return evidence
+    def start(*_):calls.append('confirm-ready');return ready
+    def fail_release(*_):calls.append('partial-release');raise OSError('controller interrupted')
+    with pytest.raises(OSError):run_promotion(tmp_path,intent=intent,fence_workers=fence,verify_fence=verify,start_primary=start,release_workers=fail_release)
+    def release(_intent,fences):calls.append('resume-release');return fences
+    result=run_promotion(tmp_path,intent=intent,fence_workers=fence,verify_fence=verify,start_primary=start,release_workers=release)
+    assert result['phase']=='released' and calls==['fence','verify','confirm-ready','partial-release','confirm-ready','resume-release']
