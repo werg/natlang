@@ -39,6 +39,45 @@ def turns(path, n):
     return rows
 
 
+def tree(pid):
+    """pid and all its descendants."""
+    pids, frontier = [pid], [pid]
+    while frontier:
+        children = []
+        for parent in frontier:
+            try:
+                children += [int(c) for c in Path(f'/proc/{parent}/task/{parent}/children').read_text().split()]
+            except OSError:
+                pass
+        pids += children
+        frontier = children
+    return pids
+
+
+def memory(pid):
+    """RSS and CUDA memory (nvidia-smi) of the actor's process tree, GiB: front and SGLang server separately."""
+    pids = tree(pid)
+    out = subprocess.run(['nvidia-smi', '--query-compute-apps=pid,used_memory', '--format=csv,noheader,nounits'],
+                         capture_output=True, text=True).stdout
+    cuda = {int(a): int(b) for a, b in (line.split(',') for line in out.splitlines() if line.strip())}
+    def rss(p):
+        try:
+            return int(Path(f'/proc/{p}/statm').read_text().split()[1]) * 4096
+        except OSError:
+            return 0
+    front, server = [pid], [p for p in pids if p != pid]
+    gib = lambda value: round(value / 2**30, 2)
+    return {'front_rss': gib(sum(rss(p) for p in front)), 'front_cuda': gib(sum(cuda.get(p, 0) for p in front) * 2**20),
+            'sglang_rss': gib(sum(rss(p) for p in server)),
+            'sglang_cuda': gib(sum(cuda.get(p, 0) for p in server) * 2**20)}
+
+
+def scrape(url):
+    with urllib.request.urlopen(url + '/metrics', timeout=30) as response:
+        return {line.split()[0]: float(line.split()[1]) for line in response.read().decode().splitlines()
+                if line.startswith('natlang_')}
+
+
 def post(url, body):
     request = urllib.request.Request(url + '/v1/chat/completions', data=json.dumps(body).encode(),
                                      headers={'Content-Type': 'application/json'})
@@ -59,7 +98,7 @@ def main():
     parser.add_argument('--k', type=int, default=128)
     parser.add_argument('--port', type=int, default=8297)
     parser.add_argument('--replay', type=int, default=16, help='captures replayed on the native model')
-    parser.add_argument('--sglang-mem-fraction', type=float, default=0.15)
+    parser.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument')
     parser.add_argument('--store-dir', type=Path)
     args = parser.parse_args()
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
@@ -68,7 +107,7 @@ def main():
     log = open(args.out.with_suffix('.actor.log'), 'w')
     actor = subprocess.Popen([sys.executable, str(ROOT / 'scripts/neuralese_data/serve_native_checkpoint.py'),
         '--checkpoint', str(args.checkpoint), '--checkpoint-sha256', sha, '--base', args.base, '--port', str(args.port),
-        '--store-dir', str(store), '--engine', 'sglang', '--sglang-mem-fraction', str(args.sglang_mem_fraction)],
+        '--store-dir', str(store), '--engine', 'sglang', *args.actor_arg],
         stdout=log, stderr=subprocess.STDOUT)
     url = f'http://127.0.0.1:{args.port}'
     try:
@@ -85,12 +124,20 @@ def main():
                     raise
                 time.sleep(5)
         bodies = [{**turn, 'max_tokens': args.max_tokens, 'temperature': args.temperature,
-                   'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': args.k}
+                   'x_natlang_rl_capture': True, 'x_natlang_rl_top_k': args.k,
+                   # The RL collector's graph recorder sets this on every turn.
+                   'x_natlang_native_recording': True}
                   for turn in turns(args.turns, args.requests)]
+        idle = memory(actor.pid)
         start = time.time()
         with ThreadPoolExecutor(args.concurrency) as pool:
             responses = list(pool.map(lambda body: post(url, body), bodies))
         wall = time.time() - start
+        loaded = memory(actor.pid)
+        metrics = scrape(url)
+        # One guided turn: served by the native engine, which loads lazily on first use.
+        fallback = post(url, {**bodies[0], 'max_tokens': 16, 'guidance': True})
+        after_fallback, metrics_after = memory(actor.pid), scrape(url)
     finally:
         actor.terminate()
         try:
@@ -101,7 +148,10 @@ def main():
     result = {'checkpoint': str(args.checkpoint), 'checkpoint_sha256': sha, 'requests': len(responses),
               'concurrency': args.concurrency, 'wall_s': wall, 'sampled_tokens': generated,
               'tokens_per_s': generated / wall, 'serving_engine': info['rl_policy_binding'].get('serving_engine'),
-              'finish_reasons': [r['choices'][0]['finish_reason'] for r in responses]}
+              'finish_reasons': [r['choices'][0]['finish_reason'] for r in responses],
+              'memory_gib': {'idle': idle, 'after_batch': loaded, 'after_native_fallback': after_fallback},
+              'metrics': metrics, 'metrics_after_fallback': metrics_after,
+              'fallback_capture_samples': len(fallback['x_natlang_rl_capture']['samples'])}
     print(json.dumps(result), flush=True)
     result.update(replay(args, responses[:args.replay]))
     args.out.write_text(json.dumps(result, indent=1))

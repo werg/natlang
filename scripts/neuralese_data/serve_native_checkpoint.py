@@ -47,7 +47,12 @@ def main() -> None:
                         help='sglang: ordinary-token turns generate on the SGLang fork, the rest on the native engine (serve/sglang_actor.py)')
     parser.add_argument('--sglang-python', help="the fork's Python (default: training/neuralese/sglang-fork.json python)")
     parser.add_argument('--sglang-port', type=int, help='port of the SGLang server (default: --port + 1000)')
-    parser.add_argument('--sglang-mem-fraction', type=float, default=0.8)
+    # SGLang's pools are sized from need: requests x context, radix-shared; the memory fraction is only a ceiling.
+    parser.add_argument('--sglang-max-running', type=int, default=32, help='concurrent sequences on SGLang')
+    parser.add_argument('--sglang-context', type=int, default=32768, help='longest prompt + reply in tokens')
+    parser.add_argument('--sglang-max-total-tokens', type=int,
+                        help='KV pool tokens shared by all sequences (default: 4 x --sglang-context; prompts share prefixes)')
+    parser.add_argument('--sglang-mem-fraction', type=float, default=0.3, help='ceiling, not the allocation')
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
     args = parser.parse_args()
@@ -108,6 +113,10 @@ def main() -> None:
         **view_options)
     if args.engine == 'sglang':
         launch_sglang(engine, args, checkpoint)
+        # The native model is loaded again only when a turn SGLang cannot serve arrives (serve/sglang_actor.py).
+        engine.release_native({'checkpoint': str(checkpoint), 'base': str(args.base) if args.base else None,
+                               'device': args.device, 'participant': args.native_participant,
+                               **({'actor_view': view_options['actor_view']} if 'actor_view' in view_options else {})})
     if args.store_dir is not None:
         from natlang_neuralese.serve.store import TensorStore
         engine.store = TensorStore(args.store_dir)
@@ -159,9 +168,17 @@ def launch_sglang(engine, args, checkpoint):
     manifest = export_loaded(engine.shared_model, engine.tokenizer, engine.role_tokens, engine.model_config,
                              checkpoint=checkpoint, checkpoint_sha256=args.checkpoint_sha256, out_dir=export_dir)
     port = args.sglang_port or args.port + 1000
+    context = min(args.sglang_context, engine.context)
+    total = args.sglang_max_total_tokens or 4 * context
+    if total < context:
+        raise ValueError('--sglang-max-total-tokens must hold one full-context sequence')
     command = [python, '-m', 'sglang.launch_server', '--model-path', str(export_dir), '--host', '127.0.0.1',
                '--port', str(port), '--dtype', 'bfloat16', '--mem-fraction-static', str(args.sglang_mem_fraction),
-               '--context-length', str(engine.context), '--skip-tokenizer-init', '--trust-remote-code', *args.sglang_arg]
+               '--context-length', str(context), '--max-total-tokens', str(total),
+               '--max-running-requests', str(args.sglang_max_running),
+               '--max-mamba-cache-size', str(8 * args.sglang_max_running),
+               '--cuda-graph-max-bs-decode', str(args.sglang_max_running),
+               '--skip-tokenizer-init', '--trust-remote-code', *args.sglang_arg]
     print(json.dumps({'event': 'sglang_launch', 'command': command, 'export': manifest}), flush=True)
     # FlashInfer JIT-compiles kernels: the fork venv's ninja and the CUDA toolkit's nvcc on PATH.
     cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')

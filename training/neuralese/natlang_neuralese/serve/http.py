@@ -131,7 +131,7 @@ def make_handler(engine: Engine):
                 from ..data.prompt_rendering import prompt_rendering_identity
                 prompt_identity = prompt_rendering_identity(engine.prompt_rendering)
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width,
-                                        "dtype": str(engine.backbone.embedding_weight.dtype).replace("torch.", ""),
+                                        "dtype": getattr(engine, "native_dtype", None) or str(engine.backbone.embedding_weight.dtype).replace("torch.", ""),
                                         "store": {"owners": True, "persistent": engine.store.directory is not None},
                                         "max_block_length": engine.max_block, "context": engine.context,
                                         "grad": True, "grad_order": 2, "stream": True,

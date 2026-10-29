@@ -29,3 +29,9 @@ def test_routing_sends_neuralese_turns_to_native():
     assert 'native_state' in SglangEngine.sglang_unsupported(plain, [('tokens', [1]), ('native_state', 'b0')])
     templated = GenerationRequest(messages=[], template={'call': 'f', 'value': 'write'})
     assert SglangEngine.sglang_unsupported(templated, [('tokens', [1])]) == 'template'
+
+
+def test_recorded_collector_turns_stay_on_sglang():
+    # The collector's graph recorder sets native_recording on every turn; it only asks for the capture.
+    recorded = GenerationRequest(messages=[], temperature=1.0, rl_capture=True, native_recording=True)
+    assert SglangEngine.sglang_unsupported(recorded, [('tokens', [1, 2])]) is None
