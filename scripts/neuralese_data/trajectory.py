@@ -49,7 +49,29 @@ class Trajectory:
     split_groups: list
     outcome: dict
     tools: list | None = None
+    native_xml_turns: dict = field(default_factory=dict)  # exact assistant-content source turns, keyed by message index
     background: list = field(default_factory=list)   # extra source dicts (protocols, policies)
+
+
+def append_captured_native_xml_turn(trajectory: Trajectory, turn: dict) -> None:
+    """Append one authenticated captured response and retain its exact source envelope.
+
+    The caller supplies the already bound task/actor/split on the trajectory;
+    this function does not infer an outcome or preference from the response.
+    """
+    import copy
+    from natlang_neuralese.data.native_xml_custody import authenticate, derived_tool_calls
+    authenticate(turn)
+    if turn['context'] != trajectory.messages or turn['tools_offered'] != (trajectory.tools or []):
+        raise ValueError('captured native XML request differs from trajectory history or offered tools')
+    target = {'role': 'assistant', 'content': '', 'tool_calls': derived_tool_calls(turn)}
+    if turn['assistant'].get('reasoning'):
+        target['reasoning_content'] = turn['assistant']['reasoning']
+    index = str(len(trajectory.messages))
+    if index in trajectory.native_xml_turns:
+        raise ValueError('native XML source turn already exists')
+    trajectory.messages.append(target)
+    trajectory.native_xml_turns[index] = copy.deepcopy(turn)
 
 
 def split_think(text: str | None) -> tuple[str | None, str | None]:

@@ -91,3 +91,54 @@ def test_real_captured_assistant_content_with_synthetic_custody_envelope():
     assert authenticate(turn) and turn['model_response']['raw_calls']==[]
     forged=copy.deepcopy(turn);forged['assistant']['calls'][0]['arguments']={}
     with pytest.raises(ValueError):authenticate(forged)
+
+
+@pytest.mark.parametrize('captured', [False, True])
+def test_capture_to_offline_pair_to_dpo_and_forged_evidence(captured):
+    from scripts.neuralese_data.trajectory import Trajectory,append_captured_native_xml_turn
+    from scripts.neuralese_data.acquired_preferences import bound_preference_record
+    from natlang_neuralese.data.native_preference import pair_graph
+    from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+    from natlang_neuralese.serve.chat import bind_history_reasoning
+    from transformers import AutoTokenizer
+    base=Path('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+    if not base.is_dir():pytest.skip('pinned real tokenizer unavailable')
+    tok=AutoTokenizer.from_pretrained(base,trust_remote_code=False);bind_history_reasoning(tok,policy='keep')
+    source=fixture()
+    if captured:
+        path=Path('/home/werg/data/dgxops/claude-recovery-20261028/data/training-bug-audit-v1/synthetic-wrapper-real-xml-turn.json')
+        if not path.is_file():pytest.skip('captured graph-80 response unavailable')
+        source=json.loads(path.read_text())
+    def trajectory(name):
+        return Trajectory(id=name,family='actual-capture',messages=copy.deepcopy(source['context']),head=1,noun='task',
+            lineage={'actor':'captured-actor'},license={},split='train',split_groups=['world'],outcome={},tools=[])
+    chosen=trajectory('chosen');append_captured_native_xml_turn(chosen,source)
+    rejected=trajectory('rejected');rejected.messages.append({'role':'assistant','content':'wrong'})
+    binding={'source_file':{'sha256':'a'*64},'source_row':'pair','source_revision':'actual-revision'}
+    record=bound_preference_record({'chosen':chosen,'rejected':rejected},binding)
+    graph,_=pair_graph(record,tok,tokenizer_fingerprint=tokenizer_fingerprint(tok))
+    assert len(graph['nodes'])==2 and record['alternatives']['chosen']['native_xml_turns']['1']==source
+    assert source['model_response']['raw_calls']==[] and record['source']==binding
+    for field in ('request','schema','action'):
+        broken=copy.deepcopy(chosen)
+        turn=broken.native_xml_turns['1']
+        if field=='request':turn['model_request']['seed']='forged'
+        elif field=='schema':turn['response_tools'][0]['function']['name']='forged'
+        else:turn['assistant']['calls'][0]['arguments']['code']='forged'
+        with pytest.raises(ValueError):bound_preference_record({'chosen':broken,'rejected':rejected},binding)
+
+
+def test_failure_repair_retains_and_rechecks_sampled_xml_evidence():
+    from test_native_failure_repair_dpo import record
+    from natlang_neuralese.data.native_failure_repair import _merge_graphs
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    pair=record();alt=pair['alternatives']['failed']
+    turn=rollout_turns({'trajectory':[fixture()]})[0]
+    alt['native_xml_turns']=[turn]
+    capture=alt['execution_receipt'];capture['native_xml_turns_sha256']=canonical_json_sha256_hex([turn])
+    alt['execution_capture_sha256']=canonical_json_sha256_hex(capture)
+    replay=alt['graph_replay_receipt'];replay['execution_capture_sha256']=alt['execution_capture_sha256']
+    alt['graph_replay_sha256']=canonical_json_sha256_hex(replay)
+    _merge_graphs(pair,'tok')
+    forged=copy.deepcopy(pair);forged['alternatives']['failed']['native_xml_turns'][0]['target']['tool_calls'][0]['function']['arguments']='{}'
+    with pytest.raises(ValueError):_merge_graphs(forged,'tok')

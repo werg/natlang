@@ -112,6 +112,10 @@ def _validate_pair(record, tokenizer_fingerprint, *, protected_groups):
                     or type(action.get('reference_logp')) not in (int,float)
                     or not math.isfinite(action['reference_logp']) or action['reference_logp'] > 1e-6):
                 raise ValueError('action capture or fixed reference log probability is malformed')
+        xml_turns=alt.get('native_xml_turns') or []
+        if not isinstance(xml_turns,list):raise ValueError('invalid native XML capture inventory')
+        from ..data.native_xml_custody import validate_replay_turn
+        for turn in xml_turns:validate_replay_turn(turn)
         capture_receipt=alt.get('execution_receipt')
         actor=alt.get('actor') or {}
         capture_actions=[{key:action.get(key) for key in ('node','position','token_id','kind')}
@@ -123,6 +127,8 @@ def _validate_pair(record, tokenizer_fingerprint, *, protected_groups):
                 or capture_receipt.get('prompt_sha256')!=binding['prompt_sha256']
                 or capture_receipt.get('actions')!=capture_actions
                 or capture_receipt.get('actor')!=actor
+                or (xml_turns and capture_receipt.get('native_xml_turns_sha256')!=canonical_json_sha256_hex(xml_turns))
+                or (not xml_turns and capture_receipt.get('native_xml_turns_sha256') is not None)
                 or canonical_json_sha256_hex(capture_receipt)!=alt.get('execution_capture_sha256')):
             raise ValueError('full sampled/forced action capture receipt does not match this exact unhinted task')
         replay_receipt=alt.get('graph_replay_receipt')
@@ -585,9 +591,11 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
             for action in actions]
         prompt_sha=canonical_json_sha256_hex({'messages':rollout['turns'][0]['messages'],
             'tools':rollout['turns'][0].get('tools') or []})
+        xml_turns=[copy.deepcopy(turn) for turn in rollout['turns'] if turn.get('native_xml_turn') is not None]
         capture_receipt={'schema':'natlang.native-failure-execution-capture/1',
             'task_sha256':evidence['task_sha256'],'world_sha256':evidence['world_sha256'],
             'prompt_sha256':prompt_sha,'actions':capture_actions,'actor':actor,
+            **({'native_xml_turns_sha256':canonical_json_sha256_hex(xml_turns)} if xml_turns else {}),
             'result_sha256':evidence['result_sha256'],'execution_graph_sha256':canonical_json_sha256_hex(rollout['execution_graph'])}
         capture_sha=canonical_json_sha256_hex(capture_receipt)
         replay_receipt={'schema':'natlang.native-graph-replay-receipt/1',
@@ -604,7 +612,8 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
             'reference_score':{**{key:score_receipt[key] for key in
                 ('checkpoint_sha256','tokenizer_fingerprint','runtime_sha256','graph_action_sha256','normalization')},
                 'receipt':score_receipt,'receipt_sha256':score_receipt_sha},
-            'capture_actor_identity':actor_identity,'capture_invocation_actors':actors}
+            'capture_actor_identity':actor_identity,'capture_invocation_actors':actors,
+            **({'native_xml_turns':xml_turns} if xml_turns else {})}
     prompt_sha=alternatives['failed']['prompt_sha256']
     if alternatives['repaired']['prompt_sha256']!=prompt_sha:
         raise ValueError('corrected execution prompt differs from the original unhinted task view')
