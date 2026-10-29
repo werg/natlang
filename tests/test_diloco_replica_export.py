@@ -76,3 +76,23 @@ def test_pack_waits_for_generation_registration(tmp_path):
         ex.pack({'store': str(store), 'archive': str(tmp_path / 'one.tar'), 'export_id': 'one'})
     (store / 'retention.json').write_text(json.dumps({'generations': [{'id': 'a' * 32}]}))
     assert ex.pack({'store': str(store), 'archive': str(tmp_path / 'one.tar'), 'export_id': 'one'})['export']['sequence'] == 4
+
+
+def test_prune_keeps_referenced_blobs_for_restore(tmp_path):
+    store = _store(tmp_path)
+    first = ex.pack({'store': str(store), 'archive': str(tmp_path / 'one' / 'coordinator.tar'), 'export_id': 'one', 'dedupe_bytes': 1000})
+    one = ex.verify_archive(first['path'])
+    state = {'exports': [{'export_id': 'one', 'phase': 'verified', 'local_copy': first['path'], 'pack': first,
+                          'object': {'run': 'r', 'name': 'n1'}, 'verification': one}]}
+    second = ex.pack({'store': str(store), 'archive': str(tmp_path / 'two' / 'coordinator.tar'), 'export_id': 'two',
+                      'dedupe_bytes': 1000, 'exclude': ex._exclusions(state)})
+    state['exports'].append({'export_id': 'two', 'phase': 'verified', 'local_copy': second['path'], 'pack': second,
+                             'object': {'run': 'r', 'name': 'n2'}, 'verification': ex.verify_archive(second['path'])})
+    journal = tmp_path / 'journal.json'; log = tmp_path / 'deletions.txt'
+    removed = ex.prune(state, journal, {'local_root': str(tmp_path / 'local')}, deletion_log=log)
+    assert removed == [first['path']] and not Path(first['path']).exists() and 'n1' in log.read_text()
+    assert set(state['blobs']) == {r['sha256'] for r in second['export']['references'].values()}
+    assert set(ex._exclusions(state)) >= set(state['blobs'])
+    journal.write_text(json.dumps(state))
+    restored = ex.restore(journal, 'two', tmp_path / 'seed')
+    assert verify_seed(tmp_path / 'seed', expected_receipt_sha256=_sha((tmp_path / 'seed' / 'seed-receipt.json').read_bytes()))['sequence'] == restored['sequence']

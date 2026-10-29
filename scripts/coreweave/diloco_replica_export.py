@@ -39,6 +39,7 @@ SEED_SCHEMA = 'natlang.diloco-replica-seed/1'
 EXPORT_SCHEMA = 'natlang.diloco-replica-export/1'
 JOURNAL_SCHEMA = 'natlang.diloco-replica-export-journal/1'
 BLOCK = 8 << 20
+RESTARTED = 'interrupted before verification (supervisor restart)'
 
 
 def identity(value):
@@ -265,8 +266,12 @@ def restore(journal_path, export_id, destination):
     with open(entry['local_copy'], 'rb') as raw, tarfile.open(fileobj=raw, mode='r|') as tar:
         names = [m.name for m in tar if m.name.startswith('seed/')]
     extract(entry['local_copy'], {n: n[5:] for n in names})
-    by_object = {}
-    for relative, ref in export['references'].items(): by_object.setdefault(ref['export_id'], {})[ref['member']] = relative
+    by_object = {}; blobs = state.get('blobs', {})
+    for relative, ref in export['references'].items():
+        if ref['sha256'] in blobs and Path(blobs[ref['sha256']]['path']).is_file():
+            target = destination / relative; target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(blobs[ref['sha256']]['path'], target); continue
+        by_object.setdefault(ref['export_id'], {})[ref['member']] = relative
     for source_id, wanted in by_object.items(): extract(entries[source_id]['local_copy'], wanted)
     receipt = json.loads((destination / 'seed-receipt.json').read_text())
     for item in receipt['files']:
@@ -300,13 +305,51 @@ def _remote_code(box, directory):
 
 
 def _exclusions(state):
-    """Blobs of verified exports whose local copies and private objects exist."""
+    """Blobs held by a present verified local copy or by the local blob store."""
     out = {}
+    for digest, blob in state.get('blobs', {}).items():
+        if Path(blob['path']).is_file(): out[digest] = {k: blob[k] for k in ('export_id', 'member', 'object')}
     for entry in state['exports']:
-        if entry.get('phase') != 'verified' or not Path(entry['local_copy']).is_file(): continue
+        if entry.get('phase') != 'verified' or not Path(entry.get('local_copy', '')).is_file(): continue
         for digest, member in entry['pack'].get('blobs', {}).items():
             out.setdefault(digest, {'export_id': entry['export_id'], 'member': member, 'object': entry['object']})
     return out
+
+
+def prune(state, journal, config, *, deletion_log):
+    """Keep only the newest verified local copy; first move blobs it references into the blob store."""
+    verified = [e for e in state['exports'] if e.get('phase') == 'verified']
+    if not verified: return []
+    latest = verified[-1]; store = Path(config['local_root']) / 'blobs'; blobs = state.setdefault('blobs', {})
+    needed = {r['sha256']: r for r in latest['verification']['export']['references'].values()}
+    removed = []
+    for entry in verified[:-1]:
+        local = Path(entry.get('local_copy', ''))
+        if entry.get('local_pruned') or not local.is_file(): continue
+        wanted = {r['member']: d for d, r in needed.items() if r['export_id'] == entry['export_id'] and d not in blobs}
+        if wanted:
+            store.mkdir(parents=True, exist_ok=True)
+            with open(local, 'rb') as raw, tarfile.open(fileobj=raw, mode='r|') as tar:
+                for member in tar:
+                    digest = wanted.get(member.name)
+                    if digest is None: continue
+                    target = store / digest; pending = store / ('.' + digest + '.pending'); h = hashlib.sha256()
+                    with tar.extractfile(member) as src, pending.open('wb') as dst:
+                        while block := src.read(BLOCK): h.update(block); dst.write(block)
+                        dst.flush(); os.fsync(dst.fileno())
+                    if h.hexdigest() != digest: pending.unlink(); raise ValueError('blob store extraction differs')
+                    os.replace(pending, target); ref = needed[digest]
+                    blobs[digest] = {'path': str(target), 'bytes': member.size, 'export_id': ref['export_id'],
+                                     'member': ref['member'], 'object': ref['object']}
+                    _write(journal, state)
+            if set(wanted.values()) - set(blobs): raise ValueError('referenced blob missing from superseded copy')
+        with open(deletion_log, 'a') as log:
+            log.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')} delete {local} sha256={entry['pack']['sha256']} bytes={entry['pack']['bytes']} "
+                      f"reason=superseded local coordinator copy; successor {latest['export_id']} owner-GET and member verified; "
+                      f"private object {entry['object']['run']}/{entry['object']['name']} retained\n")
+        local.unlink(); shutil.rmtree(local.parent, ignore_errors=True)
+        entry.update(local_pruned=True, local_pruned_at=time.time()); _write(journal, state); removed.append(str(local))
+    return removed
 
 
 def cycle(config, state, journal):
@@ -349,7 +392,8 @@ def cycle(config, state, journal):
            'CW_EXPORT_EXPECTED_BYTES': str(packed['bytes']), 'CW_EXPORT_CACHE_BOUNDED_READS': '1',
            'CW_EXPORT_SEALED_PIN': json.dumps({'path': packed['path'], 'identity': {'sha256': packed['sha256'], 'bytes': packed['bytes']},
                                                'stat': packed['stat']}),
-           'CW_EXPORT_VERIFY_ON_OWNER': '1', 'CW_EXPORT_OWNER_DESTINATION': str(local)}
+           'CW_EXPORT_VERIFY_ON_OWNER': '1', 'CW_EXPORT_OWNER_DESTINATION': str(local),
+           'CW_EXPORT_OWNER_RESERVE_BYTES': str(config.get('owner_reserve_bytes', 80 << 30))}
     log = Path(config['state_root']) / f'coordinator-v5-export-{export_id}.log'
     with log.open('ab') as output:
         code = subprocess.run([str(CW_PYTHON), str(EXPORTER), role, packed['path']], env=env, stdout=output, stderr=subprocess.STDOUT).returncode
@@ -369,6 +413,8 @@ def cycle(config, state, journal):
     verification = verify_archive(copy['path'], expected_export_id=export_id)
     if (verification['sequence'], verification['head']) != (export['sequence'], export['head']): raise RuntimeError('local copy differs from intent')
     entry.update(phase='verified', verification=verification, verified_at=time.time()); _write(journal, state)
+    if config.get('prune_superseded_local', False):
+        entry['pruned'] = prune(state, journal, config, deletion_log=config['deletion_log'])
     removed = box.exec(['rm', '-rf', '--', staging], timeout_seconds=300).result(timeout=330)
     entry['staging_removed'] = removed.returncode == 0; _write(journal, state)
     return entry
@@ -381,11 +427,13 @@ def run(config_path):
     state = json.loads(journal.read_text()) if journal.exists() else {'schema': JOURNAL_SCHEMA, 'config': config, 'exports': []}
     for entry in state['exports']:
         if entry.get('phase') not in ('verified', 'failed', 'cloud-verified-no-local-copy'):
-            entry.update(phase='failed', error='interrupted before verification (supervisor restart)')
+            entry.update(phase='failed', error=RESTARTED)
     _write(journal, state)
     while True:
-        last = max((e['started_at'] for e in state['exports']), default=0)
-        failed_recently = state['exports'] and state['exports'][-1].get('phase') != 'verified'
+        # Exports never overlap (one synchronous cycle); the interval is measured start to start.
+        counted = [e for e in state['exports'] if e.get('error') != RESTARTED]
+        last = max((e['started_at'] for e in counted), default=0)
+        failed_recently = bool(counted) and counted[-1].get('phase') != 'verified'
         wait = (config.get('retry_seconds', 600) if failed_recently else config.get('interval_seconds', 2700)) - (time.time() - last)
         if wait > 0: time.sleep(min(wait, 300)); continue
         try:
