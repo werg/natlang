@@ -124,3 +124,28 @@ def test_replacement_owner_requires_exact_failed_worker_lineage(tmp_path):
     with pytest.raises(ValueError):check(provider_fn=lambda _:SimpleNamespace(sandbox_id='replacement',status=SimpleNamespace(state=3)))
     with pytest.raises(ValueError):check(observed=lambda journal,nonce:dict(observe(journal,nonce),worker_absent=False))
     with pytest.raises(ValueError):verify_replacement_owner(ref,owner_journal={'workers':{'0':dict(old,sandbox_id='other')}},expected_primary=old,expected_target=target,worker_index=0,nonce='n'*48,get_sandbox=provider,observe_owner=observe)
+
+
+def test_successor_sdk_observer_executes_against_real_nested_owner(tmp_path,monkeypatch):
+    import subprocess,sys,time
+    from types import SimpleNamespace
+    from scripts.coreweave import cwctl
+    from scripts.coreweave.diloco_nested_owner import prepare
+    from scripts.coreweave.diloco_replica_fence import sdk_observe_replacement_owner
+    script=Path(__file__).parents[1]/'scripts/coreweave/diloco_role_supervisor.py'
+    spec=prepare(source=script,expected_sha256=hashlib.sha256(script.read_bytes()).hexdigest(),python=sys.executable,control_directory=str(tmp_path/'owner'),runtime=str(Path(__file__).parents[1]))
+    proc=subprocess.Popen(spec['argv'])
+    class Box:
+        def exec(self,argv,**kwargs):
+            result=subprocess.run(argv,capture_output=True,text=True,timeout=15)
+            return SimpleNamespace(result=lambda **kw:result)
+    try:
+        statepath=tmp_path/'owner'/'state.json';end=time.monotonic()+8
+        while not statepath.exists() and time.monotonic()<end:time.sleep(.02)
+        state=json.loads(statepath.read_text());new={'sandbox_id':'replacement','boot_id':state['boot_id'],'owner_id':state['owner_id']}
+        supervisor={'pid':proc.pid,'start_ticks':state['supervisor_start_ticks'],'cmdline_sha256':spec['supervisor_cmdline_sha256'],'entrypoint_sha256':spec['entrypoint_sha256']}
+        journal={'new_identity':new,'supervisor':supervisor,'control_directory':str(statepath.parent)}
+        monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None);monkeypatch.setattr(cwctl,'read_sandbox',lambda *a,**k:Box())
+        result=sdk_observe_replacement_owner(journal,'n'*48)
+        assert result['owner_live'] and result['worker_absent'] and result['supervisor']==supervisor
+    finally:proc.terminate();proc.wait(timeout=8)
