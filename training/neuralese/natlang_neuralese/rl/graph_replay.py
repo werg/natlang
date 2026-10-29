@@ -303,10 +303,14 @@ def restore_bundle(engine, manifest_path, *, policy_id):
 
 def producer_turns(rollout):
     """Bind sampled invocation turns to existing execution-graph occurrences."""
+    import copy
     graph = rollout.get('execution_graph') or []
     nodes = {node['node']: node for node in graph if node.get('node')}
     counters, result = {}, []
     for turn in rollout.get('turns') or []:
+        if turn.get('native_xml_turn'):
+            from ..data.native_xml_custody import validate_replay_turn
+            validate_replay_turn(turn)
         call = turn.get('invocation_id')
         counters[call] = counters.get(call, 0) + 1
         turn_id = f'{call}#turn{counters[call]}'
@@ -321,6 +325,7 @@ def producer_turns(rollout):
                 if sources and sources[0] != 'external':
                     reads[node['block']] = sources[0]
         result.append({'messages': turn['messages'], 'tools': turn.get('tools'), 'reply': turn['target'],
+            **({'response_tools':copy.deepcopy(turn['response_tools']), 'native_xml_turn':copy.deepcopy(turn['native_xml_turn'])} if turn.get('native_xml_turn') else {}),
             'graph_turn': turn_id, 'written_nodes': writes, 'read_bindings': reads,
             **({'sampling': turn['sampling']} if turn.get('sampling') else {})})
     return result

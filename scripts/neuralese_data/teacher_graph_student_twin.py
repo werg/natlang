@@ -214,6 +214,10 @@ def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: s
                     checks['reference_rows_without_decision_record'] += 1
                 context, assistant = turn.get('context'), turn.get('assistant')
                 raw_calls = (turn.get('model_response') or {}).get('raw_calls')
+                native_xml = bool((turn.get('model_response') or {}).get('tool_parse'))
+                if native_xml:
+                    from natlang_neuralese.data.native_xml_custody import derived_tool_calls
+                    raw_calls = derived_tool_calls(turn)
                 tools = turn.get('tools_offered')
                 target = {'role': 'assistant', 'content': assistant.get('content', ''), 'tool_calls': raw_calls}
                 if isinstance(assistant.get('reasoning'), str) and assistant['reasoning']:
@@ -223,8 +227,13 @@ def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: s
                     omissions.append({'id': ref['id'], 'split': split, 'source_row_id': row['id'],
                                       'teacher_turn_index': index, 'reason': reason, **extra})
                 try:
-                    packet, omission = render_teacher_packet(tokenizer, context, target, tools, turn,
-                                                             prompt_rendering=prompt_rendering)
+                    if native_xml:
+                        from natlang_neuralese.data.native_xml_custody import render_packet
+                        packet = (render_packet(tokenizer,turn),None)
+                        omission = None
+                    else:
+                        packet, omission = render_teacher_packet(tokenizer, context, target, tools, turn,
+                                                                 prompt_rendering=prompt_rendering)
                 except ValueError as error:  # e.g. RequestError('tool-call-unrepresentable') under XML calls
                     omit(f'{model_key} rendering refused: {error}'[:300])
                     continue
@@ -232,7 +241,7 @@ def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: s
                     omit(omission.get('reason'), detail=omission)
                     continue
                 (text, token_ids, boundary), _emulation = packet
-                if prompt_rendering == 'program-header':
+                if prompt_rendering == 'program-header' and not native_xml:
                     # Same parity as render_native_turn_corpus.py: the serving renderer's program-header row must
                     # equal the strip script's derivation from the full row; a mismatch is an omission.
                     reason = program_header_parity(tokenizer, context, target, tools, turn, text, token_ids,

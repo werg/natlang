@@ -59,7 +59,7 @@ export type NativeProtocolFailure = { schema: 'natlang.native-marker-failure/1';
 export type ModelTurn = { protocol_failure?: NativeProtocolFailure; calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number; prompt_tokens?: number;
   /** Native XML was parsed from this actual assistant content, never fabricated provider tool_calls. */
-  tool_parse?: { schema: 'natlang.native-xml-tool-parse/1'; source: 'assistant-content'; schema_custody: 'response_tools' };
+  tool_parse?: { schema: 'natlang.native-xml-tool-parse/1'; source: 'assistant-content'; schema_custody: 'response_tools'; policy_sha256: string; wire_tool_aliases: Record<string,string> };
   /** Exact provider-context provenance, when an adapter supplies it. */
   transport_provenance?: Record<string, unknown>;
   value_confidence?: (number | { geometric_mean?: number } | null)[];

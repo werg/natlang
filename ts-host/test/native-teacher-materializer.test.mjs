@@ -1909,3 +1909,20 @@ test('source planning readiness does not replace captured task and action outcom
     assert.ok(materializeNativeRows([unknown], { directAnswers: true }).turns.every(turn => !turn.training_admission.approved));
   }
 });
+
+test('assistant-content native XML is authenticated and materialized without fabricating provider raw calls', async () => {
+  const { chatCompletionModelTurn } = await import(pathToFileURL(join(dist,'model/chat-completion.js')));
+  const { trajectoryTurn } = await import(pathToFileURL(join(dist,'runtime/trajectory.js')));
+  const tools = [{type:'function',function:{name:'eval',parameters:{type:'object',properties:{code:{type:'string'}},required:['code'],additionalProperties:false}}}];
+  const xml='<tool_call>\n<function=eval>\n<parameter=code>\nreturn 6;\n</parameter>\n</function>\n</tool_call>';
+  const request={invocation_id:'root',messages:[system,opening],tools:[],response_tools:tools,seed:1,max_tokens:99};
+  const response=await chatCompletionModelTurn(async()=>({choices:[{finish_reason:'stop',message:{content:xml,reasoning_content:'compute'}}]}))(request);
+  const row=nativeRow('xml-projection');row.trajectory=[trajectoryTurn(request,response)];
+  row.outcome.action_ledger=[{seq:12,call_id:'root',name:'eval',arguments:{code:'return 6;'},outcome:'ok',result_text:'6'}];
+  const result=materializeNativeRows([row]);assert.equal(result.turns.length,1);
+  const turn=result.turns[0];assert.deepEqual(turn.tools,[]);assert.deepEqual(turn.response_tools,tools);
+  assert.equal(turn.target.tool_calls[0].function.name,'eval');assert.equal(turn.native_xml_turn.model_response.raw_calls.length,0);
+  assert.equal(turn.native_xml_turn.model_response.raw_response.choices[0].message.content,xml);
+  const forged=structuredClone(row);forged.trajectory[0].assistant.calls[0].arguments.code='return 7;';
+  assert.throws(()=>materializeNativeRows([forged]),/native XML/);
+});

@@ -16,6 +16,7 @@ import { tuneRuntime, rethrowInfrastructureFailure, executionKey, type TuneExecu
  * consumed by the trainer's RL objective with plan field `rollouts`.
  */
 import { createHash } from 'node:crypto';
+import { trajectoryTurn } from '../runtime/trajectory.js';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
@@ -136,7 +137,7 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
     const message = ((raw.choices as Json[] | undefined)?.[0]?.message ?? {}) as Json;
     turns.push({ messages: structuredClone(request.messages), ...(request.tools?.length ? { tools: structuredClone(request.tools) } : {}),
       ...(request.response_tools ? {response_tools: structuredClone(request.response_tools)} : {}),
-      ...(reply.tool_parse ? {tool_parse: structuredClone(reply.tool_parse)} : {}),
+      ...(reply.tool_parse ? {tool_parse: structuredClone(reply.tool_parse), native_xml_turn: trajectoryTurn(request,reply)} : {}),
       target: { role: 'assistant', content: message.content ?? '', ...(message.tool_calls ? { tool_calls: structuredClone(message.tool_calls) } : {}) },
       invocation_id: call, sampling: { ...structuredClone(capture), ...(Array.isArray(imports) ? { native_state_imports: structuredClone(imports) } : {}) },
       replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });

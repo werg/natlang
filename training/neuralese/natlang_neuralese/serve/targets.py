@@ -32,9 +32,9 @@ def _split_boundary(engine, prefix, after):
     return None
 
 
-def target_items(engine, messages, tools, target):
+def target_items(engine, messages, tools, target, *, response_tools=None):
     """Return (prompt items, target continuation items) under the runtime's exact chat rendering."""
-    prompt = engine.render_request(messages, tools)
+    prompt = engine.render_request(messages, tools, **({'response_tools':response_tools} if response_tools is not None else {}))
     thinking = opens_thinking(engine._template([{"role": "user", "content": "x"}], None))
 
     def full_template(msgs, tls):
@@ -42,7 +42,8 @@ def target_items(engine, messages, tools, target):
             values, tools=tls or None, tokenize=False, add_generation_prompt=False)
         return render_with_empty_thought(render, msgs) if thinking else render(msgs)
 
-    full = engine.render_request(list(messages) + [target], tools, template=full_template)
+    full = engine.render_request(list(messages) + [target], tools, template=full_template,
+                                 **({'response_tools':response_tools} if response_tools is not None else {}))
     before = _items(engine, prompt.segments, prompt.blocks, prompt.escape_nonce,
                     prompt.block_stop_gradients, prompt.block_source_occurrences)
     after = _items(engine, full.segments, full.blocks, full.escape_nonce,

@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { chatCompletionModelTurn } from '../dist/model/chat-completion.js';
 import { parseNativeXmlCalls } from '../dist/model/native-xml-calls.js';
 import { trajectoryTurn } from '../dist/runtime/trajectory.js';
+import { authenticateNativeXmlTurn } from '../dist/model/native-xml-custody.js';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 const tool = (name, properties, required=[]) => ({type:'function',function:{name,parameters:{type:'object',properties,required,additionalProperties:false}}});
 const tools = [tool('eval',{code:{type:'string'},finish:{type:'boolean'},timeout_ms:{type:'integer',minimum:1}},['code']),
   tool('return_result',{status:{type:'string',enum:['success','blocked','failed']},value:{anyOf:[{type:'number'},{type:'null'}]},reason:{type:'string'}},['status'])];
@@ -30,4 +33,16 @@ test('header request preserves allowed schema out of band, raw response and reas
 test('truncated native XML never executes',async()=>{
   const turn=chatCompletionModelTurn(async()=>({choices:[{finish_reason:'length',message:{content:compact}}]}));
   const result=await turn({messages:[],tools:[],response_tools:tools,seed:3,max_tokens:1});assert.deepEqual(result.calls,[]);assert.equal(result.truncated,true);
+});
+
+
+test('native parser policy and complete captured custody authenticate; forged bindings fail',async()=>{
+  const hash=createHash('sha256').update(readFileSync(new URL('../src/model/native-xml-calls.ts',import.meta.url))).digest('hex');
+  const turn=chatCompletionModelTurn(async()=>({choices:[{finish_reason:'stop',message:{content:compact,reasoning_content:'inspect'}}]}));
+  const req={messages:[{role:'user',content:'go'}],tools:[],response_tools:tools,seed:3,max_tokens:100,invocation_id:'invocation'};
+  const result=await turn(req);const captured=trajectoryTurn(req,result);assert.equal(result.tool_parse.policy_sha256,hash);
+  assert.deepEqual(authenticateNativeXmlTurn(captured),result.calls);
+  for(const mutate of [x=>x.model_response.raw_response.choices[0].message.content+='x',x=>x.response_tools[0].function.name='forged',x=>x.assistant.calls[0].arguments.code='forged',x=>x.model_response.tool_parse.policy_sha256='0'.repeat(64),x=>x.model_request.seed=4,x=>x.model_response.raw_calls.push({})]){
+    const forged=structuredClone(captured);mutate(forged);assert.throws(()=>authenticateNativeXmlTurn(forged));
+  }
 });

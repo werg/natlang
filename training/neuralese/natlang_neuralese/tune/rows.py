@@ -123,7 +123,15 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None):
             keys = {import_name(*json.loads(key)[1:]):key for key in placed}
             row['soft'] = {name:keys[name] for name in external}
         return row
-    prompt, target = target_items(engine, messages, turn['tools'], reply_message(turn['reply']))
+    native_xml=turn.get('native_xml_turn')
+    if native_xml:
+        from ..data.native_xml_custody import authenticate
+        calls=authenticate(native_xml)
+        if (calls!=turn['reply'].get('calls') or native_xml['context']!=turn['messages'] or
+                native_xml['tools_offered']!=turn['tools'] or native_xml['response_tools']!=turn.get('response_tools')):
+            raise TuneMathError('native XML tune turn differs from its exact request and action')
+    prompt, target = target_items(engine, messages, turn['tools'], reply_message(turn['reply']),
+                                  **({'response_tools':turn['response_tools']} if native_xml else {}))
     if not target:
         raise TuneMathError('the reply rendered no target tokens')
     names = {mine[key]: import_name(*json.loads(key)[1:]) for key in placed}

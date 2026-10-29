@@ -70,6 +70,9 @@ def validate_rollout_graph(rollout,*,semantic=False):
             for turn in turns):
         raise ValueError('whole-episode Neuralese RL requires its actual complete execution graph')
     for name, turn in zip(names, turns):
+        if turn.get('native_xml_turn'):
+            from ..data.native_xml_custody import validate_replay_turn
+            validate_replay_turn(turn)
         if nodes and nodes[name].get('call_id') != turn['invocation_id']:
             raise ValueError('whole-episode model-turn event changed its actual invocation owner')
         capture=turn.get('sampling') or {}
@@ -90,5 +93,6 @@ def whole_episode_turns(rollout,*,semantic=False):
         outside={block:node for block,node in binding['read_bindings'].items() if node not in captured_writers}
         binding['read_bindings']={block:node for block,node in binding['read_bindings'].items() if block not in outside}
         result.append({'messages': turn['messages'], 'tools': turn.get('tools'), 'reply': turn['target'],
+            **({'response_tools':copy.deepcopy(turn['response_tools']), 'native_xml_turn':copy.deepcopy(turn['native_xml_turn'])} if turn.get('native_xml_turn') else {}),
             **binding,'external_read_bindings':outside,'sampling':copy.deepcopy(turn.get('sampling') or {})})
     return result

@@ -13,6 +13,7 @@ import { pureLiteralEvalReturn } from '../compiler/neuralese-conversion.js';
 import { deriveInlineActionSpanMap } from '../compiler/inline-action-spans.js';
 import { formatType, parseType, type Type } from '../native/types.js';
 import { writtenReturnResult } from '../native/pseudo-call.js';
+import { authenticateNativeXmlTurn } from '../model/native-xml-custody.js';
 
 // The materializer reads two explicitly identified source dialects: exact
 // historical receipts remain reusable, and current collectors emit native
@@ -1063,6 +1064,7 @@ function containsIncompleteDiagnostic(value: unknown): boolean {
 function hasExactRawModelCall(source: Dict, call: Dict): boolean {
   const response = source.model_response && typeof source.model_response === 'object' ? source.model_response as Dict : {};
   const rawCalls = Array.isArray(response.raw_calls) ? response.raw_calls : [];
+  if (response.tool_parse) return authenticateNativeXmlTurn(source).some(([name,args]) => name === call.source_tool && canonical(args) === canonical(call.arguments));
   return rawCalls.some(raw => rawModelCallMatches(raw, call));
 }
 
@@ -1765,6 +1767,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         (turn.assistant as Dict).calls as Dict[] : [];
       const rawCalls = Array.isArray((turn.model_response as Dict | undefined)?.raw_calls) ?
         (turn.model_response as Dict).raw_calls as Dict[] : [];
+      const parsedNative = (turn.model_response as Dict | undefined)?.tool_parse ? authenticateNativeXmlTurn(turn) : undefined;
       calls.forEach((call, callIndex) => {
         if (call.source_tool !== 'eval' || !call.arguments || typeof call.arguments !== 'object') return;
         const actions = ledger.filter(event => event.call_id === turn.invocation_id && event.name === 'eval' &&
@@ -1772,6 +1775,10 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
             row, typeof turn.invocation_id === 'string' ? turn.invocation_id : undefined)));
         if (actions.length !== 1 || typeof actions[0]!.tool_call_id !== 'string') return;
         const raw = rawCalls[callIndex], fn = raw && typeof raw.function === 'object' ? raw.function as Dict : undefined;
+        const parsed = parsedNative?.[callIndex];
+        if (parsed && parsed[0] === 'eval') {
+          rawEvalArguments.set(`${String(actions[0]!.call_id)}\u0000${String(actions[0]!.tool_call_id)}`, parsed[1]); return;
+        }
         if (fn?.name !== 'eval' || typeof fn.arguments !== 'string') return;
         const args = parseArguments(fn.arguments);
         if (args && typeof args === 'object' && !Array.isArray(args))
@@ -1959,7 +1966,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       if (!contextSource.length || contextSource[0]?.role !== 'system' || contextSource[1]?.role !== 'user')
         throw new Error(`${row.id}: decision ${index} lacks a fresh system/user opening context`);
 
-      const offered = toolSchemas(source.tools_offered ?? [], `${row.id}.trajectory[${index}].tools_offered`);
+      const parsedNative = (source.model_response as Dict | undefined)?.tool_parse ? authenticateNativeXmlTurn(source) : undefined;
+      const offered = toolSchemas(parsedNative ? source.response_tools : source.tools_offered ?? [], `${row.id}.trajectory[${index}].allowed_tools`);
       const assistant = record(source.assistant, `${row.id}.trajectory[${index}].assistant`);
       const planningAttempted = Object.hasOwn(assistant, 'execution_plan');
       const executionPlan = typeof assistant.execution_plan === 'string' && assistant.execution_plan.trim() ?
@@ -2193,6 +2201,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         license: taskIr.license ?? 'project-generated',
         messages: publicValue(contextSource),
         tools: publicValue(source.tools_offered ?? []),
+        ...(parsedNative ? { response_tools: publicValue(source.response_tools), native_xml_turn: structuredClone(source) } : {}),
         target,
         teacher_reasoning: authoredRootAction ? null : retainedReasoning,
         // Only reasoning a model wrote is a target: rationales a model wrote for scripted actions (static

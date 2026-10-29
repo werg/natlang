@@ -10,6 +10,7 @@ import { nativeProtocolFailure } from '../native/native-protocol.js';
 import { runtimePartsToText, type RuntimeContentPart } from '../native/neuralese.js';
 import { TOOL_MARKUP } from '../native/tool-markup.js';
 import { parseNativeXmlCalls } from './native-xml-calls.js';
+import { NATIVE_XML_POLICY_SHA256 } from './native-xml-policy.js';
 
 type Json = Record<string, unknown>;
 /** Streamed chunks (`chat.completion.chunk`), or a single complete `chat.completion` body. */
@@ -340,7 +341,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         if (written) calls.push([reverse[written[0]] ?? written[0], written[1]]);
         const reasoning = message?.reasoning_content ?? message?.reasoning;
         return finish({ calls, text: parsedNative ? '' : replyText, raw_calls: rawCalls,
-          ...(parsedNative ? {tool_parse: {schema:'natlang.native-xml-tool-parse/1' as const, source:'assistant-content' as const, schema_custody:'response_tools' as const}} : {}),
+          ...(parsedNative ? {tool_parse: {schema:'natlang.native-xml-tool-parse/1' as const, source:'assistant-content' as const, schema_custody:'response_tools' as const, policy_sha256:NATIVE_XML_POLICY_SHA256, wire_tool_aliases:structuredClone(forward)}} : {}),
           ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}),
           ...(truncated ? { truncated: true } : {}), ...counts(), raw_response: body });
       } catch (error) {

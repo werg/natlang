@@ -1,0 +1,93 @@
+import copy,hashlib,json
+from pathlib import Path
+import pytest
+from natlang_neuralese.data.native_xml_custody import authenticate,derived_tool_calls,validate_replay_turn,render_packet,POLICY_SHA256
+from natlang_neuralese.rl.task_rollouts import rollout_turns
+
+
+def fixture():
+    xml='<tool_call>\n<function=eval>\n<parameter=code>\nconst a = 1 < 2;\n</parameter>\n</function>\n</tool_call>'
+    tools=[{'type':'function','function':{'name':'eval','parameters':{'type':'object','properties':{'code':{'type':'string'}},'required':['code'],'additionalProperties':False}}}]
+    request={'invocation_id':'i','messages':[{'role':'user','content':'x'}],'tools':[],'response_tools':tools,'seed':3,'max_tokens':100}
+    raw={'choices':[{'finish_reason':'stop','message':{'content':xml,'reasoning_content':'thinking'}}]}
+    encode=lambda value:json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False)
+    req=encode({k:v for k,v in request.items() if k!='invocation_id'});response=encode(raw);sha=lambda x:hashlib.sha256(x.encode()).hexdigest()
+    calls=[['eval',{'code':'const a = 1 < 2;'}]]
+    return {'phase':'action','invocation_id':'i','context':copy.deepcopy(request['messages']),'tools_offered':[],
+      'response_tools':copy.deepcopy(tools),'model_request':request,'model_request_canonical':req,'request_sha256':sha(req),
+      'raw_response_sha256':sha(response),'model_response':{'calls':calls,'text':'','raw_calls':[],
+        'raw_response':raw,'raw_response_canonical':response,'tool_parse':{'schema':'natlang.native-xml-tool-parse/1',
+         'source':'assistant-content','schema_custody':'response_tools','policy_sha256':POLICY_SHA256,'wire_tool_aliases':{}}},
+      'assistant':{'content':'','reasoning':'thinking','calls':[{'tool':'eval','source_tool':'eval','arguments':calls[0][1],'call_id':None}]}}
+
+
+def test_authenticate_rejects_changed_source_schemas_policy_and_claimed_calls():
+    turn=fixture();assert authenticate(turn)==[['eval',{'code':'const a = 1 < 2;'}]]
+    for change in (lambda x:x['model_response']['raw_response']['choices'][0]['message'].update(content='bad'),
+                   lambda x:x['response_tools'][0]['function'].update(name='other'),
+                   lambda x:x['assistant']['calls'][0]['arguments'].update(code='wrong'),
+                   lambda x:x['model_response']['tool_parse'].update(policy_sha256='0'*64),
+                   lambda x:x['model_request'].update(seed=4),lambda x:x['model_response']['raw_calls'].append({})):
+        broken=copy.deepcopy(turn);change(broken)
+        with pytest.raises(ValueError):authenticate(broken)
+    broken=copy.deepcopy(turn);broken['model_response']['raw_response']['choices'][0]['message']['content']='prefix '+broken['model_response']['raw_response']['choices'][0]['message']['content']
+    encoded=json.dumps(broken['model_response']['raw_response'],sort_keys=True,separators=(',',':'));broken['model_response']['raw_response_canonical']=encoded;broken['raw_response_sha256']=hashlib.sha256(encoded.encode()).hexdigest()
+    with pytest.raises(ValueError):authenticate(broken)
+
+
+def test_rollout_projection_retains_actual_empty_prompt_tools_and_reauthenticates():
+    source=fixture();row=rollout_turns({'trajectory':[source]})[0]
+    assert row['tools'] is None and row['response_tools']==source['response_tools']
+    assert row['target']['tool_calls']==derived_tool_calls(source)
+    assert validate_replay_turn(row)==authenticate(source)
+    forged=copy.deepcopy(row);forged['target']['tool_calls'][0]['function']['arguments']='{"code":"wrong"}'
+    with pytest.raises(ValueError):validate_replay_turn(forged)
+
+
+def test_render_exact_actual_xml_and_refuse_noncanonical_frame():
+    from transformers import AutoTokenizer
+    from natlang_neuralese.serve.chat import bind_history_reasoning
+    base=Path('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+    if not base.is_dir():pytest.skip('pinned real tokenizer unavailable')
+    tokenizer=AutoTokenizer.from_pretrained(base,trust_remote_code=False);bind_history_reasoning(tokenizer,policy='keep')
+    turn=fixture();text,ids,boundary=render_packet(tokenizer,turn)
+    assert text.endswith(turn['model_response']['raw_response']['choices'][0]['message']['content']+'<|im_end|>\n')
+    assert 0<boundary<len(ids)
+    assert '<tools>' not in text
+
+
+def test_authenticated_xml_admission_uses_exact_action():
+    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import admitted_teacher_turn
+    turn=fixture();row={'id':'row'};decisions={('row',0):{'approved':True,'invocation_id':'i','raw_response_sha256':turn['raw_response_sha256']}}
+    assert admitted_teacher_turn(row,0,turn,decisions)[0] is True
+    forged=copy.deepcopy(turn);forged['model_response']['raw_response']['choices'][0]['message']['content']+='x'
+    with pytest.raises(ValueError):admitted_teacher_turn(row,0,forged,decisions)
+
+
+def test_dpo_uses_exact_authenticated_xml_projection_and_preserves_prompt_tools():
+    from transformers import AutoTokenizer
+    from natlang_neuralese.serve.chat import bind_history_reasoning
+    from natlang_neuralese.data.native_preference import pair_graph,SCHEMA_PREFERENCE,KIND
+    from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+    base=Path('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+    if not base.is_dir():pytest.skip('pinned real tokenizer unavailable')
+    tokenizer=AutoTokenizer.from_pretrained(base,trust_remote_code=False);bind_history_reasoning(tokenizer,policy='keep')
+    turn=fixture();target={'role':'assistant','content':'','reasoning_content':'thinking','tool_calls':derived_tool_calls(turn)}
+    alternatives={'chosen':{'split':'train','split_groups':['world'],'tools':[], 'messages':turn['context']+[target],'native_xml_turns':{'1':turn}},
+                  'rejected':{'split':'train','split_groups':['world'],'tools':[], 'messages':turn['context']+[{'role':'assistant','content':'wrong'}]}}
+    record={'schema':SCHEMA_PREFERENCE,'required_objective':KIND,'offline':True,'native_on_policy':False,'split':'train','source_groups':['world'],'common_message_count':1,'source':{'kind':'test'},'alternatives':alternatives}
+    graph,_=pair_graph(record,tokenizer,tokenizer_fingerprint=tokenizer_fingerprint(tokenizer))
+    assert len(graph['nodes'])==2 and all(not any(n['target_weights']) for n in graph['nodes'])
+    forged=copy.deepcopy(record);forged['alternatives']['chosen']['native_xml_turns']['1']['assistant']['calls'][0]['arguments']['code']='wrong'
+    with pytest.raises(ValueError):pair_graph(forged,tokenizer,tokenizer_fingerprint=tokenizer_fingerprint(tokenizer))
+
+
+def test_real_captured_assistant_content_with_synthetic_custody_envelope():
+    # The content is the saved graph-80 model response; its request envelope was
+    # reconstructed for this test and is not claimed as the original transport.
+    path=Path('/home/werg/data/dgxops/claude-recovery-20261028/data/training-bug-audit-v1/synthetic-wrapper-real-xml-turn.json')
+    if not path.is_file():pytest.skip('captured graph-80 response unavailable')
+    turn=json.loads(path.read_text())
+    assert authenticate(turn) and turn['model_response']['raw_calls']==[]
+    forged=copy.deepcopy(turn);forged['assistant']['calls'][0]['arguments']={}
+    with pytest.raises(ValueError):authenticate(forged)

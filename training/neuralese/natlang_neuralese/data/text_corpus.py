@@ -1693,7 +1693,7 @@ def _string_typed_parameter(tools, name, parameter):
         'type': 'object', 'properties': {parameter: {'type': 'string'}}}}}]
 
 
-def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="full",
+def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="full", response_tools=None,
                        return_offsets=False, producer_span=None, return_producer_span=False,
                        context_tags=()):
     """Render the exact serving prompt followed by the target assistant reply.
@@ -1711,7 +1711,7 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
     from .prompt_rendering import apply_prompt_rendering
     bound = getattr(tokenizer, 'natlang_history_reasoning', {})
     bind_history_reasoning(tokenizer, policy=bound.get('policy'))
-    schema_tools = tools
+    schema_tools = tools if response_tools is None else response_tools
     messages, tools = apply_prompt_rendering(messages, tools, prompt_rendering)
     if list(_message_neuralese_ids(target)):
         raise ValueError("ordinary gold text target contains unresolved neuralese blocks")
@@ -2274,6 +2274,13 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                     transformation_evidence=context_evidence if derivation is not None else None,
                     static_sources=context_rows if derivation is not None else None))
             notes = handover_notes(record)
+            native_xml=record.get('native_xml_turn')
+            if native_xml:
+                from .native_xml_custody import verify_projection,render_packet
+                verify_projection(native_xml,record['messages'],record.get('tools'),record['target'])
+                if record.get('response_tools')!=native_xml['response_tools']:
+                    raise ValueError('native XML materialized schema custody differs')
+                render_packet(tokenizer,native_xml)
             gold = target_with_teacher_reasoning(record) if target_reasoning else record["target"]
             target = crisp_messages([gold], piece_map, notes)[0]
             if derivation is not None:
@@ -2308,8 +2315,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             context_tags = [item['render_tag'] for item in ((derivation or {}).get('context_replacements') or [])
                             if item.get('render_tag') is not None]
             rendered = native_gold_packet(tokenizer, messages, target, record.get("tools") or [],
-                prompt_rendering=prompt_rendering, return_offsets=include_token_offsets,
-                producer_span=producer_span, return_producer_span=request_rendered_span, context_tags=context_tags)
+                prompt_rendering='full' if native_xml else prompt_rendering, return_offsets=include_token_offsets,
+                response_tools=record.get('response_tools') if native_xml else None, producer_span=producer_span, return_producer_span=request_rendered_span, context_tags=context_tags)
             text, token_ids, suffix_start = rendered[:3]
             token_offsets = rendered[3] if include_token_offsets else None
             rendered_producer_body = rendered[-1].get('rendered_body') if request_rendered_span else None

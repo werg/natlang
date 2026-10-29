@@ -877,7 +877,10 @@ def admitted_teacher_turn(row, index, turn, decisions):
     if not decision['approved']:
         return False, decision
     assistant = turn.get('assistant') or {}
-    if not (turn.get('model_response') or {}).get('raw_calls') and not str(assistant.get('content') or '').strip():
+    if (turn.get('model_response') or {}).get('tool_parse'):
+        from natlang_neuralese.data.native_xml_custody import authenticate
+        authenticate(turn)
+    elif not (turn.get('model_response') or {}).get('raw_calls') and not str(assistant.get('content') or '').strip():
         return False, {**decision, 'reason': 'no original provider action or nonempty assistant reply'}
     return True, decision
 
@@ -1533,6 +1536,10 @@ def main():
                 context = turn.get("context")
                 assistant = turn.get("assistant")
                 raw_calls = (turn.get("model_response") or {}).get("raw_calls")
+                native_xml = bool((turn.get('model_response') or {}).get('tool_parse'))
+                if native_xml:
+                    from natlang_neuralese.data.native_xml_custody import derived_tool_calls
+                    raw_calls = derived_tool_calls(turn)
                 tools = turn.get("tools_offered")
                 if (not isinstance(context, list) or not isinstance(assistant, dict)
                         or not isinstance(raw_calls, list) or not isinstance(tools, list)):
@@ -1541,7 +1548,12 @@ def main():
                           "tool_calls": raw_calls}
                 if isinstance(assistant.get("reasoning"), str) and assistant["reasoning"]:
                     target["reasoning_content"] = assistant["reasoning"]
-                packet, omission = render_teacher_packet(tokenizer, context, target, tools, turn)
+                if native_xml:
+                    from natlang_neuralese.data.native_xml_custody import render_packet
+                    packet = (render_packet(tokenizer,turn),None)
+                    omission = None
+                else:
+                    packet, omission = render_teacher_packet(tokenizer, context, target, tools, turn)
                 if omission is not None:
                     action_omissions.append({'source_row_id': row['id'], 'teacher_turn_index': index,
                         **omission, 'decision': decision})

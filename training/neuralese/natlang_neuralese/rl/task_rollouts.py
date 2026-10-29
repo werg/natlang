@@ -59,7 +59,11 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
         # reserialize JSON, or even infer a tool call from plain output text.
         # Those are runtime interpretations, not the policy's sampled tokens.
         raw_calls = response.get("raw_calls")
-        if isinstance(raw_calls, list) and raw_calls:
+        native_xml = bool(response.get('tool_parse'))
+        if native_xml:
+            from ..data.native_xml_custody import derived_tool_calls
+            target['tool_calls'] = derived_tool_calls(step)
+        elif isinstance(raw_calls, list) and raw_calls:
             target["tool_calls"] = copy.deepcopy(raw_calls)
         elif "raw_calls" not in response:
             # Legacy trajectories did not retain raw calls. Keep them usable for
@@ -73,10 +77,12 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
         turns.append({"messages": copy.deepcopy(step["context"]),
                       "tools": copy.deepcopy(step.get("tools_offered") or None), "target": target,
                       "invocation_id": step.get("invocation_id"),
+                      **({'response_tools':copy.deepcopy(step['response_tools']), 'native_xml_turn':copy.deepcopy(step)} if native_xml else {}),
                       **({'sampling': copy.deepcopy(response['rl_sampling'])} if response.get('rl_sampling') else {}),
                       **({'native_state_imports': copy.deepcopy(response['native_state_imports'])}
                          if response.get('native_state_imports') else {}),
                       "replay": {"raw_calls_retained": "raw_calls" in response,
+                                 **({"assistant_content_xml_authenticated": True} if native_xml else {}),
                                  "request_sha256": step.get("request_sha256"),
                                  "raw_response_sha256": step.get("raw_response_sha256")}})
     return turns
