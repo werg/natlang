@@ -1,4 +1,10 @@
-"""Durable consumer registrations serialized with artifact retirement."""
+"""Durable consumer registrations serialized with artifact retirement.
+
+Managed consumers register the exact role before resolving or fetching it, and
+release their same identity after the last use. Registrations do not expire;
+recovery must explicitly release an abandoned consumer after verifying its end.
+Existing owner GETs are separately protected by their lock-bound pending state.
+"""
 from __future__ import annotations
 import fcntl,json
 from pathlib import Path
@@ -15,6 +21,8 @@ def leased_roles(path):
 def change_lease(*,lock_path,state_path,retirement_state_path,role,consumer_id,identity,release,write_durable):
     """Register before use; release explicitly after use, never guess expiry."""
     if not role or not consumer_id or not isinstance(identity,dict) or not identity:raise ValueError('incomplete consumer identity')
+    parent=Path(retirement_state_path).parent.resolve()
+    if Path(state_path).resolve()!=parent/'standalone-retention-consumer-leases.json' or Path(lock_path).resolve()!=parent/'standalone-cloud-retention.lock':raise ValueError('consumer lease must use the shared retention namespace')
     with Path(lock_path).open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
         state_path=Path(state_path);retirement_state_path=Path(retirement_state_path)
