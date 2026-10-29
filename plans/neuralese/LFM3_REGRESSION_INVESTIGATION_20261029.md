@@ -1,5 +1,20 @@
 # LFM3 capability regression: investigation brief for independent review
 
+## Current rollback and restart status, 2026-10-29
+
+The four suspect learners are stopped at steps15000,14001,14318 and13210.
+Their full-state checkpoints are retained for diagnostics; they are forbidden
+production continuation parents. Private complete cloud GET/hash receipts exist;
+independent workstation readback is tracked separately. Restart is from pinned
+instruction base40ebe with fresh native interface/optimizer/RNG and zero exposure.
+
+The restart is integrating both recovered Claude accumulation/token-mass work
+and the subsequent root runtime/source fixes. See
+[the restart inclusion record](LFM3_FRESH_RESTART_INTEGRATION_20261029.md) for
+selected changes and unfinished work. This supersedes older operational updates
+below that describe resuming suspect weights. No restored capability or new
+production policy update is claimed by this note.
+
 ## Operational update, 10:05 Berlin
 
 The original brief below is a timestamped account, not current launch state.
