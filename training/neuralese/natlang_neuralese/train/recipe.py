@@ -895,13 +895,25 @@ def _data_continuation(old, new):
         if classification_changed and not _classification_proof_extension(old,new):
             return False
         standalone = 'standalone_diloco_parent'
+        standalone_rebind = False
         if old.get(standalone) != new.get(standalone):
-            if old.get(standalone) is not None or not all(
-                    new.get(standalone, {}).get(k) for k in ('path', 'sha256', 'binding')):
+            if not all(new.get(standalone, {}).get(k) for k in ('path', 'sha256', 'binding')):
                 return False
+            if old.get(standalone) is not None:
+                # A fresh DiLoCo-to-standalone boundary may replace the old
+                # historical custody pin only while retiring the exact complete
+                # committed withdrawal set. The trainer independently checks that
+                # the new immutable pin is byte-identical to the resumed slot.
+                if not (all(old[standalone].get(k) for k in ('path', 'sha256', 'binding'))
+                        and old[standalone]['path'] != new[standalone]['path']
+                        and old.get(withdrawal) is not None and new.get(withdrawal) is None
+                        and old.get(retired) is not None and new.get(retired) is None
+                        and new.get(retired_set) is not None):
+                    return False
+                standalone_rebind = True
         excluded = set(roles) | {'continued_' + role for role in roles} | {foundation,withdrawal,retired,retired_set,standalone}
         if classification_changed:excluded.add(classification)
-        return changed and {k: v for k, v in old.items() if k not in excluded} == {
+        return (changed or standalone_rebind) and {k: v for k, v in old.items() if k not in excluded} == {
             k: v for k, v in new.items() if k not in excluded}
     return False
 
