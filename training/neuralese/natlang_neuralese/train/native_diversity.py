@@ -23,13 +23,16 @@ def stream_windows(source, grouped, *, priority_ids=(), cohort_ids=None, rotatio
                    communication_cohort_fairness=True):
     """Read each source cursor monotonically; buffer only one prepared window."""
     priority_ids=set(priority_ids or ());focus_ids=set(focus_ids or ());entries=source.entries
+    # Planning and consumption traverse the same windows, including callers
+    # that supply a one-shot iterator.
+    grouped=list(grouped)
     if cohort_ids is not None and len(cohort_ids)!=len(entries):raise ValueError('cohort count differs')
     def key(visit,index,focused):
         e=entries[index];foundation=e['id'] in priority_ids
-        selected=(communication_cohort_fairness and e.get('communication')) or (not foundation and
-            ((urgent_cohort_fairness and e.get('training_priority',0)>0) or
-             (ordinary_cohort_fairness and not e.get('communication') and e.get('training_priority',0)==0)))
-        cohort=cohort_ids[index] if cohort_ids is not None and selected else None
+        # Reader identity follows physical source custody, independently of
+        # whether scheduling fairness for that lane is enabled. Merging these
+        # cursors can rewind a source after cross-cohort packing.
+        cohort=cohort_ids[index] if cohort_ids is not None else None
         return visit,scheduling_rank(e),foundation,cohort,bool(rotation_index is not None and index<rotation_index),focused
     requests={};last={}
     for window in grouped:
