@@ -936,9 +936,10 @@ def test_external_source_publication_binds_compact_proofs_without_offbox_raw(tmp
     content=file('content-audit.json',b'{}');split=file('split-audit.json',b'{}')
     provenance={'schema':'natlang.external-source-publication-provenance/1','closure':ref(closurefile),'custody':closure,'mechanisms_archive':ref(bundle),'content_audit':ref(content),'clean_closure_audit':ref(split)}
     binding={'path':str(root/'recipe.json'),'sha256':'c'*64,'lineage_sha256':'d'*64,'external_provenance':provenance}
-    state={'training':{'options':{'recipe_binding':json.dumps(binding)}}}
+    graph=file('train.jsonl',b'{"id":"row"}\n');manifest=file('train-sources.json',json.dumps({'schema':'natlang.native-graph-sources/1','sources':[{'kind':'native-graphs',**ref(graph)}]}).encode())
+    state={'training':{'schema':'natlang.neuralese-native-sft-training/1','options':{'recipe_binding':json.dumps(binding),'stage_id':'native_full_sft'},'source_row_order':['row'],'source_row_bindings':{'row':'e'*64},'required_visits':{'row':1},'exposure_counts':{'row':0},'source_receipts':[ref(manifest)]}}
     result=deps.dependency_closure({},namespace=str(root),_checkpoint_payload=state)
-    actual={item['path'] for item in result['files']};assert {str(closurefile),str(bundle),str(content),str(split)}<=actual
+    actual={item['path'] for item in result['files']};assert {str(closurefile),str(bundle),str(content),str(split),str(manifest),str(graph)}<=actual
     assert absent_archive['path'] not in actual and absent_raw['path'] not in actual
     required=required_bindings({'training':state['training'],'model_config':{'base':''}});keys={(x['path'],x['sha256']) for x in required}
     assert (absent_archive['path'],absent_archive['sha256']) in keys and (absent_raw['path'],absent_raw['sha256']) in keys
