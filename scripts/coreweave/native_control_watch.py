@@ -1,6 +1,6 @@
 """Shared retryable control hook for externally supervised native learners."""
 from __future__ import annotations
-import hashlib, json, subprocess
+import fcntl, hashlib, json, subprocess
 from pathlib import Path
 try:
     from .native_remote_budget import bounded_remote
@@ -48,5 +48,13 @@ def attempt_control(pin, sandbox, entry, state, journal, selection, write_durabl
     role=selection['role_prefix']+'-step%d-publication-control'%pin['step'];unit=role+'-export-'+str(control['attempts'])
     existing=presence(role,archive)
     if sandbox is None and not existing:raise ValueError('private control object absent and historical sandbox unavailable')
-    control.update(role=role,unit=unit,phase_path=selection['phase_directory']+'/coreweave-'+role+'-'+Path(archive['path']).name+'-export-progress-20261014.json',status='export_requested');write_durable(journal,state)
-    launch(role,unit,pin['sandbox_id'],archive,existing)
+    # Serialize the last retry decision and launch with the retention intent.
+    # An intent is durable before deletion, and must fence even a source-free GET.
+    with (Path(journal).parent/'standalone-cloud-retention.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        retired_path=Path(journal).parent/'standalone-retired-cloud-objects.json'
+        retired=json.loads(retired_path.read_text()) if retired_path.exists() else {}
+        if role in retired.get('retired_roles',[]) or any(op.get('control_role')==role and op.get('phase') in ('intent','control_deleted','deleted') for op in retired.get('operations',[])):
+            control.update(role=role,status='retired');write_durable(journal,state);return
+        control.update(role=role,unit=unit,phase_path=selection['phase_directory']+'/coreweave-'+role+'-'+Path(archive['path']).name+'-export-progress-20261014.json',status='export_requested');write_durable(journal,state)
+        launch(role,unit,pin['sandbox_id'],archive,existing)

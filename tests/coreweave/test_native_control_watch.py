@@ -28,6 +28,15 @@ def test_historical_unbound_entry_is_not_silently_relabelled(tmp_path):
         attempt_control({},None,{'control':{'attempts':1}},{},tmp_path/'j',selection,lambda *a:None,presence=lambda *a:False,launch=lambda *a:None)
 
 
+def test_durable_retirement_intent_fences_source_free_control_retry(tmp_path):
+    helper=tmp_path/'helper';helper.write_text('pass');sha=hashlib.sha256(helper.read_bytes()).hexdigest()
+    selection={'helper':{'path':str(helper),'sha256':sha},'target_selection':{'sha256':'a'*64},'role_prefix':'peer2','phase_directory':str(tmp_path)}
+    pin={'step':2,'sandbox_id':'box'}; entry={'control':{'attempts':1,'selection_sha256':'a'*64,'archive':{'path':'/work/archive','sha256':'c'*64,'bytes':23}}};state={'exports':[entry]}; journal=tmp_path/'journal';calls=[]
+    (tmp_path/'standalone-retired-cloud-objects.json').write_text(json.dumps({'operations':[{'control_role':'peer2-step2-publication-control','phase':'intent'}]}))
+    attempt_control(pin,None,entry,state,journal,selection,lambda p,v:p.write_text(json.dumps(v)),presence=lambda *a:True,launch=lambda *a:calls.append(a))
+    assert entry['control']['status']=='retired' and not calls
+
+
 def test_missing_hook_reports_failure_without_executing_untrusted_code():
     import ast
     from pathlib import Path
