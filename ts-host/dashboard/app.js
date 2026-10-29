@@ -168,7 +168,7 @@ function liveModel() {
       else if (delta.type === 'reset') Object.assign(turn, { reasoning: '', text: '', tools: [] });
     } else if (event.type === 'trace') {
       const data = event.event;
-      if (data.kind === 'model_request' && data.phase === 'start') { const turn = turnOf(call, data.turn); turn.working = true; call.lastTurn = data.turn; }
+      if (data.kind === 'model_request' && data.phase === 'start') { const turn = turnOf(call, data.turn); turn.working = true; turn.since = event.at; call.lastTurn = data.turn; }
       if (data.kind === 'model_request' && data.phase !== 'start') { const turn = turnOf(call, data.turn); turn.working = false;
         turn.prompt = data.prompt_tokens ?? 0; turn.cached = data.cached_tokens ?? 0; turn.completion = data.completion_tokens ?? 0; turn.ms = data.duration_ms;
         turn.prefillMs = data.prefill_ms; turn.generationMs = data.generation_ms; if (data.error) turn.failures.push(data.error); }
@@ -196,7 +196,8 @@ function renderCall(call, all = false) {
       call.ended && call.started ? ` · ${ms(call.ended - call.started)}` : ''),
     call.detail && call.status !== 'done' ? h('div', { class: 'turn' }, h('div', { class: 'fail' }, call.detail)) : null,
     (all ? turns : turns.slice(-4)).map(turn => h('div', { class: 'turn' },
-      h('div', { class: 'meta' }, `turn ${turn.number}${turn.working ? ' · model working…' : turn.ms ? ` · ${ms(turn.ms)} · ${tokens(turn.prompt)} prompt (${tokens(turn.cached ?? 0)} cached) + ${tokens(turn.completion)} generated${rate(turn)}` : ''}`),
+      h('div', { class: 'meta' }, `turn ${turn.number}${turn.working ? ` · ${turn.reasoning ? 'thinking' : turn.text || turn.tools.length ? 'writing' : 'reading the prompt'}… ` : turn.ms ? ` · ${ms(turn.ms)} · ${tokens(turn.prompt)} prompt (${tokens(turn.cached ?? 0)} cached) + ${tokens(turn.completion)} generated${rate(turn)}` : ''}`,
+        turn.working && turn.since && !all ? h('span', { 'data-since': turn.since }, ms(Date.now() - turn.since)) : null),
       turn.reasoning ? h('div', { class: 'reason' }, turn.reasoning.slice(-1500)) : null,
       turn.text ? h('div', {}, turn.text.slice(-1500)) : null,
       turn.tools.map((tool, index) => [h('div', { class: 'code' }, toolText(tool)),
@@ -243,7 +244,7 @@ async function jobDetail(id, container) {
     const calls = state.model.calls.size;
     fill(tabs, ...[['live', `Calls${calls ? ` (${calls})` : ''}`], ['output', 'Output'], ['log', 'Log']].map(([key, label]) =>
       h('button', { class: state.tab === key ? 'active' : '', onclick: () => { state.tab = key; draw(); } }, label)));
-    if (state.tab === 'live') fill(body, state.model.roots.length ? h('div', { class: 'calltree' }, state.model.roots.map(renderCall)) :
+    if (state.tab === 'live') fill(body, state.model.roots.length ? h('div', { class: 'calltree' }, state.model.roots.map(call => renderCall(call))) :
       h('div', { class: 'empty' }, job.status === 'running' ? 'Waiting for the first natural-language call… (starting the model can take a moment)' : 'This run made no natural-language calls.'));
     else {
       const text = state.tab === 'output' ? state.out : state.err;
@@ -297,6 +298,57 @@ async function programs(path, target) {
   if (selected) await programDetail(selected, detail);
 }
 
+// A small Markdown reader for program READMEs, built from elements (never HTML from the file): headings, paragraphs
+// with soft line breaks, lists, fenced code, tables as written, inline code, emphasis and web links.
+function markdown(text) {
+  const inline = line => {
+    const out = [], pattern = /`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)\s]+)\)/g;
+    let last = 0, match;
+    while ((match = pattern.exec(line))) {
+      out.push(line.slice(last, match.index)); last = pattern.lastIndex;
+      if (match[1] !== undefined) out.push(h('code', {}, match[1]));
+      else if (match[2] !== undefined) out.push(h('strong', {}, match[2]));
+      else out.push(/^https?:\/\//.test(match[4]) ? h('a', { href: match[4], target: '_blank', rel: 'noreferrer' }, match[3]) : h('span', { title: match[4] }, match[3]));
+    }
+    out.push(line.slice(last)); return out;
+  };
+  const blocks = [], lines = text.replace(/\r/g, '').split('\n');
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index];
+    if (/^\s*(```|~~~)/.test(line)) {
+      const fence = line.trim().slice(0, 3), body = [];
+      for (index++; index < lines.length && !lines[index].trim().startsWith(fence); index++) body.push(lines[index]);
+      index++; blocks.push(h('pre', { class: 'block' }, body.join('\n'))); continue;
+    }
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) { blocks.push(h(heading[1].length <= 2 ? 'h3' : 'h4', {}, inline(heading[2]))); index++; continue; }
+    if (!line.trim()) { index++; continue; }
+    const group = [];
+    const kind = /^\s*([-*]|\d+\.)\s+/.test(line) ? 'list' : /^\s*\|/.test(line) ? 'table' : 'text';
+    while (index < lines.length && lines[index].trim() && !/^(#{1,6})\s|^\s*(```|~~~)/.test(lines[index])) {
+      const current = lines[index];
+      if (kind === 'list' && /^\s*([-*]|\d+\.)\s+/.test(current)) group.push(current.replace(/^\s*([-*]|\d+\.)\s+/, ''));
+      else if (kind === 'list' && group.length) group[group.length - 1] += ' ' + current.trim();
+      else group.push(current);
+      index++;
+    }
+    if (kind === 'list') blocks.push(h('ul', {}, group.map(item => h('li', {}, inline(item)))));
+    else if (kind === 'table') blocks.push(h('pre', { class: 'block' }, group.join('\n')));
+    else blocks.push(h('p', {}, inline(group.map(item => item.trim()).join(' '))));
+  }
+  return blocks;
+}
+// What a profile changes beyond its model: sampling, reasoning budget and server slots.
+function profileSettings(profile) {
+  const request = profile.request ?? {}, local = profile.local ?? {}, parts = [];
+  if (request.temperature !== undefined) parts.push(`temperature ${request.temperature}`);
+  if (request.thinking_budget_tokens !== undefined) parts.push(request.thinking_budget_tokens === 0 ? 'no thinking' : `thinking ≤ ${tokens(request.thinking_budget_tokens)} tokens`);
+  if (local.contextTokens) parts.push(`${tokens(local.contextTokens)} context`);
+  if (local.parallel) parts.push(`${local.parallel} slots`);
+  if (local.server) parts.push('own llama-server');
+  if (profile.escalate) parts.push(`escalates to ${profile.escalate}`);
+  return parts.join(' · ') || '–';
+}
 async function programDetail(path, container) {
   const program = await get(`/api/programs/detail?path=${encodeURIComponent(path)}`);
   const manifest = program.manifest, lock = program.lock;
@@ -326,7 +378,7 @@ async function programDetail(path, container) {
       h('tbody', {}, warm.cases.map(item => h('tr', { class: item.call_id ? 'click' : '', onclick: () => item.call_id && go(`traces-call-${encodeURIComponent(item.call_id)}`) },
         h('td', {}, item.name, item.detail ? h('div', { class: 'small muted' }, short(item.detail, 200)) : null), h('td', {}, pill(item.outcome)),
         h('td', { class: 'num' }, ms(item.wall_ms)), h('td', { class: 'num' }, `${tokens(item.tokens_in)} + ${tokens(item.tokens_out)}`)))))) : null,
-    !(manifest.warmup ?? []).length ? h('div', { class: 'small muted' }, 'Add "warmup": [{ "function": "classify.nl", "inputs": { … } }] to natlang.json to trace and prefill this program ahead of time.') : null);
+    !(manifest.warmup ?? []).length && program.functions.length ? h('div', { class: 'small muted' }, `Add "warmup": [{ "function": "${program.functions[0].source}", "inputs": { … } }] to natlang.json to trace and prefill this program ahead of time.`) : null);
   fill(container, 
     h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, manifest.name, h('span', { class: 'muted' }, ` ${manifest.version}`)),
       h('a', { href: `#traces-program-${encodeURIComponent(program.directory)}` }, 'Traces of this program')),
@@ -334,7 +386,7 @@ async function programDetail(path, container) {
       program.problem ? h('div', { class: 'callout warn' }, `natlang.json: ${program.problem}`) : null,
       manifest.model ? h('div', { class: 'small' }, 'Declared model: ', h('code', {}, JSON.stringify(manifest.model))) : h('div', { class: 'small muted' }, 'Runs on the machine default model unless natlang.json declares "model".')),
     runPanel, functions, build,
-    program.readme ? h('section', { class: 'panel' }, h('h3', {}, program.readme.name), h('pre', { class: 'block', style: 'font-family: var(--sans); font-size: 13px' }, program.readme.text)) : null);
+    program.readme ? h('section', { class: 'panel' }, h('h3', { class: 'muted small' }, program.readme.name), h('div', { class: 'prose' }, markdown(program.readme.text))) : null);
 }
 function functionCard(program, fn) {
   const fields = fn.params.map(param => { const [name, ...type] = param.split(':'); return { name: name.replace('?', '').trim(), type: type.join(':').trim() }; });
@@ -475,9 +527,10 @@ async function models(_arg, target) {
     h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Profiles'),
       h('label', { class: 'row small muted' }, 'Default', h('select', { id: 'default-profile', onchange: attempt(async event => { await api('POST', '/api/default', { profile: event.target.value || null }); toast('Default profile saved'); refreshRail(); }) },
         h('option', { value: '' }, 'built-in (stock LFM3 1.7B, local)'), profileRows.map(([name]) => h('option', { value: name, selected: name === config.defaultProfile }, name))))),
-      profileRows.length ? h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Profile'), h('th', {}, 'Backend'), h('th', {}, 'Model'), h('th', {}))),
+      profileRows.length ? h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Profile'), h('th', {}, 'Backend'), h('th', {}, 'Model'), h('th', {}, 'Settings'), h('th', {}))),
         h('tbody', {}, profileRows.map(([name, entry]) => h('tr', {}, h('td', {}, h('strong', {}, name), name === config.defaultProfile ? h('span', { class: 'small muted' }, ' · default') : null),
           h('td', {}, entry.error ? pill('invalid', 'bad') : entry.kind), h('td', { class: 'mono small' }, entry.error ?? entry.model),
+          h('td', { class: 'small muted' }, profileSettings(entry.profile)),
           h('td', {}, h('div', { class: 'row' }, h('button', { onclick: () => editProfile(name, entry.profile) }, 'Edit'),
             h('button', { onclick: () => startJob({ kind: 'ask', instruction: 'Reply with the single word: ready', input: '', profile: name }) }, 'Test'),
             h('button', { class: 'danger', onclick: attempt(async () => { await api('DELETE', `/api/profiles/${encodeURIComponent(name)}`); toast(`Deleted ${name}`); route(); }) }, 'Delete')))))))) :
@@ -592,7 +645,7 @@ async function system(_arg, target) {
           'upstream llama.cpp: decisions fall back to model turns, no guided generation or tuned soft states'] : null,
         ['Path', runtime.selected?.path], ['Pinned', `${runtime.recommended.version} (build ${runtime.recommended.build})`],
         runtime.selected?.reason ? ['Note', runtime.selected.reason] : null]),
-      runtime.candidates.length ? h('div', { class: 'small muted' }, runtime.candidates.map(item => `${item.source}: ${item.path}${item.compatible ? '' : ` (${item.reason})`}`).join('\n')) : null),
+      runtime.candidates.length ? h('div', { class: 'small muted', style: 'white-space: pre-line' }, runtime.candidates.map(item => `${item.source}: ${item.path}${item.compatible ? '' : ` (${item.reason})`}`).join('\n')) : null),
     h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Call records and specialization'),
       h('button', { onclick: () => startJob({ kind: 'specialize' }) }, 'Run the specializer')),
       status.calls ? kv([['Store', status.calls.root], ['Calls', status.calls.calls], ['Size', bytes(status.calls.bytes)],
@@ -603,4 +656,6 @@ async function system(_arg, target) {
 }
 
 refreshRail(); setInterval(refreshRail, 10000);
+// Elapsed times of work in progress tick between redraws (a CPU prefill can take a minute with nothing else to show).
+setInterval(() => { for (const element of document.querySelectorAll('[data-since]')) element.textContent = ms(Date.now() - Number(element.dataset.since)); }, 1000);
 route();
