@@ -165,3 +165,111 @@ def verify_bootstrap_inputs(*, baseline, baseline_sha256, source_manifest, sourc
             'bootstrap_source_sha256':source_sha256,'source_receipt_sha256':receipt_sha256,
             'earned_parent_sha256':expected_parent_sha256,'baseline_sha256':baseline_sha256,
             'scope':'exact source manifest and receipt bytes and earned-parent binding; source admission remains its own evidence'}
+
+
+def run_coreweave_seed_stage(config):
+    """Stage a third peer directly over gateways using exact, owned SDK roles.
+
+    This operates only on the two supplied existing sandboxes. The caller must
+    first persist and verify the supervisor fence; incomplete transfers retain
+    the source lease and fail closed. No provider credential enters either host.
+    """
+    import time,uuid
+    try:from . import cwctl,diloco_replica_fence as fences
+    except ImportError:
+        import cwctl
+        import diloco_replica_fence as fences
+    from natlang_neuralese.train.diloco.replica_transport import freeze_replica_files,witness_head
+    evidence=config['verified_fence'];witness=config['witness'];nonce=config['activation_nonce']
+    if (evidence.get('primary_fenced') is not True or evidence.get('all_workers_quiesced') is not True or
+            evidence.get('run_id')!=witness['run_id'] or not evidence.get('proof_sha256')):
+        raise ValueError('seed stage requires a verified old-primary and worker fence')
+    if len(nonce)<32 or witness['sequence']%2:raise ValueError('invalid seed boundary')
+    source=config['source'];target=config['target'];cwctl.load_env_file();cwctl.require_key()
+    source_box=cwctl.read_sandbox(source['sandbox_id'],patience=60);target_box=cwctl.read_sandbox(target['sandbox_id'],patience=60)
+    source_token=Path(config['source_token_file']).read_text().strip()
+    source_gateway=Path(config['source_gateway_file']).read_text().strip() if config.get('source_gateway_file') else None
+    target_gateway=Path(config['target_gateway_file']).read_text().strip() if config.get('target_gateway_file') else None
+    actual=witness_head(source['replica_url'],source_token,allow_http=config.get('allow_http',False),gateway=source_gateway)
+    if actual!=witness:raise ValueError('source peer changed before seed staging')
+    freeze_replica_files(source['replica_url'],source_token,nonce,allow_http=config.get('allow_http',False),gateway=source_gateway)
+    unique=uuid.uuid4().hex
+    def config_argv(box,host,role,value):
+        directory=host['stage_directory'].rstrip('/')+'/'+unique
+        result=box.exec(['mkdir','-p',directory],timeout_seconds=30).result(timeout=60)
+        if result.returncode!=0:raise ValueError('seed staging directory failed')
+        path=directory+'/'+role+'.json';raw=json.dumps(value,sort_keys=True,separators=(',',':')).encode();digest=hashlib.sha256(raw).hexdigest()
+        box.write_file(path,raw).result(timeout=60)
+        return [host['python'],'-m','natlang_neuralese.train.diloco.replica_cli',role,'--config',path,'--config-sha256',digest]
+    def execute(box,host,argv,timeout):
+        result=box.exec(['env','PYTHONPATH='+host['runtime']+'/training/neuralese',*argv],timeout_seconds=timeout).result(timeout=timeout+30)
+        if result.returncode!=0:raise ValueError('seed command '+argv[3]+' failed')
+        return result.stdout
+    def owned_start(host,argv,request_id):
+        request={'schema':'natlang.diloco-role-request/1','id':request_id,'owner_id':host['owner_id'],
+            'expected_generation':host['generation'],'action':'start','role':'actor','promotion_nonce':nonce,
+            'argv':argv,'env':{'PYTHONPATH':host['runtime']+'/training/neuralese'}}
+        role={'sandbox_id':host['sandbox_id'],'directory':host['directory'],'boot_id':host['boot_id'],
+              'runtime':host['runtime'],'request':request}
+        fences.sdk_authorize_seed_server(role,nonce)
+        publisher=host['publisher'];program=('import hashlib,json,runpy,sys\nfrom pathlib import Path\n'
+            'p=Path(sys.argv[1]);actual=hashlib.sha256(p.read_bytes()).hexdigest()\n'
+            'if actual!=sys.argv[2]:raise ValueError("owner publisher differs")\n'
+            'print(json.dumps(runpy.run_path(str(p))["submit"](sys.argv[3],json.loads(sys.argv[4]),timeout=60)))\n')
+        box=source_box if host['sandbox_id']==source['sandbox_id'] else target_box
+        result=box.exec(['python3','-c',program,publisher['path'],publisher['sha256'],host['directory'],json.dumps(request)],timeout_seconds=90).result(timeout=120)
+        if result.returncode!=0:raise ValueError('owned seed role did not start')
+        value=json.loads(result.stdout)
+        if value.get('accepted') is not True:raise ValueError('owned seed role was rejected')
+        return value
+    publish=config_argv(source_box,source,'seed-publish',{'store':source['store'],'destination':source['seed_directory'],
+        'sequence':witness['sequence'],'head':witness['head'],'lease_id':unique,'freeze_nonce':nonce})
+    execute(source_box,source,publish,config.get('publish_timeout',3600))
+    sha_program='import hashlib,sys;print(hashlib.file_digest(open(sys.argv[1],"rb"),"sha256").hexdigest())'
+    hashed=source_box.exec(['python3','-c',sha_program,source['seed_directory']+'/seed-receipt.json'],timeout_seconds=120).result(timeout=150)
+    if hashed.returncode!=0:raise ValueError('seed receipt hash unavailable')
+    receipt_sha=hashed.stdout.strip()
+    if len(receipt_sha)!=64:raise ValueError('invalid seed receipt hash')
+    serve=config_argv(source_box,source,'seed-serve',{'seed':source['seed_directory'],'host':source['seed_host'],'port':source['seed_port'],'token_file':source['seed_token_file']})
+    source_role=owned_start(source,serve,'seed-source-'+unique)
+    fetch=config_argv(target_box,target,'seed-fetch',{'url':source['seed_url'],'token_file':target['seed_token_file'],
+        'gateway_file':target.get('source_gateway_file'),'destination':target['seed_directory'],'receipt_sha256':receipt_sha,'allow_http':config.get('allow_http',False)})
+    execute(target_box,target,fetch,config.get('transfer_timeout',21600))
+    install=config_argv(target_box,target,'seed-install',{'seed':target['seed_directory'],'store':target['store'],'receipt_sha256':receipt_sha})
+    execute(target_box,target,install,config.get('install_timeout',3600))
+    peer_config={'baseline':target['store']+'/baseline','baseline_sha256':witness['baseline_sha256'],'store':target['store'],
+        'work_root':target['work_root'],'host':target['peer_host'],'port':target['peer_port'],'token_file':target['peer_token_file'],'max_transaction_bytes':target['max_transaction_bytes']}
+    peer_argv=config_argv(target_box,target,'peer',peer_config);target_role=owned_start(target,peer_argv,'seed-peer-'+unique)
+    target_token=Path(config['target_token_file']).read_text().strip();deadline=time.monotonic()+config.get('readiness_timeout',300)
+    while True:
+        try:
+            actual=witness_head(target['replica_url'],target_token,allow_http=config.get('allow_http',False),gateway=target_gateway)
+            if actual!=witness:raise ValueError('replacement peer witnessed a different head')
+            break
+        except OSError:
+            if time.monotonic()>=deadline:raise
+            time.sleep(1)
+    release=config_argv(source_box,source,'seed-release',{'store':source['store'],'seed_receipt':source['seed_directory']+'/seed-receipt.json',
+        'receipt_sha256':receipt_sha,'peer_url':target['replica_url'],'token_file':source['target_peer_token_file'],
+        'gateway_file':source.get('target_gateway_file'),'allow_http':config.get('allow_http',False)})
+    execute(source_box,source,release,120)
+    stop_request={'schema':'natlang.diloco-role-request/1','id':'seed-stop-'+unique,'owner_id':source_role['owner_id'],
+        'expected_generation':source_role['generation'],'role':'actor','action':'stop','expected_pid':source_role['pid'],
+        'expected_process_start_ticks':source_role['process_start_ticks']}
+    publisher=source['publisher'];program=('import hashlib,json,runpy,sys\nfrom pathlib import Path\n'
+        'p=Path(sys.argv[1]);actual=hashlib.sha256(p.read_bytes()).hexdigest()\n'
+        'if actual!=sys.argv[2]:raise ValueError("owner publisher differs")\n'
+        'print(json.dumps(runpy.run_path(str(p))["submit"](sys.argv[3],json.loads(sys.argv[4]),timeout=60)))\n')
+    stopped=source_box.exec(['python3','-c',program,publisher['path'],publisher['sha256'],source['directory'],json.dumps(stop_request)],timeout_seconds=90).result(timeout=120)
+    if stopped.returncode!=0 or json.loads(stopped.stdout).get('accepted') is not True:raise ValueError('seed actor stop was not accepted')
+    probe=('import json,sys,time\nfrom pathlib import Path\n'
+        'deadline=time.monotonic()+60\n'
+        'while time.monotonic()<deadline:\n'
+        ' s=json.loads(Path(sys.argv[1]).read_text());r=s.get("roles",{}).get("actor",{})\n'
+        ' if r.get("pid")==int(sys.argv[2]) and r.get("alive") is False:break\n'
+        ' time.sleep(.2)\n'
+        'else:raise SystemExit(1)\n')
+    observed=source_box.exec(['python3','-c',probe,source['directory'].rstrip('/')+'/state.json',str(source_role['pid'])],timeout_seconds=70).result(timeout=90)
+    if observed.returncode!=0:raise ValueError('seed actor exit not observed')
+    return {'schema':'natlang.diloco-third-peer-stage/1','witness':witness,'receipt_sha256':receipt_sha,
+            'source_role':source_role,'target_role':target_role,'source_seed_server_stopped':True}

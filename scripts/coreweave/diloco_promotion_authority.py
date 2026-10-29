@@ -37,6 +37,7 @@ def release(directory, *, expected_owner, expected_boot, nonce):
         state=json.loads((directory/'state.json').read_text())
         if state.get('owner_id')!=expected_owner or state.get('boot_id')!=expected_boot:raise ValueError('role owner identity changed')
         (directory/'promotion-coordinator.json').unlink(missing_ok=True)
+        (directory/'promotion-seed-server.json').unlink(missing_ok=True)
         path.unlink();fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY)
         try:os.fsync(fd)
         finally:os.close(fd)
@@ -61,5 +62,26 @@ def authorize_coordinator(directory, *, expected_owner, expected_boot, nonce, re
         value={'schema':'natlang.diloco-coordinator-promotion-authorization/1','nonce':nonce,'request_sha256':digest}
         path=directory/'promotion-coordinator.json'
         if path.exists() and json.loads(path.read_text())!=value:raise ValueError('another coordinator request is already authorized')
+        if not path.exists():write_json_durable(path,value)
+        return value
+
+
+def authorize_seed_server(directory, *, expected_owner, expected_boot, nonce, request):
+    """Authorize exactly a hash-bound seed server or replica peer under a fence."""
+    import hashlib,re
+    directory=Path(directory).resolve(strict=True);argv=request.get('argv',[]) if isinstance(request,dict) else []
+    if (request.get('owner_id')!=expected_owner or request.get('role')!='actor' or request.get('action')!='start'
+            or request.get('promotion_nonce')!=nonce or len(argv)!=8 or argv[1:3]!=['-m','natlang_neuralese.train.diloco.replica_cli'] or argv[3] not in ('seed-serve','peer')
+            or argv[4]!='--config' or argv[6]!='--config-sha256' or not re.fullmatch('[0-9a-f]{64}',argv[7])):
+        raise ValueError('invalid read-only seed server request')
+    digest=hashlib.sha256(json.dumps(request,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+    with (directory/'promotion-authority.lock').open('a+b') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        marker=json.loads((directory/'promotion-fence.json').read_text());state=json.loads((directory/'state.json').read_text())
+        if marker!={'schema':'natlang.diloco-role-promotion-fence/1','owner_id':expected_owner,'boot_id':expected_boot,'nonce':nonce} or state.get('owner_id')!=expected_owner or state.get('boot_id')!=expected_boot or state.get('generation')!=request.get('expected_generation'):
+            raise ValueError('seed owner fence or generation differs')
+        value={'schema':'natlang.diloco-seed-promotion-authorization/1','nonce':nonce,'request_sha256':digest}
+        path=directory/'promotion-seed-server.json'
+        if path.exists() and json.loads(path.read_text())!=value:raise ValueError('another seed request is authorized')
         if not path.exists():write_json_durable(path,value)
         return value

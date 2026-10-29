@@ -35,12 +35,12 @@ def main():
             raw=Path(config['seed_receipt']).read_bytes()
             if hashlib.sha256(raw).hexdigest()!=config['receipt_sha256']:raise ValueError('seed receipt hash differs')
             record=json.loads(raw);peer_token=Path(config['token_file']).read_text().strip()
-            witness=witness_head(config['peer_url'],peer_token,gateway=config.get('gateway'),allow_http=config.get('allow_http',False))
+            witness=witness_head(config['peer_url'],peer_token,gateway=(Path(config['gateway_file']).read_text().strip() if config.get('gateway_file') else None),allow_http=config.get('allow_http',False))
             release_seed_lease(config['store'],record,witnessed=witness);return
         seed_token=Path(config['token_file']).read_text().strip()
         if args.role=='seed-serve':return serve_seed(config['seed'],config['host'],config['port'],seed_token,stop=stop)
         value=download_seed(config['url'],seed_token,config['destination'],expected_receipt_sha256=config['receipt_sha256'],
-            gateway=config.get('gateway'),allow_http=config.get('allow_http',False));print(json.dumps(value,sort_keys=True));return
+            gateway=(Path(config['gateway_file']).read_text().strip() if config.get('gateway_file') else None),allow_http=config.get('allow_http',False));print(json.dumps(value,sort_keys=True));return
     if args.role=='replica-loss-recover':
         from .replica_promotion import recover_after_replica_loss
         evidence=verify_attestation(config,mode=args.role)

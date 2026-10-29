@@ -79,10 +79,12 @@ def main(directory: Path) -> None:
                         fcntl.flock(authority,fcntl.LOCK_EX)
                         fence_path=directory/'promotion-fence.json'
                         if fence_path.exists():
-                            fence=json.loads(fence_path.read_text());allowed=directory/'promotion-coordinator.json'
+                            fence=json.loads(fence_path.read_text())
+                            allowed=directory/('promotion-coordinator.json' if role=='coordinator' else 'promotion-seed-server.json')
+                            schema=('natlang.diloco-coordinator-promotion-authorization/1' if role=='coordinator' else 'natlang.diloco-seed-promotion-authorization/1')
                             digest=hashlib.sha256(json.dumps(v,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
-                            expected={'schema':'natlang.diloco-coordinator-promotion-authorization/1','nonce':fence.get('nonce'),'request_sha256':digest}
-                            if (role!='coordinator' or v.get('promotion_nonce')!=fence.get('nonce') or not allowed.is_file() or json.loads(allowed.read_text())!=expected):
+                            expected={'schema':schema,'nonce':fence.get('nonce'),'request_sha256':digest}
+                            if (role not in ('coordinator','actor') or v.get('promotion_nonce')!=fence.get('nonce') or not allowed.is_file() or json.loads(allowed.read_text())!=expected):
                                 raise ValueError('role starts fenced for coordinator promotion')
                         if prior and prior.poll() is None:raise ValueError('role already alive')
                         argv=v.get('argv');env=v.get('env',{})

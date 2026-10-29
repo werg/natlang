@@ -52,3 +52,38 @@ def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch
         'outgoing_replica':{'url':'https://replica','old_token_file':str(tmp_path/'old-token'),'baseline_sha256':'a'*64},'primary_role':{'sandbox_id':'target','directory':'/control','publisher':{'path':'/publisher','sha256':'a'*64},'request':{'action':'start','role':'coordinator'}}}
     assert run_coreweave_promotion(tmp_path/'journal',config)['phase']=='released'
     assert calls==['fence','release']
+
+
+def test_coreweave_seed_stage_uses_direct_owned_roles_and_stops_source(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from scripts.coreweave import cwctl,diloco_replica_fence as fm
+    from scripts.coreweave.diloco_replica_controller import run_coreweave_seed_stage
+    from natlang_neuralese.train.diloco import replica_transport
+    witness={'run_id':'r','baseline_sha256':'a'*64,'sequence':2,'head':'b'*64};calls=[];staged=[]
+    class Future:
+        def __init__(self,value):self.value=value
+        def result(self,**kwargs):return self.value
+    class Box:
+        def __init__(self,name):self.name=name
+        def write_file(self,path,data):staged.append((self.name,path,data));return Future(None)
+        def exec(self,argv,**kwargs):
+            calls.append((self.name,argv))
+            if argv[0]=='env':return Future(SimpleNamespace(returncode=0,stdout='{}'))
+            if argv[0]=='python3' and 'file_digest' in argv[2]:return Future(SimpleNamespace(returncode=0,stdout='c'*64+'\n'))
+            if argv[0]=='python3' and 'runpy.run_path' in argv[2]:
+                request=json.loads(argv[-1]);return Future(SimpleNamespace(returncode=0,stdout=json.dumps({'accepted':True,'owner_id':request['owner_id'],'generation':request['expected_generation']+1,'pid':42,'process_start_ticks':'7'})))
+            return Future(SimpleNamespace(returncode=0,stdout=''))
+    boxes={'source':Box('source'),'target':Box('target')}
+    monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)
+    monkeypatch.setattr(cwctl,'read_sandbox',lambda sid,**k:boxes[sid])
+    monkeypatch.setattr(fm,'sdk_authorize_seed_server',lambda role,nonce:calls.append(('authorize',role['request']['argv'][3])))
+    monkeypatch.setattr(replica_transport,'witness_head',lambda *a,**k:witness)
+    monkeypatch.setattr(replica_transport,'freeze_replica_files',lambda *a,**k:calls.append(('freeze',a[2])))
+    (tmp_path/'token').write_text('s'*32)
+    common={'directory':'/control','boot_id':'boot','owner_id':'owner','generation':1,'runtime':'/runtime','python':'/usr/bin/python3','stage_directory':'/stage','publisher':{'path':'/publisher','sha256':'f'*64},'seed_token_file':'/seed-token','seed_directory':'/seed'}
+    source={**common,'sandbox_id':'source','store':'/source-store','replica_url':'https://source','seed_host':'0.0.0.0','seed_port':8080,'seed_url':'https://seed','target_peer_token_file':'/peer-token'}
+    target={**common,'sandbox_id':'target','store':'/target-store','work_root':'/workroot','replica_url':'https://target','peer_host':'0.0.0.0','peer_port':8081,'peer_token_file':'/peer-token','max_transaction_bytes':1024}
+    result=run_coreweave_seed_stage({'verified_fence':{'primary_fenced':True,'all_workers_quiesced':True,'run_id':'r','proof_sha256':'d'*64},'witness':witness,'activation_nonce':'n'*48,'source':source,'target':target,'source_token_file':str(tmp_path/'token'),'target_token_file':str(tmp_path/'token')})
+    assert result['source_seed_server_stopped'] and result['witness']==witness
+    assert ('authorize','seed-serve') in calls and ('authorize','peer') in calls
+    assert all(b'sssssssss' not in raw for _,_,raw in staged)
