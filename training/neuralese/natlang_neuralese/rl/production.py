@@ -300,6 +300,8 @@ def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_n
     if not receipts or any(not receipt or receipt.get('checkpoint_sha256') != policy_id
                            for receipt in receipts.values()):
         raise ValueError('RL actor did not attest the requested immutable checkpoint')
+    if any((receipt.get('actor_view') or {}).get('scope')=='diagnostic-local-pin' for receipt in receipts.values()):
+        raise ValueError('diagnostic-only transported actor cannot be admitted as an RL policy')
     modes = set()
     for receipt in receipts.values():
         if 'neuralese' in receipt:

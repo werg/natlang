@@ -29,6 +29,7 @@ def main() -> None:
     parser.add_argument('--transport-recovery-receipt',type=Path)
     parser.add_argument('--transport-recovery-receipt-sha256')
     parser.add_argument('--training-source-sha256')
+    parser.add_argument('--transport-scope',choices=('independent-recovery','diagnostic-local-pin'))
     parser.add_argument('--semantic-adapter', type=Path, help='checkpoint-bound shared semantic adapter receipt')
     parser.add_argument('--semantic-adapter-sha256')
     parser.add_argument('--coefficient-policy', type=Path)
@@ -46,9 +47,11 @@ def main() -> None:
     if bool(args.native_actor_view) != bool(args.native_actor_view_sha256):
         parser.error('native actor view requires its exact receipt SHA-256')
     transport_values=(args.transport_receipt,args.transport_receipt_sha256,args.transport_view_receipt,
-        args.transport_view_receipt_sha256,args.transport_recovery_receipt,args.transport_recovery_receipt_sha256,
-        args.training_source_sha256)
-    if any(transport_values) and (not all(transport_values) or args.native_actor_view or args.native_participant):
+        args.transport_view_receipt_sha256,args.training_source_sha256,args.transport_scope)
+    recovery_values=(args.transport_recovery_receipt,args.transport_recovery_receipt_sha256)
+    if any((*transport_values,*recovery_values)) and (not all(transport_values) or args.native_actor_view or args.native_participant
+            or (args.transport_scope=='independent-recovery' and not all(recovery_values))
+            or (args.transport_scope=='diagnostic-local-pin' and any(recovery_values))):
         parser.error('transported actor requires all exact receipt bindings and no full-source actor view or participant')
     if bool(args.semantic_adapter) != bool(args.semantic_adapter_sha256):
         parser.error('semantic adapter requires its exact SHA-256')
@@ -70,8 +73,9 @@ def main() -> None:
         bindings.append(('actor view', args.native_actor_view.resolve(strict=True), args.native_actor_view_sha256))
     if args.transport_receipt:
         bindings.extend([('transport receipt',args.transport_receipt.resolve(strict=True),args.transport_receipt_sha256),
-            ('transport view receipt',args.transport_view_receipt.resolve(strict=True),args.transport_view_receipt_sha256),
-            ('transport recovery receipt',args.transport_recovery_receipt.resolve(strict=True),args.transport_recovery_receipt_sha256)])
+            ('transport view receipt',args.transport_view_receipt.resolve(strict=True),args.transport_view_receipt_sha256)])
+        if args.transport_recovery_receipt:
+            bindings.append(('transport recovery receipt',args.transport_recovery_receipt.resolve(strict=True),args.transport_recovery_receipt_sha256))
     for label, path, expected in bindings:
         actual = sha256_file_hex_cached(path)
         if actual != expected:
@@ -84,8 +88,8 @@ def main() -> None:
         def ref(path,sha):return {'path':str(path.resolve(strict=True)),'sha256':sha,'bytes':path.stat().st_size}
         view_options={'transported_actor':{'transport':ref(args.transport_receipt,args.transport_receipt_sha256),
             'view_receipt':ref(args.transport_view_receipt,args.transport_view_receipt_sha256),
-            'recovery_receipt':ref(args.transport_recovery_receipt,args.transport_recovery_receipt_sha256),
-            'source_sha256':args.training_source_sha256}}
+            'recovery_receipt':ref(args.transport_recovery_receipt,args.transport_recovery_receipt_sha256) if args.transport_recovery_receipt else None,
+            'source_sha256':args.training_source_sha256,'scope':args.transport_scope}}
     engine = load_native_engine(str(checkpoint), base=str(args.base) if args.base else None,
         device=args.device, prompt_rendering=args.prompt_rendering, participant=args.native_participant,
         semantic_adapter=str(args.semantic_adapter) if args.semantic_adapter else None, **view_options)
