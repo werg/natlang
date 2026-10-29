@@ -61,6 +61,36 @@ two-sided McNemar p on (b, c).
 Continue SFT only on **improved** against both base executions (batched mode); on no-significant-change or
 regressed, reset and go to RL/self-distillation.
 
-## Measurements
+## Measurements (2026-10-29)
 
-See the end of this file (filled in as runs complete).
+Build used for every number here: llama-server from the fork worktree
+`dgxops/claude-recovery-20261028/data/llama-actor-worktree` at `b89457f32` (server fingerprint `b12005-b89457f32`,
+binary sha256 `cb57d2b2…91b9`); GGUFs converted by the fork at `85a2e716` (the pin now moves to `a6401bbd3`).
+Base GGUF `LFM3-1.7B-BF16.gguf` sha256 `39158a79…5e9f68`. Step 142: checkpoint `bf13a50b…`, GGUF `844707d2…`
+(`lfm3-eval/gate-fresh-step142/gguf`). Step 608: checkpoint `b48d4d9c…`, GGUF `e17b5c89…`
+(`lfm3-eval/decision/step608/gguf`). Harness: system prompt `8628b031…`, tool surface `695dfc9f…`.
+
+- Determinism: `lfm3-eval/det/e1a`, `e1b` (`-np 8`, 8 cases twice): 7/7 identical first requests, different
+  replies; 0/8 conversations identical; 7 vs 6 successes. `e2a`, `e2b` (`-np 1 --no-cache-prompt`): 65/65
+  requests and replies identical, 8 and 8 successes, 649 s and 635 s wall. A frozen-runtime rerun of
+  cases 40 and 97 under RL GPU load reproduced the same request counts and completion tokens.
+- Throughput: single sequence ~60 tok/s on the idle GPU, ~8 tok/s per server with three servers next to the RL
+  learner; batched 16 slots ×4 servers next to RL ~4 tok/s per slot (~250 tok/s total).
+- Old-gate data, same harness, 38 cases, batched with the 3600 s budget: base 26/38, step 142 29/38, gained
+  {16, 24, 104, 105, 120}, lost {9, 57}, McNemar p = 0.45. That is no significant difference; it is not the
+  decision eval.
+- The full 128-case run (step 142, step 608, base ×2) was stopped after 14 minutes by an owner decision that gave
+  the DGX GPU to RL. No full arm completed. Partial outputs are in `lfm3-eval/decision/`.
+
+## Rerun (one command; do it on a cloud sandbox GPU, not the shared DGX)
+
+    PYTHONPATH=training/neuralese:. NATLANG_HASH_CACHE=$(mktemp -d)/h.json \
+      .venv-neuralese/bin/python scripts/neuralese_data/lfm3_checkpoint_gate.py \
+      <step142 export dir or .pt> <step608 export dir or .pt> --out <dir> --serving deterministic --repeat-base \
+      --llama-server <fork build>/bin/llama-server --base-gguf <LFM3-1.7B-BF16.gguf> --eval-root <dir>/root
+
+Use `--serving deterministic` on a dedicated GPU: four single-sequence servers run in parallel, and on a
+datacenter GPU each should decode far faster than the GB10's 60 tok/s. With `--repeat-base` the base-vs-base flips
+must be 0, which checks determinism on the full packet. Use `--serving batched` only when GPU time is short. Record the
+llama-server build and converter revision with the result. Rebuilding with the `a6401bbd3` pin changes the
+numerics, so it needs its own base run; the base key includes the binary hash, so this happens automatically.
