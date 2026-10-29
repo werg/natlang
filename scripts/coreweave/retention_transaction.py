@@ -1,0 +1,44 @@
+"""Crash-resumable paired checkpoint/control retirement under one durable fence."""
+from __future__ import annotations
+
+import fcntl
+import json
+from pathlib import Path
+
+
+def retire_pair(*, lock_path, state_path, candidate, inspect, remove, present, write_durable):
+    """Retire one fully inspected pair; callbacks must use authenticated identities.
+
+    inspect(candidate, phase) must recheck current owner, pending GETs, live dependencies,
+    replacement coverage and fresh presence, and raise on any uncertainty. The
+    same lock is shared with publication retries. No network or path assumption is
+    hidden here: the caller supplies its real provider operations.
+    """
+    required=('role','sha256','control_role','control_sha256')
+    if any(not candidate.get(k) for k in required):raise ValueError('incomplete paired candidate')
+    if candidate['role']==candidate['control_role']:raise ValueError('full and control roles must differ')
+    lock_path=Path(lock_path);state_path=Path(state_path)
+    with lock_path.open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        state=json.loads(state_path.read_text()) if state_path.exists() else {'retired_roles':[],'operations':[]}
+        prior=[x for x in state['operations'] if x.get('role')==candidate['role']]
+        if len(prior)>1:raise ValueError('duplicate retirement operation')
+        if prior:
+            op=prior[0]
+            if any(op.get(k)!=candidate[k] for k in required):raise ValueError('retirement identity changed')
+            if op.get('phase')=='deleted':return op
+        else:
+            inspect(candidate,'prepare')
+            op={**candidate,'phase':'intent'};state['operations'].append(op);write_durable(state_path,state)
+        if op['phase']=='intent':
+            inspect(candidate,'intent')
+            if present(candidate['control_role'],candidate['control_sha256']):remove(candidate['control_role'],candidate['control_sha256'])
+            if present(candidate['control_role'],candidate['control_sha256']):raise RuntimeError('control remains present')
+            op['phase']='control_deleted';write_durable(state_path,state)
+        if op['phase']=='control_deleted':
+            inspect(candidate,'control_deleted')
+            if present(candidate['role'],candidate['sha256']):remove(candidate['role'],candidate['sha256'])
+            if present(candidate['role'],candidate['sha256']):raise RuntimeError('checkpoint remains present')
+            op['phase']='deleted';state['retired_roles']=list(dict.fromkeys([*state['retired_roles'],candidate['role'],candidate['control_role']]));write_durable(state_path,state)
+        if op['phase']!='deleted':raise ValueError('unknown retirement phase')
+        return op
