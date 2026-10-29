@@ -74,7 +74,7 @@ def test_nested_owner_handoff_fences_old_and_new_publishers(tmp_path):
         config=tmp_path/'seed-config.json';config.write_text(json.dumps({'seed':str(seed),'host':'127.0.0.1','port':seedport,'token_file':str(tokenfile)}))
         configsha=hashlib.sha256(config.read_bytes()).hexdigest();ownerstate=state(nested)
         seedrequest={'schema':'natlang.diloco-role-request/1','id':'seed-server','owner_id':ownerstate['owner_id'],
-            'expected_generation':ownerstate['generation'],'role':'actor','action':'start','promotion_nonce':authority['nonce'],
+            'expected_generation':ownerstate['generation'],'role':'coordinator','action':'start','promotion_nonce':authority['nonce'],
             'argv':[sys.executable,'-m','natlang_neuralese.train.diloco.replica_cli','seed-serve','--config',str(config),'--config-sha256',configsha]}
         authorize_seed_server(nested,request=seedrequest,**authority);seedpid=submit(nested,seedrequest)['pid']
         def seed_ready():
@@ -83,8 +83,8 @@ def test_nested_owner_handoff_fences_old_and_new_publishers(tmp_path):
             except OSError:return False
         wait(seed_ready);assert not start(nested,'worker-during-seed',[sys.executable,'-c','pass'])['accepted']
         ownerstate=state(nested);assert submit(nested,{'schema':'natlang.diloco-role-request/1','id':'stop-seed','owner_id':ownerstate['owner_id'],
-            'expected_generation':ownerstate['generation'],'role':'actor','action':'stop','expected_pid':seedpid})['accepted']
-        wait(lambda:not state(nested)['roles']['actor']['alive'])
+            'expected_generation':ownerstate['generation'],'role':'coordinator','action':'stop','expected_pid':seedpid})['accepted']
+        wait(lambda:not state(nested)['roles']['coordinator']['alive'])
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         state_now=state(nested)
         request={'schema':'natlang.diloco-role-request/1','id':'new-coordinator','owner_id':state_now['owner_id'],

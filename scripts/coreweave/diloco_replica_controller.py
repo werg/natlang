@@ -207,7 +207,7 @@ def run_coreweave_seed_stage(config):
         return result.stdout
     def owned_start(host,argv,request_id):
         request={'schema':'natlang.diloco-role-request/1','id':request_id,'owner_id':host['owner_id'],
-            'expected_generation':host['generation'],'action':'start','role':'actor','promotion_nonce':nonce,
+            'expected_generation':host['generation'],'action':'start','role':host.get('seed_role','actor'),'promotion_nonce':nonce,
             'argv':argv,'env':{'PYTHONPATH':host['runtime']+'/training/neuralese'}}
         role={'sandbox_id':host['sandbox_id'],'directory':host['directory'],'boot_id':host['boot_id'],
               'runtime':host['runtime'],'request':request}
@@ -254,7 +254,7 @@ def run_coreweave_seed_stage(config):
         'gateway_file':source.get('target_gateway_file'),'allow_http':config.get('allow_http',False)})
     execute(source_box,source,release,120)
     stop_request={'schema':'natlang.diloco-role-request/1','id':'seed-stop-'+unique,'owner_id':source_role['owner_id'],
-        'expected_generation':source_role['generation'],'role':'actor','action':'stop','expected_pid':source_role['pid'],
+        'expected_generation':source_role['generation'],'role':source.get('seed_role','actor'),'action':'stop','expected_pid':source_role['pid'],
         'expected_process_start_ticks':source_role['process_start_ticks']}
     publisher=source['publisher'];program=('import hashlib,json,runpy,sys\nfrom pathlib import Path\n'
         'p=Path(sys.argv[1]);actual=hashlib.sha256(p.read_bytes()).hexdigest()\n'
@@ -265,11 +265,11 @@ def run_coreweave_seed_stage(config):
     probe=('import json,sys,time\nfrom pathlib import Path\n'
         'deadline=time.monotonic()+60\n'
         'while time.monotonic()<deadline:\n'
-        ' s=json.loads(Path(sys.argv[1]).read_text());r=s.get("roles",{}).get("actor",{})\n'
+        ' s=json.loads(Path(sys.argv[1]).read_text());r=s.get("roles",{}).get(sys.argv[3],{})\n'
         ' if r.get("pid")==int(sys.argv[2]) and r.get("alive") is False:break\n'
         ' time.sleep(.2)\n'
         'else:raise SystemExit(1)\n')
-    observed=source_box.exec(['python3','-c',probe,source['directory'].rstrip('/')+'/state.json',str(source_role['pid'])],timeout_seconds=70).result(timeout=90)
+    observed=source_box.exec(['python3','-c',probe,source['directory'].rstrip('/')+'/state.json',str(source_role['pid']),source.get('seed_role','actor')],timeout_seconds=70).result(timeout=90)
     if observed.returncode!=0:raise ValueError('seed actor exit not observed')
     return {'schema':'natlang.diloco-third-peer-stage/1','witness':witness,'receipt_sha256':receipt_sha,
             'source_role':source_role,'target_role':target_role,'source_seed_server_stopped':True}

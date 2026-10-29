@@ -80,11 +80,13 @@ def main(directory: Path) -> None:
                         fence_path=directory/'promotion-fence.json'
                         if fence_path.exists():
                             fence=json.loads(fence_path.read_text())
-                            allowed=directory/('promotion-coordinator.json' if role=='coordinator' else 'promotion-seed-server.json')
-                            schema=('natlang.diloco-coordinator-promotion-authorization/1' if role=='coordinator' else 'natlang.diloco-seed-promotion-authorization/1')
+                            argv=v.get('argv',[])
+                            seed_service=(isinstance(argv,list) and len(argv)==8 and argv[1:3]==['-m','natlang_neuralese.train.diloco.replica_cli'] and argv[3] in ('seed-serve','peer'))
+                            allowed=directory/('promotion-seed-server.json' if seed_service else 'promotion-coordinator.json')
+                            schema=('natlang.diloco-seed-promotion-authorization/1' if seed_service else 'natlang.diloco-coordinator-promotion-authorization/1')
                             digest=hashlib.sha256(json.dumps(v,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
                             expected={'schema':schema,'nonce':fence.get('nonce'),'request_sha256':digest}
-                            if (role not in ('coordinator','actor') or v.get('promotion_nonce')!=fence.get('nonce') or not allowed.is_file() or json.loads(allowed.read_text())!=expected):
+                            if (role not in ('coordinator','actor') or (role=='actor' and not seed_service) or v.get('promotion_nonce')!=fence.get('nonce') or not allowed.is_file() or json.loads(allowed.read_text())!=expected):
                                 raise ValueError('role starts fenced for coordinator promotion')
                         if prior and prior.poll() is None:raise ValueError('role already alive')
                         argv=v.get('argv');env=v.get('env',{})

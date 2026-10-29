@@ -70,7 +70,7 @@ def authorize_seed_server(directory, *, expected_owner, expected_boot, nonce, re
     """Authorize exactly a hash-bound seed server or replica peer under a fence."""
     import hashlib,re
     directory=Path(directory).resolve(strict=True);argv=request.get('argv',[]) if isinstance(request,dict) else []
-    if (request.get('owner_id')!=expected_owner or request.get('role')!='actor' or request.get('action')!='start'
+    if (request.get('owner_id')!=expected_owner or request.get('role') not in ('actor','coordinator') or request.get('action')!='start'
             or request.get('promotion_nonce')!=nonce or len(argv)!=8 or argv[1:3]!=['-m','natlang_neuralese.train.diloco.replica_cli'] or argv[3] not in ('seed-serve','peer')
             or argv[4]!='--config' or argv[6]!='--config-sha256' or not re.fullmatch('[0-9a-f]{64}',argv[7])):
         raise ValueError('invalid read-only seed server request')
