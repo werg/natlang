@@ -18,7 +18,7 @@ def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,m
     ck=tmp_path/'checkpoint';ck.write_bytes(b'fallback');fallback_sha=hashlib.sha256(b'fallback').hexdigest();qual=put(root/'q.json',{'passed':True,'checkpoint':str(ck),'bytes':8,'sha256':fallback_sha})
     def receipt(role,sha):return {'role':role,'private':True,'run':'r','name':role,'identity':{'sha256':sha,'bytes':2},'independent_verification':{'sha256':sha,'bytes':2,'readback_location':'owner'}}
     fallback=receipt('backup',fallback_sha);put(ops/'coreweave-production-backup-private-export-receipt-20261014.json',fallback)
-    base={'bytes':2,'worker':1,'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','owner':accepted,'outer_credit':False}
+    base={'path':'/work/checkpoint','bytes':2,'worker':1,'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','owner':accepted,'outer_credit':False}
     exports=[]
     for role,step,sha in [('old',6,'a'*64),('middle',7,'c'*64),('new',8,'b'*64)]:
         intent=put(root/(role+'.json'),base|{'step':step,'sha256':sha});exports.append({'role':role,'step':step,'worker':1,'unit':role+'-unit','intent':str(intent),'phase_path':str(root/(role+'-phase.json'))});put(ops/('coreweave-production-'+role+'-private-export-receipt-20261014.json'),receipt(role,sha))

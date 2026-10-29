@@ -13,3 +13,12 @@ def test_only_exact_self_records_are_exempt(tmp_path):
     value=json.loads(review.read_text());value['consumer']=d;review.write_text(json.dumps(value))
     with pytest.raises(ValueError,match='another reference'):own_bookkeeping(**kw)
     with pytest.raises(ValueError,match='changed'):recheck_own_bookkeeping(docs,role='old',digest=d)
+
+
+def test_only_exact_exporter_invocation_metadata_is_bookkeeping(tmp_path):
+    from scripts.coreweave.retention_bookkeeping import own_exporter_metadata
+    h='a'*64;p=tmp_path/'wandb-metadata.json';program=tmp_path/'exporter.py';v={'program':str(program),'args':['control','/work/'+h+'.tar'],'host':'x'};p.write_text(json.dumps(v))
+    assert str(p) in own_exporter_metadata([p],role='control',source=v['args'][1],program=program,watched_digests=[h])
+    assert not own_exporter_metadata([p],role='other',source=v['args'][1],program=program,watched_digests=[h])
+    p.write_text(json.dumps(v|{'consumer':h}))
+    with pytest.raises(ValueError,match='another reference'):own_exporter_metadata([p],role='control',source=v['args'][1],program=program,watched_digests=[h])

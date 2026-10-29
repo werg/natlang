@@ -25,8 +25,8 @@ def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, loc
         before=snapshot(roots);refs=scan(digests,roots);before,refs=refresh_references(roots,before,refs,digests,scan,allow_busy=True)
     else:before,refs=use_reference_evidence(evidence,roots,digests)
     for digest in (candidate['sha256'],candidate['control_sha256']):
-        if external_references(digest,refs[digest],**reference_scope):
-            raise ValueError('external dependency protects candidate')
+        blocking=external_references(digest,refs[digest],**reference_scope)
+        if blocking:raise ValueError('external dependency protects candidate '+digest+': '+repr(sorted(blocking)))
     def inspect(value,phase):
         if phase=='prepare':
             _,updated=refresh_point_in_time(roots,before,refs,[value['sha256'],value['control_sha256']])

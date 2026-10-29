@@ -62,3 +62,17 @@ def recheck_own_bookkeeping(documents, *, role, digest):
             if expected_op and expected_op.get('phase')=='intent':
                 value['operations']=[dict(x,phase='intent') if x.get('role')==role and x.get('sha256')==digest and x.get('phase')=='control_deleted' else x for x in value['operations']]
         if value!=expected:raise ValueError('own bookkeeping changed before commit: '+path)
+
+
+def own_exporter_metadata(paths, *, role, source, program, watched_digests):
+    """Recognize exact local exporter invocation history, not other consumers."""
+    out={}
+    for path in paths:
+        p=Path(path)
+        if p.name!='wandb-metadata.json':continue
+        value=json.loads(p.read_text())
+        if value.get('args')!=[role,source] or value.get('program')!=str(program):continue
+        extra={k:v for k,v in value.items() if k!='args'}
+        if any(_contains(extra,d) for d in watched_digests):raise ValueError('exporter metadata contains another reference')
+        out[str(p)]=value
+    return out

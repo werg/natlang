@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse,hashlib,json,subprocess,time
 from pathlib import Path
 from .dependency_references import reference_paths
-from .retention_bookkeeping import own_bookkeeping,recheck_own_bookkeeping
+from .retention_bookkeeping import own_bookkeeping,own_exporter_metadata,recheck_own_bookkeeping
 from .retention_evidence import authenticated_owner_epochs
 from .retention_guard import guarded_full,guarded_pair
 from .retention_live import live_facts
@@ -115,6 +115,12 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
                 own_control_caches=[p for p in control_cache if (value:=read(p)).get('identity')==control_receipt.get('identity') and value.get('receipt')==control_receipt]
                 own.update(own_bookkeeping(role=candidate['control_role'],digest=candidate['control_sha256'],receipt=control_receipt,receipt_path=receipt_path(candidate['control_role']),phase=control_phase if control_phase.exists() else None,watched_digests=(candidate['sha256'],)))
                 for path in own_control_caches:own.update(own_bookkeeping(role=candidate['control_role'],digest=candidate['control_sha256'],receipt=control_receipt,cache=path,watched_digests=(candidate['sha256'],)))
+            watched=[candidate['sha256']]+([candidate['control_sha256']] if candidate['control_required'] else [])
+            metadata_paths=set().union(*(evidence.references[d] for d in watched))
+            program=ops/'coreweave-private-runfile-export-20261014.py'
+            own.update(own_exporter_metadata(metadata_paths,role=candidate['role'],source=intent['path'],program=program,watched_digests=watched))
+            if candidate['control_required']:
+                own.update(own_exporter_metadata(metadata_paths,role=candidate['control_role'],source=control['archive']['path'],program=program,watched_digests=watched))
             allowed=[str(Path(entry['intent'])),*own]
             manual_journal=root/('standalone-peer%d-manual-cloud-journal.json'%rank)
             is_manual=manual_journal.exists() and any(x['role']==candidate['role'] for x in read(manual_journal)['exports'])
