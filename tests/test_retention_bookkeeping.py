@@ -22,3 +22,12 @@ def test_only_exact_exporter_invocation_metadata_is_bookkeeping(tmp_path):
     assert not own_exporter_metadata([p],role='other',source=v['args'][1],program=program,watched_digests=[h])
     p.write_text(json.dumps(v|{'consumer':h}))
     with pytest.raises(ValueError,match='another reference'):own_exporter_metadata([p],role='control',source=v['args'][1],program=program,watched_digests=[h])
+
+
+def test_exact_local_pin_dry_does_not_hide_other_consumers(tmp_path):
+    from scripts.coreweave.retention_bookkeeping import own_pin_maintenance
+    h='a'*64;p=tmp_path/'local-pin-maintenance-old.json';v={'schema':'natlang.local-pin-maintenance-dry/1','role':'old','no_unlink_performed':True,'candidate':{'sha256':h}};p.write_text(json.dumps(v))
+    assert str(p) in own_pin_maintenance([p],role='old',digest=h)
+    assert not own_pin_maintenance([p],role='different',digest=h)
+    p.write_text(json.dumps(v|{'consumer':h}))
+    with pytest.raises(ValueError,match='another reference'):own_pin_maintenance([p],role='old',digest=h)

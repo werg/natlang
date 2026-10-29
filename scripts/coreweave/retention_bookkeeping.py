@@ -76,3 +76,17 @@ def own_exporter_metadata(paths, *, role, source, program, watched_digests):
         if any(_contains(extra,d) for d in watched_digests):raise ValueError('exporter metadata contains another reference')
         out[str(p)]=value
     return out
+
+
+def own_pin_maintenance(paths, *, role, digest):
+    """Recognize an exact completed local-pin dry record, not a consumer."""
+    out={}
+    for path in paths:
+        p=Path(path)
+        if not p.name.startswith('local-pin-maintenance-'):continue
+        value=json.loads(p.read_text())
+        if value.get('schema')!='natlang.local-pin-maintenance-dry/1' or value.get('role')!=role or value.get('no_unlink_performed') is not True or (value.get('candidate') or {}).get('sha256')!=digest:continue
+        rest=dict(value);rest.pop('candidate')
+        if _contains(rest,digest):raise ValueError('local pin dry contains another reference')
+        out[str(p)]=value
+    return out

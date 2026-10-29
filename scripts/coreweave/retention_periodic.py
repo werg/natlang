@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse,hashlib,json,subprocess,time
 from pathlib import Path
 from .dependency_references import reference_paths
-from .retention_bookkeeping import own_bookkeeping,own_exporter_metadata,recheck_own_bookkeeping
+from .retention_bookkeeping import own_bookkeeping,own_exporter_metadata,own_pin_maintenance,recheck_own_bookkeeping
 from .retention_evidence import authenticated_owner_epochs
 from .retention_guard import guarded_full,guarded_pair
 from .retention_live import live_facts
@@ -117,6 +117,7 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
                 for path in own_control_caches:own.update(own_bookkeeping(role=candidate['control_role'],digest=candidate['control_sha256'],receipt=control_receipt,cache=path,watched_digests=(candidate['sha256'],)))
             watched=[candidate['sha256']]+([candidate['control_sha256']] if candidate['control_required'] else [])
             metadata_paths=set().union(*(evidence.references[d] for d in watched))
+            own.update(own_pin_maintenance(metadata_paths,role=candidate['role'],digest=candidate['sha256']))
             program=ops/'coreweave-private-runfile-export-20261014.py'
             own.update(own_exporter_metadata(metadata_paths,role=candidate['role'],source=intent['path'],program=program,watched_digests=watched))
             if candidate['control_required']:
