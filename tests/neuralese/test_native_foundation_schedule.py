@@ -161,6 +161,16 @@ def test_actual_tiny_stop_append_resume_keeps_optimizer_rng_and_all_row_visits(t
     assert trainer.main(retired)==0
     replayed=torch.load(pin,weights_only=False)['training']
     assert len(replayed['options']['source_predecessor_retirement_history'])==1
+    third=tmp_path/'third';third.mkdir()
+    later=source_manifest(third,ordinary,[*pairs,*[authenticated_pair('expanded-'+str(i),roles=roles.ids,fingerprint=fp) for i in range(2)],authenticated_pair('later',roles=roles.ids,fingerprint=fp)])
+    declaration=json.loads(later.read_text());declaration['sources'][0]['training_priority']=1;later.write_text(json.dumps(declaration))
+    appended=retired.copy();appended[appended.index('--native-graphs')+1]=str(later)
+    appended+=['--continued-native-graphs',str(new)]
+    assert trainer.main(appended)==0
+    later_training=torch.load(pin,weights_only=False)['training']
+    assert len(later_training['options']['source_predecessor_retirement_history'])==1
+    assert later_training['options']['source_predecessors']['continued_native_graphs']==sha256_file_hex(new)
+    assert trainer.main(appended)==0
 
 
 

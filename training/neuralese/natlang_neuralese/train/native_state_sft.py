@@ -2102,8 +2102,8 @@ def _main(argv=None, *, requested_refresh):
             'optimizer': shared_resume['optimizer'], 'rng': shared_resume['rng'],
             'fp8': shared_resume.get('fp8'), 'step': 0, 'global_step': shared_resume['step']}
     if args.source_predecessor_retirement is not None:
-        if resume is None or args.continued_native_graphs is not None:
-            raise ValueError('source predecessor retirement requires an earned checkpoint and no active predecessor argument')
+        if resume is None:
+            raise ValueError('source predecessor retirement requires an earned checkpoint')
         from .native_predecessor_retirement import load_retirement, verify_retirement
         source_pin = args.continue_from if parent_continuation else policy.slot
         proof = load_retirement(args.source_predecessor_retirement)
@@ -2111,8 +2111,11 @@ def _main(argv=None, *, requested_refresh):
         history = list((resume.get('options') or {}).get('source_predecessor_retirement_history') or [])
         recorded = dict(proof, proof_sha256=proof_sha, proof_path=str(args.source_predecessor_retirement.resolve()))
         already_committed = recorded in history
-        verify_retirement(resume, proof, checkpoint_sha256=proof['checkpoint_sha256'] if already_committed else sha256_file_hex_cached(source_pin),
-                          train_sha256=source_receipts[0]['sha256'], held_sha256=source_receipts[1]['sha256'])
+        if not already_committed:
+            if args.continued_native_graphs is not None:
+                raise ValueError('new source predecessor retirement cannot also execute an append')
+            verify_retirement(resume, proof, checkpoint_sha256=sha256_file_hex_cached(source_pin),
+                              train_sha256=source_receipts[0]['sha256'], held_sha256=source_receipts[1]['sha256'])
         checkpoint_options['source_predecessor_retirement_history'] = history if already_committed else history + [recorded]
     if resume is not None:
         if mandatory_objective:
