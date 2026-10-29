@@ -918,7 +918,7 @@ def test_unselected_stale_foundation_bindings_are_not_runtime_dependencies(tmp_p
         'sha256':deps.sha256_file_hex_cached(checkpoint)}},namespace=str(tmp_path))
     assert {item['path']for item in closure['files']}=={str(checkpoint)}
 def test_external_source_publication_binds_compact_proofs_without_offbox_raw(tmp_path):
-    import hashlib, io, json, tarfile
+    import copy, hashlib, io, json, tarfile
     from scripts.coreweave.recovery_readiness import required_bindings
     root=tmp_path/'provider';root.mkdir()
     def ref(path):
@@ -943,6 +943,19 @@ def test_external_source_publication_binds_compact_proofs_without_offbox_raw(tmp
     assert absent_archive['path'] not in actual and absent_raw['path'] not in actual
     required=required_bindings({'training':state['training'],'model_config':{'base':''}});keys={(x['path'],x['sha256']) for x in required}
     assert (absent_archive['path'],absent_archive['sha256']) in keys and (absent_raw['path'],absent_raw['sha256']) in keys
+    second=copy.deepcopy(closure);second['archive']={'path':str(tmp_path/'other-offbox.tar.zst'),'sha256':'f'*64};secondfile=file('second-closure.json',json.dumps(second).encode());members['closure.json']=secondfile.read_bytes();bundle2=root/'second-mechanisms.tar.gz'
+    with tarfile.open(bundle2,'w:gz') as tar:
+        for name,data in members.items():
+            info=tarfile.TarInfo(name);info.size=len(data);tar.addfile(info,io.BytesIO(data))
+    second_provenance={**provenance,'closure':ref(secondfile),'custody':second,'mechanisms_archive':ref(bundle2)}
+    from natlang_neuralese.train.recipe import preserve_recipe_external_provenance
+    original=copy.deepcopy(binding);binding.pop('external_provenance');binding['external_provenances']=[provenance,second_provenance]
+    binding=preserve_recipe_external_provenance(original,binding)
+    state['training']['options']['recipe_binding']=json.dumps(binding)
+    import torch
+    checkpoint=root/'append-checkpoint.pt';torch.save(state,checkpoint);saved=torch.load(checkpoint,weights_only=False)
+    result=deps.dependency_closure({},namespace=str(root),_checkpoint_payload=saved)
+    actual={item['path'] for item in result['files']};assert {str(closurefile),str(bundle),str(secondfile),str(bundle2)}<=actual
     bundle.write_bytes(b'tampered')
     import pytest
     with pytest.raises(ValueError,match='dependency hash changed'):

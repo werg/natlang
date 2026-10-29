@@ -1719,6 +1719,10 @@ def _main(argv=None, *, requested_refresh):
             new_recipe=json.loads(args.recipe_binding)
             if old_recipe.get('lineage_sha256',old_recipe['sha256'])!=new_recipe.get('lineage_sha256',new_recipe['sha256']):
                 raise ValueError('native continuation changed its preserved recipe lineage')
+            from .recipe import preserve_recipe_external_provenance
+            new_recipe=preserve_recipe_external_provenance(old_recipe,new_recipe)
+            args.recipe_binding=json.dumps(new_recipe,sort_keys=True,separators=(',',':'))
+            checkpoint_options['recipe_binding']=args.recipe_binding
     checkpoint_options['withdrawal_history']=list((saved_training.get('options') or {}).get('withdrawal_history') or [])
     checkpoint_options['source_availability_history']=list((saved_training.get('options') or {}).get('source_availability_history') or [])
     checkpoint_options['source_correction_history']=list((saved_training.get('options') or {}).get('source_correction_history') or [])

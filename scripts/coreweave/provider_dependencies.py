@@ -142,36 +142,33 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
 
     def external_source_provenance(options):
         """Bind compact historical evidence without demanding offbox raw files."""
-        from natlang_neuralese.train.recipe import native_recipe_provenance
-        binding = native_recipe_provenance(options.get('recipe_binding'))
-        provenance = binding.get('external_provenance') if binding else None
-        if provenance is None:
-            return
-        if provenance.get('schema') != 'natlang.external-source-publication-provenance/1':
-            raise ValueError('external source publication provenance schema differs')
-        closure = json.loads(bound(provenance['closure']).read_text())
-        if closure != provenance.get('custody') or closure.get('schema') != 'natlang.big2-tranche-custody-publication-closure/1':
-            raise ValueError('external source custody differs from its exact closure')
-        for key in ('archive', 'recovered_raw_records'):
-            item = closure.get(key) or {}
-            if not isinstance(item.get('path'), str) or not isinstance(item.get('sha256'), str) or len(item['sha256']) != 64 or any(c not in '0123456789abcdef' for c in item['sha256']):
-                raise ValueError('external source historical identity is malformed')
-        archive = bound(provenance['mechanisms_archive'])
-        bound(provenance['content_audit']); bound(provenance['clean_closure_audit'])
-        members = {'verify.py': closure['verifier']['sha256'],
-                   'student_tokenizers.py': closure['tokenizer_helper']['sha256'],
-                   'runtime.tar': closure['runtime_snapshot']['sha256'],
-                   'runtime-receipt.json': closure['runtime_snapshot_receipt']['sha256'],
-                   'closure.json': provenance['closure']['sha256']}
-        members.update({f'proofs/{index}.json': proof['sha256']
-                        for index, proof in enumerate(closure['historical_proofs'])})
-        with tarfile.open(archive, 'r:*') as tar:
-            entries = tar.getmembers()
-            if any(not item.isfile() for item in entries) or len(entries) != len(members) or {item.name for item in entries} != set(members):
-                raise ValueError('external source mechanism archive inventory differs')
-            for item in entries:
-                if hashlib.file_digest(tar.extractfile(item), 'sha256').hexdigest() != members[item.name]:
-                    raise ValueError('external source mechanism archive member differs: ' + item.name)
+        from natlang_neuralese.train.recipe import external_source_provenances
+        for provenance in external_source_provenances(options.get('recipe_binding')):
+            if provenance.get('schema') != 'natlang.external-source-publication-provenance/1':
+                raise ValueError('external source publication provenance schema differs')
+            closure = json.loads(bound(provenance['closure']).read_text())
+            if closure != provenance.get('custody') or closure.get('schema') != 'natlang.big2-tranche-custody-publication-closure/1':
+                raise ValueError('external source custody differs from its exact closure')
+            for key in ('archive', 'recovered_raw_records'):
+                item = closure.get(key) or {}
+                if not isinstance(item.get('path'), str) or not isinstance(item.get('sha256'), str) or len(item['sha256']) != 64 or any(c not in '0123456789abcdef' for c in item['sha256']):
+                    raise ValueError('external source historical identity is malformed')
+            archive = bound(provenance['mechanisms_archive'])
+            bound(provenance['content_audit']); bound(provenance['clean_closure_audit'])
+            members = {'verify.py': closure['verifier']['sha256'],
+                       'student_tokenizers.py': closure['tokenizer_helper']['sha256'],
+                       'runtime.tar': closure['runtime_snapshot']['sha256'],
+                       'runtime-receipt.json': closure['runtime_snapshot_receipt']['sha256'],
+                       'closure.json': provenance['closure']['sha256']}
+            members.update({f'proofs/{index}.json': proof['sha256']
+                            for index, proof in enumerate(closure['historical_proofs'])})
+            with tarfile.open(archive, 'r:*') as tar:
+                entries = tar.getmembers()
+                if any(not item.isfile() for item in entries) or len(entries) != len(members) or {item.name for item in entries} != set(members):
+                    raise ValueError('external source mechanism archive inventory differs')
+                for item in entries:
+                    if hashlib.file_digest(tar.extractfile(item), 'sha256').hexdigest() != members[item.name]:
+                        raise ValueError('external source mechanism archive member differs: ' + item.name)
 
     def classification_input(reference):
         from natlang_neuralese.train.native_classification_continuation import classification_proof_dependencies

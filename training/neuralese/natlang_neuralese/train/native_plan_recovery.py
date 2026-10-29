@@ -17,7 +17,7 @@ def checkpoint_plan_recovery(checkpoint,recipe_path,recipe,stage_inputs,*,expect
     original=training_recipe_binding(state)
     if original is None:raise ValueError('checkpoint recovery requires its saved current recipe authority')
     lineage=original.get('lineage_sha256',original['sha256'])
-    current=native_recipe_binding(recipe_path,lineage)
+    current=native_recipe_binding(recipe_path,lineage,previous=original)
     if any(current.get(key)!=original.get(key) for key in ('sha256','file_sha256')):
         raise ValueError('checkpoint recovery requires the exact saved current recipe policy and file')
     stages=[stage for stage in recipe['stages'] if stage.get('admitted',True)]

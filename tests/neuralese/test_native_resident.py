@@ -76,6 +76,36 @@ def test_actual_indexes_append_commit_and_crash_projection_recovery(tmp_path,mon
     assert resumed.poll(7) is None
 
 
+def test_resident_append_preserves_parent_and_new_external_provenance(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    paths,directory,manager,recipe=setup(tmp_path)
+    first={'schema':'natlang.external-source-publication-provenance/1','closure':{'path':'/history/one','sha256':'a'*64}}
+    second={'schema':'natlang.external-source-publication-provenance/1','closure':{'path':'/history/two','sha256':'b'*64}}
+    manager.recipe_binding={**manager.recipe_binding,'external_provenance':first}
+    initial=directory/'initial.json';value=json.loads(initial.read_text());value['recipe']=manager.recipe_binding;write_json(initial,value)
+    proposed=json.loads(recipe.read_text());proposed['external_provenances']=[first,second];write_json(recipe,proposed)
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=())
+    manager.poll(7)
+    state=resident.current(directory);assert state['payload']['recipe']['external_provenances']==[first,second]
+    assert manager.recipe_binding['external_provenances']==[first,second]
+    loaded=NativeGraphSource(paths['new'],'tokenizer-sha',required_split='train')
+    resumed=resident.ResidentAdoption(directory,stage_id='sft',recipe_binding=state['payload']['recipe'],train=loaded,held=manager.held)
+    assert resumed.poll(7) is None
+
+
+def test_resident_contract_rejects_dropped_external_provenance(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    _,directory,_,recipe=setup(tmp_path)
+    plan=json.loads((directory.parent/'recipe-plan.json').read_text());proposed=copy.deepcopy(plan)
+    first={'schema':'natlang.external-source-publication-provenance/1','closure':{'path':'/history/one','sha256':'a'*64}}
+    second={'schema':'natlang.external-source-publication-provenance/1','closure':{'path':'/history/two','sha256':'b'*64}}
+    plan['recipe']['external_provenances']=[first]
+    proposed['recipe']=load_recipe(recipe);proposed['recipe']['external_provenances']=[second]
+    proposed['stage_inputs']={'sft':resolve_stage_inputs(proposed['recipe'],proposed['recipe']['stages'][0],{})}
+    with pytest.raises(ValueError,match='dropped or changed historical external'):
+        resident._contract(plan,proposed,'sft')
+
+
 def test_startup_rejects_wrong_runtime_before_rewriting_resident_state(tmp_path):
     _, directory, manager, _ = setup(tmp_path)
     initial = directory/'initial.json'

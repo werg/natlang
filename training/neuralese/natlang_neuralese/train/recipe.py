@@ -586,11 +586,49 @@ def recipe_identity_sha256(path):
     return sha(path)
 
 
-def native_recipe_binding(path, lineage_sha256):
+def external_source_provenances(value):
+    """Return exact external source histories without importing unrelated options."""
+    value = native_recipe_provenance(value) if value else {}
+    items = list(value.get('external_provenances') or [])
+    if value.get('external_provenance') is not None:
+        items.append(value['external_provenance'])
+    seen = {}
+    for item in items:
+        if not isinstance(item, dict) or item.get('schema') != 'natlang.external-source-publication-provenance/1':
+            raise ValueError('invalid external source publication provenance')
+        ref = item.get('closure') or {}; path, sha = ref.get('path'), ref.get('sha256')
+        if (not isinstance(path, str) or not path or not isinstance(sha, str) or len(sha) != 64
+                or any(c not in '0123456789abcdef' for c in sha)):
+            raise ValueError('external source provenance needs an exact closure binding')
+        if path in seen and seen[path] != item:
+            raise ValueError('external source historical provenance changed')
+        seen[path] = item
+    return list(seen.values())
+
+
+def preserve_recipe_external_provenance(previous, current):
+    """Carry omitted history on reconstruction; reject explicit drops or rewrites."""
+    current = native_recipe_provenance(current)
+    prior = external_source_provenances(previous)
+    has_declaration = 'external_provenances' in current or 'external_provenance' in current
+    incoming = external_source_provenances(current)
+    if has_declaration:
+        if any(item not in incoming for item in prior):
+            raise ValueError('external source historical provenance was dropped or changed')
+    elif prior:
+        current['external_provenances'] = prior
+    return current
+
+
+def native_recipe_binding(path, lineage_sha256, *, previous=None):
     """Bind current training policy separately from the preserved run lineage."""
     path = Path(path).resolve()
-    return {'path': str(path), 'sha256': recipe_identity_sha256(path),
-            'file_sha256': sha(path), 'lineage_sha256': lineage_sha256}
+    result = {'path': str(path), 'sha256': recipe_identity_sha256(path),
+              'file_sha256': sha(path), 'lineage_sha256': lineage_sha256}
+    declaration = resolve_recipe_data(path).get('external_provenances')
+    if declaration is not None:result['external_provenances'] = declaration
+    external_source_provenances(result)
+    return preserve_recipe_external_provenance(previous, result) if previous else result
 
 
 def native_recipe_provenance(value):

@@ -203,9 +203,15 @@ def _contract(plan, proposed, stage_id):
     if not active_changed and not pending_changed:
         raise ValueError('resident request must add active data or mandatory pending work')
     recipes = []
+    old_external = plan['recipe'].get('external_provenances')
+    new_external = proposed['recipe'].get('external_provenances')
+    if old_external is not None and (not isinstance(old_external, list) or not isinstance(new_external, list)
+            or any(item not in new_external for item in old_external)):
+        raise ValueError('resident append dropped or changed historical external source provenance')
     for recipe in (plan['recipe'], proposed['recipe']):
         value = copy.deepcopy(recipe)
         value.pop('input_bindings', None)
+        value.pop('external_provenances', None)
         for stage in value['stages']:
             if stage['id'] == stage_id:
                 if stage['kind'] != 'native_state_sft':
@@ -1418,7 +1424,8 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
     pending_declarations(proposed, stage_id, tokenizer_fingerprint)
     payload={'predecessor': previous['generation'] if previous else digest(plan),
         'stage_id': stage_id, 'plan': proposed,
-        'recipe': native_recipe_binding(recipe_path, plan['recipe_sha256']),
+        'recipe': native_recipe_binding(recipe_path, plan['recipe_sha256'],
+            previous=previous['payload']['recipe'] if previous else initial['recipe']),
         'train': train_ref, 'prior_train': prior_ref, 'held': held_ref, 'prior_held': held_ref,
         'prior_recipe': previous['payload']['prior_recipe'] if previous else initial['recipe'],
         'tokenizer_fingerprint': tokenizer_fingerprint, 'role_ids': list(role_ids),
@@ -1515,7 +1522,8 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
         if any(geometry[key] > limits[key] for key in limits):
             raise ValueError('resident append exceeds qualified whole-graph geometry; retain pending until memory handling is qualified')
         payload = {'predecessor': predecessor, 'stage_id': stage_id, 'plan': proposed,
-            'recipe': native_recipe_binding(recipe_path, plan['recipe_sha256']),
+            'recipe': native_recipe_binding(recipe_path, plan['recipe_sha256'],
+                previous=previous['payload']['recipe'] if previous else initial['recipe']),
             'train': binding(train.path), 'prior_train': binding(old.path),
             'held': binding(held.path), 'prior_held': binding(old_held.path),
             'prior_recipe': (previous['payload']['prior_recipe'] if previous else
@@ -1620,6 +1628,9 @@ class ResidentAdoption:
             if bound(payload['prior_train']) != self.train.path.resolve():
                 raise ValueError('resident predecessor differs from loaded training source')
             recipe = payload['recipe']
+            from .recipe import preserve_recipe_external_provenance
+            if preserve_recipe_external_provenance(self.recipe_binding, recipe) != recipe:
+                raise ValueError('resident recipe omitted authenticated external source provenance')
             bound({'path': recipe['path'], 'sha256': recipe['file_sha256']})
             from .recipe import recipe_identity_sha256, load_recipe, resolve_stage_inputs
             if load_recipe(Path(recipe['path'])) != payload['plan']['recipe']:
