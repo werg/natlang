@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import signal
 import subprocess
 import sys
 import time
@@ -25,6 +27,60 @@ sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 
 from natlang_neuralese.eval import task_cadence  # noqa: E402
 from natlang_neuralese.eval.task_packet import read_jsonl, score_rows  # noqa: E402
+
+
+def collect_queues(queues, spec, args, env):
+    """Use the production slot dispatcher and own each collector's process group."""
+    if not queues:
+        return []
+    children = []
+    stopping = False
+
+    def request_stop(*_):
+        nonlocal stopping
+        stopping = True
+
+    def signal_group(child, value):
+        try:
+            os.killpg(child.pid, value)
+        except ProcessLookupError:
+            pass
+
+    class Collector:
+        def __init__(self, child): self.child = child
+        def poll(self): return self.child.poll()
+        def terminate(self): signal_group(self.child, signal.SIGTERM)
+
+    def launch(queue, journal, entries):
+        log = (queue.parent / 'supervisor.log').open('a')
+        try:
+            child = subprocess.Popen(
+                [sys.executable, str(ROOT / 'scripts' / 'run_bonsai_queue.py'), str(queue), str(journal),
+                 '--runtime', str(spec.get('runtime') or ROOT / 'ts-host'), '--server', args.server,
+                 '--chat-completions-url', args.server.rstrip('/') + '/v1/chat/completions',
+                 '--model-concurrency', str(args.model_concurrency), '--case-seconds', str(args.case_seconds)],
+                cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        except BaseException:
+            log.close()
+            raise
+        children.append((child, log))
+        return Collector(child), log
+
+    handlers = {value: signal.signal(value, request_stop) for value in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        return task_cadence.wait_collectors([], queues, launch, min_free_mib=0,
+            max_workers=min(spec['workers'], len(queues)), stop_requested=lambda: stopping)
+    finally:
+        for child, log in children:
+            signal_group(child, signal.SIGTERM)
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                signal_group(child, signal.SIGKILL)
+                child.wait(timeout=5)
+            log.close()
+        for value, handler in handlers.items():
+            signal.signal(value, handler)
 
 
 def recipe_spec(path: Path) -> dict:
@@ -76,19 +132,7 @@ def main(argv=None) -> int:
     queues = evaluation._queues(run)
     env = task_cadence.node_path_env()
     started = time.time()
-    children = []
-    for queue, journal, _ in ([] if args.report_only else queues):
-        log = (queue.parent / 'supervisor.log').open('a')
-        children.append((subprocess.Popen(
-            [sys.executable, str(ROOT / 'scripts' / 'run_bonsai_queue.py'), str(queue), str(journal),
-             '--runtime', str(spec.get('runtime') or ROOT / 'ts-host'), '--server', args.server,
-             '--chat-completions-url', args.server.rstrip('/') + '/v1/chat/completions',
-             '--model-concurrency', str(args.model_concurrency), '--case-seconds', str(args.case_seconds)],
-            cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT), log))
-    codes = []
-    for child, log in children:
-        codes.append(child.wait())
-        log.close()
+    codes = collect_queues([] if args.report_only else queues, spec, args, env)
 
     finishes, results, keys = {}, [], {}
     for queue, journal, entries in queues:
