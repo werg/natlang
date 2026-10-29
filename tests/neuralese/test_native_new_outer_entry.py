@@ -85,3 +85,55 @@ def test_native_entry_saves_full_transition_before_readiness(tmp_path, monkeypat
     with pytest.raises(Ready):
         trainer.main([*argv, '--continue-from',str(seed), '--diloco',settings,
                       '--diloco-new-outer',str(declaration)])
+
+
+def test_existing_full_slot_wins_over_original_continue_from(tmp_path, monkeypatch):
+    from test_native_serve import _tiny_source
+    from test_native_state_sft import graph
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    base=tmp_path/'base';_tiny_source(base)
+    from natlang_neuralese.model import lfm2_port
+    from transformers import AutoModelForCausalLM,AutoTokenizer
+    def local_backbone(source,lora=None,dtype=torch.bfloat16,device='cpu'):
+        model=AutoModelForCausalLM.from_pretrained(str(source),dtype=dtype).to(device).eval()
+        for parameter in model.parameters():parameter.requires_grad_(False)
+        return model,AutoTokenizer.from_pretrained(str(source))
+    monkeypatch.setattr(lfm2_port,'load_backbone',local_backbone)
+    original_from_pretrained=AutoModelForCausalLM.from_pretrained
+    def cpu_load(*args,**kwargs):
+        kwargs.pop('device_map',None)
+        return original_from_pretrained(*args,**kwargs)
+    monkeypatch.setattr(AutoModelForCausalLM,'from_pretrained',cpu_load)
+    from transformers import AutoConfig
+    model_type=type(AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(str(base))))
+    original_model_load=model_type.from_pretrained
+    def cpu_model_load(*args,**kwargs):
+        kwargs.pop('device_map',None)
+        return original_model_load(*args,**kwargs)
+    monkeypatch.setattr(model_type,'from_pretrained',cpu_model_load)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    paths={}
+    for split in ('train','test'):
+        paths[split]=tmp_path/(split+'.jsonl')
+        paths[split].write_text(json.dumps(dict(graph(split),split=split,source_groups=[split],tokenizer_fingerprint=config['tokenizer_fingerprint']))+'\n')
+    out=tmp_path/'run';argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),'--epochs','1','--out',str(out)]
+    assert trainer.main(argv)==0
+    slot=out/'checkpoint.pt';parent=tmp_path/'parent.pt';shutil.copyfile(slot,parent)
+    full=torch.load(slot,weights_only=True);old_step=full['training']['global_step'];full['training']['global_step']=old_step+11;torch.save(full,slot)
+    class Loaded(Exception):pass
+    actual_loader=trainer.load_native_checkpoint
+    def observe(path,*args,**kwargs):
+        model,tokenizer,roles,configuration,state=actual_loader(path,*args,**kwargs)
+        assert path==slot and state['training']['global_step']==old_step+11
+        def same(a,b):
+            if isinstance(a,torch.Tensor):return isinstance(b,torch.Tensor) and torch.equal(a,b)
+            if isinstance(a,dict):return a.keys()==b.keys() and all(same(a[k],b[k]) for k in a)
+            if isinstance(a,(tuple,list)):return len(a)==len(b) and all(same(x,y) for x,y in zip(a,b))
+            return a==b
+        for key in ('optimizer','rng','exposure_counts'):assert full['training'][key] and same(state['training'][key],full['training'][key])
+        for key in ('backbone_state','interface_state'):assert same(state[key],full[key])
+        raise Loaded()
+    monkeypatch.setattr(trainer,'load_native_checkpoint',observe)
+    with pytest.raises(Loaded):trainer.main([*argv,'--continue-from',str(parent)])

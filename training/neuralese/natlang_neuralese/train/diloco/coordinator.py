@@ -725,6 +725,7 @@ class FileStore:
         self.partial = self.root / ".partial"
         self.locks: dict[str, threading.Lock] = {}
         self.guard = threading.Lock()
+        self.snapshot_gate = threading.RLock()
 
     @staticmethod
     def check(name: str, sha256: str | None = None) -> None:
@@ -804,12 +805,35 @@ class FileStore:
         return (self.root / name).open("rb"), sha256
 
 
-def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, stop: threading.Event | None = None) -> None:
+def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, stop: threading.Event | None = None, replication=None) -> None:
     """Serve on a private host, behind the sandbox gateway or an authenticated TLS proxy."""
     if not token or len(token) < 24:
         raise ValueError(f"Set {TOKEN_ENV} to a random secret (>=24 chars)")
-    coordinator = Coordinator(root)
+    coordinator = Coordinator(root) if replication is None else replication.machine.coordinator
+    if coordinator.root.resolve() != Path(root).resolve():
+        raise ValueError('replicated coordinator root differs')
     files = FileStore(coordinator.root)
+    if replication is not None:
+        pending=files.root/'.replication-pending'
+        if pending.is_dir():
+            for marker in sorted(pending.iterdir()):
+                if not marker.is_file() or marker.is_symlink():raise ValueError('invalid pending file replication marker')
+                intent=json.loads(marker.read_text());name=intent['name'];sha=intent['sha256'];files.check(name,sha)
+                if marker.name!=name:raise ValueError('pending file identity differs')
+                if files.committed(name) is not None:
+                    if files.committed(name)!=sha:raise ValueError('pending committed file hash differs')
+                    replication.replicate_file(name,files.root/name,sha)
+                    marker.unlink();fd=os.open(pending,os.O_RDONLY|os.O_DIRECTORY)
+                    try:os.fsync(fd)
+                    finally:os.close(fd)
+    def read(function):
+        return function() if replication is None else replication.read(function)
+    def operation(kind, args, payload=None):
+        if replication is not None:
+            return replication.call(kind, args, payload)
+        if kind == 'submit': args = {**args, 'incoming': payload}
+        return getattr(coordinator, kind)(**args)
+
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -899,11 +923,27 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
             try:
                 if parsed.path == "/v1/manifest":
                     self._json(200, coordinator.manifest)
+                elif parsed.path == "/v1/replica-promotion" and replication is not None:
+                    path=coordinator.root / "replica-session.json"
+                    if not path.is_file():self._json(404, {"error":"no promoted session"})
+                    else:self._json(200, json.loads(path.read_text()))
+                elif re.fullmatch(r'/v1/replica-recovery-status/[A-Za-z0-9_-]{1,128}',parsed.path) and replication is not None:
+                    ident=parsed.path.rsplit('/',1)[-1];path=Path(replication.recovery_store)/'recovery-pins'/(ident+'.status.json')
+                    self._json(200,json.loads(path.read_text()) if path.exists() else {'state':'pending'})
                 elif parsed.path == "/v1/status":
-                    self._json(200, coordinator.status())
+                    self._json(200, read(coordinator.status))
                 elif parsed.path.startswith("/v1/files/"):
                     name = parsed.path[len("/v1/files/"):]
                     query = parse_qs(parsed.query)
+                    files.check(name)
+                    marker=files.root/'.replication-pending'/name
+                    if replication is not None and marker.exists() and files.committed(name) is not None:
+                        intent=json.loads(marker.read_text());sha=intent.get('sha256')
+                        if intent.get('name')!=name or files.committed(name)!=sha:raise ValueError('file replication intent differs')
+                        replication.replicate_file(name,files.root/name,sha)
+                        marker.unlink(missing_ok=True);directory=os.open(marker.parent,os.O_RDONLY|os.O_DIRECTORY)
+                        try:os.fsync(directory)
+                        finally:os.close(directory)
                     if "sha256" in query:  # upload state: committed, conflict, or the partial size to resume at
                         self._json(200, files.state(name, query["sha256"][0]))
                     else:
@@ -930,19 +970,23 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                     if coordinator.manifest.get("ema") is None:
                         self._json(404, {"error": "this run keeps no EMA of its global versions"})
                     else:
-                        with coordinator.lock:
-                            path = coordinator._path(index)
-                            version = int(_metadata(path)["version"])
-                            ema = load_tensors(path)["ema"]
-                        payload = io.BytesIO(save({"ema": ema}, metadata={"version": str(version)}))
+                        def read_ema():
+                            with coordinator.lock:
+                                path = coordinator._path(index)
+                                version = int(_metadata(path)["version"])
+                                ema = load_tensors(path)["ema"]
+                            return version, io.BytesIO(save({"ema": ema}, metadata={"version": str(version)}))
+                        version, payload = read(read_ema)
                         self._stream(payload, version)
                 elif re.fullmatch(r"/v1/fragments/[0-9]+", parsed.path):
                     index = int(parsed.path.rsplit("/", 1)[-1])
-                    with coordinator.lock:
-                        version = coordinator._version(index)
-                        unchanged = parse_qs(parsed.query).get("after") == [str(version)]
-                        # Open under the lock, but never hold it while a slow client streams.
-                        file = None if unchanged else coordinator._published(index).open("rb")
+                    def read_fragment():
+                        with coordinator.lock:
+                            version = coordinator._version(index)
+                            unchanged = parse_qs(parsed.query).get("after") == [str(version)]
+                            file = None if unchanged else coordinator._published(index).open("rb")
+                        return version, file
+                    version, file = read(read_fragment)
                     if file is None:
                         self._empty()
                     else:
@@ -959,39 +1003,56 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 return
             parsed = urlsplit(self.path)
             try:
+                if parsed.path == '/v1/replica-recovery-pin' and replication is not None:
+                    value=self._read_json()
+                    if set(value)!={'fence_id','workers','owner_journal_sha256'} or not re.fullmatch('[A-Za-z0-9_-]{1,128}',str(value['fence_id'])):
+                        raise ValueError('invalid replicated recovery request')
+                    from .replica_recovery import capture_recovery
+                    event=threading.Event();result={};destination=Path(replication.recovery_store)/'recovery-pins'/value['fence_id']
+                    def pinned(pinned_value):
+                        write_json_durable(Path(replication.recovery_store)/'recovery-pins'/(value['fence_id']+'.status.json'),
+                            {'state':'pinned','fence_id':value['fence_id'],'head':pinned_value['extra'],'workers':value['workers'],
+                             'owner_journal_sha256':value['owner_journal_sha256'],
+                             'boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                             'pid':os.getpid(),'start_ticks':Path(f'/proc/{os.getpid()}/stat').read_text().split(') ',1)[1].split()[19]})
+                        result['pinned']=True;event.set()
+                    def run():
+                        try:
+                            receipt=capture_recovery(replication,files,replication.recovery_store,destination,
+                                fence_id=value['fence_id'],workers=value['workers'],owner_journal_sha256=value['owner_journal_sha256'],on_pinned=pinned)
+                            write_json_durable(Path(replication.recovery_store)/'recovery-pins'/(value['fence_id']+'.status.json'),{'state':'complete','receipt':receipt})
+                        except BaseException as exc:
+                            result['error']=str(exc);event.set()
+                            write_json_durable(Path(replication.recovery_store)/'recovery-pins'/(value['fence_id']+'.status.json'),{'state':'failed','error':str(exc)})
+                    threading.Thread(target=run,daemon=True).start()
+                    if not event.wait(300):raise ValueError('replica recovery pin timed out')
+                    if result.get('error'):raise ValueError(result['error'])
+                    self._json(200,{'state':'pinned','fence_id':value['fence_id'],'path':str(destination)});return
                 if parsed.path == "/v1/lease":
                     value = self._read_json()
-                    result = coordinator.lease(int(value["worker"]), str(value["session"]))
+                    result = operation("lease", {"worker": int(value["worker"]), "session": str(value["session"])})
                 elif parsed.path == "/v1/identity-transition":
                     value=self._read_json()
-                    result=coordinator.identity_transition(int(value['worker']),str(value['session']),value['transition'])
+                    result=operation('identity_transition', {'worker':int(value['worker']),'session':str(value['session']),'transition':value['transition']})
                 elif parsed.path == "/v1/completion":
                     value=self._read_json()
-                    result=coordinator.completion(int(value['worker']),str(value['session']),
-                                                  drained=value['drained'],sequences=value.get('sequences'),generation=value.get('generation'))
+                    result=operation('completion', {'worker':int(value['worker']),'session':str(value['session']),'drained':value['drained'],'sequences':value.get('sequences'),'generation':value.get('generation')})
                 elif parsed.path == "/v1/reopen":
                     value=self._read_json()
-                    result=coordinator.reopen(int(value['worker']),str(value['session']),previous=value['previous'],generation=value['generation'],sequences=value['sequences'])
+                    result=operation('reopen', {'worker':int(value['worker']),'session':str(value['session']),'previous':value['previous'],'generation':value['generation'],'sequences':value['sequences']})
                 elif parsed.path == "/v1/progress":
                     value = self._read_json()
-                    result = coordinator.heartbeat(
-                        int(value["worker"]), str(value["session"]), value["steps"], value["tokens"], value.get("metrics")
-                    )
+                    result = operation('heartbeat', {'worker':int(value['worker']),'session':str(value['session']),
+                        'steps':value['steps'],'tokens':value['tokens'],'metrics':value.get('metrics')})
                 elif re.fullmatch(r"/v1/updates/[0-9]+", parsed.path):
                     index = int(parsed.path.rsplit("/", 1)[-1])
                     coordinator._path(index)
                     filename = self._receive(coordinator.fragments[index].length * 4 + 8192)
                     try:
-                        result = coordinator.submit(
-                            index,
-                            int(self._header("X-Worker")),
-                            self._header("X-Session"),
-                            int(self._header("X-Sequence")),
-                            int(self._header("X-Base-Version")),
-                            int(self._header("X-Steps")),
-                            int(self._header("X-Tokens")),
-                            filename,
-                        )
+                        result = operation('submit', {'index':index,'worker':int(self._header("X-Worker")),
+                            'session':self._header("X-Session"),'sequence':int(self._header("X-Sequence")),
+                            'base_version':int(self._header("X-Base-Version")),
+                            'steps':int(self._header("X-Steps")),'tokens':int(self._header("X-Tokens"))}, filename)
                     finally:
                         filename.unlink(missing_ok=True)
                 else:
@@ -1004,6 +1065,9 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 self._json(400, {"error": str(exc)})
 
         def do_PUT(self) -> None:
+            with files.snapshot_gate:return self._file_put()
+
+        def _file_put(self) -> None:
             if not self._auth():
                 return
             parsed = urlsplit(self.path)
@@ -1012,9 +1076,21 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                     self._json(404, {"error": "Unknown endpoint"})
                     return
                 length = int(self.headers.get("Content-Length", "-1"))
-                result = files.receive(parsed.path[len("/v1/files/"):], self._header("X-Sha256"),
-                                       int(self.headers.get("X-Offset", "0")), int(self._header("X-Total-Bytes")),
-                                       length, self.rfile.read)
+                name=parsed.path[len("/v1/files/"):];sha=self._header("X-Sha256");files.check(name,sha)
+                marker=files.root/'.replication-pending'/name
+                if replication is not None:
+                    existing=files.committed(name)
+                    if existing is not None and existing!=sha:raise Conflict('a different file is already committed under this name')
+                    marker.parent.mkdir(parents=True,exist_ok=True)
+                    intent={'name':name,'sha256':sha}
+                    if marker.exists() and json.loads(marker.read_text())!=intent:raise Conflict('file replication intent differs')
+                    if not marker.exists():write_json_durable(marker,intent)
+                result = files.receive(name,sha,int(self.headers.get("X-Offset", "0")),int(self._header("X-Total-Bytes")),length,self.rfile.read)
+                if replication is not None and result['status'] in ('committed','present'):
+                    replication.replicate_file(name,files.root/name,sha)
+                    marker.unlink();directory=os.open(marker.parent,os.O_RDONLY|os.O_DIRECTORY)
+                    try:os.fsync(directory)
+                    finally:os.close(directory)
                 self._json(200, result)
             except Conflict as exc:
                 self._json(409, {"error": str(exc), **exc.detail})
@@ -1030,7 +1106,22 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
     def reconcile() -> None:
         while not stop.wait(1):
             try:
-                coordinator.tick()
+                def pending_tick_due():
+                    if coordinator._all_completion_declared():
+                        return any(any(coordinator._pending_dir(f.index).glob("*.safetensors")) for f in coordinator.fragments)
+                    for fragment in coordinator.fragments:
+                        files=list(coordinator._pending_dir(fragment.index).glob("*.safetensors"))
+                        if len(files)>=coordinator.manifest['min_quorum']:
+                            return True
+                        meta=_metadata(coordinator._path(fragment.index));version=int(meta['version'])
+                        last_seq=json.loads(meta.get('last_seq','{}'))
+                        if any((version-int(item['base_version'])>coordinator.manifest['max_staleness']
+                                or int(item['sequence'])<=last_seq.get(item['worker'],0))
+                               for item in map(_metadata,files)):
+                            return True
+                    return False
+                if replication is None or read(pending_tick_due):
+                    operation("tick", {})
             except Exception:
                 traceback.print_exc()  # a failed merge must not end the loop serving later rounds
                 sys.stderr.flush()
@@ -1048,4 +1139,4 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
         stop.set()
         server.server_close()
         threads[0].join(timeout=2)
-        coordinator.close()
+        operation("close", {})

@@ -75,7 +75,13 @@ class Backend:
             self.parent=self.direct['parent']
         if len(self.workers)!=record['run']['settings']['workers'] or len(set(self.workers))!=len(self.workers):
             raise ValueError('recovery requires distinct actual sandbox IDs for every learner')
-        self.manifest=json.loads(cwctl.read_sandbox(self.coordinator).read_file(self.root+'/manifest.json').result(timeout=60))
+        coordinator_box=cwctl.read_sandbox(self.coordinator)
+        self.manifest=json.loads(coordinator_box.read_file(self.root+'/manifest.json').result(timeout=60))
+        check=coordinator_box.exec(['test','-f',self.root+'/replica-session.json'],timeout_seconds=30).result(timeout=60)
+        if check.returncode not in (0,1):raise ValueError('cannot inspect coordinator replica recovery mode')
+        self.replica_recovery=self.direct.get('replica_recovery') if self.direct else None
+        if check.returncode==0 and self.replica_recovery is None:raise ValueError('replicated coordinator requires the exact replica recovery control')
+        if check.returncode==1 and self.replica_recovery is not None:raise ValueError('replica recovery control targets a nonreplicated coordinator')
         if self.manifest.get('run_id')!=record['run']['settings']['run_id']:
             raise ValueError('actual coordinator manifest belongs to another run')
         if self.direct and any(self.manifest.get(k)!=v for k,v in self.direct['manifest_checks'].items()):
@@ -157,7 +163,21 @@ class Backend:
         result=self._exec(self.coordinator,['coordinator',self.root,pin,self.runtime_repo/'training/neuralese/natlang_neuralese'])
         return {**result,'sandbox_id':self.coordinator,'source':self.root}
 
-    def pin_coordinator_tree(self,cycle,*,timeout=3600):
+    def pin_coordinator_tree(self,cycle,*,timeout=3600,fence_id=None,ready=None):
+        if self.replica_recovery:
+            if not fence_id or not isinstance(ready,dict):raise ValueError('replicated recovery requires the actual worker fence')
+            box=cwctl.read_sandbox(self.coordinator);cfg=self.replica_recovery
+            program=('import json,sys,urllib.request\nfrom pathlib import Path\n'
+                'token=Path(sys.argv[2]).read_text().strip();body=json.dumps(json.loads(sys.argv[3])).encode()\n'
+                'req=urllib.request.Request(sys.argv[1]+"/v1/replica-recovery-pin",data=body,method="POST",headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"})\n'
+                'print(urllib.request.urlopen(req,timeout=float(sys.argv[4])).read().decode())\n')
+            payload={'fence_id':fence_id,'workers':{str(k):v for k,v in ready.items()},'owner_journal_sha256':cfg['owner_journal_sha256']}
+            result=box.exec(['python3','-c',program,cfg['url'],cfg['token_file'],json.dumps(payload),str(timeout)],timeout_seconds=timeout).result(timeout=timeout+1)
+            if result.returncode!=0:raise ValueError('replicated coordinator pin failed')
+            value=json.loads(result.stdout)
+            if value.get('state')!='pinned' or value.get('fence_id')!=fence_id or value.get('path')!=cfg['store'].rstrip('/')+'/recovery-pins/'+fence_id:
+                raise ValueError('replicated coordinator pin identity differs')
+            return {'path':value['path'],'binding_kind':'replicated-closure-pending','fence_id':fence_id,'cycle':cycle,'sandbox_id':self.coordinator,'source':self.root}
         pin=f'/work/.coreweave/recovery-pins/{cycle}/coordinator-tree-{uuid.uuid4().hex}/tree'
         result=self._exec(self.coordinator,['coordinator-tree',self.root,pin,self.runtime_repo/'training/neuralese/natlang_neuralese'],timeout=timeout)
         return {**result,'sandbox_id':self.coordinator,'source':self.root}
@@ -168,6 +188,33 @@ class Backend:
         box.write_file(identity,json.dumps(component['file_identity'],sort_keys=True).encode()).result(timeout=60)
         result=self._exec(self.coordinator,['coordinator-tree-archive',tree,archive,identity])
         return {**component,**result,'binding_kind':'immutable-hardlink-tree-archive','tree':tree}
+
+    def finalize_replicated_coordinator(self, component):
+        cfg=self.replica_recovery;fence_id=component['fence_id'];box=cwctl.read_sandbox(self.coordinator)
+        path=cfg['store'].rstrip('/')+'/recovery-pins/'+fence_id+'.status.json'
+        status=json.loads(box.read_file(path).result(timeout=60))
+        if status.get('state')=='failed':raise ValueError('replicated coordinator pin failed: '+str(status.get('error')))
+        if status.get('state')=='pinned':
+            # Resume only after the exact process which owned hashing is gone.
+            program=('import json,os,pathlib,sys\n'
+                's=json.loads(pathlib.Path(sys.argv[1]).read_text());p=pathlib.Path("/proc")/str(s["pid"])\n'
+                'alive=pathlib.Path("/proc/sys/kernel/random/boot_id").read_text().strip()==s["boot_id"] and p.exists() and (p/"stat").read_text().split(") ",1)[1].split()[19]==s["start_ticks"]\n'
+                'if alive: sys.exit(75)\n'
+                'from natlang_neuralese.train.diloco.replica_recovery import finish_recovery\n'
+                'from natlang_neuralese.common.jsonio import write_json_durable\n'
+                'r=finish_recovery(sys.argv[2]);write_json_durable(sys.argv[1],{"state":"complete","receipt":r});print(json.dumps(r))\n')
+            result=box.exec(['nice','-n','19','env','PYTHONPATH='+str(self.runtime_repo/'training/neuralese')+os.pathsep+str(self.runtime_repo),'python3','-c',program,path,component['path']],timeout_seconds=3600).result(timeout=3601)
+            if result.returncode==75:raise RuntimeError('replicated coordinator pin hashing is still pending')
+            if result.returncode!=0:raise ValueError('replicated coordinator pin recovery failed')
+            status={'state':'complete','receipt':json.loads(result.stdout)}
+        if status.get('state')!='complete':raise RuntimeError('replicated coordinator pin hashing is still pending')
+        receipt=status['receipt'];value=receipt['value']
+        if (value.get('fence_id')!=fence_id or value.get('owner_journal_sha256')!=cfg['owner_journal_sha256'] or
+                receipt.get('path')!=component['path']+'/recovery-closure.json'):
+            raise ValueError('replicated coordinator closure differs from its fence')
+        archive=f"/work/.coreweave/recovery-pins/{component['cycle']}/replicated-coordinator-{fence_id}.tar"
+        result=self._exec(self.coordinator,['replica-archive',component['path'],archive,receipt['sha256']])
+        return {**result,'sandbox_id':self.coordinator,'source':self.root,'fence_id':fence_id,'tree':component['path']}
 
     def capture_fenced(self, cycle, *, timeout=600):
         """Fence all learners at completed updates, pin controls and coordinator, then release."""
@@ -259,7 +306,8 @@ class Backend:
                 if len(ready)<len(boxes):time.sleep(1)
             with ThreadPoolExecutor(max_workers=5) as pool:
                 pin_timeout=remaining(3600)
-                coordinator=pool.submit(self.pin_coordinator_tree,cycle,timeout=pin_timeout)
+                coordinator=(pool.submit(self.pin_coordinator_tree,cycle,timeout=pin_timeout,fence_id=fence,ready=ready) if getattr(self,'replica_recovery',None) else
+                             pool.submit(self.pin_coordinator_tree,cycle,timeout=pin_timeout))
                 residents={} if self.direct else {i:pool.submit(self.pin_resident,i,cycle,timeout=pin_timeout) for i in range(len(boxes))}
                 components={'coordinator':coordinator.result()}
                 for i,future in residents.items():components['resident-'+str(i)]=future.result()
@@ -332,7 +380,10 @@ class Backend:
                 worker=int(name.removeprefix('worker-'));fence=cycle['fenced']
                 args += ['--fenced-source',fence['ready'][str(worker)]['checkpoint'],
                          '--fence-root',self.out+'/diloco/recovery-fence/pins/'+fence['id']]
-            return self._exec(intent['sandbox_id'],args)
+            result=self._exec(intent['sandbox_id'],args)
+            if name=='coordinator' and intent.get('binding_kind')=='replicated-recovery-archive':
+                self._exec(intent['sandbox_id'],['replica-release',intent['tree'],intent['replicated_receipt_sha256'],self.replica_recovery['store'].rstrip('/')+'/recovery-pins'])
+            return result
         with ThreadPoolExecutor(max_workers=5) as pool:
             futures={name:pool.submit(release,name,intent) for name,intent in components.items()}
             for future in futures.values():future.result()
@@ -702,6 +753,13 @@ def run_once(record,state_path,backend):
             try:cycle['components']['coordinator']=backend.pin_coordinator(cycle['id']);cycle['errors'].pop('coordinator',None)
             except Exception as error:cycle['errors']['coordinator']=str(error)
         coordinator=cycle['components'].get('coordinator') or {}
+        if coordinator.get('binding_kind')=='replicated-closure-pending':
+            try:
+                cycle['components']['coordinator']=backend.finalize_replicated_coordinator(coordinator)
+                cycle['errors'].pop('coordinator-archive',None)
+            except Exception as error:
+                cycle['errors']['coordinator-archive']=str(error);cycle['phase']='incomplete';save();return state
+            coordinator=cycle['components']['coordinator'];save()
         if coordinator.get('binding_kind')=='immutable-hardlink-tree':
             try:
                 cycle['components']['coordinator']=backend.archive_coordinator_tree(coordinator)
