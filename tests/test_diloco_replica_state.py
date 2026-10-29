@@ -386,3 +386,30 @@ def test_cross_host_clock_rebase_sealed_and_pending_grace_exact(tmp_path):
     assert recovered.coordinator.progress==machine.coordinator.progress
     assert all(torch.equal(a,b) for a,b in zip(load_tensors(live/'fragments/00000.safetensors').values(),load_tensors(restored/'fragments/00000.safetensors').values()))
     journal.close()
+
+
+def test_initial_peer_external_baseline_restarts_only_with_exact_pin(tmp_path):
+    import multiprocessing as mp,socket,time
+    from natlang_neuralese.train.diloco.replica_baseline import capture
+    from natlang_neuralese.train.diloco.replica_service import serve_peer
+    from natlang_neuralese.train.diloco.replica_transport import witness_head
+    base=tmp_path/'base';initialize_coordinator(base,run_id='r',masters={'weight':torch.ones(4)},identity={'parent':'p'},workers=1,min_quorum=1,fragment_bytes=1024)
+    machine=ReplayCoordinator(base,quorum_since={})
+    class Capture:
+        def __init__(self):self.machine=machine
+        def read(self,fn):return fn()
+    baseline=tmp_path/'external-baseline';receipt=capture(Capture(),baseline);store=tmp_path/'store';token='s'*32
+    with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+    ctx=mp.get_context('fork');stop=ctx.Event()
+    def run(root,sha):serve_peer(baseline=baseline,baseline_sha256=sha,store=store,work_root=root,host='127.0.0.1',port=port,token=token,max_transaction_bytes=1<<20,stop=stop)
+    first=ctx.Process(target=run,args=(tmp_path/'work1',receipt['sha256']));first.start()
+    for _ in range(100):
+        try:first_head=witness_head(f'http://127.0.0.1:{port}',token,allow_http=True);break
+        except OSError:time.sleep(.02)
+    stop.set();first.join(8);assert first.exitcode==0;stop.clear()
+    bad=ctx.Process(target=run,args=(tmp_path/'bad','0'*64));bad.start();bad.join(8);assert bad.exitcode!=0
+    again=ctx.Process(target=run,args=(tmp_path/'work2',receipt['sha256']));again.start()
+    for _ in range(100):
+        try:assert witness_head(f'http://127.0.0.1:{port}',token,allow_http=True)==first_head;break
+        except OSError:time.sleep(.02)
+    stop.set();again.join(8);assert again.exitcode==0

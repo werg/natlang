@@ -26,7 +26,7 @@ def serve_peer(*, baseline, baseline_sha256, store, work_root, host, port, token
     if pointer.exists():
         value=json.loads(pointer.read_text())
         expected=verify(value['baseline'],value['baseline_sha256'])['run_id']
-        journal,machine,prepared=load_active(store,run_identity=expected,destination=work_root)
+        journal,machine,prepared=load_active(store,run_identity=expected,destination=work_root,initial_baseline=baseline,initial_baseline_sha256=baseline_sha256)
     else:
         value=verify(baseline,baseline_sha256);journal=ReplicaJournal(store/'journal0',run_identity=value['run_id'],baseline_sha256=baseline_sha256)
         machine=recover_receiver(baseline=baseline,baseline_sha256=baseline_sha256,journal=journal,destination=work_root)

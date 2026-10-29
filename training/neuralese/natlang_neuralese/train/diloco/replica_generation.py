@@ -83,13 +83,16 @@ def load_prepared(store_root, current):
     return {'request':request,'reply':reply,'baseline':str(baseline),'journal':new}
 
 
-def load_active(store_root, *, run_identity, destination):
+def load_active(store_root, *, run_identity, destination, initial_baseline=None, initial_baseline_sha256=None):
     """Recover a committed peer generation without interpreting a timeout as a fence."""
     from .replica_promotion import recover_receiver
     store=Path(store_root).resolve();pointer=json.loads((store/'replica-active.json').read_text())
     if pointer.get('schema')!='natlang.diloco-replica-active-generation/1':raise ValueError('invalid active generation pointer')
     baseline=Path(pointer['baseline']).resolve();path=Path(pointer['journal']).resolve()
-    if not baseline.is_relative_to(store) or not path.is_relative_to(store):raise ValueError('active generation escapes storage')
+    external_initial=(pointer.get('id')=='initial' and pointer.get('previous') is None and initial_baseline is not None
+                      and baseline==Path(initial_baseline).resolve() and pointer.get('baseline_sha256')==initial_baseline_sha256)
+    if (not baseline.is_relative_to(store) and not external_initial) or not path.is_relative_to(store):
+        raise ValueError('active generation escapes storage or differs from the pinned initial baseline')
     journal=ReplicaJournal(path,run_identity=run_identity,baseline_sha256=pointer['baseline_sha256'],previous_generation=pointer['previous'],
         max_payload_bytes=pointer['max_payload_bytes'],max_transactions=pointer['max_transactions'])
     from .replica_journal import _identity
