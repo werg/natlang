@@ -569,7 +569,11 @@ def make_handler(engine: Engine):
     return Handler
 
 
+class _Server(ThreadingHTTPServer):
+    # The socketserver default backlog (5) resets connections when an RL collector opens more concurrent requests.
+    request_queue_size = 1024
+    daemon_threads = True
+
+
 def serve(engine: Engine, host: str = "127.0.0.1", port: int = 0) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer((host, port), make_handler(engine))
-    server.daemon_threads = True
-    return server
+    return _Server((host, port), make_handler(engine))

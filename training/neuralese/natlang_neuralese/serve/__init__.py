@@ -6,7 +6,7 @@ from __future__ import annotations
 def load_native_engine(checkpoint: str, *, base: str | None = None, device: str = "cpu", dtype=None,
                        prompt_rendering: str = "full", participant: str | None = None,
                        semantic_adapter: str | None = None, actor_view: dict | None = None, transported_actor: dict | None = None,
-                       store=None):
+                       store=None, engine_class=None):
     """Restore a native-state checkpoint through the shared model loader and serving engine."""
     from ..common.hashing import sha256_file_hex_cached
     from ..model.native_model import load_native_checkpoint, native_identity
@@ -24,7 +24,7 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     checkpoint_sha256 = (_state['inference_source']['training_checkpoint_sha256'] if transported_actor is not None
                          else sha256_file_hex_cached(checkpoint))
     identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha256)
-    engine = Engine(model.port, tokenizer, store if store is not None else TensorStore(), f"native-state/{config['architecture']}",
+    engine = (engine_class or Engine)(model.port, tokenizer, store if store is not None else TensorStore(), f"native-state/{config['architecture']}",
                     model_name=f"native-{config['architecture']}", device=device,
                     prompt_rendering=prompt_rendering, shared_model=model, role_tokens=roles,
                     model_config=config, checkpoint_sha256=identity['checkpoint_sha256'],
