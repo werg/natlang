@@ -54,7 +54,11 @@ def test_nested_owner_handoff_fences_old_and_new_publishers(tmp_path):
             'expected_generation':s['generation'],'role':'worker','action':'start','argv':argv})
     try:
         oldstate=wait(lambda:state(old))
-        assert start(old,'nested',[sys.executable,str(script),str(nested)])['accepted']
+        import hashlib
+        from scripts.coreweave.diloco_nested_owner import prepare
+        prepared=prepare(source=script,expected_sha256=hashlib.sha256(script.read_bytes()).hexdigest(),python=sys.executable,control_directory=str(nested),runtime=str(Path(__file__).parents[1]))
+        nested_start=start(old,'nested',prepared['argv']);assert nested_start['accepted']
+        assert hashlib.sha256(Path(f"/proc/{nested_start['pid']}/cmdline").read_bytes()).hexdigest()==prepared['supervisor_cmdline_sha256']
         nestedstate=wait(lambda:state(nested))
         stale={'schema':'natlang.diloco-role-request/1','id':'stale','owner_id':oldstate['owner_id'],
             'expected_generation':oldstate['generation'],'role':'worker','action':'start','argv':[sys.executable,'-c','pass']}
