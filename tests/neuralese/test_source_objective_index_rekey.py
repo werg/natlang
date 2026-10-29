@@ -54,13 +54,18 @@ def test_preserves_all_classes_and_real_normal_verifier(case, monkeypatch, tmp_p
     assert result['entries']==entries and result['metadata_sha256']==value['metadata_sha256']
     assert {k:v for k,v in result['key'].items()if k!='policy_sha256'}=={k:v for k,v in value['key'].items()if k!='policy_sha256'}
     assert result['key']['policy_sha256']!=value['key']['policy_sha256']
-    monkeypatch.setattr(m,'__file__',str(new/'train/native_source_classification.py'))
-    monkeypatch.setattr(m,'_jsonl',lambda *_:pytest.fail('raw graph parse'))
+    # Execute the exact historical verifier rather than relabeling its certificate
+    # with the current decision-aware policy.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'natlang_neuralese.train._historic_source_classification', new/'train/native_source_classification.py')
+    historical = importlib.util.module_from_spec(spec); spec.loader.exec_module(historical)
+    monkeypatch.setattr(historical, '_jsonl', lambda *_: pytest.fail('raw graph parse'))
     proof=tmp_path/'proof.json';proof.write_text(json.dumps({'schema':m.SCHEMA,'train_sha256':bind(source)['sha256'],'indexes':[part]}))
     class Source:
         def receipt(self):return bind(source)
     current=Source();current.entries=entries
-    assert m.migration_classes(proof,current)=={'external':{'binding':'c'*64,'communication':True,'producer_consumer':False,'external_state_consumption':True}}
+    assert historical.migration_classes(proof,current)=={'external':{'binding':'c'*64,'communication':True,'producer_consumer':False,'external_state_consumption':True}}
     assert run(case)==part
     assert pickle.loads(index.read_bytes())==value
 

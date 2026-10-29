@@ -116,8 +116,14 @@ def combined(case, tmp_path):
     return old,save,current,prior,put,index_ref
 
 
-def test_actual_combined_recipe_ce_data_rekey_withdrawal(combined,tmp_path):
+def test_actual_combined_recipe_ce_data_rekey_withdrawal(combined,tmp_path,monkeypatch):
     old,save,current,prior,*_=combined;new=save()
+    # This fixed CE certificate belongs to the historical parser and verifier.
+    with pytest.raises(ValueError, match='producer/policy differs'):
+        recipe._ce_supervision_input_continuation(old,new)
+    historical = Path(current['objective_policy_continuation']['old_package'])
+    monkeypatch.setattr(m, 'POLICY_FILES', c.POLICY_FILES)
+    monkeypatch.setattr(m, '__file__', str(historical/'train/native_source_classification.py'))
     assert recipe._ce_supervision_input_continuation(old,new)
     def plan(roles):return {'recipe':{'stages':[{'id':'full','kind':'native_state_sft','inputs':{k:v['binding']for k,v in roles.items()}}]},'stage_inputs':{'full':roles}}
     changes=recipe.unstarted_stage_input_changes(plan(old),plan(new),tmp_path,started_stage_ids=('full',))
@@ -173,10 +179,13 @@ def test_rejects_unwitnessed_new_raw_classes_and_rekey_authority(combined,fault,
     with pytest.raises(ValueError):recipe._ce_supervision_input_continuation(old,save())
 
 
-def test_recipe_and_publication_recursively_bind_actual_proof_dependencies(combined,tmp_path):
+def test_recipe_and_publication_recursively_bind_actual_proof_dependencies(combined,tmp_path,monkeypatch):
     from natlang_neuralese.train.native_classification_continuation import classification_proof_dependencies
     from scripts.coreweave.provider_dependencies import dependency_closure
     old,save,current,prior,put,index_ref=combined;new=save();ref=new['source_classification_migration']
+    historical = Path(current['objective_policy_continuation']['old_package'])
+    monkeypatch.setattr(m, 'POLICY_FILES', c.POLICY_FILES)
+    monkeypatch.setattr(m, '__file__', str(historical/'train/native_source_classification.py'))
     dependencies=classification_proof_dependencies(ref)
     paths={x['path']for x in dependencies}
     extra=current['objective_policy_continuation'];wd=extra['withdrawals'][0]
