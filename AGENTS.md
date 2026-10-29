@@ -43,6 +43,17 @@ Coordinator durability must cover accepted queues, sequence/session and source
 transitions as well as global weights. Measure replication and export overhead;
 check actual durable commits before relying on failover.
 
+Source admission checks the complete current protection union, including acquired
+held manifests and reserved related invocation worlds, not only the active held
+file. Distinguish held connections from quality-only exclusions. When broader
+protection reveals an existing overlap, correct future sampling through the
+authenticated withdrawal mechanism and preserve actual historical exposure;
+do not describe that exposure as undone. Apply a withdrawal only to a peer that
+actually contains those rows. A peer on an earlier clean predecessor appends
+directly to the cleaned successor. Stage dependencies before draining affected
+learners and resume useful corrected training promptly; other healthy peers
+continue while the correction is prepared.
+
 Use the platform maximum sandbox lifetime for training. Do not introduce short
 expiry limits or routine sandbox cycling to control spend: they interrupt
 healthy work and force unnecessary recovery. Supervise actual useful progress,
