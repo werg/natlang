@@ -23,6 +23,15 @@ def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared
     store_root=Path(store_root) if store_root is not None else journal.root.parent
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args): pass
+        def do_GET(self):
+            if not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+token):self.send_error(403);return
+            if self.path!='/v1/head':self.send_error(404);return
+            with guard:
+                current=active['journal']
+                if failure or current.sequence%2:self.send_error(409);return
+                value={'run_id':current.identity['run_identity'],'baseline_sha256':current.identity['baseline_sha256'],
+                       'sequence':current.sequence,'head':current.head}
+            data=json.dumps(value,sort_keys=True).encode();self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
         def do_PUT(self):
             if not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer '+token):
                 self.send_error(403); return
@@ -189,3 +198,11 @@ def generation_request(url, token, operation, body, *, timeout=3600, allow_http=
         except (OSError,http.client.HTTPException):
             if attempt==2:raise
         finally:conn.close()
+
+
+def witness_head(url,token,*,timeout=30,allow_http=False,gateway=None):
+    from .worker import Transport
+    result=Transport(url,token,timeout,allow_http=allow_http,gateway=gateway or '').json('GET','/v1/head')
+    if set(result)!={'run_id','baseline_sha256','sequence','head'} or type(result['sequence']) is not int or result['sequence']%2:
+        raise ValueError('peer has no sealed witnessed head')
+    return result

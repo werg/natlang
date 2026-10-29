@@ -296,7 +296,28 @@ def test_service_bootstrap_requires_fence_and_serves_with_peer(tmp_path):
         except OSError:time.sleep(.02)
     ready=client.json('GET','/v1/replica-promotion');assert ready['ready'] and ready['run_id']=='r' and ready['sequence']==0
     assert client.json('POST','/v1/lease',{'worker':0,'session':'00000000-0000-0000-0000-000000000001'})['run_id']=='r'
-    leaderstop.set();process.join(10);assert process.exitcode==0;peerstop.set();peerproc.join(10);assert peerproc.exitcode==0
+    delta=tmp_path/'restart-delta';save_tensors(delta,{'delta':torch.ones(4)})
+    status,answer,_=client.request('POST','/v1/updates/0',file=delta,headers={'X-Worker':'0','X-Session':'00000000-0000-0000-0000-000000000001','X-Sequence':'1','X-Base-Version':'0','X-Steps':'1','X-Tokens':'3'})
+    assert status==200 and client.json('GET','/v1/status')['versions']==[1]
+    import os,signal
+    os.kill(process.pid,signal.SIGKILL);process.join(10);assert process.exitcode==-signal.SIGKILL
+    from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
+    check=ReplicaJournal(tmp_path/'oldjournal',run_identity='r',baseline_sha256=receipt['sha256']);latest={'sequence':check.sequence,'head':check.head};check.close()
+    assert latest['sequence']>2
+    restartstop=ctx.Event()
+    def restart(sequence,head,root):
+        assert process.exitcode==-signal.SIGKILL
+        journal=ReplicaJournal(tmp_path/'oldjournal',run_identity='r',baseline_sha256=receipt['sha256'])
+        serve_new_primary(baseline=baseline,baseline_sha256=receipt['sha256'],store=tmp_path/'leaderstore',root=root,host='127.0.0.1',port=port,token=token,peer_url=f'http://127.0.0.1:{peerport}',supervisor_proof={},verify_supervisor_fence=lambda _:evidence,expected_primary=identity,expected_workers=[0],stop=restartstop,journal=journal,sequence=sequence,head=head,session_transition={'previous_url':'http://old','new_url':'http://new','previous_token_sha256':__import__('hashlib').sha256(b'old-secret').hexdigest(),'new_token_sha256':__import__('hashlib').sha256(token.encode()).hexdigest(),'generation_nonce':'n'*48},previous_token='old-secret',restart=True,allow_http=True)
+    stale=ctx.Process(target=restart,args=(0,ready['head'],tmp_path/'staleroot'));stale.start();stale.join(10);assert stale.exitcode!=0 and not (tmp_path/'staleroot').exists()
+    revived=ctx.Process(target=restart,args=(latest['sequence'],latest['head'],tmp_path/'restartroot'));revived.start()
+    for _ in range(150):
+        try:
+            current=client.json('GET','/v1/replica-promotion');break
+        except OSError:time.sleep(.02)
+    assert current['sequence']==latest['sequence'] and current['head']==latest['head'] and current['sealed_rebase']['sequence']>latest['sequence']
+    assert client.json('GET','/v1/status')['versions']==[1]
+    restartstop.set();revived.join(10);assert revived.exitcode==0;peerstop.set();peerproc.join(10);assert peerproc.exitcode==0
 
 
 def test_retention_three_real_rollovers_recover_after_primary_kill(tmp_path):

@@ -7,16 +7,16 @@ from __future__ import annotations
 import argparse
 import json
 import signal
-import sys
 import threading
 from pathlib import Path
 from .replica_journal import ReplicaJournal
 from .replica_service import serve_new_primary,serve_peer
+from .replica_attestation import load_owned_config,verify_attestation
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('role',choices=('peer','promote'));parser.add_argument('--config',required=True)
-    args=parser.parse_args();config=json.loads(Path(args.config).read_text());stop=threading.Event()
+    parser=argparse.ArgumentParser();parser.add_argument('role',choices=('peer','promote','restart'));parser.add_argument('--config',required=True);parser.add_argument('--config-sha256',required=True)
+    args=parser.parse_args();config=load_owned_config(args.config,args.config_sha256);stop=threading.Event()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set())
     token=Path(config['token_file']).read_text().strip()
     if not token:raise ValueError('empty replication token')
@@ -24,9 +24,8 @@ def main():
                 host=config['host'],port=config['port'],token=token,stop=stop)
     if args.role=='peer':
         return serve_peer(**common,work_root=config['work_root'],max_transaction_bytes=config['max_transaction_bytes'])
-    sys.path.insert(0,config['coreweave_scripts'])
-    from diloco_replica_fence import provider_fence_verifier
-    verify=provider_fence_verifier(expected_primary=config['expected_primary'],expected_workers=config['expected_workers'],control_dirs=config['control_dirs'])
+    evidence=verify_attestation(config,mode=args.role)
+    verify=lambda _proof:evidence
     journal_path=Path(config['journal'])
     identity=json.loads((journal_path/'identity.json').read_text())
     journal=ReplicaJournal(journal_path,run_identity=identity['run_identity'],baseline_sha256=identity['baseline_sha256'],
@@ -37,7 +36,7 @@ def main():
             expected_primary=config['expected_primary'],expected_workers=config['expected_workers'],
             journal=journal,sequence=config['sequence'],head=config['head'],session_transition=config['session_transition'],
             previous_token=Path(config['previous_token_file']).read_text().strip(),
-            gateway=config.get('gateway'),allow_http=config.get('allow_http',False),max_generations=config.get('max_generations',3))
+            restart=(args.role=='restart'),gateway=config.get('gateway'),allow_http=config.get('allow_http',False),max_generations=config.get('max_generations',3))
     finally:journal.close()
 
 

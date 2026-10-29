@@ -188,3 +188,42 @@ def sdk_set_worker_authority(workers, *, nonce, action):
         if result.returncode!=0:raise ValueError('worker authority transition failed; previous fences remain in force')
         results.append({'sandbox_id':worker['sandbox_id'],'authority':json.loads(result.stdout) if action=='fence' else None})
     return results
+
+
+def observe_coordinator_stop(identity, nonce, control_dir, port):
+    """Observe stopped exact coordinator and closed loopback port under a durable role fence."""
+    import errno,socket
+    state=json.loads((Path(control_dir)/'state.json').read_text())
+    if Path('/proc/sys/kernel/random/boot_id').read_text().strip()!=identity['boot_id'] or state.get('owner_id')!=identity['owner_id'] or state.get('boot_id')!=identity['boot_id']:
+        raise ValueError('role owner identity changed')
+    marker=json.loads((Path(control_dir)/'promotion-fence.json').read_text())
+    if marker!={'schema':'natlang.diloco-role-promotion-fence/1','owner_id':identity['owner_id'],'boot_id':identity['boot_id'],'nonce':nonce}:
+        raise ValueError('role owner is not fenced')
+    def ticks(pid):
+        try:
+            fields=Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()
+            return None if fields[0]=='Z' else fields[19]
+        except (OSError,IndexError):return None
+    if type(state.get('supervisor_pid')) is not int or not state.get('supervisor_start_ticks') or ticks(state['supervisor_pid'])!=state['supervisor_start_ticks']:
+        raise ValueError('role owner is not alive')
+    role=state.get('roles',{}).get('coordinator',{})
+    if ticks(identity['pid'])==str(identity['start_ticks']) or role.get('alive') or (role.get('pid') and ticks(role['pid']) is not None):
+        raise ValueError('old or replacement coordinator is alive')
+    if state.get('pending_start') or (Path(control_dir)/'request.json').exists() or (Path(control_dir)/'request.claimed.json').exists():
+        raise ValueError('role request remains in flight')
+    with socket.socket() as sock:
+        sock.settimeout(1);closed=sock.connect_ex(('127.0.0.1',int(port)))==errno.ECONNREFUSED
+    if not closed:raise ValueError('coordinator port remains open')
+    return {'identity':identity,'nonce':nonce,'process_absent':True,'port_closed':True,'observed_at':time.time()}
+
+
+def sdk_observe_coordinator_stop(identity,nonce,control_dir,port):
+    import inspect
+    try:from . import cwctl
+    except ImportError:import cwctl
+    program=('import json,sys,time\nfrom pathlib import Path\n'+inspect.getsource(observe_coordinator_stop)+
+             '\nprint(json.dumps(observe_coordinator_stop(json.loads(sys.argv[1]),sys.argv[2],sys.argv[3],int(sys.argv[4]))))\n')
+    cwctl.load_env_file();cwctl.require_key();sandbox=cwctl.read_sandbox(identity['sandbox_id'],patience=60)
+    result=sandbox.exec(['python3','-c',program,json.dumps(identity,sort_keys=True),nonce,control_dir,str(port)],timeout_seconds=30).result(timeout=60)
+    if result.returncode!=0:raise ValueError('old coordinator death observation failed')
+    return json.loads(result.stdout)

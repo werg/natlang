@@ -14,7 +14,7 @@ from .replica_baseline import verify
 from .replica_journal import ReplicaJournal,_identity
 from .replica_promotion import recover_receiver,promote
 from .replica_generation import load_active,load_prepared,rotate
-from .replica_transport import serve as serve_peer_transport,generation_request
+from .replica_transport import serve as serve_peer_transport,generation_request,witness_head
 from .replica_executor import ReplicatedExecutor
 from .replica_dispatch import ReplicatedDispatch
 from .coordinator import serve_coordinator
@@ -40,7 +40,7 @@ def serve_peer(*, baseline, baseline_sha256, store, work_root, host, port, token
 
 
 def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, token, peer_url,
-                      supervisor_proof, verify_supervisor_fence, expected_primary, expected_workers, stop, journal, sequence, head, session_transition, previous_token, gateway=None, allow_http=False, max_generations=3):
+                      supervisor_proof, verify_supervisor_fence, expected_primary, expected_workers, stop, journal, sequence, head, session_transition, previous_token, restart=False, gateway=None, allow_http=False, max_generations=3):
     """Start a fresh unique primary only after an explicit supervisor fence.
 
     After both physical replicas confirm the new generation, local retention
@@ -50,23 +50,39 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
     required={'previous_url','new_url','previous_token_sha256','new_token_sha256','generation_nonce'}
     if (not isinstance(session_transition,dict) or set(session_transition)!=required or
             not all(isinstance(session_transition[k],str) and session_transition[k] for k in required) or
-            session_transition['previous_url']==session_transition['new_url'] or
+            (not restart and session_transition['previous_url']==session_transition['new_url']) or
             not isinstance(previous_token,str) or not previous_token or
             session_transition['previous_token_sha256']!=hashlib.sha256(previous_token.encode()).hexdigest() or
-            session_transition['previous_token_sha256']==session_transition['new_token_sha256'] or
+            (not restart and session_transition['previous_token_sha256']==session_transition['new_token_sha256']) or
             session_transition['new_token_sha256']!=hashlib.sha256(token.encode()).hexdigest() or
             len(session_transition['generation_nonce'])<32):
         raise ValueError('new generation requires distinct bound endpoint and credential')
     # The supervisor supplies the exact independently witnessed sealed head;
     # reconstructing an empty journal here would silently discard earned state.
     value=verify(baseline,baseline_sha256)
-    store=Path(store);store.mkdir(parents=True,exist_ok=False)
+    store=Path(store)
+    if restart:
+        if not store.is_dir():raise ValueError('restart requires the existing primary store')
+        active=json.loads((store/'primary-active.json').read_text())
+        if (Path(active['journal']).resolve()!=journal.root.resolve() or Path(active['baseline']).resolve()!=Path(baseline).resolve()
+                or active['baseline_sha256']!=baseline_sha256):raise ValueError('restart differs from active generation')
+        old_session=json.loads((store/'supervisor-start.json').read_text())['session_transition']
+        if old_session!=session_transition:raise ValueError('restart changes the live coordinator session')
+        peer=witness_head(peer_url,token,allow_http=allow_http,gateway=gateway)
+        if peer!={'run_id':value['run_id'],'baseline_sha256':baseline_sha256,'sequence':sequence,'head':head}:
+            raise ValueError('restart head differs from current durable peer witness')
+        journal.verify(expected_sequence=sequence,expected_head=head)
+    else:store.mkdir(parents=True,exist_ok=False)
     machine,receipt=promote(baseline=baseline,baseline_sha256=baseline_sha256,
         journal=journal,sequence=sequence,head=head,destination=root,
         supervisor_proof=supervisor_proof,verify_supervisor_fence=verify_supervisor_fence,
         expected_primary=expected_primary,expected_workers=expected_workers)
-    write_json_durable(store/'supervisor-start.json',{'schema':'natlang.diloco-replica-start/1',
+    start_path=store/('supervisor-restart-'+uuid.uuid4().hex+'.json' if restart else 'supervisor-start.json')
+    write_json_durable(start_path,{'schema':'natlang.diloco-replica-start/1',
         'baseline_sha256':baseline_sha256,'promotion':receipt,'session_transition':session_transition})
+    if not restart:
+        write_json_durable(store/'primary-active.json',{'id':'initial','baseline':str(Path(baseline).resolve()),
+            'journal':str(journal.root.resolve()),'baseline_sha256':baseline_sha256,'head':_identity(journal.identity)})
     empty=store/'empty-payload';write_bytes_durable(empty,b'')
     writer=ReplicatedExecutor(journal,peer_url,token,allow_http=allow_http,gateway=gateway)
     dispatch=ReplicatedDispatch(machine,writer,empty)
@@ -82,7 +98,7 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
         receipt=rotate(dispatch,local_baseline_dir=directory/'baseline',local_journal_dir=directory/'journal',
                       receipt_path=directory/'generation.json',peer_prepare=prepare,peer_commit=commit,within_writer=True)
         pointer=store/'primary-active.json'
-        write_json_durable(pointer,{'id':identifier,'baseline_sha256':receipt['baseline_sha256'],'head':receipt['new_head'],'previous':receipt['previous']})
+        write_json_durable(pointer,{'id':identifier,'baseline':str((directory/'baseline').resolve()),'journal':str((directory/'journal').resolve()),'baseline_sha256':receipt['baseline_sha256'],'head':receipt['new_head'],'previous':receipt['previous']})
         confirmation=generation_request(peer_url,token,'retain',{'id':identifier,'previous':receipt['previous'],
             'baseline_sha256':receipt['baseline_sha256'],'new_head':receipt['new_head']},allow_http=allow_http,gateway=gateway)
         from .replica_retention import Retention
