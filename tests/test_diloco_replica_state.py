@@ -574,3 +574,55 @@ def test_replica_loss_after_seal_ack_loss_preserves_locally_sealed_state(tmp_pat
     assert second['unsealed_tail_retained'] and second['sealed_predecessor']=={'sequence':2,'head':sealed_head}
     assert (local.root/'00000000000000000003'/'record.json').is_file()
     local.close()
+
+
+def test_bootstrapped_primary_restarts_on_its_exact_session(tmp_path):
+    """A fenced bootstrap primary restarts on the same URL/token at the peer-witnessed sealed head."""
+    import hashlib,multiprocessing as mp,socket,time
+    from natlang_neuralese.train.diloco.replica_baseline import capture
+    from natlang_neuralese.train.diloco.replica_service import serve_peer,serve_new_primary
+    from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
+    from natlang_neuralese.train.diloco.replica_transport import witness_head
+    from natlang_neuralese.train.diloco.worker import Transport
+    base=tmp_path/'base';initialize_coordinator(base,run_id='fresh',masters={'weight':torch.ones(4)},identity={'parent':'earned'},workers=1,min_quorum=1,fragment_bytes=1024)
+    machine=ReplayCoordinator(base,quorum_since={})
+    class Capture:
+        def __init__(self):self.machine=machine
+        def read(self,fn):return fn()
+    baseline=tmp_path/'baseline';receipt=capture(Capture(),baseline);token='s'*32;ctx=mp.get_context('fork')
+    def port():
+        with socket.socket() as sock:sock.bind(('127.0.0.1',0));return sock.getsockname()[1]
+    pp,lp=port(),port();peerstop=ctx.Event();stop=ctx.Event();restartstop=ctx.Event()
+    session={'new_url':'http://new','new_token_sha256':hashlib.sha256(token.encode()).hexdigest(),'generation_nonce':'n'*48}
+    def peer():serve_peer(baseline=baseline,baseline_sha256=receipt['sha256'],store=tmp_path/'peerstore',work_root=tmp_path/'peerroot',host='127.0.0.1',port=pp,token=token,max_transaction_bytes=1<<20,stop=peerstop)
+    def first():
+        j=ReplicaJournal(tmp_path/'wal',run_identity='fresh',baseline_sha256=receipt['sha256'])
+        serve_new_primary(baseline=baseline,baseline_sha256=receipt['sha256'],store=tmp_path/'store',root=tmp_path/'root',host='127.0.0.1',port=lp,token=token,peer_url=f'http://127.0.0.1:{pp}',supervisor_proof={},verify_supervisor_fence=lambda _:{'run_id':'fresh','source_verified':True},expected_primary=None,expected_workers=None,stop=stop,journal=j,sequence=0,head=j.head,session_transition=session,previous_token=None,bootstrap=True,allow_http=True)
+    p=ctx.Process(target=peer);p.start();time.sleep(.2);leader=ctx.Process(target=first);leader.start()
+    client=Transport(f'http://127.0.0.1:{lp}',token,3,allow_http=True);restarted=None
+    try:
+        for _ in range(150):
+            try:client.json('GET','/v1/replica-promotion');break
+            except OSError:time.sleep(.02)
+        session_id='00000000-0000-0000-0000-000000000001'
+        client.json('POST','/v1/lease',{'worker':0,'session':session_id});fingerprint=client.json('GET','/v1/manifest')['fingerprint']
+        stop.set();leader.join(8);assert leader.exitcode==0
+        witness=witness_head(f'http://127.0.0.1:{pp}',token,allow_http=True)
+        selected={'journal':tmp_path/'wal','baseline':baseline,'baseline_sha256':receipt['sha256']}  # bootstrap journal; rotated generations reconcile via the pointer
+        identity={'boot_id':'b','pid':1,'start_ticks':'1'}
+        evidence={'run_id':'fresh','primary_fenced':True,'all_workers_quiesced':True,'primary':identity,'quiesced_workers':[0],'proof_sha256':'p'*64}
+        def again():
+            j=ReplicaJournal(selected['journal'],run_identity='fresh',baseline_sha256=selected['baseline_sha256'])
+            serve_new_primary(baseline=selected['baseline'],baseline_sha256=selected['baseline_sha256'],store=tmp_path/'store',root=tmp_path/'root-restart',host='127.0.0.1',port=lp,token=token,peer_url=f'http://127.0.0.1:{pp}',supervisor_proof={},verify_supervisor_fence=lambda _:evidence,expected_primary=identity,expected_workers=[0],stop=restartstop,journal=j,sequence=witness['sequence'],head=witness['head'],session_transition=session,previous_token=None,restart=True,allow_http=True)
+        restarted=ctx.Process(target=again);restarted.start()
+        for _ in range(250):
+            try:ready=client.json('GET','/v1/replica-promotion');break
+            except OSError:time.sleep(.02)
+        assert ready['ready'] and ready['sealed_rebase']['sequence']==witness['sequence']+2
+        assert client.json('GET','/v1/manifest')['fingerprint']==fingerprint
+        assert client.json('POST','/v1/lease',{'worker':0,'session':session_id})['run_id']=='fresh'
+    finally:
+        stop.set();restartstop.set();leader.join(8)
+        if restarted is not None:restarted.join(8)
+        peerstop.set();p.join(8)
+    assert restarted.exitcode==0

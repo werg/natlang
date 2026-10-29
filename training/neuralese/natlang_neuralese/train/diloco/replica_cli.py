@@ -91,7 +91,7 @@ def main():
             supervisor_proof=config['supervisor_proof'],verify_supervisor_fence=verify,
             expected_primary=config.get('expected_primary'),expected_workers=config.get('expected_workers'),
             journal=journal,sequence=config['sequence'],head=config['head'],session_transition=config['session_transition'],
-            previous_token=(Path(config['previous_token_file']).read_text().strip() if args.role!='bootstrap' else None),
+            previous_token=(Path(config['previous_token_file']).read_text().strip() if args.role=='promote' else None),
             restart=(args.role=='restart'),bootstrap=(args.role=='bootstrap'),file_custody_store=config.get('file_custody_store'),file_freeze_nonce=config.get('file_freeze_nonce'),gateway=gateway,allow_http=config.get('allow_http',False),max_generations=config.get('max_generations',3))
     finally:journal.close()
 
