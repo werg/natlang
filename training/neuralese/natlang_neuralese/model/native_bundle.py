@@ -150,6 +150,7 @@ def prepare_actor_transport(checkpoint, out, recovery_receipt):
     proof=json.loads(Path(recovery_receipt).read_text())
     if (proof.get('private') is not True or proof.get('upload_commit_notified') is not True
             or proof.get('upload',{}).get('status_code') not in (200,201)
+            or any(proof.get('upload',{}).get(k)!=source.get(k) for k in ('sha256','bytes'))
             or proof.get('identity',{}).get('sha256')!=source['sha256']
             or proof.get('identity',{}).get('bytes')!=source['bytes']
             or proof.get('independent_verification',{}).get('sha256')!=source['sha256']
@@ -196,6 +197,7 @@ def load_transported_actor_view(view, *, transport, view_receipt, recovery_recei
             or recovery.get('private') is not True
             or recovery.get('upload_commit_notified') is not True
             or recovery.get('upload',{}).get('status_code') not in (200,201)
+            or any(recovery.get('upload',{}).get(k)!=source.get(k) for k in ('sha256','bytes'))
             or not isinstance(recovery.get('independent_verification',{}).get('readback_location'),str)
             or not recovery['independent_verification']['readback_location']
             or any(recovery.get('identity',{}).get(k)!=source.get(k) for k in ('sha256','bytes'))

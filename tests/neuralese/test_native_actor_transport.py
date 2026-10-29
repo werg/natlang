@@ -10,7 +10,7 @@ from test_native_actor_view import source
 def test_transported_view_matches_actual_full_actor_without_source(source,tmp_path,monkeypatch):
     engine,path,state,_=source;binding=_file_binding(path)
     recovery=tmp_path/'recovery.json';verified={**binding,'readback_location':'independent-test-receiver'}
-    receipt={'private':True,'upload_commit_notified':True,'upload':{'status_code':200},'identity':binding,'independent_verification':verified}
+    receipt={'private':True,'upload_commit_notified':True,'upload':{'status_code':200,**binding},'identity':binding,'independent_verification':verified}
     recovery.write_text(json.dumps(receipt))
     manifest=prepare_actor_transport(path,tmp_path/'views',recovery);m=json.loads(Path(manifest['path']).read_text())
     folder=Path(manifest['path']).parent
