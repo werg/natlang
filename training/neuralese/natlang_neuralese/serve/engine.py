@@ -30,9 +30,15 @@ def derive_seed(*parts) -> int:
 
 
 def _insert_privileged(plan, at, pieces):
-    """Split the prompt plan's token segments at own-token index ``at`` and insert ``pieces`` (never at an import)."""
-    if type(at) is not int or at < 0 or not pieces:
-        raise RequestError('bad-request', 'guidance needs its own-token insertion index and pieces')
+    """Split the prompt plan's token segments at plan-token index ``at`` and insert ``pieces`` (never at an import).
+
+    ``at`` counts the plan's token segments only (what the renderer saw); the plan has no consume markers or
+    re-encoded import text yet. An ``insertion_point`` segment marks the cut, so prefill can bind the receipt to the
+    captured own-token index (markers and re-encoded text included) the learner and student form use.
+    """
+    if type(at) is not int or at < 0:
+        raise RequestError('bad-request', 'guidance needs its own-token insertion index')
+    pieces = [('insertion_point', None), *pieces]
     result, own, inserted = [], 0, False
     for number, (kind, value) in enumerate(plan):
         if kind != 'tokens':
@@ -46,7 +52,8 @@ def _insert_privileged(plan, at, pieces):
             following = plan[number+1][0] if number+1 < len(plan) else None
             if cut == len(ids) and following not in (None, 'tokens'):
                 raise RequestError('bad-request', 'guidance cannot share a native-state import boundary')
-            result.extend(piece for piece in (('tokens', ids[:cut]), *pieces, ('tokens', ids[cut:])) if piece[1])
+            result.extend(piece for piece in (('tokens', ids[:cut]), *pieces, ('tokens', ids[cut:]))
+                          if piece[0] == 'insertion_point' or piece[1])
             inserted = True
         else:
             result.append((kind, value))
@@ -609,9 +616,13 @@ class Engine:
         plan = list(seq.prompt_plan or ())
         if seq.request.privileged_context is not None:
             insert_at, pieces, seq.native_guidance_receipt = self._guidance(seq.request, plan)
-            if pieces:
-                plan = _insert_privileged(plan, insert_at, pieces)
+            plan = _insert_privileged(plan, insert_at, pieces)
         for kind, value in plan:
+            if kind == 'insertion_point':
+                # The renderer chose the cut in plan-token space; the receipt, learner and student form index the
+                # captured own tokens (consume markers and re-encoded import text included).
+                seq.native_guidance_receipt['insert_at'] = seq.native_own_position
+                continue
             privileged = kind in ('privileged', 'privileged_state')
             if kind == 'privileged':
                 kind = 'tokens'

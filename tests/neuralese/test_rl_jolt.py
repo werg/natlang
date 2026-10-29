@@ -355,6 +355,43 @@ def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
 
 
 
+@pytest.mark.parametrize('best_effort', [False, True])
+def test_guidance_after_an_imported_state_is_captured_where_the_learner_expects(tmp_path, best_effort):
+    """The receipt's insert_at is a captured-own-token index: consume markers (and re-encoded text) count."""
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.rl.privileged_context import REQUEST_SCHEMA, captured_block
+    from natlang_neuralese.serve.engine import GenerationRequest
+    engine = engine_fixture(tmp_path, 'lfm')
+    custody_receipt = {'schema': 'natlang.jolt-privileged-custody/1', 'case_id': 'c', 'split': 'train',
+                       'world_sha256': 'd' * 64, 'protected_sha256': 'c' * 64}
+    request = {'schema': REQUEST_SCHEMA, 'invocation': {'name': 'run-1', 'role': 'root'}, 'mode': 'text',
+               'custody': custody_receipt, 'fallback': 'writer failed', 'facts': [
+                   {'id': 'expected_result:0', 'kind': 'expected_result', 'text': 'The verified result is t6.'}],
+               'selection': {'implementation': 'nl', 'sha256': 'b' * 64}}
+    engine.start()
+    try:
+        state = engine.native_write_text('t8 t9')['id']
+        if best_effort:
+            engine._native_exact = lambda block: False
+        # A word-level fixture: t9/t8 are the system turn's im_start/im_end, t5 and t6 encode 'system\\n' and '\\n'.
+        from dataclasses import replace
+        engine._privileged_rendering_cache = replace(engine._privileged_rendering(), bos=None, im_start=9, im_end=8,
+            encode=lambda text: {'system\n': [5], '\n': []}.get(text, [20] * len(text.split())))
+        messages = [{'role': 'system', 'content': [{'type': 'text', 'text': 't9 t5 t7 '},
+                                                   {'type': 'native_state', 'id': state},
+                                                   {'type': 'text', 'text': 't8 '}]},
+                    {'role': 'user', 'content': 't4 t5'}]
+        reply = engine.generate(GenerationRequest(messages=messages, temperature=.9, seed=5, max_tokens=4,
+                                                  rl_capture=True, privileged_context=request))
+    finally:
+        engine.stop()
+    capture = reply['x_natlang_rl_capture']
+    assert any(s['kind'] == 'native_state' for s in capture['prompt']) != best_effort
+    block = captured_block({'graph_turn': 'run-1#turn1', 'sampling': capture})
+    own = [t for s in capture['prompt'] if s['kind'] == 'tokens' for t in s['token_ids']]
+    assert own[block.insert_at:block.insert_at + len(block.token_ids)] == list(block.token_ids)
+
+
 @pytest.mark.parametrize('scale', [1.0, 1e-4])
 def test_reverse_kl_from_logits_matches_float64_reference_including_near_agreement(scale):
     from natlang_neuralese.rl.jolt import reverse_kl
