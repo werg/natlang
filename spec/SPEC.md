@@ -466,7 +466,9 @@ While a task runs, a host may subscribe to its live events (`onLive`, on the run
 `model_delta` event carries a piece of one of a call's model turns as it streams (text, reasoning, a tool-call
 fragment, a written Neuralese block, or `reset` when the turn's request is sent again and what was shown of it is
 void), tagged with the task, the call ID, the caller's call ID, the function's name and definition, and the turn
-number its trace's `model_request` events carry. Live events are hints for showing a call at work; the trace and
+number its trace's `model_request` events carry. `call_start` and `call_end` (with the outcome and its detail) bracket
+each call, and `trace` events carry the call's trace events as they are recorded (model requests with their token
+counts, actions, failures; not scope snapshots). Live events are hints for showing a call at work; the trace and
 the call's records do not depend on them, and without a subscriber the runtime does no live work.
 Recording and compilation of calls are the [call records extension](ext/call-records.md); resuming a long
 invocation is [continuations](ext/continuations.md).

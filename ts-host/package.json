@@ -102,6 +102,7 @@
   },
   "files": [
     "dist",
+    "dashboard",
     "bin",
     "examples/browser-local",
     "prelude.js",

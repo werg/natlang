@@ -36,6 +36,8 @@ import { supportsGuidance } from './native/neuralese.js';
 export type NatlangRuntimeConfiguration = {
   /** Model selection: a profile name, or a Pi provider / model override (as `--profile`, `--provider`, `--model`). */
   profile?: string; provider?: string; model?: string;
+  /** The program's own model (natlang.json `model`), used when nothing above or in the environment selects one. */
+  programModel?: import('./package/manifest.js').ProgramModel;
   /** A tuned program's root: its active release is served, on the checkpoint it was tuned on. */
   programRoot?: string;
   /** The program's descriptor, when the caller has built it; otherwise it is built when a release or adaptation needs it. */
@@ -70,6 +72,8 @@ export type ConfiguredNatlangRuntime = {
   tuned: TunedServing;
   /** Start the model server now rather than on the first call. */
   prepare(): Promise<void>;
+  /** The model backend: source, endpoint, a managed server's stock release and llama.cpp build. */
+  modelStatus(): import('./model/local-server.js').ManagedModelStatus;
   /** Close the runtime and every model session and server it started. */
   close(): Promise<void>;
 };
@@ -81,11 +85,11 @@ const readConfigFile = (environment: NodeJS.ProcessEnv): ConfigFile => {
 };
 
 /** The configured profile, with a notice when its native checkpoint source has a newer checkpoint. */
-export function selectModel(options: Pick<NatlangRuntimeConfiguration, 'profile' | 'provider' | 'model' | 'environment' | 'log'> = {}):
+export function selectModel(options: Pick<NatlangRuntimeConfiguration, 'profile' | 'provider' | 'model' | 'programModel' | 'environment' | 'log'> = {}):
   LoadedModelConfiguration {
   const environment = options.environment ?? process.env, log = options.log ?? process.stderr;
   const overrides: ModelSelectionOverrides = { provider: options.provider, model: options.model };
-  const loaded = loadModelConfiguration(options.profile, overrides, environment);
+  const loaded = loadModelConfiguration(options.profile, overrides, environment, options.programModel);
   const native = loaded.choice.kind === 'external' ? loaded.choice.managedNative : undefined;
   const newer = native && newerNativeCheckpoint(native, loaded.nativeSources);
   if (newer) log.write(`natlang: ${native!.source} has a newer checkpoint${newer.step !== undefined ? ` (step ${newer.step}` +
@@ -215,7 +219,8 @@ export async function natlangRuntime(configuration: NatlangRuntimeConfiguration 
   const tuned = release ? await tunedServing(root!, program, choice, environment) : {};
   if (tuned.notice) log.write(tuned.notice + '\n');
   const session = createResolvedModelSession(choice, environment, log, { ...(configuration.ensureRuntime ? { ensureRuntime: configuration.ensureRuntime } : {}),
-    ...(tuned.loraAdapters ? { loraAdapters: tuned.loraAdapters } : {}), ...(tuned.nativeStates ? { nativeStates: tuned.nativeStates } : {}) });
+    ...(tuned.loraAdapters ? { loraAdapters: tuned.loraAdapters } : {}), ...(tuned.nativeStates ? { nativeStates: tuned.nativeStates } : {}),
+  });
   const closers: (() => Promise<void>)[] = [() => session.close()];
   try {
     if (tuned.vllmStacks) session.vllmStacks?.(tuned.vllmStacks);
@@ -234,7 +239,7 @@ export async function natlangRuntime(configuration: NatlangRuntimeConfiguration 
       ...(tuned.weights ? { weights: tuned.weights } : {}) });
     let closed = false;
     return { runtime, driver, selection, executorIdentity, ...(program ? { program } : {}), adaptation, tuned,
-      prepare: async () => { await session.prepare(); },
+      prepare: async () => { await session.prepare(); }, modelStatus: () => session.status(),
       close: async () => {
         if (closed) return;
         closed = true;

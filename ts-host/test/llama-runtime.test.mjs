@@ -9,17 +9,17 @@ import { join } from 'node:path';
 import { discoverLlamaRuntime, inspectLlamaServer, installManagedLlamaRuntime,
   isCompatibleLlamaVersion } from '../dist/model/index.js';
 
-function fakeServer(path, version = '0.5.0', build = 11146) {
+function fakeServer(path, version = '0.8.0', build = 11960) {
   writeFileSync(path, `#!${process.execPath}\nconsole.log('version: ${version} (build ${build}, commit b29c606e2)');\n`);
   chmodSync(path, 0o755);
 }
 
 test('llama.cpp compatibility checks version and build boundaries', () => {
-  assert.equal(isCompatibleLlamaVersion('0.5.0', 11146), true);
-  assert.equal(isCompatibleLlamaVersion('0.5.0-dev', 11146), true);
-  assert.equal(isCompatibleLlamaVersion('0.5.0', 11145), false);
-  assert.equal(isCompatibleLlamaVersion('0.4.1', 10964), false);
-  assert.equal(isCompatibleLlamaVersion('0.6.0', 20000), false);
+  assert.equal(isCompatibleLlamaVersion('0.8.0', 11960), true);
+  assert.equal(isCompatibleLlamaVersion('0.8.0-dev', 11960), true);
+  assert.equal(isCompatibleLlamaVersion('0.8.0', 11959), false);
+  assert.equal(isCompatibleLlamaVersion('0.5.0', 11146), false, 'llama.cpp before b11938 cannot load LFM3');
+  assert.equal(isCompatibleLlamaVersion('0.9.0', 20000), false);
 });
 
 test('runtime discovery validates explicit and PATH executables', () => {
@@ -29,10 +29,13 @@ test('runtime discovery validates explicit and PATH executables', () => {
   const found = discoverLlamaRuntime({ ...process.env, PATH: root, NATLANG_RUNTIME_HOME: join(root, 'managed') });
   assert.equal(found.selected?.path, compatible);
   assert.equal(found.selected?.source, 'path');
-  const rejected = discoverLlamaRuntime({ ...process.env, NATLANG_LLAMA_SERVER: old,
+  const explicitOld = discoverLlamaRuntime({ ...process.env, NATLANG_LLAMA_SERVER: old,
     NATLANG_RUNTIME_HOME: join(root, 'managed') });
-  assert.equal(rejected.selected, null);
-  assert.equal(rejected.candidates[0]?.compatible, false);
+  assert.equal(explicitOld.selected?.path, old, 'an explicitly chosen older build is used');
+  assert.match(explicitOld.selected?.reason ?? '', /chosen explicitly/);
+  assert.equal(explicitOld.candidates[0]?.compatible, false);
+  const broken = join(root, 'broken'); writeFileSync(broken, `#!${process.execPath}\nconsole.log('nonsense');\n`); chmodSync(broken, 0o755);
+  assert.equal(discoverLlamaRuntime({ ...process.env, NATLANG_LLAMA_SERVER: broken, NATLANG_RUNTIME_HOME: join(root, 'managed') }).selected, null);
   assert.match(inspectLlamaServer(old, 'explicit').reason, /needs/);
 });
 

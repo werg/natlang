@@ -13,6 +13,7 @@ models/*
 !models/templates/
 models/templates/*
 !models/templates/LFM2.5-350M.jinja
+!models/templates/LFM3-1.7B.jinja
 vendor/
 !ts-host/vendor/
 !ts-host/vendor/pyodide/

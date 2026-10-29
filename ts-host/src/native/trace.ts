@@ -59,11 +59,14 @@ export class NativeTraceRecorder {
     trace.reconstruct();
     return trace;
   }
+  /** Sees each event as it is emitted (live observers); what it throws is ignored. */
+  observer?: (event: TraceEvent) => void;
   emit(kind: string, data: Record<string, unknown> = {}): TraceEvent {
     const event = JSON.parse(JSON.stringify({ version: TRACE_VERSION, seq: this.events.length, kind,
       observed_at: new Date().toISOString(), elapsed_ms: Math.round(performance.now() - this.started),
       ...data })) as TraceEvent;
     this.events.push(event);
+    if (this.observer) try { this.observer(event); } catch { /* observers never affect the trace */ }
     return event;
   }
   finalState(): unknown {

@@ -700,6 +700,11 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   let outcome = 'failed', detail = '';
   let hostValue: unknown, hasValue = false;
   registerTrace(callId, runtime.trace, runtime.episodeBudget);
+  const liveCall = task.live && { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null, definitionId: definition.id, name: definition.name };
+  if (liveCall) {
+    task.live!({ type: 'call_start', ...liveCall });
+    runtime.trace.observer = event => { if (event.kind !== 'state' && event.kind !== 'reduction') task.live!({ type: 'trace', ...liveCall, event }); };
+  }
   capture?.watch(() => runtime!.trace.events as Record<string, unknown>[]);
   try {
     const normalizedInputs = await runtime.materializeSoftStringArguments(definition, inputs, frame.parentCallId);
@@ -759,6 +764,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   } finally {
     await task.drainChildren(callId);
     releaseTrace(callId);
+    if (liveCall) task.live!({ type: 'call_end', ...liveCall, outcome, detail });
     task.record({ callId, parentCallId: frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id,
       name: definition.name, outcome, detail, adaptation: adaptationProvenance, events: runtime.trace.events as Record<string, unknown>[] });
     environment.close();

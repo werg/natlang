@@ -44,7 +44,7 @@ const table = (rows: Record<string, unknown>[], columns: string[]): string => {
 const short = (value: unknown, limit = 200) => { const shown = JSON.stringify(value); return shown === undefined ? 'undefined' : shown.length > limit ? `${shown.slice(0, limit)}…` : shown; };
 
 /** A record with its values in place of their references. */
-function expanded(store: CallStore, record: CallRecord): Record<string, unknown> {
+export function expandedRecord(store: CallStore, record: CallRecord): Record<string, unknown> {
   const value = (ref: Parameters<CallStore['value']>[0]) => ref?.complete ? store.value(ref) : ref;
   return { ...record, inputs: Object.fromEntries(Object.entries(record.inputs).map(([name, ref]) => [name, value(ref)])),
     captures: Object.fromEntries(Object.entries(record.captures).map(([name, ref]) => [name, value(ref)])),
@@ -54,7 +54,7 @@ function expanded(store: CallStore, record: CallRecord): Record<string, unknown>
 }
 
 function describeCall(store: CallStore, record: CallRecord): string {
-  const view = expanded(store, record);
+  const view = expandedRecord(store, record);
   const cases = store.callCases(record.call_id);
   return [`call ${record.call_id}${record.parent_call_id ? ` (in ${record.parent_call_id}, eval ${record.parent_action_index ?? '?'})` : ''}`,
     `definition: ${record.definition.name} (${record.definition.source ?? record.definition.site}) key ${record.definition.key}`,
@@ -204,7 +204,7 @@ export async function tracesCommand(argv: string[]): Promise<number> {
       return 0;
     }
     if (args.options.has('--events')) { print((store.events(record.call_id) ?? []).map(event => JSON.stringify(event)).join('\n'), false); return 0; }
-    print(json ? expanded(store, record) : describeCall(store, record), json);
+    print(json ? expandedRecord(store, record) : describeCall(store, record), json);
     return 0;
   }
   if (action === 'occupancy') {
@@ -230,7 +230,7 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     for (const row of store.calls({ definition: text(args, '--definition'), executor: text(args, '--executor'), limit: number(args, '--limit', 1000),
       audits: args.options.has('--all') })) {
       const record = store.call(row.call_id);
-      if (record) process.stdout.write(`${JSON.stringify(expanded(store, record))}\n`);
+      if (record) process.stdout.write(`${JSON.stringify(expandedRecord(store, record))}\n`);
     }
     return 0;
   }

@@ -46,7 +46,7 @@ build_llama() {  # $1 label, $2 archs
   python3 - "$stage/BUILD.json" "$LLAMA_SHA" "$archs" "$seconds" <<'PY'
 import json, sys
 path, sha, archs, seconds = sys.argv[1:]
-json.dump({'source': 'github.com/werg/llama.cpp-neuralese', 'branch': 'neuralese-lfm3', 'git_sha': sha,
+json.dump({'source': 'github.com/werg/llama.cpp-neuralese', 'branch': 'neuralese', 'git_sha': sha,
            'cuda_architectures': archs, 'build_seconds': float(seconds),
            'cmake': ['-DGGML_CUDA=ON', f'-DCMAKE_CUDA_ARCHITECTURES={archs}', '-DGGML_NATIVE=OFF', '-DGGML_CUDA_NCCL=OFF',
                      '-DBUILD_SHARED_LIBS=OFF', '-DLLAMA_OPENSSL=OFF', '-DCMAKE_BUILD_TYPE=Release']},

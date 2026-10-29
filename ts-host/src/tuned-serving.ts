@@ -47,7 +47,7 @@ export async function llamaServesRelease(manifest: { artifacts: readonly Exporte
   if (choice.kind !== 'managed-local' || !manifest.artifacts.length) return false;
   environment = profileEnvironment(choice, environment);
   let base: string;
-  try { base = await managedModelSha256(environment); } catch { return false; }
+  try { base = await managedModelSha256(environment, choice.release); } catch { return false; }
   const bound = (item: { exports?: { gguf?: { baseGgufSha256?: string } } }) => item.exports?.gguf?.baseGgufSha256 === base;
   // Families without members in this program are not exported; every exported one must bind the same base.
   if (!manifest.artifacts.every(bound) || !manifest.softStates.every(bound)
@@ -84,7 +84,7 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
   let base: string | undefined;
   if (choice.kind !== 'managed-local') incompatible = `the ${choice.kind} backend does not serve tuned weights; use the managed local model or the native server`;
   else {
-    base = await managedModelSha256(environment);
+    base = await managedModelSha256(environment, choice.release);
     const exported = manifest.artifacts.filter(item => item.exports?.gguf);
     const families = manifest.families.map(family => manifest.artifacts.find(item => item.artifact === family.artifact)).filter(Boolean);
     if (!exported.length && !families.length) incompatible = 'this release has no llama.cpp export; rerun natlang tune for the managed backend';

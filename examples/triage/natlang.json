@@ -3,6 +3,39 @@
   "name": "natlang-triage-example",
   "version": "0.1.0",
   "description": "Triage a JSON list of support tickets into a report.",
-  "include": ["main.ts", "triage.ts", "types.ts", "classify.nl", "is_urgent.nl", "tsconfig.json"],
-  "targets": { "triage": { "entry": "main.ts", "description": "natlang run examples/triage -- TICKETS.json [RUBRIC]" } }
+  "include": [
+    "classify.nl",
+    "is_urgent.nl",
+    "main.ts",
+    "tickets.json",
+    "triage.ts",
+    "tsconfig.json",
+    "types.ts"
+  ],
+  "targets": {
+    "triage": {
+      "entry": "main.ts",
+      "description": "natlang run examples/triage [-- TICKETS.json [RUBRIC]] (default: the bundled tickets.json)"
+    }
+  },
+  "model": {
+    "stock": "lfm3-1.7b-q8_0"
+  },
+  "warmup": [
+    {
+      "name": "outage ticket",
+      "function": "classify.nl",
+      "inputs": {
+        "ticket": "Checkout fails with a 500 error for every customer.",
+        "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+      }
+    },
+    {
+      "name": "urgent outage",
+      "function": "is_urgent.nl",
+      "inputs": {
+        "ticket": "Checkout fails with a 500 error for every customer."
+      }
+    }
+  ]
 }

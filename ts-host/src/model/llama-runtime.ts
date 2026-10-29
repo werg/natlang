@@ -1,25 +1,27 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { accessSync, chmodSync, constants, createReadStream, createWriteStream, existsSync, lstatSync,
+import { accessSync, chmodSync, constants, cpSync, createReadStream, createWriteStream, existsSync, lstatSync,
   mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, platform } from 'node:os';
+import { cpus, homedir, platform } from 'node:os';
 import { basename, delimiter, dirname, join, relative, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { LLAMA_RUNTIME_RELEASE } from '../llama-runtime-release.js';
+import { LLAMA_FORK_SOURCE } from '../llama-fork-source.js';
 
 export type LlamaRuntimeArtifact = { key: string; platform: NodeJS.Platform; arch: string;
   backend: 'cpu' | 'metal'; archive: 'tar.gz' | 'zip'; url: string; bytes: number; sha256: string };
 export type LlamaRuntimeRelease = { version: string; build: number; commit: string;
   compatible: { minimumVersion: string; maximumVersionExclusive: string; minimumBuild: number };
   artifacts: readonly LlamaRuntimeArtifact[] };
-export type LlamaServerInspection = { path: string; source: 'explicit' | 'managed' | 'path';
+export type LlamaServerInspection = { path: string; source: 'explicit' | 'managed' | 'fork' | 'path';
   compatible: boolean; version: string | null; build: number | null; commit: string | null;
   reason: string | null; output: string };
 export type LlamaRuntimeDiscovery = { selected: LlamaServerInspection | null;
   candidates: LlamaServerInspection[]; artifact: LlamaRuntimeArtifact | null; runtimeRoot: string };
 
 export { LLAMA_RUNTIME_RELEASE } from '../llama-runtime-release.js';
+export { LLAMA_FORK_SOURCE } from '../llama-fork-source.js';
 
 function semver(value: string): [number, number, number] | null {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/.exec(value);
@@ -64,7 +66,11 @@ export function inspectLlamaServer(path: string, source: LlamaServerInspection['
   if (!match) return { path: resolved, source, compatible: false, version: null, build: null, commit: null,
     reason: 'unrecognized llama-server version output', output };
   const version = match[1]!, build = Number(match[2]), commit = match[3]!;
-  const compatible = isCompatibleLlamaVersion(version, build, release);
+  // A source build of the pinned fork commit is that commit, whatever build number its checkout counted.
+  const compatible = source === 'fork' ? commit.length >= 7 && LLAMA_FORK_SOURCE.commit.startsWith(commit) :
+    isCompatibleLlamaVersion(version, build, release);
+  if (source === 'fork') return { path: resolved, source, compatible, version, build, commit,
+    reason: compatible ? null : `a build of fork commit ${commit}, not the pinned ${LLAMA_FORK_SOURCE.commit.slice(0, 9)}; run natlang runtime build`, output };
   return { path: resolved, source, compatible, version, build, commit,
     reason: compatible ? null : `needs >=${release.compatible.minimumVersion} build ${release.compatible.minimumBuild} and <${release.compatible.maximumVersionExclusive}`,
     output };
@@ -95,15 +101,84 @@ function managedExecutable(root: string, release: LlamaRuntimeRelease, artifact:
   } catch { return null; }
 }
 
+const forkDirectory = (root: string) => join(root, 'llama.cpp', `fork-${LLAMA_FORK_SOURCE.commit.slice(0, 12)}-${process.platform}-${process.arch}`);
+function forkExecutable(root: string): string | null {
+  const executable = join(forkDirectory(root), 'bin', process.platform === 'win32' ? 'llama-server.exe' : 'llama-server');
+  return existsSync(join(forkDirectory(root), 'runtime.json')) && existsSync(executable) ? executable : null;
+}
+
+/**
+ * `natlang runtime build`: fetch the pinned commit of natlang's llama.cpp fork and compile llama-server for this machine
+ * (native CPU flags; CUDA when nvcc is found or `cuda` is set; Metal on macOS) into the runtime directory, where
+ * discovery prefers it. Needs git, CMake and a C++ compiler.
+ */
+export async function buildForkLlamaRuntime(options: { environment?: NodeJS.ProcessEnv; error?: NodeJS.WritableStream;
+  cuda?: boolean; jobs?: number } = {}): Promise<LlamaServerInspection> {
+  const environment = options.environment ?? process.env, log = options.error ?? process.stderr;
+  const root = defaultNatlangRuntimeDirectory(environment), destination = forkDirectory(root);
+  for (const tool of ['git', 'cmake']) if (!commandPath(tool, environment)) throw new Error(`natlang runtime build needs ${tool} on PATH`);
+  const cuda = options.cuda ?? Boolean(commandPath('nvcc', environment));
+  const run = (command: string, args: string[], cwd: string) => {
+    log.write(`natlang: ${command} ${args.join(' ')}\n`);
+    const result = spawnSync(command, args, { cwd, env: environment, stdio: ['ignore', 'inherit', 'inherit'] });
+    if (result.status !== 0) throw new Error(`${command} ${args[0]} failed (${result.error?.message ?? `exit ${result.status}`})`);
+  };
+  mkdirSync(root, { recursive: true });
+  const work = mkdtempSync(join(root, '.fork-build-'));
+  try {
+    const source = join(work, 'llama.cpp');
+    mkdirSync(source);
+    run('git', ['init', '-q'], source);
+    run('git', ['fetch', '-q', '--depth', '1', `https://github.com/${LLAMA_FORK_SOURCE.repository}`, LLAMA_FORK_SOURCE.commit], source);
+    run('git', ['checkout', '-q', 'FETCH_HEAD'], source);
+    const rpath = process.platform === 'darwin' ? '@loader_path' : '$ORIGIN';
+    run('cmake', ['-S', '.', '-B', 'build', '-DCMAKE_BUILD_TYPE=Release', '-DLLAMA_CURL=OFF', '-DLLAMA_BUILD_TESTS=OFF',
+      // natlang does not serve llama.cpp's web UI, which would otherwise be fetched from an unpinned "latest" bucket.
+      '-DLLAMA_BUILD_EXAMPLES=OFF', '-DLLAMA_USE_PREBUILT_UI=OFF', '-DLLAMA_BUILD_UI=OFF', `-DCMAKE_INSTALL_RPATH=${rpath}`, '-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON',
+      ...(cuda ? ['-DGGML_CUDA=ON', '-DCMAKE_CUDA_ARCHITECTURES=native'] : [])], source);
+    run('cmake', ['--build', 'build', '--config', 'Release', '--target', 'llama-server', '-j', String(options.jobs ?? Math.max(1, cpus().length))], source);
+    const built = [join(source, 'build', 'bin'), join(source, 'build', 'bin', 'Release')].find(path => existsSync(join(path,
+      process.platform === 'win32' ? 'llama-server.exe' : 'llama-server')));
+    if (!built) throw new Error('the fork build produced no llama-server');
+    const staged = join(work, 'runtime');
+    // Library symlinks stay relative (libllama.so.0 -> libllama.so.0.8.0); copied as they are, they survive removing the build.
+    cpSync(built, join(staged, 'bin'), { recursive: true, verbatimSymlinks: true });
+    writeFileSync(join(staged, 'runtime.json'), JSON.stringify({ fork: true, repository: LLAMA_FORK_SOURCE.repository,
+      commit: LLAMA_FORK_SOURCE.commit, backend: cuda ? 'cuda' : process.platform === 'darwin' ? 'metal' : 'cpu',
+      builtAt: new Date().toISOString() }, null, 2) + '\n');
+    rmSync(destination, { recursive: true, force: true });
+    mkdirSync(dirname(destination), { recursive: true });
+    renameSync(staged, destination);
+  } finally { rmSync(work, { recursive: true, force: true }); }
+  // Checked once the build tree is gone, so the installed copy stands on its own.
+  const inspected = inspectLlamaServer(join(destination, 'bin', process.platform === 'win32' ? 'llama-server.exe' : 'llama-server'), 'fork',
+    LLAMA_RUNTIME_RELEASE, environment);
+  if (!inspected.compatible) throw new Error(`the installed fork llama-server does not run as the pinned commit: ${inspected.reason ?? inspected.output}`);
+  // Builds of earlier fork commits are never selected again.
+  const suffix = `-${process.platform}-${process.arch}`;
+  for (const entry of readdirSync(dirname(destination)))
+    if (entry.startsWith('fork-') && entry.endsWith(suffix) && join(dirname(destination), entry) !== destination)
+      rmSync(join(dirname(destination), entry), { recursive: true, force: true });
+  return inspected;
+}
+
 export function discoverLlamaRuntime(environment: NodeJS.ProcessEnv = process.env,
   release: LlamaRuntimeRelease = LLAMA_RUNTIME_RELEASE): LlamaRuntimeDiscovery {
   const runtimeRoot = defaultNatlangRuntimeDirectory(environment), artifact = artifactForCurrentPlatform(release);
   const candidates: LlamaServerInspection[] = [];
   if (environment.NATLANG_LLAMA_SERVER) {
     const explicit = commandPath(environment.NATLANG_LLAMA_SERVER, environment) ?? resolve(environment.NATLANG_LLAMA_SERVER);
-    candidates.push(inspectLlamaServer(explicit, 'explicit', release, environment));
-    return { selected: candidates[0]!.compatible ? candidates[0]! : null, candidates, artifact, runtimeRoot };
+    const inspected = inspectLlamaServer(explicit, 'explicit', release, environment);
+    candidates.push(inspected);
+    // An explicitly chosen build (a CUDA build, the Neuralese fork) runs even when it predates the pinned release; the
+    // reason stays as a warning (LFM3, the default model, needs build 11938 or later).
+    const selected = inspected.compatible ? inspected : inspected.version ? { ...inspected, compatible: true,
+      reason: `older than natlang's pinned llama.cpp ${release.version} (${inspected.reason}); used because it was chosen explicitly` } : null;
+    return { selected, candidates, artifact, runtimeRoot };
   }
+  // natlang's fork, built here by `natlang runtime build`, comes before the downloaded upstream release.
+  const fork = forkExecutable(runtimeRoot);
+  if (fork) candidates.push(inspectLlamaServer(fork, 'fork', release, environment));
   if (artifact) {
     const managed = managedExecutable(runtimeRoot, release, artifact);
     if (managed) candidates.push(inspectLlamaServer(managed, 'managed', release, environment));

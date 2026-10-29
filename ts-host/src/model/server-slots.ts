@@ -10,7 +10,8 @@
  *
  * The default cap exists because on unified-memory machines (DGX) admitted jobs claim memory after the server starts.
  *
- * Defaults: memoryFraction 0.5, kvBytesPerToken 65536 (64 KiB, a conservative figure for sub-2B models; set
+ * Defaults: memoryFraction 0.5, kvBytesPerToken the stock model's measured figure (LFM3 1.7B: 12,800), else 65536 (64 KiB,
+ * a conservative figure for sub-2B models; set
  * `local.kvBytesPerToken` or NATLANG_MODEL_KV_BYTES_PER_TOKEN for a model whose cache is larger), maxSlots 8. An
  * explicit `local.parallel` always wins. On unified-memory machines (DGX) available memory is the GPU's, so the
  * budget must be agreed with the GPU ledger: set `local.memoryBudgetMiB` to the ledger's grant.
@@ -29,10 +30,11 @@ export const DEFAULT_MAX_SLOTS = 8;
 export const DEFAULT_KV_BUDGET_CAP_BYTES = 4 * 2 ** 30;
 
 export function planServerSlots(input: { local?: ModelProfile['local']; modelBytes: number; defaultContextTokens: number;
-  availableMemoryBytes?: number; environment?: NodeJS.ProcessEnv }): SlotPlan {
+  /** The served model's measured figure (model-catalog.ts), used before the generic default. */
+  defaultKvBytesPerToken?: number; availableMemoryBytes?: number; environment?: NodeJS.ProcessEnv }): SlotPlan {
   const { local, modelBytes } = input, environment = input.environment ?? process.env;
   const contextPerSlot = local?.contextTokens ?? input.defaultContextTokens;
-  const kvBytesPerToken = local?.kvBytesPerToken ?? (Number(environment.NATLANG_MODEL_KV_BYTES_PER_TOKEN) || DEFAULT_KV_BYTES_PER_TOKEN);
+  const kvBytesPerToken = local?.kvBytesPerToken ?? (Number(environment.NATLANG_MODEL_KV_BYTES_PER_TOKEN) || input.defaultKvBytesPerToken || DEFAULT_KV_BYTES_PER_TOKEN);
   const envBudget = Number(environment.NATLANG_MODEL_MEMORY_BUDGET_MIB) || 0;
   const budgetMiB = local?.memoryBudgetMiB ?? (envBudget > 0 ? envBudget : undefined);
   const available = input.availableMemoryBytes ?? freemem();

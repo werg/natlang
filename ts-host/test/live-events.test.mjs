@@ -83,7 +83,7 @@ test('a natlang call\'s deltas reach the subscriber in order, tagged with the ca
   try {
     const events = [];
     const runtime = createNatlangRuntime({ model: openAICompatibleModelTurn({ endpoint: model.endpoint, model: 'm' }),
-      calls: false, onLive: event => events.push(event) });
+      calls: false, onLive: event => event.type === 'model_delta' && events.push(event) });
     const main = program();
     const traces = [];
     assert.equal(await runtime.run(() => main(5), { trace: trace => traces.push(trace) }), 11);
@@ -121,7 +121,7 @@ test('a re-sent request\'s reset reaches the subscriber, so the abandoned attemp
     const runtime = createNatlangRuntime({ model: openAICompatibleModelTurn({ endpoint: model.endpoint, model: 'm' }), calls: false });
     const main = program();
     // A task's own subscriber.
-    assert.equal(await runtime.run(() => main(2), { onLive: event => events.push(event) }), 5);
+    assert.equal(await runtime.run(() => main(2), { onLive: event => event.type === 'model_delta' && events.push(event) }), 5);
     const inner = events.filter(event => event.name === 'addOne' && event.turn === 1).map(event => event.delta.type);
     assert.deepEqual(inner, ['text', 'text', 'tool_call', 'reset', 'text', 'text', 'tool_call', 'tool_call']);
     assert.equal(shown(events)['addOne#1'], 'Working on addOne.');
@@ -133,8 +133,8 @@ test('a subscriber that throws does not affect the call; a runtime and a task su
   try {
     const a = [], b = [];
     const runtime = createNatlangRuntime({ model: openAICompatibleModelTurn({ endpoint: model.endpoint, model: 'm' }),
-      calls: false, onLive: event => { a.push(event); throw new Error('observer'); } });
-    assert.equal(await runtime.run(() => program()(1), { onLive: event => b.push(event) }), 3);
+      calls: false, onLive: event => { if (event.type === 'model_delta') a.push(event); throw new Error('observer'); } });
+    assert.equal(await runtime.run(() => program()(1), { onLive: event => event.type === 'model_delta' && b.push(event) }), 3);
     assert.equal(a.length, 12);
     assert.deepEqual(a, b);
   } finally { await model.close(); }
@@ -149,7 +149,7 @@ test('without a subscriber the driver gets no turn options, and requests and res
   assert.ok(argumentCounts.length >= 4 && argumentCounts.every(count => count === 2), String(argumentCounts));
   argumentCounts.length = 0;
   const events = [];
-  assert.equal(await createNatlangRuntime({ model: driver, calls: false, onLive: event => events.push(event) }).run(() => program()(4)), 9);
+  assert.equal(await createNatlangRuntime({ model: driver, calls: false, onLive: event => event.type === 'model_delta' && events.push(event) }).run(() => program()(4)), 9);
   assert.ok(argumentCounts.every(count => count === 3), String(argumentCounts));
   assert.deepEqual(events, [], 'a driver that does not stream emits no deltas');
 
@@ -166,4 +166,17 @@ test('without a subscriber the driver gets no turn options, and requests and res
   }
   assert.equal(runs[0].value, 7);
   assert.deepEqual(runs[1], runs[0]);
+});
+
+test('calls are bracketed by call_start and call_end live events, and their trace events arrive as they are recorded', async () => {
+  const events = [];
+  const driver = () => ({ calls: [['return_result', { status: 'success', value: 9 }]],
+    completion_tokens: 2, prompt_tokens: 40 });
+  assert.equal(await createNatlangRuntime({ model: driver, calls: false, onLive: event => events.push(event) }).run(() => program()(4)), 9);
+  const kinds = events.map(event => event.type === 'trace' ? `trace:${event.event.kind}` : event.type);
+  assert.equal(kinds[0], 'call_start'); assert.equal(kinds.at(-1), 'call_end');
+  assert.equal(events.at(-1).outcome, 'done'); assert.equal(events.at(-1).name, 'main');
+  const request = events.find(event => event.type === 'trace' && event.event.kind === 'model_request' && event.event.phase === 'end');
+  assert.equal(request.event.prompt_tokens, 40);
+  assert.ok(!kinds.includes('trace:state'), 'scope snapshots stay out of live events');
 });

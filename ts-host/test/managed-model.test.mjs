@@ -25,7 +25,7 @@ test('managed model startup can be prepared eagerly and its child is closed with
   const template = join(root, 'template.jinja');
   writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.5.0 (build 11146, commit 7fe450e19)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 11960, commit 8642541b2)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
 fs.appendFileSync(${JSON.stringify(marker)}, 'started\\n');
@@ -67,7 +67,7 @@ test('a host can grant managed runtime installation at the first semantic turn',
   const template = join(root, 'template.jinja');
   writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.5.0 (build 11146, commit 7fe450e19)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 11960, commit 8642541b2)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
 fs.appendFileSync(${JSON.stringify(marker)}, 'started\\n');
@@ -104,7 +104,7 @@ test('tuned soft states load as native state spans and requests carry them as na
     const executable = join(root, 'fake-llama-server'), log = join(root, 'log'), model = join(root, 'model.gguf'), template = join(root, 'template.jinja');
     writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
     writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.5.0 (build 11146, commit 7fe450e19)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 11960, commit 8642541b2)'); process.exit(0); }
 if (process.argv.includes('--help')) { console.log(${JSON.stringify(supports ? '--lora-per-sequence\n--native-state FNAME' : '--lora')}); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
@@ -136,4 +136,55 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
   const refused = createManagedModelSession({}, upstream.environment, process.stderr, { nativeStates: () => [{ id: state, path: '/x.gguf' }] });
   await assert.rejects(refused.prepare(), /weights-unavailable: .* cannot import native state spans/);
   await refused.close();
+});
+
+test('a managed session uses a server another process keeps loaded for the same model file and build', async () => {
+  const { spawn } = await import('node:child_process');
+  const { createHash } = await import('node:crypto');
+  const { publishSharedServer } = await import('../dist/model/shared-server.js');
+  const root = mkdtempSync(join(tmpdir(), 'natlang-shared-model-'));
+  const executable = join(root, 'fake-llama-server'), model = join(root, 'model.gguf'), started = join(root, 'started');
+  writeFileSync(model, 'fixture weights');
+  writeFileSync(executable, `#!${process.execPath}
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 11960, commit 8642541b2)'); process.exit(0); }
+require('node:fs').writeFileSync(${JSON.stringify(started)}, 'spawned');
+`);
+  chmodSync(executable, 0o755);
+  const kept = spawn(process.execPath, ['-e', `const s = require('node:http').createServer((q, r) => { r.setHeader('content-type', 'application/json');
+    if (q.url === '/health') return r.end('{"status":"ok"}');
+    let b = ''; q.on('data', c => b += c); q.on('end', () => r.end(JSON.stringify({ choices: [{ message: { content: 'shared', tool_calls: [] } }] }))); });
+    s.listen(0, '127.0.0.1', () => console.log(s.address().port));`], { stdio: ['ignore', 'pipe', 'inherit'] });
+  try {
+    const port = await new Promise(resolve => kept.stdout.once('data', data => resolve(Number(String(data).trim()))));
+    const environment = { ...process.env, NATLANG_LLAMA_SERVER: executable, NATLANG_MODEL_PATH: model, NATLANG_STATE_HOME: join(root, 'state'),
+      NATLANG_CACHE_HOME: join(root, 'cache'), NATLANG_MODEL_START_TIMEOUT_MS: '3000' };
+    publishSharedServer({ pid: kept.pid, endpoint: `http://127.0.0.1:${port}`, modelSha256: createHash('sha256').update('fixture weights').digest('hex'),
+      runtimeBuild: 11960, runtime: 'b11960g8642541', slots: 3, contextPerSlot: 8192, model: 'fixture', profile: 'default', startedAt: new Date().toISOString(), warm: false }, environment);
+    // a binary of the same build number from another commit (every fork build reports build 1) does not match
+    const { findSharedServer } = await import('../dist/model/shared-server.js');
+    const sha = createHash('sha256').update('fixture weights').digest('hex');
+    assert.equal(await findSharedServer(sha, 'b11960g0000000', environment), undefined);
+    assert.equal((await findSharedServer(sha, 'b11960g8642541', environment))?.endpoint, `http://127.0.0.1:${port}`);
+    const session = createManagedModelSession({}, environment, { write: () => true });
+    const result = await session.turn({ messages: [], tools: [], temperature: 0, seed: 1, max_tokens: 4 });
+    assert.equal(result.text, 'shared');
+    assert.equal(existsSync(started), false, 'no server of its own was started');
+    assert.equal(session.status().shared, true); assert.equal(session.slotPlan().slots, 3);
+    await session.close();
+    // another model file is not served by it
+    writeFileSync(model, 'other weights');
+    const other = createManagedModelSession({}, { ...environment, NATLANG_SHARED_SERVER: 'off' }, { write: () => true });
+    await assert.rejects(other.turn({ messages: [], tools: [], temperature: 0, seed: 1, max_tokens: 4 }), /exited during startup|did not become ready/);
+    assert.equal(existsSync(started), true);
+    await other.close();
+  } finally { kept.kill(); }
+});
+
+test('a profile request refines the stock model request field by field', async () => {
+  const { resolveModelChoice } = await import('../dist/model/config.js');
+  const choice = resolveModelChoice({ local: { stock: 'lfm3-1.7b-q4_k_m' },
+    request: { thinking_budget_tokens: 512, chat_template_kwargs: { enable_thinking: true } } });
+  assert.deepEqual(choice.request, { temperature: 0, thinking_budget_tokens: 512,
+    chat_template_kwargs: { preserve_thinking: true, enable_thinking: true } });
+  assert.deepEqual(resolveModelChoice({}).request, { temperature: 0, chat_template_kwargs: { preserve_thinking: true } });
 });

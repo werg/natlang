@@ -1330,6 +1330,16 @@ export class NativeToolAgent {
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, turns = 0, failureRepairs = 0, refinementRepairs = 0, lastRefinementFailure = '';
     let consecutiveEmptyEosWithoutResult = 0;
+    // A model that repeats the same action and gets the same failure back is stuck (greedy decoding reproduces it for
+    // ever): the fourth identical failure in a row ends the call instead of running silently without end.
+    let repeatedFailure = '', repeatedFailures = 0;
+    const stuck = (signature: string): string | undefined => {
+      repeatedFailures = signature === repeatedFailure ? repeatedFailures + 1 : 0; repeatedFailure = signature;
+      if (repeatedFailures < 3) return;
+      session.runtime.trace.emit('model_incomplete', { call_id: session.runtime.currentCallId ?? null, turn: turns,
+        reason: 'repeated_failed_action', evidence: 'four_identical_actions_with_identical_failures' });
+      return `model_incomplete: repeated_failed_action (the same action failed the same way 4 times in a row: ${signature.slice(signature.indexOf('\n') + 1, signature.indexOf('\n') + 241)})`;
+    };
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
       (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
@@ -1481,6 +1491,8 @@ export class NativeToolAgent {
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: turns + 1,
         duration_ms: Math.round(performance.now() - started),
         prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null,
+        ...(response.cached_tokens !== undefined ? { cached_tokens: response.cached_tokens } : {}),
+        ...(response.generation_ms !== undefined ? { prefill_ms: response.prefill_ms, generation_ms: response.generation_ms } : {}),
         ...(response.scheduling ? { batch_id: response.scheduling.batch_id, batch_size: response.scheduling.batch_size,
           in_flight: response.scheduling.in_flight, queue_wait_ms: response.scheduling.queue_wait_ms,
           schedule_priority: response.scheduling.priority } : {}) });
@@ -1643,15 +1655,20 @@ export class NativeToolAgent {
         continue;
       }
       if (session.failureSerial > previousFailureSerial) {
+        const repeated = stuck(`${JSON.stringify(calls)}\n${session.failureDebug?.message ?? results.at(-1)?.text ?? ''}`);
+        if (repeated) return repeated;
         if (++failureRepairs > (repairLimit ?? Infinity))
           return `eval repair limit reached: ${session.failureDebug?.message ?? 'failure'}`;
         continue;
       }
       if (!session.failureDebug && results.some((result, index) => calls[index]?.[0] === 'eval' && result.kind === 'ok'))
         failureRepairs = 0;
+      if (!results.some(result => ['rejected', 'refused'].includes(result.kind))) repeatedFailure = '';
       // A rejected tool call is reported back to the model like a failed eval, within the same repair budget.
       const failed = results.find(result => ['rejected', 'refused'].includes(result.kind));
       if (failed) {
+        const repeated = stuck(`${JSON.stringify(calls)}\n${failed.text}`);
+        if (repeated) return repeated;
         if (++failureRepairs > (repairLimit ?? Infinity)) return `repair limit reached: ${failed.text}`;
         continue;
       }

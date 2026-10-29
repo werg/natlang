@@ -58,6 +58,10 @@ export type NativeProtocolFailure = { schema: 'natlang.native-marker-failure/1';
 
 export type ModelTurn = { protocol_failure?: NativeProtocolFailure; calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number; prompt_tokens?: number;
+  /** Prompt tokens the server reused from its cache instead of prefilling them (llama.cpp `cache_n`, OpenAI cached tokens). */
+  cached_tokens?: number;
+  /** Server time spent prefilling the prompt and generating the reply, when it reports them (llama.cpp `timings`). */
+  prefill_ms?: number; generation_ms?: number;
   /** Native XML was parsed from this actual assistant content, never fabricated provider tool_calls. */
   tool_parse?: { schema: 'natlang.native-xml-tool-parse/1'; source: 'assistant-content'; schema_custody: 'response_tools'; policy_sha256: string; wire_tool_aliases: Record<string,string> };
   /** Exact provider-context provenance, when an adapter supplies it. */

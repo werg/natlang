@@ -31,14 +31,19 @@ introduction in nine chapters; its source is in [`website/`](website/).
 
 ```sh
 scripts/setup_dev.sh --node-only        # install and build ts-host; installs the `natlang` command
-natlang doctor
-natlang run applications/evidence       # a citation-checked question-answering console
-natlang check examples/triage           # type- and policy-check a project
+natlang setup --yes                     # the llama.cpp runtime and the default model (stock LFM3 1.7B, 1.8 GB)
+natlang run examples/triage             # triage the bundled support tickets
+natlang dashboard --open                # the local dashboard: models, programs, live runs, traces
+natlang build examples/triage --warm    # compile with its model lock and a pre-warmed, traced warm-up run
+natlang runtime build                   # optional: compile natlang's llama.cpp fork (scoring, guidance, native states)
 ```
 
 `natlang setup` prepares the selected model backend. The CLI can use its managed
-local model, an OpenAI-compatible endpoint, or a Pi provider with an API key or
-supported subscription login. See
+local model (by default the stock `LiquidAI/LFM3-1.7B`), an OpenAI-compatible endpoint,
+or a Pi provider with an API key or supported subscription login; the dashboard's
+Models page configures all three. While natural-language calls run, `natlang run`
+shows which function is working, its turn and token counts; a call that fails is
+always reported. See
 [model configuration](NATIVE_PACKAGES.md#authority-and-the-model-runtime)
 for profiles, overrides, and provider options; see
 [development setup](DEV_SETUP.md) for the browser build and tests.
@@ -47,6 +52,7 @@ for profiles, overrides, and provider options; see
 
 | Guide | Contents |
 |---|---|
+| [Running programs](docs/RUNNING_PROGRAMS.md) | The default model, profiles, progress, compiled programs with warm starts, the dashboard |
 | [Language specification](spec/SPEC.md) | Functions, callable folders, captures, iteration, services, the model surface |
 | [Skills](skills/README.md) | Authoring and integration guidance for coding agents |
 | [Native packages](NATIVE_PACKAGES.md) | `@natlang/node`, `@natlang/browser`, the CLI, and distribution packages |

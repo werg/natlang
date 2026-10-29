@@ -2,13 +2,13 @@
 import type { LlamaRuntimeRelease } from './model/llama-runtime.js';
 
 export const LLAMA_RUNTIME_RELEASE = Object.freeze({
-  "version": "0.5.0",
-  "build": 11146,
-  "commit": "7fe450e19",
+  "version": "0.8.0",
+  "build": 11960,
+  "commit": "8642541b2",
   "compatible": {
-    "minimumVersion": "0.5.0",
-    "maximumVersionExclusive": "0.6.0",
-    "minimumBuild": 11146
+    "minimumVersion": "0.8.0",
+    "maximumVersionExclusive": "0.9.0",
+    "minimumBuild": 11960
   },
   "artifacts": [
     {
@@ -17,9 +17,9 @@ export const LLAMA_RUNTIME_RELEASE = Object.freeze({
       "arch": "x64",
       "backend": "cpu",
       "archive": "tar.gz",
-      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11146/llama-b11146-bin-ubuntu-x64.tar.gz",
-      "bytes": 16998357,
-      "sha256": "c150306eb16b5ab696f76a8bdf810c35fd98a24e82158742e6fa28f420ff8410"
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11960/llama-b11960-bin-ubuntu-x64.tar.gz",
+      "bytes": 22686210,
+      "sha256": "31cc3a6bc638ac6c48dc4b1b74888f1eaadf3d14227c1e5f67daf9a49541d97a"
     },
     {
       "key": "linux-arm64-cpu",
@@ -27,9 +27,9 @@ export const LLAMA_RUNTIME_RELEASE = Object.freeze({
       "arch": "arm64",
       "backend": "cpu",
       "archive": "tar.gz",
-      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11146/llama-b11146-bin-ubuntu-arm64.tar.gz",
-      "bytes": 13598346,
-      "sha256": "4aeda6fe68831547e49b7fa87607383ca5352b3d72ca5f70d52ed265f58c131f"
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11960/llama-b11960-bin-ubuntu-arm64.tar.gz",
+      "bytes": 18411465,
+      "sha256": "0065ecfbffe8a790bb0d28059a3320cdc8f723b7f3f248cdc8bfc04790927715"
     },
     {
       "key": "darwin-arm64-metal",
@@ -37,9 +37,9 @@ export const LLAMA_RUNTIME_RELEASE = Object.freeze({
       "arch": "arm64",
       "backend": "metal",
       "archive": "tar.gz",
-      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11146/llama-b11146-bin-macos-arm64.tar.gz",
-      "bytes": 11189714,
-      "sha256": "1ad3f9eff80edb9dbef4259ad564d1720612ef7eea48fa4afed0e54f5f3d5711"
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11960/llama-b11960-bin-macos-arm64.tar.gz",
+      "bytes": 16465074,
+      "sha256": "58e5a5e1d7c2bf66cedd9c29e0323f3e570660a70a1e2156d32eed08f4cc1e3c"
     },
     {
       "key": "darwin-x64-metal",
@@ -47,9 +47,9 @@ export const LLAMA_RUNTIME_RELEASE = Object.freeze({
       "arch": "x64",
       "backend": "metal",
       "archive": "tar.gz",
-      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11146/llama-b11146-bin-macos-x64.tar.gz",
-      "bytes": 11237237,
-      "sha256": "305f0e3a17d2c01eb205cd0a62128357f1ec3b55329cb084d94e5ec0115d7a3b"
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11960/llama-b11960-bin-macos-x64.tar.gz",
+      "bytes": 12205764,
+      "sha256": "d1e6c9ddcaed9a3b1bb8f3d946bdb3481c7b919357a4029dcb747762397f1da5"
     },
     {
       "key": "win32-x64-cpu",
@@ -57,9 +57,9 @@ export const LLAMA_RUNTIME_RELEASE = Object.freeze({
       "arch": "x64",
       "backend": "cpu",
       "archive": "zip",
-      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11146/llama-b11146-bin-win-cpu-x64.zip",
-      "bytes": 18560055,
-      "sha256": "14cf1303ca9ac3abd94816850532f9f9a69ac66fbaca3776fc6f9061c2fac1d1"
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11960/llama-b11960-bin-win-cpu-x64.zip",
+      "bytes": 24407745,
+      "sha256": "73f962f82850d244db47eaacb9d913637027b82399124324298576d58c5f4287"
     },
     {
       "key": "win32-arm64-cpu",
@@ -67,9 +67,9 @@ export const LLAMA_RUNTIME_RELEASE = Object.freeze({
       "arch": "arm64",
       "backend": "cpu",
       "archive": "zip",
-      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11146/llama-b11146-bin-win-cpu-arm64.zip",
-      "bytes": 12034624,
-      "sha256": "1727d241f3bf6d27360e984e851cf013928fd655bf89f8628e70da027f377b7d"
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11960/llama-b11960-bin-win-cpu-arm64.zip",
+      "bytes": 13018162,
+      "sha256": "77349357c38da235bb0eed37bcc5ecf3efef21bb5dc42c2269589c0e71cfa00f"
     }
   ]
 } satisfies LlamaRuntimeRelease);

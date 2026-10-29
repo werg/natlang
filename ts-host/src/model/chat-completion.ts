@@ -249,8 +249,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     for (const message of messages) for (const call of message.tool_calls ?? [])
       if (call.function?.name && forward[call.function.name]) call.function.name = forward[call.function.name];
     let attemptMessages: unknown[] = messages, retries = 0;
-    let promptTokens = 0, completionTokens = 0, cachedTokens = 0;
-    let hasPrompt = false, hasCompletion = false, hasCached = false;
+    let promptTokens = 0, completionTokens = 0, cachedTokens = 0, prefillMs = 0, generationMs = 0;
+    let hasPrompt = false, hasCompletion = false, hasCached = false, hasTimings = false;
     const started = Date.now();
     const counts = () => ({ ...(hasCompletion ? { completion_tokens: completionTokens } : {}),
       ...(hasPrompt ? { prompt_tokens: promptTokens } : {}) });
@@ -259,7 +259,9 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       options.onTurn?.({ durationMs: Date.now() - started, promptTokens: hasPrompt ? promptTokens : null,
         completionTokens: hasCompletion ? completionTokens : null, cachedTokens: hasCached ? cachedTokens : null, retries,
         ...(scheduling ? { scheduling } : {}) });
-      return scheduling ? { ...turn, scheduling } : turn;
+      const counted = { ...turn, ...(hasCached ? { cached_tokens: cachedTokens } : {}),
+        ...(hasTimings ? { prefill_ms: Math.round(prefillMs), generation_ms: Math.round(generationMs) } : {}) };
+      return scheduling ? { ...counted, scheduling } : counted;
     };
     while (true) {
       if (signal?.aborted) throw new Error('model turn aborted');
@@ -314,6 +316,10 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       if (typeof usage?.completion_tokens === 'number') { completionTokens += usage.completion_tokens; hasCompletion = true; }
       const cached = (usage?.prompt_tokens_details as Json | undefined)?.cached_tokens ?? (body.timings as Json | undefined)?.cache_n;
       if (typeof cached === 'number') { cachedTokens += cached; hasCached = true; }
+      const timings = body.timings as Json | undefined;
+      if (typeof timings?.prompt_ms === 'number' && typeof timings.predicted_ms === 'number') {
+        prefillMs += timings.prompt_ms; generationMs += timings.predicted_ms; hasTimings = true;
+      }
       const truncated = choice?.finish_reason === 'length';
       const protocolFailure=nativeProtocolFailure(body);
       if(protocolFailure)return finish({calls:[],text:contentText(message?.content),
