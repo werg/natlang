@@ -316,6 +316,9 @@ test('server slots follow the memory formula unless configured; the default KV b
   // 16K context at 64 KiB/token is 1 GiB per slot: about 4 slots under the cap, however much memory is free
   const wide = planServerSlots({ ...base, defaultContextTokens: 16384, availableMemoryBytes: 512 * GiB });
   assert.equal(wide.slots, 4);
+  // a stock model's measured cache size (LFM3 1.7B: 12,800 bytes per token) fits more slots in the same budget
+  const lfm3 = planServerSlots({ ...base, defaultContextTokens: 32768, defaultKvBytesPerToken: 12800, availableMemoryBytes: 8 * GiB });
+  assert.equal(lfm3.kvBytesPerToken, 12800); assert.equal(lfm3.slots, 8);
   assert.match(wide.formula, /4294967296/);
   // explicit settings win and are not capped
   assert.equal(planServerSlots({ ...base, availableMemoryBytes: 64 * GiB, local: { parallel: 3, contextTokens: 4096 } }).slots, 3);

@@ -91,7 +91,10 @@ export function localModelPrerequisites(environment: NodeJS.ProcessEnv = process
 export function localSlotPlan(local: ModelProfile['local'], environment: NodeJS.ProcessEnv = process.env,
   modelPath: string | null = localModelPrerequisites(environment).modelPath, release: LocalModelRelease = DEFAULT_LOCAL_MODEL): SlotPlan {
   const modelBytes = modelPath && existsSync(modelPath) ? statSync(modelPath).size : release.bytes;
-  return planServerSlots({ local, modelBytes, defaultContextTokens: release.contextTokens, environment });
+  // A configured GGUF is another model: only the stock file's measured cache size applies to it.
+  const stock = !environment.NATLANG_MODEL_PATH;
+  return planServerSlots({ local, modelBytes, defaultContextTokens: release.contextTokens, environment,
+    ...(stock ? { defaultKvBytesPerToken: release.kvBytesPerToken } : {}) });
 }
 
 async function fileHash(path: string): Promise<string> {

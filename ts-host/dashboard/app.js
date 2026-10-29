@@ -126,7 +126,7 @@ async function startJob(spec) {
 function liveModel() {
   const calls = new Map(), roots = [];
   const turnOf = (call, number) => { let turn = call.turns.get(number);
-    if (!turn) call.turns.set(number, turn = { number, reasoning: '', text: '', tools: [], failures: [], prompt: 0, completion: 0, working: false }); return turn; };
+    if (!turn) call.turns.set(number, turn = { number, reasoning: '', text: '', tools: [], results: [], failures: [], prompt: 0, completion: 0, working: false }); return turn; };
   return { calls, roots, add(event) {
     let call = calls.get(event.callId);
     if (!call && event.callId) {
@@ -150,13 +150,18 @@ function liveModel() {
       if (data.kind === 'model_request' && data.phase !== 'start') { const turn = turnOf(call, data.turn); turn.working = false;
         turn.prompt = data.prompt_tokens ?? 0; turn.cached = data.cached_tokens ?? 0; turn.completion = data.completion_tokens ?? 0; turn.ms = data.duration_ms; if (data.error) turn.failures.push(data.error); }
       if (data.kind === 'action' && call.lastTurn) { const turn = turnOf(call, call.lastTurn);
-        if (!turn.tools.length) turn.tools.push({ name: data.name, arguments: JSON.stringify(data.arguments ?? {}) }); }
+        if (turn.tools.length <= turn.results.length) turn.tools.push({ name: data.name, arguments: JSON.stringify(data.arguments ?? {}) });
+        if (typeof data.result_text === 'string' && data.result_text) turn.results.push(data.result_text); }
+      // A recorded trace's proposals carry the reply's text and tool calls (stored traces keep no streamed deltas).
+      if (data.kind === 'proposal' && data.phase === 'generated' && data.turn) { const turn = turnOf(call, data.turn);
+        if (!turn.text && data.text) turn.text = data.text;
+        if (!turn.tools.length) for (const [name, args] of data.calls ?? []) turn.tools.push({ name, arguments: JSON.stringify(args ?? {}) }); }
       if (data.kind === 'scope_failure' && call.lastTurn) turnOf(call, call.lastTurn).failures.push(data.message);
       if (data.kind === 'model_incomplete') call.detail = `model incomplete: ${data.reason}`;
     }
   } };
 }
-function renderCall(call) {
+function renderCall(call, all = false) {
   const turns = [...call.turns.values()].sort((a, b) => a.number - b.number);
   const totals = turns.reduce((sum, turn) => [sum[0] + turn.prompt, sum[1] + turn.completion], [0, 0]);
   const kind = call.status === 'done' ? 'done' : call.status === 'running' ? '' : 'failed';
@@ -165,13 +170,15 @@ function renderCall(call) {
     h('div', { class: 'meta' }, `${turns.length} turn${turns.length === 1 ? '' : 's'} · ${tokens(totals[0])} prompt + ${tokens(totals[1])} generated tokens`,
       call.ended && call.started ? ` · ${ms(call.ended - call.started)}` : ''),
     call.detail && call.status !== 'done' ? h('div', { class: 'turn' }, h('div', { class: 'fail' }, call.detail)) : null,
-    turns.slice(-4).map(turn => h('div', { class: 'turn' },
+    (all ? turns : turns.slice(-4)).map(turn => h('div', { class: 'turn' },
       h('div', { class: 'meta' }, `turn ${turn.number}${turn.working ? ' · model working…' : turn.ms ? ` · ${ms(turn.ms)} · ${tokens(turn.prompt)} prompt (${tokens(turn.cached ?? 0)} cached) + ${tokens(turn.completion)} generated` : ''}`),
       turn.reasoning ? h('div', { class: 'reason' }, turn.reasoning.slice(-1500)) : null,
       turn.text ? h('div', {}, turn.text.slice(-1500)) : null,
-      turn.tools.map(tool => h('div', { class: 'code' }, toolText(tool))),
-      turn.failures.map(text => h('div', { class: 'fail' }, short(text, 600))))),
-    call.children.length ? h('div', { class: 'children' }, call.children.map(renderCall)) : null);
+      turn.tools.map((tool, index) => [h('div', { class: 'code' }, toolText(tool)),
+        turn.results[index] ? h('div', { class: 'result' }, short(turn.results[index], all ? 2400 : 600)) : null]),
+      turn.failures.filter(text => !turn.results.some(result => result.includes(String(text).slice(0, 80))))
+        .map(text => h('div', { class: 'fail' }, short(text, 600))))),
+    call.children.length ? h('div', { class: 'children' }, call.children.map(child => renderCall(child, all))) : null);
 }
 function toolText(tool) {
   try { const args = JSON.parse(tool.arguments || '{}');
@@ -182,9 +189,12 @@ function toolText(tool) {
 async function runs(id, target) {
   const jobs = await get('/api/jobs');
   const selected = id || jobs[0]?.id;
-  const list = h('div', { class: 'list' }, jobs.length ? jobs.map(job => h('button', { class: `item${job.id === selected ? ' selected' : ''}`, onclick: () => go(`runs-${job.id}`) },
+  const list = h('div', { class: 'list scroll' });
+  const drawList = rows => fill(list, rows.length ? rows.map(job => h('button', { class: `item${job.id === selected ? ' selected' : ''}`, onclick: () => go(`runs-${job.id}`) },
     h('div', { class: 'title' }, h('span', { class: 'mono' }, short(job.title, 46)), pill(job.status)),
-    h('div', { class: 'desc' }, `${job.kind} · ${ago(job.startedAt)}`))) : h('div', { class: 'empty' }, 'No runs yet.'));
+    h('div', { class: 'desc' }, `${job.kind} · ${ago(job.startedAt)}`))) : h('div', { class: 'empty' }, 'No runs yet. Start one from Programs or the Playground.'));
+  drawList(jobs);
+  every(attempt(async () => drawList(await get('/api/jobs'))), 4000);
   const detail = h('div', { class: 'stack' });
   fill(target, header('Runs', 'Every program run, call, ask, build and tuning job started from here, with its live calls and output.'),
     h('div', { class: 'split' }, h('section', { class: 'panel', style: 'padding: 6px 10px' }, list), detail));
@@ -371,6 +381,15 @@ async function traceDetail(id, container) {
     toast(result.message);
   });
   const events = h('div', {});
+  // The recorded turns, drawn as the live view draws a running call.
+  const execution = h('div', { class: 'calltree' }, h('div', { class: 'muted small' }, 'Loading the turns…'));
+  get(`/api/traces/${encodeURIComponent(id)}/events`).then(list => {
+    const model = liveModel(), call = { callId: record.call_id, name: record.definition.name, parentCallId: null };
+    model.add({ type: 'call_start', ...call, at: Date.parse(record.started_at) });
+    for (const event of list) if (event.kind !== 'state' && event.kind !== 'reduction') model.add({ type: 'trace', ...call, event });
+    model.add({ type: 'call_end', ...call, outcome: record.outcome, detail: record.detail ?? '', at: Date.parse(record.started_at) + (cost.wall_ms ?? 0) });
+    fill(execution, model.roots.map(root => renderCall(root, true)));
+  }, error => fill(execution, h('div', { class: 'muted small' }, error.message)));
   fill(container, h('section', { class: 'panel' },
     h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, record.definition.name), pill(record.outcome)),
     record.detail && record.outcome !== 'done' ? h('div', { class: 'callout' }, record.detail) : null,
@@ -380,7 +399,7 @@ async function traceDetail(id, container) {
       ['Started', new Date(record.started_at).toLocaleString()], record.parent_call_id ? ['Caller', h('a', { href: `#traces-call-${encodeURIComponent(record.parent_call_id)}` }, record.parent_call_id)] : null]),
     h('h3', {}, 'Inputs'), h('pre', { class: 'block' }, pretty(record.inputs)),
     h('h3', {}, 'Output'), h('pre', { class: 'block' }, pretty(record.output)),
-    record.approach?.evals?.length ? [h('h3', {}, 'Evals'), record.approach.evals.map(code => h('pre', { class: 'block' }, code))] : null,
+    h('h3', {}, 'Execution'), execution,
     record.effects?.length ? [h('h3', {}, 'Service calls'), h('pre', { class: 'block' }, record.effects.map(effect => `${effect.service}.${effect.method}(${short(effect.args, 200)}) ${effect.error ? `failed: ${effect.error}` : `→ ${short(effect.result, 200)}`}`).join('\n'))] : null,
     value.children.length ? [h('h3', {}, 'Calls it made'), h('div', { class: 'list' }, value.children.map(child => h('button', { class: 'item', onclick: () => traceDetail(child.call_id, container) },
       h('div', { class: 'title' }, h('span', {}, child.definition_name), pill(child.outcome)))))] : null,
@@ -517,14 +536,23 @@ async function models(_arg, target) {
 
 // ---- system ---------------------------------------------------------------------------------------------------------
 async function system(_arg, target) {
-  const status = await get('/api/status');
+  const [status, warm] = await Promise.all([get('/api/status'), get('/api/warm')]);
   const runtime = status.runtime;
+  const warmPanel = h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Warm prompt openings'),
+      warm.length ? h('button', { onclick: attempt(async () => { await api('DELETE', '/api/warm'); toast('Cleared; the next calls prefill again'); route(); }) }, 'Clear') : null),
+    h('div', { class: 'small muted' }, 'Every call starts with the same long system prompt and tools. The managed server prefills each distinct opening once, saves it here and restores it into every slot, so later calls and runs skip that prefill.'),
+    warm.length ? h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'State'), h('th', { class: 'num' }, 'Tokens'), h('th', { class: 'num' }, 'Size'), h('th', {}, 'Model · build'), h('th', {}, 'Last used'))),
+      h('tbody', {}, warm.map(item => h('tr', {}, h('td', { class: 'mono small' }, item.file.slice(0, 16)), h('td', { class: 'num' }, item.tokens ?? '–'),
+        h('td', { class: 'num' }, bytes(item.bytes)), h('td', { class: 'mono small' }, `${item.model ?? '?'} · b${item.build ?? '?'}`), h('td', {}, ago(item.usedAt))))))) :
+      h('div', { class: 'muted' }, 'None saved yet; the first call of each kind saves one.'));
   const mode = h('select', { id: 'spec-mode', onchange: attempt(async event => { await api('PUT', '/api/store/settings', { specialization: event.target.value }); toast('Saved'); }) },
     ['off', 'shadow', 'on'].map(value => h('option', { value, selected: status.calls?.settings.specialization === value }, value)));
   fill(target, header('System', 'The model runtime, the call record store and where natlang keeps its state.'),
     h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'llama.cpp runtime'),
       h('button', { class: 'primary', onclick: () => startJob({ kind: 'setup' }) }, runtime.selected ? 'Check and download the default model' : 'Install runtime and default model')),
       kv([['Selected', runtime.selected ? `${runtime.selected.source} · ${runtime.selected.version} (build ${runtime.selected.build})` : 'none'],
+        runtime.selected ? ['Build', runtime.selected.fork ? 'natlang fork: decision scoring, guided generation and native states' :
+          'upstream llama.cpp: decisions fall back to model turns, no guided generation or tuned soft states'] : null,
         ['Path', runtime.selected?.path], ['Pinned', `${runtime.recommended.version} (build ${runtime.recommended.build})`],
         runtime.selected?.reason ? ['Note', runtime.selected.reason] : null]),
       runtime.candidates.length ? h('div', { class: 'small muted' }, runtime.candidates.map(item => `${item.source}: ${item.path}${item.compatible ? '' : ` (${item.reason})`}`).join('\n')) : null),
@@ -533,6 +561,7 @@ async function system(_arg, target) {
       status.calls ? kv([['Store', status.calls.root], ['Calls', status.calls.calls], ['Size', bytes(status.calls.bytes)],
         ['Specialization', h('span', {}, mode, h('span', { class: 'small muted' }, ' compiled crisp cases: off, shadow (checked, not served) or on'))]]) :
         h('div', { class: 'muted' }, 'Recording is off (NATLANG_CALL_STORE=off).')),
+    warmPanel,
     h('section', { class: 'panel' }, h('h2', {}, 'Paths'), kv([['Project root', status.root], ['Model profiles', status.configPath], ['natlang', `${status.version} on Node ${status.node}`]])));
 }
 

@@ -119,3 +119,4 @@ pre.console { background: var(--sunk); border-radius: 6px; padding: 10px 12px; m
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 main > .view { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .list.scroll { max-height: calc(100vh - 210px); overflow-y: auto; margin-top: 8px; }
+.turn .result { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; color: var(--muted); border-left: 2px solid var(--line); padding: 2px 0 2px 8px; overflow-wrap: anywhere; max-height: 14em; overflow: auto; }

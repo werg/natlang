@@ -6,7 +6,7 @@
  * printed at startup (a cookie set by the startup URL and a header), so other web pages cannot drive it.
  */
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { cpus, freemem, totalmem } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
@@ -17,10 +17,10 @@ import { programFunctions, readProgramManifest } from '../cli/build-lock.js';
 import { currentRelease } from '../adaptation/weights/release.js';
 import { resolveModelChoice, type ModelProfile } from '../model/config.js';
 import { DEFAULT_LOCAL_MODEL, STOCK_MODELS, stockModel, type LocalModelRelease } from '../model-catalog.js';
-import { ensureStockModel, stockModelPath } from '../model/local-server.js';
+import { ensureStockModel, stockModelPath, supportsNativeStates } from '../model/local-server.js';
 import { discoverLlamaRuntime, LLAMA_RUNTIME_RELEASE } from '../model/llama-runtime.js';
 import { discoverLocalApplications } from '../package/discover.js';
-import { defaultNatlangConfigDirectory, defaultNatlangStateDirectory } from '../package/store.js';
+import { defaultNatlangCacheDirectory, defaultNatlangConfigDirectory, defaultNatlangStateDirectory } from '../package/store.js';
 import { readBuildLock } from '../package/warm.js';
 import { JobSupervisor, type JobSpec } from './jobs.js';
 
@@ -91,11 +91,22 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
         ...(choice.kind === 'external' ? { endpoint: choice.endpoint } : {}), ...(choice.kind === 'pi-provider' ? { provider: choice.provider } : {}) };
     } catch (error) { model = { profile: name, error: (error as Error).message }; }
     return { version: options.version, node: process.version, root, configPath, model, calls,
-      runtime: { selected: runtime.selected, recommended: { version: LLAMA_RUNTIME_RELEASE.version, build: LLAMA_RUNTIME_RELEASE.build },
+      runtime: { selected: runtime.selected ? { ...runtime.selected, fork: supportsNativeStates(runtime.selected.path) } : null, recommended: { version: LLAMA_RUNTIME_RELEASE.version, build: LLAMA_RUNTIME_RELEASE.build },
         candidates: runtime.candidates.map(item => ({ path: item.path, source: item.source, compatible: item.compatible, reason: item.reason })) },
       machine: { cpus: cpus().length, cpu: cpus()[0]?.model ?? null, memory: totalmem(), free: freemem(), platform: `${process.platform}-${process.arch}` },
       jobs: { running: jobs.running(), total: jobs.list().length } };
   });
+
+  // Warm prompt openings the managed server saved (package/warm.ts).
+  const warmDirectory = join(defaultNatlangCacheDirectory(environment), 'warm-prefixes');
+  route('GET', '/api/warm', () => existsSync(warmDirectory) ? readdirSync(warmDirectory).filter(name => name.endsWith('.slot')).map(name => {
+    const stat = statSync(join(warmDirectory, name));
+    let meta: { tokens?: number; chars?: number } = {};
+    try { meta = JSON.parse(readFileSync(join(warmDirectory, `${name}.json`), 'utf8')) as typeof meta; } catch { /* no sidecar */ }
+    const [, model, build] = /^[0-9a-f]{16}-([0-9a-f]{12})-b(\w+)\.slot$/.exec(name) ?? [];
+    return { file: name, bytes: stat.size, usedAt: stat.mtime.toISOString(), tokens: meta.tokens ?? null, model: model ?? null, build: build ?? null };
+  }).sort((a, b) => b.usedAt.localeCompare(a.usedAt)) : []);
+  route('DELETE', '/api/warm', () => { rmSync(warmDirectory, { recursive: true, force: true }); return { ok: true }; });
 
   // Model configuration.
   route('GET', '/api/config', async () => {
