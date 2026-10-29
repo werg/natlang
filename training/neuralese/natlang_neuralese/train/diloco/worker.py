@@ -47,6 +47,41 @@ GATEWAY_TOKEN_ENV = "NATLANG_DILOCO_GATEWAY_TOKEN"
 GATEWAY_SECRET = "diloco-gateway"
 WORKER_ID_ENV = "NATLANG_DILOCO_WORKER_ID"
 HEARTBEAT_SECONDS = 10.0
+# A gateway/coordinator outage (restart, replica rotation, provider 502/503/504, timeouts) is waited out, never fatal.
+TRANSIENT_HTTP = frozenset({502, 503, 504})
+TRANSIENT_WAIT_SECONDS = 6 * 3600.0
+
+
+def transient(exc: BaseException) -> bool:
+    """An error that says the coordinator was unreachable, not that it refused or rejected the request."""
+    if isinstance(exc, RemoteError):
+        return exc.status in TRANSIENT_HTTP
+    if isinstance(exc, (urllib.error.URLError, ConnectionError, TimeoutError, http.client.HTTPException)):
+        return True
+    return type(exc) is OSError and str(exc).startswith(("Incomplete HTTP response", "Incomplete fragment download"))
+
+
+def patient(call, *, what: str, wait_seconds: float | None = None, sleep=None):
+    """Retry an idempotent coordinator call through transient unavailability with capped exponential backoff.
+
+    Used where no optimizer update can proceed without the answer (startup, lease, contract and transition records);
+    calls inside training keep failing fast and count toward ``max_offline_steps`` instead.
+    """
+    deadline = time.monotonic() + (TRANSIENT_WAIT_SECONDS if wait_seconds is None else wait_seconds)
+    sleep = sleep or time.sleep
+    delay, attempts = 1.0, 0
+    while True:
+        try:
+            return call()
+        except Exception as exc:
+            if not transient(exc) or time.monotonic() >= deadline:
+                raise
+            attempts += 1
+            if attempts == 1 or attempts % 10 == 0:
+                print(json.dumps({"event": "diloco_coordinator_unavailable", "call": what, "attempt": attempts,
+                                  "error": f"{type(exc).__name__}: {exc}"[:300]}), flush=True)
+            sleep(delay)
+            delay = min(60.0, delay * 2)
 
 
 @dataclass(frozen=True)
@@ -315,12 +350,12 @@ class DilocoLearner:
         self.worker = settings.resolved_worker_id
         self.shard = (self.worker, settings.workers)
         self.transport = transport or transport_from_env(settings)
-        self.manifest = self.transport.json("GET", "/v1/manifest")
+        self.manifest = patient(lambda: self.transport.json("GET", "/v1/manifest"), what="manifest")
         from .role_contract import SCHEMA as HETERO_SCHEMA, select as select_role_contract
         self.contract_sha256 = None
         self.contract_history = []
         if self.manifest['identity'].get('schema') == HETERO_SCHEMA:
-            authority=self.transport.json('GET',f'/v1/role-contracts?worker={self.worker}')
+            authority=patient(lambda:self.transport.json('GET',f'/v1/role-contracts?worker={self.worker}'),what='role-contracts')
             self.contract_sha256 = select_role_contract(authority, self.worker, identity)
         mismatches = [
             label
@@ -350,6 +385,11 @@ class DilocoLearner:
         self.pending: dict[int, dict] = {}
         self.awaiting_global: set[int] = set()
         self.downloads: dict[int, Future] = {}
+        # Downloads in flight or completed-but-uninstalled are bounded: each holds one decoded FP32 fragment.
+        self.download_limit = settings.io_workers
+        self.peak_downloads = 0
+        # Fragments whose stale update was restored locally and must take the newer global before requeueing.
+        self.rebase: set[int] = set()
         self.heartbeat_seconds = min(settings.heartbeat_seconds, self.manifest["lease_seconds"] / 4)
         self.heartbeat_thread: threading.Thread | None = None
         self.stopping = threading.Event()
@@ -372,6 +412,9 @@ class DilocoLearner:
         status = self.transport.json("POST", "/v1/lease", {"worker": self.worker, "session": self.session, **({"contract_sha256":self.contract_sha256} if self.contract_sha256 is not None else {})})
         self._update_status(status)
         return status
+
+    def _lease_patiently(self) -> dict:
+        return patient(self._lease, what="lease")
 
     def _with_lease(self, call: Any) -> Any:
         """Run a call; if our own lease ran out meanwhile, lease again and retry once."""
@@ -427,15 +470,15 @@ class DilocoLearner:
         fragment still at version 0 is the coordinator's seed, which must equal
         the local parent exactly.
         """
-        self._adopt_ledger(self._lease())
+        self._adopt_ledger(self._lease_patiently())
         self._start_heartbeat()
         for index in range(len(self.fragments)):
-            update = self._fetch(index, -1)
+            update = patient(lambda: self._fetch(index, -1), what="fetch")
             if update is None:
                 raise ValueError(f"DiLoCo coordinator omitted fragment {index}")
             seed = update[1]
             if update[0] != 0:
-                path, _ = self.transport.fetch_file(f"/v1/seed-fragments/{index}", self.outbox)
+                path, _ = patient(lambda: self.transport.fetch_file(f"/v1/seed-fragments/{index}", self.outbox), what="seed-fetch")
                 if path is None:
                     raise ValueError(f"DiLoCo coordinator omitted seed fragment {index}")
                 try:
@@ -467,7 +510,7 @@ class DilocoLearner:
         local steps have accrued.  The caller must preserve and authenticate the
         complete old checkpoint and record its source transition separately.
         """
-        status = self._lease()
+        status = self._lease_patiently()
         if (status['merges'] != 0 or any(status['versions']) or
                 any(status['sequences']) or any(status['pending'].values()) or
                 status.get('completion')):
@@ -507,9 +550,9 @@ class DilocoLearner:
                        'reanchor_checkpoint_sha256': checkpoint_sha256, 'reanchor_session': self.session,
                        'reanchor_source_hash': source_hash, 'reanchor_held_sha256': held_sha256}
         while not stop_requested():
-            status = self._with_lease(lambda: self.transport.json('POST', '/v1/progress', {
+            status = patient(lambda: self._with_lease(lambda: self.transport.json('POST', '/v1/progress', {
                 'worker': self.worker, 'session': self.session,
-                'steps': self.local_steps, 'tokens': self.local_tokens, 'metrics': self.report}))
+                'steps': self.local_steps, 'tokens': self.local_tokens, 'metrics': self.report})), what='progress')
             self._update_status(status)
             released = status.get('reanchor_release') or {}
             if (released.get('fingerprint') == marker and released.get('source_hash') == source_hash
@@ -541,7 +584,7 @@ class DilocoLearner:
         self.local_tokens = int(value["local_tokens"])
         self.pending = {int(k): dict(v, future=None) for k, v in value["pending"].items()}
         self.awaiting_global = set(value.get("awaiting_global", []))
-        ledger = self._lease()
+        ledger = self._lease_patiently()
         self._start_heartbeat()
         for index, entry in list(self.pending.items()):
             filename = self.outbox / f"{index:05d}-{entry['sequence']:09d}.safetensors"
@@ -611,19 +654,25 @@ class DilocoLearner:
                      for index in range(start, min(start + width, len(self.fragments)))]
             try:
                 for index, future in batch:
-                    self._install(index, future.result())
+                    try:
+                        update = future.result()
+                    except Exception as exc:
+                        if not transient(exc):
+                            raise
+                        update = patient(lambda: self._fetch(index, self.versions[index]), what="fetch")
+                    self._install(index, update)
             finally:
                 for _, future in batch:
                     future.cancel()
 
     def _upload(self, index: int, entry: dict) -> dict:
         file = self._write_outbox(entry)
-        _, response, _ = self._with_lease(
-            lambda: self.transport.request(
-                "POST",
-                f"/v1/updates/{index}",
-                file=file,
-                headers={
+        def send():
+            # Stream the saved window file rather than reading a second full copy into memory per upload.
+            size = file.stat().st_size
+            with file.open("rb") as handle:
+                return self.transport.request("POST", f"/v1/updates/{index}", file=_Window(handle, size), headers={
+                    "Content-Length": str(size),
                     "X-Worker": str(self.worker),
                     "X-Session": self.session,
                     "X-Sequence": str(entry["sequence"]),
@@ -631,9 +680,8 @@ class DilocoLearner:
                     "X-Steps": str(entry["steps"]),
                     "X-Tokens": str(entry["tokens"]),
                     "Content-Type": "application/octet-stream",
-                },
-            )
-        )
+                })
+        _, response, _ = self._with_lease(send)
         return response
 
     def _send_async(self, index: int) -> None:
@@ -655,7 +703,8 @@ class DilocoLearner:
         )
 
     def _queue(self, index: int) -> None:
-        if index in self.pending or index in self.awaiting_global or index in self.downloads or self.versions[index] < 0:
+        if (index in self.pending or index in self.awaiting_global or index in self.downloads or index in self.rebase
+                or self.versions[index] < 0):
             return
         if not self._flushable(index):
             return
@@ -703,7 +752,8 @@ class DilocoLearner:
                 self.awaiting_global.add(index)
                 self.offline_steps = 0
                 # Our upload completed a quorum: fetch the merge now, not at the next heartbeat.
-                if isinstance(response, dict) and int(response.get("version", -1)) > self.versions[index] and index not in self.downloads:
+                if (isinstance(response, dict) and int(response.get("version", -1)) > self.versions[index]
+                        and index not in self.downloads and len(self.downloads) < self.download_limit):
                     self.downloads[index] = self.io.submit(self._fetch, index, self.versions[index])
             except RemoteError as exc:
                 if exc.status == 409 and exc.detail.get("stale"):
@@ -722,7 +772,7 @@ class DilocoLearner:
                     self.sequences[index] -= 1
                     Path(entry["filename"]).unlink(missing_ok=True)
                     del self.pending[index]
-                    self.downloads[index] = self.io.submit(self._fetch, index, -1)
+                    self.rebase.add(index)
                 elif 400 <= exc.status < 500 and exc.status not in (408, 409, 425, 429) and entry.get("attempts", 0) >= 3:
                     raise RuntimeError("DiLoCo update was rejected; contribution remains undelivered") from exc
                 else:
@@ -749,10 +799,22 @@ class DilocoLearner:
                 errors += 1
                 self.last_error = str(exc)
             del self.downloads[index]
+        for index in sorted(self.rebase):
+            if len(self.downloads) >= self.download_limit:
+                break
+            self.rebase.discard(index)
+            self.downloads[index] = self.io.submit(self._fetch, index, -1)
         if self.remote_versions is not None:
+            # Each decoded fragment is a full FP32 copy held until the training thread installs it. After an outage
+            # every fragment is behind at once; submitting all of them let completed results accumulate gigabytes
+            # between two updates (RTX learners OOM-killed in the 2026-10-29 catch-ups). Keep at most one I/O window
+            # in flight or awaiting install; the rest follow on later updates in the same version order.
             for index, remote in enumerate(self.remote_versions):
-                if remote > self.versions[index] and index not in self.downloads:
+                if len(self.downloads) >= self.download_limit:
+                    break
+                if remote > self.versions[index] and index not in self.downloads and index not in self.rebase:
                     self.downloads[index] = self.io.submit(self._fetch, index, self.versions[index])
+        self.peak_downloads = max(self.peak_downloads, len(self.downloads))
         return updated, errors
 
     # -- training-thread hooks -----------------------------------------------
@@ -810,18 +872,18 @@ class DilocoLearner:
 
     def record_identity_transition(self, transition: dict) -> None:
         value={**transition,'worker':self.worker,'fingerprint':self.manifest['fingerprint']}
-        self._with_lease(lambda:self.transport.json('POST','/v1/identity-transition',
-            {'worker':self.worker,'session':self.session,'transition':value}))
+        patient(lambda:self._with_lease(lambda:self.transport.json('POST','/v1/identity-transition',
+            {'worker':self.worker,'session':self.session,'transition':value})),what='identity-transition')
 
     def declare_completion(self, *, drained: bool, generation: str | None = None) -> None:
         body={'worker':self.worker,'session':self.session,'drained':drained,'generation':generation}
         if drained:body['sequences']=list(self.sequences)
-        self._with_lease(lambda:self.transport.json('POST','/v1/completion',body))
+        patient(lambda:self._with_lease(lambda:self.transport.json('POST','/v1/completion',body)),what='completion')
 
     def reopen(self, *, previous: str, generation: str, sequences: list[int]) -> None:
         body={'worker':self.worker,'session':self.session,'previous':previous,
               'generation':generation,'sequences':sequences}
-        self._with_lease(lambda:self.transport.json('POST','/v1/reopen',body))
+        patient(lambda:self._with_lease(lambda:self.transport.json('POST','/v1/reopen',body)),what='reopen')
 
     def finish(self, *, stop_requested=lambda: False) -> bool:
         """Send the last partial window and wait until it is delivered (bounded).
@@ -867,11 +929,11 @@ class DilocoLearner:
         if self.contract_sha256 is None:raise ValueError('coordinator does not have role contracts')
         if self.pending or self.awaiting_global or any(self.steps_since) or any(self.tokens_since):
             raise ValueError('role contract change has uncommitted windows')
-        authority=self.transport.json('GET',f'/v1/role-contracts?worker={self.worker}')
+        authority=patient(lambda:self.transport.json('GET',f'/v1/role-contracts?worker={self.worker}'),what='role-contracts')
         current=select(authority,self.worker,identity)
         if current==self.contract_sha256:return current
         previous=self.contract_sha256;self.contract_sha256=current
-        try:self._lease()
+        try:self._lease_patiently()
         except BaseException:self.contract_sha256=previous;raise
         self.contract_history.append({'from':previous,'to':current,'local_steps':self.local_steps})
         return current
@@ -936,6 +998,7 @@ class DilocoLearner:
             "diloco_min_version": min(self.versions) if self.versions else -1,
             "diloco_pending_uploads": len(self.pending),
             "diloco_inflight_downloads": len(self.downloads),
+            "diloco_peak_downloads": self.peak_downloads,
             "diloco_merges": self.merges,
             "diloco_installs": self.installs,
             "diloco_offline_steps": self.offline_steps,

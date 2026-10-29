@@ -20,6 +20,7 @@ def test_truncated_and_invalid_fragment_retry_until_valid(tmp_path):
     try:
         learner=object.__new__(DilocoLearner);learner.transport=Transport(f'http://127.0.0.1:{server.server_port}','x'*24,5,allow_http=True);learner.outbox=tmp_path;learner.fragments=[SimpleNamespace(length=1)]
         learner.downloads={};learner.remote_versions=None;learner.offline_steps=0;learner.last_error=None
+        learner.rebase=set();learner.download_limit=4;learner.peak_downloads=0
         for _ in range(2):
             f=Future()
             try:learner._fetch(0,0)

@@ -337,3 +337,46 @@ def test_actor_runtime_requires_and_binds_rendering_assets_before_launch(tmp_pat
     (assets/'pieces.json').write_text('{"changed":true}')
     with pytest.raises(ValueError,match='rendering assets'):
         production.validate_actor_runtime_configuration(config)
+
+
+@pytest.mark.parametrize('successes',[True,False])
+def test_self_distillation_trains_own_successes_even_with_spread(tmp_path, monkeypatch, successes):
+    from natlang_neuralese.rl.policy_math import default_policy_loss
+    from natlang_neuralese.rl import native_raw_policy
+    monkeypatch.setattr(native_raw_policy,'prepare_raw_policy',lambda *a,**kw:{'tokenizer':'bound-parent'})
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps({'id': f't{i}', 'split': 'train'}) + '\n' for i in range(2)))
+    checkpoint = tmp_path / 'parent.pt'; checkpoint.write_bytes(b'full state')
+    out = tmp_path / 'production'; config = tmp_path / 'config.json'
+    config.write_text(json.dumps({'out': str(out), 'checkpoint': str(checkpoint), 'cases': str(source),
+        'endpoints': ['http://unused'], 'rows_per_round': 2, 'group': 2,
+        'learner_command': ['learn', '--rl-policy-loss', '{rl_policy_loss}', '--jolt-cases', '{cases}'],
+        'after_update': ['publish'], 'native_state': True, 'base': 'unused',
+        'update_objective': 'self-distillation',
+        'policy_loss': default_policy_loss()}))
+    seen = {}
+    def collect(**kwargs):
+        seen['teacher_attempts'] = kwargs.get('teacher_attempts')
+        kwargs['out'].mkdir(parents=True, exist_ok=True)
+        qualities = [1, 0] if successes else [0, 0]
+        (kwargs['out'] / 'rollouts.jsonl').write_text(''.join(json.dumps({'task_id': 't0', 'split': 'train',
+            'reward': {'quality': q}, 'turns': [{}]}) + '\n' for q in qualities))
+        return {'groups_with_spread': int(successes), 'rollouts': 2, 'scored': 2, 'successes': sum(qualities),
+                'groups': []}
+    monkeypatch.setattr(production, 'collect', collect)
+    calls = []
+    class Stop(Exception):
+        pass
+    def command(argv, values):
+        calls.append((argv[0], values.get('mode')))
+        raise Stop  # only the update objective selection is under test here
+    monkeypatch.setattr(production, 'run_command', command)
+    if successes:
+        with pytest.raises(Stop):
+            production.run(config, rounds=1)
+        assert seen['teacher_attempts'] == 0 and calls == [('learn', 'rft')]
+        assert json.loads((out / 'state.json').read_text())['update_mode'] == 'rft'
+    else:
+        state = production.run(config, rounds=1)
+        assert seen['teacher_attempts'] == 0 and calls == []
+        assert state['phase'] == 'await_successful_episodes' and state['trained_rounds'] == 0

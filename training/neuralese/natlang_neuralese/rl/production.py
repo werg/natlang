@@ -1089,7 +1089,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native,
                     **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
                     teacher_attempts=(config.get('jolt_teacher_attempts', 1)
-                                      if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else 0),
+                                      if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'
+                                      and config.get('update_objective', 'policy') == 'policy' else 0),
                     teacher_plan=config.get('jolt_teacher_plan', 'nl'),
                     guidance_stage=config.get('jolt_guidance_stage'),
                     prompt_rendering=config.get('prompt_rendering'))
@@ -1131,10 +1132,23 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
             from .native_semantic_route import has_semantic_inputs
             semantic_batch=bool(has_semantic_inputs(rows))
             rft_stages = ['all']
-            if report['groups_with_spread'] or (policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'):
+            objective = config.get('update_objective', 'policy')
+            if objective not in {'policy', 'self-distillation'}:
+                raise ValueError('RL update_objective must be policy or self-distillation')
+            successes = any((row.get('reward') or {}).get('quality') == 1 for row in rows)
+            if objective == 'self-distillation':
+                # Rejection-sampled self-distillation: the current policy's own successful whole episodes become
+                # supervised targets (sampled outputs only; prompts and tool output carry no loss).
+                if not successes:
+                    state.update(phase='await_successful_episodes', collection_attempt=attempt + 1,
+                                 reason='self-distillation round sampled no successful episode; recollect')
+                    write_json_durable(state_path, state)
+                    return state
+                mode = 'rft'
+            elif report['groups_with_spread'] or (policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'):
                 mode = 'grpo'  # JOLT+'s dense self-teaching term learns from every scored group
             else:
-                if any((row.get('reward') or {}).get('quality') == 1 for row in rows):
+                if successes:
                     mode = 'rft'
                 elif config.get('seed_command'):
                     mode = 'seed'

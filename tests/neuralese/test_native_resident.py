@@ -93,6 +93,22 @@ def test_resident_append_preserves_parent_and_new_external_provenance(tmp_path,m
     assert resumed.poll(7) is None
 
 
+def test_plan_sealed_with_logical_paths_adopts_on_host_with_symlinked_mirror(tmp_path,monkeypatch):
+    """A plan sealed elsewhere keeps logical paths; this host resolves them into a mirror."""
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    physical=tmp_path/'mirror';physical.mkdir();logical=tmp_path/'logical';logical.symlink_to(physical)
+    paths,directory,manager,recipe=setup(physical)
+    plan_path=directory.parent/'recipe-plan.json'
+    sealed=json.loads(plan_path.read_text().replace(str(physical),str(logical)))
+    assert sealed['stage_inputs']['sft']['native_graphs']['path'].startswith(str(logical))
+    write_json(plan_path,sealed)
+    manager=resident.ResidentAdoption(directory,stage_id='sft',recipe_binding=manager.recipe_binding,
+        train=manager.train,held=manager.held,geometry_qualification=physical/'geometry-capacity.json')
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=())
+    assert manager.poll(7) is not None
+    assert resident.current(directory)['at_global_step']==7
+
+
 def test_resident_contract_rejects_dropped_external_provenance(tmp_path,monkeypatch):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
     _,directory,_,recipe=setup(tmp_path)

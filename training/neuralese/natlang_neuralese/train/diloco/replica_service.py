@@ -51,6 +51,11 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
     if bootstrap:
         if restart or not isinstance(session_transition,dict) or session_transition.get('new_token_sha256')!=hashlib.sha256(token.encode()).hexdigest():
             raise ValueError('bootstrap session identity differs')
+    elif restart:
+        # A restart keeps the exact live session, whether it began as a bootstrap or a promotion; it is compared
+        # with the stored start record below and must still name this token.
+        if not isinstance(session_transition,dict) or session_transition.get('new_token_sha256')!=hashlib.sha256(token.encode()).hexdigest():
+            raise ValueError('restart session identity differs')
     else:
         required={'previous_url','new_url','previous_token_sha256','new_token_sha256','generation_nonce'}
         if (not isinstance(session_transition,dict) or set(session_transition)!=required or

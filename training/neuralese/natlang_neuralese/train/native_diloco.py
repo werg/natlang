@@ -223,8 +223,8 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
     if source_transition is not None and not new_outer:
         if parent_continuation or saved_state is None:
             raise ValueError('source identity transition requires an earned DiLoCo checkpoint')
-        from .diloco.worker import transport_from_env
-        transport=transport_from_env(settings);manifest=transport.json('GET','/v1/manifest')
+        from .diloco.worker import patient, transport_from_env
+        transport=transport_from_env(settings);manifest=patient(lambda:transport.json('GET','/v1/manifest'),what='manifest')
         original=manifest['identity']
         from .diloco.role_contract import SCHEMA as HETERO_SCHEMA
         if original.get('schema')==HETERO_SCHEMA:
@@ -496,11 +496,11 @@ def export_global(args):
 
     if getattr(args, 'coordinator_url', None):
         from .diloco.coordinator import TOKEN_ENV, TOKEN_SECRET, credential, remote_global
-        from .diloco.worker import GATEWAY_SECRET, GATEWAY_TOKEN_ENV, Transport
+        from .diloco.worker import GATEWAY_SECRET, GATEWAY_TOKEN_ENV, Transport, patient
         transport = Transport(args.coordinator_url, credential(TOKEN_ENV, TOKEN_SECRET), getattr(args, 'timeout', 600.0),
                               gateway=credential(GATEWAY_TOKEN_ENV, GATEWAY_SECRET))
         workdir = getattr(args, 'workdir', None) or args.out.with_name(args.out.name + '.fetch')
-        manifest = transport.json('GET', '/v1/manifest')
+        manifest = patient(lambda: transport.json('GET', '/v1/manifest'), what='manifest')
 
         def read(key):
             values, info, _ = remote_global(transport, key, workdir)

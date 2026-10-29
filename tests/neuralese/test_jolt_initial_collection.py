@@ -21,3 +21,7 @@ def test_initial_world_ranks_only_bound_train_reference_geometry():
     choice=initial_training_world(rows,'a'*64)
     assert choice['case_id']=='hinted' and choice['reference_actions']==6 and choice['cases_sha256']=='a'*64
     with pytest.raises(ValueError):initial_training_world([dict(rows[1],split='test')],'a'*64)
+    rootonly={'id':'root-only','split':'train','curriculum':{'rl':{'level':0},'reference':{'root':[0,0]}}}
+    choice=initial_training_world([*rows,rootonly],'a'*64)
+    assert choice['case_id']=='root-only' and choice['reference_children']==0 and choice['reference_actions']==2
+    with pytest.raises(ValueError):initial_training_world([{**rootonly,'curriculum':{'rl':{'level':0},'reference':{}}}],'a'*64)

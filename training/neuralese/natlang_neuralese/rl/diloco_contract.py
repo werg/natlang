@@ -4,7 +4,7 @@ import json,tarfile,tempfile,os
 from pathlib import Path
 import torch
 from ..common.hashing import sha256_file_hex_cached,canonical_json_sha256_hex
-from ..train.diloco.worker import DilocoSettings,transport_from_env
+from ..train.diloco.worker import DilocoSettings,patient,transport_from_env
 from ..train.diloco.role_contract import SCHEMA,validate
 from ..train.native_diloco import identity
 
@@ -53,9 +53,9 @@ def register_admitted_stage(args,trainer_args):
 
 def _publish(item,saved,settings,out):
     refs=item['dependencies'];worker=settings.resolved_worker_id
-    transport=transport_from_env(settings);authority=transport.json('GET',f'/v1/role-contracts?worker={worker}')
+    transport=transport_from_env(settings);authority=patient(lambda:transport.json('GET',f'/v1/role-contracts?worker={worker}'),what='role-contracts')
     if authority.get('schema')!=SCHEMA:raise ValueError('RL stage coordinator lacks heterogeneous authority')
-    initial=transport.json('GET','/v1/manifest')['identity']
+    initial=patient(lambda:transport.json('GET','/v1/manifest'),what='manifest')['identity']
     static={(ref['path'],ref['sha256']) for roles in initial['roles'].values() for stage in roles for ref in stage.get('dependencies',[])}
     digest=canonical_json_sha256_hex(item);existing=authority['roles'][str(worker)]
     if not any(canonical_json_sha256_hex(x)==digest for x in existing):existing.append(item)
@@ -65,9 +65,9 @@ def _publish(item,saved,settings,out):
     try:
         with tarfile.open(temp,'w') as tar:
             for ref in {x['sha256']:x for x in refs if (x['path'],x['sha256']) not in static}.values():tar.add(ref['path'],arcname=ref['sha256'],recursive=False)
-        evidence_sha=sha256_file_hex_cached(temp);name='role-contract-'+digest+'.tar';transport.upload_file(temp,name)
-        transport.json('POST','/v1/lease',{'worker':worker,'session':saved['session'],'contract_sha256':saved['contract_sha256']})
-        result=transport.json('POST','/v1/register-role-contract',{'worker':worker,'session':saved['session'],'contract':item,'evidence_name':name,'evidence_sha256':evidence_sha})
+        evidence_sha=sha256_file_hex_cached(temp);name='role-contract-'+digest+'.tar';patient(lambda:transport.upload_file(temp,name),what='contract-evidence')
+        patient(lambda:transport.json('POST','/v1/lease',{'worker':worker,'session':saved['session'],'contract_sha256':saved['contract_sha256']}),what='lease')
+        result=patient(lambda:transport.json('POST','/v1/register-role-contract',{'worker':worker,'session':saved['session'],'contract':item,'evidence_name':name,'evidence_sha256':evidence_sha}),what='register-role-contract')
         if result.get('sha256')!=digest or result.get('status') not in ('registered','already_registered'):raise ValueError('coordinator did not seal exact on-policy contract')
         return result
     finally:temp.unlink(missing_ok=True)

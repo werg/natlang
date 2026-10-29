@@ -259,7 +259,7 @@ def transmit(url, token, *, sequence, previous, event, payload, timeout=30, allo
         with path.open('rb') as source:
             while block:=source.read(CHUNK):conn.send(block)
         response=conn.getresponse();data=response.read(65537)
-        if response.status!=200 or len(data)>65536:raise ValueError('replica did not durably acknowledge transaction')
+        if response.status!=200 or len(data)>65536:raise ValueError('replica did not durably acknowledge transaction (HTTP %d)'%response.status)
         ack=json.loads(data)
         if set(ack)!={'sequence','head'} or ack['sequence']!=sequence:raise ValueError('replica acknowledgement differs')
         return ack
