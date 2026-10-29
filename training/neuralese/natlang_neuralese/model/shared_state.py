@@ -204,8 +204,9 @@ def _convolution_index(plan, width, rows, device):
 
 
 def _convolve(layer, gated, c, plan, rows, *, index=None):
-    rows=tuple(rows)
-    if any(type(row) is not int or not 0<=row<plan.token_count for row in rows) or any(a>=b for a,b in zip(rows,rows[1:])):
+    complete=isinstance(rows,range) and rows==range(plan.token_count)
+    if not complete:rows=tuple(rows)
+    if not complete and (any(type(row) is not int or not 0<=row<plan.token_count for row in rows) or any(a>=b for a,b in zip(rows,rows[1:]))):
         raise ValueError('convolution rows must be unique physical rows in graph order')
     kernel = layer.conv.conv
     if index is None:
@@ -226,11 +227,13 @@ def _convolve(layer, gated, c, plan, rows, *, index=None):
         # boundaries and reverse-order autograd accumulation as the cache.
         lengths=[]
         if gated.dtype==torch.bfloat16:
-            previous=None
-            for row in rows:
-                invocation=plan.node_ids[row]
-                if invocation!=previous:lengths.append(0);previous=invocation
-                lengths[-1]+=1
+            if complete:lengths=[len(node.token_ids) for node in plan.invocations if node.token_ids]
+            else:
+                previous=None
+                for row in rows:
+                    invocation=plan.node_ids[row]
+                    if invocation!=previous:lengths.append(0);previous=invocation
+                    lengths[-1]+=1
         if len(lengths)>1:
             gathered=torch.cat([padded[:, part] for part in index.split(lengths,dim=0)],dim=1)
         else:

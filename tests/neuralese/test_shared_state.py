@@ -711,3 +711,20 @@ def test_convolution_gather_subsets_preserve_invocation_order_and_reject_reorder
     assert torch.equal(actual,expected) and torch.equal(agrad,egrad)
     with pytest.raises(ValueError,match='graph order'):_convolve(layer,source,gate,plan,list(reversed(rows)))
     with pytest.raises(ValueError,match='graph order'):_convolve(layer,source,gate,plan,[0,0,4,6])
+
+
+def test_bf16_convolution_stopped_and_live_imports_keep_distinct_adjoints():
+    from types import SimpleNamespace
+    from natlang_neuralese.model.shared_state import _convolve
+    torch.manual_seed(823)
+    plan=compile_graph([Invocation('a',(1,2,3,4),producing=((1,3),)),
+        Invocation('stopped',(5,6),imports=(ImportSpan(0,'a',1,3,stop_gradient=True),)),
+        Invocation('live',(7,8),imports=(ImportSpan(0,'a',1,3),))])
+    width=4;channels=8
+    kernel=SimpleNamespace(weight=torch.randn(channels,1,width).bfloat16(),bias=torch.randn(channels).bfloat16())
+    layer=SimpleNamespace(conv=SimpleNamespace(conv=kernel));source=torch.randn(1,plan.token_count,channels).bfloat16().requires_grad_()
+    gate=torch.ones_like(source);out=_convolve(layer,source,gate,plan,range(plan.token_count))
+    stopped=torch.autograd.grad(out[:,4:6].float().sum(),source,retain_graph=True)[0]
+    live=torch.autograd.grad(out[:,6:8].float().sum(),source)[0]
+    assert torch.count_nonzero(stopped[:,:4])==0
+    assert torch.count_nonzero(live[:,1:3])>0
