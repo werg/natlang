@@ -67,3 +67,12 @@ def test_verify_rejects_tampered_member(tmp_path):
     Path(packed['path']).write_bytes(bytes(data))
     with pytest.raises(ValueError, match='member differs'):
         ex.verify_archive(packed['path'])
+
+
+def test_pack_waits_for_generation_registration(tmp_path):
+    store = _store(tmp_path)
+    (store / ('generation-' + 'a' * 32)).mkdir()
+    with pytest.raises(ex.RotationInProgress):
+        ex.pack({'store': str(store), 'archive': str(tmp_path / 'one.tar'), 'export_id': 'one'})
+    (store / 'retention.json').write_text(json.dumps({'generations': [{'id': 'a' * 32}]}))
+    assert ex.pack({'store': str(store), 'archive': str(tmp_path / 'one.tar'), 'export_id': 'one'})['export']['sequence'] == 4

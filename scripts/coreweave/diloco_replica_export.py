@@ -70,12 +70,23 @@ class _HashingReader:
         return data
 
 
+class RotationInProgress(RuntimeError):
+    pass
+
+
 def select_sealed(store):
     """Return the active generation and its newest sealed, chain-verified journal prefix."""
     store = Path(store)
     pointer_path = store / 'primary-active.json'
     if not pointer_path.exists(): pointer_path = store / 'replica-active.json'
     pointer_raw = pointer_path.read_bytes(); pointer = json.loads(pointer_raw)
+    # The writer hashes a new generation twice (pin, then retention registration)
+    # while operations wait; do not compete for its I/O until it is registered.
+    retention = store / 'retention.json'
+    registered = {x['id'] for x in json.loads(retention.read_text())['generations']} if retention.exists() else set()
+    present = {p.name[len('generation-'):] for p in store.glob('generation-*') if p.is_dir()}
+    if (pointer.get('id') != 'initial' and pointer.get('id') not in registered) or present - registered:
+        raise RotationInProgress('coordinator generation rotation in progress')
     baseline = Path(pointer['baseline']); journal = Path(pointer['journal'])
     receipt_raw = (baseline / 'replica-baseline.json').read_bytes()
     if sha256_bytes(receipt_raw) != pointer['baseline_sha256']: raise ValueError('active baseline receipt differs from pointer')
