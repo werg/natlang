@@ -63,6 +63,20 @@ def test_real_recipe_contract_accepts_complete_ce_addition(tmp_path):
     assert {s['sha256']for s in loaded['sources']}=={resident.sha(paths['old']),resident.sha(paths['extra'])}
 
 
+def test_source_append_retains_common_reanchor_custody(tmp_path):
+    paths, old, new = fixture(tmp_path)
+    manifest = tmp_path / 'reanchor.json'
+    write_json(manifest, {'schema':'natlang.diloco-new-outer-manifest/1','workers':4,'peers':[]})
+    reference = {**resident.binding(manifest), 'binding':'reanchor'}
+    for plan in (old,new):
+        plan['recipe']['input_bindings']['reanchor'] = resident.binding(manifest)
+        plan['recipe']['stages'][0]['inputs']['diloco_new_outer'] = 'reanchor'
+        plan['stage_inputs']['sft']['diloco_new_outer'] = reference
+    resident._contract(old,new,'sft')
+    altered=copy.deepcopy(new);altered['stage_inputs']['sft']['diloco_new_outer']['sha256']='0'*64
+    with pytest.raises(ValueError):resident._contract(old,altered,'sft')
+
+
 @pytest.mark.parametrize('change',['coefficient','encoding','delete','held','mask','coverage','inventory','default','parameters','otherstage','same_source','drop_policy'])
 def test_objective_or_custody_change_rejected(tmp_path,change):
     paths,old,new=fixture(tmp_path);doc=json.loads(paths['new_ce'].read_text())
