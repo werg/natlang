@@ -32,6 +32,36 @@ def has_owner_readback(receipt):
     return owner and all(verification.get(key)==identity.get(key) for key in ('sha256','bytes'))
 
 
+def existing_private_object_binding(role, source, *, expected_sha256, expected_bytes, registry, receipt=None):
+    """Resolve an exact existing object without contacting its former sandbox.
+
+    The owner's sealed identity and existing private run registry authorize a
+    read, not a verification claim. The caller must still check fresh privacy,
+    object presence and the complete GET/hash. A missing receipt is allowed for
+    salvage of a PUT whose sandbox vanished before it could finish readback.
+    """
+    if not isinstance(role, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', role):
+        raise ValueError('existing private object requires an exact export role')
+    if not isinstance(expected_sha256, str) or not re.fullmatch('[0-9a-f]{64}', expected_sha256):
+        raise ValueError('existing private object requires a sealed SHA-256')
+    if not isinstance(expected_bytes, (str, int)) or isinstance(expected_bytes, bool) or not re.fullmatch('[0-9]+', str(expected_bytes)) or int(expected_bytes) < 1:
+        raise ValueError('existing private object requires a positive sealed byte count')
+    if (not isinstance(registry, dict) or registry.get('project') != 'werg/natlang'
+            or registry.get('access') != 'PRIVATE'
+            or not isinstance(registry.get('run_id'), str)
+            or not re.fullmatch(r'[A-Za-z0-9_-]+', registry['run_id'])):
+        raise ValueError('existing private object requires its established private run registry')
+    identity = {'sha256': expected_sha256, 'bytes': int(expected_bytes)}
+    result = {'identity': identity, 'run': 'werg/natlang/' + registry['run_id'],
+              'name': role + '/' + expected_sha256 + '/' + Path(source).name}
+    if not Path(source).name:
+        raise ValueError('existing private object requires its source basename')
+    if receipt is not None and (receipt.get('role') != role or receipt.get('private') is not True
+            or any(receipt.get(key) != result[key] for key in ('identity', 'run', 'name'))):
+        raise ValueError('existing private object receipt differs from sealed role/run/name/identity')
+    return result
+
+
 def commit_uploaded_run_file(api, run_path, name):
     """Use the SDK's upload notification; callers still verify the full GET.
 

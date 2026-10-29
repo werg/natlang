@@ -11,6 +11,34 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts/coreweave'))
 from private_export_guard import export_lease
 
 
+def test_existing_object_recovery_needs_no_source_and_keeps_exact_private_custody(tmp_path):
+    from private_export_guard import existing_private_object_binding
+    source = str(tmp_path / 'gone-sandbox' / 'checkpoint.pt')
+    registry = {'run_id': 'savedrun', 'project': 'werg/natlang', 'access': 'PRIVATE'}
+    def resolve(**changes):
+        values = dict(role='learner-step12', source=source, expected_sha256='a' * 64,
+                      expected_bytes='123', registry=registry)
+        values.update(changes)
+        return existing_private_object_binding(**values)
+    bound = resolve()
+    assert not Path(source).exists()
+    assert bound == {'identity': {'sha256': 'a' * 64, 'bytes': 123},
+                     'run': 'werg/natlang/savedrun',
+                     'name': 'learner-step12/' + 'a' * 64 + '/checkpoint.pt'}
+    receipt = dict(bound, role='learner-step12', private=True)
+    assert resolve(receipt=receipt) == bound
+    for changes in ({'expected_sha256': None}, {'expected_bytes': None}, {'expected_bytes': '-1'},
+                    {'expected_bytes': True}, {'role': '../other'},
+                    {'registry': dict(registry, access='PUBLIC')},
+                    {'registry': dict(registry, project='other/project')},
+                    {'registry': dict(registry, run_id='../other')},
+                    {'receipt': dict(receipt, run='werg/natlang/other')},
+                    {'receipt': dict(receipt, name='alias/checkpoint.pt')},
+                    {'receipt': dict(receipt, identity={'sha256': 'b' * 64, 'bytes': 123})}):
+        with pytest.raises(ValueError):
+            resolve(**changes)
+
+
 def test_destination_reserve_is_explicit_and_rejects_invalid_values():
     from private_export_guard import owner_readback_reserve_bytes
     assert owner_readback_reserve_bytes({})==80<<30
