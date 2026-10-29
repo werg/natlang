@@ -128,6 +128,10 @@ def prepare(args):
         configured['max_model_requests']=16
         configured['max_turns']=16
         configured['initial_train_world']=initial_training_world(rows,args.cases_sha256)
+        # The SFT stage's warmup counts lineage optimizer updates. A fresh policy lineage makes about one
+        # update per collection round, so an inherited 150-update warmup would run its first rounds at
+        # 1/150 of the approved RL rates (observed on DGX 2026-10-29: first update at 6.7e-9).
+        configured['trainer_parameters']['lr_warmup']=0
         write_json_durable(config,configured)
     return configured
 
