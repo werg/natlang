@@ -1139,6 +1139,8 @@ def build_parser():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--base', type=Path)
     parser.add_argument('--continue-from', type=Path)
+    parser.add_argument('--initialize-only', action='store_true',
+        help='save a fresh zero-update native state before SFT or policy collection')
     parser.add_argument('--native-participant')
     parser.add_argument('--objective-continuation', action='store_true',
         help='explicit new source/objective stage; preserve full optimizer/RNG and start local exposure at zero')
@@ -1481,6 +1483,8 @@ def main(argv=None):
 
 def _main(argv=None, *, requested_refresh):
     args = build_parser().parse_args(argv)
+    if args.initialize_only and (args.continue_from is not None or (args.out / 'checkpoint.pt').exists()):
+        raise ValueError('initialize-only requires a fresh output and no checkpoint parent')
     if args.checkpoint_direct_token_limit < 0 or (args.checkpoint_direct_token_limit and not args.checkpoint_layers):
         raise ValueError('checkpoint-direct-token-limit requires a nonnegative limit and enabled layer checkpointing')
     if args.ffn_chunk_tokens is not None and args.ffn_chunk_tokens<0:
@@ -2960,6 +2964,21 @@ def _main(argv=None, *, requested_refresh):
     specialized_recovery_attempted = False
     loop_error = None
     loop_error_tb = None
+    if args.initialize_only:
+        if resume is not None or step != 0 or global_step != 0 or any(exposure_counts.values()):
+            raise ValueError('fresh initialization must have zero steps and zero exposure')
+        checkpoint_options['fresh_initialization'] = {'schema':'natlang.fresh-native-initialization/1',
+            'optimizer_updates':0,'earned_exposure':0,'parent_checkpoint':None}
+        _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+            global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+            source_hash=source_hash, source_row_bindings=source_row_bindings,
+            held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+            rng=capture_training_rng_state(args.device), metrics=metrics,
+            architecture=config['architecture'], options={**checkpoint_options, '_source_row_order':source_order},
+            fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+        schedule.close()
+        policy.drain_async()
+        return
     if new_outer_proof is not None and diloco.local_steps == 0:
         # Publish no readiness until the full peer-specific model, optimizer,
         # RNG, exposure and new baselines are durable in the rolling slot.
