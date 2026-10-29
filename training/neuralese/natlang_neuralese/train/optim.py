@@ -562,10 +562,16 @@ class MuonSR(LionSR):
     Muon (Nesterov 0.95, 5 NS steps, 0.2 sqrt(max(m, n)) scale, wd 0.1; Mellum2 report arXiv:2605.31268)."""
 
     def __init__(self, params, lr: float, momentum: float = 0.95, weight_decay: float = 0.0, ns_steps: int = 5,
-                 idle_fraction: float = 0.0, ns: str = "quintic"):
+                 idle_fraction: float = 0.0, ns: str = "quintic", rounding: str = "stochastic"):
         torch.optim.Optimizer.__init__(self, params, dict(lr=lr, momentum=momentum, weight_decay=weight_decay,
                                                           ns_steps=ns_steps, idle_fraction=idle_fraction))
-        self.chunk, self.fused, self.ns = None, False, ns
+        if rounding not in ("stochastic", "kahan"):
+            raise ValueError("MuonSR rounding is 'stochastic' or 'kahan'")
+        # ``kahan``: a BF16 latent rounds to nearest and keeps its rounding residual in a BF16 ``compensation``
+        # buffer added back before the next update. Stochastic rounding is unbiased, but at fine-tuning rates
+        # (updates ~1/30 of a BF16 spacing) its variance random-walked the LFM3 weights (about 35% of the change
+        # energy; plans/neuralese/LFM3_REGRESSION_INVESTIGATION_20261029.md). Configuration, kept across loads.
+        self.chunk, self.fused, self.ns, self.rounding = None, False, ns, rounding
         self.state_storage = 'device'
         self._hooks, self._gated, self._armed = [], False, None
         for group in self.param_groups:
@@ -576,7 +582,7 @@ class MuonSR(LionSR):
     def load_state_dict(self, state_dict):
         """Keep saved momentum/norm precision: Torch's default loader casts floating state to parameter dtype."""
         saved = {index: {key: value for key, value in entry.items()
-                         if key in ('momentum', 'grad_norm') and torch.is_tensor(value)}
+                         if key in ('momentum', 'grad_norm', 'compensation') and torch.is_tensor(value)}
                  for index, entry in state_dict['state'].items()}
         parameters = {index: parameter
                       for previous, current in zip(state_dict['param_groups'], self.param_groups)
@@ -634,8 +640,9 @@ class MuonSR(LionSR):
         state = self.state[p]
         if "momentum" not in state:
             state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
-        if (p.is_cuda and p.dtype == torch.bfloat16 and p.grad.dtype == torch.bfloat16 and p.is_contiguous()
-                and p.grad.is_contiguous() and os.environ.get("NATLANG_MUON_FUSED", "1") != "0"):
+        kahan = getattr(self, "rounding", "stochastic") == "kahan" and p.dtype == torch.bfloat16
+        if (not kahan and p.is_cuda and p.dtype == torch.bfloat16 and p.grad.dtype == torch.bfloat16
+                and p.is_contiguous() and p.grad.is_contiguous() and os.environ.get("NATLANG_MUON_FUSED", "1") != "0"):
             return self._fused_update(p, group, state)
         beta = group["momentum"]
         g = p.grad.float()
@@ -660,11 +667,18 @@ class MuonSR(LionSR):
             direction = direction * active.to(direction.dtype)
         scale = 0.2 * math.sqrt(max(rows, cols))
         value = p.float()
+        if kahan:
+            if "compensation" not in state:
+                state["compensation"] = torch.zeros_like(p, dtype=torch.bfloat16)
+            value.add_(state["compensation"].float())
         if group["weight_decay"]:
             decay = 1 - group["lr"] * group["weight_decay"]
             value.mul_(decay if active is None else 1 - (1 - decay) * active)
         value.add_(direction.float(), alpha=-group["lr"] * scale)
-        if p.dtype == torch.bfloat16:
+        if kahan:
+            p.copy_(value)  # round to nearest; the residual carries to the next update
+            state["compensation"].copy_(value - p.float())
+        elif p.dtype == torch.bfloat16:
             stochastic_round_(p, value)
         else:
             p.copy_(value)
@@ -910,13 +924,13 @@ def latent_entries(latent_named, latent_optimizer: str, lr: float, head_dim: int
 
 
 def latent_options(latent_optimizer: str, *, weight_decay: float = 0.0, skip_idle: bool = True,
-                   cautious: bool = False, ns: str = 'quintic', betas=None) -> dict:
+                   cautious: bool = False, ns: str = 'quintic', betas=None, rounding: str = 'stochastic') -> dict:
     """``PortMuonAdamW``'s ``latent_options`` for one latent optimizer (only the options it takes)."""
     options = dict(weight_decay=weight_decay)
     if latent_optimizer in ('lionsr', 'adaminisr'):
         options.update(skip_idle=skip_idle, cautious=cautious)
     if latent_optimizer == 'muonsr':
-        options.update(ns=ns)
+        options.update(ns=ns, rounding=rounding)
     if latent_optimizer == 'adaminisr' and betas is not None:
         options['betas'] = tuple(betas)
     return options

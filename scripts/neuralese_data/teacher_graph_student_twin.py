@@ -134,7 +134,10 @@ def program_header_parity(tokenizer, context, target, tools, turn, text, token_i
     checks['header_chars_total'] += header
     checks['header_chars_max'] = max(checks['header_chars_max'], header)
     checks['header_over_2000_chars'] += header > 2000
-    packet, omission = render_teacher_packet(tokenizer, context, target, tools, turn, prompt_rendering='full')
+    try:
+        packet, omission = render_teacher_packet(tokenizer, context, target, tools, turn, prompt_rendering='full')
+    except ValueError as error:  # the schema-typed target check (program-header drops schemas from the prompt)
+        return f'program-header parity: full rendering refused: {error}'[:300]
     if omission is not None:
         return 'program-header parity: full rendering unavailable: ' + str(omission.get('reason'))
     (full_text, full_ids, full_boundary), _ = packet
@@ -298,10 +301,12 @@ def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: s
                         for (_, a), (_, b) in zip(got, want)):
                     checks['target_calls_equal_modulo_untyped_values'] += 1
                 else:
-                    checks['target_calls_differ'] += 1
-                    if checks['target_calls_differ'] <= 3:
-                        omissions.append({'id': ref['id'], 'check': 'target_calls_differ (kept; see verification)',
-                                          'want': json.dumps(want)[:300], 'got': json.dumps(got)[:300]})
+                    # The serving parser, typed by the turn's own schema, does not read this target back (e.g. a
+                    # string value where the schema declares an object): not a usable target for this student.
+                    checks['target_calls_unparsable_omitted'] += 1
+                    omit('target does not parse back to its source calls under the turn\'s tool schema',
+                         want=json.dumps(want)[:300], got=json.dumps(got)[:300])
+                    continue
                 groups[split].update(graph['source_groups'])
                 checks['tokens'] += len(token_ids)
                 writers[split].write(graph)

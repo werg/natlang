@@ -256,7 +256,8 @@ def native_trainable_parameters(model):
     return backbone_named + interface_named
 
 
-def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in_backward=True, learned_row_lr=None, interface_row_lr=None):
+def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in_backward=True, learned_row_lr=None, interface_row_lr=None,
+                          muon_rounding='stochastic'):
     """Reuse the production port optimizer and its in-backward MuonSR memory path."""
     from .optim import PortMuonAdamW, latent_entries, latent_options, latent_split
 
@@ -287,7 +288,7 @@ def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in
         auxiliary_rounding=rounding,
         embedding_ids={id(model.port.embedding_weight)}, force_adamw_ids={id(parameter) for _,parameter in ordinary},
         latent=latent_entries(latent, 'muonsr', lr), latent_optimizer='muonsr',
-        latent_options=latent_options('muonsr', weight_decay=weight_decay, ns=latent_ns))
+        latent_options=latent_options('muonsr', weight_decay=weight_decay, ns=latent_ns, rounding=muon_rounding))
     optimizer._native_named_parameters = named
     from .native_learning_rates import apply_native_learning_rates
     apply_native_learning_rates(optimizer,backbone_lr=lr,learned_row_lr=learned_row_lr,interface_row_lr=interface_row_lr)
@@ -1217,6 +1218,10 @@ def build_parser():
     parser.add_argument('--batch-graphs', type=int, default=1)
     parser.add_argument('--batch-tokens', type=int, default=0,
         help='pack whole sequential graphs to this token volume instead of graph-count batching')
+    parser.add_argument('--muon-rounding', choices=('kahan', 'stochastic'), default='kahan',
+        help='BF16 MuonSR matrix writes: kahan (default 2026-10-29) rounds to nearest and carries the residual in a '
+             'BF16 compensation buffer; stochastic rounding random-walked the LFM3 weights at fine-tuning rates. A '
+             'continuation records the change in muon_rounding_history')
     parser.add_argument('--accumulate-batches', type=int, default=DEFAULT_ACCUMULATE_BATCHES,
         help='packed micro-batches per optimizer update; their gradients accumulate before one MuonSR/AdamW step '
              '(default 16, about 64 graphs at 32k tokens per micro-batch; 1 restores one step per batch). A '
@@ -1759,6 +1764,14 @@ def _main(argv=None, *, requested_refresh):
             'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0)) or 0),
             'weights_optimizer_rng_exposure': 'preserved'})
     checkpoint_options['accumulate_batches_history'] = accumulation_history
+    # Checkpoints from before Kahan rounding wrote MuonSR matrices stochastically; a switch starts a zero residual.
+    rounding_history = list(saved_options.get('muon_rounding_history') or [])
+    if saved_training and (saved_options.get('muon_rounding') or 'stochastic') != args.muon_rounding:
+        rounding_history.append({'schema': 'natlang.muon-rounding-transition/1',
+            'from': saved_options.get('muon_rounding') or 'stochastic', 'to': args.muon_rounding,
+            'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0)) or 0),
+            'compensation': 'starts at zero', 'weights_optimizer_rng_exposure': 'preserved'})
+    checkpoint_options['muon_rounding_history'] = rounding_history
     checkpoint_options['source_predecessor_retirement_history'] = list(saved_options.get('source_predecessor_retirement_history') or [])
     prior_service_policy = saved_options.get('cohort_service_policy', 'absolute-token-service-v1')
     service_history = list(saved_options.get('cohort_service_policy_history') or [])
@@ -2423,7 +2436,7 @@ def _main(argv=None, *, requested_refresh):
     model.to(args.device)
     model.train()
     optimizer, named = make_native_optimizer(model, lr=args.learning_rate, learned_row_lr=args.learned_row_learning_rate, interface_row_lr=args.interface_row_learning_rate,
-                                              weight_decay=args.weight_decay, latent_ns=args.latent_ns)
+                                              weight_decay=args.weight_decay, latent_ns=args.latent_ns, muon_rounding=args.muon_rounding)
     task_eval = None
     task_spec = None
     if args.task_eval:

@@ -332,7 +332,8 @@ def load_participant(name, binding, config, device):
     optimizer, _ = make_native_optimizer(model, lr=optimizer_options['lr'],
         weight_decay=optimizer_options['weight_decay'], latent_ns=optimizer_options['latent_ns'], in_backward=False,
         learned_row_lr=optimizer_options.get('learned_row_lr'),
-        interface_row_lr=optimizer_options.get('interface_row_lr'))
+        interface_row_lr=optimizer_options.get('interface_row_lr'),
+        muon_rounding=optimizer_options.get('muon_rounding', 'stochastic'))
     optimizer_state_storage = _apply_optimizer_state_storage(optimizer, inherited_options, participant=name)
     from .recipe import training_recipe_binding,native_recipe_provenance
     recipe_binding=training_recipe_binding(state)
