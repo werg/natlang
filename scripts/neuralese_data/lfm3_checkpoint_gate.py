@@ -89,9 +89,9 @@ def execute(binary, gguf, kwargs, out, port, cases):
         raise RuntimeError(f'probe printed no summary: {out / "probe.log"}')
     summary = json.loads(lines[-1])
     probe = json.loads((out / 'probe' / 'budget-probe.json').read_text())
-    if any(probe.get('collector_exit_codes', [])) and not summary['task_successes'] and \
-            summary['outcome_counts'].get('unresolved') == len(cases):
-        raise RuntimeError(f'every collector failed, not caching: {out / "probe"}')
+    failed = sum(1 for code in probe.get('collector_exit_codes', []) if code)
+    if failed:  # e.g. ts-host/dist rebuilt mid-run: those cases never executed, so the count is not a measurement
+        raise RuntimeError(f'{failed} collectors failed, not caching a partial result: {out / "probe"}')
     summary_path.write_text(json.dumps(summary, indent=1) + '\n')
     return summary
 
