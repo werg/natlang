@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare first-outer controls only from actual full-pin/private-readback metadata.
+"""Prepare LFM3 20261029 first-outer controls from actual pin/readback metadata.
 
 This never launches a role or invents a parent. The four destinations must stage the
 same seed at --seed-logical, each own pinned parent in its declared path, and the
@@ -39,6 +39,17 @@ def prepare(a):
         if rank and (parent['sha256']!=sha or parent['bytes']!=size or parent['step']!=2):raise ValueError('seed clone differs from common step2 baseline')
         if rank==0 and parent['step']<2:raise ValueError('peer1 earned parent predates common seed')
         source_hashes.add(meta.get('source_hash'));records.append({'parent':parent,'pin_receipt':peer['pin_receipt'],'private_receipt':peer['private_receipt'],'full_state_receipt':peer['full_state_receipt'],'owner_presence_receipt':peer['owner_presence_receipt'],'owner_get':'verified' if verified.get('readback_location')=='owner' else 'pending'})
+    witness=json.loads(bound(inventory['peer1_lineage_witness']).read_text())
+    owner_ref=witness.get('owner') or {};owner=json.loads(bound(owner_ref).read_text());accepted=owner.get('accepted') or {}
+    baseline=json.loads(bound(witness['baseline_pin_receipt']).read_text());latest=json.loads(bound(peers[0]['pin_receipt']).read_text())
+    if (witness.get('schema')!='natlang.fresh-writer-lineage/1' or witness.get('continuity_verified') is not True
+            or witness.get('baseline_sha256')!=sha or witness.get('latest_sha256')!=peers[0]['parent']['sha256']
+            or baseline.get('sha256')!=sha or baseline.get('step')!=2
+            or baseline.get('owner_receipt')!=owner_ref.get('path') or latest.get('owner_receipt')!=owner_ref.get('path')
+            or witness.get('initial_checkpoint_sha256')!=owner.get('fresh_checkpoint_sha256')
+            or witness.get('pid')!=accepted.get('pid') or witness.get('boot_id')!=accepted.get('boot_id')
+            or witness.get('process_start_ticks')!=accepted.get('process_start_ticks') or accepted.get('accepted') is not True):
+        raise ValueError('peer1 newer parent lacks exact continuous fresh-writer custody')
     if len(source_hashes)!=1 or any(not isinstance(x,str) or len(x)!=64 for x in source_hashes):raise ValueError('peer source hash differs')
     source_hash=source_hashes.pop();settings={'run_id':a.run_id,'workers':4,'coordinator_url':a.coordinator_url,'local_steps':8,'wire_dtype':'bf16','start_grace_seconds':30};DilocoSettings.from_dict(settings)
     a.out.mkdir(parents=True,exist_ok=False);declarations=[]
@@ -52,8 +63,15 @@ def prepare(a):
     binding=R.native_recipe_binding(path,R.recipe_identity_sha256(bound(a.recipe)));argv=R.stage_input_args(resolved,'native_state_sft',target='portable')+['--device','cuda']+R.stage_parameter_args(R.effective_stage_parameters(stage,[],recipe))+['--recipe-binding',json.dumps(binding,sort_keys=True,separators=(',',':')),'--stage-id',stage['id'],'--prerequisite-stages','[]','--continue-from',a.seed_logical,'--out',a.worker_out];build_parser().parse_args(argv)
     identities=[{'schema':IDENTITY_SCHEMA,'parent_checkpoint_sha256':sha,'trainer_argv':trainer_argv(argv),'diloco':DilocoSettings.from_dict({**settings,'worker_id':i}).identity()} for i in range(4)]
     if any(x!=identities[0] for x in identities[1:]):raise ValueError('worker coordinator identities differ')
-    argfile=a.out/'worker-args.json';write_json_durable(argfile,argv);init=['init','--root',a.coordinator_root,'--parent',a.seed_logical,'--base',stage['parameters']['base'],'--trainer-argv',json.dumps(argv,separators=(',',':')),'--settings',json.dumps(settings,separators=(',',':')),'--quorum','3','--ema',json.dumps({'decay':0.88,'warmup':0},separators=(',',':')),'--outer-schedule',json.dumps([{'from_round':0,'lr':1.,'momentum':0.},{'from_round':10,'lr':0.7,'momentum':0.9}],separators=(',',':')),'--max-staleness','2'];initfile=a.out/'coordinator-init-args.json';write_json_durable(initfile,init)
-    result={'schema':'natlang.fresh-first-outer-prepared/1','inventory':a.inventory,'prior_recipe':a.recipe,'recipe':resident.binding(path),'manifest':resident.binding(manifest),'peer_declarations':declarations,'worker_args':resident.binding(argfile),'coordinator_init_args':resident.binding(initfile),'source_sha256':train,'held_sha256':held,'source_hash':source_hash,'seed':seed,'peers':records,'settings':settings,'quorum':3,'common_identity_sha256':canonical_json_sha256_hex(identities[0]),'scope':'Inert prepared controls; verify actual runtime, target staged paths, owner process and physical capacity before launch. Owner full GET status is separate.'};write_json_durable(a.out/'receipt.json',result);return result
+    argfile=a.out/'worker-args.json';write_json_durable(argfile,argv)
+    dependencies={dep['path']:dep['sha256'] for value in resolved.values() for dep in R._binding_files(value)}
+    dependencies[str(path)]=sha256_file_hex(path)
+    role={'kind':'sft','identity':identities[0],'dependencies':[{'path':p,'sha256':h} for p,h in sorted(dependencies.items())]}
+    authority={'schema':'natlang.diloco-heterogeneous-identity/1','baseline_sha256':sha,'recipe_lineage_sha256':R.recipe_identity_sha256(bound(a.recipe)),'diloco':DilocoSettings.from_dict(settings).identity(),'roles':{str(i):[role] for i in range(4)}}
+    from natlang_neuralese.train.diloco.role_contract import validate
+    validate(authority,4,verify_files=True);authority_file=a.out/'role-contract.json';write_json_durable(authority_file,authority)
+    init=['init','--root',a.coordinator_root,'--parent',a.seed_logical,'--base',stage['parameters']['base'],'--trainer-argv',json.dumps(argv,separators=(',',':')),'--settings',json.dumps(settings,separators=(',',':')),'--role-contract',str(authority_file),'--quorum','3','--ema',json.dumps({'decay':0.88,'warmup':0},separators=(',',':')),'--outer-schedule',json.dumps([{'from_round':0,'lr':1.,'momentum':0.},{'from_round':10,'lr':0.7,'momentum':0.9}],separators=(',',':')),'--max-staleness','2'];initfile=a.out/'coordinator-init-args.json';write_json_durable(initfile,init)
+    result={'schema':'natlang.fresh-first-outer-prepared/1','inventory':a.inventory,'prior_recipe':a.recipe,'recipe':resident.binding(path),'manifest':resident.binding(manifest),'peer_declarations':declarations,'worker_args':resident.binding(argfile),'role_contract':resident.binding(authority_file),'coordinator_init_args':resident.binding(initfile),'source_sha256':train,'held_sha256':held,'source_hash':source_hash,'seed':seed,'peers':records,'settings':settings,'quorum':3,'common_identity_sha256':canonical_json_sha256_hex(identities[0]),'peer1_lineage_witness':inventory['peer1_lineage_witness'],'scope':'LFM3 20261029 task-specific inert controls; verify actual runtime, target staged paths, owner process and physical capacity before launch. Owner full GET status is separate.'};write_json_durable(a.out/'receipt.json',result);return result
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--inventory',type=Path,required=True);p.add_argument('--inventory-sha256',required=True);p.add_argument('--recipe',type=Path,required=True);p.add_argument('--recipe-sha256',required=True);p.add_argument('--out',type=Path,required=True)

@@ -156,6 +156,11 @@ def initialize_coordinator(
         or not (0 < outer_lr <= 4 and 0 <= outer_momentum < 1)
     ):
         raise ValueError("Invalid DiLoCo coordinator configuration")
+    from .role_contract import SCHEMA as HETERO_SCHEMA, validate as validate_role_contract
+    if identity.get('schema') == HETERO_SCHEMA:
+        validate_role_contract(identity, workers, verify_files=True)
+        if identity['baseline_sha256'] != (seed_source or {}).get('sha256'):
+            raise ValueError('heterogeneous baseline differs from exact coordinator seed')
     if root.exists() and any(root.iterdir()):
         raise FileExistsError(f"Refusing to overwrite a DiLoCo coordinator run at {root}")
     root.mkdir(parents=True, exist_ok=True)
@@ -287,21 +292,119 @@ class Coordinator:
         if lease is None or lease["session"] != session or lease["expires"] < time.time():
             raise Conflict("Learner lease expired or belongs to a different session", lease=True)
 
-    def lease(self, worker: int, session: str) -> dict:
+    def lease(self, worker: int, session: str, contract_sha256: str | None = None) -> dict:
         if not 0 <= worker < self.manifest["workers"] or not re.fullmatch(r"[a-f0-9-]{36}", session):
             raise ValueError("Invalid learner ID or session UUID")
-        with self.progress_lock:
+        from .role_contract import SCHEMA as HETERO_SCHEMA
+        hetero=self.manifest['identity'].get('schema') == HETERO_SCHEMA
+        if hetero:
+            allowed={canonical_json_sha256_hex(x) for x in self.role_contracts(worker)['roles'][str(worker)]}
+            if contract_sha256 not in allowed:raise ValueError('worker contract is not authorized')
+        with self.lock, self.progress_lock:
             previous = self.progress["leases"].get(str(worker))
+            if hetero and previous and previous.get('contract_sha256')!=contract_sha256:
+                if any((self._pending_dir(f.index)/f'{worker:03d}.safetensors').exists() for f in self.fragments):
+                    raise Conflict('cannot switch objective with queued worker updates')
             if previous and previous["expires"] > time.time() and previous["session"] != session:
                 raise Conflict("Learner ID already leased by a live session")
             self.progress["leases"][str(worker)] = {
                 "session": session,
                 "expires": time.time() + self.manifest["lease_seconds"],
+                **({"contract_sha256":contract_sha256} if hetero else {}),
             }
             self.progress.setdefault("registered", {}).setdefault(str(worker), time.time())
             self._write_progress()
         with self.lock:
             return {**self.status(), "sequences": self._sequences(worker)}
+
+    def role_contracts(self, worker: int) -> dict:
+        from .role_contract import SCHEMA as HETERO_SCHEMA
+        identity=self.manifest['identity']
+        if identity.get('schema') != HETERO_SCHEMA or not 0 <= worker < self.manifest['workers']:
+            raise ValueError('coordinator has no heterogeneous authority for worker')
+        with self.progress_lock:
+            extra=list((self.progress.get('role_contracts') or {}).get(str(worker), []))
+        result={**identity, 'roles':{str(i):list(identity['roles'][str(i)]) for i in range(self.manifest['workers'])}}
+        result['roles'][str(worker)].extend(extra)
+        return result
+
+    def register_role_contract(self, worker: int, session: str, contract: dict, incoming: Path) -> dict:
+        """Seal an admitted stage and its portable exact evidence in the replica journal."""
+        import tarfile,tempfile,shutil
+        from ...common.hashing import sha256_file_hex_cached
+        from .role_contract import validate
+        self._lease_valid(worker,session)
+        if contract.get('kind') not in ('jolt','sft'):raise ValueError('only explicit on-policy or supervised contracts may be registered')
+        digest=canonical_json_sha256_hex(contract)
+        static={(ref['path'],ref['sha256']) for roles in self.manifest['identity']['roles'].values() for item in roles for ref in item.get('dependencies',[])}
+        expected={x['sha256'] for x in contract.get('dependencies',[]) if isinstance(x,dict) and 'sha256' in x and (x.get('path'),x['sha256']) not in static}
+        if not contract.get('dependencies'):raise ValueError('role evidence has no dependencies')
+        with tempfile.TemporaryDirectory(prefix='role-evidence-',dir=self.root) as directory:
+            root=Path(directory)
+            with tarfile.open(incoming,'r:*') as archive:
+                members=archive.getmembers()
+                if len(members)!=len(expected) or {x.name for x in members}!=expected or any(not x.isfile() for x in members):
+                    raise ValueError('role evidence archive inventory differs')
+                archive.extractall(root,filter='data')
+            def resolver(ref):return Path(ref['path']) if (ref['path'],ref['sha256']) in static else root/ref['sha256']
+            current=self.role_contracts(worker)
+            if contract.get('kind')=='sft':
+                previous=self.progress['leases'][str(worker)].get('contract_sha256')
+                matches=[x for x in current['roles'][str(worker)] if canonical_json_sha256_hex(x)==previous]
+                if contract.get('predecessor_contract_sha256')!=previous or len(matches)!=1:
+                    raise ValueError('supervised continuation must follow its exact prior contract')
+                if matches[0].get('kind')=='sft':
+                    transition=contract.get('source_transition') or {}
+                    if (transition.get('schema')!='natlang.diloco-source-contract-transition/1'
+                            or transition.get('kind')!='append' or transition.get('verified') is not True
+                            or not re.fullmatch('[0-9a-f]{64}',str(transition.get('checkpoint_sha256','')))):
+                        raise ValueError('supervised source append lacks its exact verified transition')
+                    def value(role,flag):
+                        argv=role['identity']['trainer_argv'];indices=[i for i,v in enumerate(argv[:-1]) if v==flag]
+                        if len(indices)!=1:raise ValueError('source transition lacks '+flag)
+                        path=argv[indices[0]+1];refs=[r for r in role['dependencies'] if r['path']==path]
+                        if len(refs)!=1:raise ValueError('source transition lacks exact input binding')
+                        return refs[0]['sha256']
+                    if (value(matches[0],'--native-graphs')!=transition.get('prior_source_sha256')
+                            or value(contract,'--continued-native-graphs')!=transition.get('prior_source_sha256')
+                            or value(contract,'--native-graphs')!=transition.get('source_sha256')
+                            or value(matches[0],'--held-native-graphs')!=value(contract,'--held-native-graphs')):
+                        raise ValueError('supervised source append changed predecessor or held custody')
+                    if '--foundation-native-graphs' in matches[0]['identity']['trainer_argv']:
+                        old_foundation=value(matches[0],'--foundation-native-graphs')
+                        new_foundation=value(contract,'--foundation-native-graphs')
+                        if (old_foundation==transition['prior_source_sha256'] and new_foundation!=transition['source_sha256']) or (old_foundation!=transition['prior_source_sha256'] and new_foundation!=old_foundation):
+                            raise ValueError('supervised source append changed foundation custody')
+                elif matches[0].get('kind')!='jolt':raise ValueError('invalid previous supervised contract')
+            if not any(canonical_json_sha256_hex(x)==digest for x in current['roles'][str(worker)]):
+                current['roles'][str(worker)].append(contract)
+            validate(current,self.manifest['workers'],verify_files=True,only_digest=digest,resolver=resolver)
+            evidence_sha=sha256_file_hex_cached(incoming); evidence_dir=self.root/'contracts';evidence_dir.mkdir(exist_ok=True)
+            evidence=evidence_dir/(digest+'.tar')
+            if evidence.exists():
+                if sha256_file_hex_cached(evidence)!=evidence_sha:raise ValueError('registered role evidence changed')
+            else:
+                fd,name=tempfile.mkstemp(prefix='.role-',dir=evidence_dir)
+                try:
+                    with os.fdopen(fd,'wb') as dst, Path(incoming).open('rb') as src:
+                        shutil.copyfileobj(src,dst,1<<20);dst.flush();os.fsync(dst.fileno())
+                    if sha256_file_hex_cached(Path(name))!=evidence_sha:raise ValueError('role evidence copy differs')
+                    try:os.link(name,evidence)
+                    except FileExistsError:
+                        if sha256_file_hex_cached(evidence)!=evidence_sha:raise ValueError('concurrent role evidence differs')
+                    directory_fd=os.open(evidence_dir,os.O_RDONLY|os.O_DIRECTORY)
+                    try:os.fsync(directory_fd)
+                    finally:os.close(directory_fd)
+                finally:os.unlink(name)
+            with self.lock:
+                self._lease_valid(worker,session)
+                current=self.role_contracts(worker)
+                if any(canonical_json_sha256_hex(x)==digest for x in current['roles'][str(worker)]):return {'status':'already_registered','sha256':digest}
+                with self.progress_lock:
+                    self.progress.setdefault('role_contracts',{}).setdefault(str(worker),[]).append(contract)
+                    self.progress.setdefault('role_evidence',{})[digest]={'path':'contracts/'+digest+'.tar','sha256':evidence_sha}
+                    self._write_progress()
+                return {'status':'registered','sha256':digest}
 
     def _sequences(self, worker: int) -> list[int]:
         """The newest sequence held from ``worker`` per fragment (merged or queued).
@@ -513,12 +616,15 @@ class Coordinator:
                 or not torch.isfinite(delta).all()
             ):
                 raise ValueError("Delta dtype, shape, or finiteness invalid")
+            lease = self.progress['leases'][str(worker)]
+            contract = lease.get('contract_sha256')
             target = self._pending_dir(index) / f"{worker:03d}.safetensors"
             if target.exists():
                 queued = _metadata(target)
                 if int(queued["sequence"]) == sequence:
                     if (any(queued.get(key) != str(value) for key,value in
                             (('worker',worker),('base_version',base_version),('steps',steps),('tokens',tokens)))
+                            or (contract is not None and queued.get('contract_sha256') != contract)
                             or not torch.equal(load_tensors(target)['delta'],delta.float())):
                         raise Conflict('Queued learner sequence was replayed with different metadata or delta')
                     return {"status": "already_queued", "version": version}
@@ -532,6 +638,7 @@ class Coordinator:
                     "base_version": str(base_version),
                     "steps": str(steps),
                     "tokens": str(tokens),
+                    **({"contract_sha256":contract} if contract is not None else {}),
                 },
             )
             self._try_merge(index,final=self._all_completion_declared())
@@ -583,9 +690,17 @@ class Coordinator:
             committed["ema"] = torch.lerp(data["ema"], theta, weight)
         # The authoritative fragment with its last_seq is the commit record;
         # proposals replayed after a crash are discarded by the ledger above.
-        windows = {item["worker"]: {"steps": int(item["steps"]), "tokens": int(item["tokens"]), "staleness": age}
+        windows = {item["worker"]: {"steps": int(item["steps"]), "tokens": int(item["tokens"]), "staleness": age, **({"contract_sha256":item["contract_sha256"]} if "contract_sha256" in item else {})}
                    for _, item, age in proposals}
         record = {"version": str(version + 1), "last_seq": json.dumps(last_seq), "windows": json.dumps(windows)}
+        from .role_contract import SCHEMA as HETERO_SCHEMA
+        if self.manifest['identity'].get('schema') == HETERO_SCHEMA:
+            ledger=json.loads(meta.get('contract_ledger','{}'))
+            for _,item,_ in proposals:
+                contract=item.get('contract_sha256');key=item['worker']+':'+item['sequence']
+                if not contract or (key in ledger and ledger[key]!=contract):raise ValueError('proposal contract custody is missing or changed')
+                ledger[key]=contract
+            record['contract_ledger']=json.dumps(ledger,sort_keys=True,separators=(',',':'))
         if "outer_schedule" in self.manifest:
             record["outer"] = json.dumps({"entry": entry_index, **entry}, sort_keys=True)
         save_tensors(path, committed, metadata=record)
@@ -835,7 +950,7 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
     def operation(kind, args, payload=None):
         if replication is not None:
             return replication.call(kind, args, payload)
-        if kind == 'submit': args = {**args, 'incoming': payload}
+        if kind in ('submit','register_role_contract'): args = {**args, 'incoming': payload}
         return getattr(coordinator, kind)(**args)
 
 
@@ -925,6 +1040,9 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 return
             parsed = urlsplit(self.path)
             try:
+                if parsed.path == "/v1/role-contracts":
+                    query=parse_qs(parsed.query); worker=int(query['worker'][0])
+                    self._json(200,read(lambda: coordinator.role_contracts(worker)));return
                 if parsed.path == "/v1/manifest":
                     self._json(200, coordinator.manifest)
                 elif parsed.path == "/v1/replica-promotion" and replication is not None:
@@ -1034,7 +1152,12 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                     self._json(200,{'state':'pinned','fence_id':value['fence_id'],'path':str(destination)});return
                 if parsed.path == "/v1/lease":
                     value = self._read_json()
-                    result = operation("lease", {"worker": int(value["worker"]), "session": str(value["session"])})
+                    result = operation("lease", {"worker": int(value["worker"]), "session": str(value["session"]), **({"contract_sha256":value.get("contract_sha256")} if "contract_sha256" in value else {})})
+                elif parsed.path == "/v1/register-role-contract":
+                    value=self._read_json()
+                    name=value['evidence_name'];digest=value['evidence_sha256'];files.check(name,digest)
+                    if files.committed(name)!=digest:raise ValueError('role evidence is not durably committed')
+                    result=operation('register_role_contract',{'worker':int(value['worker']),'session':str(value['session']),'contract':value['contract']},files.root/name)
                 elif parsed.path == "/v1/identity-transition":
                     value=self._read_json()
                     result=operation('identity_transition', {'worker':int(value['worker']),'session':str(value['session']),'transition':value['transition']})

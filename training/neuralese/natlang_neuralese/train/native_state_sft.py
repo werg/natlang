@@ -2667,9 +2667,17 @@ def _main(argv=None, *, requested_refresh):
         carried=((resume or {}).get('options') or {}).get('diloco_identity_transition_history') or []
         if carried and diloco_previous_source_hash==source_hash:
             diloco_identity_transition={**carried[-1], 'replay_verified_checkpoint_sha256':sha256_file_hex_cached(policy.slot)}
+    carried_diloco = (resume or {}).get('diloco') if (parent_continuation and args.diloco is not None) else None
+    if carried_diloco is not None and not policy_operation:
+        from ..rl.diloco_contract import register_supervised_stage
+        register_supervised_stage(args, list(sys.argv[1:] if argv is None else argv), carried_diloco)
+    effective_argv=argv
+    if resident_state is not None and args.diloco is not None:
+        from .diloco.role_contract import resident_argv
+        effective_argv=resident_argv(sys.argv[1:] if argv is None else argv,resident_state['payload'],args.stage_id)
     diloco = attach_learner(args, named, parent_continuation=parent_continuation,
-                            saved_state=None if parent_continuation or (args.diloco is None and args.standalone_diloco_parent is not None) else (resume or {}).get('diloco'),
-                            argv=argv, source_transition=diloco_identity_transition,
+                            saved_state=carried_diloco if carried_diloco is not None else None if parent_continuation or (args.diloco is None and args.standalone_diloco_parent is not None) else (resume or {}).get('diloco'),
+                            argv=effective_argv, source_transition=diloco_identity_transition,
                             new_outer=new_outer_proof is not None and not new_outer_resumed)
     checkpoint_options['_diloco_learner'] = diloco
     if new_outer_proof is not None:
@@ -2694,7 +2702,7 @@ def _main(argv=None, *, requested_refresh):
         history=checkpoint_options.setdefault('diloco_identity_transition_history',list(((resume or {}).get('options') or {}).get('diloco_identity_transition_history') or []))
         if diloco.identity_transition not in history:history.append(diloco.identity_transition)
     reopened_diloco=False
-    if diloco is not None and not parent_continuation and resume and new_outer_proof is None:
+    if diloco is not None and (not parent_continuation or carried_diloco is not None) and resume and new_outer_proof is None:
         previous_delivery=((resume.get('options') or {}).get('diloco_final_delivery') or {})
         previous_source=resume.get('source_hash')
         if previous_delivery and previous_source != source_hash:
@@ -3194,9 +3202,44 @@ def _main(argv=None, *, requested_refresh):
                         checkpoint_sha256=sha256_file_hex_cached(policy.slot) if policy.slot.exists() else config['base_inventory_sha256'],
                         global_step=global_step,prior_geometry=payload.get('sft_packed_geometry'),live_uncommitted=True,
                         capacity_identity=capacity_identity(config,args,backend))
-                expanded = (resident.poll(global_step,candidate_check=packed_candidate_check)
-                    if args.memory_qualification and objective is None else resident.poll(global_step))
+                pending_role_contract = {}
+                def resident_candidate_check(candidate_train,candidate_held,payload,candidate_ce,declarations):
+                    nonlocal last_saved_step, metadata_dirty
+                    checked = packed_candidate_check(candidate_train,candidate_held,payload,candidate_ce,declarations) if args.memory_qualification and objective is None else None
+                    if diloco is not None and getattr(diloco,'contract_sha256',None) is not None:
+                        from .native_resident import ResidentRetry
+                        if not diloco.drain_for_contract(stop_requested=lambda:policy.signaled):
+                            raise ResidentRetry('resident append awaits merged prior-objective windows')
+                        _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                            global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                            source_hash=source_hash, source_row_bindings=source_row_bindings,
+                            held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                            rng=capture_training_rng_state(args.device), metrics=metrics,
+                            architecture=config['architecture'], options={**checkpoint_options, '_source_row_order':source_order},
+                            fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                        policy.drain_async();last_saved_step=step;metadata_dirty=False
+                        from .diloco.role_contract import resident_argv
+                        from ..rl.diloco_contract import register_source_append
+                        new_argv=resident_argv(sys.argv[1:] if argv is None else argv,payload,args.stage_id)
+                        transition={'schema':'natlang.diloco-source-contract-transition/1','kind':'append','verified':True,
+                            'checkpoint_sha256':sha256_file_hex_cached(policy.slot),'prior_source_sha256':source_receipts[0]['sha256'],
+                            'source_sha256':candidate_train.file_sha256}
+                        try:
+                            _,identity=register_source_append(args,new_argv,diloco.state_dict(clone_baselines=False),transition)
+                        except (OSError,TimeoutError) as error:
+                            raise ResidentRetry('resident role publication temporarily unavailable') from error
+                        except Exception as error:
+                            from .diloco.worker import RemoteError
+                            if isinstance(error,RemoteError) and error.status in (409,429,500,502,503,504):
+                                raise ResidentRetry('resident coordinator temporarily unavailable') from error
+                            raise
+                        pending_role_contract['identity']=identity
+                    return checked
+                needs_candidate_check = bool((args.memory_qualification and objective is None) or (diloco is not None and getattr(diloco,'contract_sha256',None) is not None))
+                expanded = resident.poll(global_step,candidate_check=resident_candidate_check) if needs_candidate_check else resident.poll(global_step)
                 if expanded is not None:
+                    if pending_role_contract:
+                        diloco.switch_role_contract(pending_role_contract['identity'])
                     schedule.close()
                     metadata_dirty = True
                     checkpoint_options['source_predecessors'] = {
@@ -3674,6 +3717,8 @@ def _main(argv=None, *, requested_refresh):
                 diloco.declare_completion(drained=False,generation=source_hash)
                 if not diloco.finish(stop_requested=lambda: policy.signaled):
                     raise RuntimeError('DiLoCo final local updates were not fully delivered; full-state resume required')
+                if getattr(diloco,'contract_sha256',None) is not None and not diloco.drain_for_contract(stop_requested=lambda: policy.signaled):
+                    raise RuntimeError('DiLoCo objective boundary requires all prior windows merged and installed')
                 diloco.declare_completion(drained=True,generation=source_hash)
                 checkpoint_options['diloco_final_delivery'] = {
                     'schema': 'natlang.diloco-final-delivery/1',

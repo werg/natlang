@@ -60,12 +60,12 @@ class ReplayCoordinator:
     def apply(self,event,payload):
         if set(event)!={'kind','args','wall','monotonic'} or not isinstance(event['args'],dict):raise ValueError('invalid replay event')
         kind=event['kind'];args=dict(event['args']);c=self.coordinator
-        if kind not in ('lease','heartbeat','identity_transition','completion','reopen','submit','tick','close','clock_rebase'):
+        if kind not in ('lease','heartbeat','identity_transition','register_role_contract','completion','reopen','submit','tick','close','clock_rebase'):
             raise ValueError('unknown coordinator replay event')
         if not isinstance(event['wall'],(int,float)) or not isinstance(event['monotonic'],(int,float)):
             raise ValueError('invalid coordinator event clock')
         before=[c._version(f.index) for f in c.fragments]
-        if kind=='submit':args['incoming']=Path(payload)
+        if kind in ('submit','register_role_contract'):args['incoming']=Path(payload)
         with _CLOCK_LOCK:
             previous=module.time;module.time=_Clock(event['wall'],event['monotonic'])
             error=None

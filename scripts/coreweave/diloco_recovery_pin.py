@@ -130,7 +130,7 @@ def _inventory(root, *, include_public=False):
     root=Path(root);result={}
     # public/ is a derived serving cache; Coordinator._sync_public rebuilds it
     # from authoritative fragment theta/version on every coordinator startup.
-    names=['manifest.json','seed.safetensors','progress.json','fragments','pending']
+    names=['manifest.json','seed.safetensors','progress.json','fragments','pending','contracts']
     if include_public:names.append('public')
     for name in names:
         entry=root/name

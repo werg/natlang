@@ -259,6 +259,8 @@ def _admit_and_train(args,trainer):
     trainer_args=['--native-graphs', str(graph_path), '--held-native-graphs', str(args.held_native_graphs),
         '--objective-spec', str(objective_path), '--continue-from', str(args.continue_from),
         '--objective-continuation', '--out', str(args.out), *trainer]
+    from .diloco_contract import register_admitted_stage
+    register_admitted_stage(args,trainer_args)
     return _invoke_raw_trainer(args, trainer, trainer_args, train)
 
 

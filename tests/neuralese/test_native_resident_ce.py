@@ -277,3 +277,29 @@ def test_shared_foundation_and_ce_append_resume_exact_training_state(tmp_path,mo
     assert options['foundation_native_graphs_binding']['sha256']==resident.sha(tmp_path/'train.json')
     assert options['foundation_native_graphs']==str(tmp_path/'train.json')
     assert options['ce_supervision_policy_binding']['sha256']==resident.sha(tmp_path/'new-ce.json')
+
+
+def test_resident_logical_family_extension_preserves_old_rows_and_records_transition(tmp_path):
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.train.native_resident_ce import adopt_policy_update
+    from natlang_neuralese.train.own_output_supervision import identity,policy_objective
+    from test_own_output_supervision import objective
+    paths,old,new=fixture(tmp_path);before=NativeGraphSource(paths['old_train'],'tokenizer-sha',required_split='train');after=NativeGraphSource(paths['train'],'tokenizer-sha',required_split='train')
+    def family_map(path,source):
+        write_json(path,{'schema':'natlang.logical-family-map/1','source_sha256':source.file_sha256,
+                         'rows':[{'id':e['id'],'binding':e['binding'],'family':'ordinary'} for e in source.entries]})
+        return resident.binding(path)
+    oldmap=family_map(tmp_path/'old-family.json',before);newmap=family_map(tmp_path/'new-family.json',after)
+    family=lambda ref:{'key':'logical-family','max_scale':8.,'normalization':'bounded-mean-one/1','map':ref}
+    olddoc=json.loads(paths['old_ce'].read_text());newdoc=json.loads(paths['new_ce'].read_text())
+    olddoc['objective']=objective(mass='token',family_balance=family(oldmap));newdoc['objective']=objective(mass='token',family_balance=family(newmap));newdoc['objective_transition']={'from':identity(policy_objective(olddoc))['sha256']}
+    write_json(paths['old_ce'],olddoc);write_json(paths['new_ce'],newdoc)
+    old['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['old_ce']),'binding':'ce'};new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+    loaded=extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
+    options={'supervision_objective':identity(policy_objective(olddoc))};args=SimpleNamespace(ce_supervision_policy=None)
+    adopt_policy_update((new['stage_inputs']['sft']['ce_supervision_policy'],loaded),current_binding=resident.binding(paths['old_ce']),args=args,checkpoint_options=options,global_step=7)
+    assert options['supervision_objective']['sha256']==identity(policy_objective(newdoc))['sha256']
+    assert options['supervision_objective_history'][-1]['at_global_step']==7
+    damaged=json.loads((tmp_path/'new-family.json').read_text());damaged['rows'][0]['family']='changed';write_json(tmp_path/'new-family.json',damaged);newdoc['objective']['family_balance']['map']=resident.binding(tmp_path/'new-family.json');write_json(paths['new_ce'],newdoc);new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+    with pytest.raises(ValueError,match='changed prior source row families'):
+        extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)

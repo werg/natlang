@@ -7,11 +7,14 @@ from scripts.coreweave.prepare_fresh_first_outer import prepare
 def test_first_outer_builder_exact_receipts_and_common_identity(tmp_path):
     def put(name,value):
         p=tmp_path/name;p.write_text(json.dumps(value));return {'path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+    owner=put('owner',{'fresh_checkpoint_sha256':'d'*64,'accepted':{'accepted':True,'pid':12,'boot_id':'boot','process_start_ticks':'34'}})
     base='51bacc47b54e937684e8e757dde12e1b01719c8f24e1d52d8f185b236753648f';size=12482163595;train='9d93141df15287e147afb7fa32b499ef4d59d54cdfe5de1755d24b879a821362';held='5053ab2b6754f2998294215e7892b5c18443d973f55e6c04239803ffac7b5e7f';peers=[]
     for rank in range(4):
         sha='a'*64 if rank==0 else base;step=3 if rank==0 else 2;parent={'path':f'/work/peer-{rank}.pt','sha256':sha,'bytes':size,'step':step}
-        pin=put(f'pin-{rank}',{**parent,'source_sha256':train});private=put(f'private-{rank}',{'private':True,'identity':{'sha256':sha},'independent_verification':{'sha256':sha,'bytes':size,'readback_location':'sandbox'},'verified_at':1});meta=put(f'meta-{rank}',{'checkpoint_sha256':sha,'step':step,'train_sha256':train,'held_sha256':held,'source_hash':'b'*64,'full_state_verified':True,'optimizer_verified':True,'rng_verified':True,'exposure_verified':True});presence=put(f'presence-{rank}',{'sha256':sha,'bytes':size,'owner_access':True,'private_object_present':True,'observed_at':2});peers.append({'worker':rank,'parent':parent,'pin_receipt':pin,'private_receipt':private,'full_state_receipt':meta,'owner_presence_receipt':presence})
-    inv=put('inventory',{'schema':'natlang.fresh-first-outer-inventory/1','seed':{'sha256':base,'bytes':size},'peers':peers})
+        pin=put(f'pin-{rank}',{**parent,'source_sha256':train,'owner_receipt':owner['path']});private=put(f'private-{rank}',{'private':True,'identity':{'sha256':sha},'independent_verification':{'sha256':sha,'bytes':size,'readback_location':'sandbox'},'verified_at':1});meta=put(f'meta-{rank}',{'checkpoint_sha256':sha,'step':step,'train_sha256':train,'held_sha256':held,'source_hash':'b'*64,'full_state_verified':True,'optimizer_verified':True,'rng_verified':True,'exposure_verified':True});presence=put(f'presence-{rank}',{'sha256':sha,'bytes':size,'owner_access':True,'private_object_present':True,'observed_at':2});peers.append({'worker':rank,'parent':parent,'pin_receipt':pin,'private_receipt':private,'full_state_receipt':meta,'owner_presence_receipt':presence})
+    baseline=put('baseline-pin',{'sha256':base,'step':2,'owner_receipt':owner['path']})
+    witness=put('witness',{'schema':'natlang.fresh-writer-lineage/1','continuity_verified':True,'owner':owner,'baseline_pin_receipt':baseline,'baseline_sha256':base,'latest_sha256':peers[0]['parent']['sha256'],'initial_checkpoint_sha256':'d'*64,'pid':12,'boot_id':'boot','process_start_ticks':'34'})
+    inv=put('inventory',{'schema':'natlang.fresh-first-outer-inventory/1','seed':{'sha256':base,'bytes':size},'peers':peers,'peer1_lineage_witness':witness})
     recipe=Path(os.environ.get('NATLANG_FRESH_RECIPE_FIXTURE','/nonexistent/fresh-recipe.json'))
     if not recipe.is_file():pytest.skip('production recipe fixture not available')
     args=argparse.Namespace(inventory=inv,recipe={'path':str(recipe),'sha256':hashlib.sha256(recipe.read_bytes()).hexdigest()},out=tmp_path/'out',seed_logical='/work/fresh/seed.pt',worker_out='/work/fresh/learner',coordinator_root='/work/fresh/coordinator',coordinator_url='https://example.invalid',run_id='test')
@@ -21,3 +24,7 @@ def test_first_outer_builder_exact_receipts_and_common_identity(tmp_path):
     assert all(x['owner_get']=='pending' for x in result['peers'])
     invdoc=json.loads(Path(inv['path']).read_text());invdoc['peers'][2]['parent']['sha256']='c'*64;bad=put('bad-inventory',invdoc);args.inventory=bad;args.out=tmp_path/'badout'
     with pytest.raises(ValueError,match='pin receipt differs'):prepare(args)
+
+    witnessdoc=json.loads(Path(witness['path']).read_text());witnessdoc['pid']=13;badw=put('bad-witness',witnessdoc)
+    invdoc=json.loads(Path(inv['path']).read_text());invdoc['peer1_lineage_witness']=badw;args.inventory=put('bad-witness-inventory',invdoc);args.out=tmp_path/'bad-witness-out'
+    with pytest.raises(ValueError,match='continuous fresh-writer custody'):prepare(args)

@@ -1659,3 +1659,12 @@ def test_expanded_shared_foundation_carries_only_exact_prior_row_exposure(tmp_pa
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
+
+
+def test_transient_candidate_dependency_keeps_same_request_retryable(tmp_path):
+    paths,directory,manager,recipe=setup(tmp_path)
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=())
+    def unavailable(*args):raise resident.ResidentRetry('temporary coordinator failure')
+    assert manager.poll(13,candidate_check=unavailable) is None
+    assert not manager.rejected and resident.current(directory) is None
+    assert manager.poll(14,candidate_check=lambda *args:None)[0].ordered_ids()==['a','b','c']

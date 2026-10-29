@@ -1562,6 +1562,10 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
         return binding(path)
 
 
+class ResidentRetry(RuntimeError):
+    """A transient admission dependency is unavailable; keep the request pending."""
+
+
 class ResidentAdoption:
     def __init__(self, directory, *, stage_id, recipe_binding, train, held, package=None, geometry_qualification=None, geometry_identity=None, withdrawal_history=()):
         self.directory = Path(directory)
@@ -1698,7 +1702,7 @@ class ResidentAdoption:
             validate_classification_append(self.plan,payload['plan'],self.stage_id,train,len(self.train),self.directory)
             from .native_resident_ce import extension_policy
             ce_policy = extension_policy(self.plan['stage_inputs'][self.stage_id],
-                payload['plan']['stage_inputs'][self.stage_id])
+                payload['plan']['stage_inputs'][self.stage_id], prior_train=self.train, candidate_train=train)
             ce_update = ((payload['plan']['stage_inputs'][self.stage_id]['ce_supervision_policy'],
                 ce_policy) if ce_policy is not None else None)
             checked = candidate_check(train, held, payload, ce_update, declarations) if candidate_check else None
@@ -1734,6 +1738,9 @@ class ResidentAdoption:
                 self.ce_policy_update = ce_update
                 self.packed_capacity_update = checked
                 return train, held
+        except ResidentRetry as error:
+            print(json.dumps({'event':'resident_retry','error':str(error),'at_global_step':global_step}),flush=True)
+            return None
         except (ValueError, KeyError, TypeError, OSError) as error:
             # A post-commit projection error is fatal/recoverable, never continue
             # SGD under stale source metadata after publishing a new generation.

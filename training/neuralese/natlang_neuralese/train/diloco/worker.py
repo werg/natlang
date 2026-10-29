@@ -316,6 +316,12 @@ class DilocoLearner:
         self.shard = (self.worker, settings.workers)
         self.transport = transport or transport_from_env(settings)
         self.manifest = self.transport.json("GET", "/v1/manifest")
+        from .role_contract import SCHEMA as HETERO_SCHEMA, select as select_role_contract
+        self.contract_sha256 = None
+        self.contract_history = []
+        if self.manifest['identity'].get('schema') == HETERO_SCHEMA:
+            authority=self.transport.json('GET',f'/v1/role-contracts?worker={self.worker}')
+            self.contract_sha256 = select_role_contract(authority, self.worker, identity)
         mismatches = [
             label
             for label, ok in (
@@ -323,7 +329,7 @@ class DilocoLearner:
                 ("run_id", self.manifest["run_id"] == settings.run_id),
                 ("workers", self.manifest["workers"] == settings.workers),
                 ("parameters", self.manifest["parameter_identity"] == parameter_identity(surface.masters)),
-                ("identity", self.manifest["identity_sha256"] == canonical_json_sha256_hex(dict(identity))),
+                ("identity", self.contract_sha256 is not None or self.manifest["identity_sha256"] == canonical_json_sha256_hex(dict(identity))),
             )
             if not ok
         ]
@@ -363,7 +369,7 @@ class DilocoLearner:
     # -- lease and heartbeat -------------------------------------------------
 
     def _lease(self) -> dict:
-        status = self.transport.json("POST", "/v1/lease", {"worker": self.worker, "session": self.session})
+        status = self.transport.json("POST", "/v1/lease", {"worker": self.worker, "session": self.session, **({"contract_sha256":self.contract_sha256} if self.contract_sha256 is not None else {})})
         self._update_status(status)
         return status
 
@@ -518,6 +524,13 @@ class DilocoLearner:
             raise ValueError("DiLoCo learner state belongs to a different coordinator run")
         if value["worker"] != self.worker:
             raise ValueError("DiLoCo learner state belongs to another data shard")
+        previous_contract=value.get('contract_sha256')
+        self.contract_history=list(value.get('contract_history') or [])
+        if self.contract_sha256 is not None and previous_contract != self.contract_sha256:
+            if (not previous_contract or value.get('pending') or value.get('awaiting_global')
+                    or any(value.get('steps_since') or []) or any(value.get('tokens_since') or [])):
+                raise ValueError('objective handoff requires an exact drained prior contract and no uncommitted windows')
+            self.contract_history.append({'from':previous_contract,'to':self.contract_sha256,'local_steps':value['local_steps']})
         self.session = value["session"]
         self.versions = list(value["versions"])
         self.baselines = [None if part is None else part.float().cpu() for part in value["baselines"]]
@@ -848,6 +861,36 @@ class DilocoLearner:
                     return False
             time.sleep(0.2)
 
+    def switch_role_contract(self, identity: Mapping) -> str:
+        """Activate an already registered contract only after all prior windows commit."""
+        from .role_contract import select
+        if self.contract_sha256 is None:raise ValueError('coordinator does not have role contracts')
+        if self.pending or self.awaiting_global or any(self.steps_since) or any(self.tokens_since):
+            raise ValueError('role contract change has uncommitted windows')
+        authority=self.transport.json('GET',f'/v1/role-contracts?worker={self.worker}')
+        current=select(authority,self.worker,identity)
+        if current==self.contract_sha256:return current
+        previous=self.contract_sha256;self.contract_sha256=current
+        try:self._lease()
+        except BaseException:self.contract_sha256=previous;raise
+        self.contract_history.append({'from':previous,'to':current,'local_steps':self.local_steps})
+        return current
+
+    def drain_for_contract(self, *, stop_requested=lambda: False) -> bool:
+        """Deliver and install every prior-objective window before switching contracts."""
+        if not self.finish(stop_requested=stop_requested):return False
+        deadline=time.monotonic()+self.settings.timeout_seconds
+        versions=tuple(self.remote_versions or ())
+        while self.pending or self.awaiting_global or any(self.steps_since) or any(self.tokens_since):
+            if stop_requested():return False
+            self._collect_uploads(self.local_steps)
+            self._collect_downloads()
+            current=tuple(self.remote_versions or ())
+            if current!=versions:versions=current;deadline=time.monotonic()+self.settings.timeout_seconds
+            if time.monotonic()>deadline:return False
+            time.sleep(.2)
+        return True
+
     def cursors(self) -> dict:
         """Small committed-fragment counters, without allocating tensor snapshots."""
         return {'versions': list(self.versions), 'sequences': list(self.sequences)}
@@ -866,6 +909,7 @@ class DilocoLearner:
             "fingerprint": self.manifest["fingerprint"],
             "worker": self.worker,
             "session": self.session,
+            **({"contract_sha256":self.contract_sha256, "contract_history":list(self.contract_history)} if self.contract_sha256 is not None else {}),
             **self.cursors(),
             "baselines": [None if t is None else t.detach().clone() if clone_baselines else t.detach()
                           for t in self.baselines],

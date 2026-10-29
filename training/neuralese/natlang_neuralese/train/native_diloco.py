@@ -182,7 +182,18 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
         from .diloco.worker import transport_from_env
         transport=transport_from_env(settings);manifest=transport.json('GET','/v1/manifest')
         original=manifest['identity']
-        if current_identity!=original:
+        from .diloco.role_contract import SCHEMA as HETERO_SCHEMA
+        if original.get('schema')==HETERO_SCHEMA:
+            if (source_transition.get('transition_kind')!='append' or source_transition.get('correction_verified') is not True
+                    or args.continued_native_graphs is None):
+                raise ValueError('heterogeneous source continuation requires an exact verified append')
+            from ..rl.diloco_contract import register_source_append
+            record={'schema':'natlang.diloco-source-contract-transition/1','kind':'append','verified':True,
+                'checkpoint_sha256':source_transition['checkpoint_sha256'],
+                'prior_source_sha256':sha256_file_hex_cached(args.continued_native_graphs),
+                'source_sha256':sha256_file_hex_cached(args.native_graphs)}
+            register_source_append(args,sys.argv[1:] if argv is None else argv,saved_state,record)
+        elif current_identity!=original:
             prior=source_transition.get('original_identity')
             if prior is not None:
                 if prior!=original:
@@ -216,7 +227,7 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
                             identity=effective, output=args.out / 'diloco', transport=transport)
     if new_outer:
         learner.reanchor_deviations = learner.reanchor_fresh()
-    elif parent_continuation:
+    elif parent_continuation and saved_state is None:
         learner.start()
     elif saved_state is None:
         raise ValueError('rolling checkpoint lacks its DiLoCo learner state')
@@ -300,9 +311,12 @@ def parse_coordinator_ema(text):
 def init(args):
     settings = DilocoSettings.from_dict(json.loads(args.settings))
     masters = _coordinator_surface(args.parent, args.base)
+    coordinator_identity = json.loads(Path(args.role_contract).read_text()) if args.role_contract else identity(args.parent, json.loads(args.trainer_argv), settings)
+    if args.role_contract and coordinator_identity.get('diloco') != settings.identity():
+        raise ValueError('heterogeneous contract optimizer settings differ')
     manifest = initialize_coordinator(
         args.root, run_id=settings.run_id, masters=masters,
-        identity=identity(args.parent, json.loads(args.trainer_argv), settings),
+        identity=coordinator_identity,
         workers=settings.workers, min_quorum=args.quorum or settings.workers, fragment_bytes=args.fragment_mib << 20,
         outer_lr=args.outer_lr, outer_momentum=args.outer_momentum, grace_seconds=args.grace_seconds,
         max_staleness=args.max_staleness,
@@ -476,6 +490,7 @@ def main(argv=None):
     start.add_argument('--base', type=Path)
     start.add_argument('--trainer-argv', required=True, help='JSON list: the learner trainer arguments')
     start.add_argument('--settings', required=True, help='JSON: the stage diloco block (coordinator_url may be absent)')
+    start.add_argument('--role-contract', type=Path, help='Bound JSON file declaring the exact heterogeneous role authority')
     start.add_argument('--quorum', type=int)
     start.add_argument('--fragment-mib', type=int, default=64)
     start.add_argument('--outer-lr', type=float, default=0.7)

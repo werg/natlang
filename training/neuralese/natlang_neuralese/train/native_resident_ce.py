@@ -11,7 +11,7 @@ def _public(policy):
     return {key:value for key,value in policy.items() if not key.startswith('_')}
 
 
-def extension_policy(old, new):
+def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     """Load a complete, additive CE declaration without changing prior intent.
 
     Normal recipe/source/index guards still authenticate the actual append.
@@ -31,6 +31,29 @@ def extension_policy(old, new):
     prior, policy = load_policy(before), load_policy(after)
     a, b = _public(prior), _public(policy)
     excluded = {'sources', 'source_contract', 'inventory', 'first_row_observations'}
+    old_objective,new_objective=a.get('objective'),b.get('objective')
+    if old_objective != new_objective:
+        from .own_output_supervision import identity,policy_objective
+        from .native_logical_families import _verified_bytes,load_map
+        import json
+        left,right=copy.deepcopy(old_objective),copy.deepcopy(new_objective)
+        old_family=(left or {}).get('family_balance') or {};new_family=(right or {}).get('family_balance') or {}
+        if old_family.get('key')!='logical-family' or new_family.get('key')!='logical-family':
+            raise ValueError('resident CE objective change is not a logical-family map extension')
+        old_map=old_family.pop('map',None);new_map=new_family.pop('map',None)
+        if left!=right or not old_map or not new_map or (b.get('objective_transition') or {}).get('from')!=identity(policy_objective(prior))['sha256']:
+            raise ValueError('resident logical-family extension changed objective law or lacks its exact predecessor')
+        previous=json.loads(_verified_bytes(old_map)[1]);current=json.loads(_verified_bytes(new_map)[1])
+        if (previous.get('schema')!='natlang.logical-family-map/1' or current.get('schema')!='natlang.logical-family-map/1'
+                or previous.get('source_sha256')!=old['native_graphs']['sha256']
+                or current.get('source_sha256')!=new['native_graphs']['sha256']
+                or not isinstance(previous.get('rows'),list) or not isinstance(current.get('rows'),list)
+                or current['rows'][:len(previous['rows'])]!=previous['rows']):
+            raise ValueError('resident logical-family extension changed prior source row families')
+        if (prior_train is None)!=(candidate_train is None):raise ValueError('resident logical-family source validation needs both sources')
+        if prior_train is not None:
+            load_map(old_map,prior_train);load_map(new_map,candidate_train)
+        excluded |= {'objective','objective_transition'}
     if ({k:v for k,v in a.items() if k not in excluded} !=
             {k:v for k,v in b.items() if k not in excluded}):
         raise ValueError('resident CE append changed prior masks, held declarations or objective settings')
@@ -109,6 +132,13 @@ def adopt_policy_update(update, *, current_binding, args, checkpoint_options, gl
     if update is None:
         return None
     binding, policy = update
+    from .own_output_supervision import continuation_identity
+    objective,transition=continuation_identity(checkpoint_options,policy)
+    if transition is not None:
+        transitions=list(checkpoint_options.get('supervision_objective_history') or [])
+        transitions.append({**transition,'at_global_step':int(global_step),'weights_optimizer_rng_exposure':'preserved'})
+        checkpoint_options['supervision_objective_history']=transitions
+        checkpoint_options['supervision_objective']=objective
     reference = {key:binding[key] for key in ('path', 'sha256')}
     history = list(checkpoint_options.get('ce_supervision_policy_history') or [])
     history.append({'from':copy.deepcopy(current_binding), 'to':reference,
