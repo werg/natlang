@@ -904,11 +904,15 @@ def _data_continuation(old, new):
                 # historical custody pin only while retiring the exact complete
                 # committed withdrawal set. The trainer independently checks that
                 # the new immutable pin is byte-identical to the resumed slot.
+                complete_retirement = (old.get(withdrawal) is not None and new.get(withdrawal) is None
+                        and old.get(retired) is not None and new.get(retired) is None
+                        and new.get(retired_set) is not None)
+                active_correction = (changed and old.get(withdrawal) is None and new.get(withdrawal) is not None
+                        and old.get(retired) is not None and old.get(retired) == new.get(retired)
+                        and old.get(retired_set) == new.get(retired_set))
                 if not (all(old[standalone].get(k) for k in ('path', 'sha256', 'binding'))
                         and old[standalone]['path'] != new[standalone]['path']
-                        and old.get(withdrawal) is not None and new.get(withdrawal) is None
-                        and old.get(retired) is not None and new.get(retired) is None
-                        and new.get(retired_set) is not None):
+                        and (complete_retirement or active_correction)):
                     return False
                 standalone_rebind = True
         excluded = set(roles) | {'continued_' + role for role in roles} | {foundation,withdrawal,retired,retired_set,standalone}
