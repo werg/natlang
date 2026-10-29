@@ -42,7 +42,7 @@ def retire_pair(*, lock_path, state_path, candidate, inspect, remove, present, w
             inspect(candidate,'control_deleted')
             if present(candidate['role'],candidate['sha256']):remove(candidate['role'],candidate['sha256'])
             if present(candidate['role'],candidate['sha256']):raise RuntimeError('checkpoint remains present')
-            op['phase']='deleted';state['retired_roles']=list(dict.fromkeys([*state['retired_roles'],candidate['role'],candidate['control_role']]));write_durable(state_path,state)
+            op['phase']='deleted';op['absence_scope']='fresh provider listing absent or zero-byte listing confirmed HTTP 404';state['retired_roles']=list(dict.fromkeys([*state['retired_roles'],candidate['role'],candidate['control_role']]));write_durable(state_path,state)
         if op['phase']!='deleted':raise ValueError('unknown retirement phase')
         return op
 
@@ -68,5 +68,5 @@ def retire_full(*, lock_path, state_path, candidate, inspect, remove, present, w
         inspect(candidate,'intent')
         if present(candidate['role'],candidate['sha256']):remove(candidate['role'],candidate['sha256'])
         if present(candidate['role'],candidate['sha256']):raise RuntimeError('checkpoint remains present')
-        op['phase']='deleted';state['retired_roles']=list(dict.fromkeys([*state['retired_roles'],candidate['role']]));write_durable(state_path,state)
+        op['phase']='deleted';op['absence_scope']='fresh provider listing absent or zero-byte listing confirmed HTTP 404';state['retired_roles']=list(dict.fromkeys([*state['retired_roles'],candidate['role']]));write_durable(state_path,state)
         return op
