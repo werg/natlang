@@ -1,8 +1,25 @@
 import shutil
+import pytest
 import torch
 from natlang_neuralese.train.diloco.coordinator import initialize_coordinator
 from natlang_neuralese.train.diloco.protocol import load_tensors,save_tensors
 from natlang_neuralese.train.diloco.replica_state import ReplayCoordinator
+
+
+@pytest.fixture(autouse=True)
+def reap_owned_test_children():
+    """Failed assertions must not leave non-daemon HTTP servers blocking pytest exit."""
+    import multiprocessing as mp
+    before={child.pid for child in mp.active_children()}
+    yield
+    children=[child for child in mp.active_children() if child.pid not in before]
+    for child in children:
+        child.terminate()
+    for child in children:
+        child.join(5)
+        if child.is_alive():
+            child.kill()
+            child.join(5)
 
 
 def test_replay_exact_pending_merge_and_progress(tmp_path):

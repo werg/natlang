@@ -141,9 +141,9 @@ def make_inputs(tmp_path):
     trace_path = tmp_path / 'trace.json'
     trace_path.write_text(json.dumps(trace))
     report = observed_audit.audit(rows, [(trace_path, trace)])
-    report['inputs'] = {'native_rows': {'path': str(records),
+    report['inputs'] = {'native_rows': {'path': assembler.artifact_key(records),
         'sha256': hashlib.sha256(records.read_bytes()).hexdigest()},
-        'execution_traces': [{'path': str(trace_path),
+        'execution_traces': [{'path': assembler.artifact_key(trace_path),
             'sha256': hashlib.sha256(trace_path.read_bytes()).hexdigest()}]}
     audit_path = tmp_path / 'observed-output-audit.json'
     audit_path.write_text(json.dumps(report))
@@ -170,9 +170,9 @@ def test_assembler_can_consume_trace_authenticated_eval_context_without_output_l
         report['inputs']['native_rows']['sha256'] = hashlib.sha256(records.read_bytes()).hexdigest()
     audit_path.write_text(json.dumps(report))
     review = {'schema': assembler.SOURCE_REVIEW_SCHEMA,
-        'inputs': {'records': [{'path': str(records.resolve()),
+        'inputs': {'records': [{'path': assembler.artifact_key(records),
             'sha256': hashlib.sha256(records.read_bytes()).hexdigest()}],
-            'pieces': [{'path': str(pieces.resolve()),
+            'pieces': [{'path': assembler.artifact_key(pieces),
             'sha256': hashlib.sha256(pieces.read_bytes()).hexdigest()}]},
         'allow': {'source_groups': [], 'target_ids': [row['id'] for row in rows]},
         'hold': {'source_groups': [], 'target_ids': []}}
