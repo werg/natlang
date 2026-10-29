@@ -36,6 +36,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+from natlang_neuralese.common import paths
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
 
 SCHEMA = 'natlang.offline-preference-student-twin/1'
 REVISION = '11fbf325f6eda37b34f519d1ba7268f40f469ac6'
@@ -49,19 +51,14 @@ SOURCE_FILES = {  # path -> (bytes, sha256), pinned by training/audits/acquired-
 FIT_LIMIT_TOKENS = 94324
 HISTORICAL_INVENTORY = ROOT / 'runs/acquired-d24-native-offline-preference-20261017-v1/whole-pair-pending/evidence/pair-geometry-inventory.jsonl'
 
-PROTECTION_MANIFEST = Path('/home/werg/data/dgxops/acquired-connected-source-protection-20261016-v2/protection-manifest.json')
-RESTART_TRAIN_SOURCE = Path('/home/werg/data/dgxops/claude-recovery-20261028/data/prompt-variants-pilot-v1/ordinary-expansion-v2/successor-v1/train-sources.json')
-RECOVERY = Path('/home/werg/data/dgxops/claude-recovery-20261028/data')
-BIG2_HELD = Path('/mnt/external/natlang-lfm3-data-20261028/communication/big2-stream-tranche-000/graphs/test/native-graphs.jsonl.zst')
+PROTECTION_MANIFEST = paths.resolve('data_nvme', 'dgxops/acquired-connected-source-protection-20261016-v2/protection-manifest.json')
+RESTART_TRAIN_SOURCE = paths.resolve('data_nvme', 'dgxops/claude-recovery-20261028/data/prompt-variants-pilot-v1/ordinary-expansion-v2/successor-v1/train-sources.json')
+RECOVERY = paths.resolve('data_nvme', 'dgxops/claude-recovery-20261028/data')
+BIG2_HELD = paths.resolve('data_hdd', 'natlang-lfm3-data-20261028/communication/big2-stream-tranche-000/graphs/test/native-graphs.jsonl.zst')
 HELD_SOURCES = (ROOT / 'runs/lfm3-mixture/joint-sft-v3/mixture/held-sources.json',
                 RECOVERY / 'clef-exact-mixture-v2/held/native-graphs.jsonl.zst',
                 RECOVERY / 'repaired-fourteen-mixture-v1/held/native-graphs.jsonl.zst', BIG2_HELD)
 PACKET_CONFIG = RECOVERY / 'repaired-fourteen-source-successor-v1/future-admission-config.json'
-
-
-def sha256_file(path):
-    from natlang_neuralese.common.hashing import sha256_file_hex
-    return sha256_file_hex(Path(path))
 
 
 def dump(path, value):
