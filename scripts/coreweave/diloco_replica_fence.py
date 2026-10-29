@@ -156,3 +156,30 @@ def provider_fence_verifier(*, expected_primary, expected_workers, control_dirs)
     worker_probe=sdk_worker_probe(control_dirs)
     return lambda proof: verify_provider_fence(proof,expected_primary=expected_primary,
         expected_workers=expected_workers,get_sandbox=sdk_get_sandbox,probe_worker=worker_probe)
+
+
+def sdk_set_worker_authority(workers, *, nonce, action):
+    """Fence or release the exact nested owners through the existing SDK.
+
+    The authorized controller calls this; partial failure deliberately leaves
+    every already-fenced owner fenced. No operation is executed on import.
+    """
+    import inspect
+    try: from . import cwctl, diloco_promotion_authority as authority
+    except ImportError:
+        import cwctl
+        import diloco_promotion_authority as authority
+    if action not in ('fence','release') or not isinstance(nonce,str) or len(nonce)<32:
+        raise ValueError('invalid controller authority transition')
+    function=getattr(authority,action)
+    program=('import fcntl,json,os,sys\nfrom pathlib import Path\n'
+             'sys.path.insert(0,sys.argv[5]+"/training/neuralese")\nfrom natlang_neuralese.common.jsonio import write_json_durable\n'+inspect.getsource(function)+
+             '\nprint(json.dumps('+action+'(sys.argv[1],expected_owner=sys.argv[2],expected_boot=sys.argv[3],nonce=sys.argv[4])))\n')
+    results=[]
+    for worker in workers:
+        if set(worker)!={'sandbox_id','directory','owner_id','boot_id','runtime'}:raise ValueError('invalid worker owner binding')
+        cwctl.load_env_file();cwctl.require_key();sandbox=cwctl.read_sandbox(worker['sandbox_id'],patience=60)
+        result=sandbox.exec(['python3','-c',program,worker['directory'],worker['owner_id'],worker['boot_id'],nonce,worker['runtime']],timeout_seconds=30).result(timeout=60)
+        if result.returncode!=0:raise ValueError('worker authority transition failed; previous fences remain in force')
+        results.append({'sandbox_id':worker['sandbox_id'],'authority':json.loads(result.stdout) if action=='fence' else None})
+    return results
