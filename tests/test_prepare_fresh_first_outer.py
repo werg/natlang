@@ -27,6 +27,7 @@ def test_first_outer_builder_exact_receipts_and_common_identity(tmp_path):
     assert declarations[0]['rng_fork_seed'] is None and len({x['rng_fork_seed'] for x in declarations[1:]})==3
     assert all(x['owner_get']=='pending' for x in result['peers'])
     argv=json.loads(Path(result['worker_args']['path']).read_text());assert argv[argv.index('--resident-data-directory')+1]=='/work/fresh/learner/resident-data';assert argv[argv.index('--muon-rounding')+1]=='stochastic'
+    init=json.loads(Path(result['coordinator_init_args']['path']).read_text());assert init[init.index('--grace-seconds')+1]=='30'
     plan=json.loads(Path(result['worker_plan']['path']).read_text());assert result['worker_plan_target']=='/work/fresh/learner/recipe-plan.json'
     assert plan['stage_inputs']['native_full_sft']['native_graphs']==plan['stage_inputs']['native_full_sft']['foundation_native_graphs'] and plan['code']
     # Launch may use the live, fully decoded newest rank-0 pin while its
