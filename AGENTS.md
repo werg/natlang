@@ -1,5 +1,31 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## LFM3 rollback and comprehensive fresh restart (owner, 2026-10-29)
+
+The suspect trained LFM3 lineage is for diagnostics only. All four learners were
+safely stopped and their full states preserved. Do not resume those weights,
+learned interface parameters or optimizer histories as production parents merely
+because they contain earned steps or decreasing loss. The production restart
+uses the pinned instruction base with fresh native-interface initialization,
+optimizer/RNG state and honestly zero training exposure. Preserve diagnostic
+parents until their replacements and recovery dependencies are durable; then
+apply discarded-work hygiene without losing necessary evidence.
+
+Include feasible beneficial work in the actual restarted run. Maintain an
+executable restart manifest binding the real runtime, CLI/config, sources,
+objective, prompt and recovery controls to their verification evidence. Every
+prepared improvement is included and verified, blocked for a concrete reason
+with work continuing, or deliberately excluded with an explanation. Do not
+silently inherit old opt-out flags, old source aliases, stale checkpoints or
+unearned source-stage credits. Code fixes and useful prepared data survive the
+weight rollback. Newly ready data enters explicit continuations promptly.
+
+Early full-prompt JOLT+ and subsequent SFT/DPO must retain the full production
+recipe obligations. Select and continue models by actual task behavior, not
+aggregate training loss. A numerical/recovery-qualified checkpoint is not a
+behaviorally qualified production model. Diagnose regressions and use a better
+demonstrated parent rather than repeatedly training through unexplained harm.
+
 ## Agents decide; nothing waits on the owner (owner, 2026-10-29)
 
 Operational and technical decisions such as restarting learners, restarting a
