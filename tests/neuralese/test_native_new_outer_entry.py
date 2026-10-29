@@ -127,7 +127,13 @@ def test_existing_full_slot_wins_over_original_continue_from(tmp_path, monkeypat
     def observe(path,*args,**kwargs):
         model,tokenizer,roles,configuration,state=actual_loader(path,*args,**kwargs)
         assert path==slot and state['training']['global_step']==old_step+11
-        assert state['training']['optimizer'] and state['training']['rng'] and state['training']['exposure_counts']
+        def same(a,b):
+            if isinstance(a,torch.Tensor):return isinstance(b,torch.Tensor) and torch.equal(a,b)
+            if isinstance(a,dict):return a.keys()==b.keys() and all(same(a[k],b[k]) for k in a)
+            if isinstance(a,(tuple,list)):return len(a)==len(b) and all(same(x,y) for x,y in zip(a,b))
+            return a==b
+        for key in ('optimizer','rng','exposure_counts'):assert full['training'][key] and same(state['training'][key],full['training'][key])
+        for key in ('backbone_state','interface_state'):assert same(state[key],full[key])
         raise Loaded()
     monkeypatch.setattr(trainer,'load_native_checkpoint',observe)
     with pytest.raises(Loaded):trainer.main([*argv,'--continue-from',str(parent)])
