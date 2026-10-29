@@ -14,6 +14,7 @@ import { parsePackageManifest, type NatlangPackageManifest } from '../package/ma
 import { BUILD_LOCK_SCHEMA, readBuildLock, writeBuildLock, type BuildLock, type WarmCaseResult } from '../package/warm.js';
 import type { LoadedModelConfiguration } from '../model/config.js';
 import { discoverLlamaRuntime, type LlamaRuntimeDiscovery, type LlamaServerInspection } from '../model/llama-runtime.js';
+import { runtimeLabel } from '../model/local-server.js';
 
 const IGNORED = new Set(['.git', '.natlang', 'node_modules', 'dist', '.venv']);
 
@@ -53,7 +54,8 @@ function modelSection(selection: LoadedModelConfiguration, natlang: ConfiguredNa
     release: release ? { id: release.id, sha256: release.sha256, file: release.file, quant: release.quant, source: release.source.repository,
       revision: release.source.revision, template: release.template } : null,
     request: 'request' in choice && choice.request ? choice.request : null,
-    runtime: runtime?.version && runtime.build ? { version: runtime.version, build: runtime.build } : status?.runtimeBuild ? { version: '', build: status.runtimeBuild } : null };
+    runtime: runtime?.version && runtime.build ? { version: runtime.version, build: runtime.build, label: runtimeLabel(runtime) } :
+      status?.runtimeBuild ? { version: '', build: status.runtimeBuild, label: status.runtime ?? `b${status.runtimeBuild}` } : null };
 }
 
 /** The lock `natlang build` writes beside the compiled program; an existing warm section is kept while it still applies. */
@@ -63,7 +65,7 @@ export function lockFor(root: string, selection: LoadedModelConfiguration, versi
   const release = currentRelease(root);
   const model = modelSection(selection, natlang);
   const previous = readBuildLock(join(root, '.natlang', 'build'))?.warm ?? null;
-  const kept = previous && model.release?.sha256 === previous.modelSha256 && model.runtime?.build === previous.runtimeBuild ? previous : null;
+  const kept = previous && model.release?.sha256 === previous.modelSha256 && model.runtime?.label === previous.runtime ? previous : null;
   return { schema: BUILD_LOCK_SCHEMA, program: { name: manifest?.name ?? null, version: manifest?.version ?? null, root },
     builtAt: new Date().toISOString(), natlang: version, model,
     tuning: release ? { release: release.manifest.digest, base: release.manifest.base.checkpoint_sha256 } : null,
@@ -110,7 +112,7 @@ export async function warmProgram(root: string, options: { profile?: string; pro
     }
     const status = natlang.modelStatus();
     const warm: BuildLock['warm'] = cases.length ? { at: new Date().toISOString(), modelSha256: status.release?.sha256 ?? null,
-      runtimeBuild: status.runtimeBuild ?? null, prefixes: status.warm ?? [], cases: results, wall_ms: Date.now() - started } : null;
+      runtimeBuild: status.runtimeBuild ?? null, runtime: status.runtime ?? null, prefixes: status.warm ?? [], cases: results, wall_ms: Date.now() - started } : null;
     if (cases.length && status.source !== 'managed-local')
       options.log.write(`natlang: traces recorded; prompt openings are prefilled only on the managed local model (this profile is ${status.source})\n`);
     const lock = lockFor(root, natlang.selection, options.version, natlang, warm ?? undefined);

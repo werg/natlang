@@ -159,7 +159,12 @@ require('node:fs').writeFileSync(${JSON.stringify(started)}, 'spawned');
     const environment = { ...process.env, NATLANG_LLAMA_SERVER: executable, NATLANG_MODEL_PATH: model, NATLANG_STATE_HOME: join(root, 'state'),
       NATLANG_CACHE_HOME: join(root, 'cache'), NATLANG_MODEL_START_TIMEOUT_MS: '3000' };
     publishSharedServer({ pid: kept.pid, endpoint: `http://127.0.0.1:${port}`, modelSha256: createHash('sha256').update('fixture weights').digest('hex'),
-      runtimeBuild: 11960, slots: 3, contextPerSlot: 8192, model: 'fixture', profile: 'default', startedAt: new Date().toISOString(), warm: false }, environment);
+      runtimeBuild: 11960, runtime: 'b11960g8642541', slots: 3, contextPerSlot: 8192, model: 'fixture', profile: 'default', startedAt: new Date().toISOString(), warm: false }, environment);
+    // a binary of the same build number from another commit (every fork build reports build 1) does not match
+    const { findSharedServer } = await import('../dist/model/shared-server.js');
+    const sha = createHash('sha256').update('fixture weights').digest('hex');
+    assert.equal(await findSharedServer(sha, 'b11960g0000000', environment), undefined);
+    assert.equal((await findSharedServer(sha, 'b11960g8642541', environment))?.endpoint, `http://127.0.0.1:${port}`);
     const session = createManagedModelSession({}, environment, { write: () => true });
     const result = await session.turn({ messages: [], tools: [], temperature: 0, seed: 1, max_tokens: 4 });
     assert.equal(result.text, 'shared');

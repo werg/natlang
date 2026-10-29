@@ -141,10 +141,10 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
       if (!status.endpoint || !plan) throw new Error('the model server did not start');
       const sha = await managedModelSha256(profileEnvironment(selection.choice, environment), selection.choice.release);
       publishSharedServer({ pid: process.pid, endpoint: status.endpoint, modelSha256: sha, runtimeBuild: status.runtimeBuild ?? null,
-        slots: plan.slots, contextPerSlot: plan.contextPerSlot, model: status.model, profile: selection.name, startedAt: new Date().toISOString(),
+        runtime: status.runtime ?? null, slots: plan.slots, contextPerSlot: plan.contextPerSlot, model: status.model, profile: selection.name, startedAt: new Date().toISOString(),
         warm: environment.NATLANG_WARM_PREFIXES !== 'off' }, environment);
       // Start every slot from the openings earlier runs saved for this model file, build and slot layout, most recent first.
-      const tag = `-${warmTag(sha, status.runtimeBuild ?? null, plan)}.slot`;
+      const tag = `-${warmTag(sha, status.runtime ?? 'bx', plan)}.slot`;
       const saved = existsSync(warmDirectory) ? readdirSync(warmDirectory).filter(name => name.endsWith(tag))
         .sort((a, b) => statSync(join(warmDirectory, b)).mtimeMs - statSync(join(warmDirectory, a)).mtimeMs) : [];
       let restored = 0;

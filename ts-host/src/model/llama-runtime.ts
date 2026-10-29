@@ -141,18 +141,20 @@ export async function buildForkLlamaRuntime(options: { environment?: NodeJS.Proc
       process.platform === 'win32' ? 'llama-server.exe' : 'llama-server')));
     if (!built) throw new Error('the fork build produced no llama-server');
     const staged = join(work, 'runtime');
-    cpSync(built, join(staged, 'bin'), { recursive: true });
+    // Library symlinks stay relative (libllama.so.0 -> libllama.so.0.8.0); copied as they are, they survive removing the build.
+    cpSync(built, join(staged, 'bin'), { recursive: true, verbatimSymlinks: true });
     writeFileSync(join(staged, 'runtime.json'), JSON.stringify({ fork: true, repository: LLAMA_FORK_SOURCE.repository,
       commit: LLAMA_FORK_SOURCE.commit, backend: cuda ? 'cuda' : process.platform === 'darwin' ? 'metal' : 'cpu',
       builtAt: new Date().toISOString() }, null, 2) + '\n');
     rmSync(destination, { recursive: true, force: true });
     mkdirSync(dirname(destination), { recursive: true });
     renameSync(staged, destination);
-    const inspected = inspectLlamaServer(join(destination, 'bin', process.platform === 'win32' ? 'llama-server.exe' : 'llama-server'), 'fork',
-      LLAMA_RUNTIME_RELEASE, environment);
-    if (!inspected.compatible) throw new Error(`the built llama-server is not the pinned fork commit: ${inspected.reason ?? inspected.output}`);
-    return inspected;
   } finally { rmSync(work, { recursive: true, force: true }); }
+  // Checked once the build tree is gone, so the installed copy stands on its own.
+  const inspected = inspectLlamaServer(join(destination, 'bin', process.platform === 'win32' ? 'llama-server.exe' : 'llama-server'), 'fork',
+    LLAMA_RUNTIME_RELEASE, environment);
+  if (!inspected.compatible) throw new Error(`the installed fork llama-server does not run as the pinned commit: ${inspected.reason ?? inspected.output}`);
+  return inspected;
 }
 
 export function discoverLlamaRuntime(environment: NodeJS.ProcessEnv = process.env,

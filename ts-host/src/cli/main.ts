@@ -17,6 +17,7 @@ import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js
 import { discoverLocalApplications, isApplicationManifest } from '../package/discover.js';
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
+import { LLAMA_FORK_SOURCE } from '../llama-fork-source.js';
 import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
   installManagedLlamaRuntime, buildForkLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites, localSlotPlan, ensureStockModel,
   type LlamaRuntimeDiscovery, type LlamaServerInspection, type LoadedModelConfiguration,
@@ -334,7 +335,8 @@ function runtimeReport(discovery = discoverLlamaRuntime()): Record<string, unkno
 function outputRuntime(discovery: LlamaRuntimeDiscovery, json: boolean): void {
   if (json) { output(runtimeReport(discovery), true); return; }
   if (discovery.selected) {
-    output(`llama.cpp runtime ready\nsource: ${discovery.selected.source}\npath: ${discovery.selected.path}\nversion: ${discovery.selected.version} (build ${discovery.selected.build})`, false);
+    output(`llama.cpp runtime ready\nsource: ${discovery.selected.source}\npath: ${discovery.selected.path}\nversion: ${discovery.selected.version} ${discovery.selected.source === 'fork' ?
+      `(natlang fork ${LLAMA_FORK_SOURCE.repository} at ${LLAMA_FORK_SOURCE.commit.slice(0, 12)})` : `(build ${discovery.selected.build})`}`, false);
     return;
   }
   output(`llama.cpp runtime unavailable\n${describeLlamaRuntime(discovery)}`, false);

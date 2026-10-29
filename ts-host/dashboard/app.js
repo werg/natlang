@@ -95,7 +95,7 @@ async function overview(_arg, target) {
     h('div', { class: 'grid' },
       tile('Model', model.error ? 'Profile problem' : release?.label ?? model.model,
         model.error ?? `profile ${model.profile} · ${model.kind === 'managed-local' ? 'managed llama.cpp' : model.kind}${release ? (release.installed ? ' · downloaded' : ' · not downloaded') : ''}`),
-      tile('Runtime', runtime ? `llama.cpp ${runtime.version}` : 'not installed', runtime ? `build ${runtime.build} · ${runtime.source}` : `pinned ${status.runtime.recommended.version} (b${status.runtime.recommended.build})`),
+      tile('Runtime', runtime ? `llama.cpp ${runtime.version}` : 'not installed', runtime ? (runtime.source === 'fork' ? `natlang fork ${status.runtime.fork.commit.slice(0, 10)}` : `build ${runtime.build} · ${runtime.source}`) : `pinned ${status.runtime.recommended.version} (b${status.runtime.recommended.build})`),
       tile('Traces', status.calls ? `${status.calls.calls} calls` : 'recording off', status.calls ? `${bytes(status.calls.bytes)} · specialization ${status.calls.settings.specialization}` : ''),
       tile('Machine', `${status.machine.cpus} CPUs · ${bytes(status.machine.memory)}`, `${bytes(status.machine.free)} free · ${status.machine.platform}`)),
     await keptModelPanel(),
@@ -587,7 +587,7 @@ async function system(_arg, target) {
       h('div', { class: 'row' }, runtime.selected?.fork ? null : h('button', { title: `Compile ${runtime.fork.repository} at ${runtime.fork.commit.slice(0, 10)} (needs git, cmake and a C++ compiler; CUDA when nvcc is present)`,
         onclick: () => startJob({ kind: 'runtime-build' }) }, 'Build the natlang fork'),
         h('button', { class: 'primary', onclick: () => startJob({ kind: 'setup' }) }, runtime.selected ? 'Check and download the default model' : 'Install runtime and default model'))),
-      kv([['Selected', runtime.selected ? `${runtime.selected.source} · ${runtime.selected.version} (build ${runtime.selected.build})` : 'none'],
+      kv([['Selected', runtime.selected ? `${runtime.selected.source} · ${runtime.selected.version} ${runtime.selected.source === 'fork' ? `(${runtime.fork.repository} at ${runtime.fork.commit.slice(0, 12)})` : `(build ${runtime.selected.build})`}` : 'none'],
         runtime.selected ? ['Build', runtime.selected.fork ? 'natlang fork: decision scoring, guided generation and native states' :
           'upstream llama.cpp: decisions fall back to model turns, no guided generation or tuned soft states'] : null,
         ['Path', runtime.selected?.path], ['Pinned', `${runtime.recommended.version} (build ${runtime.recommended.build})`],

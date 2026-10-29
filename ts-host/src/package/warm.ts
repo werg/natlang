@@ -30,10 +30,12 @@ export type BuildLock = {
   builtAt: string; natlang: string;
   model: { profile: string; kind: string; model: string; executor: string;
     release: { id: string; sha256: string; file: string; quant: string; source: string; revision: string; template: string } | null;
-    request: Record<string, unknown> | null; runtime: { version: string; build: number } | null };
+    request: Record<string, unknown> | null; runtime: { version: string; build: number; label: string } | null };
   tuning: { release: string; base: string } | null;
   functions: { name: string; source: string; params: string[]; returns: string; description?: string }[];
-  warm: { at: string; modelSha256: string | null; runtimeBuild: number | null; prefixes: WarmPrefix[];
+  warm: { at: string; modelSha256: string | null; runtimeBuild: number | null;
+    /** The llama.cpp binary's `b<build>g<commit>` label (model/local-server.ts runtimeLabel). */
+    runtime: string | null; prefixes: WarmPrefix[];
     cases: WarmCaseResult[]; wall_ms: number } | null;
 };
 

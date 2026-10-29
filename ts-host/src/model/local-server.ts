@@ -31,6 +31,8 @@ export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-pr
   model: string; executable: string | null; modelPath: string | null; running: boolean;
   /** A managed server's stock model and llama.cpp build (undefined for other backends and configured GGUFs). */
   release?: LocalModelRelease; runtimeBuild?: number | null;
+  /** The llama.cpp build and commit, git-describe style (`b11960g8642541`): fork builds all report build 1. */
+  runtime?: string | null;
   /** The prompt openings this session warmed (prefilled and saved, or restored) on a managed server. */
   warm?: WarmPrefix[];
   /** The session uses a server another process keeps loaded (model/shared-server.ts). */
@@ -231,8 +233,11 @@ async function stopChild(child: ChildProcess): Promise<void> {
  * The key part of a warm state for this model file, llama.cpp build and slot layout: a saved slot state restores only
  * into a server with the same number of slots and context per slot.
  */
-export const warmTag = (modelSha256: string, build: number | null, plan: Pick<SlotPlan, 'slots' | 'contextPerSlot'>) =>
-  `${modelSha256.slice(0, 12)}-b${build ?? 'x'}-p${plan.slots}x${plan.contextPerSlot}`;
+/** A llama.cpp binary's identity as `b<build>g<commit>`: the build number alone does not tell fork commits apart. */
+export const runtimeLabel = (runtime: { build: number | null; commit: string | null } | null | undefined) =>
+  runtime ? `b${runtime.build ?? 'x'}${runtime.commit ? `g${runtime.commit.slice(0, 7)}` : ''}` : 'bx';
+export const warmTag = (modelSha256: string, runtime: string, plan: Pick<SlotPlan, 'slots' | 'contextPerSlot'>) =>
+  `${modelSha256.slice(0, 12)}-${runtime}-p${plan.slots}x${plan.contextPerSlot}`;
 
 /** Whether no slot of a llama.cpp server is processing (its /slots listing). */
 async function serverIdle(endpoint: string): Promise<boolean> {
@@ -327,7 +332,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
         // A shared server also serves other processes: warm it only while none of its slots is working.
         if (sharedEndpoint && !await serverIdle(sharedEndpoint)) { openings.delete(opening.key); return undefined; }
         const sha = await managedModelSha256(environment, release);
-        const state = await warmOpening(options.endpoint, warmDirectory, opening, warmTag(sha, prerequisites.runtime.selected?.build ?? null, plan!), plan?.slots ?? 1);
+        const state = await warmOpening(options.endpoint, warmDirectory, opening, warmTag(sha, runtimeLabel(prerequisites.runtime.selected), plan!), plan?.slots ?? 1);
         if (state) {
           warmed.push(state);
           error.write(state.created ? `natlang: prefilled the ${state.tokens}-token prompt opening once for this model; later calls and runs restore it\n` :
@@ -362,7 +367,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       // A server another natlang process keeps loaded for exactly this model file and build (model/shared-server.ts).
       const adapterless = !(runtimeOptions.loraAdapters?.() ?? []).length && !(runtimeOptions.nativeStates?.() ?? []).length;
       const shared = adapterless && choice.kind === 'managed-local' ?
-        await findSharedServer(await managedModelSha256(environment, release), prerequisites.runtime.selected?.build ?? null, environment) : undefined;
+        await findSharedServer(await managedModelSha256(environment, release), runtimeLabel(prerequisites.runtime.selected), environment) : undefined;
       if (shared) {
         plan = { budgetSource: 'configured-parallel', slots: shared.slots, contextPerSlot: shared.contextPerSlot,
           totalContext: shared.slots * shared.contextPerSlot, source: 'configured', budgetBytes: null, modelBytes: 0, kvBytesPerToken: 0,
@@ -430,12 +435,16 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     finally { starting = null; }
   };
 
+  // Runs before the host's own handlers: the server stops with the process, and the signal is raised again (its default
+  // action ends the process) only when nothing else handles it. A host with a handler (natlang dashboard) closes first.
   const terminate = (signal: NodeJS.Signals) => {
-    child?.kill(signal);
+    // llama-server finishes the batch in progress on its first signal (a long prefill takes many seconds on a CPU) and
+    // exits at once on a second; a different signal, since a pending signal of the same kind can merge with the first.
+    child?.kill('SIGTERM'); child?.kill('SIGINT');
     process.removeListener(signal, terminate);
-    process.kill(process.pid, signal);
+    if (!process.listenerCount(signal)) process.kill(process.pid, signal);
   };
-  process.once('SIGINT', terminate); process.once('SIGTERM', terminate);
+  process.prependOnceListener('SIGINT', terminate); process.prependOnceListener('SIGTERM', terminate);
   const onExit = () => { if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM'); };
   process.once('exit', onExit);
   let window: Promise<number | undefined> | undefined;
@@ -468,7 +477,8 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,
       model: environment.NATLANG_MODEL ?? choice.model, executable: prerequisites.executable,
       modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child || sharedEndpoint),
-      ...(environment.NATLANG_MODEL_PATH ? {} : { release }), runtimeBuild: prerequisites.runtime.selected?.build ?? null, warm: [...warmed],
+      ...(environment.NATLANG_MODEL_PATH ? {} : { release }), runtimeBuild: prerequisites.runtime.selected?.build ?? null,
+      runtime: prerequisites.runtime.selected ? runtimeLabel(prerequisites.runtime.selected) : null, warm: [...warmed],
       ...(sharedEndpoint ? { shared: true } : {}) }; },
     scheduler,
     /** The native reference server's artifact store (uploads of tuned artifacts and states), when this is one. */
