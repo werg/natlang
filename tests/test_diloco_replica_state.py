@@ -534,14 +534,16 @@ def test_replica_loss_after_seal_ack_loss_preserves_locally_sealed_state(tmp_pat
     with pytest.raises(RuntimeError):dispatch.call('tick',{})
     writer.close();remote.close()
     evidence={'run_id':'r','primary_process_absent':True,'replica_fenced':True,'all_workers_quiesced':True,'proof_sha256':'f'*64}
-    recovered=recover_after_replica_loss(baseline=baseline,baseline_sha256=receipt['sha256'],journal=local,sequence=local.sequence,head=local.head,destination=tmp_path/'new-seed',verified_owner_evidence=evidence,source_work_root=root,freeze_nonce='f'*48)
+    from natlang_neuralese.common.jsonio import write_json_durable
+    oldstore=tmp_path/'old-primary-store';oldstore.mkdir();write_json_durable(oldstore/'supervisor-start.json',{'schema':'natlang.diloco-replica-start/1','promotion':{'run_id':'r'},'session_transition':{'generation_nonce':'g'*48}})
+    recovered=recover_after_replica_loss(baseline=baseline,baseline_sha256=receipt['sha256'],journal=local,sequence=local.sequence,head=local.head,destination=tmp_path/'new-seed',verified_owner_evidence=evidence,source_work_root=root,source_primary_store=oldstore,freeze_nonce='f'*48)
     assert recovered['sealed_predecessor']=={'sequence':2,'head':local.head} and not recovered['unsealed_tail_retained']
     new,replayed,_=load_active(tmp_path/'new-seed',run_identity='r',destination=tmp_path/'peer')
     assert replayed.coordinator.progress==machine.coordinator.progress and new.identity['previous_generation']['head']==local.head
     new.close();sealed_head=local.head
     event={'kind':'tick','args':{},'wall':time.time(),'monotonic':time.monotonic()}
     local.append(event,empty,expected_sequence=3,expected_previous=local.head)
-    second=recover_after_replica_loss(baseline=baseline,baseline_sha256=receipt['sha256'],journal=local,sequence=local.sequence,head=local.head,destination=tmp_path/'unsealed-seed',verified_owner_evidence=evidence,source_work_root=root,freeze_nonce='f'*48)
+    second=recover_after_replica_loss(baseline=baseline,baseline_sha256=receipt['sha256'],journal=local,sequence=local.sequence,head=local.head,destination=tmp_path/'unsealed-seed',verified_owner_evidence=evidence,source_work_root=root,source_primary_store=oldstore,freeze_nonce='f'*48)
     assert second['unsealed_tail_retained'] and second['sealed_predecessor']=={'sequence':2,'head':sealed_head}
     assert (local.root/'00000000000000000003'/'record.json').is_file()
     local.close()

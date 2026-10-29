@@ -50,7 +50,7 @@ def main():
         try:
             value=recover_after_replica_loss(baseline=config['baseline'],baseline_sha256=config['baseline_sha256'],journal=journal,
                 sequence=config['sequence'],head=config['head'],destination=config['destination'],verified_owner_evidence=evidence,
-                source_work_root=config['source_work_root'],freeze_nonce=config['activation_nonce'])
+                source_work_root=config['source_work_root'],source_primary_store=config['source_primary_store'],freeze_nonce=config['activation_nonce'])
             print(json.dumps(value,sort_keys=True));return
         finally:journal.close()
     token=Path(config['token_file']).read_text().strip()

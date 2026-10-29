@@ -144,3 +144,94 @@ def test_controller_resumes_after_partial_release_without_refencing(tmp_path):
     def release(_intent,fences):calls.append('resume-release');return fences
     result=run_promotion(tmp_path,intent=intent,fence_workers=fence,verify_fence=verify,start_primary=start,release_workers=release)
     assert result['phase']=='released' and calls==['fence','verify','confirm-ready','partial-release','confirm-ready','resume-release']
+
+
+def test_replica_loss_restart_reuses_session_only_after_exact_peer(tmp_path,monkeypatch):
+    import hashlib,time
+    from types import SimpleNamespace
+    from scripts.coreweave import cwctl,diloco_replica_fence as fm
+    from scripts.coreweave.diloco_replica_controller import run_coreweave_replica_loss_restart
+    from natlang_neuralese.train.diloco import worker,replica_transport
+    token='s'*32;(tmp_path/'token').write_text(token);nonce='x'*48
+    primary={'sandbox_id':'primary','boot_id':'boot','owner_id':'owner','pid':9,'start_ticks':'10'}
+    lost={'sandbox_id':'lost','boot_id':'lb','owner_id':'lo','pid':11,'start_ticks':'12'}
+    successor={'sandbox_id':'new','boot_id':'nb','owner_id':'no'}
+    intent={'run_id':'r','generation_nonce':'g'*48,'activation_nonce':nonce,'sequence':0,'head':'h'*64,'new_url':'https://same-session','new_token_sha256':hashlib.sha256(token.encode()).hexdigest()}
+    owner_observation={'identity':primary,'nonce':nonce,'process_absent':True,'port_closed':True,'observed_at':time.time()}
+    owner_evidence={'schema':'natlang.diloco-owner-restart-fence/1','run_id':'r','primary':primary,'primary_fenced':True,'all_workers_quiesced':True,'quiesced_workers':[0,1],
+        'proof_sha256':'p'*64,'owner_observed_at':time.time(),'owner_observation':owner_observation}
+    monkeypatch.setattr(fm,'owner_reference',lambda *a:{'run_id':'r','workers':{'0':primary,'1':lost}})
+    monkeypatch.setattr(fm,'verify_replacement_owner',lambda *a,**k:{'proof_sha256':'e'*64})
+    monkeypatch.setattr(fm,'verify_owned_restart_fence',lambda *a,**k:owner_evidence)
+    monkeypatch.setattr(fm,'verify_replica_loss_fence',lambda *a,**k:{'replica_fenced':True,'proof_sha256':'f'*64})
+    monkeypatch.setattr(fm,'sdk_worker_probe',lambda *a,**k:None)
+    monkeypatch.setattr(fm,'sdk_set_worker_authority',lambda ws,nonce,action:[{'sandbox_id':w['sandbox_id']} for w in ws])
+    monkeypatch.setattr(fm,'sdk_stop_owned_role',lambda *a,**k:{'exit_observed':True})
+    monkeypatch.setattr(fm,'sdk_authorize_coordinator',lambda *a,**k:{})
+    monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)
+    class Sandbox:
+        def exec(self,argv,**kwargs):
+            out=json.dumps({'owner_id':'owner','boot_id':'boot','generation':4}) if argv[0]=='cat' else '{"accepted":true}'
+            return SimpleNamespace(result=lambda **kw:SimpleNamespace(returncode=0,stdout=out))
+        def write_file(self,*args):return SimpleNamespace(result=lambda **kw:None)
+    monkeypatch.setattr(cwctl,'read_sandbox',lambda *a,**k:Sandbox())
+    class Transport:
+        def __init__(self,*a,**k):self.calls=0
+        def json(self,*a):
+            self.calls+=1
+            if self.calls==1:raise OSError('not running')
+            return {'ready':True,'run_id':'r','sequence':0,'head':'h'*64,'url':'https://same-session','token_sha256':intent['new_token_sha256'],'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64}}
+    monkeypatch.setattr(worker,'Transport',Transport)
+    monkeypatch.setattr(replica_transport,'witness_head',lambda *a,**k:{'run_id':'r','baseline_sha256':'a'*64,'sequence':0,'head':'h'*64})
+    session={'generation_nonce':'g'*48,'new_url':'https://same-session','new_token_sha256':intent['new_token_sha256']}
+    config={'intent':intent,'workers':[primary,successor],'lost_replica_sandbox_id':'lost','expected_primary':primary,'expected_workers':[0,1],
+        'supervisor_proof':{'journal':{'path':'unused','sha256':'a'*64}},'replacement_owner':{'reference':{},'target':successor,'worker_index':1},
+        'primary_owner_observer':{'directory':'/control','port':8080,'supervisor_cmdline_sha256':'a'*64,'entrypoint_sha256':'b'*64},
+        'control_dirs':{},'token_file':str(tmp_path/'token'),'outgoing_replica':{'url':'https://peer','baseline_sha256':'a'*64},
+        'recovered_source_peer_role':{},'activation_config':{'run_id':'r','baseline_sha256':'a'*64,'sequence':0,'head':'h'*64,'activation_nonce':nonce,'expected_primary':primary,'expected_workers':[0,1],'session_transition':session},
+        'primary_role':{'sandbox_id':'primary','directory':'/control','owner_id':'owner','boot_id':'boot','stage_directory':'/stage','python':'/usr/bin/python3','publisher':{'path':'/publisher','sha256':'a'*64},'request':{'action':'start','role':'coordinator'}}}
+    assert run_coreweave_replica_loss_restart(tmp_path/'controller',config)['phase']=='released'
+
+
+def test_replica_loss_local_recovery_starts_owned_witness(tmp_path,monkeypatch):
+    import time
+    from types import SimpleNamespace
+    from scripts.coreweave import cwctl,diloco_replica_fence as fm
+    from scripts.coreweave.diloco_replica_controller import run_coreweave_prepare_replica_loss
+    from natlang_neuralese.train.diloco import replica_transport
+    primary={'sandbox_id':'primary','boot_id':'boot','owner_id':'owner','pid':9,'start_ticks':'10'}
+    lost={'sandbox_id':'lost','boot_id':'lb','owner_id':'lo','pid':11,'start_ticks':'12'};nonce='x'*48
+    observation={'identity':primary,'nonce':nonce,'process_absent':True,'port_closed':True,'observed_at':time.time()}
+    owner={'schema':'natlang.diloco-owner-restart-fence/1','run_id':'r','primary':primary,'primary_fenced':True,'all_workers_quiesced':True,'quiesced_workers':[0,1],
+        'proof_sha256':'p'*64,'owner_observation':observation,'workers':[{'identity':primary},{'identity':lost}]}
+    loss={'schema':'natlang.diloco-replica-loss-fence/1','run_id':'r','primary':primary,'primary_process_absent':True,'replica_fenced':True,
+        'all_workers_quiesced':True,'quiesced_workers':[0,1],'proof_sha256':'f'*64,'replica_observed_at':time.time(),'owner_evidence':owner}
+    monkeypatch.setattr(fm,'owner_reference',lambda *a:{'run_id':'r','workers':{'0':primary,'1':lost}})
+    monkeypatch.setattr(fm,'sdk_set_worker_authority',lambda ws,nonce,action:[{'sandbox_id':w['sandbox_id']} for w in ws])
+    monkeypatch.setattr(fm,'verify_owned_restart_fence',lambda *a,**k:owner);monkeypatch.setattr(fm,'verify_replica_loss_fence',lambda *a,**k:loss)
+    monkeypatch.setattr(fm,'sdk_worker_probe',lambda *a,**k:None);monkeypatch.setattr(fm,'sdk_authorize_seed_server',lambda *a,**k:{})
+    monkeypatch.setattr(fm,'sdk_record_preserved_role',lambda *a,**k:{})
+    monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)
+    receipt={'run_id':'r','source_head':'h'*64,'source_sequence':3,'new_baseline_sha256':'a'*64,'new_head':'b'*64}
+    class Sandbox:
+        def exec(self,argv,**kwargs):
+            if argv[0]=='env':out=json.dumps(receipt)
+            elif argv[0]=='cat':out=json.dumps({'owner_id':'owner','boot_id':'boot','generation':2})
+            elif argv[0]=='python3':out=json.dumps({'accepted':True,'pid':42,'process_start_ticks':'77','owner_id':'owner','generation':3})
+            else:out=''
+            return SimpleNamespace(result=lambda **kw:SimpleNamespace(returncode=0,stdout=out))
+        def write_file(self,*args):return SimpleNamespace(result=lambda **kw:None)
+    monkeypatch.setattr(cwctl,'read_sandbox',lambda *a,**k:Sandbox())
+    monkeypatch.setattr(replica_transport,'witness_head',lambda *a,**k:{'run_id':'r','baseline_sha256':'a'*64,'sequence':0,'head':'b'*64})
+    (tmp_path/'token').write_text('s'*32)
+    session={'generation_nonce':'g'*48,'new_url':'https://same','new_token_sha256':'t'*64}
+    activation={'run_id':'r','baseline_sha256':'c'*64,'sequence':3,'head':'h'*64,'activation_nonce':nonce,
+        'expected_primary':primary,'expected_workers':[0,1],'session_transition':session,'destination':'/recovery'}
+    source={'sandbox_id':'primary','boot_id':'boot','owner_id':'owner','directory':'/control','stage_directory':'/stage','runtime':'/runtime','python':'/usr/bin/python3',
+        'peer_work_root':'/peer-work','peer_host':'0.0.0.0','peer_port':8081,'peer_token_file':'/peer-token','max_transaction_bytes':1024,
+        'publisher':{'path':'/publisher','sha256':'a'*64},'replica_url':'https://peer'}
+    result=run_coreweave_prepare_replica_loss({'activation_nonce':nonce,'workers':[primary],'lost_replica_sandbox_id':'lost',
+        'primary_owner_observer':{'directory':'/control','port':8080,'supervisor_cmdline_sha256':'a'*64,'entrypoint_sha256':'b'*64},
+        'supervisor_proof':{'journal':{'path':'/journal','sha256':'d'*64}},'expected_primary':primary,'expected_workers':[0,1],
+        'control_dirs':{},'activation_config':activation,'source':source,'peer_token_file':str(tmp_path/'token')})
+    assert result['witness']['head']=='b'*64 and result['preserve_role']['pid']==42

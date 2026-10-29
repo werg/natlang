@@ -67,7 +67,7 @@ def recover_receiver(*, baseline, baseline_sha256, journal, destination):
                   quorum_since=timers,receiver_restart=True,clock_anchor={'wall':value['captured_wall'],'monotonic':value['captured_monotonic']})
 
 
-def recover_after_replica_loss(*, baseline, baseline_sha256, journal, sequence, head, destination, verified_owner_evidence, source_work_root, freeze_nonce):
+def recover_after_replica_loss(*, baseline, baseline_sha256, journal, sequence, head, destination, verified_owner_evidence, source_work_root, source_primary_store, freeze_nonce):
     """Preserve locally sealed updates after a fenced replica disappears.
 
     The controller must first verify the old primary owner is stopped, the
@@ -91,6 +91,11 @@ def recover_after_replica_loss(*, baseline, baseline_sha256, journal, sequence, 
     if not isinstance(freeze_nonce,str) or len(freeze_nonce)<32:raise ValueError('replica loss file freeze nonce is invalid')
     source_root=Path(source_work_root).resolve(strict=True)
     if not source_root.is_dir():raise ValueError('old primary work root is not a directory')
+    source_store=Path(source_primary_store).resolve(strict=True)
+    previous_start=json.loads((source_store/'supervisor-start.json').read_text())
+    if previous_start.get('schema')!='natlang.diloco-replica-start/1' or previous_start.get('promotion',{}).get('run_id')!=value['run_id'] or not previous_start.get('session_transition'):
+        raise ValueError('old primary session custody differs')
+
     uploads=source_root/'uploads';target_uploads=target/'replica-uploads';files=[]
     if uploads.exists():
         target_uploads.mkdir()
@@ -128,5 +133,8 @@ def recover_after_replica_loss(*, baseline, baseline_sha256, journal, sequence, 
         write_json_durable(target/'replica-active.json',{'schema':'natlang.diloco-replica-active-generation/1','id':'seeded',
             'previous':previous,'baseline':str((target/'baseline').resolve()),'baseline_sha256':captured['sha256'],
             'journal':str((target/'journal').resolve()),'head':new_head,'max_payload_bytes':journal.max_payload_bytes,'max_transactions':journal.max_transactions})
+        write_json_durable(target/'primary-active.json',{'id':'seeded','baseline':str((target/'baseline').resolve()),
+            'journal':str((target/'journal').resolve()),'work_root':str(source_root),'baseline_sha256':captured['sha256'],'head':new_head,'previous':previous})
+        write_json_durable(target/'supervisor-start.json',previous_start)
         return receipt
     finally:new.close()

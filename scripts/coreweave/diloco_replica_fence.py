@@ -234,7 +234,7 @@ def sdk_observe_coordinator_stop(identity,nonce,control_dir,port,supervisor_cmdl
     return json.loads(result.stdout)
 
 
-def verify_owned_restart_fence(proof, *, expected_primary, expected_workers, nonce, observe_primary, probe_worker, now=time.time):
+def verify_owned_restart_fence(proof, *, expected_primary, expected_workers, nonce, observe_primary, probe_worker, completed_sandbox_ids=(), get_sandbox=None, now=time.time):
     """Fresh role-owner death and worker quiescence without a provider shutdown."""
     if set(proof)!={'journal','expected_run_id'}:raise ValueError('invalid restart fence request')
     ref=proof['journal'];owner=owner_reference(ref['path'],ref['sha256'],expected_primary)
@@ -249,7 +249,13 @@ def verify_owned_restart_fence(proof, *, expected_primary, expected_workers, non
     for rank in sorted(expected_workers):
         entry=workers[str(rank)];identity={key:entry.get(key) for key in ('sandbox_id','boot_id','owner_id','pid','start_ticks')}
         identity['start_ticks']=entry.get('start_ticks') or entry.get('process_start_ticks')
-        challenge=secrets.token_hex(24);start=now();result=probe_worker(identity,challenge);end=now()
+        challenge=secrets.token_hex(24);start=now()
+        if identity['sandbox_id'] in completed_sandbox_ids:
+            if not callable(get_sandbox) or _top_state(get_sandbox(identity['sandbox_id']),identity['sandbox_id'])!=COMPLETED:
+                raise ValueError('completed worker provider fence is not proven')
+            result={'identity':identity,'nonce':challenge,'process_absent':True,'owner_quiesced':True,'method':'provider-completed'}
+        else:result=probe_worker(identity,challenge)
+        end=now()
         if (not isinstance(result,dict) or result.get('identity')!=identity or result.get('nonce')!=challenge
                 or result.get('process_absent') is not True or result.get('owner_quiesced') is not True or end<start or end-start>120):
             raise ValueError('worker role remains unverified')
@@ -367,7 +373,7 @@ print(json.dumps({'pid':pid,'start_ticks':ticks,'owner_id':owner,'boot_id':boot}
     return json.loads(result.stdout)
 
 
-def verify_replacement_owner(ref, *, owner_journal, expected_primary, expected_target, worker_index, nonce, get_sandbox, observe_owner, now=time.time):
+def verify_replacement_owner(ref, *, owner_journal, expected_primary, expected_target, worker_index, nonce, get_sandbox, observe_owner, failed_sandbox_id=None, now=time.time):
     """Bind a fresh replacement owner to one exact failed worker lineage."""
     path=Path(ref['path']).resolve(strict=True);before=path.stat();raw=path.read_bytes();after=path.stat()
     if hashlib.sha256(raw).hexdigest()!=ref['sha256'] or (before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)!=(after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns):
@@ -377,7 +383,7 @@ def verify_replacement_owner(ref, *, owner_journal, expected_primary, expected_t
     new_identity={k:expected_target.get(k) for k in ('sandbox_id','boot_id','owner_id')}
     if (value.get('schema')!='natlang.diloco-replacement-owner/1' or value.get('worker_index')!=worker_index or
             value.get('old_identity')!=old_identity or value.get('new_identity')!=new_identity or
-            old_identity['sandbox_id']!=expected_primary['sandbox_id'] or new_identity['sandbox_id']==old_identity['sandbox_id'] or
+            old_identity['sandbox_id']!=(failed_sandbox_id or expected_primary['sandbox_id']) or new_identity['sandbox_id']==old_identity['sandbox_id'] or
             value.get('control_directory')!=expected_target.get('directory') or value.get('owner_runtime')!=expected_target.get('runtime') or
             value.get('supervisor')!=expected_target.get('supervisor')):
         raise ValueError('replacement journal does not bind the failed worker and successor owner')

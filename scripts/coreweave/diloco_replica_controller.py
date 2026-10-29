@@ -249,14 +249,24 @@ def run_coreweave_seed_stage(config):
         import diloco_replica_fence as fences
     from natlang_neuralese.train.diloco.replica_transport import freeze_replica_files,witness_head
     witness=config['witness'];nonce=config['activation_nonce']
-    verifier=fences.provider_fence_verifier(expected_primary=config['expected_primary'],expected_workers=config['expected_workers'],control_dirs=config['control_dirs'])
-    evidence=verifier(config['supervisor_proof'])
-    if (evidence.get('primary_fenced') is not True or evidence.get('all_workers_quiesced') is not True or
+    if config.get('fence_mode','primary-loss')=='replica-loss':
+        owner=config['primary_owner_observer']
+        def observe(identity,challenge):
+            return fences.sdk_observe_coordinator_stop(identity,challenge,owner['directory'],owner['port'],owner['supervisor_cmdline_sha256'],owner['entrypoint_sha256'])
+        owner_evidence=fences.verify_owned_restart_fence(config['supervisor_proof'],expected_primary=config['expected_primary'],
+            expected_workers=config['expected_workers'],nonce=nonce,observe_primary=observe,probe_worker=fences.sdk_worker_probe(config['control_dirs']),
+            completed_sandbox_ids=[config['lost_replica_sandbox_id']],get_sandbox=fences.sdk_get_sandbox)
+        evidence=fences.verify_replica_loss_fence(owner_evidence,replica_sandbox_id=config['lost_replica_sandbox_id'],get_sandbox=fences.sdk_get_sandbox)
+        observations=owner_evidence['workers'];primary_stopped=evidence.get('primary_process_absent') is True
+    else:
+        verifier=fences.provider_fence_verifier(expected_primary=config['expected_primary'],expected_workers=config['expected_workers'],control_dirs=config['control_dirs'])
+        evidence=verifier(config['supervisor_proof']);observations=evidence['workers'];primary_stopped=evidence.get('primary_fenced') is True
+    if (not primary_stopped or evidence.get('all_workers_quiesced') is not True or
             evidence.get('run_id')!=witness['run_id'] or not evidence.get('proof_sha256')):
-        raise ValueError('seed stage requires a verified old-primary and worker fence')
+        raise ValueError('seed stage requires a verified stopped primary and worker fence')
     if len(nonce)<32 or witness['sequence']%2:raise ValueError('invalid seed boundary')
     source=config['source'];target=config['target']
-    authorized={(item['identity']['sandbox_id'],item['identity']['boot_id'],item['identity']['owner_id']) for item in evidence.get('workers',[])}
+    authorized={(item['identity']['sandbox_id'],item['identity']['boot_id'],item['identity']['owner_id']) for item in observations}
     source_id=(source['sandbox_id'],source['boot_id'],source['owner_id']);target_id=(target['sandbox_id'],target['boot_id'],target['owner_id'])
     if source_id==target_id or source_id not in authorized:raise ValueError('seed source is not a distinct verified survivor')
     if target_id not in authorized:
@@ -264,7 +274,8 @@ def run_coreweave_seed_stage(config):
         if not isinstance(replacement,dict):raise ValueError('seed target is not an authenticated successor owner')
         ref=config['supervisor_proof']['journal'];old_owner=fences.owner_reference(ref['path'],ref['sha256'],config['expected_primary'])
         proof=fences.verify_replacement_owner(replacement['reference'],owner_journal=old_owner,expected_primary=config['expected_primary'],
-            expected_target=target,worker_index=replacement['worker_index'],nonce=nonce,get_sandbox=fences.sdk_get_sandbox,observe_owner=fences.sdk_observe_replacement_owner)
+            expected_target=target,worker_index=replacement['worker_index'],nonce=nonce,get_sandbox=fences.sdk_get_sandbox,observe_owner=fences.sdk_observe_replacement_owner,
+            failed_sandbox_id=(config.get('lost_replica_sandbox_id') if config.get('fence_mode')=='replica-loss' else None))
         fences.sdk_set_worker_authority([{'sandbox_id':target['sandbox_id'],'boot_id':target['boot_id'],'owner_id':target['owner_id'],
             'directory':target['directory'],'runtime':target['runtime']}],nonce=nonce,action='fence')
     else:proof=None
@@ -374,3 +385,178 @@ def run_coreweave_seed_stage(config):
         finally:stopped_value=stop_source()
     return {'schema':'natlang.diloco-third-peer-stage/1','witness':witness,'receipt_sha256':receipt_sha,
             'source_role':source_role,'target_role':target_role,'replacement_owner_proof':proof,'target_preserve_role':preserved,'source_generation_after_seed_stop':stopped_value['generation'],'source_seed_server_stopped':True}
+
+
+def run_coreweave_replica_loss_restart(directory, config):
+    """Resume the same stopped primary after its lost peer is replaced.
+
+    The recovered local sealed state and the replacement peer must already be
+    staged. This path retains the existing coordinator session and never
+    pretends the still-running primary sandbox was provider-Completed.
+    """
+    import time,uuid
+    try:from . import cwctl,diloco_replica_fence as fences
+    except ImportError:
+        import cwctl
+        import diloco_replica_fence as fences
+    from natlang_neuralese.train.diloco.worker import Transport,RemoteError
+    from natlang_neuralese.train.diloco.replica_transport import witness_head
+    intent=config['intent'];nonce=intent['activation_nonce'];workers=config['workers'];lost=config['lost_replica_sandbox_id']
+    ref=config['supervisor_proof']['journal'];old=fences.owner_reference(ref['path'],ref['sha256'],config['expected_primary'])
+    expected={(w['sandbox_id'],w['boot_id'],w['owner_id']) for w in old['workers'].values() if w['sandbox_id']!=lost}
+    actual={(w['sandbox_id'],w['boot_id'],w['owner_id']) for w in workers};extra=actual-expected
+    if not expected<=actual or len(extra)!=1:raise ValueError('restart owners differ from surviving roster and one successor')
+    replacement=config['replacement_owner'];target=replacement['target']
+    if extra!={(target['sandbox_id'],target['boot_id'],target['owner_id'])}:raise ValueError('restart replacement owner differs')
+    replacement_proof=fences.verify_replacement_owner(replacement['reference'],owner_journal=old,expected_primary=config['expected_primary'],
+        expected_target=target,worker_index=replacement['worker_index'],nonce=nonce,get_sandbox=fences.sdk_get_sandbox,
+        observe_owner=fences.sdk_observe_replacement_owner,failed_sandbox_id=lost)
+    owner=config['primary_owner_observer']
+    def observe(identity,challenge):return fences.sdk_observe_coordinator_stop(identity,challenge,owner['directory'],owner['port'],owner['supervisor_cmdline_sha256'],owner['entrypoint_sha256'])
+    token=Path(config['token_file']).read_text().strip()
+    if hashlib.sha256(token.encode()).hexdigest()!=intent['new_token_sha256']:raise ValueError('restart session token differs')
+    def install(_):return fences.sdk_set_worker_authority(workers,nonce=nonce,action='fence')
+    def verify(_):
+        owner_proof=fences.verify_owned_restart_fence(config['supervisor_proof'],expected_primary=config['expected_primary'],
+            expected_workers=config['expected_workers'],nonce=nonce,observe_primary=observe,probe_worker=fences.sdk_worker_probe(config['control_dirs']),
+            completed_sandbox_ids=[lost],get_sandbox=fences.sdk_get_sandbox)
+        loss_proof=fences.verify_replica_loss_fence(owner_proof,replica_sandbox_id=lost,get_sandbox=fences.sdk_get_sandbox)
+        result={**owner_proof,'replica_loss':loss_proof,'replacement_owner':replacement_proof}
+        result['proof_sha256']=hashlib.sha256(json.dumps({k:v for k,v in result.items() if k!='proof_sha256'},sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        return result
+    def start(_,evidence):
+        client=Transport(intent['new_url'],token,5,gateway=config.get('gateway'),allow_http=config.get('allow_http',False))
+        try:existing=client.json('GET','/v1/replica-promotion')
+        except OSError:existing=None
+        except RemoteError as exc:
+            if exc.status not in (404,503):raise
+            existing=None
+        if existing is not None:
+            if (existing.get('run_id')!=intent['run_id'] or existing.get('sequence')!=intent['sequence'] or
+                    existing.get('head')!=intent['head'] or existing.get('token_sha256')!=intent['new_token_sha256']):raise ValueError('existing restart differs')
+            fences.sdk_confirm_promoted_role(config['primary_role'],nonce);return existing
+        peer=config['outgoing_replica'];witness=witness_head(peer['url'],token,allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
+        if witness!={'run_id':intent['run_id'],'baseline_sha256':peer['baseline_sha256'],'sequence':intent['sequence'],'head':intent['head']}:
+            raise ValueError('replacement peer does not witness recovered head')
+        fences.sdk_stop_owned_role(config['recovered_source_peer_role'])
+        role=dict(config['primary_role']);cwctl.load_env_file();cwctl.require_key();box=cwctl.read_sandbox(role['sandbox_id'],patience=60)
+        status=box.exec(['cat',role['directory'].rstrip('/')+'/state.json'],timeout_seconds=30).result(timeout=60)
+        if status.returncode!=0:raise ValueError('restarting owner state unavailable')
+        state=json.loads(status.stdout)
+        if state.get('owner_id')!=role['owner_id'] or state.get('boot_id')!=role['boot_id'] or state.get('pending_start'):
+            raise ValueError('restarting owner identity changed')
+        activation=dict(config['activation_config'])
+        if (activation.get('run_id')!=intent['run_id'] or activation.get('sequence')!=intent['sequence'] or activation.get('head')!=intent['head'] or activation.get('activation_nonce')!=nonce):
+            raise ValueError('restart activation differs from recovered custody')
+        raw,digest=prepare_owned_activation(activation,mode='restart',supervisor_evidence=evidence,now=time.time(),owner_stop=evidence['owner_observation'])
+        stage=role['stage_directory'].rstrip('/')+'/restart-'+uuid.uuid4().hex
+        made=box.exec(['mkdir','-p',stage],timeout_seconds=30).result(timeout=60)
+        if made.returncode!=0:raise ValueError('restart staging directory failed')
+        path=stage+'/activation.json';box.write_file(path,raw).result(timeout=60)
+        request=dict(role['request']);request.update(owner_id=role['owner_id'],expected_generation=state['generation'],promotion_nonce=nonce,
+            argv=[role['python'],'-m','natlang_neuralese.train.diloco.replica_cli','restart','--config',path,'--config-sha256',digest])
+        if any('COREWEAVE' in k.upper() or k.upper().startswith('CW_') for k in request.get('env',{})):
+            raise ValueError('provider credential must not enter restart environment')
+        role['request']=request;fences.sdk_authorize_coordinator(role,nonce)
+        publisher=role['publisher'];program=('import hashlib,json,runpy,sys\nfrom pathlib import Path\n'
+            'p=Path(sys.argv[1]);actual=hashlib.sha256(p.read_bytes()).hexdigest()\n'
+            'if actual!=sys.argv[2]:raise ValueError("owner publisher differs")\n'
+            'print(json.dumps(runpy.run_path(str(p))["submit"](sys.argv[3],json.loads(sys.argv[4]),timeout=60)))\n')
+        started=box.exec(['python3','-c',program,publisher['path'],publisher['sha256'],role['directory'],json.dumps(request)],timeout_seconds=90).result(timeout=120)
+        if started.returncode!=0 or json.loads(started.stdout).get('accepted') is not True:raise ValueError('restart owner did not accept coordinator')
+        deadline=time.monotonic()+config.get('readiness_timeout',120)
+        while True:
+            try:return client.json('GET','/v1/replica-promotion')
+            except OSError:
+                if time.monotonic()>=deadline:raise
+                time.sleep(1)
+    def release(_,fenced):return fences.sdk_set_worker_authority(workers,nonce=nonce,action='release')
+    return run_promotion(directory,intent=intent,fence_workers=install,verify_fence=verify,start_primary=start,release_workers=release)
+
+
+def run_coreweave_prepare_replica_loss(config):
+    """Recover the stopped primary's exact local WAL and publish a temporary owned peer.
+
+    No allocation or GPU work occurs. The caller owns the identified sandbox,
+    has quiesced workers, and supplies the actual local sealed/unsealed head.
+    """
+    import time,uuid
+    try:from . import cwctl,diloco_replica_fence as fences
+    except ImportError:
+        import cwctl
+        import diloco_replica_fence as fences
+    from natlang_neuralese.train.diloco.replica_transport import witness_head
+    nonce=config['activation_nonce'];workers=config['workers'];lost=config['lost_replica_sandbox_id'];owner=config['primary_owner_observer']
+    ref=config['supervisor_proof']['journal'];journal=fences.owner_reference(ref['path'],ref['sha256'],config['expected_primary'])
+    expected={(w['sandbox_id'],w['boot_id'],w['owner_id']) for w in journal['workers'].values() if w['sandbox_id']!=lost}
+    if {(w['sandbox_id'],w['boot_id'],w['owner_id']) for w in workers}!=expected:
+        raise ValueError('replica loss fencing does not cover exact surviving owners')
+    fences.sdk_set_worker_authority(workers,nonce=nonce,action='fence')
+    def observe(identity,challenge):return fences.sdk_observe_coordinator_stop(identity,challenge,owner['directory'],owner['port'],owner['supervisor_cmdline_sha256'],owner['entrypoint_sha256'])
+    owner_proof=fences.verify_owned_restart_fence(config['supervisor_proof'],expected_primary=config['expected_primary'],
+        expected_workers=config['expected_workers'],nonce=nonce,observe_primary=observe,probe_worker=fences.sdk_worker_probe(config['control_dirs']),
+        completed_sandbox_ids=[lost],get_sandbox=fences.sdk_get_sandbox)
+    loss=fences.verify_replica_loss_fence(owner_proof,replica_sandbox_id=lost,get_sandbox=fences.sdk_get_sandbox)
+    source=config['source'];primary=config['expected_primary']
+    if (source['sandbox_id'],source['boot_id'],source['owner_id'])!=(primary['sandbox_id'],primary['boot_id'],primary['owner_id']):
+        raise ValueError('recovered source is not the exact stopped primary owner')
+    activation=dict(config['activation_config'])
+    if activation.get('activation_nonce')!=nonce or activation.get('run_id')!=owner_proof['run_id']:
+        raise ValueError('replica-loss activation custody differs')
+    raw,digest=prepare_owned_activation(activation,mode='replica-loss-recover',supervisor_evidence=loss,now=time.time())
+    cwctl.load_env_file();cwctl.require_key();box=cwctl.read_sandbox(source['sandbox_id'],patience=60);unique=uuid.uuid4().hex
+    stage=source['stage_directory'].rstrip('/')+'/peer-loss-'+unique
+    made=box.exec(['mkdir','-p',stage],timeout_seconds=30).result(timeout=60)
+    if made.returncode!=0:raise ValueError('replica loss staging directory failed')
+    path=stage+'/recovery.json';box.write_file(path,raw).result(timeout=60)
+    argv=[source['python'],'-m','natlang_neuralese.train.diloco.replica_cli','replica-loss-recover','--config',path,'--config-sha256',digest]
+    result=box.exec(['env','PYTHONPATH='+source['runtime']+'/training/neuralese',*argv],timeout_seconds=config.get('recovery_timeout',3600)).result(timeout=config.get('recovery_timeout',3600)+30)
+    if result.returncode!=0:raise ValueError('local replica-loss recovery failed; original journal is retained')
+    receipt=json.loads(result.stdout)
+    if receipt.get('run_id')!=owner_proof['run_id'] or receipt.get('source_head')!=activation['head'] or receipt.get('source_sequence')!=activation['sequence']:
+        raise ValueError('recovered local journal receipt differs')
+    peer_config={'baseline':activation['destination']+'/baseline','baseline_sha256':receipt['new_baseline_sha256'],'store':activation['destination'],
+        'work_root':source['peer_work_root'],'host':source['peer_host'],'port':source['peer_port'],'token_file':source['peer_token_file'],'max_transaction_bytes':source['max_transaction_bytes']}
+    peer_raw=json.dumps(peer_config,sort_keys=True,separators=(',',':')).encode();peer_sha=hashlib.sha256(peer_raw).hexdigest();peer_path=stage+'/peer.json';box.write_file(peer_path,peer_raw).result(timeout=60)
+    status=box.exec(['cat',source['directory'].rstrip('/')+'/state.json'],timeout_seconds=30).result(timeout=60)
+    if status.returncode!=0:raise ValueError('recovered source owner unavailable')
+    state=json.loads(status.stdout)
+    if state.get('owner_id')!=source['owner_id'] or state.get('boot_id')!=source['boot_id'] or state.get('pending_start'):
+        raise ValueError('recovered source owner identity changed')
+    peer_argv=[source['python'],'-m','natlang_neuralese.train.diloco.replica_cli','peer','--config',peer_path,'--config-sha256',peer_sha]
+    request={'schema':'natlang.diloco-role-request/1','id':'recovered-peer-'+unique,'owner_id':source['owner_id'],
+        'expected_generation':state['generation'],'action':'start','role':source.get('peer_role','actor'),'promotion_nonce':nonce,
+        'argv':peer_argv,'env':{'PYTHONPATH':source['runtime']+'/training/neuralese'}}
+    role={'sandbox_id':source['sandbox_id'],'directory':source['directory'],'boot_id':source['boot_id'],'runtime':source['runtime'],'request':request}
+    fences.sdk_authorize_seed_server(role,nonce)
+    publisher=source['publisher'];program=('import hashlib,json,runpy,sys\nfrom pathlib import Path\n'
+        'p=Path(sys.argv[1]);actual=hashlib.sha256(p.read_bytes()).hexdigest()\n'
+        'if actual!=sys.argv[2]:raise ValueError("owner publisher differs")\n'
+        'print(json.dumps(runpy.run_path(str(p))["submit"](sys.argv[3],json.loads(sys.argv[4]),timeout=60)))\n')
+    started=box.exec(['python3','-c',program,publisher['path'],publisher['sha256'],source['directory'],json.dumps(request)],timeout_seconds=90).result(timeout=120)
+    if started.returncode!=0:raise ValueError('recovered source peer owner failed')
+    peer_role=json.loads(started.stdout)
+    if peer_role.get('accepted') is not True:raise ValueError('recovered source peer was not accepted')
+    preserved={'role':source.get('peer_role','actor'),'pid':peer_role['pid'],'start_ticks':peer_role['process_start_ticks'],
+               'argv_sha256':hashlib.sha256(json.dumps(peer_argv,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()}
+    try:
+        fences.sdk_record_preserved_role(source,nonce,preserved)
+        token=Path(config['peer_token_file']).read_text().strip();deadline=time.monotonic()+config.get('readiness_timeout',300)
+        expected={'run_id':receipt['run_id'],'baseline_sha256':receipt['new_baseline_sha256'],'sequence':0,'head':receipt['new_head']}
+        while True:
+            try:
+                actual=witness_head(source['replica_url'],token,gateway=config.get('gateway'),allow_http=config.get('allow_http',False))
+                if actual!=expected:raise ValueError('recovered source peer head differs')
+                break
+            except OSError:
+                if time.monotonic()>=deadline:raise
+                time.sleep(1)
+    except BaseException:
+        stop_request={'schema':'natlang.diloco-role-request/1','id':'recovered-peer-stop-'+unique,'owner_id':peer_role['owner_id'],
+            'expected_generation':peer_role['generation'],'role':source.get('peer_role','actor'),'action':'stop',
+            'expected_pid':peer_role['pid'],'expected_process_start_ticks':peer_role['process_start_ticks']}
+        fences.sdk_stop_owned_role({'sandbox_id':source['sandbox_id'],'directory':source['directory'],
+            'publisher':source['publisher'],'request':stop_request})
+        raise
+    return {'schema':'natlang.diloco-owned-replica-loss-stage/1','recovery':receipt,'witness':expected,
+            'owner_fence':owner_proof,'lost_replica_fence':loss,'peer_role':peer_role,'preserve_role':preserved}
