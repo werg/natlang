@@ -3,8 +3,12 @@
 import hashlib,json,subprocess,sys,time,fcntl,types
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent));from native_remote_budget import bounded_remote
-sys.path.insert(0,'/home/werg/natlang/scripts/coreweave');import cwctl
+from natlang_neuralese.common.paths import resolve
+sys.path.insert(0,str(resolve('repo','scripts/coreweave')));import cwctl
 from natlang_neuralese.common.jsonio import write_json_durable
+OPS=resolve('data_nvme','dgxops')
+CW_PYTHON=Path.home()/'.local/share/natlang/cw-venv/bin/python'
+EXPORTER=OPS/'coreweave-private-runfile-export-20261014.py'
 
 def bound(ref):
  path=Path(ref['path']);raw=path.read_bytes();actual=hashlib.sha256(raw).hexdigest()
@@ -61,7 +65,7 @@ def control_attempt(v,b,e):
  def presence(role,archive):
   try:
    import wandb
-   registry=Path('/home/werg/data/dgxops')/('coreweave-production-'+role+'-private-export-run-20261014.json')
+   registry=OPS/('coreweave-production-'+role+'-private-export-run-20261014.json')
    rid=json.loads(registry.read_text())['run_id'];name=role+'/'+archive['sha256']+'/'+Path(archive['path']).name
    return wandb.Api().run('werg/natlang/'+rid).file(name).size==archive['bytes']
   except Exception:
@@ -70,7 +74,7 @@ def control_attempt(v,b,e):
  def launch(role,unit,sandbox_id,archive,existing):
   env={'CW_EXPORT_SANDBOX_ID':sandbox_id,'CW_EXPORT_EXPECTED_SHA256':archive['sha256'],'CW_EXPORT_EXPECTED_BYTES':str(archive['bytes']),'CW_EXPORT_CACHE_BOUNDED_READS':'1','CW_EXPORT_VERIFY_ON_OWNER':'1'}
   if existing:env['CW_EXPORT_VERIFY_EXISTING_ONLY']='1'
-  subprocess.run(['systemd-run','--user','--unit='+unit,'--property=MemoryMax=2G',*[f'--setenv={k}={x}' for k,x in env.items()],'/home/werg/.local/share/natlang/cw-venv/bin/python','/home/werg/data/dgxops/coreweave-private-runfile-export-20261014.py',role,archive['path']],check=True)
+  subprocess.run(['systemd-run','--user','--unit='+unit,'--property=MemoryMax=2G',*[f'--setenv={k}={x}' for k,x in env.items()],str(CW_PYTHON),str(EXPORTER),role,archive['path']],check=True)
  hook.attempt_control(v,b,e,s,journal,selection['hook_selection'],write_json_durable,presence=presence,launch=launch)
 
 def refresh_publication(e):
@@ -88,7 +92,7 @@ def refresh_publication(e):
   if api.run(selector['run']).file(selector['name']).size!=selector_identity['bytes']:raise ValueError('selector private object missing')
   bindings.append({'role':selector['role'],'receipt':str(selector_receipt),'receipt_sha256':selector_receipt_sha,'sha256':selection_sha,'bytes':selector_identity['bytes']})
   for role,expected in checks:
-   path=Path('/home/werg/data/dgxops')/('coreweave-production-'+role+'-private-export-receipt-20261014.json');raw=path.read_bytes();digest=hashlib.sha256(raw).hexdigest()
+   path=OPS/('coreweave-production-'+role+'-private-export-receipt-20261014.json');raw=path.read_bytes();digest=hashlib.sha256(raw).hexdigest()
    if expected and digest!=expected:raise ValueError('dependency receipt changed: '+role)
    d=json.loads(raw);identity=d['identity'];v=d['independent_verification']
    if not d.get('private') or v.get('readback_location')!='owner' or v.get('sha256')!=identity['sha256'] or v.get('bytes')!=identity['bytes']:raise ValueError('receipt lacks owner full GET: '+role)
@@ -119,7 +123,7 @@ while True:
     if subprocess.run(['systemctl','--user','is-active','--quiet',e['unit']]).returncode!=0:
      import uuid
      e['unit']=e['role']+'-export-recover-'+uuid.uuid4().hex;write_json_durable(journal,s)
-     subprocess.run(['systemd-run','--user','--unit='+e['unit'],'--property=MemoryMax=2G',*[f'--setenv={k}={x}' for k,x in env.items()],'/home/werg/.local/share/natlang/cw-venv/bin/python','/home/werg/data/dgxops/coreweave-private-runfile-export-20261014.py',e['role'],v['path']],check=True)
+     subprocess.run(['systemd-run','--user','--unit='+e['unit'],'--property=MemoryMax=2G',*[f'--setenv={k}={x}' for k,x in env.items()],str(CW_PYTHON),str(EXPORTER),e['role'],v['path']],check=True)
     e['full_launch_pending']=False;write_json_durable(journal,s)
    p=Path(e['phase_path']);phase=json.loads(p.read_text()).get('phase') if p.exists() else None
    e['full_backup_verified']=phase in ('independently_verified','reused_independently_verified');e.setdefault('publication_complete',False);refresh_publication(e);write_json_durable(journal,s)
@@ -128,11 +132,11 @@ while True:
     if not active:
      v=json.loads(Path(e['intent']).read_text());import wandb
      try:
-      rid=json.loads((Path('/home/werg/data/dgxops')/('coreweave-production-'+e['role']+'-private-export-run-20261014.json')).read_text())['run_id'];name=e['role']+'/'+v['sha256']+'/'+Path(v['path']).name;present=wandb.Api().run('werg/natlang/'+rid).file(name).size==v['bytes']
+      rid=json.loads((OPS/('coreweave-production-'+e['role']+'-private-export-run-20261014.json')).read_text())['run_id'];name=e['role']+'/'+v['sha256']+'/'+Path(v['path']).name;present=wandb.Api().run('werg/natlang/'+rid).file(name).size==v['bytes']
      except Exception as err:print('object check unavailable',type(err).__name__,flush=True);time.sleep(60);continue
      n=int(e.get('retry_count',0))+1;unit=e['unit']+'-retry-'+str(n);env={'CW_EXPORT_SANDBOX_ID':v['sandbox_id'],'CW_EXPORT_EXPECTED_SHA256':v['sha256'],'CW_EXPORT_EXPECTED_BYTES':str(v['bytes']),'CW_EXPORT_CACHE_BOUNDED_READS':'1'}
      if present:env['CW_EXPORT_VERIFY_EXISTING_ONLY']='1'
-     subprocess.run(['systemd-run','--user','--unit='+unit,'--property=MemoryMax=2G',*[f'--setenv={k}={x}' for k,x in env.items()],'/home/werg/.local/share/natlang/cw-venv/bin/python','/home/werg/data/dgxops/coreweave-private-runfile-export-20261014.py',e['role'],v['path']],check=True);e.update(retry_count=n,retry_unit=unit);write_json_durable(journal,s)
+     subprocess.run(['systemd-run','--user','--unit='+unit,'--property=MemoryMax=2G',*[f'--setenv={k}={x}' for k,x in env.items()],str(CW_PYTHON),str(EXPORTER),e['role'],v['path']],check=True);e.update(retry_count=n,retry_unit=unit);write_json_durable(journal,s)
     time.sleep(60);continue
   with (root/'standalone-cloud-retention.lock').open('a') as lock:
    fcntl.flock(lock,fcntl.LOCK_EX)
@@ -142,9 +146,9 @@ while True:
   if r.returncode:print('scan failed',r.stderr[-500:],flush=True);time.sleep(60);continue
   v=json.loads(r.stdout.strip().splitlines()[-1]);
   if not v['ready']:time.sleep(60);continue
-  v.update(sandbox_id=o['sandbox_id'],worker=rank,runtime_commit=o['runtime_commit'],plan_sha256=o['plan_sha256'],owner=o['accepted'],outer_credit=False,scope='cloud readback intended; owner GET remains separately required');intent=root/('outerloss-cloud-peer%d-step%d-intent.json'%(rank,v['step']));write_json_durable(intent,v);name='lfm3-outerloss-cloud-peer%d-step%d'%(rank,v['step']);unit=name+'-export';env={'CW_EXPORT_SANDBOX_ID':v['sandbox_id'],'CW_EXPORT_EXPECTED_SHA256':v['sha256'],'CW_EXPORT_EXPECTED_BYTES':str(v['bytes']),'CW_EXPORT_CACHE_BOUNDED_READS':'1'};e={'worker':rank,'step':v['step'],'intent':str(intent),'unit':unit,'role':name,'phase_path':'/home/werg/data/dgxops/coreweave-'+name+'-'+Path(v['path']).name+'-export-progress-20261014.json','control_required':True,'control_selection_sha256':selection_sha,'full_launch_pending':True,'full_backup_verified':False,'publication_complete':False};s['exports'].append(e);s['last']=v['step'];write_json_durable(journal,s)
+  v.update(sandbox_id=o['sandbox_id'],worker=rank,runtime_commit=o['runtime_commit'],plan_sha256=o['plan_sha256'],owner=o['accepted'],outer_credit=False,scope='cloud readback intended; owner GET remains separately required');intent=root/('outerloss-cloud-peer%d-step%d-intent.json'%(rank,v['step']));write_json_durable(intent,v);name='lfm3-outerloss-cloud-peer%d-step%d'%(rank,v['step']);unit=name+'-export';env={'CW_EXPORT_SANDBOX_ID':v['sandbox_id'],'CW_EXPORT_EXPECTED_SHA256':v['sha256'],'CW_EXPORT_EXPECTED_BYTES':str(v['bytes']),'CW_EXPORT_CACHE_BOUNDED_READS':'1'};e={'worker':rank,'step':v['step'],'intent':str(intent),'unit':unit,'role':name,'phase_path':str(OPS/('coreweave-'+name+'-'+Path(v['path']).name+'-export-progress-20261014.json')),'control_required':True,'control_selection_sha256':selection_sha,'full_launch_pending':True,'full_backup_verified':False,'publication_complete':False};s['exports'].append(e);s['last']=v['step'];write_json_durable(journal,s)
   try:control_attempt(v,b,e)
   except Exception as error:e.setdefault('control',{})['error']=str(error)[:500];write_json_durable(journal,s);print('control pending; journaled full-state fallback proceeds',type(error).__name__,str(error)[:500],flush=True)
-  subprocess.run(['systemd-run','--user','--unit='+unit,'--property=MemoryMax=2G',*[f'--setenv={k}={x}' for k,x in env.items()],'/home/werg/.local/share/natlang/cw-venv/bin/python','/home/werg/data/dgxops/coreweave-private-runfile-export-20261014.py',name,v['path']],check=True);e['full_launch_pending']=False;write_json_durable(journal,s);print('cloud export started',rank,v['step'],flush=True)
+  subprocess.run(['systemd-run','--user','--unit='+unit,'--property=MemoryMax=2G',*[f'--setenv={k}={x}' for k,x in env.items()],str(CW_PYTHON),str(EXPORTER),name,v['path']],check=True);e['full_launch_pending']=False;write_json_durable(journal,s);print('cloud export started',rank,v['step'],flush=True)
  except Exception as e:print('watch error',type(e).__name__,str(e),flush=True)
  time.sleep(60)

@@ -72,8 +72,7 @@ def test_complete_publication_requires_exact_private_selector_owner_get(tmp_path
         path=tmp_path/('coreweave-production-'+role+'-private-export-receipt-20261014.json')
         path.write_text(json.dumps({'role':role,'private':True,'run':'r','name':role,'identity':{'sha256':sha,'bytes':2},'independent_verification':{'readback_location':'owner','sha256':sha,'bytes':2}}));return path
     full=receipt('full','b'*64);control=receipt('control','c'*64);selector=receipt('selector','a'*64)
-    def path_factory(x):return tmp_path if str(x)=='/home/werg/data/dgxops' else Path(x)
-    env={'selection':{'publication_dependencies':[]},'selector_receipt':selector,'selector_receipt_sha':hashlib.sha256(selector.read_bytes()).hexdigest(),'selection_sha':'a'*64,'Path':path_factory,'json':json,'write_json_durable':lambda *args:None,'journal':tmp_path/'j','s':{}}
+    env={'selection':{'publication_dependencies':[]},'selector_receipt':selector,'selector_receipt_sha':hashlib.sha256(selector.read_bytes()).hexdigest(),'selection_sha':'a'*64,'OPS':tmp_path,'Path':Path,'json':json,'write_json_durable':lambda *args:None,'journal':tmp_path/'j','s':{}}
     exec(compile(ast.Module(body=[node],type_ignores=[]),str(source),'exec'),env)
     entry={'full_backup_verified':True,'role':'full','intent':str(intent),'control':{'role':'control','status':'independently_verified','archive':{'sha256':'c'*64}}}
     env['refresh_publication'](entry);assert entry['publication_complete']
