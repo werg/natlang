@@ -30,3 +30,23 @@ def test_fresh_initialization_saves_zero_update_and_refuses_parent(tmp_path, mon
         source_sha256=state['source_receipts'][0]['sha256'])==checkpoint
     with pytest.raises(ValueError,match='fresh output'):
         trainer.main(args)
+
+
+def test_fresh_handoff_rejects_real_nested_updated_optimizer(tmp_path,monkeypatch):
+    import hashlib
+    from natlang_neuralese.rl.jolt_handoff import checked_fresh_parent
+    from natlang_neuralese.train.optim import PortMuonAdamW
+    parameter=torch.nn.Parameter(torch.ones(3))
+    matrix=torch.nn.Parameter(torch.ones(16,16))
+    optimizer=PortMuonAdamW([('layer.weight',matrix),('bias',parameter)],lr=1e-4,vocab_size=10)
+    parameter.grad=torch.ones_like(parameter);optimizer.step()
+    state=optimizer.state_dict()
+    assert state['adamw']['state']
+    source='a'*64
+    training={'step':0,'global_step':0,'exposure_counts':{},'rng':{'x':1},'sft_progress':{'x':1},
+        'optimizer':state,'options':{'fresh_initialization':{'schema':'natlang.fresh-native-initialization/1',
+        'parent_checkpoint':None,'optimizer_updates':0,'earned_exposure':0}},'source_receipts':[{'sha256':source}]}
+    checkpoint=tmp_path/'forged.pt';torch.save({'training':training},checkpoint)
+    digest=hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    with pytest.raises(ValueError,match='inherited training'):
+        checked_fresh_parent(checkpoint,expected_sha256=digest,source_sha256=source)

@@ -47,11 +47,18 @@ def checked_fresh_parent(checkpoint, *, expected_sha256, source_sha256):
     state=torch.load(path,map_location='cpu',weights_only=False,mmap=True)
     training=state['training']; init=(training.get('options') or {}).get('fresh_initialization') or {}
     optimizer=training.get('optimizer') or {}
+    def optimizer_histories(value):
+        if not isinstance(value,dict):return []
+        histories=[value['state']] if 'state' in value else []
+        for key, child in value.items():
+            if key!='state' and isinstance(child,dict):histories.extend(optimizer_histories(child))
+        return histories
+    histories=optimizer_histories(optimizer)
     if (init.get('schema')!='natlang.fresh-native-initialization/1' or init.get('parent_checkpoint') is not None
             or init.get('optimizer_updates')!=0 or init.get('earned_exposure')!=0
             or training.get('step')!=0 or training.get('global_step')!=0
             or any((training.get('exposure_counts') or {}).values()) or not training.get('rng')
-            or not training.get('sft_progress') or optimizer.get('state')
+            or not training.get('sft_progress') or not histories or any(histories)
             or (training.get('source_receipts') or [{}])[0].get('sha256')!=source_sha256):
         raise ValueError('fresh checkpoint has inherited training, exposure, or wrong source')
     after=path.stat()
