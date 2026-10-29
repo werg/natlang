@@ -84,17 +84,39 @@ def run_coreweave_promotion(directory, config):
             raise ValueError('outgoing replica does not witness exact promoted head')
         rotate_replica_credential(replica['url'],old_token,token,sequence=intent['sequence'],head=intent['head'],nonce=nonce,
             allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
-        role=config['primary_role'];publisher=role['publisher']
+        # The surviving receiver owns the journal lock. Stop only that exact
+        # role after its replacement has witnessed the head, before promotion.
+        fence_module.sdk_stop_owned_role(config['promoted_replica_role'])
+        role=dict(config['primary_role']);publisher=role['publisher']
         if not Path(publisher['path']).is_absolute() or len(publisher['sha256'])!=64:raise ValueError('invalid role publisher identity')
+        cwctl.load_env_file();cwctl.require_key();sandbox=cwctl.read_sandbox(role['sandbox_id'],patience=60)
+        status=sandbox.exec(['cat',role['directory'].rstrip('/')+'/state.json'],timeout_seconds=30).result(timeout=60)
+        if status.returncode!=0:raise ValueError('promoted owner state unavailable')
+        owner_state=json.loads(status.stdout)
+        if owner_state.get('owner_id')!=role['owner_id'] or owner_state.get('boot_id')!=role['boot_id'] or owner_state.get('pending_start'):
+            raise ValueError('promoted owner identity changed')
+        activation=dict(config['activation_config'])
+        if (activation.get('run_id')!=intent['run_id'] or activation.get('sequence')!=intent['sequence'] or activation.get('head')!=intent['head'] or
+                activation.get('activation_nonce')!=nonce or activation.get('file_freeze_nonce')!=nonce):
+            raise ValueError('activation does not bind exact promotion custody')
+        raw,activation_sha=prepare_owned_activation(activation,mode='promote',supervisor_evidence=evidence,now=time.time())
+        import uuid
+        directory=role['stage_directory'].rstrip('/')+'/promotion-'+uuid.uuid4().hex
+        made=sandbox.exec(['mkdir','-p',directory],timeout_seconds=30).result(timeout=60)
+        if made.returncode!=0:raise ValueError('owned activation directory failed')
+        activation_path=directory+'/activation.json';sandbox.write_file(activation_path,raw).result(timeout=60)
+        request=dict(role['request']);request.update(owner_id=role['owner_id'],expected_generation=owner_state['generation'],promotion_nonce=nonce,
+            argv=[role['python'],'-m','natlang_neuralese.train.diloco.replica_cli','promote','--config',activation_path,'--config-sha256',activation_sha])
+        if any('COREWEAVE' in key.upper() or key.upper().startswith('CW_') for key in request.get('env',{})):
+            raise ValueError('provider credential must not enter owned coordinator environment')
+        role['request']=request
         program=('import hashlib,json,runpy,sys\nfrom pathlib import Path\n'
                  'p=Path(sys.argv[1]);actual=hashlib.sha256(p.read_bytes()).hexdigest()\n'
                  'if actual!=sys.argv[2]:raise ValueError("role publisher hash differs")\n'
                  'm=runpy.run_path(str(p));r=json.loads(sys.argv[4]);'
                  'print(json.dumps(m["submit"](sys.argv[3],r,timeout=60)))\n')
-        request=role['request']
         if request.get('action')!='start' or request.get('role')!='coordinator':raise ValueError('promotion requires owned coordinator start')
         fence_module.sdk_authorize_coordinator(role,nonce)
-        cwctl.load_env_file();cwctl.require_key();sandbox=cwctl.read_sandbox(role['sandbox_id'],patience=60)
         result=sandbox.exec(['python3','-c',program,publisher['path'],publisher['sha256'],role['directory'],json.dumps(request)],timeout_seconds=90).result(timeout=120)
         if result.returncode!=0 or json.loads(result.stdout).get('accepted') is not True:raise ValueError('coordinator owner did not accept start')
         client=Transport(intent['new_url'],token,5,gateway=config.get('gateway'),allow_http=config.get('allow_http',False))
@@ -180,7 +202,9 @@ def run_coreweave_seed_stage(config):
         import cwctl
         import diloco_replica_fence as fences
     from natlang_neuralese.train.diloco.replica_transport import freeze_replica_files,witness_head
-    evidence=config['verified_fence'];witness=config['witness'];nonce=config['activation_nonce']
+    witness=config['witness'];nonce=config['activation_nonce']
+    verifier=fences.provider_fence_verifier(expected_primary=config['expected_primary'],expected_workers=config['expected_workers'],control_dirs=config['control_dirs'])
+    evidence=verifier(config['supervisor_proof'])
     if (evidence.get('primary_fenced') is not True or evidence.get('all_workers_quiesced') is not True or
             evidence.get('run_id')!=witness['run_id'] or not evidence.get('proof_sha256')):
         raise ValueError('seed stage requires a verified old-primary and worker fence')

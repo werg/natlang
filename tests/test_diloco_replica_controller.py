@@ -77,13 +77,14 @@ def test_coreweave_seed_stage_uses_direct_owned_roles_and_stops_source(tmp_path,
     monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)
     monkeypatch.setattr(cwctl,'read_sandbox',lambda sid,**k:boxes[sid])
     monkeypatch.setattr(fm,'sdk_authorize_seed_server',lambda role,nonce:calls.append(('authorize',role['request']['argv'][3])))
+    monkeypatch.setattr(fm,'provider_fence_verifier',lambda **kw:lambda proof:{'primary_fenced':True,'all_workers_quiesced':True,'run_id':'r','proof_sha256':'d'*64})
     monkeypatch.setattr(replica_transport,'witness_head',lambda *a,**k:witness)
     monkeypatch.setattr(replica_transport,'freeze_replica_files',lambda *a,**k:calls.append(('freeze',a[2])))
     (tmp_path/'token').write_text('s'*32)
     common={'directory':'/control','boot_id':'boot','owner_id':'owner','generation':1,'runtime':'/runtime','python':'/usr/bin/python3','stage_directory':'/stage','publisher':{'path':'/publisher','sha256':'f'*64},'seed_token_file':'/seed-token','seed_directory':'/seed'}
     source={**common,'sandbox_id':'source','store':'/source-store','replica_url':'https://source','seed_host':'0.0.0.0','seed_port':8080,'seed_url':'https://seed','target_peer_token_file':'/peer-token'}
     target={**common,'sandbox_id':'target','store':'/target-store','work_root':'/workroot','replica_url':'https://target','peer_host':'0.0.0.0','peer_port':8081,'peer_token_file':'/peer-token','max_transaction_bytes':1024}
-    result=run_coreweave_seed_stage({'verified_fence':{'primary_fenced':True,'all_workers_quiesced':True,'run_id':'r','proof_sha256':'d'*64},'witness':witness,'activation_nonce':'n'*48,'source':source,'target':target,'source_token_file':str(tmp_path/'token'),'target_token_file':str(tmp_path/'token')})
+    result=run_coreweave_seed_stage({'expected_primary':{},'expected_workers':[0],'control_dirs':{},'supervisor_proof':{},'witness':witness,'activation_nonce':'n'*48,'source':source,'target':target,'source_token_file':str(tmp_path/'token'),'target_token_file':str(tmp_path/'token')})
     assert result['source_seed_server_stopped'] and result['witness']==witness
     assert ('authorize','seed-serve') in calls and ('authorize','peer') in calls
     assert all(b'sssssssss' not in raw for _,_,raw in staged)
