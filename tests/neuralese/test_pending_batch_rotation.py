@@ -42,3 +42,12 @@ def test_rotation_keeps_fixed_foundation_before_other_communication():
     entries=[{'id':f'row-{i}','forward_tokens':1,'supervised_tokens':1,'communication':True,'training_priority':0} for i in range(6)]
     _,batches=pending_exposure_batches(entries,{},epochs=1,batch_graphs=1,rotation_index=3,foundation_ids={'row-0','row-1'})
     assert {entries[b[1][0]]['id'] for b in batches[:2]}=={'row-0','row-1'}
+
+
+def test_rotation_interleaves_priority_communication_with_urgent_ordinary():
+    entries=[{'id':f'row-{i}','forward_tokens':1,'supervised_tokens':1,'communication':i==0,'training_priority':1} for i in range(100)]
+    _,batches=pending_exposure_batches(entries,{},epochs=1,batch_graphs=1,rotation_index=50)
+    first=[entries[b[1][0]] for b in batches[:32]]
+    assert any(e['communication'] for e in first)
+    assert any(e['id']=='row-50' for e in first)
+    assert len({i for batch in batches for i in batch[1]})==len(entries)

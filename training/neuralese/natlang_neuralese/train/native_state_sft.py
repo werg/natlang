@@ -166,6 +166,15 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
         communication = (rotate_lane([batch for batch in communication if foundational(batch)])
                          + rotate_lane([batch for batch in communication if not foundational(batch)]))
         urgent, ordinary = map(rotate_lane, (urgent, ordinary))
+        # Positive-priority communication lives in the urgent lane. Keep it
+        # interleaved with urgent ordinary work after rotating the new tail.
+        urgent_comm = [batch for batch in urgent if entries[batch[1][0]].get('communication')]
+        urgent_other = [batch for batch in urgent if not entries[batch[1][0]].get('communication')]
+        if urgent_comm and urgent_other:
+            urgent = []
+            for index in range(max(len(urgent_comm), len(urgent_other))):
+                if index < len(urgent_comm):urgent.append(urgent_comm[index])
+                if index < len(urgent_other):urgent.append(urgent_other[index])
     remaining_foundation_batches = sum(foundational(batch) for batch in communication)
     if urgent and communication:
         interleaved = []
