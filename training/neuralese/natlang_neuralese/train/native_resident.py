@@ -169,11 +169,26 @@ class IndexWitnessValidation:
         return check_index_witness_union([witnesses],verify)
 
 
+def physical(value):
+    """Resolved inputs with every absolute path in its host-physical form.
+
+    A plan sealed on one host keeps logical paths; a host whose logical roots are
+    symlinked mirrors resolves the same recipe to mirror paths. Both are the same
+    files, so compare inputs in this form; SHA and dependency checks are unchanged.
+    """
+    if isinstance(value, dict):
+        return {key: (os.path.realpath(item) if key == 'path' and isinstance(item, str) and item.startswith('/')
+                      else physical(item)) for key, item in value.items()}
+    if isinstance(value, list):
+        return [physical(item) for item in value]
+    return value
+
+
 def _contract(plan, proposed, stage_id):
     """One stage may append active data and/or mandatory pending declarations."""
     from .recipe import _data_continuation, _pending_source_continuation, _shared_foundation_append
     from .native_resident_ce import extension_policy
-    old_inputs, new_inputs = plan['stage_inputs'], proposed['stage_inputs']
+    old_inputs, new_inputs = physical(plan['stage_inputs']), physical(proposed['stage_inputs'])
     if plan['code'] != proposed['code'] or plan.get('device') != proposed.get('device'):
         raise ValueError('resident append cannot change runtime or device')
     if set(old_inputs) != set(new_inputs):
@@ -245,7 +260,7 @@ def validate_classification_append(plan,proposed,stage_id,train,prior_rows,direc
     and verifier remain unchanged. Prior rows are not reparsed or deserialized;
     the usual immutable-artifact hash checks remain in force.
     """
-    old,new=plan['stage_inputs'][stage_id],proposed['stage_inputs'][stage_id]
+    old,new=physical(plan['stage_inputs'][stage_id]),physical(proposed['stage_inputs'][stage_id])
     role='source_classification_migration'
     if old.get(role)==new.get(role):return
     from .recipe import _classification_proof_extension
@@ -1349,8 +1364,8 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
     from .recipe import native_recipe_binding
     if not isinstance(delta_sources, dict) or set(delta_sources) != {'train'}:
         raise ValueError('resident delta preparation requires an explicit train delta')
-    prior = plan['stage_inputs'][stage_id]
-    actual = proposed['stage_inputs'][stage_id]
+    prior = physical(plan['stage_inputs'][stage_id])
+    actual = physical(proposed['stage_inputs'][stage_id])
     if actual['held_native_graphs'] != prior['held_native_graphs']:
         raise ValueError('resident delta preparation requires unchanged held source')
     train_ref = binding(bound(actual['native_graphs']))
@@ -1495,12 +1510,9 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
         if (train.entries[:len(old.entries)] != old.entries or held.entries[:len(old_held.entries)] != old_held.entries
                 or len(train) < len(old) or len(held) < len(old_held)
                 or (len(train) == len(old) and len(held) == len(old_held)
-                    and plan['stage_inputs'][stage_id].get('pending_native_sources') ==
-                        proposed['stage_inputs'][stage_id].get('pending_native_sources')
-                    and plan['stage_inputs'][stage_id].get('pending_focus') ==
-                        proposed['stage_inputs'][stage_id].get('pending_focus')
-                    and plan['stage_inputs'][stage_id].get('ce_supervision_policy') ==
-                        proposed['stage_inputs'][stage_id].get('ce_supervision_policy'))):
+                    and all(physical(plan['stage_inputs'][stage_id].get(role)) ==
+                            physical(proposed['stage_inputs'][stage_id].get(role))
+                            for role in ('pending_native_sources', 'pending_focus', 'ce_supervision_policy')))):
             raise ValueError('resident append must preserve every prior row, order and scheduling priority')
         if train.groups & held.groups:
             raise ValueError('resident train/held groups overlap')
@@ -1650,7 +1662,7 @@ class ResidentAdoption:
                 resolve_stage_inputs(payload['plan']['recipe'], stage,
                     {'records': None, 'pieces': None, 'text_data': None}))
                 for stage in payload['plan']['recipe']['stages']}
-            if resolved != payload['plan']['stage_inputs']:
+            if physical(resolved) != physical(payload['plan']['stage_inputs']):
                 raise ValueError('resident resolved recipe inputs changed')
             if recipe_identity_sha256(recipe['path']) != recipe['sha256']:
                 raise ValueError('resident recipe inheritance changed')
@@ -1692,12 +1704,9 @@ class ResidentAdoption:
                     or train.entries[:len(self.train.entries)] != self.train.entries
                     or len(train) < len(self.train) or train.groups & held.groups
                     or (len(train) == len(self.train) and len(held) == len(self.held)
-                        and self.plan['stage_inputs'][self.stage_id].get('pending_native_sources') ==
-                            payload['plan']['stage_inputs'][self.stage_id].get('pending_native_sources')
-                        and self.plan['stage_inputs'][self.stage_id].get('pending_focus') ==
-                            payload['plan']['stage_inputs'][self.stage_id].get('pending_focus')
-                        and self.plan['stage_inputs'][self.stage_id].get('ce_supervision_policy') ==
-                            payload['plan']['stage_inputs'][self.stage_id].get('ce_supervision_policy'))
+                        and all(physical(self.plan['stage_inputs'][self.stage_id].get(role)) ==
+                                physical(payload['plan']['stage_inputs'][self.stage_id].get(role))
+                                for role in ('pending_native_sources', 'pending_focus', 'ce_supervision_policy')))
                     or len(train) != payload['rows'] or (delta is None and full_validation['entries_sha256'] != payload['entries_sha256'])):
                 raise ValueError('resident rows are not an exact protected append')
             declarations = pending_declarations(payload['plan'], self.stage_id, train.tokenizer_fingerprint)
@@ -1705,8 +1714,8 @@ class ResidentAdoption:
                 self.withdrawal_history)
             validate_classification_append(self.plan,payload['plan'],self.stage_id,train,len(self.train),self.directory)
             from .native_resident_ce import extension_policy
-            ce_policy = extension_policy(self.plan['stage_inputs'][self.stage_id],
-                payload['plan']['stage_inputs'][self.stage_id], prior_train=self.train, candidate_train=train)
+            ce_policy = extension_policy(physical(self.plan['stage_inputs'][self.stage_id]),
+                physical(payload['plan']['stage_inputs'][self.stage_id]), prior_train=self.train, candidate_train=train)
             ce_update = ((payload['plan']['stage_inputs'][self.stage_id]['ce_supervision_policy'],
                 ce_policy) if ce_policy is not None else None)
             checked = candidate_check(train, held, payload, ce_update, declarations) if candidate_check else None
