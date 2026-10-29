@@ -57,7 +57,7 @@ def prepare(a):
         parent=record['parent'];fork=first_outer_rng_seed(sha,rank) if parent['sha256']==sha else None
         proof={'schema':'natlang.diloco-first-outer/1','worker':rank,'parent':{k:parent[k] for k in ('path','sha256','bytes')},'historical_outer_checkpoint':None,'seed_sha256':sha,'source_hash':source_hash,'held_sha256':held,'rng_fork_seed':fork};path=a.out/f'peer-{rank}.json';write_json_durable(path,proof);declarations.append({**resident.binding(path),'bytes':path.stat().st_size})
     manifest=a.out/'manifest.json';write_json_durable(manifest,{'schema':'natlang.diloco-new-outer-manifest/1','workers':4,'peers':declarations})
-    recipe=copy.deepcopy(prior);stage=recipe['stages'][0];stage['inputs']['diloco_new_outer']='first_outer_manifest';recipe['input_bindings']['first_outer_manifest']=resident.binding(manifest);stage['parameters']['diloco']=settings
+    recipe=copy.deepcopy(prior);stage=recipe['stages'][0];stage['inputs']['diloco_new_outer']='first_outer_manifest';recipe['input_bindings']['first_outer_manifest']=resident.binding(manifest);stage['parameters']['diloco']=settings;stage['parameters']['muon_rounding']='stochastic'
     path=a.out/'recipe.json';write_json_durable(path,recipe);recipe=R.load_recipe(path);stage=recipe['stages'][0];resolved=R.resolve_stage_inputs(recipe,stage,{})
     if not R._new_outer_continuation(old,resolved):raise ValueError('fresh recipe reanchor handoff rejected')
     lineage=R.recipe_identity_sha256(bound(a.recipe))
