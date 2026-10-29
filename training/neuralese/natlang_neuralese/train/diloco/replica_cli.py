@@ -14,6 +14,14 @@ from .replica_service import serve_new_primary,serve_peer
 from .replica_attestation import load_owned_config,verify_attestation
 
 
+def gateway_credential(config):
+    if config.get('gateway_file') and config.get('gateway'):
+        raise ValueError('replica gateway must have one credential source')
+    value=Path(config['gateway_file']).read_text().strip() if config.get('gateway_file') else config.get('gateway')
+    if config.get('gateway_file') and not value:raise ValueError('empty replica gateway token')
+    return value
+
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('role',choices=('peer','bootstrap','promote','restart','seed-freeze','seed-publish','seed-serve','seed-fetch','seed-install','seed-release','seed-restored','replica-loss-recover'));parser.add_argument('--config',required=True);parser.add_argument('--config-sha256',required=True)
     args=parser.parse_args();config=load_owned_config(args.config,args.config_sha256);stop=threading.Event()
@@ -32,7 +40,7 @@ def main():
         if args.role=='seed-freeze':
             from .replica_transport import freeze_replica_files
             seed_token=Path(config['token_file']).read_text().strip()
-            print(json.dumps(freeze_replica_files(config['peer_url'],seed_token,config['freeze_nonce'],gateway=config.get('gateway'),allow_http=config.get('allow_http',False)),sort_keys=True));return
+            print(json.dumps(freeze_replica_files(config['peer_url'],seed_token,config['freeze_nonce'],gateway=(Path(config['gateway_file']).read_text().strip() if config.get('gateway_file') else config.get('gateway')),allow_http=config.get('allow_http',False)),sort_keys=True));return
         if args.role=='seed-release':
             import hashlib
             from .replica_transport import witness_head
@@ -59,6 +67,7 @@ def main():
         finally:journal.close()
     token=Path(config['token_file']).read_text().strip()
     if not token:raise ValueError('empty replication token')
+    gateway=gateway_credential(config)
     common=dict(baseline=config['baseline'],baseline_sha256=config['baseline_sha256'],store=config['store'],
                 host=config['host'],port=config['port'],token=token,stop=stop)
     if args.role=='peer':
@@ -68,7 +77,7 @@ def main():
     if args.role=='restart':
         from .replica_generation import reconcile_primary_pointer
         from .replica_transport import witness_head
-        witness=witness_head(config['peer_url'],token,allow_http=config.get('allow_http',False),gateway=config.get('gateway'))
+        witness=witness_head(config['peer_url'],token,allow_http=config.get('allow_http',False),gateway=gateway)
         selected=reconcile_primary_pointer(config['store'],witness)
         if (selected['baseline_sha256']!=config['baseline_sha256'] or Path(selected['baseline']).resolve()!=Path(config['baseline']).resolve()
                 or Path(selected['journal']).resolve()!=Path(config['journal']).resolve() or witness['sequence']!=config['sequence'] or witness['head']!=config['head']):
@@ -83,7 +92,7 @@ def main():
             expected_primary=config.get('expected_primary'),expected_workers=config.get('expected_workers'),
             journal=journal,sequence=config['sequence'],head=config['head'],session_transition=config['session_transition'],
             previous_token=(Path(config['previous_token_file']).read_text().strip() if args.role!='bootstrap' else None),
-            restart=(args.role=='restart'),bootstrap=(args.role=='bootstrap'),file_custody_store=config.get('file_custody_store'),file_freeze_nonce=config.get('file_freeze_nonce'),gateway=config.get('gateway'),allow_http=config.get('allow_http',False),max_generations=config.get('max_generations',3))
+            restart=(args.role=='restart'),bootstrap=(args.role=='bootstrap'),file_custody_store=config.get('file_custody_store'),file_freeze_nonce=config.get('file_freeze_nonce'),gateway=gateway,allow_http=config.get('allow_http',False),max_generations=config.get('max_generations',3))
     finally:journal.close()
 
 
