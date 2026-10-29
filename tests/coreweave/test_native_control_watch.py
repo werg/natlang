@@ -26,3 +26,14 @@ def test_historical_unbound_entry_is_not_silently_relabelled(tmp_path):
     helper=tmp_path/'helper';helper.write_text('pass');sha=hashlib.sha256(helper.read_bytes()).hexdigest();selection={'helper':{'path':str(helper),'sha256':sha},'target_selection':{'sha256':'a'*64}}
     with pytest.raises(ValueError,match='historical control'):
         attempt_control({},None,{'control':{'attempts':1}},{},tmp_path/'j',selection,lambda *a:None,presence=lambda *a:False,launch=lambda *a:None)
+
+
+def test_missing_hook_reports_failure_without_executing_untrusted_code():
+    import ast
+    from pathlib import Path
+    source=Path(__file__).resolve().parents[2]/'scripts/coreweave/native_standalone_control_watch.py'
+    node=next(x for x in ast.parse(source.read_text()).body if isinstance(x,ast.FunctionDef) and x.name=='control_attempt')
+    env={'hook':None,'hook_error':'ValueError: changed helper'}
+    exec(compile(ast.Module(body=[node],type_ignores=[]),str(source),'exec'),env)
+    with pytest.raises(ValueError,match='selected control hook unavailable'):
+        env['control_attempt']({},None,{})

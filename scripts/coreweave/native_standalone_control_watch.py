@@ -19,10 +19,16 @@ for prior in s['exports']:
  if prior.get('control_required') and prior.get('control',{}).get('status')!='independently_verified' and prior.get('control_selection_sha256')!=selection_sha:
   raise ValueError('unfinished historical control belongs to a different or unbound selection')
 code=bound(selection['scanner']).decode();compile(code,'<remote-scanner>','exec')
-hook_ref=selection['hook'];hook_raw=bound(hook_ref);name='selected_native_control_hook_'+hook_ref['sha256'];hook=types.ModuleType(name);hook.__file__=hook_ref['path'];sys.modules[name]=hook;exec(compile(hook_raw,hook_ref['path'],'exec'),hook.__dict__)
+hook=None;hook_error=None
+try:
+ hook_ref=selection['hook'];hook_raw=bound(hook_ref);name='selected_native_control_hook_'+hook_ref['sha256'];hook=types.ModuleType(name);hook.__file__=hook_ref['path'];sys.modules[name]=hook;exec(compile(hook_raw,hook_ref['path'],'exec'),hook.__dict__)
+except Exception as error:
+ hook=None;hook_error=type(error).__name__+': '+str(error)[:400]
 cwctl.load_env_file()
 
 def control_attempt(v,b,e):
+ if hook is None:raise ValueError('selected control hook unavailable: '+hook_error)
+
  def presence(role,archive):
   try:
    import wandb
