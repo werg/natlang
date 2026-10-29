@@ -1099,6 +1099,7 @@ def build_parser():
     parser.add_argument('--foundation-native-graphs', type=Path)
     parser.add_argument('--foundation-declaration-recovery', type=Path,
                         help='Exact ancestor-bound recovery of an unavailable historical foundation declaration; grants no exposure or qualification')
+    parser.add_argument('--source-predecessor-retirement', type=Path, help='Exact earned checkpoint proof retiring a consumed source predecessor')
     parser.add_argument('--pending-native-sources', action='append', default=[])
     parser.add_argument('--refresh-at-checkpoint', action=argparse.BooleanOptionalAction, default=False,
         help='return an explicit incomplete continuation for semantic refresh at the next declared checkpoint boundary')
@@ -2097,6 +2098,15 @@ def _main(argv=None, *, requested_refresh):
         resume = {'identity': {**training_identity, 'optimizer_options': old_optimizer},
             'optimizer': shared_resume['optimizer'], 'rng': shared_resume['rng'],
             'fp8': shared_resume.get('fp8'), 'step': 0, 'global_step': shared_resume['step']}
+    if args.source_predecessor_retirement is not None:
+        if resume is None or args.continued_native_graphs is not None:
+            raise ValueError('source predecessor retirement requires an earned checkpoint and no active predecessor argument')
+        from .native_predecessor_retirement import load_retirement, verify_retirement
+        source_pin = args.continue_from if parent_continuation else policy.slot
+        proof = load_retirement(args.source_predecessor_retirement)
+        verify_retirement(resume, proof, checkpoint_sha256=sha256_file_hex_cached(source_pin),
+                          train_sha256=source_receipts[0]['sha256'], held_sha256=source_receipts[1]['sha256'])
+        checkpoint_options['source_predecessor_retirement_history'] = list((resume.get('options') or {}).get('source_predecessor_retirement_history') or []) + [dict(proof, proof_sha256=sha256_file_hex_cached(args.source_predecessor_retirement))]
     if resume is not None:
         if mandatory_objective:
             checkpoint_options['_objective_required_visits']=dict((resume.get('options') or {}).get('_objective_required_visits') or {})

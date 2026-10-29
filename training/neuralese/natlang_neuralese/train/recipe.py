@@ -37,7 +37,7 @@ HANDLERS = {
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request', 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'source_predecessor_retirement', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request', 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
@@ -422,7 +422,7 @@ def stage_input_args(resolved, kind, *, target='portable'):
                        ('native_participants', '--participants'), ('resume', '--resume')):
         if role in resolved and role in supported:
             args += [flag, resolved[role]['path']]
-    for role in ('rollouts', 'native_graphs', 'held_native_graphs', 'continued_native_graphs',
+    for role in ('rollouts', 'native_graphs', 'held_native_graphs', 'continued_native_graphs', 'source_predecessor_retirement',
                  'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request',
                  'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction',
                  'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from'):
@@ -1401,6 +1401,23 @@ def activated_existing_training_stages(old_recipe, new_recipe, out, *, started_s
     return activated
 
 
+def _source_predecessor_retirement(old, new):
+    """Only retire an exact consumed predecessor; trainer verifies the earned pin."""
+    from .native_predecessor_retirement import load_retirement
+    prior=old.get('continued_native_graphs'); reference=new.get('source_predecessor_retirement')
+    if not isinstance(prior,dict) or not isinstance(reference,dict) or 'continued_native_graphs' in new:
+        return False
+    if {k:v for k,v in old.items() if k!='continued_native_graphs'} != {k:v for k,v in new.items() if k!='source_predecessor_retirement'}:
+        return False
+    try:
+        if sha(reference['path'])!=reference['sha256']:return False
+        proof=load_retirement(reference['path'])
+        return (proof['predecessor_sha256']==prior['sha256'] and proof['train_sha256']==old['native_graphs']['sha256']
+                and proof['held_sha256']==old['held_native_graphs']['sha256'])
+    except (KeyError, OSError, ValueError, TypeError):
+        return False
+
+
 def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
     """Track new stage inputs, allowing started native stages only verified source continuations."""
     old_inputs, new_inputs = existing.get('stage_inputs'), plan.get('stage_inputs')
@@ -1448,7 +1465,7 @@ def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
             continue
         if stage_id in started_stage_ids or stage_started(out, stage_id):
             if stage_finished(out, stage_id) or not (
-                    _priority_only_native_source_continuation(old, new) or _data_continuation(old, new)
+                    _source_predecessor_retirement(old, new) or _priority_only_native_source_continuation(old, new) or _data_continuation(old, new)
                     or _new_outer_continuation(old, new)
                     or _pending_source_continuation(old, new)
                     or _combined_native_source_continuation(old, new)
@@ -1459,7 +1476,7 @@ def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
                 raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
                                  'that has not started may take new inputs, and the active stage only by an explicit metadata classification or declared '
                                  'data continuation that retains the exact authenticated native predecessor')
-            changes[stage_id] = {'kind': ('new_outer_continuation'
+            changes[stage_id] = {'kind': ('source_predecessor_retirement' if _source_predecessor_retirement(old,new) else 'new_outer_continuation'
                 if _new_outer_continuation(old, new) else 'source_correction_continuation'
                 if _source_correction_continuation(old, new) else 'ce_supervision_continuation'
                 if _ce_supervision_input_continuation(old, new) else 'metadata_classification_continuation'
