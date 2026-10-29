@@ -519,8 +519,8 @@ def test_semantic_resume_never_relabels_changed_or_unchanged_participant_recipe(
     assert sha256_file_hex(parent)==before
 
 
-def test_frozen_snapshot_preparation_then_explicit_descendant_optimizer_adoption(tmp_path,monkeypatch):
-    """Actual two-port VAE/joint updates; readiness transport is a protocol fixture."""
+def test_frozen_snapshot_preparation_refuses_retired_cross_model_adoption(tmp_path,monkeypatch):
+    """Frozen preparation remains distinct from the retired cross-model adoption."""
     path,manifest,config,_=_fixture(tmp_path,monkeypatch)
     config['snapshot_preparation']=True
     _install_source_baseline_eval(monkeypatch,tmp_path,path,config)
@@ -572,44 +572,8 @@ def test_frozen_snapshot_preparation_then_explicit_descendant_optimizer_adoption
             if state is not None:assert not state['state']
     config['snapshot_preparation']=False;config['adaptive_refresh']={'updates_per_phase':1}
     path.write_text(json.dumps(config))
-    with pytest.raises(ValueError,match='explicit descendant optimizer handoff'):
+    with pytest.raises(ValueError,match='snapshot adoption belonged to the removed cross-model role exchange'):
         stage.run(path,manifest,tmp_path/'without-release',resume=parent,device='cpu',refresh_participants=True)
-    # New descendants are produced by a genuine optimizer update on each tiny
-    # model. Their full optimizer history and earned exposure must be adopted.
-    original=stage.load_participant;loaded={}
-    for binding in bindings['models']:
-        binding['native_identity']['checkpoint_sha256']='b'*64
-    bindings['signature']=canonical_json_sha256_hex(bindings['models']);manifest.write_text(json.dumps(bindings))
-    def descendant(name,binding,current,device):
-        value=original(name,binding,current,device)
-        loss=value.model.input_rows.square().sum();loss.backward();value.optimizer.step();value.optimizer.zero_grad(set_to_none=True)
-        value.identity=binding['native_identity']
-        value.snapshot_ancestors=[saved['participants'][name]['source_identity']['checkpoint_sha256']]
-        value.global_step=17
-        value.source_rng=stage.capture_training_rng_state('cpu')
-        value.sft_progress={'actual-descendant':{'remaining_ordinary_credit':3}}
-        loaded[name]=copy.deepcopy(value.optimizer.state_dict())
-        loaded[name+'-rng']=copy.deepcopy(value.source_rng)
-        return value
-    monkeypatch.setattr(stage,'load_participant',descendant)
-    monkeypatch.setattr(stage,'_snapshot_adoption',lambda config,bindings:{'protocol':'real-owner-release independently tested'})
-    continued=stage.run(path,manifest,tmp_path/'adopted',resume=parent,refresh_participants=True,
-        device='cpu',max_updates=1)
-    adopted=CheckpointPolicy.load(tmp_path/'adopted/checkpoint.pt')
-    assert continued['step']==2 and not continued['production_ready']
-    for name in ('lfm','mellum'):
-        assert continued['source_task_baselines'][name]['native_identity']['checkpoint_sha256']=='b'*64
-        resolved=json.loads(Path(continued['resolved_curriculum']['path']).read_text())
-        assert resolved['models'][name]['task_eval']['reference_successes']==0
-    assert adopted['training']['participant_refreshes'][-1]['changed_models']==['lfm','mellum']
-    for name,participant in adopted['participants'].items():
-        _assert_same(participant['optimizer'],loaded[name])
-        _assert_same(participant['source_rng'],loaded[name+'-rng'])
-        assert participant['global_step']==17
-        assert participant['sft_progress']=={'actual-descendant':{'remaining_ordinary_credit':3}}
-        assert participant['source_identity']['checkpoint_sha256']=='b'*64
-    # The first adopted update is a real VAE refresh; joint/distill still remain.
-    assert continued['refresh_progress']['completed_updates']['vae']==1
 
 
 def test_new_frozen_work_refreshes_vae_after_real_descendant_sgd_and_resumes_exact_credit(tmp_path,monkeypatch):
