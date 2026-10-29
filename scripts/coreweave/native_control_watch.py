@@ -2,6 +2,10 @@
 from __future__ import annotations
 import hashlib, json, subprocess
 from pathlib import Path
+try:
+    from .native_remote_budget import bounded_remote
+except ImportError:
+    from native_remote_budget import bounded_remote
 
 
 def attempt_control(pin, sandbox, entry, state, journal, selection, write_durable, *, presence, launch):
@@ -32,7 +36,7 @@ def attempt_control(pin, sandbox, entry, state, journal, selection, write_durabl
         control['attempts']+=1;target=selection['control_directory']+'/step%d-attempt%d'%(pin['step'],control['attempts'])
         control['status']='derivation_requested';write_durable(journal,state)
         if sandbox is None:raise ValueError('historical source sandbox unavailable for control derivation')
-        args=['python3','-c',raw.decode(),'--checkpoint',pin['path'],'--checkpoint-sha256',pin['sha256'],'--step',str(pin['step']),'--out',target,'--selection',selection['target_selection']['path'],'--selection-sha256',selection['target_selection']['sha256'],'--helper-path',selection['target_helper']['path'],'--helper-sha256',selection['helper']['sha256']]
+        args=['python3','-c',bounded_remote(raw.decode()),'--checkpoint',pin['path'],'--checkpoint-sha256',pin['sha256'],'--step',str(pin['step']),'--out',target,'--selection',selection['target_selection']['path'],'--selection-sha256',selection['target_selection']['sha256'],'--helper-path',selection['target_helper']['path'],'--helper-sha256',selection['helper']['sha256']]
         result=sandbox.exec(args,timeout_seconds=selection.get('timeout_seconds',600)).result(timeout=selection.get('timeout_seconds',600)+30)
         control['collector_invoked']='NATLANG_CONTROL_COLLECTOR_INVOKED' in result.stdout;write_durable(journal,state)
         if result.returncode:raise RuntimeError('control derivation failed: '+result.stderr[-500:])

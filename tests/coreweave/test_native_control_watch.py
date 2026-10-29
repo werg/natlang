@@ -9,7 +9,7 @@ def test_attempt_records_selection_and_retries_source_free(tmp_path,monkeypatch)
     pin={'path':'/work/pin','sha256':'b'*64,'step':2,'sandbox_id':'box'};state={'exports':[{}]};entry=state['exports'][0];journal=tmp_path/'journal';calls=[]
     class Sandbox:
         def exec(self,argv,**kwargs):
-            assert argv[2]==helper.read_text() and '--selection-sha256' in argv
+            assert 'os.nice(15)' in argv[2] and 'OMP_NUM_THREADS' in argv[2] and helper.read_text() in argv[2] and '--selection-sha256' in argv
             result=types.SimpleNamespace(returncode=0,stdout='NATLANG_CONTROL_COLLECTOR_INVOKED\n'+json.dumps({'checkpoint_sha256':'b'*64,'archive':{'path':'/work/archive','sha256':'c'*64,'bytes':23},'control':{'path':'/work/proof','sha256':'d'*64}}),stderr='')
             return types.SimpleNamespace(result=lambda **kwargs:result)
     monkeypatch.setattr('scripts.coreweave.native_control_watch.subprocess.run',lambda *a,**k:types.SimpleNamespace(returncode=1))

@@ -2,6 +2,7 @@
 """External standalone checkpoint watcher with an exact per-role control selection."""
 import hashlib,json,subprocess,sys,time,fcntl,types
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parent));from native_remote_budget import bounded_remote
 sys.path.insert(0,'/home/werg/natlang/scripts/coreweave');import cwctl
 from natlang_neuralese.common.jsonio import write_json_durable
 
@@ -28,7 +29,7 @@ try:
 except (OSError,ValueError,IndexError,KeyError,TypeError):
  print(json.dumps({'ready':False,'reason':'owner process identity unavailable or changed'}));raise SystemExit(0)
 '''
-code=OWNER_GUARD+code;compile(code,'<remote-scanner>','exec')
+code=bounded_remote(OWNER_GUARD+code);compile(code,'<remote-scanner>','exec')
 hook=None;hook_error=None
 try:
  hook_ref=selection['hook'];hook_raw=bound(hook_ref);name='selected_native_control_hook_'+hook_ref['sha256'];hook=types.ModuleType(name);hook.__file__=hook_ref['path'];sys.modules[name]=hook;exec(compile(hook_raw,hook_ref['path'],'exec'),hook.__dict__)
