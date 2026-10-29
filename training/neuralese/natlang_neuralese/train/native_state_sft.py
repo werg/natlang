@@ -1113,7 +1113,7 @@ def build_parser():
         help='balance ordinary source cohorts using completed token exposure')
     parser.add_argument('--communication-cohort-fairness', action=argparse.BooleanOptionalAction, default=True,
         help='balance communication source cohorts using completed token exposure')
-    parser.add_argument('--urgent-cohort-fairness', action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument('--urgent-cohort-fairness', action=argparse.BooleanOptionalAction, default=True,
         help='balance positive-priority source cohorts using actual completed indexed graph token exposure')
     parser.add_argument('--source-classification-migration', type=Path,
         help='explicit source-bound index/progress classification continuation')
@@ -1640,6 +1640,8 @@ def _main(argv=None, *, requested_refresh):
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
     saved_options = saved_training.get('options') or {}
+    urgent_prior = bool(saved_options.get('urgent_cohort_fairness', False))
+    urgent_history = list(saved_options.get('urgent_cohort_fairness_history') or [])
     communication_prior = bool(saved_options.get('communication_cohort_fairness', False))
     communication_history = list(saved_options.get('communication_cohort_fairness_history') or [])
     fairness_saved_policy = bool(saved_options.get('ordinary_cohort_fairness', False))
@@ -2638,6 +2640,10 @@ def _main(argv=None, *, requested_refresh):
     checkpoint_options['ordinary_cohort_fairness_history'] = fairness_history
     if fairness_had_saved_training and communication_prior != args.communication_cohort_fairness:
         communication_history.append({'schema':'natlang.communication-cohort-fairness-transition/1', 'from':communication_prior, 'to':args.communication_cohort_fairness, 'at_global_step':global_step, 'source_bindings_sha256':source_hash, 'optimizer_rng_exposure':'preserved'})
+    if fairness_had_saved_training and urgent_prior != args.urgent_cohort_fairness:
+        urgent_history.append({'schema':'natlang.urgent-cohort-fairness-transition/1', 'from':urgent_prior, 'to':args.urgent_cohort_fairness, 'at_global_step':global_step, 'source_bindings_sha256':source_hash, 'optimizer_rng_exposure':'preserved'})
+    checkpoint_options['urgent_cohort_fairness_history'] = urgent_history
+    checkpoint_options['urgent_cohort_fairness'] = args.urgent_cohort_fairness
     checkpoint_options['communication_cohort_fairness_history'] = communication_history
     checkpoint_options['communication_cohort_fairness'] = args.communication_cohort_fairness
     if prior_rotation and args.diloco is not None:
@@ -2654,10 +2660,10 @@ def _main(argv=None, *, requested_refresh):
         args.pending_rotation_anchor = None
         checkpoint_options['pending_rotation_anchor'] = None
         prior_rotation = {}
-    elif prior_rotation and fairness_had_saved_training and ((not prior_fairness and args.ordinary_cohort_fairness) or (not communication_prior and args.communication_cohort_fairness)):
+    elif prior_rotation and fairness_had_saved_training and ((not prior_fairness and args.ordinary_cohort_fairness) or (not communication_prior and args.communication_cohort_fairness) or (not urgent_prior and args.urgent_cohort_fairness)):
         if args.pending_rotation_anchor is not None:
             raise ValueError('ordinary cohort fairness transition must remove the retired pending rotation anchor')
-        transition = communication_history[-1] if not communication_prior and args.communication_cohort_fairness else fairness_history[-1]
+        transition = (communication_history[-1] if not communication_prior and args.communication_cohort_fairness else urgent_history[-1] if not urgent_prior and args.urgent_cohort_fairness else fairness_history[-1])
         if transition['to'] is not True:
             raise ValueError('rotation retirement requires its recorded fairness transition')
         rotation_history.append({'schema':'natlang.pending-batch-rotation-fairness-retirement/1',
