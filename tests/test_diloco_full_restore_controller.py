@@ -93,13 +93,19 @@ def test_full_restore_orchestrates_and_resumes_without_restarting(tmp_path,monke
     monkeypatch.setattr(replica_seed,'verify_seed',lambda *a,**kw:seed_record)
     monkeypatch.setattr(ctl,'stage_replica_seed',lambda *a,**kw:(calls.append('transfer') or {}))
     monkeypatch.setattr(ctl,'start_restored_peer',lambda host,**kw:(calls.append('peer') or {'sandbox_id':host['sandbox_id'],'directory':host['directory'],'publisher':{},'request':{},'preserve_role':{}}))
-    def promote(directory,config):calls.append('promote');return {'phase':'workers-released'}
+    def promote(directory,config):
+        calls.append('promote')
+        if calls.count('promote')==1:raise RuntimeError('interrupted before primary ready')
+        return {'phase':'workers-released'}
     monkeypatch.setattr(promotion,'run_coreweave_promotion',promote)
     monkeypatch.setattr(ctl,'start_restored_workers',lambda *a,**kw:(calls.append('start') or {'sha256':'owner'}))
+    with pytest.raises(RuntimeError):ctl.run_full_restore(tmp_path/'journal',config)
+    assert json.loads((tmp_path/'journal'/'restore.json').read_text())['phase']=='peers-ready' and 'start' not in calls
     assert ctl.run_full_restore(tmp_path/'journal',config)['phase']=='complete'
-    assert calls==['verify','fence','dependencies','workers','seed','transfer','peer','peer','promote','start']
+    expected=['verify','fence','dependencies','workers','seed','transfer','peer','peer','promote','promote','start']
+    assert calls==expected
     ctl.run_full_restore(tmp_path/'journal',config)
-    assert calls==['verify','fence','dependencies','workers','seed','transfer','peer','peer','promote','start']
+    assert calls==expected
     changed=dict(config,mode='new-outer')
     with pytest.raises(ValueError):ctl.run_full_restore(tmp_path/'journal',changed)
 
