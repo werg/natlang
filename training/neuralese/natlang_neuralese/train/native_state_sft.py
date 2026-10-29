@@ -1626,7 +1626,8 @@ def _main(argv=None, *, requested_refresh):
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
     saved_options = saved_training.get('options') or {}
-    fairness_saved_options = saved_options
+    fairness_saved_policy = bool(saved_options.get('ordinary_cohort_fairness', False))
+    fairness_saved_history = list(saved_options.get('ordinary_cohort_fairness_history') or [])
     fairness_had_saved_training = bool(saved_training)
     if args.chunk_tokens is None:
         # Readout chunking is exact but part of a resident geometry identity: a resume keeps its geometry.
@@ -2607,8 +2608,8 @@ def _main(argv=None, *, requested_refresh):
         'exposure_counts': dict(exposure_counts), 'options': checkpoint_options},
         carried_progress.get(args.stage_id or 'native-graph-ce') or {})
     from .native_cohort_schedule import source_cohort_ids
-    fairness_history = list(fairness_saved_options.get('ordinary_cohort_fairness_history') or [])
-    prior_fairness = fairness_saved_options.get('ordinary_cohort_fairness', False)
+    fairness_history = fairness_saved_history
+    prior_fairness = fairness_saved_policy
     if fairness_had_saved_training and bool(prior_fairness) != args.ordinary_cohort_fairness:
         fairness_history.append({'schema': 'natlang.ordinary-cohort-fairness-transition/1',
             'from': bool(prior_fairness), 'to': args.ordinary_cohort_fairness,
@@ -2861,7 +2862,8 @@ def _main(argv=None, *, requested_refresh):
                         foundation_ids=candidate_foundation_ids,
                         foundation_communication_batches=args.foundation_communication_batches or 1,
                         minimum_visits=candidate_frame.get('required_visits'),schedule_offset=global_step,
-                        cohort_ids=candidate_cohorts, urgent_cohort_fairness=args.urgent_cohort_fairness,
+                        cohort_ids=candidate_cohorts, shard=diloco.shard if diloco else None,
+                        urgent_cohort_fairness=args.urgent_cohort_fairness,
                         ordinary_cohort_fairness=args.ordinary_cohort_fairness)
                     return qualify_pending(model,optimizer,candidate_train,candidate_batches,args,backend=backend,
                         checkpoint_sha256=sha256_file_hex_cached(policy.slot) if policy.slot.exists() else config['base_inventory_sha256'],
