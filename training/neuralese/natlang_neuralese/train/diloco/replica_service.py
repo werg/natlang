@@ -40,7 +40,7 @@ def serve_peer(*, baseline, baseline_sha256, store, work_root, host, port, token
 
 
 def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, token, peer_url,
-                      supervisor_proof, verify_supervisor_fence, expected_primary, expected_workers, stop, journal, sequence, head, session_transition, gateway=None, allow_http=False, max_generations=3):
+                      supervisor_proof, verify_supervisor_fence, expected_primary, expected_workers, stop, journal, sequence, head, session_transition, previous_token, gateway=None, allow_http=False, max_generations=3):
     """Start a fresh unique primary only after an explicit supervisor fence.
 
     Old generations are retained. If `max_generations` is reached, writes
@@ -51,6 +51,8 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
     if (not isinstance(session_transition,dict) or set(session_transition)!=required or
             not all(isinstance(session_transition[k],str) and session_transition[k] for k in required) or
             session_transition['previous_url']==session_transition['new_url'] or
+            not isinstance(previous_token,str) or not previous_token or
+            session_transition['previous_token_sha256']!=hashlib.sha256(previous_token.encode()).hexdigest() or
             session_transition['previous_token_sha256']==session_transition['new_token_sha256'] or
             session_transition['new_token_sha256']!=hashlib.sha256(token.encode()).hexdigest() or
             len(session_transition['generation_nonce'])<32):

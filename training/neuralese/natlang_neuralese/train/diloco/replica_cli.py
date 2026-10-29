@@ -36,6 +36,7 @@ def main():
             supervisor_proof=config['supervisor_proof'],verify_supervisor_fence=verify,
             expected_primary=config['expected_primary'],expected_workers=config['expected_workers'],
             journal=journal,sequence=config['sequence'],head=config['head'],session_transition=config['session_transition'],
+            previous_token=Path(config['previous_token_file']).read_text().strip(),
             gateway=config.get('gateway'),allow_http=config.get('allow_http',False),max_generations=config.get('max_generations',3))
     finally:journal.close()
 
