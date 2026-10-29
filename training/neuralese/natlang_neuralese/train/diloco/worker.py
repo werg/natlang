@@ -452,6 +452,44 @@ class DilocoLearner:
             time.sleep(.2)
         return True
 
+    def reanchor_fresh(self) -> list[dict]:
+        """Anchor retained local weights to a genuinely unused coordinator seed.
+
+        This transition does not install the seed into the local model.  The
+        initial residual is included in the first proposal only after real new
+        local steps have accrued.  The caller must preserve and authenticate the
+        complete old checkpoint and record its source transition separately.
+        """
+        status = self._lease()
+        if (status['merges'] != 0 or any(status['versions']) or
+                any(status['sequences']) or any(status['pending'].values()) or
+                status.get('completion')):
+            raise ValueError('reanchor requires an unused coordinator and empty worker ledger')
+        anchors = []
+        deviations = []
+        for index, fragment in enumerate(self.fragments):
+            update = self._fetch(index, -1)
+            if update is None or update[0] != 0:
+                raise ValueError('reanchor requires every coordinator fragment at seed version zero')
+            seed = update[1]
+            local = pack_fragment(self.surface.masters, fragment)
+            delta = local.double() - seed.double()
+            deviations.append({'fragment': index, 'elements': delta.numel(),
+                               'l2': float(torch.linalg.vector_norm(delta)),
+                               'max_abs': float(delta.abs().max()) if delta.numel() else 0.0})
+            anchors.append(seed)
+        # No model mutation or queued proposal occurs during initialization.
+        self.versions = [0] * len(anchors)
+        self.baselines = anchors
+        self.steps_since = [0] * len(anchors)
+        self.tokens_since = [0] * len(anchors)
+        self.sequences = [0] * len(anchors)
+        self.local_steps = self.local_tokens = 0
+        self.pending = {}
+        self.awaiting_global = set()
+        self._start_heartbeat()
+        return deviations
+
     def resume(self, value: dict) -> None:
         if value["protocol"] != PROTOCOL or value["fingerprint"] != self.manifest["fingerprint"]:
             raise ValueError("DiLoCo learner state belongs to a different coordinator run")
