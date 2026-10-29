@@ -12,6 +12,7 @@ import time as real_time
 from pathlib import Path
 from . import coordinator as module
 from .protocol import Fragment
+from .replica_baseline import known,remember
 
 _CLOCK_LOCK=threading.Lock()
 
@@ -45,7 +46,7 @@ class ReplayCoordinator:
         if path.is_symlink():raise ValueError('replica hash target is a symlink')
         with path.open('rb') as f:
             before=os.fstat(f.fileno());key=(before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)
-            digest=self.hash_cache.get(key)
+            digest=self.hash_cache.get(key) or known(key)
             if digest is None:
                 h=hashlib.sha256()
                 while block:=f.read(1<<20):h.update(block)
@@ -54,7 +55,7 @@ class ReplayCoordinator:
             if key!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns) or key!=(current.st_dev,current.st_ino,current.st_size,current.st_mtime_ns,current.st_ctime_ns):
                 raise ValueError('replica hash target changed during verification')
         if len(self.hash_cache)>=4096:self.hash_cache.clear()
-        self.hash_cache[key]=digest
+        self.hash_cache[key]=digest;remember(key,digest)
         return digest
 
     def apply(self,event,payload):
