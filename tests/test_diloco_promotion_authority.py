@@ -67,6 +67,21 @@ def test_nested_owner_handoff_fences_old_and_new_publishers(tmp_path):
         authority={'expected_owner':nestedstate['owner_id'],'expected_boot':nestedstate['boot_id'],'nonce':'n'*48}
         fence(nested,**authority)
         assert not start(nested,'nested-fenced',[sys.executable,'-c','pass'])['accepted']
+        import socket
+        from scripts.coreweave.diloco_promotion_authority import authorize_coordinator
+        with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+        state_now=state(nested)
+        request={'schema':'natlang.diloco-role-request/1','id':'new-coordinator','owner_id':state_now['owner_id'],
+                 'expected_generation':state_now['generation'],'role':'coordinator','action':'start','promotion_nonce':authority['nonce'],
+                 'argv':[sys.executable,'-c',f'import socket,time;s=socket.socket();s.bind(("127.0.0.1",{port}));s.listen();time.sleep(30)']}
+        authorize_coordinator(nested,request=request,**authority)
+        assert submit(nested,request)['accepted']
+        def ready():
+            try:
+                with socket.create_connection(('127.0.0.1',port),timeout=.1):return True
+            except OSError:return False
+        wait(ready)
+        assert not start(nested,'worker-still-fenced',[sys.executable,'-c','pass'])['accepted']
         release(nested,**authority)
         assert start(nested,'new-worker',[sys.executable,'-c','import time;time.sleep(30)'])['accepted']
     finally:

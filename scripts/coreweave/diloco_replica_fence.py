@@ -259,3 +259,21 @@ def verify_owned_restart_fence(proof, *, expected_primary, expected_workers, non
             'owner_journal':ref,'owner_observation':old,'owner_observed_at':finished,'workers':observations}
     result['proof_sha256']=hashlib.sha256(json.dumps(result,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     return result
+
+
+def sdk_authorize_coordinator(role, nonce):
+    import inspect
+    try:from . import cwctl,diloco_promotion_authority as authority
+    except ImportError:
+        import cwctl
+        import diloco_promotion_authority as authority
+    request=role['request']
+    if request.get('promotion_nonce')!=nonce:raise ValueError('coordinator request nonce differs')
+    program=('import fcntl,json,os,sys\nfrom pathlib import Path\n'
+             'sys.path.insert(0,sys.argv[5]+"/training/neuralese")\n'
+             'from natlang_neuralese.common.jsonio import write_json_durable\n'+inspect.getsource(authority.authorize_coordinator)+
+             '\nprint(json.dumps(authorize_coordinator(sys.argv[1],expected_owner=sys.argv[2],expected_boot=sys.argv[3],nonce=sys.argv[4],request=json.loads(sys.argv[6]))))\n')
+    cwctl.load_env_file();cwctl.require_key();sandbox=cwctl.read_sandbox(role['sandbox_id'],patience=60)
+    result=sandbox.exec(['python3','-c',program,role['directory'],request['owner_id'],role['boot_id'],nonce,role['runtime'],json.dumps(request,sort_keys=True)],timeout_seconds=30).result(timeout=60)
+    if result.returncode!=0:raise ValueError('coordinator authorization failed; worker fence remains active')
+    return json.loads(result.stdout)

@@ -32,6 +32,7 @@ def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch
     entries=[{'sandbox_id':'peer','boot_id':'bb','owner_id':'oo','directory':'/control','runtime':'/runtime'}]
     monkeypatch.setattr(fm,'owner_reference',lambda *args:{'run_id':'r','workers':{'0':dict(old),'1':dict(entries[0])}})
     calls=[]
+    monkeypatch.setattr(fm,'sdk_authorize_coordinator',lambda *a,**k:{})
     monkeypatch.setattr(fm,'sdk_set_worker_authority',lambda ws,nonce,action:(calls.append(action) or [{'sandbox_id':'peer'}]))
     monkeypatch.setattr(fm,'provider_fence_verifier',lambda **kw:lambda proof:{'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64})
     monkeypatch.setattr(cwctl,'load_env_file',lambda:None);monkeypatch.setattr(cwctl,'require_key',lambda:None)

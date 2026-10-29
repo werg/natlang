@@ -77,7 +77,13 @@ def main(directory: Path) -> None:
                 if action=='start':
                     with (directory/'promotion-authority.lock').open('a+b') as authority:
                         fcntl.flock(authority,fcntl.LOCK_EX)
-                        if (directory/'promotion-fence.json').exists():raise ValueError('role starts fenced for coordinator promotion')
+                        fence_path=directory/'promotion-fence.json'
+                        if fence_path.exists():
+                            fence=json.loads(fence_path.read_text());allowed=directory/'promotion-coordinator.json'
+                            digest=hashlib.sha256(json.dumps(v,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+                            expected={'schema':'natlang.diloco-coordinator-promotion-authorization/1','nonce':fence.get('nonce'),'request_sha256':digest}
+                            if (role!='coordinator' or v.get('promotion_nonce')!=fence.get('nonce') or not allowed.is_file() or json.loads(allowed.read_text())!=expected):
+                                raise ValueError('role starts fenced for coordinator promotion')
                         if prior and prior.poll() is None:raise ValueError('role already alive')
                         argv=v.get('argv');env=v.get('env',{})
                         if not isinstance(argv,list) or not argv or not all(isinstance(x,str) and x for x in argv):raise ValueError('invalid argv')

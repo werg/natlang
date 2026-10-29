@@ -36,6 +36,30 @@ def release(directory, *, expected_owner, expected_boot, nonce):
             raise ValueError('promotion fence identity differs')
         state=json.loads((directory/'state.json').read_text())
         if state.get('owner_id')!=expected_owner or state.get('boot_id')!=expected_boot:raise ValueError('role owner identity changed')
+        (directory/'promotion-coordinator.json').unlink(missing_ok=True)
         path.unlink();fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY)
         try:os.fsync(fd)
         finally:os.close(fd)
+
+
+def authorize_coordinator(directory, *, expected_owner, expected_boot, nonce, request):
+    """Authorize exactly one bound coordinator request while workers remain fenced."""
+    import hashlib
+    directory=Path(directory).resolve(strict=True)
+    if (not isinstance(request,dict) or request.get('owner_id')!=expected_owner or
+            request.get('role')!='coordinator' or request.get('action')!='start' or request.get('promotion_nonce')!=nonce):
+        raise ValueError('invalid coordinator promotion request')
+    digest=hashlib.sha256(json.dumps(request,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+    with (directory/'promotion-authority.lock').open('a+b') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        fence=json.loads((directory/'promotion-fence.json').read_text())
+        if fence!={'schema':'natlang.diloco-role-promotion-fence/1','owner_id':expected_owner,'boot_id':expected_boot,'nonce':nonce}:
+            raise ValueError('promotion fence differs')
+        state=json.loads((directory/'state.json').read_text())
+        if state.get('owner_id')!=expected_owner or state.get('boot_id')!=expected_boot or state.get('generation')!=request.get('expected_generation'):
+            raise ValueError('coordinator owner generation changed')
+        value={'schema':'natlang.diloco-coordinator-promotion-authorization/1','nonce':nonce,'request_sha256':digest}
+        path=directory/'promotion-coordinator.json'
+        if path.exists() and json.loads(path.read_text())!=value:raise ValueError('another coordinator request is already authorized')
+        if not path.exists():write_json_durable(path,value)
+        return value

@@ -86,6 +86,7 @@ def run_coreweave_promotion(directory, config):
                  'print(json.dumps(m["submit"](sys.argv[3],r,timeout=60)))\n')
         request=role['request']
         if request.get('action')!='start' or request.get('role')!='coordinator':raise ValueError('promotion requires owned coordinator start')
+        fence_module.sdk_authorize_coordinator(role,nonce)
         cwctl.load_env_file();cwctl.require_key();sandbox=cwctl.read_sandbox(role['sandbox_id'],patience=60)
         result=sandbox.exec(['python3','-c',program,publisher['path'],publisher['sha256'],role['directory'],json.dumps(request)],timeout_seconds=90).result(timeout=120)
         if result.returncode!=0 or json.loads(result.stdout).get('accepted') is not True:raise ValueError('coordinator owner did not accept start')
