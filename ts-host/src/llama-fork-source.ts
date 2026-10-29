@@ -6,5 +6,5 @@
 export const LLAMA_FORK_SOURCE = Object.freeze({
   repository: 'werg/llama.cpp-neuralese',
   branch: 'neuralese',
-  commit: 'caa9ea15ec2b3a6ff50c05cad84ea2180ec36aa1',
+  commit: 'a6401bbd37529eda6b94e38d8ab63a35647c5204',
 });

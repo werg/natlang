@@ -154,6 +154,11 @@ export async function buildForkLlamaRuntime(options: { environment?: NodeJS.Proc
   const inspected = inspectLlamaServer(join(destination, 'bin', process.platform === 'win32' ? 'llama-server.exe' : 'llama-server'), 'fork',
     LLAMA_RUNTIME_RELEASE, environment);
   if (!inspected.compatible) throw new Error(`the installed fork llama-server does not run as the pinned commit: ${inspected.reason ?? inspected.output}`);
+  // Builds of earlier fork commits are never selected again.
+  const suffix = `-${process.platform}-${process.arch}`;
+  for (const entry of readdirSync(dirname(destination)))
+    if (entry.startsWith('fork-') && entry.endsWith(suffix) && join(dirname(destination), entry) !== destination)
+      rmSync(join(dirname(destination), entry), { recursive: true, force: true });
   return inspected;
 }
 
