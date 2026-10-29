@@ -425,6 +425,8 @@ def run(config_path):
     config = json.loads(Path(config_path).read_text())
     journal = Path(config['state_root']) / config.get('journal_name', 'coordinator-v5-journal.json')
     state = json.loads(journal.read_text()) if journal.exists() else {'schema': JOURNAL_SCHEMA, 'config': config, 'exports': []}
+    if state.get('disabled'):
+        raise SystemExit('export disabled by journal: ' + json.dumps(state['disabled']))
     for entry in state['exports']:
         if entry.get('phase') not in ('verified', 'failed', 'cloud-verified-no-local-copy'):
             entry.update(phase='failed', error=RESTARTED)
