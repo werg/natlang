@@ -19,9 +19,10 @@ def verify_attestation(config, *, mode, now=None):
         raise ValueError('supervisor attestation is stale or invalid')
     expected={'run_id':config['run_id'],'baseline_sha256':config['baseline_sha256'],
               'sequence':config['sequence'],'head':config['head'],
-              'generation_nonce':config['session_transition']['generation_nonce'],
+              'generation_nonce':config['session_transition']['generation_nonce'],'activation_nonce':config['activation_nonce'],
               'new_url':config['session_transition']['new_url'],
               'new_token_sha256':config['session_transition']['new_token_sha256']}
+    if not isinstance(expected['activation_nonce'],str) or len(expected['activation_nonce'])<32:raise ValueError('invalid activation nonce')
     if att.get('binding')!=expected:raise ValueError('supervisor attestation binding differs')
     evidence=att.get('evidence',{})
     if (evidence.get('run_id')!=expected['run_id'] or evidence.get('primary_fenced') is not True
@@ -32,7 +33,7 @@ def verify_attestation(config, *, mode, now=None):
     if mode=='restart':
         owner=att.get('owner_observation',{})
         if (att.get('owner_process_absent') is not True or att.get('port_closed') is not True
-                or owner.get('identity')!=config['expected_primary'] or owner.get('nonce')!=expected['generation_nonce']
+                or owner.get('identity')!=config['expected_primary'] or owner.get('nonce')!=expected['activation_nonce']
                 or owner.get('process_absent') is not True or owner.get('port_closed') is not True
                 or not isinstance(owner.get('observed_at'),(float,int)) or not 0<=att['verified_at']-owner['observed_at']<=120):
             raise ValueError('restart lacks verified owner death and closed port')

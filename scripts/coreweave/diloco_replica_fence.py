@@ -190,7 +190,7 @@ def sdk_set_worker_authority(workers, *, nonce, action):
     return results
 
 
-def observe_coordinator_stop(identity, nonce, control_dir, port):
+def observe_coordinator_stop(identity, nonce, control_dir, port, supervisor_cmdline_sha256, entrypoint_sha256):
     """Observe stopped exact coordinator and closed loopback port under a durable role fence."""
     import errno,socket
     state=json.loads((Path(control_dir)/'state.json').read_text())
@@ -206,6 +206,10 @@ def observe_coordinator_stop(identity, nonce, control_dir, port):
         except (OSError,IndexError):return None
     if type(state.get('supervisor_pid')) is not int or not state.get('supervisor_start_ticks') or ticks(state['supervisor_pid'])!=state['supervisor_start_ticks']:
         raise ValueError('role owner is not alive')
+    command=Path(f"/proc/{state['supervisor_pid']}/cmdline").read_bytes();parts=command.split(b'\0')
+    if (hashlib.sha256(command).hexdigest()!=supervisor_cmdline_sha256 or b'-c' not in parts or
+            parts.index(b'-c')+1>=len(parts) or hashlib.sha256(parts[parts.index(b'-c')+1]).hexdigest()!=entrypoint_sha256):
+        raise ValueError('role owner authority entrypoint differs')
     role=state.get('roles',{}).get('coordinator',{})
     if ticks(identity['pid'])==str(identity['start_ticks']) or role.get('alive') or (role.get('pid') and ticks(role['pid']) is not None):
         raise ValueError('old or replacement coordinator is alive')
@@ -217,13 +221,41 @@ def observe_coordinator_stop(identity, nonce, control_dir, port):
     return {'identity':identity,'nonce':nonce,'process_absent':True,'port_closed':True,'observed_at':time.time()}
 
 
-def sdk_observe_coordinator_stop(identity,nonce,control_dir,port):
+def sdk_observe_coordinator_stop(identity,nonce,control_dir,port,supervisor_cmdline_sha256,entrypoint_sha256):
     import inspect
     try:from . import cwctl
     except ImportError:import cwctl
-    program=('import json,sys,time\nfrom pathlib import Path\n'+inspect.getsource(observe_coordinator_stop)+
-             '\nprint(json.dumps(observe_coordinator_stop(json.loads(sys.argv[1]),sys.argv[2],sys.argv[3],int(sys.argv[4]))))\n')
+    program=('import hashlib,json,sys,time\nfrom pathlib import Path\n'+inspect.getsource(observe_coordinator_stop)+
+             '\nprint(json.dumps(observe_coordinator_stop(json.loads(sys.argv[1]),sys.argv[2],sys.argv[3],int(sys.argv[4]),sys.argv[5],sys.argv[6])))\n')
     cwctl.load_env_file();cwctl.require_key();sandbox=cwctl.read_sandbox(identity['sandbox_id'],patience=60)
-    result=sandbox.exec(['python3','-c',program,json.dumps(identity,sort_keys=True),nonce,control_dir,str(port)],timeout_seconds=30).result(timeout=60)
+    result=sandbox.exec(['python3','-c',program,json.dumps(identity,sort_keys=True),nonce,control_dir,str(port),supervisor_cmdline_sha256,entrypoint_sha256],timeout_seconds=30).result(timeout=60)
     if result.returncode!=0:raise ValueError('old coordinator death observation failed')
     return json.loads(result.stdout)
+
+
+def verify_owned_restart_fence(proof, *, expected_primary, expected_workers, nonce, observe_primary, probe_worker, now=time.time):
+    """Fresh role-owner death and worker quiescence without a provider shutdown."""
+    if set(proof)!={'journal','expected_run_id'}:raise ValueError('invalid restart fence request')
+    ref=proof['journal'];owner=owner_reference(ref['path'],ref['sha256'],expected_primary)
+    if owner['run_id']!=proof['expected_run_id']:raise ValueError('owner journal run differs')
+    workers=owner['workers']
+    if sorted(map(int,workers))!=sorted(expected_workers):raise ValueError('restart fence omits workers')
+    started=now();old=observe_primary(expected_primary,nonce);finished=now()
+    if (not isinstance(old,dict) or old.get('identity')!=expected_primary or old.get('nonce')!=nonce
+            or old.get('process_absent') is not True or old.get('port_closed') is not True or
+            finished<started or finished-started>120):raise ValueError('old coordinator stop is unverified')
+    observations=[]
+    for rank in sorted(expected_workers):
+        entry=workers[str(rank)];identity={key:entry.get(key) for key in ('sandbox_id','boot_id','owner_id','pid','start_ticks')}
+        identity['start_ticks']=entry.get('start_ticks') or entry.get('process_start_ticks')
+        challenge=secrets.token_hex(24);start=now();result=probe_worker(identity,challenge);end=now()
+        if (not isinstance(result,dict) or result.get('identity')!=identity or result.get('nonce')!=challenge
+                or result.get('process_absent') is not True or result.get('owner_quiesced') is not True or end<start or end-start>120):
+            raise ValueError('worker role remains unverified')
+        observations.append({'worker':rank,'identity':identity,'observed_at':end,'nonce':challenge})
+    owner_reference(ref['path'],ref['sha256'],expected_primary)
+    result={'schema':'natlang.diloco-owner-restart-fence/1','run_id':owner['run_id'],'primary':expected_primary,
+            'primary_fenced':True,'all_workers_quiesced':True,'quiesced_workers':sorted(expected_workers),
+            'owner_journal':ref,'owner_observation':old,'owner_observed_at':finished,'workers':observations}
+    result['proof_sha256']=hashlib.sha256(json.dumps(result,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    return result

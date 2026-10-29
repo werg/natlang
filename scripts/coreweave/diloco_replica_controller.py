@@ -111,16 +111,17 @@ def prepare_owned_activation(config, *, mode, supervisor_evidence, now, owner_st
     if mode not in ('promote','restart'):raise ValueError('invalid replica activation mode')
     result=copy.deepcopy(config);transition=result['session_transition']
     binding={'run_id':result['run_id'],'baseline_sha256':result['baseline_sha256'],'sequence':result['sequence'],
-             'head':result['head'],'generation_nonce':transition['generation_nonce'],'new_url':transition['new_url'],
+             'head':result['head'],'generation_nonce':transition['generation_nonce'],'activation_nonce':result['activation_nonce'],'new_url':transition['new_url'],
              'new_token_sha256':transition['new_token_sha256']}
-    observed=supervisor_evidence.get('provider_observed_at')
-    if not isinstance(observed,(int,float)) or not 0<=now-observed<=120:raise ValueError('provider observation is not fresh')
+    observed=supervisor_evidence.get('owner_observed_at' if mode=='restart' else 'provider_observed_at')
+    if not isinstance(observed,(int,float)) or not 0<=now-observed<=120:raise ValueError('supervisor fence observation is not fresh')
+    if not isinstance(binding['activation_nonce'],str) or len(binding['activation_nonce'])<32:raise ValueError('invalid activation nonce')
     if supervisor_evidence.get('run_id')!=binding['run_id'] or supervisor_evidence.get('primary_fenced') is not True or supervisor_evidence.get('all_workers_quiesced') is not True or not supervisor_evidence.get('proof_sha256') or supervisor_evidence.get('primary')!=result['expected_primary'] or sorted(supervisor_evidence.get('quiesced_workers') or [])!=sorted(result['expected_workers']):
         raise ValueError('unverified supervisor fence')
     att={'schema':'natlang.diloco-replica-supervisor-attestation/1','mode':mode,'verified_at':now,'expires_at':now+300,
          'binding':binding,'evidence':supervisor_evidence}
     if mode=='restart':
-        if (not isinstance(owner_stop,dict) or owner_stop.get('nonce')!=binding['generation_nonce'] or
+        if (not isinstance(owner_stop,dict) or owner_stop.get('nonce')!=binding['activation_nonce'] or
                 owner_stop.get('process_absent') is not True or owner_stop.get('port_closed') is not True or
                 owner_stop.get('identity')!=result['expected_primary'] or not isinstance(owner_stop.get('observed_at'),(int,float)) or
                 not 0<=now-owner_stop['observed_at']<=120):raise ValueError('unverified old role owner stop')
