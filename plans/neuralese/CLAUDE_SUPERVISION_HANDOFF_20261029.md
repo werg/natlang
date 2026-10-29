@@ -63,37 +63,41 @@ provider lifetime. Use exact owner/PID/start/boot and generation guards. New GPU
 requests require one GPU; do not reintroduce GPU-model/CPU filters. Current
 allocations already exist: do not spin up another merely for routine evaluation.
 
-## Current launch: v4 / 969d
+## Current launch: v5 controls / 969d runtime
 
 Authoritative control directory:
-`/home/werg/data/dgxops/claude-recovery-20261028/data/fresh-first-outer-step202-20261029/controls-main-v4`
+`/home/werg/data/dgxops/claude-recovery-20261028/data/fresh-first-outer-step202-20261029/controls-main-v5`
 
 - Runtime is the **complete committed native package at `969d35b7b`**, not the
   earlier special b0 patch tree. Runtime archive SHA
   `4a450e95902318981be2710d4920862968f22d4effd4b1cc593dc0f0f21a9fd2`.
   Archive has 399 Git blobs; its native inventory has 369 files. All four hosts
   verified that inventory and the shared static argument checks.
-- Control archive `control-transfer-main-v4.tar.gz`, SHA
-  `c8d160f663d305f066198de96866ace12319238f3196ecb5ff89843942709c10`,
+- Control archive `control-transfer-main-v5.tar.gz`, SHA
+  `448547a67c7b418559fcba0efa72b5158664ff38627059b2a74b6e4c8d9e2362`,
   thirteen individually verified members. Paths in its worker args, plan,
   role-contract, peer declarations and coordinator args are authoritative.
 - Explicit **Kahan rounding**, **local weight EMA off**, accumulation16,
   local_steps32, quorum3, grace30, BF16 wire. Global coordinator EMA remains on.
   Initial ten outer rounds average; later Nesterov uses momentum0.9/lr0.7.
+- Explicit SFT rates: backbone `2e-5`, interface/learned rows `1e-3`, warmup150.
+  Early JOLT/RL retains `1e-6`/`1e-4`. `59d9eb328` checks real optimizer reload
+  preserves weights, moments and RNG while adopting the SFT rates. Larger nominal
+  rates are not evidence of faster capability improvement; measure behavior.
 - Rank0 resumes its exact earned step202. Other ranks clone exact common step2.
   The first outer mechanism preserves rank0's newer weight deviation and RNG,
   and gives seed clones deterministic distinct rank RNG streams. Initializer
   and reanchor are not optimizer progress.
 - Runtime path on hosts is `/work/runtime-four-sft-969d-v2`. New output and
-  coordinator namespaces are v2; consult the v4 args instead of guessing paths.
+  coordinator namespaces are v3; consult v5 args instead of guessing paths.
 - At 13:45–13:46 Berlin, primary init PID83047 and replica init PID80511 had
   been accepted; actual completion, new baseline, bootstrap, updates and merge
-  still required observation. Final handoff observations below supersede this
-  intermediate timestamp.
+  were intermediate v4 observations. V4 was fenced before SGD for warm indexes
+  and corrected SFT rates. Final observations below supersede those earlier PIDs.
 
 Operational launch/probe scripts live in:
 `/home/werg/data/dgxops/four-sft-cutover-20261029/`.
-Use `*-v4.py`, `*-v2.py` and current receipts; old similarly named attempts are
+Use current v5/v3 scripts and receipts; old similarly named attempts are
 historical. Read a script before executing it: some start/stop roles. Routine
 health uses actual progress and authenticated manifest, since full status can
 wait behind large tensor merges.
@@ -124,6 +128,22 @@ wait behind large tensor merges.
    implemented. Relevant commits `cbd168d39`, `8cf7c6a71`, `6cc701690`.
    Six real transition tests and 28 protocol/heterogeneous checks passed.
    Production memory/throughput still needs actual update evidence.
+8. V4 workers reparsed cold large leaves while GPUs idled. The exact969d520-leaf
+   index bundle covers591181 train +1500 held rows; SHA
+   `2d0cda41c21b30ce048c22d3417834b9f29f197cb7e1d190080b140bff439937`.
+   Every key binds source/tokenizer/split/roles/parser policy and metadata digest.
+   All520 entries were authenticated/installed on every host with exclusive
+   create and zero conflicts. Preserve the cache; see
+   `/home/werg/data/dgxops/four-sft-cutover-20261029/row-cache-handoff-969d.json`.
+9. V4 carried conservative early-RL rates into SFT. V5 corrects them. All v4
+   workers were proven pre-SGD and fenced. Rank0 saved a same-step202 transition,
+   SHA `763622aa8e8b0436f93c0c3fd8f9cb1be7fdd74e820c932949ff825a6cb17b8d`;
+   tensor-by-tensor comparison confirmed identical model, optimizer, RNG and
+   exposure to original202. Retain it as zero-update history; original202 remains
+   the v5 numeric parent. No learned update was lost. One graceful startup stop
+   took over4minutes; its process exited before the guarded SIGKILL was needed.
+   LR changes still require a new outer identity/baseline: an authenticated
+   operational-parameter continuation remains an adaptive-pipeline gap.
 
 The previous 88-fragment / 23.47GB baseline had verified byte-identically on both
 hosts, but its trainer identity used stochastic/local-EMA controls. It is not the
@@ -200,20 +220,21 @@ Ready Big2-001/002 add226,019 complete rows, with archive-backed custody and no
 ID or full-content collisions against current train/held. Successor has817,200
 rows, SHA `8eace17178fc3202490618a354ac8aeeb6170225c3176e24e620a4a96b9e2058`.
 The first incomplete519-leaf CE candidate is invalid: successor needs521 leaves.
-Final v4-rebased successor recipe SHA
-`4cf011f1c2948602ceec0182313703b1274d2e29f468ff8bc4ba3c6ba3de2224`,
+Final v5-rebased successor recipe SHA
+`bb19e3ac469d239d90e7fe55516792930e229970984d60cbb59051437f3eab53`,
 CE SHA `129daeba201e23c48c2b5f80b27796d81e3e232cfe686cb4bf19d29011871175`.
 Actual resident contract/source/map/CE preflight passed; it is **not yet published,
 adopted or exposed**. Transfer:
-`.../prompt-variants-pilot-v1/big2-first-outer-resident-transfer-v2/transfer.tar.gz`,
-SHA `f7e9d922a730cdb40e17ce897ba42c331f0050c02e855a94d20016d7ce96a09e`.
+`.../prompt-variants-pilot-v1/big2-first-outer-resident-transfer-v3/transfer.tar.gz`,
+SHA `5a90b88f0bd84f933914c396099035f1081395733446d3862c00d89b9974df13`.
 Use committed resident payload geometry, fixed by `676481dba`; stage all exact
 dependencies, publish against each actual predecessor, verify each adoption and
 subsequent exposure. Do not overwrite the distributed/reanchor controls.
 
-Claude owns full-prompt teacher variants, last report255,592 written /249,155
-with identical own-output mass to their header twin. Root requested classification
-and target-contract verification of the6,437 differences; do not assume all equal.
+Claude owns full-prompt teacher variants:255,592 initially written /249,155
+with identical own-output mass. The6,437 differences were classified:6,380 valid
+schema-required JSON quoting changes,57 double-quoted teacher values quarantined.
+Useful remaining count255,535. Exact v6 receipts retain this classification.
 Append to817200, preserve useful header variants, authenticate variant IDs and
 related-world splits. Four-family target40% communication/30% curated natlang/
 15% coding/15% other ordinary follows authenticated row reassignment proof, not
@@ -221,6 +242,10 @@ a map-extension claim that silently relabels old rows.
 
 Remaining supply: re-encode historical12,413 whole DPO pairs for LFM3, including
 425 long pairs; old LFM2.5 tokenized files are not ready native LFM3 inputs.
+Claude implemented the exact-custody converter in `cbff08576` and started work
+under `/home/werg/data/lfm3-dpo-20261029/{source,out}`; verify completion, pair
+coverage, protection and actual admission rather than treating implementation as
+exposure. Do not duplicate or discard that in-flight conversion.
 Complete long-chain sources and physical geometry/custody remain obligations.
 Do not count prefix rows or registration as full communication-graph exposure.
 
@@ -265,24 +290,46 @@ gradient norms; their unchanged values were consistent with tiny signal under
 warmup/epsilon, not demonstrated optimizer misrouting. Reasoning rows changed.
 Actual per-term telemetry is now saved by cd04e7779.
 
-Future JOLT has a reported imported-native-state/guidance insertion-coordinate
-bug. Claude's helper owns a failing test/fix on main. Repair before admitting
-affected communication episodes. It does not block correct ordinary SFT. Newly
+JOLT's imported-state/guidance insertion-coordinate bug is fixed on main in
+`4124cf018`;50 JOLT/serve tests passed. It is not in the selected969d runtime:
+include it in the actual next RL actor/learner runtime before admitting affected
+communication episodes. It does not block correct ordinary SFT. Newly
 integrated service/iteration/greenhouse oracles need exact source-bound task
 qualification; do not re-use old proof hashes after changing reward semantics.
 
 ## Tests, repository and stranded work
 
+Final quick check passed on `20ae4b8e4` at14:38:28 Berlin: source review, seven
+ratchet tests and TS typecheck. That commit fixes the DPO converter's shared
+paths/hash helper without changing the already-running process. Its original
+executing script bytes and PID/boot/start/argv are preserved under
+`/home/werg/data/lfm3-dpo-20261029/out/executing-source-custody/`; this is a
+single-file custody receipt, not full runtime/admission qualification.
+
 - `scripts/check-main.sh --quick` must pass before push. Last quick failure was
   two newly integrated chain/pair scripts with machine paths; `624b9a67c` fixes
   them. Re-run the quick check before final publication.
-- Full current-main ledger is `natlang-check-main-four-current-1029`; log
+- Full current-main ledger was `natlang-check-main-four-current-1029`; log
   `/home/werg/data/dgxops/check-main-four-current-1029.log`, TMPDIR=/tmp.
-  It is live, not an all-green result. Root Python phase:3070pass/10fail/5skip;
+  It ended14:15:33 with exit1 and no OOM; it is not an all-green result.
+  Root Python phase:3070pass/10fail/5skip;
   all ten failures were old reviewedOpenRouter/Luna launcher tests collected
   before Sonnet removed both tests and implementation during the run. Do not
-  restore removed legacy infrastructure. Native suite was~57% at13:46; inspect
-  its current terminal result and remaining GPU/TS phases.
+  restore removed legacy infrastructure. Native phase:5523pass/13fail/14skip;
+  GPU phase:27pass/8skip. Twelve native failures are addressed or passed focused
+  current-main checks: source-fetch recovery faults now target the actual stream
+  (`54a1209bb`,6 tests passed), four resident-predecessor cases passed, coefficient
+  CLI/drained-handoff cases passed, and the retired semantic expectation was fixed.
+  One real generic semantic-refresh resume bug remains: the test
+  `test_new_frozen_work_refreshes_vae_after_real_descendant_sgd_and_resumes_exact_credit`
+  reaches step5 instead of3 on identical resume. The attempted fix was reverted;
+  investigate refresh signatures/checkpoint custody. It is outside LFM3's recipe.
+  TS builtins/interpreter failures were repaired in `534a21b3f`; Claude reports
+ 128 then24 focused passes. The recursion guard now compares instructions AND
+  inputs, preserving recursion on a smaller argument, and the prompt fixture is
+  re-pinned to its owner-directed explanatory paragraph. Source/build edits caused
+  some inconsistent-file failures. Do not describe targeted repairs as a complete
+  new full-suite pass.
 - A semantic-stage test failed because it expected a deliberately removed
   cross-model role exchange. `62c4884f2` preserves real frozen-preparation checks
   and asserts the explicit rejection; its targeted test passed. This is not a
@@ -305,7 +352,7 @@ qualification; do not re-use old proof hashes after changing reward semantics.
 
 ## Storage and local job supervision
 
-At13:46 internal had~53GiB free, external~95GiB. Goal floors: internal45,
+At14:16 internal had~46GiB free, external~94GiB. Goal floors: internal45,
 critical32; external80. Measure before new large copies. Use bounded fsync and
 cache release; do not hardlink mutable files or change live source link counts.
 Retained142 uses12.5GB external; diagnostic33 uses3.46GB internal.
@@ -341,10 +388,54 @@ durable supervisors after root stops. Keep useful training/export services alive
 Detailed auxiliary handoffs:
 
 - `/home/werg/data/dgxops/four-sft-cutover-20261029/OPERATIONS_HANDOFF.md`
-- `/home/werg/data/dgxops/four-sft-cutover-20261029/data-readiness-handoff-20261029.json`,
-  SHA `36441bd49d6859747135ce637b79a2973ad592dd0975b8232e3169608ba8a6f0`.
+- `/home/werg/data/dgxops/four-sft-cutover-20261029/data-readiness-handoff-v5-20261029.json`,
+  SHA `1b2623ef8026d20ae0a771f47faf172e4b62f447f1277c2e09358490fdb0a6f7`.
 
-This section will be completed at the actual stopping point with live learner
-steps, coordinator/replica evidence, recovery status, test status, commit/push and
-the exact outstanding work. Earlier intermediate facts must not be mistaken for
-that final observation.
+**Final operational observation:14:31 Berlin. All four completed a real v5
+optimizer update:** rank0 globalstep203 from202, ranks1–3 globalstep3 from2,
+verified in each actual `train.jsonl`. This is the practical handoff boundary.
+The first32-local-update outer merge remains pending; do not count registration,
+initialization, physical qualification or the sealed clock rebase as a merge.
+
+| Role | Actual PID / start ticks | Boot / custody |
+| --- | --- | --- |
+| rank0 worker |90045 /4252947| f3 owner receipt |
+| rank1 worker |88269 /5602436| ea17 owner receipt |
+| rank2 worker |91745 /5904060| 3aba owner receipt |
+| rank3 worker |86756 /4686174| b166 owner receipt |
+| primary |89811 /4243792| f3; authenticated sealed rebase verified |
+| replica |86389 /4663575| b166; exact baseline and journal witness verified |
+
+Read current boot IDs and dynamic receipts from the operations handoff before
+acting. Worker receipt paths are
+`/home/werg/data/lfm3-sft-20261028/production-v3-live/fresh-four-v5-peer{1,2,3,4}-owner.json`.
+Read-only command: SDK Python plus
+`/home/werg/data/dgxops/four-sft-cutover-20261029/monitor-four-worker-v5.py <1..4>`.
+These are observations at handoff, not eternal PID identities.
+
+Current coordinator fingerprint:
+`ff59ad4dee23ef0d46c94e3d79e34f42fffb485bd1b36e78b3ab1e4fbdfb9946`;
+exact91-file baseline receipt:
+`ae34085c963a63d05882e446730c6b2aebe7f54640680bca7965688ddb413b12`.
+New v5 independent exports/owner readbacks are **not yet verified**; the last
+durable recovery is cloud202 and retained local142. Claude acknowledged preparation
+of per-rank v5 publication/health selectors; activation and coordinator-state
+exports are immediate receiving-supervisor tasks. Reuse existing
+`scripts/coreweave/diloco_periodic_recovery.py` and exact replica controls where
+applicable, preserving queue/sequence/momentum/EMA and all worker optimizer/RNG/
+exposure. Replication alone is not quota-independent recovery.
+
+First next actions: observe sustained updates and first real outer merge; activate
+current-owner recovery/health; adopt817200 with actual physical-capacity evidence
+and per-rank exposure; finish255535 full variants/four-family weights; include
+4124cf018 in the next real RL runtime; finish the local behavior gate; fix the
+remaining generic refresh bug and check results without claiming whole-main green.
+An initial dynamo accumulated-recompilation-limit warning appeared on rank0:
+investigate sustained throughput rather than interpreting a startup sample.
+
+Claude identity `dgx-claude-5c7cf3fb` explicitly confirmed takeover availability
+at12:50UTC and was told to take over at these verified optimizer updates, with
+the pending first merge explicit. Root is relinquishing cloud mutation ownership
+through coordination; all useful training/export processes remain running.
+Root helpers have supplied their handoffs and have no independent operational
+strand to keep alive. Training is not complete; only Codex supervision is ending.
