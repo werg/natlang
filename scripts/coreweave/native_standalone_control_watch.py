@@ -120,7 +120,7 @@ while True:
      path=OPS/('coreweave-production-'+entry['role']+'-private-export-receipt-20261014.json')
      receipt=json.loads(path.read_text())
      if historical_owner_ready(entry,pin,receipt,selection_sha):
-      refresh_publication(entry);historical_cursor=(i+1)%len(old);break
+      entry['full_backup_verified']=True;refresh_publication(entry);historical_cursor=(i+1)%len(old);break
     except (OSError,ValueError,KeyError,TypeError):
      continue
   for e in s['exports']:
