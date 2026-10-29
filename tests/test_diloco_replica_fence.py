@@ -26,7 +26,8 @@ def test_provider_fence_exact_top_state_and_failures(tmp_path):
 
 
 def test_actual_historical_owner_journal():
-    path=Path('/home/werg/data/lfm3-sft-20261028/production-v3-live/four-rejoin-2512-ownership.json')
+    from natlang_neuralese.common.paths import resolve
+    path=resolve('data_nvme','lfm3-sft-20261028/production-v3-live/four-rejoin-2512-ownership.json')
     if not path.is_file(): pytest.skip('host owner journal unavailable')
     journal=json.loads(path.read_text()); old=journal['coordinator']
     primary={key:old[key] for key in ('sandbox_id','boot_id','owner_id','pid','start_ticks')}
