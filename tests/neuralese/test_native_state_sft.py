@@ -1681,3 +1681,6 @@ def test_communication_exposure_uses_only_assigned_shard():
     assert communication_exposure(entries, {'mine':1,'peer':7}, {'mine':2,'ordinary':1}) == {
         'graphs':1, 'required_graph_visits':2, 'graph_visits':1, 'complete':False}
     assert communication_exposure(entries, {'mine':2,'peer':7}, {'mine':2})['complete']
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

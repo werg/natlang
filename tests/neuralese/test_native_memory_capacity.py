@@ -690,3 +690,6 @@ def test_sft_descriptor_rejects_wrong_source_and_geometry(tmp_path, monkeypatch)
     bad=tmp_path/'damaged.json'; bad.write_text(json.dumps(damaged)); descriptor['geometry']=resident.binding(bad)
     with pytest.raises(ValueError,match='geometry'):
         memory._materialize_sft_capacity_request(train, descriptor, identity={}, runtime_code_sha256='x', request_path=tmp_path/'r')
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

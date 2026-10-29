@@ -185,3 +185,6 @@ def test_resource_sampling_error_keeps_actual_update_result(tmp_path, monkeypatc
     with observe_backbone_updates(tmp_path, samples=1) as state:
         assert native.native_training_update(None, optimizer, []) is token
     assert state['completed_updates'] == 1 and state['diagnostic_errors'] == ['OSError']
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

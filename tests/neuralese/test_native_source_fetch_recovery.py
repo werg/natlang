@@ -175,3 +175,6 @@ def test_partial_update_exception_does_not_enter_source_recovery(tmp_path,monkey
     checkpoint=torch.load(out/'checkpoint.pt',weights_only=False,map_location='cpu')
     assert checkpoint['training']['step']==2 and checkpoint['training']['exposure_counts']=={'train':2}
     assert not(out/'native-training-receipt.json').exists()
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

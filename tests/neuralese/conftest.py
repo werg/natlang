@@ -64,3 +64,12 @@ def loaded():
     model, tokenizer = load_backbone(dtype=torch.float32, device="cpu")
     backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer))
     return model, tokenizer, backbone
+
+
+@pytest.fixture
+def per_batch_native_updates(monkeypatch):
+    """One optimizer update per packed batch, the schedule these mechanism tests were written against. The
+    production default accumulates micro-batches (``--accumulate-batches``); test_native_update_accumulation.py
+    covers it."""
+    from natlang_neuralese.train import native_state_sft
+    monkeypatch.setattr(native_state_sft, 'DEFAULT_ACCUMULATE_BATCHES', 1)

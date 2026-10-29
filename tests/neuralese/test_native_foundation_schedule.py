@@ -254,3 +254,6 @@ def test_normalized_service_is_proportional_and_ignores_out_of_shard_credit():
     subset=[(0,[0],False),(0,[1000],False)]
     result=balance_urgent_batches(rows,subset,{'old-1':100},['old']*1000+['new']*1000,lane='communication',quotas={'old-0':1,'new-0':1})
     assert result[0][1]==[1000]
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

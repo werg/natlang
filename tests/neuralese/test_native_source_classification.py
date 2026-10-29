@@ -326,3 +326,6 @@ def test_recipe_historical_classifier_retains_origin_with_identical_code(tmp_pat
         assert _classification_proof(inputs)==proof
         assert Path(proof['indexes'][0]['producer']['path'])==origin
     assert path.read_bytes()==before
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

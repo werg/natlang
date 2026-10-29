@@ -329,6 +329,16 @@ def _source_hash(examples):
     return digest.hexdigest()
 
 
+# Packed micro-batches per optimizer update (2026-10-29): one 32k-token batch of ~4 graphs per fixed-size Muon step
+# made the LFM3 weights random-walk; 16 accumulated micro-batches give ~64 graphs per step.
+DEFAULT_ACCUMULATE_BATCHES = 16
+
+
+def accumulated_updates(batches, accumulate):
+    """Optimizer updates that cover ``batches`` packed micro-batches at ``accumulate`` micro-batches each."""
+    return -(-batches // accumulate)
+
+
 def pack_native_graphs(examples):
     """Join disjoint examples into one graph plan so shared weights update once."""
     from ..model.shared_state import Invocation, ImportSpan, compile_graph
@@ -354,51 +364,64 @@ def pack_native_graphs(examples):
 
 
 def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_layers=True,
-                           chunk_tokens=128, objective=None, precision=None):
+                           chunk_tokens=128, objective=None, precision=None, accumulate=()):
     """One shared complete production update, also used by throughput diagnostics.
 
     ``precision``: (Quantization, point, λ, loss weight) of this update's QAT pass (``--quantization``); the forward
     and the backward (including checkpoint recomputation) run under that point and the loss is scaled by the weight.
-    The returned loss is the unscaled objective."""
+    The returned loss is the unscaled objective.
+
+    ``accumulate``: earlier micro-batches of the same optimizer update (``--accumulate-batches``). Their backwards
+    run outside ``in_backward()``, so the gated MuonSR hooks stay idle and every gradient accumulates in ``.grad``;
+    ``batch`` is the last micro-batch, whose backward steps each latent with the whole update's gradient. Each
+    micro-batch's loss is weighted by its share of the update's scored graphs, so the update optimizes the same
+    graph mean as one batch holding all of them. Without accumulation a 32k-token batch of ~4 graphs drove each
+    fixed-size Muon step and the weights random-walked (plans/neuralese/LFM3_REGRESSION_INVESTIGATION_20261029.md)."""
     if backend is not None:
         backend.reset_row_counts()
     optimizer.zero_grad(set_to_none=True)
     sparse_before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()
                      if name in ('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows')
                      and parameter.requires_grad}
-    if optimizer.latent is not None:
-        context = optimizer.latent.in_backward()
-    else:
-        from contextlib import nullcontext
-        context = nullcontext()
     from contextlib import nullcontext as _nullcontext
-    precision_context = (precision[0].context(precision[1], precision[2]) if precision is not None
-                         else _nullcontext())
+    micro_batches = [*accumulate, batch]
+    if accumulate and any(not micro for micro in micro_batches):
+        raise ValueError('native accumulated update has an empty micro-batch')
+    scored = [len(micro) if objective is not None else
+              sum(any(weight > 0 for weight in example.target_weights) or bool(example.decisions) for example in micro)
+              for micro in micro_batches]
+    shares = ([count / sum(scored) for count in scored] if sum(scored) else [1. / len(micro_batches)] * len(micro_batches))
     loss_weight = None if precision is None or precision[3] == 1.0 else float(precision[3])
+    losses, parts = [], []
     try:
         from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
-        if getattr(model, 'native_cotangent_accumulator_backend', 'cpu_file') == 'plain':
-            scope = contextlib.ExitStack()
-            scope.enter_context(plain_training_arithmetic())
-            scope.finish = lambda: None
-        else:
-            scope = ParameterCotangentScope.for_model(model, mode='vjp')
-        with precision_context, scope as cotangents, context:
-            if backend is not None:
-                with backend.autocast():
-                    loss, details = packed_graph_loss(model, batch,
+        for index, (micro, share) in enumerate(zip(micro_batches, shares)):
+            final = index == len(micro_batches) - 1
+            context = (optimizer.latent.in_backward() if final and optimizer.latent is not None
+                       else _nullcontext())
+            precision_context = (precision[0].context(precision[1], precision[2]) if precision is not None
+                                 else _nullcontext())
+            if getattr(model, 'native_cotangent_accumulator_backend', 'cpu_file') == 'plain':
+                scope = contextlib.ExitStack()
+                scope.enter_context(plain_training_arithmetic())
+                scope.finish = lambda: None
+            else:
+                scope = ParameterCotangentScope.for_model(model, mode='vjp')
+            with precision_context, scope as cotangents, context:
+                with (backend.autocast() if backend is not None else _nullcontext()):
+                    loss, details = packed_graph_loss(model, micro,
                         checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
                         objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
                         collect_accuracy=False, allow_communication_prefixes=backend is None)
-            else:
-                loss, details = packed_graph_loss(model, batch,
-                    checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
-                    objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
-                    collect_accuracy=False, allow_communication_prefixes=backend is None)
-            (loss if loss_weight is None else loss * loss_weight).backward()
-            cotangents.finish()
+                scaled = loss if share == 1. else loss * share
+                (scaled if loss_weight is None else scaled * loss_weight).backward()
+                cotangents.finish()
+            losses.append(loss.detach() * share)
+            parts.append(details)
         if optimizer.latent is not None:
             optimizer.latent._armed = None
+        loss = torch.stack(losses).sum() if len(losses) > 1 else losses[0]
+        details = parts[0] if len(parts) == 1 else merge_update_details(parts, scored)
         params = [p for p in model.parameters() if p.requires_grad and p.grad is not None]
         if params:
             norm = torch.nn.utils.clip_grad_norm_(params, float('inf'))
@@ -412,6 +435,37 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
         optimizer.zero_grad(set_to_none=True)
         raise
     return loss, details
+
+
+_PACKED_DETAIL_KEYS = ('packed_physical_tokens', 'original_physical_tokens', 'primal_projection_rows',
+                       'reused_primal_projection_rows', 'readout_forward_rows', 'readout_original_rows')
+
+
+def merge_update_details(parts, scored):
+    """Details of one accumulated update from its micro-batches' ``packed_graph_loss`` details.
+
+    Ordinary CE details are per-graph lists whose packed totals repeat in every entry; the merged list keeps every
+    graph and carries the update's summed packed totals. A policy objective's dictionary sums its counts and
+    weights its means by each micro-batch's scored graphs; any other field must agree across micro-batches."""
+    if all(isinstance(part, list) for part in parts):
+        totals = {key: sum(part[0].get(key, 0) for part in parts if part) for key in _PACKED_DETAIL_KEYS}
+        return [{**item, **{key: value for key, value in totals.items() if key in item}}
+                for part in parts for item in part]
+    if not all(isinstance(part, dict) for part in parts):
+        raise ValueError('accumulated micro-batches returned different detail kinds')
+    weights = [count / sum(scored) for count in scored] if sum(scored) else [1. / len(parts)] * len(parts)
+    merged = {}
+    for key in parts[0]:
+        values = [part.get(key) for part in parts]
+        if all(type(value) is int for value in values):
+            merged[key] = sum(values)
+        elif all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
+            merged[key] = sum(weight * value for weight, value in zip(weights, values))
+        elif all(value == values[0] for value in values):
+            merged[key] = values[0]
+        else:
+            raise ValueError(f'accumulated micro-batches disagree on objective detail {key!r}')
+    return merged
 
 
 @torch.no_grad()
@@ -565,6 +619,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
             continue
         categories = getattr(example, 'objective_categories', None)
         scale = float(getattr(example, 'loss_scale', 1.))
+        # Own-output token mass: the summed weighted CE times the scale, never divided by the graph's own mass.
+        token_mass = getattr(example, 'loss_normalization', 'graph') == 'token'
         queries, targets, weights = [], [], []
         reasoning = []
         boundary_targets = {str(token): {'count': 0, 'weight': 0.} for token in sorted(boundary_ids)}
@@ -595,7 +651,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
             invocations = sum(1 for node, offset in zip(example.plan.invocations, example.plan.offsets)
                               if any(weight > 0 for weight in example.target_weights[offset:offset+len(node.token_ids)]))
             token_share = invocations / (invocations + decided[1])
-            decision_scale = scale / (invocations + decided[1])
+            decision_scale = (scale * example.decision_tokens if token_mass else
+                              scale / (invocations + decided[1]))
         if not queries:
             if reuse_readouts:
                 decision_extra.append(decided[0] * decision_scale / targeted_graphs)
@@ -625,7 +682,11 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                     readout_groups.append([])
                 readout_groups[readout_index[key]].append(readout_position)
                 readout_position += 1
-            if decided is None:
+            if token_mass:
+                readout_weights.append(token_weights * scale / targeted_graphs)
+                if decided is not None:
+                    decision_extra.append(decided[0] * decision_scale / targeted_graphs)
+            elif decided is None:
                 readout_weights.append(token_weights / denominator / targeted_graphs * scale)
             else:
                 readout_weights.append(token_weights / denominator * token_share / targeted_graphs * scale)
@@ -648,14 +709,20 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                     correct = part_correct if correct is None else correct + part_correct
             total = parts[0][0] + parts[1][0]
             category_sums.append(torch.stack((parts[0][1], parts[0][0].detach(), parts[1][1], parts[1][0].detach())))
-            losses.append(total / denominator * scale if decided is None else
-                          total / denominator * token_share * scale + decided[0] * decision_scale)
+            if token_mass:
+                losses.append(total * scale if decided is None else total * scale + decided[0] * decision_scale)
+            else:
+                losses.append(total / denominator * scale if decided is None else
+                              total / denominator * token_share * scale + decided[0] * decision_scale)
         else:
             total, correct = _native_ce_sum(model, hidden, query_ids, target_ids, token_weights,
                 chunk_tokens=chunk_tokens, collect_accuracy=collect_accuracy,
                 unique_queries=len(set(queries)) == len(queries))
-            losses.append(total / denominator * scale if decided is None else
-                          total / denominator * token_share * scale + decided[0] * decision_scale)
+            if token_mass:
+                losses.append(total * scale if decided is None else total * scale + decided[0] * decision_scale)
+            else:
+                losses.append(total / denominator * scale if decided is None else
+                              total / denominator * token_share * scale + decided[0] * decision_scale)
         detail_weights.append(denominator.detach())
         if collect_accuracy:
             detail_accuracies.append((correct / denominator).detach())
@@ -1150,6 +1217,10 @@ def build_parser():
     parser.add_argument('--batch-graphs', type=int, default=1)
     parser.add_argument('--batch-tokens', type=int, default=0,
         help='pack whole sequential graphs to this token volume instead of graph-count batching')
+    parser.add_argument('--accumulate-batches', type=int, default=DEFAULT_ACCUMULATE_BATCHES,
+        help='packed micro-batches per optimizer update; their gradients accumulate before one MuonSR/AdamW step '
+             '(default 16, about 64 graphs at 32k tokens per micro-batch; 1 restores one step per batch). A '
+             'continuation records the change in accumulate_batches_history')
     parser.add_argument('--share-causal-prefixes', action=argparse.BooleanOptionalAction, default=None,
         help='reuse exact ordinary token prefixes with unchanged targets, losses and exposure. On by default for new '
              'runs and continuations (recorded); an omitted flag on a rolling resume keeps the in-flight stage\'s '
@@ -1262,7 +1333,7 @@ def build_parser():
     parser.add_argument('--supervision-objective', dest='supervision_objective_mode', choices=('own-outputs', 'declared'),
         default='own-outputs',
         help='own-outputs (default, owner 2026-10-28): a CE policy that declares no objective gets own-outputs/1 '
-             '(reasoning share 0.1, role tokens from the model tokenizer), adopted by continuations through a recorded '
+             '(token mass, reasoning share 0.1, role tokens from the model tokenizer), adopted by continuations through a recorded '
              'objective transition; declared: use exactly the bound CE policy (row weights when it declares none)')
     return parser
 
@@ -1678,6 +1749,16 @@ def _main(argv=None, *, requested_refresh):
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
     saved_options = saved_training.get('options') or {}
+    if type(args.accumulate_batches) is not int or args.accumulate_batches < 1:
+        raise ValueError('--accumulate-batches must be a positive integer')
+    # Checkpoints from before accumulation stepped once per packed batch.
+    accumulation_history = list(saved_options.get('accumulate_batches_history') or [])
+    if saved_training and int(saved_options.get('accumulate_batches') or 1) != args.accumulate_batches:
+        accumulation_history.append({'schema': 'natlang.update-accumulation-transition/1',
+            'from': int(saved_options.get('accumulate_batches') or 1), 'to': args.accumulate_batches,
+            'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0)) or 0),
+            'weights_optimizer_rng_exposure': 'preserved'})
+    checkpoint_options['accumulate_batches_history'] = accumulation_history
     checkpoint_options['source_predecessor_retirement_history'] = list(saved_options.get('source_predecessor_retirement_history') or [])
     prior_service_policy = saved_options.get('cohort_service_policy', 'absolute-token-service-v1')
     service_history = list(saved_options.get('cohort_service_policy_history') or [])
@@ -2837,18 +2918,19 @@ def _main(argv=None, *, requested_refresh):
             backend=backend,checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot),
             pending_batches=pending_batches,prior_proof=prior_policy_capacity)
     target_rows = sum(required_visits.values())
-    total_end = step + len(pending_batches)
+    total_end = step + accumulated_updates(len(pending_batches), args.accumulate_batches)
+    batches_left = len(pending_batches)
     if step > total_end:
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
     if (diloco is not None and parent_continuation and not (resume or {}).get('diloco')
             and getattr(args, 'quantization', None) in (None, '')):
         saved_quantization_options = _quantization_shard_transition(saved_quantization_options,
-            global_step=global_step, pending_updates=len(pending_batches),
+            global_step=global_step, pending_updates=accumulated_updates(len(pending_batches), args.accumulate_batches),
             stage=args.stage_id or 'native-graph-ce', worker=diloco.worker)
     quantization = _setup_quantization(args, model, saved_quantization, checkpoint_options,
         saved_options=saved_quantization_options,
         default_bind={'stage': args.stage_id or 'native-graph-ce', 'start': global_step,
-                      'end': global_step + max(1, len(pending_batches))}
+                      'end': global_step + max(1, accumulated_updates(len(pending_batches), args.accumulate_batches))}
         if config.get('source_architecture') == 'lfm3' and objective is None else None)
     # A policy round samples the unquantized actor, while QAT is retained for
     # the continuing SFT lineage. Carry the pending refresh across resumes.
@@ -3183,7 +3265,8 @@ def _main(argv=None, *, requested_refresh):
                             resident_bound(adopted_geometry)
                             args.sft_packed_geometry = json.dumps(adopted_geometry)
                             checkpoint_options['sft_packed_geometry'] = args.sft_packed_geometry
-                    total_end = step + len(pending_batches)
+                    total_end = step + accumulated_updates(len(pending_batches), args.accumulate_batches)
+                    batches_left = len(pending_batches)
                     target_rows = sum(required_visits.values())
                     schedule = stream_windows(train, [[batch] for batch in pending_batches], priority_ids=foundation_priority_ids,
                                                       cohort_ids=urgent_cohort_ids, rotation_index=rotation_index, focus_ids=focus_ids,
@@ -3197,7 +3280,7 @@ def _main(argv=None, *, requested_refresh):
             update_started = time.monotonic()
             fetch_rng = capture_training_rng_state(args.device)
             try:
-                visit, indices, pass_end, batch = next(schedule)
+                fetched = [next(schedule) for _ in range(min(args.accumulate_batches, batches_left))]
             except Exception as error:
                 # The previous update and its exposure are complete. The next
                 # batch has not reached native_training_update and earns nothing.
@@ -3224,6 +3307,11 @@ def _main(argv=None, *, requested_refresh):
                     finally:
                         restore_training_rng_state(fetch_rng, args.device)
                 raise
+            batches_left -= len(fetched)
+            micro_batches = [item[3] for item in fetched]
+            indices = [index for item in fetched for index in item[1]]
+            pass_end = any(item[2] for item in fetched)
+            batch = [example for micro in micro_batches for example in micro]
             batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
             cursor = indices[-1] + 1
             exception_boundary_safe = False
@@ -3240,7 +3328,7 @@ def _main(argv=None, *, requested_refresh):
                 calibration_rng = capture_training_rng_state(args.device)
                 try:
                     precision_pass=training_precision_pass(quantization,policy_operation=False,
-                        checkpoint_options=checkpoint_options,global_step=global_step,batch=batch,cursor=cursor,
+                        checkpoint_options=checkpoint_options,global_step=global_step,batch=micro_batches[0],cursor=cursor,
                         forward=lambda examples: packed_graph_loss(model, examples,
                             checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens,
                             objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
@@ -3255,13 +3343,13 @@ def _main(argv=None, *, requested_refresh):
                 if logit_probe is not None:
                     from ..model.attention_probe import probing
                     with probing(logit_probe):
-                        loss, details = native_training_update(model, optimizer, batch, backend=backend,
+                        loss, details = native_training_update(model, optimizer, micro_batches[-1], backend=backend,
                             checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective,
-                            precision=precision_pass)
+                            precision=precision_pass, accumulate=micro_batches[:-1])
                 else:
-                    loss, details = native_training_update(model, optimizer, batch, backend=backend,
+                    loss, details = native_training_update(model, optimizer, micro_batches[-1], backend=backend,
                         checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective,
-                        precision=precision_pass)
+                        precision=precision_pass, accumulate=micro_batches[:-1])
             finally:
                 if warmup is not None:
                     warmup.restore()

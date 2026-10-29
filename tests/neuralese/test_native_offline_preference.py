@@ -437,3 +437,6 @@ def test_actual_preference_prefix_recipe_parser_keeps_parameters_command_and_ide
     rejected=tmp_path/'unsupported.json';rejected.write_text(json.dumps(bad))
     with pytest.raises(ValueError,match='unknown stage parameters'):
         recipe.load_recipe(rejected)
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

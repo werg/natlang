@@ -233,3 +233,6 @@ def test_focus_composes_with_authenticated_source_and_ce_append(tmp_path):
     bad['stage_inputs']['sft']['continued_native_graphs']['sha256'] = '0'*64
     with pytest.raises(ValueError, match='handoff refused'):
         unstarted_stage_input_changes(old,bad,tmp_path,started_stage_ids=('sft',))
+
+# Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
+pytestmark = pytest.mark.usefixtures('per_batch_native_updates')

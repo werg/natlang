@@ -182,12 +182,15 @@ class _HostPeak:
 
 def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers=True,
                      chunk_tokens=1024, checkpoint_sha256, source_binding, gradient_observer=None, objective=None,
-                     production_packing=False):
+                     production_packing=False, retained_gradients=False):
     """Cases are whole, source-authenticated graphs chosen by the supervisor.
 
     The existing gated optimizer hooks stay installed but unarmed. Temporary
     observation hooks release each gradient exactly where production consumes
-    it; no optimizer method, parameter write or full-model gradient copy runs.
+    it; no optimizer method or parameter write runs. ``retained_gradients``
+    (an update accumulating several micro-batches) holds a zero gradient for
+    every trainable parameter from before each case's forward, as the
+    accumulated ``.grad`` of the earlier micro-batches is held in production.
     CUDA lifetime peaks are not reset. This is capacity, not task qualification.
     """
     from ..train.native_state_sft import packed_graph_loss
@@ -253,6 +256,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             started=time.monotonic()
             phase='forward'
             try:
+                if retained_gradients:
+                    for _,parameter in named:
+                        if parameter.requires_grad:parameter.grad=torch.zeros_like(parameter)
                 with _HostPeak() as host:
                     from ..model.native_weight_carrier import ParameterCotangentScope
                     with ParameterCotangentScope.for_model(model,mode='vjp') as cotangents:
@@ -299,6 +305,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             'parent_checkpoint_sha256':checkpoint_sha256,'source':source_binding,'cases':rows,
             **({'objective':objective.binding()} if objective is not None else {}),
             'optimizer_updates':0,'gradients_released_per_parameter':True,'whole_graphs':True,
+            'retained_accumulation_gradients':bool(retained_gradients),
             'task_quality_qualified':False,'cpu_and_all_cuda_rng_restored':True,
             'checkpoint_layers':checkpoint_layers,'chunk_tokens':chunk_tokens,
             'backend':backend.configuration() if backend is not None else {'enabled':False},
@@ -518,7 +525,8 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
         if result['numerical_reference']['passed']:
             examples=list(source.iter_indices([row['index'] for row in selected]))
             result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,chunk_tokens=args.chunk_tokens,
-                checkpoint_layers=args.checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=request['source'],objective=objective)
+                checkpoint_layers=args.checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=request['source'],objective=objective,
+                retained_gradients=getattr(args,'accumulate_batches',1)>1)
             result['passed']=result['capacity']['passed']
     except (RuntimeError,FloatingPointError,MemoryError) as error:
         if isinstance(error,CapacityStateChangedError):raise
@@ -908,7 +916,8 @@ def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backe
     try:
         result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,
             checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
-            checkpoint_sha256=checkpoint_sha256,source_binding=expected['source'],objective=objective)
+            checkpoint_sha256=checkpoint_sha256,source_binding=expected['source'],objective=objective,
+            retained_gradients=getattr(args,'accumulate_batches',1)>1)
         if not result['capacity']['passed']:
             raise RuntimeError('actual policy objective exceeded its learner capacity')
         if args.fp8_training!='off':

@@ -154,7 +154,7 @@ def own_output_objective(args):
     tokenizer.chat_template = (template.read_text() if template.exists() else
         json.loads((directory / 'tokenizer_config.json').read_text()).get('chat_template'))
     share = DEFAULT_REASONING_SHARE if args.objective_reasoning_share is None else args.objective_reasoning_share
-    objective = resolve({'name': NAME, 'reasoning_share': share,
+    objective = resolve({'name': NAME, 'reasoning_share': share, 'mass': args.objective_mass,
         'family_balance': args.objective_family_balance,
         'role_tokens': role_tokens_from_tokenizer(tokenizer,
             tokenizer_fingerprint=args.objective_tokenizer_fingerprint)})
@@ -184,6 +184,9 @@ def main(argv=None):
              'and the trainer applies own-outputs/1 (reasoning share 0.1) with the model tokenizer; with it, the '
              'objective is declared here. declared-row-weights opts out explicitly (declared-row-weights/1); a prior '
              'policy that already declares an objective keeps it')
+    parser.add_argument('--objective-mass', choices=('token', 'invocation'), default='token',
+        help="own-output loss mass: 'token' (default, 2026-10-29) is token-level CE over the model's own outputs; "
+             "'invocation' gives every invocation mass 1 (the earlier objective)")
     parser.add_argument('--objective-reasoning-share', type=float,
         help='own-outputs/1 reasoning share of assistant loss (default 0.1; requires --objective-tokenizer)')
     parser.add_argument('--objective-tokenizer', type=Path,

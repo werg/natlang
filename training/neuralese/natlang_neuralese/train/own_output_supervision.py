@@ -52,6 +52,15 @@ per-token eligibility mask:
 7. Optional family balance multiplies each training graph's normalized loss
    by a bounded census-derived scale so each declared task family contributes
    equally in expectation (mean scale 1, capped at ``max_scale``).
+
+``mass: 'token'`` (the default for new runs, 2026-10-29) replaces steps 3 and 5: a decision's mass is the number of
+its eligible reply tokens (reasoning keeps its ``reasoning_share`` of that mass), invocations and graphs are not
+renormalized, and each graph contributes ``family_scale / token_reference * (sum of weighted token CE +
+decision_tokens * sum of decision-readout CE)``: ordinary token-level CE over the model's own outputs, with a
+``decide`` readout counted as ``decision_tokens`` reply tokens. The invocation mass of steps 3 and 5 gave 85.8% of
+the LFM3 source's loss mass to one-decision invocations and 0.9% to replies of 512+ tokens (21.9% of the reply
+tokens); see plans/neuralese/LFM3_REGRESSION_INVESTIGATION_20261029.md. A declaration without ``mass`` keeps the
+invocation mass and its exact identity.
 """
 from __future__ import annotations
 
@@ -79,10 +88,14 @@ _SHA = re.compile('[0-9a-f]{64}')
 
 @dataclass
 class OwnOutputGraphExample(NativeGraphExample):
-    """A training graph weighted by ``own-outputs/1``; categories are per flat position."""
+    """A training graph weighted by ``own-outputs/1``; categories are per flat position. ``loss_normalization``
+    ``'token'`` (``mass: 'token'``) scales its summed weighted CE by ``loss_scale`` without dividing by its own mass;
+    each decision readout then counts ``decision_tokens`` reply tokens."""
     objective_categories: tuple = ()
     loss_scale: float = 1.
     objective_sha256: str = ''
+    loss_normalization: str = 'graph'
+    decision_tokens: float = 0.
 
 
 def _token(value, *, optional=False):
@@ -167,12 +180,26 @@ def resolve(declaration):
     if name != NAME:
         raise ValueError(f'unknown supervision objective {name!r}')
     allowed = {'name', 'reasoning_share', 'reasoning_markers', 'family_balance', 'role_tokens', 'decision_readout',
-               *_FIXED}
+               'mass', 'decision_tokens', 'token_reference', *_FIXED}
     if set(declaration) - allowed:
         raise ValueError('unknown own-output objective fields: ' + ', '.join(sorted(set(declaration) - allowed)))
-    for key, fixed in _FIXED.items():
+    mass = declaration.get('mass', 'invocation')
+    if mass not in ('invocation', 'token'):
+        raise ValueError("own-output mass is 'invocation' or 'token'")
+    fixed_fields = _FIXED if mass == 'invocation' else {**_FIXED, 'balance': ['token']}
+    for key, fixed in fixed_fields.items():
         if key in declaration and declaration[key] != fixed:
-            raise ValueError(f'own-outputs/1 fixes {key} = {fixed!r}')
+            raise ValueError(f'own-outputs/1 with {mass} mass fixes {key} = {fixed!r}')
+    token_mass = {}
+    if mass == 'token':
+        for key, default in (('decision_tokens', DEFAULT_DECISION_TOKENS), ('token_reference', DEFAULT_TOKEN_REFERENCE)):
+            value = declaration.get(key, default)
+            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+                raise ValueError(f'own-output {key} must be a finite positive number')
+            token_mass[key] = float(value)
+        token_mass['mass'] = 'token'
+    elif 'decision_tokens' in declaration or 'token_reference' in declaration:
+        raise ValueError('decision_tokens and token_reference belong to token mass')
     share = declaration.get('reasoning_share')
     if type(share) not in (int, float) or not math.isfinite(share) or not 0 <= share < 1:
         raise ValueError('own-output reasoning_share must be explicit, finite and in [0, 1)')
@@ -182,7 +209,7 @@ def resolve(declaration):
     readout = declaration.get('decision_readout', DECISION_READOUT)
     if readout != 'off' and readout != DECISION_READOUT:
         raise ValueError(f"decision_readout is {DECISION_READOUT!r} (default) or 'off'")
-    return {'name': NAME, 'reasoning_share': float(share), 'reasoning_markers': markers, **_FIXED,
+    return {'name': NAME, 'reasoning_share': float(share), 'reasoning_markers': markers, **fixed_fields, **token_mass,
             'decision_readout': readout if readout == 'off' else dict(DECISION_READOUT),
             'family_balance': _family_balance(declaration.get('family_balance')),
             'role_tokens': _role_tokens(declaration.get('role_tokens'))}
@@ -295,10 +322,12 @@ def generated_eligibility(labels, ids, eligible, role_tokens, *, report=None):
     return eligible
 
 
-def sequence_weights(labels, ids, eligible, *, reasoning_share, reasoning_markers='reply', think_ids=()):
+def sequence_weights(labels, ids, eligible, *, reasoning_share, reasoning_markers='reply', think_ids=(),
+                     mass='invocation'):
     """Weights and categories of one invocation under ``own-outputs/1`` (module docstring, steps 1-5).
 
-    Returns ``(weights, categories)``; weights sum to 1 when the invocation has a decision, else 0."""
+    Returns ``(weights, categories)``; with invocation mass the weights sum to 1 when the invocation has a decision,
+    with token mass each decision's weights sum to its number of eligible reply tokens; else 0."""
     size = len(labels)
     if len(ids) != size or len(eligible) != size:
         raise ValueError('own-output roles, token IDs and eligibility must align')
@@ -321,13 +350,13 @@ def sequence_weights(labels, ids, eligible, *, reasoning_share, reasoning_marker
             decisions.append((reply, reasoning))
     weights = [0.] * size
     for reply, reasoning in decisions:
-        mass = 1. / len(decisions)
+        decision_mass = float(len(reply)) if mass == 'token' else 1. / len(decisions)
         share = reasoning_share if reasoning else 0.
         for position in reply:
-            weights[position] = mass * (1. - share) / len(reply)
+            weights[position] = decision_mass * (1. - share) / len(reply)
             categories[position] = REPLY
         for position in reasoning:
-            weights[position] = mass * share / len(reasoning)
+            weights[position] = decision_mass * share / len(reasoning)
             categories[position] = REASONING
     return weights, categories
 
@@ -434,7 +463,7 @@ def graph_weights(row, objective):
         eligible = generated_eligibility(labels, ids, eligible, role_tokens)
         node_weights, node_categories = sequence_weights(labels, ids, eligible,
             reasoning_share=objective['reasoning_share'], reasoning_markers=objective['reasoning_markers'],
-            think_ids=think)
+            think_ids=think, mass=objective.get('mass', 'invocation'))
         weights.extend(node_weights)
         categories.extend(node_categories)
     return weights, categories
@@ -461,12 +490,17 @@ def apply_to_example(example, row, objective, *, family_scales=None):
         if family_scales is None or example.id not in family_scales:
             raise ValueError('family-balanced own-output objective requires its TRAIN census')
         scale = family_scales[example.id]
+    token_mass = objective.get('mass') == 'token'
+    if token_mass:
+        scale /= objective['token_reference']
     from dataclasses import fields
     return OwnOutputGraphExample(**{item.name: getattr(example, item.name) for item in fields(NativeGraphExample)
                                     if item.name not in ('target_weights', 'decisions')},
                                  decisions=() if objective['decision_readout'] == 'off' else example.decisions,
                                  target_weights=tuple(weights), objective_categories=tuple(categories),
-                                 loss_scale=scale, objective_sha256=digest)
+                                 loss_scale=scale, objective_sha256=digest,
+                                 loss_normalization='token' if token_mass else 'graph',
+                                 decision_tokens=objective['decision_tokens'] if token_mass else 0.)
 
 
 def held_measurement_weights(row, objective):
@@ -584,17 +618,20 @@ def continuation_identity(previous_options, policy):
 
 
 DEFAULT_REASONING_SHARE = 0.1
+DEFAULT_DECISION_TOKENS = 16.
+DEFAULT_TOKEN_REFERENCE = 100.
 
 
 def default_objective(tokenizer, *, tokenizer_fingerprint, chat_template=None):
-    """The default ``own-outputs/1`` objective of a model tokenizer (reasoning share 0.1), or ``None`` with the
+    """The default ``own-outputs/1`` objective of a model tokenizer (token mass, reasoning share 0.1), or ``None`` with the
     reason when the tokenizer cannot express it (no ChatML role tokens or no chat template)."""
     try:
         tokens = role_tokens_from_tokenizer(tokenizer, tokenizer_fingerprint=tokenizer_fingerprint,
                                             chat_template=chat_template)
     except (ValueError, TypeError, AttributeError, ImportError) as error:
         return None, f'{type(error).__name__}: {error}'[:500]
-    return resolve({'name': NAME, 'reasoning_share': DEFAULT_REASONING_SHARE, 'role_tokens': tokens}), None
+    return resolve({'name': NAME, 'reasoning_share': DEFAULT_REASONING_SHARE, 'role_tokens': tokens,
+                    'mass': 'token'}), None
 
 
 def with_default_objective(policy, objective, *, previous_options=None):
@@ -662,7 +699,8 @@ def conversion_weights(ids, eligible, objective, *, tokenizer, tokenizer_fingerp
     eligible = [bool(value) and position > 0 for position, value in enumerate(eligible)]
     eligible = generated_eligibility(labels, ids, eligible, objective['role_tokens'])
     weights, categories = sequence_weights(labels, ids, eligible, reasoning_share=objective['reasoning_share'],
-        reasoning_markers=objective['reasoning_markers'], think_ids=_think_ids(objective['role_tokens']))
+        reasoning_markers=objective['reasoning_markers'], think_ids=_think_ids(objective['role_tokens']),
+        mass=objective.get('mass', 'invocation'))
     declaration = {'name': NAME, 'objective_sha256': identity(objective)['sha256'],
                    'reasoning_share': objective['reasoning_share'],
                    'reasoning_markers': objective['reasoning_markers'],

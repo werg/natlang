@@ -390,7 +390,11 @@ def test_own_outputs_are_the_default_objective_and_continuations_adopt_them_with
     weighted = apply_policy(parse_graph(graph, tokenizer_fingerprint='b' * 64), graph, source_sha256='a' * 64,
                             policy=synthesized)
     boundary = ordinary['supervised_suffix_start']
-    assert sum(weighted.target_weights[:boundary]) == 0 and sum(weighted.target_weights) == pytest.approx(1.)
+    # The default is token mass: the reply's weights sum to its eligible reply tokens and the loss is not renormalized.
+    assert default['mass'] == 'token' and weighted.loss_normalization == 'token'
+    reply = sum(1 for category in weighted.objective_categories if category == own.REPLY)
+    assert sum(weighted.target_weights[:boundary]) == 0 and sum(weighted.target_weights) == pytest.approx(reply)
+    assert weighted.loss_scale == pytest.approx(1. / own.DEFAULT_TOKEN_REFERENCE)
 
 
 def test_ce_policy_builder_defaults_to_own_outputs_and_opts_out_explicitly(tmp_path):
@@ -404,3 +408,64 @@ def test_ce_policy_builder_defaults_to_own_outputs_and_opts_out_explicitly(tmp_p
     with pytest.raises(ValueError, match='contradict'):
         main(['--prior-policy', str(prior), '--objective', 'declared-row-weights', '--objective-reasoning-share', '0.2',
               '--out', str(tmp_path / 'y.json')])
+
+
+def test_token_mass_weights_follow_reply_tokens_and_keep_the_reasoning_share():
+    ids = (turn(USER, [40] * 30) + turn(ASSISTANT, [41] * 3, reasoning=[42] * 50) + turn(TOOL, [43] * 20)
+           + turn(ASSISTANT, [44] * 40))
+    labels = own.label_roles(ids, ROLE_TOKENS)
+    eligible = own.generated_eligibility(labels, ids, [True] * len(ids), ROLE_TOKENS)
+    weights, categories = own.sequence_weights(labels, ids, eligible, reasoning_share=.1,
+                                               think_ids=(THINK, UNTHINK), mass='token')
+    runs = own.assistant_runs(labels)
+    first, second = ([i for i in range(begin, end) if categories[i] == own.REPLY] for begin, end in runs)
+    reasoning = [i for i, c in enumerate(categories) if c == own.REASONING]
+    # Each decision weighs as many reply tokens as it emits; reasoning keeps 10% of its decision's mass.
+    assert sum(weights[i] for i in first) == pytest.approx(.9 * len(first))
+    assert sum(weights[i] for i in reasoning) == pytest.approx(.1 * len(first))
+    assert sum(weights[i] for i in second) == pytest.approx(len(second))
+    assert all(weights[i] == pytest.approx(1.) for i in second)
+    assert sum(weights) == pytest.approx(len(first) + len(second))
+
+
+def test_invocation_mass_keeps_its_identity_and_token_mass_is_a_declared_change():
+    historical = objective()
+    assert {'mass', 'decision_tokens', 'token_reference'}.isdisjoint(historical)
+    assert historical['balance'] == ['invocation', 'decision']
+    token = objective(mass='token')
+    assert token['balance'] == ['token'] and token['decision_tokens'] == own.DEFAULT_DECISION_TOKENS
+    assert own.identity(token)['sha256'] != own.identity(historical)['sha256']
+    assert own.identity(objective(mass='invocation')) == own.identity(historical)
+    with pytest.raises(ValueError, match='token mass'):
+        objective(decision_tokens=4)
+    with pytest.raises(ValueError, match='finite positive'):
+        objective(mass='token', token_reference=0)
+    with pytest.raises(ValueError, match='fixes balance'):
+        objective(mass='token', balance=['invocation', 'decision'])
+
+
+@pytest.mark.parametrize('family', ['lfm'])
+def test_trainer_token_mass_loss_is_the_scaled_sum_of_weighted_ce(family):
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+    from natlang_neuralese.train.native_supervision import apply_policy
+    from test_shared_state import tiny
+    model = SharedStateModel(tiny(family), marker_ids=(58, 59, 60, 61), rank=4)
+    rows = [whole_row(rid='long')[0], whole_row(rid='short', fail_second=True)[0]]
+    examples = [apply_policy(parse_graph(item, tokenizer_fingerprint=FP), item, source_sha256='a' * 64,
+                             policy=policy(mass='token', token_reference=50)) for item in rows]
+    sums = []
+    for example in examples:
+        result = model(example.plan, retain_states=False)
+        queries = [i - 1 for i, w in enumerate(example.target_weights) if w > 0]
+        labels = torch.tensor([example.plan.invocations[0].token_ids[i + 1] for i in queries])
+        weights = torch.tensor([example.target_weights[i + 1] for i in queries])
+        ce = F.cross_entropy(model.logits(result['h_final'][0, queries]).float(), labels, reduction='none')
+        sums.append((ce * weights).sum())
+        assert example.loss_scale == pytest.approx(1. / 50) and example.loss_normalization == 'token'
+    # Not divided by each graph's own mass: the longer graph carries proportionally more of the loss.
+    expected = (sums[0] + sums[1]) / 50 / 2
+    loss, details = packed_graph_loss(model, examples, checkpoint_layers=True, chunk_tokens=3)
+    torch.testing.assert_close(loss, expected, rtol=1e-5, atol=1e-6)
+    assert sum(examples[0].target_weights) > sum(examples[1].target_weights)
+    assert [item['own_output'] is not None for item in details] == [True, True]
