@@ -11,6 +11,22 @@ from test_source_objective_index_rekey import case
 from test_native_supervision_mass import declared
 
 
+def use_historical_classifier(monkeypatch, package):
+    """Bind recipe imports to the frozen implementation, not a relabeled current module."""
+    import importlib.util
+    import sys
+    from natlang_neuralese import train
+    name = 'natlang_neuralese.train.native_source_classification'
+    spec = importlib.util.spec_from_file_location(name, package/'train/native_source_classification.py')
+    historical = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(historical)
+    monkeypatch.setitem(sys.modules, name, historical)
+    monkeypatch.setattr(train, 'native_source_classification', historical)
+    from natlang_neuralese.train import native_classification_continuation
+    monkeypatch.setattr(native_classification_continuation, 'm', historical)
+    return historical
+
+
 def test_index_certificate_reuses_digest_but_loads_and_checks_authority(combined, monkeypatch):
     from natlang_neuralese.train import native_classification_continuation as continuation
     _,_,_,prior,*_=combined
@@ -122,8 +138,7 @@ def test_actual_combined_recipe_ce_data_rekey_withdrawal(combined,tmp_path,monke
     with pytest.raises(ValueError, match='producer/policy differs'):
         recipe._ce_supervision_input_continuation(old,new)
     historical = Path(current['objective_policy_continuation']['old_package'])
-    monkeypatch.setattr(m, 'POLICY_FILES', c.POLICY_FILES)
-    monkeypatch.setattr(m, '__file__', str(historical/'train/native_source_classification.py'))
+    use_historical_classifier(monkeypatch, historical)
     assert recipe._ce_supervision_input_continuation(old,new)
     def plan(roles):return {'recipe':{'stages':[{'id':'full','kind':'native_state_sft','inputs':{k:v['binding']for k,v in roles.items()}}]},'stage_inputs':{'full':roles}}
     changes=recipe.unstarted_stage_input_changes(plan(old),plan(new),tmp_path,started_stage_ids=('full',))
@@ -184,8 +199,7 @@ def test_recipe_and_publication_recursively_bind_actual_proof_dependencies(combi
     from scripts.coreweave.provider_dependencies import dependency_closure
     old,save,current,prior,put,index_ref=combined;new=save();ref=new['source_classification_migration']
     historical = Path(current['objective_policy_continuation']['old_package'])
-    monkeypatch.setattr(m, 'POLICY_FILES', c.POLICY_FILES)
-    monkeypatch.setattr(m, '__file__', str(historical/'train/native_source_classification.py'))
+    use_historical_classifier(monkeypatch, historical)
     dependencies=classification_proof_dependencies(ref)
     paths={x['path']for x in dependencies}
     extra=current['objective_policy_continuation'];wd=extra['withdrawals'][0]
