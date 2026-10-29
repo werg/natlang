@@ -36,3 +36,9 @@ def test_rotation_keeps_joint_communication_and_urgent_interleave():
     assert any(entries[i]['training_priority']>0 for i in first)
     assert len({i for b in batches for i in b[1]})==len(entries)
     assert all(value==1 for value in quotas.values())
+
+
+def test_rotation_keeps_fixed_foundation_before_other_communication():
+    entries=[{'id':f'row-{i}','forward_tokens':1,'supervised_tokens':1,'communication':True,'training_priority':0} for i in range(6)]
+    _,batches=pending_exposure_batches(entries,{},epochs=1,batch_graphs=1,rotation_index=3,foundation_ids={'row-0','row-1'})
+    assert {entries[b[1][0]]['id'] for b in batches[:2]}=={'row-0','row-1'}

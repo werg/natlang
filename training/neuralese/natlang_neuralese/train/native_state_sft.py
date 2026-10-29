@@ -163,7 +163,9 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
                     + [batch for batch in lane if batch[1][0] < rotation_index])
         # Keep the existing communication / urgent / ordinary interleave;
         # only choose the tail first inside each existing lane.
-        communication, urgent, ordinary = map(rotate_lane, (communication, urgent, ordinary))
+        communication = (rotate_lane([batch for batch in communication if foundational(batch)])
+                         + rotate_lane([batch for batch in communication if not foundational(batch)]))
+        urgent, ordinary = map(rotate_lane, (urgent, ordinary))
     remaining_foundation_batches = sum(foundational(batch) for batch in communication)
     if urgent and communication:
         interleaved = []
