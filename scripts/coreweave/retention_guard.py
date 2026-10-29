@@ -1,10 +1,13 @@
 """Two-phase, fail-closed paired retention; provider operations are explicit."""
 from __future__ import annotations
+import fcntl
+from pathlib import Path
 from .retention_snapshot import snapshot,refresh_references
 from .retention_evidence import external_references
 from .retention_eligibility import eligible_pair
 from .retention_presence import current_presence
 from .retention_transaction import retire_pair
+from .retention_leases import leased_roles
 
 
 def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, lock_path, state_path, remove, present, write_durable, apply=False):
@@ -43,7 +46,10 @@ def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, loc
             if role in by_role and by_role[role]['identity']['sha256']!=value[key]:raise ValueError('pair receipt identity changed')
         current_presence(api,[by_role[role] for role in sorted(required)])
     if not apply:
-        inspect(candidate,'dry')
+        with Path(lock_path).open('a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX)
+            if {candidate['role'],candidate['control_role']} & leased_roles(Path(state_path).parent/'standalone-retention-consumer-leases.json'):raise ValueError('active consumer lease protects retirement pair')
+            inspect(candidate,'prepare')
         return {'mode':'dry','role':candidate['role'],'control_role':candidate['control_role'],'deletion_authorized':False,'scope':'point-in-time JSON scan; managed consumer leases and owner state require the shared commit lock'}
     return retire_pair(lock_path=lock_path,state_path=state_path,candidate=candidate,inspect=inspect,remove=remove,present=present,write_durable=write_durable)
 
@@ -72,5 +78,9 @@ def guarded_full(*, candidate, roots, scan, reference_scope, read_live, api, loc
         if value['role'] in by_role and by_role[value['role']]['identity']['sha256']!=value['sha256']:raise ValueError('full receipt identity changed')
         current_presence(api,[by_role[role] for role in sorted(required)])
     if not apply:
-        inspect(candidate,'dry');return {'mode':'dry','role':candidate['role'],'deletion_authorized':False,'scope':'point-in-time JSON scan; managed consumer leases and owner state require the shared commit lock'}
+        with Path(lock_path).open('a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX)
+            if candidate['role'] in leased_roles(Path(state_path).parent/'standalone-retention-consumer-leases.json'):raise ValueError('active consumer lease protects checkpoint')
+            inspect(candidate,'prepare')
+        return {'mode':'dry','role':candidate['role'],'deletion_authorized':False,'scope':'point-in-time JSON scan; managed consumer leases and owner state require the shared commit lock'}
     return retire_full(lock_path=lock_path,state_path=state_path,candidate=candidate,inspect=inspect,remove=remove,present=present,write_durable=write_durable)
