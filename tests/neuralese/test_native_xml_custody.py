@@ -85,7 +85,7 @@ def test_dpo_uses_exact_authenticated_xml_projection_and_preserves_prompt_tools(
 def test_real_captured_assistant_content_with_synthetic_custody_envelope():
     # The content is the saved graph-80 model response; its request envelope was
     # reconstructed for this test and is not claimed as the original transport.
-    path=Path('/home/werg/data/dgxops/claude-recovery-20261028/data/training-bug-audit-v1/synthetic-wrapper-real-xml-turn.json')
+    path=Path('/home/werg/data/dgxops/claude-recovery-20261028/data/training-bug-audit-v1/synthetic-wrapper-real-xml-turn-schema-v2.json')
     if not path.is_file():pytest.skip('captured graph-80 response unavailable')
     turn=json.loads(path.read_text())
     assert authenticate(turn) and turn['model_response']['raw_calls']==[]
@@ -106,7 +106,7 @@ def test_capture_to_offline_pair_to_dpo_and_forged_evidence(captured):
     tok=AutoTokenizer.from_pretrained(base,trust_remote_code=False);bind_history_reasoning(tok,policy='keep')
     source=fixture()
     if captured:
-        path=Path('/home/werg/data/dgxops/claude-recovery-20261028/data/training-bug-audit-v1/synthetic-wrapper-real-xml-turn.json')
+        path=Path('/home/werg/data/dgxops/claude-recovery-20261028/data/training-bug-audit-v1/synthetic-wrapper-real-xml-turn-schema-v2.json')
         if not path.is_file():pytest.skip('captured graph-80 response unavailable')
         source=json.loads(path.read_text())
     def trajectory(name):
@@ -142,3 +142,39 @@ def test_failure_repair_retains_and_rechecks_sampled_xml_evidence():
     _merge_graphs(pair,'tok')
     forged=copy.deepcopy(pair);forged['alternatives']['failed']['native_xml_turns'][0]['target']['tool_calls'][0]['function']['arguments']='{}'
     with pytest.raises(ValueError):_merge_graphs(forged,'tok')
+
+
+def test_schema_semantics_reference_structural_equality_and_boolean_values():
+    from natlang_neuralese.data.native_xml_custody import _valid
+    schema={'$defs':{'item':{'anyOf':[{'type':'null'},{'type':'object','const':{'a':1,'b':'😀'}}]}},'$ref':'#/$defs/item'}
+    assert _valid(schema,{'b':'😀','a':1}) and _valid(schema,None)
+    assert not _valid(schema,{'a':True,'b':'😀'})
+    assert not _valid({'type':'array','uniqueItems':True,'items':True},[{'a':1,'b':2},{'b':2,'a':1}])
+    assert _valid({'type':'array','items':True},[1,None]) and not _valid({'type':'array','items':False},[1])
+    assert _valid({'type':['null','string'],'maxLength':1},'😀')
+    assert not _valid({'type':'string','maxLength':1},'😀x')
+
+
+def test_schema_reference_authenticates_typed_response():
+    turn=fixture();params=turn['response_tools'][0]['function']['parameters']
+    params['$defs']={'source':{'type':'string','minLength':1}}
+    params['properties']['code']={'$ref':'#/$defs/source'}
+    turn['model_request']['response_tools']=copy.deepcopy(turn['response_tools'])
+    request={k:v for k,v in turn['model_request'].items() if k!='invocation_id'}
+    encoded=json.dumps(request,sort_keys=True,separators=(',',':'),ensure_ascii=False)
+    turn['model_request_canonical']=encoded;turn['request_sha256']=hashlib.sha256(encoded.encode()).hexdigest()
+    assert authenticate(turn)==[['eval',{'code':'const a = 1 < 2;'}]]
+
+
+def test_typed_additional_properties_match_native_parser():
+    turn=fixture();params=turn['response_tools'][0]['function']['parameters']
+    params['additionalProperties']={'type':'number'}
+    turn['model_request']['response_tools']=copy.deepcopy(turn['response_tools'])
+    request={k:v for k,v in turn['model_request'].items() if k!='invocation_id'}
+    encoded=json.dumps(request,sort_keys=True,separators=(',',':'),ensure_ascii=False)
+    turn['model_request_canonical']=encoded;turn['request_sha256']=hashlib.sha256(encoded.encode()).hexdigest()
+    raw=turn['model_response']['raw_response'];raw['choices'][0]['message']['content']=raw['choices'][0]['message']['content'].replace('</function>', '<parameter=count>\n3\n</parameter>\n</function>')
+    encoded=json.dumps(raw,sort_keys=True,separators=(',',':'),ensure_ascii=False)
+    turn['model_response']['raw_response_canonical']=encoded;turn['raw_response_sha256']=hashlib.sha256(encoded.encode()).hexdigest()
+    turn['model_response']['calls'][0][1]['count']=3;turn['assistant']['calls'][0]['arguments']['count']=3
+    assert authenticate(turn)[0][1]['count']==3

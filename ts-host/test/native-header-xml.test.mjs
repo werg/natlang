@@ -46,3 +46,12 @@ test('native parser policy and complete captured custody authenticate; forged bi
     const forged=structuredClone(captured);mutate(forged);assert.throws(()=>authenticateNativeXmlTurn(forged));
   }
 });
+test('JSON schema references, boolean schemas and structural equality follow native semantics',()=>{
+ const schema={type:'object',properties:{value:{$ref:'#/$defs/item'}},required:['value'],additionalProperties:false,$defs:{item:{anyOf:[{type:'null'},{type:'object',properties:{a:{type:'integer'},b:{type:'string'}},required:['a','b'],const:{a:1,b:'😀'},additionalProperties:false}]}}};
+ const t=[{function:{name:'f',parameters:schema}}];
+ assert.deepEqual(parseNativeXmlCalls(call('f',{value:'{"b":"😀","a":1}'}),t),[['f',{value:{b:'😀',a:1}}]]);
+ assert.deepEqual(parseNativeXmlCalls(call('f',{value:'null'}),t),[['f',{value:null}]]);
+ const u=tool('u',{value:{type:'array',uniqueItems:true,items:true}},['value']);
+ assert.throws(()=>parseNativeXmlCalls(call('u',{value:'[{"a":1,"b":2},{"b":2,"a":1}]'}),[u]));
+ assert.deepEqual(parseNativeXmlCalls(call('u',{value:'[{"a":1},{"a":2}]'}),[u]),[['u',{value:[{a:1},{a:2}]}]]);
+});

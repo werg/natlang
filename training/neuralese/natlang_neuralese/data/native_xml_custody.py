@@ -1,11 +1,11 @@
 """Authenticate assistant-content XML actions without inventing provider tool calls."""
 from __future__ import annotations
 import copy, hashlib, json, math, re
-from ..serve.chat import parse_xml_calls
+from ..serve.chat import parse_xml_calls,scan_xml_calls
 
-POLICY_SHA256 = '8e7ef9bf5fe166b706b301170e86e72a51917016426ff54f820d6acd697ab058'
+POLICY_SHA256 = '1b2713adb032003d3522794fe65b75f03d9b31a1453bc86027f544f460bc315e'
 _ANNOTATIONS={'description','title','default','examples','$schema','deprecated','readOnly','writeOnly'}
-_SUPPORTED={'type','properties','required','additionalProperties','items','enum','const','anyOf','oneOf','allOf','minimum','maximum','exclusiveMinimum','exclusiveMaximum','minLength','maxLength','pattern','minItems','maxItems','uniqueItems'}|_ANNOTATIONS
+_SUPPORTED={'type','properties','required','additionalProperties','items','enum','const','anyOf','oneOf','allOf','minimum','maximum','exclusiveMinimum','exclusiveMaximum','minLength','maxLength','pattern','minItems','maxItems','uniqueItems','$ref','$defs','definitions'}|_ANNOTATIONS
 
 def _matches(kind,value):
     return {'null':value is None,'object':isinstance(value,dict),'array':isinstance(value,list),
@@ -13,15 +13,36 @@ def _matches(kind,value):
             'integer':type(value) in (int,float) and math.isfinite(value) and value==int(value) and abs(value)<=9007199254740991,
             'number':type(value) in (int,float) and math.isfinite(value)}.get(kind,False)
 
-def _valid(schema,value):
+def _resolve(ref,root):
+    if not isinstance(ref,str) or not ref.startswith('#/'):raise ValueError('unsupported schema reference')
+    node=root
+    for part in ref[2:].split('/'):
+        part=part.replace('~1','/').replace('~0','~')
+        if not isinstance(node,dict) or part not in node:raise ValueError('unresolved schema reference')
+        node=node[part]
+    if not isinstance(node,(dict,bool)):raise ValueError('invalid schema reference')
+    return node
+
+def _equal(a,b):
+    if type(a) is bool or type(b) is bool:return type(a) is type(b) and a==b
+    if type(a) in (int,float) and type(b) in (int,float):return a==b
+    if isinstance(a,list) and isinstance(b,list):return len(a)==len(b) and all(_equal(x,y) for x,y in zip(a,b))
+    if isinstance(a,dict) and isinstance(b,dict):return a.keys()==b.keys() and all(_equal(a[k],b[k]) for k in a)
+    return type(a) is type(b) and a==b
+
+def _valid(schema,value,root=None,depth=0):
+    if depth>64:return False
+    if isinstance(schema,bool):return schema
+    if root is None:root=schema
     if not isinstance(schema,dict) or any(k not in _SUPPORTED and not k.startswith('x-') for k in schema):return False
+    if '$ref' in schema and not _valid(_resolve(schema['$ref'],root),value,root,depth+1):return False
     kind=schema.get('type');kinds=kind if isinstance(kind,list) else [kind]
     if kind is not None and not any(_matches(k,value) for k in kinds):return False
-    if 'enum' in schema and not any((type(value)==type(x) or type(value) in (int,float) and type(x) in (int,float)) and value==x for x in schema['enum']):return False
-    if 'const' in schema and not ((type(value)==type(schema['const']) or type(value) in (int,float) and type(schema['const']) in (int,float)) and value==schema['const']):return False
-    if 'anyOf' in schema and not any(_valid(s,value) for s in schema['anyOf']):return False
-    if 'oneOf' in schema and sum(_valid(s,value) for s in schema['oneOf'])!=1:return False
-    if 'allOf' in schema and not all(_valid(s,value) for s in schema['allOf']):return False
+    if 'enum' in schema and not any(_equal(value,x) for x in schema['enum']):return False
+    if 'const' in schema and not _equal(value,schema['const']):return False
+    if 'anyOf' in schema and not any(_valid(s,value,root,depth+1) for s in schema['anyOf']):return False
+    if 'oneOf' in schema and sum(_valid(s,value,root,depth+1) for s in schema['oneOf'])!=1:return False
+    if 'allOf' in schema and not all(_valid(s,value,root,depth+1) for s in schema['allOf']):return False
     if type(value) in (int,float):
         for key,cmp in (('minimum',lambda a,b:a>=b),('maximum',lambda a,b:a<=b),('exclusiveMinimum',lambda a,b:a>b),('exclusiveMaximum',lambda a,b:a<b)):
             if key in schema and not cmp(value,schema[key]):return False
@@ -30,15 +51,26 @@ def _valid(schema,value):
         if 'pattern' in schema and not re.search(schema['pattern'],value):return False
     if isinstance(value,list):
         if len(value)<schema.get('minItems',0) or len(value)>schema.get('maxItems',float('inf')):return False
-        if schema.get('uniqueItems') and len({json.dumps(x,sort_keys=True,ensure_ascii=False) for x in value})!=len(value):return False
-        if 'items' in schema and not all(_valid(schema['items'],x) for x in value):return False
+        if schema.get('uniqueItems') and any(_equal(x,y) for i,x in enumerate(value) for y in value[:i]):return False
+        if 'items' in schema and not all(_valid(schema['items'],x,root,depth+1) for x in value):return False
     if isinstance(value,dict):
         props=schema.get('properties') or {}
         if any(k not in value for k in schema.get('required',[])):return False
         for key,item in value.items():
             sub=props.get(key,schema.get('additionalProperties',True))
-            if sub is False or (isinstance(sub,dict) and not _valid(sub,item)):return False
+            if sub is False or (isinstance(sub,dict) and not _valid(sub,item,root,depth+1)):return False
     return True
+
+def _types_for_parser(schema,root,depth=0):
+    if depth>64:raise ValueError('recursive schema reference')
+    if not isinstance(schema,dict):return schema
+    schema=copy.deepcopy(schema)
+    if '$ref' in schema:
+        target=_types_for_parser(_resolve(schema.pop('$ref'),root),root,depth+1)
+        if isinstance(target,dict):schema={**target,**schema}
+    for key in ('anyOf','oneOf'):
+        if isinstance(schema.get(key),list):schema[key]=[_types_for_parser(x,root,depth+1) for x in schema[key]]
+    return schema
 
 def authenticate(turn):
     """Return exact normalized actions; all custody violations raise ValueError."""
@@ -60,7 +92,17 @@ def authenticate(turn):
             reverse[wire]=name;fn['name']=wire
         choice=raw['choices'][0];message=choice['message']
         if choice.get('finish_reason')=='length' or not isinstance(message.get('content'),str) or message.get('tool_calls'):raise ValueError('native XML response incomplete')
-        parsed=parse_xml_calls(message['content'],tools);schema_by={x['function']['name']:x['function']['parameters'] for x in tools}
+        parser_tools=copy.deepcopy(tools)
+        for tool in parser_tools:
+            parameters=tool['function']['parameters'];effective=_types_for_parser(parameters,parameters);properties=effective.get('properties') or {}
+            typed={key:_types_for_parser(value,parameters) for key,value in properties.items()}
+            extra=effective.get('additionalProperties',True)
+            for frame in scan_xml_calls(message['content']):
+                if frame.name==tool['function']['name']:
+                    for parameter in frame.parameters:
+                        if parameter.key not in typed:typed[parameter.key]=_types_for_parser(extra,parameters)
+            tool['function']['parameters']={**effective,'properties':typed}
+        parsed=parse_xml_calls(message['content'],parser_tools);schema_by={x['function']['name']:x['function']['parameters'] for x in tools}
         if not parsed or any(name not in schema_by or not _valid(schema_by[name],args) for name,args in parsed):raise ValueError('native XML action violates allowed schema')
         calls=[[reverse[name],args] for name,args in parsed];assistant=turn['assistant']
         if response.get('text')!='' or assistant.get('content')!='' or response['calls']!=calls or len(assistant['calls'])!=len(calls):raise ValueError('native XML recorded response differs')
