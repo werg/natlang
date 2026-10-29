@@ -1477,6 +1477,7 @@ export class NativeToolAgent {
           ...(guidanceRequest ? { privileged_context: guidanceRequest } : {}),
           ...(guidancePolicy ? { guidance_policy: guidancePolicy } : {}),
           messages: encoded.messages, tools: this.options.promptRendering === 'program-header' ? [] : availableTools,
+          ...(this.options.promptRendering === 'program-header' ? { response_tools: availableTools } : {}),
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools && this.options.promptRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
