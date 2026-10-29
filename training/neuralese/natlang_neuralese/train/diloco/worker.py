@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import http.client
 import os
+import re
 import tempfile
 import threading
 import time
@@ -489,6 +490,28 @@ class DilocoLearner:
         self.awaiting_global = set()
         self._start_heartbeat()
         return deviations
+
+    def await_reanchor_cohort(self, checkpoint_sha256: str, *, source_hash: str, held_sha256: str,
+                              stop_requested=lambda: False) -> None:
+        """Wait for every live peer to publish its durable reanchor checkpoint."""
+        if not re.fullmatch(r'[0-9a-f]{64}', checkpoint_sha256):
+            raise ValueError('reanchor requires a full checkpoint digest')
+        marker = self.manifest['fingerprint']
+        self.report = {**self.report, 'reanchor_fingerprint': marker,
+                       'reanchor_checkpoint_sha256': checkpoint_sha256, 'reanchor_session': self.session,
+                       'reanchor_source_hash': source_hash, 'reanchor_held_sha256': held_sha256}
+        while not stop_requested():
+            status = self._with_lease(lambda: self.transport.json('POST', '/v1/progress', {
+                'worker': self.worker, 'session': self.session,
+                'steps': self.local_steps, 'tokens': self.local_tokens, 'metrics': self.report}))
+            self._update_status(status)
+            released = status.get('reanchor_release') or {}
+            if (released.get('fingerprint') == marker and released.get('source_hash') == source_hash
+                    and released.get('held_sha256') == held_sha256
+                    and len(released.get('checkpoints', [])) == self.settings.workers):
+                return
+            time.sleep(.5)
+        raise RuntimeError('reanchor cohort interrupted before every durable peer was ready')
 
     def resume(self, value: dict) -> None:
         if value["protocol"] != PROTOCOL or value["fingerprint"] != self.manifest["fingerprint"]:

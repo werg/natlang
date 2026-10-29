@@ -254,6 +254,19 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
     def training_inputs(training):
         if not isinstance(training, dict):
             return
+        for options in (training.get('options') or {}, training.get('training_options') or {}):
+            transition = options.get('new_outer_reanchor')
+            if transition is not None:
+                if transition.get('schema') != 'natlang.diloco-new-outer-transition/1':
+                    raise ValueError('invalid new outer recovery transition')
+                for name in ('declaration', 'parent', 'historical_outer_checkpoint', 'seed'):
+                    reference = transition.get(name)
+                    if not isinstance(reference, dict):
+                        raise ValueError('new outer recovery lacks dependency ' + name)
+                    bound(reference)
+                if transition['declaration']['sha256'] != transition.get('declaration_sha256') or \
+                        transition['seed']['sha256'] != transition.get('seed_sha256'):
+                    raise ValueError('new outer recovery dependency binding differs')
         foundation_inputs(training.get('options') or {})
         foundation_inputs(training.get('training_options') or {})
         packed_capacity_inputs(training.get('options') or {})

@@ -143,6 +143,24 @@ def test_config_cycle_and_external_payloads_fail_before_launch(tmp_path):
     path=tmp_path/'config.json';config=write(path,{'semantic_refresh_config':str(path)})
     with pytest.raises(ValueError,match='cycle'):
         deps.dependency_closure({'config':config},namespace=str(tmp_path))
+
+
+def test_new_outer_transition_publishes_all_exact_recovery_dependencies(tmp_path):
+    import torch
+    refs = {name:write(tmp_path / name, name) for name in ('declaration', 'parent', 'historical', 'seed')}
+    transition = {'schema':'natlang.diloco-new-outer-transition/1', 'declaration':refs['declaration'],
+                  'parent':refs['parent'], 'historical_outer_checkpoint':refs['historical'], 'seed':refs['seed'],
+                  'declaration_sha256':refs['declaration']['sha256'], 'seed_sha256':refs['seed']['sha256']}
+    path = tmp_path / 'checkpoint.pt'
+    torch.save({'schema':'natlang.neuralese-native-checkpoint/1',
+                'training':{'options':{'new_outer_reanchor':transition}}}, path)
+    checkpoint = {'path':str(path), 'sha256':deps.sha256_file_hex_cached(path), 'bytes':path.stat().st_size}
+    closure = deps.dependency_closure({'parent_checkpoint':checkpoint}, namespace=str(tmp_path))
+    files = {row['path'] for row in closure['files']}
+    assert all(ref['path'] in files for ref in refs.values())
+    Path(refs['historical']['path']).write_text('tampered')
+    with pytest.raises(ValueError, match='hash changed'):
+        deps.dependency_closure({'parent_checkpoint':checkpoint}, namespace=str(tmp_path))
     config=write(path,{'seed_native_graphs':str(tmp_path.parent/'external.jsonl')})
     with pytest.raises(ValueError,match='escaped'):
         deps.dependency_closure({'config':config},namespace=str(tmp_path))

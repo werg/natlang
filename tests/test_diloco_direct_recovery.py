@@ -59,6 +59,35 @@ def test_direct_control_validates_actual_cohort_and_all_launch_bindings(tmp_path
     with pytest.raises(ValueError,match='binding differs'):mod.load_control(descriptor,record)
 
 
+def test_direct_reanchor_requires_every_peer_declaration_and_parent_custody(tmp_path):
+    mod=load('diloco_direct_recovery');descriptor,control,_,_=fixture(tmp_path)
+    def put(name,value):
+        path=tmp_path/name;path.write_text(json.dumps(value))
+        return {'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+    argv=json.loads(Path(control['bindings']['worker_argv']['path']).read_text())
+    argv += ['--diloco-new-outer','/work/reanchor.json']
+    control['bindings']['worker_argv']=put('worker.json',argv)
+    coord=json.loads(Path(control['bindings']['coordinator_argv']['path']).read_text())
+    coord[coord.index('--trainer-argv')+1]=json.dumps(argv)
+    control['bindings']['coordinator_argv']=put('coord.json',coord)
+    external=[]
+    for index in range(4):
+        parent={'sha256':str(index)*64,'bytes':index+1}
+        old={'sha256':str(index+4)*64,'bytes':index+10}
+        external.extend([parent,old])
+        declaration={'schema':'natlang.diloco-new-outer/1','worker':index,'seed_sha256':'a'*64,
+                     'source_hash':'b'*64,'held_sha256':'c'*64,'parent':parent,
+                     'historical_outer_checkpoint':old}
+        control['bindings'][f'reanchor_worker_{index}']=put(f'reanchor-{index}.json',declaration)
+    control['external_dependencies']=external
+    descriptor.write_text(json.dumps(control));record=mod.record_from_control(descriptor,'run')
+    mod.load_control(descriptor,record)
+    control['external_dependencies'].pop()
+    descriptor.write_text(json.dumps(control))
+    with pytest.raises(ValueError,match='privately verified'):
+        mod.load_control(descriptor,record)
+
+
 def test_real_backend_constructs_from_nonresident_control(tmp_path,monkeypatch):
     from types import SimpleNamespace
     service=load('diloco_periodic_recovery');mod=load('diloco_direct_recovery');descriptor,_,_,_=fixture(tmp_path)

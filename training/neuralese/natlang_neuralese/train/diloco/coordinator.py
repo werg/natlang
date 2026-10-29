@@ -330,6 +330,24 @@ class Coordinator:
                 entry["seen"] = time.time()
             self.progress["workers"][str(worker)] = entry
             self.progress["leases"][str(worker)]["expires"] = time.time() + self.manifest["lease_seconds"]
+            # A fresh outer may train only after every peer has durably saved
+            # its own transition. Persist the release so a restarted peer does
+            # not require all peers to rendezvous again after training begins.
+            if not self.progress.get('reanchor_release'):
+                peers = [self.progress['workers'].get(str(i), {}).get('metrics', {})
+                         for i in range(self.manifest['workers'])]
+                leases = [self.progress['leases'].get(str(i), {}) for i in range(self.manifest['workers'])]
+                if all(lease.get('expires', 0) >= time.time() and
+                       peer.get('reanchor_session') == lease.get('session') and
+                       peer.get('reanchor_fingerprint') == self.manifest['fingerprint'] and
+                       re.fullmatch(r'[0-9a-f]{64}', str(peer.get('reanchor_checkpoint_sha256', '')))
+                       for peer, lease in zip(peers, leases, strict=True)) and len({
+                           (p.get('reanchor_source_hash'), p.get('reanchor_held_sha256')) for p in peers}) == 1:
+                    source, held = peers[0].get('reanchor_source_hash'), peers[0].get('reanchor_held_sha256')
+                    if source and held:
+                        self.progress['reanchor_release'] = {'fingerprint':self.manifest['fingerprint'],
+                            'source_hash':source, 'held_sha256':held,
+                            'checkpoints':[p['reanchor_checkpoint_sha256'] for p in peers]}
             self._write_progress()
             return self._progress_status()
 
@@ -426,6 +444,7 @@ class Coordinator:
                 "merges": self.progress["merges"],
                 "versions": list(self.published_versions),
                 "live_workers": sum(x["expires"] >= time.time() for x in self.progress["leases"].values()),
+                "reanchor_release": self.progress.get('reanchor_release'),
                 "worker_progress": {k: dict(v) for k, v in self.progress["workers"].items()},
                 "registered": dict(self.progress.get("registered", {})),
                 "start_waits": dict(self.progress.get("start_waits", {})),

@@ -1168,6 +1168,8 @@ def build_parser():
     parser.add_argument('--task-eval', default=None)
     parser.add_argument('--diloco', default=None,
         help='JSON DiLoCo learner block: train this learner\'s shard against a coordinator (train/native_diloco.py)')
+    parser.add_argument('--diloco-new-outer', type=Path, default=None,
+        help='authenticated per-peer declaration for recovery onto a fresh outer coordinator')
     parser.add_argument('--standalone-diloco-parent', type=Path, default=None,
         help='immutable full checkpoint retaining prior DiLoCo custody for standalone continuation')
     parser.add_argument('--task-eval-every', type=int, default=0)
@@ -2333,6 +2335,21 @@ def _main(argv=None, *, requested_refresh):
     # version or contribution credit until a separately recorded reattachment.
     previous_outer = (resume or {}).get('diloco')
     prior_outer_history = list(((resume or {}).get('options') or {}).get('standalone_diloco_history') or [])
+    prior_new_outer = ((resume or {}).get('options') or {}).get('new_outer_reanchor')
+    if prior_new_outer is not None:
+        checkpoint_options['new_outer_reanchor'] = prior_new_outer
+    new_outer_proof = new_outer_sha = None
+    new_outer_resumed = False
+    if args.diloco_new_outer is not None:
+        if args.diloco is None or args.continue_from is None or parent_continuation or not policy.slot.is_file():
+            raise ValueError('new outer requires a resumed peer slot and a fresh coordinator')
+        from .native_diloco import validate_new_outer
+        from .diloco.worker import DilocoSettings
+        new_outer_proof, new_outer_sha, new_outer_resumed = validate_new_outer(
+            args.diloco_new_outer, slot=policy.slot, seed=args.continue_from,
+            worker=DilocoSettings.from_dict(json.loads(args.diloco)).resolved_worker_id, source_hash=source_hash,
+            held_sha256=held.file_sha256, history=prior_outer_history,
+            saved=(resume or {}).get('options'))
     if args.diloco is None and previous_outer is not None:
         if args.standalone_diloco_parent is None or not policy.slot.is_file():
             raise ValueError('standalone continuation from DiLoCo requires an immutable full checkpoint pin')
@@ -2353,7 +2370,7 @@ def _main(argv=None, *, requested_refresh):
                 (prior_outer_history[-1].get('checkpoint') or {}).get('bytes') != pin.stat().st_size):
             raise ValueError('standalone DiLoCo custody pin does not match committed history')
     saved_rejoin = ((resume or {}).get('options') or {}).get('standalone_diloco_rejoin')
-    if args.diloco is not None and not parent_continuation and prior_outer_history:
+    if args.diloco is not None and not parent_continuation and prior_outer_history and args.diloco_new_outer is None:
         if (not isinstance(saved_rejoin,dict) or saved_rejoin.get('schema')!='natlang.diloco-standalone-rejoin/1'
                 or saved_rejoin.get('outer_history')!='new' or not (resume or {}).get('diloco')
                 or saved_rejoin.get('historical_outer_checkpoint')!=prior_outer_history[-1]['checkpoint']):
@@ -2371,7 +2388,7 @@ def _main(argv=None, *, requested_refresh):
                 'historical_outer_checkpoint':prior_outer_history[-1]['checkpoint']}
     from .native_diloco import attach_learner
     diloco_identity_transition = None
-    if args.diloco is not None and not parent_continuation and (source_correction_result.get('changed') or diloco_withdrawal_changed or diloco_append_changed):
+    if args.diloco_new_outer is None and args.diloco is not None and not parent_continuation and (source_correction_result.get('changed') or diloco_withdrawal_changed or diloco_append_changed):
         diloco_identity_transition = {'schema':'natlang.diloco-source-identity-transition/1',
             'correction_verified':True, 'checkpoint_sha256':sha256_file_hex_cached(policy.slot),
             'correction_sha256':(source_correction_result.get('proof_sha256') if source_correction_result.get('changed') else sha256_file_hex_cached(args.withdrawn_native_graphs) if diloco_withdrawal_changed else source_receipts[0]['sha256']),
@@ -2379,19 +2396,37 @@ def _main(argv=None, *, requested_refresh):
             'withdrawal_sha256':sha256_file_hex_cached(args.withdrawn_native_graphs) if diloco_withdrawal_changed else None,
             'previous_source_hash':diloco_previous_source_hash, 'source_hash':source_hash,
             'stage_id':args.stage_id, 'recipe_binding':args.recipe_binding}
-    if args.diloco is not None and not parent_continuation and diloco_identity_transition is None:
+    if args.diloco_new_outer is None and args.diloco is not None and not parent_continuation and diloco_identity_transition is None:
         carried=((resume or {}).get('options') or {}).get('diloco_identity_transition_history') or []
         if carried and diloco_previous_source_hash==source_hash:
             diloco_identity_transition={**carried[-1], 'replay_verified_checkpoint_sha256':sha256_file_hex_cached(policy.slot)}
     diloco = attach_learner(args, named, parent_continuation=parent_continuation,
                             saved_state=None if parent_continuation or (args.diloco is None and args.standalone_diloco_parent is not None) else (resume or {}).get('diloco'),
-                            argv=argv, source_transition=diloco_identity_transition)
+                            argv=argv, source_transition=diloco_identity_transition,
+                            new_outer=new_outer_proof is not None and not new_outer_resumed)
     checkpoint_options['_diloco_learner'] = diloco
+    if new_outer_proof is not None:
+        checkpoint_options['new_outer_reanchor'] = ((resume or {}).get('options') or {}).get('new_outer_reanchor') or {
+            'schema':'natlang.diloco-new-outer-transition/1', 'declaration_sha256':new_outer_sha,
+            'declaration':{'path':str(args.diloco_new_outer.resolve()), 'sha256':new_outer_sha,
+                           'bytes':args.diloco_new_outer.stat().st_size},
+            'parent':new_outer_proof['parent'], 'historical_outer_checkpoint':new_outer_proof['historical_outer_checkpoint'],
+            'seed_sha256':new_outer_proof['seed_sha256'],
+            'seed':{'path':str(args.continue_from.resolve()), 'sha256':new_outer_proof['seed_sha256'],
+                    'bytes':args.continue_from.stat().st_size},
+            'source_hash':source_hash, 'held_sha256':held.file_sha256,
+            'fingerprint':diloco.manifest['fingerprint'], 'worker':diloco.worker, 'global_step':global_step,
+            'old_outer':'lost; pending and accepted windows are historical and not replayed',
+            'initial_deviations':diloco.reanchor_deviations}
+        checkpoint_options['standalone_diloco_rejoin'] = {
+            'schema':'natlang.diloco-standalone-rejoin/1', 'parent':new_outer_proof['parent'],
+            'global_step':global_step, 'outer_history':'new',
+            'historical_outer_checkpoint':prior_outer_history[-1]['checkpoint']}
     if diloco is not None and getattr(diloco,'identity_transition',None):
         history=checkpoint_options.setdefault('diloco_identity_transition_history',list(((resume or {}).get('options') or {}).get('diloco_identity_transition_history') or []))
         if diloco.identity_transition not in history:history.append(diloco.identity_transition)
     reopened_diloco=False
-    if diloco is not None and not parent_continuation and resume:
+    if diloco is not None and not parent_continuation and resume and new_outer_proof is None:
         previous_delivery=((resume.get('options') or {}).get('diloco_final_delivery') or {})
         previous_source=resume.get('source_hash')
         if previous_delivery and previous_source != source_hash:
@@ -2414,11 +2449,12 @@ def _main(argv=None, *, requested_refresh):
     lineage_checkpoint_sha = (sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
                               if parent_continuation or policy.slot.exists() else None)
     if diloco is not None and ema_spec and ema_spec.get('off') and saved_ema is not None:
-        if not parent_continuation or not lineage_checkpoint_sha:
+        if (not parent_continuation and new_outer_proof is None) or not lineage_checkpoint_sha:
             raise ValueError('retiring carried learner EMA requires an exact full parent checkpoint')
         checkpoint_options['weight_ema_resolution'] = {
             **ema_resolution, 'transition': 'local-ema-retired-for-coordinator-ema',
-            'parent_checkpoint': {'path': str(args.continue_from), 'sha256': lineage_checkpoint_sha},
+            'parent_checkpoint': {'path': str(args.continue_from) if parent_continuation else new_outer_proof['parent']['path'],
+                                  'sha256': lineage_checkpoint_sha},
             'parent_ema': {key: saved_ema.get(key) for key in ('schema', 'updates', 'decay', 'warmup', 'seed', 'provenance')},
             'weights_optimizer_rng_exposure': 'preserved',
             'coordinator_ema': 'separate-global-version-history'}
@@ -2674,6 +2710,21 @@ def _main(argv=None, *, requested_refresh):
     specialized_recovery_attempted = False
     loop_error = None
     loop_error_tb = None
+    if new_outer_proof is not None and diloco.local_steps == 0:
+        # Publish no readiness until the full peer-specific model, optimizer,
+        # RNG, exposure and new baselines are durable in the rolling slot.
+        if not new_outer_resumed:
+            _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                source_hash=source_hash, source_row_bindings=source_row_bindings,
+                held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                rng=capture_training_rng_state(args.device), metrics=metrics,
+                architecture=config['architecture'], options={**checkpoint_options, '_source_row_order':source_order},
+                fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+            last_saved_step = step
+            metadata_dirty = False
+        diloco.await_reanchor_cohort(sha256_file_hex_cached(policy.slot), source_hash=source_hash,
+                                     held_sha256=held.file_sha256, stop_requested=lambda: policy.signaled)
     try:
         while not policy.signaled and not foundation_pending():
             # Surface writer failures at the update boundary, before fetching

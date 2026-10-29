@@ -23,13 +23,15 @@ def _flag(argv,name):
 
 def _identity_argv(argv):
     """Match native_diloco.trainer_argv without importing torch in the operator."""
+    reanchor=any(x=='--diloco-new-outer' or x.startswith('--diloco-new-outer=') for x in argv)
+    omitted=('--diloco','--diloco-new-outer')+(('--standalone-diloco-parent',) if reanchor else ())
     result=[];i=0
     while i<len(argv):
         value=argv[i]
-        if value=='--diloco':
+        if value in omitted:
             if i+1>=len(argv):raise ValueError('missing DiLoCo argument')
             i+=2;continue
-        if not value.startswith('--diloco='):result.append(value)
+        if not value.startswith(tuple(x+'=' for x in omitted)):result.append(value)
         i+=1
     return result
 
@@ -94,6 +96,23 @@ def load_control(path, record, *, control_bytes=None, read_bound=None, verify_he
         raise ValueError('direct run settings differ from actual cohort')
     if _flag(coord,'--parent')!=_flag(argv,'--continue-from'):
         raise ValueError('direct coordinator and worker parent differ')
+    if '--diloco-new-outer' in argv:
+        external={(x.get('sha256'),x.get('bytes')) for x in control.get('external_dependencies', [])}
+        declarations=[]
+        for index in range(settings['workers']):
+            name=f'reanchor_worker_{index}'
+            if name not in bindings:
+                raise ValueError('direct reanchor lacks per-worker declaration: '+name)
+            declaration=data(name)
+            if declaration.get('schema')!='natlang.diloco-new-outer/1' or declaration.get('worker')!=index:
+                raise ValueError('direct reanchor worker declaration differs')
+            for field in ('parent','historical_outer_checkpoint'):
+                item=declaration.get(field) or {}
+                if (item.get('sha256'),item.get('bytes')) not in external:
+                    raise ValueError('direct reanchor lacks privately verified '+field)
+            declarations.append(declaration)
+        if len({(x.get('seed_sha256'),x.get('source_hash'),x.get('held_sha256')) for x in declarations}) != 1:
+            raise ValueError('direct reanchor declarations do not share seed, source and held bindings')
     recipe=json.loads(_flag(argv,'--recipe-binding'))
     if (recipe.get('path')!=bindings['recipe']['path'] or recipe.get('file_sha256')!=bindings['recipe']['sha256']
             or recipe.get('sha256')!=bindings['recipe']['sha256'] or recipe.get('lineage_sha256')!=plan['recipe_sha256']):

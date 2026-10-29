@@ -51,16 +51,49 @@ GLOBAL_EXPORT_SCHEMA = 'natlang.native-diloco-global-export/1'
 ARGUMENT = '--diloco'
 
 
+def validate_new_outer(declaration, *, slot, seed, worker, source_hash, held_sha256, history, saved):
+    """Authenticate this peer's own parent and the shared fresh seed before reanchor."""
+    path = Path(declaration).resolve(strict=True)
+    proof = json.loads(path.read_text())
+    if (proof.get('schema') != 'natlang.diloco-new-outer/1' or proof.get('worker') != worker
+            or proof.get('source_hash') != source_hash or proof.get('held_sha256') != held_sha256
+            or proof.get('seed_sha256') != sha256_file_hex_cached(seed)
+            or not all(isinstance(proof.get(k),str) and re.fullmatch('[0-9a-f]{64}', proof[k])
+                       for k in ('seed_sha256','source_hash','held_sha256'))):
+        raise ValueError('new outer declaration differs from the worker, source, held or seed binding')
+    parent = proof.get('parent') or {}
+    historical = proof.get('historical_outer_checkpoint') or {}
+    if not history or historical != history[-1].get('checkpoint'):
+        raise ValueError('new outer declaration lacks the exact committed historical outer checkpoint')
+    for record in (parent, historical):
+        pinned = Path(record.get('path', '')).resolve(strict=True)
+        if (not pinned.is_file() or pinned.stat().st_size != record.get('bytes')
+                or sha256_file_hex_cached(pinned) != record.get('sha256')):
+            raise ValueError('new outer checkpoint pin differs from its declared bytes')
+    if Path(parent['path']).resolve() == Path(slot).resolve():
+        raise ValueError('new outer parent pin must differ from the writable rolling slot')
+    declaration_sha = sha256_file_hex_cached(path)
+    previous = (saved or {}).get('new_outer_reanchor')
+    if previous:
+        if previous.get('declaration_sha256') != declaration_sha:
+            raise ValueError('resumed new outer declaration differs from the committed transition')
+    elif sha256_file_hex_cached(slot) != parent['sha256']:
+        raise ValueError('new outer parent is not the exact resumed full checkpoint')
+    return proof, declaration_sha, bool(previous)
+
+
 def trainer_argv(argv):
     """The learner's command line without its ``--diloco`` block (which names the coordinator URL)."""
     argv = list(argv)
+    reanchor = any(x == '--diloco-new-outer' or x.startswith('--diloco-new-outer=') for x in argv)
+    omitted = (ARGUMENT, '--diloco-new-outer') + (('--standalone-diloco-parent',) if reanchor else ())
     result = []
     index = 0
     while index < len(argv):
-        if argv[index] == ARGUMENT:
+        if argv[index] in omitted:
             index += 2
             continue
-        if not argv[index].startswith(ARGUMENT + '='):
+        if not argv[index].startswith(tuple(name + '=' for name in omitted)):
             result.append(argv[index])
         index += 1
     return result
@@ -107,7 +140,7 @@ def source_identity_transition(original, current, proof):
         raise ValueError('source correction cannot change coordinator surface, parent, transport or fixed trainer arguments')
     return {**proof,'original_identity':original,'current_identity':current}
 
-def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, source_transition=None):
+def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, source_transition=None, new_outer=False):
     """Join the stage's coordinator after the trainer restored its parent or own state."""
     if args.diloco is None:
         if saved_state is not None:
@@ -118,7 +151,7 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
     settings = DilocoSettings.from_dict(json.loads(args.diloco))
     current_identity=identity(args.continue_from,sys.argv[1:] if argv is None else argv,settings)
     transition=None;transport=None;effective=current_identity
-    if source_transition is not None:
+    if source_transition is not None and not new_outer:
         if parent_continuation or saved_state is None:
             raise ValueError('source identity transition requires an earned DiLoCo checkpoint')
         from .diloco.worker import transport_from_env
@@ -156,7 +189,9 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
             effective=original
     learner = DilocoLearner(settings, surface=TensorSurface(dict(named)),
                             identity=effective, output=args.out / 'diloco', transport=transport)
-    if parent_continuation:
+    if new_outer:
+        learner.reanchor_deviations = learner.reanchor_fresh()
+    elif parent_continuation:
         learner.start()
     elif saved_state is None:
         raise ValueError('rolling checkpoint lacks its DiLoCo learner state')
