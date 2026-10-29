@@ -80,7 +80,7 @@ def test_four_real_processes_recover_pending_worker_and_restart_coordinator(tmp_
         identity={'parent':'fixture'},workers=4,min_quorum=3,fragment_bytes=1024,grace_seconds=0)
     assert len(manifest['fragments'])==2
     with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
-    url=f'http://127.0.0.1:{port}';transport=Transport(url,TOKEN,3);ctx=mp.get_context('fork')
+    url=f'http://127.0.0.1:{port}';transport=Transport(url,TOKEN,3);ctx=mp.get_context('spawn')  # fork after earlier torch tests in one process can hang/abort OpenMP children
     def coordinator():
         p=ctx.Process(target=serve_coordinator,args=(root,'127.0.0.1',port,TOKEN));p.start()
         _wait_status(transport,lambda s:True);return p
