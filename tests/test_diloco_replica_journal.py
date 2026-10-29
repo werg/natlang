@@ -108,3 +108,57 @@ def test_live_peer_credential_rotation_rejects_old_token_and_survives_restart(tm
         assert json.loads(receipt.read_text())['state']=='committed'
     finally:stop.set();p.join(8)
     assert p.exitcode==0
+
+
+def _peer(tmp_path, *, slow_seal=False, diverge=False):
+    import multiprocessing as mp,socket,time
+    from natlang_neuralese.train.diloco.replica_transport import serve
+    with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+    ctx=mp.get_context('fork');stop=ctx.Event();ready=ctx.Pipe(duplex=False)
+    def child():
+        j=ReplicaJournal(tmp_path/'peer',run_identity='run',baseline_sha256='a'*64)
+        if diverge:
+            other=tmp_path/'other';other.write_bytes(b'peer-only')
+            j.append({'kind':'peer-only'},other,expected_sequence=1,expected_previous=j.head)
+        if slow_seal:
+            original=ReplicaJournal.append;state={'slow':True}
+            def append(self,event,payload,**kw):
+                result=original(self,event,payload,**kw)
+                if event.get('kind')=='seal' and state['slow']:state['slow']=False;time.sleep(1.5)  # durable, ack delayed
+                return result
+            ReplicaJournal.append=append
+        ready[1].send(True)
+        serve(j,'127.0.0.1',port,'s'*32,max_bytes=4<<20,stop=stop,allow_unmaterialized_for_test=True)
+        j.close()
+    proc=ctx.Process(target=child);proc.start();ready[0].recv();time.sleep(.2)
+    return f'http://127.0.0.1:{port}',stop,proc
+
+
+def test_slow_seal_ack_is_retried_identically_without_fencing(tmp_path):
+    from natlang_neuralese.train.diloco.replica_executor import ReplicatedExecutor
+    url,stop,proc=_peer(tmp_path,slow_seal=True)
+    local=ReplicaJournal(tmp_path/'local',run_identity='run',baseline_sha256='a'*64)
+    payload=tmp_path/'payload';payload.write_bytes(b'operation')
+    writer=ReplicatedExecutor(local,url,'s'*32,allow_http=True,timeout=.5,seal_timeout=.5,retry_backoff=(1.5,1.5))
+    try:
+        assert writer.submit({'kind':'op'},payload,lambda:{'state':1},seal=True)=={'state':1}
+        assert writer.failure is None and [r['sequence'] for r in writer.retries]==[2]
+        assert writer.submit({'kind':'next'},payload,lambda:{'state':2},seal=True)=={'state':2} and local.sequence==4
+        final={'sequence':local.sequence,'head':local.head}
+    finally:writer.close();local.close();stop.set();proc.join(5)
+    peer=ReplicaJournal(tmp_path/'peer',run_identity='run',baseline_sha256='a'*64)
+    assert peer.verify(expected_sequence=4,expected_head=final['head'])==final;peer.close()
+
+
+def test_divergent_peer_record_still_fences_without_retry(tmp_path, capfd):
+    from natlang_neuralese.train.diloco.replica_executor import ReplicatedExecutor
+    url,stop,proc=_peer(tmp_path,diverge=True)
+    local=ReplicaJournal(tmp_path/'local',run_identity='run',baseline_sha256='a'*64)
+    payload=tmp_path/'payload';payload.write_bytes(b'operation');applied=[]
+    writer=ReplicatedExecutor(local,url,'s'*32,allow_http=True,timeout=2,retry_backoff=(.1,.1))
+    try:
+        with pytest.raises(RuntimeError,match='failed closed'):writer.submit({'kind':'op'},payload,lambda:applied.append(1))
+        assert writer.retries==[] and applied==[] and 'HTTP 400' in str(writer.failure)
+        with pytest.raises(RuntimeError,match='failed closed'):writer.submit({'kind':'later'},payload,lambda:applied.append(2))
+        assert 'replicated writer fenced at sequence 1' in capfd.readouterr().err
+    finally:writer.close();local.close();stop.set();proc.join(5)
