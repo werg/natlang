@@ -286,10 +286,12 @@ def test_service_bootstrap_requires_fence_and_serves_with_peer(tmp_path):
     peerport=freeport();port=freeport();ctx=mp.get_context('fork');peerstop=ctx.Event();leaderstop=ctx.Event();token='s'*32
     def peer():serve_peer(baseline=baseline,baseline_sha256=receipt['sha256'],store=tmp_path/'peerstore',work_root=tmp_path/'peerwork',host='127.0.0.1',port=peerport,token=token,max_transaction_bytes=1<<20,stop=peerstop)
     peerproc=ctx.Process(target=peer);peerproc.start();time.sleep(.2)
+    from natlang_neuralese.common.jsonio import write_json_durable
+    write_json_durable(tmp_path/'peerstore'/'replica-files-frozen.json',{'schema':'natlang.diloco-replica-file-freeze/1','nonce':'f'*48})
     def leader():
         from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
         journal=ReplicaJournal(tmp_path/'oldjournal',run_identity='r',baseline_sha256=receipt['sha256'])
-        serve_new_primary(baseline=baseline,baseline_sha256=receipt['sha256'],store=tmp_path/'leaderstore',root=tmp_path/'leaderroot',host='127.0.0.1',port=port,token=token,peer_url=f'http://127.0.0.1:{peerport}',supervisor_proof={},verify_supervisor_fence=lambda _:evidence,expected_primary=identity,expected_workers=[0],stop=leaderstop,journal=journal,sequence=journal.sequence,head=journal.head,session_transition={'previous_url':'http://old','new_url':'http://new','previous_token_sha256':__import__('hashlib').sha256(b'old-secret').hexdigest(),'new_token_sha256':__import__('hashlib').sha256(token.encode()).hexdigest(),'generation_nonce':'n'*48},previous_token='old-secret',allow_http=True)
+        serve_new_primary(baseline=baseline,baseline_sha256=receipt['sha256'],store=tmp_path/'leaderstore',root=tmp_path/'leaderroot',host='127.0.0.1',port=port,token=token,peer_url=f'http://127.0.0.1:{peerport}',supervisor_proof={},verify_supervisor_fence=lambda _:evidence,expected_primary=identity,expected_workers=[0],stop=leaderstop,journal=journal,sequence=journal.sequence,head=journal.head,session_transition={'previous_url':'http://old','new_url':'http://new','previous_token_sha256':__import__('hashlib').sha256(b'old-secret').hexdigest(),'new_token_sha256':__import__('hashlib').sha256(token.encode()).hexdigest(),'generation_nonce':'n'*48},previous_token='old-secret',file_custody_store=tmp_path/'peerstore',file_freeze_nonce='f'*48,allow_http=True)
     process=ctx.Process(target=leader);process.start();client=Transport(f'http://127.0.0.1:{port}',token,5,allow_http=True)
     for _ in range(150):
         try:client.json('GET','/v1/manifest');break
@@ -454,5 +456,78 @@ def test_first_outer_bootstrap_has_no_failed_primary_fence(tmp_path):
             except OSError:time.sleep(.02)
         assert ready['run_id']=='fresh' and ready['sealed_rebase']['sequence']==2
         assert client.json('POST','/v1/lease',{'worker':0,'session':'00000000-0000-0000-0000-000000000001'})['run_id']=='fresh'
+        payload=tmp_path/'source';payload.write_bytes(b'actual-source-custody')
+        assert client.upload_file(payload,'source.bin',chunk_bytes=8)['status'] in ('present','committed')
+        assert (tmp_path/'peerstore'/'replica-uploads'/'source.bin').read_bytes()==payload.read_bytes()
+        from natlang_neuralese.train.diloco.replica_transport import freeze_replica_files
+        from natlang_neuralese.train.diloco.replica_seed import restore_replica_uploads
+        freeze_replica_files(f'http://127.0.0.1:{pp}',token,'f'*48,allow_http=True)
+        restored=tmp_path/'restored-files';restored.mkdir()
+        assert 'source.bin' in restore_replica_uploads(tmp_path/'peerstore',restored,freeze_nonce='f'*48)
+        assert (restored/'uploads'/'source.bin').read_bytes()==payload.read_bytes()
     finally:stop.set();leader.join(8);peerstop.set();p.join(8)
     assert leader.exitcode==0 and p.exitcode==0
+
+
+def test_reconcile_crash_after_peer_commit_rejects_old_pointer(tmp_path):
+    import json,pytest
+    from natlang_neuralese.common.jsonio import write_json_durable
+    from natlang_neuralese.train.diloco.replica_baseline import capture
+    from natlang_neuralese.train.diloco.replica_generation import reconcile_primary_pointer
+    from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
+    base=tmp_path/'base';initialize_coordinator(base,run_id='r',masters={'weight':torch.ones(4)},identity={'parent':'p'},workers=1,min_quorum=1,fragment_bytes=1024)
+    m=ReplayCoordinator(base,quorum_since={})
+    class Capture:
+        def __init__(self):self.machine=m
+        def read(self,fn):return fn()
+    store=tmp_path/'store';store.mkdir();directory=store/('generation-'+'a'*32);directory.mkdir();baseline=directory/'baseline';receipt=capture(Capture(),baseline)
+    j=ReplicaJournal(directory/'journal',run_identity='r',baseline_sha256=receipt['sha256']);head=j.head;j.close()
+    previous={'sequence':2,'head':'b'*64}
+    write_json_durable(directory/'generation.json',{'state':'prepared','baseline_sha256':receipt['sha256'],'baseline':str(baseline),'journal':str(directory/'journal'),'new_head':head,'previous':previous})
+    pointer=store/'primary-active.json';write_json_durable(pointer,{'id':'initial','baseline_sha256':'f'*64,'journal':str(store/'old'),'baseline':str(tmp_path/'old'),'work_root':str(tmp_path/'old-root'),'head':'c'*64})
+    witness={'run_id':'r','baseline_sha256':receipt['sha256'],'sequence':0,'head':head}
+    with pytest.raises(ValueError):reconcile_primary_pointer(store,dict(witness,head='d'*64))
+    assert json.loads(pointer.read_text())['id']=='initial'
+    selected=reconcile_primary_pointer(store,witness)
+    assert selected['id']=='a'*32 and json.loads(pointer.read_text())==selected
+
+
+def test_replica_loss_after_seal_ack_loss_preserves_locally_sealed_state(tmp_path,monkeypatch):
+    import pytest,time
+    from natlang_neuralese.train.diloco import replica_executor
+    from natlang_neuralese.train.diloco.replica_baseline import capture
+    from natlang_neuralese.train.diloco.replica_dispatch import ReplicatedDispatch
+    from natlang_neuralese.train.diloco.replica_executor import ReplicatedExecutor
+    from natlang_neuralese.train.diloco.replica_generation import load_active
+    from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
+    from natlang_neuralese.train.diloco.replica_promotion import recover_after_replica_loss
+    root=tmp_path/'root';initialize_coordinator(root,run_id='r',masters={'weight':torch.ones(4)},identity={'parent':'p'},workers=1,min_quorum=1,fragment_bytes=1024)
+    machine=ReplayCoordinator(root,quorum_since={})
+    class Capture:
+        def __init__(self):self.machine=machine
+        def read(self,fn):return fn()
+    baseline=tmp_path/'baseline';receipt=capture(Capture(),baseline)
+    local=ReplicaJournal(tmp_path/'local',run_identity='r',baseline_sha256=receipt['sha256']);remote=ReplicaJournal(tmp_path/'remote',run_identity='r',baseline_sha256=receipt['sha256'])
+    def lost_ack(_url,_token,*,sequence,previous,event,payload,**_):
+        result=remote.append(event,payload,expected_sequence=sequence,expected_previous=previous)
+        if event['kind']=='seal':raise OSError('peer disappeared after durable seal')
+        return result
+    monkeypatch.setattr(replica_executor,'transmit',lost_ack)
+    empty=tmp_path/'empty';empty.write_bytes(b'');writer=ReplicatedExecutor(local,'http://unused','s'*32,allow_http=True)
+    dispatch=ReplicatedDispatch(machine,writer,empty)
+    with pytest.raises(RuntimeError):dispatch.call('lease',{'worker':0,'session':'00000000-0000-0000-0000-000000000001'})
+    assert local.sequence==2 and remote.head==local.head
+    with pytest.raises(RuntimeError):dispatch.call('tick',{})
+    writer.close();remote.close()
+    evidence={'run_id':'r','primary_process_absent':True,'replica_fenced':True,'all_workers_quiesced':True,'proof_sha256':'f'*64}
+    recovered=recover_after_replica_loss(baseline=baseline,baseline_sha256=receipt['sha256'],journal=local,sequence=local.sequence,head=local.head,destination=tmp_path/'new-seed',verified_owner_evidence=evidence,source_work_root=root,freeze_nonce='f'*48)
+    assert recovered['sealed_predecessor']=={'sequence':2,'head':local.head} and not recovered['unsealed_tail_retained']
+    new,replayed,_=load_active(tmp_path/'new-seed',run_identity='r',destination=tmp_path/'peer')
+    assert replayed.coordinator.progress==machine.coordinator.progress and new.identity['previous_generation']['head']==local.head
+    new.close();sealed_head=local.head
+    event={'kind':'tick','args':{},'wall':time.time(),'monotonic':time.monotonic()}
+    local.append(event,empty,expected_sequence=3,expected_previous=local.head)
+    second=recover_after_replica_loss(baseline=baseline,baseline_sha256=receipt['sha256'],journal=local,sequence=local.sequence,head=local.head,destination=tmp_path/'unsealed-seed',verified_owner_evidence=evidence,source_work_root=root,freeze_nonce='f'*48)
+    assert second['unsealed_tail_retained'] and second['sealed_predecessor']=={'sequence':2,'head':sealed_head}
+    assert (local.root/'00000000000000000003'/'record.json').is_file()
+    local.close()

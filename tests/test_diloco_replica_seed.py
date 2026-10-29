@@ -21,8 +21,10 @@ def test_publish_and_install_exact_witnessed_replacement_peer(tmp_path):
     j.append(event,empty,expected_sequence=1,expected_previous=j.head);state=machine.apply(event,empty)
     j.append({'kind':'seal','operation_sequence':1,'state':state},empty,expected_sequence=2,expected_previous=j.head)
     head=j.head;write_json_durable(store/'replica-active.json',{'id':'initial','baseline':str(baseline),'baseline_sha256':receipt['sha256'],'journal':str(j.root)})
-    with pytest.raises(ValueError):publish_seed(store,tmp_path/'bad',expected_sequence=2,expected_head='f'*64,lease_id='transfer')
-    record=publish_seed(store,tmp_path/'seed',expected_sequence=2,expected_head=head,lease_id='transfer');j.close()
+    uploads=store/'replica-uploads';uploads.mkdir();(uploads/'source.bin').write_bytes(b'source-file');(uploads/'source.bin.sha256').write_text(hashlib.sha256(b'source-file').hexdigest()+'\n')
+    write_json_durable(store/'replica-files-frozen.json',{'schema':'natlang.diloco-replica-file-freeze/1','nonce':'n'*48})
+    with pytest.raises(ValueError):publish_seed(store,tmp_path/'bad',expected_sequence=2,expected_head='f'*64,lease_id='transfer',freeze_nonce='n'*48)
+    record=publish_seed(store,tmp_path/'seed',expected_sequence=2,expected_head=head,lease_id='transfer',freeze_nonce='n'*48);j.close()
     digest=hashlib.sha256((tmp_path/'seed'/'seed-receipt.json').read_bytes()).hexdigest()
     assert verify_seed(tmp_path/'seed',expected_receipt_sha256=digest)['head']==head
     import multiprocessing as mp,socket,time
@@ -37,6 +39,7 @@ def test_publish_and_install_exact_witnessed_replacement_peer(tmp_path):
     finally:stop.set();server.join(8)
     assert server.exitcode==0
     install_seed(tmp_path/'received',tmp_path/'replacement',expected_receipt_sha256=digest)
+    assert (tmp_path/'replacement'/'replica-uploads'/'source.bin').read_bytes()==b'source-file'
     new,recovered,_=load_active(tmp_path/'replacement',run_identity='r',destination=tmp_path/'recovered')
     assert new.sequence==2 and new.head==head and recovered.coordinator.progress==machine.coordinator.progress
     release_seed_lease(store,record,witnessed={'run_id':'r','baseline_sha256':receipt['sha256'],'sequence':2,'head':head});new.close()

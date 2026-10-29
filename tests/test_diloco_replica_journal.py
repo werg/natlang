@@ -97,9 +97,12 @@ def test_live_peer_credential_rotation_rejects_old_token_and_survives_restart(tm
         with pytest.raises(RemoteError):witness_head(url,old,allow_http=True)
         assert witness_head(url,new,allow_http=True)==head
         stop.set();p.join(8);assert p.exitcode==0;stop.clear()
+        import json
+        receipt=root.parent/'credential-rotation.json';state=json.loads(receipt.read_text());state['state']='prepared';receipt.write_text(json.dumps(state))
         p=ctx.Process(target=peer);p.start();ready[0].recv()
         for _ in range(100):
             try:assert witness_head(url,new,allow_http=True)==head;break
             except OSError:time.sleep(.02)
+        assert json.loads(receipt.read_text())['state']=='committed'
     finally:stop.set();p.join(8)
     assert p.exitcode==0

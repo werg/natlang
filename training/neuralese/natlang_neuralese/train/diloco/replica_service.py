@@ -5,6 +5,7 @@ verify the old primary fence, and preserve independent recovery exports.
 """
 from __future__ import annotations
 import hashlib
+import os
 import json
 import threading
 import uuid
@@ -40,7 +41,7 @@ def serve_peer(*, baseline, baseline_sha256, store, work_root, host, port, token
 
 
 def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, token, peer_url,
-                      supervisor_proof, verify_supervisor_fence, expected_primary, expected_workers, stop, journal, sequence, head, session_transition, previous_token, restart=False, bootstrap=False, gateway=None, allow_http=False, max_generations=3):
+                      supervisor_proof, verify_supervisor_fence, expected_primary, expected_workers, stop, journal, sequence, head, session_transition, previous_token, restart=False, bootstrap=False, file_custody_store=None, file_freeze_nonce=None, gateway=None, allow_http=False, max_generations=3):
     """Start a fresh unique primary only after an explicit supervisor fence.
 
     After both physical replicas confirm the new generation, local retention
@@ -93,12 +94,40 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
             journal=journal,sequence=sequence,head=head,destination=root,
             supervisor_proof=supervisor_proof,verify_supervisor_fence=verify_supervisor_fence,
             expected_primary=expected_primary,expected_workers=expected_workers)
+    if restart:
+        import shutil
+        previous_root=Path(active['work_root']);previous_uploads=previous_root/'uploads'
+        if previous_uploads.exists():
+            markers=previous_uploads/'.replication-pending'
+            if markers.exists():
+                from .replica_transport import transmit_file
+                for marker in sorted(markers.iterdir()):
+                    if marker.is_symlink() or not marker.is_file():raise ValueError('invalid pending file marker')
+                    intent=json.loads(marker.read_text());name=intent['name'];sha=intent['sha256']
+                    if marker.name!=name or not __import__('re').fullmatch('[A-Za-z0-9][A-Za-z0-9._-]{0,127}',name):raise ValueError('invalid pending file identity')
+                    sidecar=previous_uploads/(name+'.sha256');payload=previous_uploads/name
+                    if sidecar.is_file() and payload.is_file():
+                        if sidecar.read_text().strip()!=sha:raise ValueError('pending file hash binding differs')
+                        transmit_file(peer_url,token,name,payload,sha,allow_http=allow_http,gateway=gateway)
+                        marker.unlink();fd=os.open(markers,os.O_RDONLY|os.O_DIRECTORY)
+                        try:os.fsync(fd)
+                        finally:os.close(fd)
+            def preserve(source,target):
+                if '/.partial/' in str(source) or '/.replication-pending/' in str(source):return shutil.copy2(source,target)
+                return os.link(source,target)
+            shutil.copytree(previous_uploads,Path(root)/'uploads',copy_function=preserve)
+    elif not bootstrap:
+        if file_custody_store is None or not isinstance(file_freeze_nonce,str):raise ValueError('promotion requires exact frozen file custody')
+        from .replica_seed import restore_replica_uploads
+        receipt['restored_uploads']=restore_replica_uploads(file_custody_store,root,freeze_nonce=file_freeze_nonce)
+    if restart:
+        active['work_root']=str(Path(root).resolve());write_json_durable(store/'primary-active.json',active)
     start_path=store/('supervisor-restart-'+uuid.uuid4().hex+'.json' if restart else 'supervisor-start.json')
     write_json_durable(start_path,{'schema':'natlang.diloco-replica-start/1',
         'baseline_sha256':baseline_sha256,'promotion':receipt,'session_transition':session_transition})
     if not restart:
         write_json_durable(store/'primary-active.json',{'id':'initial','baseline':str(Path(baseline).resolve()),
-            'journal':str(journal.root.resolve()),'baseline_sha256':baseline_sha256,'head':_identity(journal.identity)})
+            'journal':str(journal.root.resolve()),'work_root':str(Path(root).resolve()),'baseline_sha256':baseline_sha256,'head':_identity(journal.identity)})
     empty=store/'empty-payload';write_bytes_durable(empty,b'')
     writer=ReplicatedExecutor(journal,peer_url,token,allow_http=allow_http,gateway=gateway)
     dispatch=ReplicatedDispatch(machine,writer,empty)
@@ -114,7 +143,7 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
         receipt=rotate(dispatch,local_baseline_dir=directory/'baseline',local_journal_dir=directory/'journal',
                       receipt_path=directory/'generation.json',peer_prepare=prepare,peer_commit=commit,within_writer=True)
         pointer=store/'primary-active.json'
-        write_json_durable(pointer,{'id':identifier,'baseline':str((directory/'baseline').resolve()),'journal':str((directory/'journal').resolve()),'baseline_sha256':receipt['baseline_sha256'],'head':receipt['new_head'],'previous':receipt['previous']})
+        write_json_durable(pointer,{'id':identifier,'baseline':str((directory/'baseline').resolve()),'journal':str((directory/'journal').resolve()),'work_root':str(Path(root).resolve()),'baseline_sha256':receipt['baseline_sha256'],'head':receipt['new_head'],'previous':receipt['previous']})
         confirmation=generation_request(peer_url,token,'retain',{'id':identifier,'previous':receipt['previous'],
             'baseline_sha256':receipt['baseline_sha256'],'new_head':receipt['new_head']},allow_http=allow_http,gateway=gateway)
         from .replica_retention import Retention

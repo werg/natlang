@@ -100,3 +100,47 @@ def load_active(store_root, *, run_identity, destination, initial_baseline=None,
         journal.close();raise ValueError('active generation initial head differs')
     machine=recover_receiver(baseline=baseline,baseline_sha256=pointer['baseline_sha256'],journal=journal,destination=destination)
     return journal,machine,load_prepared(store,journal)
+
+
+def reconcile_primary_pointer(store_root, witnessed):
+    """Repair a crash between peer generation commit and local pointer commit.
+
+    Only a live peer's exact sealed head can select a locally prepared or
+    committed generation; an older pointer is never interpreted as the head.
+    """
+    from .replica_baseline import verify
+    from .replica_journal import _identity
+    store=Path(store_root).resolve();pointer_path=store/'primary-active.json'
+    pointer=json.loads(pointer_path.read_text())
+    if (not isinstance(witnessed,dict) or set(witnessed)!={'run_id','baseline_sha256','sequence','head'}
+            or type(witnessed['sequence']) is not int or witnessed['sequence']%2):raise ValueError('peer witness is not sealed')
+    candidates=[]
+    if pointer.get('baseline_sha256')==witnessed['baseline_sha256']:
+        candidates.append(pointer)
+    for directory in store.glob('generation-*'):
+        receipt_path=directory/'generation.json'
+        if not receipt_path.is_file():continue
+        receipt=json.loads(receipt_path.read_text())
+        if receipt.get('state') not in ('prepared','committed') or receipt.get('baseline_sha256')!=witnessed['baseline_sha256']:continue
+        candidate={'id':directory.name[len('generation-'):],'baseline':receipt['baseline'],'journal':receipt['journal'],
+                   'baseline_sha256':receipt['baseline_sha256'],'head':receipt['new_head'],
+                   'previous':receipt['previous'],'work_root':pointer['work_root']}
+        if candidate not in candidates:candidates.append(candidate)
+    valid=[]
+    for candidate in candidates:
+        baseline=Path(candidate['baseline']).resolve();journal_path=Path(candidate['journal']).resolve()
+        if not journal_path.is_relative_to(store):raise ValueError('primary journal escapes store')
+        if candidate.get('id')!='initial' and not baseline.is_relative_to(store):raise ValueError('generation baseline escapes store')
+        value=verify(baseline,candidate['baseline_sha256'])
+        identity=json.loads((journal_path/'identity.json').read_text())
+        if value['run_id']!=witnessed['run_id'] or identity['run_identity']!=witnessed['run_id'] or _identity(identity)!=candidate['head']:continue
+        journal=ReplicaJournal(journal_path,run_identity=identity['run_identity'],baseline_sha256=identity['baseline_sha256'],
+            max_payload_bytes=identity['max_payload_bytes'],max_transactions=identity['max_transactions'],previous_generation=identity.get('previous_generation'))
+        try:
+            journal.verify(expected_sequence=witnessed['sequence'],expected_head=witnessed['head']);valid.append(candidate)
+        except ValueError:pass
+        finally:journal.close()
+    if len(valid)!=1:raise ValueError('cannot uniquely reconcile the witnessed generation')
+    selected=valid[0]
+    if selected!=pointer:write_json_durable(pointer_path,selected)
+    return selected

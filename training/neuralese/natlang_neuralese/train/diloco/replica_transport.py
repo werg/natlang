@@ -50,6 +50,8 @@ def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared
         def do_PUT(self):
             if not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer '+active['token']):
                 self.send_error(403); return
+            if self.path.startswith('/v1/file/'):
+                self._receive_file();return
             if self.path != '/v1/transaction':
                 self.send_error(404); return
             temp = None
@@ -89,6 +91,43 @@ def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared
                 self.close_connection=True;self.send_error(400)
             finally:
                 if temp is not None:temp.unlink(missing_ok=True)
+        def _receive_file(self):
+            name=self.path[len('/v1/file/'):];temp=None
+            try:
+                if not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._-]{0,127}',name) or name.endswith('.sha256'):
+                    raise ValueError('invalid replica file name')
+                expected=self.headers['X-Sha256'];length=int(self.headers['Content-Length'])
+                if not re.fullmatch('[0-9a-f]{64}',expected) or not 0<=length<=64*(1<<30):raise ValueError('invalid replica file declaration')
+                directory=store_root/'replica-uploads';directory.mkdir(parents=True,exist_ok=True)
+                fd,temp=tempfile.mkstemp(prefix='.incoming-file-',dir=directory);digest=hashlib.sha256()
+                with os.fdopen(fd,'wb') as out:
+                    left=length
+                    while left:
+                        block=self.rfile.read(min(CHUNK,left))
+                        if not block:raise ValueError('truncated replica file')
+                        out.write(block);digest.update(block);left-=len(block)
+                    out.flush();os.fsync(out.fileno())
+                if digest.hexdigest()!=expected:raise ValueError('replica file hash differs')
+                with guard:
+                    if not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+active['token']):raise ValueError('replica credential changed')
+                    if (store_root/'replica-files-frozen.json').exists():raise ValueError('replica file publication is frozen')
+                    target=directory/name;sidecar=directory/(name+'.sha256')
+                    from ...common.jsonio import write_bytes_durable
+                    if target.exists() or sidecar.exists():
+                        if not target.is_file() or target.stat().st_size!=length:raise ValueError('replica file name conflicts')
+                        if sidecar.exists():
+                            if not sidecar.is_file() or sidecar.read_text().strip()!=expected:raise ValueError('replica file name conflicts')
+                        else:
+                            with target.open('rb') as check:
+                                if hashlib.file_digest(check,'sha256').hexdigest()!=expected:raise ValueError('unsealed replica file conflicts')
+                            write_bytes_durable(sidecar,(expected+'\n').encode())
+                    else:
+                        os.replace(temp,target);temp=None;write_bytes_durable(sidecar,(expected+'\n').encode())
+                    reply={'name':name,'sha256':expected,'bytes':length}
+                data=json.dumps(reply,sort_keys=True).encode();self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
+            except (KeyError,ValueError,OSError,TypeError):self.close_connection=True;self.send_error(400)
+            finally:
+                if temp is not None and os.path.exists(temp):os.unlink(temp)
         def do_POST(self):
             if not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer '+active['token']):
                 self.send_error(403);return
@@ -100,7 +139,14 @@ def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared
                     if not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+active['token']):raise ValueError('replica credential changed')
                     if failure or active['machine'] is None:raise ValueError('replica cannot rotate')
                     current=active['journal']
-                    if self.path=='/v1/credential/rotate':
+                    if self.path=='/v1/file/freeze':
+                        if set(value)!={'nonce'} or not isinstance(value['nonce'],str) or not re.fullmatch('[A-Za-z0-9_-]{32,128}',value['nonce']):raise ValueError('invalid file freeze nonce')
+                        from ...common.jsonio import write_json_durable
+                        marker=store_root/'replica-files-frozen.json';declaration={'schema':'natlang.diloco-replica-file-freeze/1','nonce':value['nonce']}
+                        if marker.exists() and json.loads(marker.read_text())!=declaration:raise ValueError('another file freeze exists')
+                        if not marker.exists():write_json_durable(marker,declaration)
+                        reply={'nonce':value['nonce'],'frozen':True}
+                    elif self.path=='/v1/credential/rotate':
                         import hashlib
                         if (token_path is None or set(value)!={'sequence','head','new_token','nonce'} or
                                 value['sequence']!=current.sequence or value['head']!=current.head or current.sequence%2 or
@@ -271,4 +317,38 @@ def rotate_replica_credential(url,old_token,new_token,*,sequence,head,nonce,allo
         result=json.loads(raw);expected={'sequence':sequence,'head':head,'nonce':nonce,'new_token_sha256':hashlib.sha256(new_token.encode()).hexdigest()}
         if result!=expected:raise ValueError('peer credential rotation binding differs')
         return result
+    finally:conn.close()
+
+
+def transmit_file(url,token,name,path,sha256,*,timeout=3600,allow_http=False,gateway=None):
+    address=urlsplit(url)
+    if address.scheme not in ('https','http') or (address.scheme=='http' and not allow_http) or not address.hostname or address.path not in ('','/'):
+        raise ValueError('replica file endpoint must be an HTTPS origin')
+    source=Path(path);size=source.stat().st_size;cls=http.client.HTTPSConnection if address.scheme=='https' else http.client.HTTPConnection
+    conn=cls(address.hostname,address.port,timeout=timeout)
+    try:
+        conn.putrequest('PUT','/v1/file/'+name);conn.putheader('Authorization','Bearer '+token);conn.putheader('Content-Length',str(size));conn.putheader('X-Sha256',sha256)
+        if gateway:conn.putheader('X-Sandbox-Share-Token',gateway)
+        conn.endheaders()
+        with source.open('rb') as stream:
+            while block:=stream.read(CHUNK):conn.send(block)
+        response=conn.getresponse();raw=response.read(65537)
+        if response.status!=200 or len(raw)>65536:raise ValueError('replica file was not durably acknowledged')
+        reply=json.loads(raw)
+        if reply!={'name':name,'sha256':sha256,'bytes':size}:raise ValueError('replica file acknowledgement differs')
+        return reply
+    finally:conn.close()
+
+
+def freeze_replica_files(url,token,nonce,*,timeout=30,allow_http=False,gateway=None):
+    address=urlsplit(url)
+    if address.scheme not in ('http','https') or not address.hostname or address.path not in ('','/') or (address.scheme=='http' and not allow_http):raise ValueError('invalid replica endpoint')
+    conn=(http.client.HTTPSConnection if address.scheme=='https' else http.client.HTTPConnection)(address.hostname,address.port,timeout=timeout)
+    try:
+        headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+        if gateway:headers['X-Sandbox-Share-Token']=gateway
+        conn.request('POST','/v1/file/freeze',body=json.dumps({'nonce':nonce}).encode(),headers=headers)
+        response=conn.getresponse();raw=response.read(65537)
+        if response.status!=200 or json.loads(raw)!={'nonce':nonce,'frozen':True}:raise ValueError('replica file freeze was not confirmed')
+        return {'nonce':nonce,'frozen':True}
     finally:conn.close()

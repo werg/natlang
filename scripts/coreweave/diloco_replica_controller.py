@@ -15,8 +15,8 @@ def run_promotion(directory, *, intent, fence_workers, verify_fence, start_prima
     already installed worker fences are deliberately left in place. The new
     primary must acknowledge the exact witnessed WAL head before release.
     """
-    required={'run_id','generation_nonce','sequence','head','new_url','new_token_sha256'}
-    if not isinstance(intent,dict) or set(intent)!=required or not all(intent.values()) or len(intent['generation_nonce'])<32:
+    required={'run_id','generation_nonce','activation_nonce','sequence','head','new_url','new_token_sha256'}
+    if not isinstance(intent,dict) or set(intent)!=required or not all(intent.values()) or len(intent['generation_nonce'])<32 or len(intent['activation_nonce'])<32:
         raise ValueError('invalid promotion intent')
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
     with (directory/'controller.lock').open('a+b') as lock:
@@ -61,7 +61,7 @@ def run_coreweave_promotion(directory, config):
         import cwctl
         import diloco_replica_fence as fence_module
     from natlang_neuralese.train.diloco.worker import Transport
-    intent=config['intent'];workers=config['workers'];nonce=intent['generation_nonce']
+    intent=config['intent'];workers=config['workers'];nonce=intent['activation_nonce']
     ref=config['supervisor_proof']['journal']
     owner=fence_module.owner_reference(ref['path'],ref['sha256'],config['expected_primary'])
     if owner['run_id']!=intent['run_id']:raise ValueError('owner journal run differs from promotion')
@@ -116,18 +116,26 @@ def prepare_owned_activation(config, *, mode, supervisor_evidence, now, owner_st
     process/port observation; no provider credential is included in the file.
     """
     import copy
-    if mode not in ('bootstrap','promote','restart'):raise ValueError('invalid replica activation mode')
+    if mode not in ('bootstrap','promote','restart','replica-loss-recover'):raise ValueError('invalid replica activation mode')
     result=copy.deepcopy(config);transition=result['session_transition']
     binding={'run_id':result['run_id'],'baseline_sha256':result['baseline_sha256'],'sequence':result['sequence'],
              'head':result['head'],'generation_nonce':transition['generation_nonce'],'activation_nonce':result['activation_nonce'],'new_url':transition['new_url'],
              'new_token_sha256':transition['new_token_sha256']}
-    observed=supervisor_evidence.get('source_verified_at' if mode=='bootstrap' else 'owner_observed_at' if mode=='restart' else 'provider_observed_at')
+    observed=supervisor_evidence.get('source_verified_at' if mode=='bootstrap' else 'owner_observed_at' if mode=='restart' else 'replica_observed_at' if mode=='replica-loss-recover' else 'provider_observed_at')
     if not isinstance(observed,(int,float)) or not 0<=now-observed<=120:raise ValueError('supervisor observation is not fresh')
     if not isinstance(binding['activation_nonce'],str) or len(binding['activation_nonce'])<32:raise ValueError('invalid activation nonce')
     if mode=='bootstrap':
         if (supervisor_evidence.get('run_id')!=binding['run_id'] or supervisor_evidence.get('source_verified') is not True or
                 not supervisor_evidence.get('bootstrap_source_sha256') or not supervisor_evidence.get('source_receipt_sha256')):
             raise ValueError('bootstrap source is not verified')
+    elif mode=='replica-loss-recover':
+        owner=supervisor_evidence.get('owner_evidence',{}).get('owner_observation',{})
+        if (supervisor_evidence.get('run_id')!=binding['run_id'] or supervisor_evidence.get('primary_process_absent') is not True or
+                supervisor_evidence.get('replica_fenced') is not True or supervisor_evidence.get('all_workers_quiesced') is not True or
+                supervisor_evidence.get('primary')!=result['expected_primary'] or owner.get('identity')!=result['expected_primary'] or
+                owner.get('nonce')!=binding['activation_nonce'] or owner.get('process_absent') is not True or owner.get('port_closed') is not True or
+                sorted(supervisor_evidence.get('quiesced_workers') or [])!=sorted(result['expected_workers']) or not supervisor_evidence.get('proof_sha256')):
+            raise ValueError('replica loss fence is not verified')
     elif supervisor_evidence.get('run_id')!=binding['run_id'] or supervisor_evidence.get('primary_fenced') is not True or supervisor_evidence.get('all_workers_quiesced') is not True or not supervisor_evidence.get('proof_sha256') or supervisor_evidence.get('primary')!=result['expected_primary'] or sorted(supervisor_evidence.get('quiesced_workers') or [])!=sorted(result['expected_workers']):
         raise ValueError('unverified supervisor fence')
     att={'schema':'natlang.diloco-replica-supervisor-attestation/1','mode':mode,'verified_at':now,'expires_at':now+300,
@@ -141,3 +149,19 @@ def prepare_owned_activation(config, *, mode, supervisor_evidence, now, owner_st
     result['attestation']=att
     raw=json.dumps(result,sort_keys=True,separators=(',',':')).encode()
     return raw,hashlib.sha256(raw).hexdigest()
+
+
+def verify_bootstrap_inputs(*, baseline, baseline_sha256, source_manifest, source_sha256, source_receipt, receipt_sha256, expected_parent_sha256):
+    """Verify exact earned-parent and source input bytes before first outer staging."""
+    import time
+    from natlang_neuralese.train.diloco.replica_baseline import verify
+    def digest(path):
+        with Path(path).open('rb') as stream:return hashlib.file_digest(stream,'sha256').hexdigest()
+    source=Path(source_manifest);receipt=Path(source_receipt)
+    if digest(source)!=source_sha256 or digest(receipt)!=receipt_sha256:raise ValueError('bootstrap source or receipt bytes differ')
+    value=verify(baseline,baseline_sha256);manifest=json.loads((Path(baseline)/'manifest.json').read_text())
+    if manifest.get('seed_source',{}).get('sha256')!=expected_parent_sha256:raise ValueError('bootstrap baseline does not bind the earned parent')
+    return {'run_id':value['run_id'],'source_verified':True,'source_verified_at':time.time(),
+            'bootstrap_source_sha256':source_sha256,'source_receipt_sha256':receipt_sha256,
+            'earned_parent_sha256':expected_parent_sha256,'baseline_sha256':baseline_sha256,
+            'scope':'exact source manifest and receipt bytes and earned-parent binding; source admission remains its own evidence'}

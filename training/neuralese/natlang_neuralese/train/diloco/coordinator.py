@@ -812,6 +812,19 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
     if coordinator.root.resolve() != Path(root).resolve():
         raise ValueError('replicated coordinator root differs')
     files = FileStore(coordinator.root)
+    if replication is not None:
+        pending=files.root/'.replication-pending'
+        if pending.is_dir():
+            for marker in sorted(pending.iterdir()):
+                if not marker.is_file() or marker.is_symlink():raise ValueError('invalid pending file replication marker')
+                intent=json.loads(marker.read_text());name=intent['name'];sha=intent['sha256'];files.check(name,sha)
+                if marker.name!=name:raise ValueError('pending file identity differs')
+                if files.committed(name) is not None:
+                    if files.committed(name)!=sha:raise ValueError('pending committed file hash differs')
+                    replication.replicate_file(name,files.root/name,sha)
+                    marker.unlink();fd=os.open(pending,os.O_RDONLY|os.O_DIRECTORY)
+                    try:os.fsync(fd)
+                    finally:os.close(fd)
     def read(function):
         return function() if replication is None else replication.read(function)
     def operation(kind, args, payload=None):
@@ -918,6 +931,15 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 elif parsed.path.startswith("/v1/files/"):
                     name = parsed.path[len("/v1/files/"):]
                     query = parse_qs(parsed.query)
+                    files.check(name)
+                    marker=files.root/'.replication-pending'/name
+                    if replication is not None and marker.exists() and files.committed(name) is not None:
+                        intent=json.loads(marker.read_text());sha=intent.get('sha256')
+                        if intent.get('name')!=name or files.committed(name)!=sha:raise ValueError('file replication intent differs')
+                        replication.replicate_file(name,files.root/name,sha)
+                        marker.unlink(missing_ok=True);directory=os.open(marker.parent,os.O_RDONLY|os.O_DIRECTORY)
+                        try:os.fsync(directory)
+                        finally:os.close(directory)
                     if "sha256" in query:  # upload state: committed, conflict, or the partial size to resume at
                         self._json(200, files.state(name, query["sha256"][0]))
                     else:
@@ -1022,9 +1044,21 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                     self._json(404, {"error": "Unknown endpoint"})
                     return
                 length = int(self.headers.get("Content-Length", "-1"))
-                result = files.receive(parsed.path[len("/v1/files/"):], self._header("X-Sha256"),
-                                       int(self.headers.get("X-Offset", "0")), int(self._header("X-Total-Bytes")),
-                                       length, self.rfile.read)
+                name=parsed.path[len("/v1/files/"):];sha=self._header("X-Sha256");files.check(name,sha)
+                marker=files.root/'.replication-pending'/name
+                if replication is not None:
+                    existing=files.committed(name)
+                    if existing is not None and existing!=sha:raise Conflict('a different file is already committed under this name')
+                    marker.parent.mkdir(parents=True,exist_ok=True)
+                    intent={'name':name,'sha256':sha}
+                    if marker.exists() and json.loads(marker.read_text())!=intent:raise Conflict('file replication intent differs')
+                    if not marker.exists():write_json_durable(marker,intent)
+                result = files.receive(name,sha,int(self.headers.get("X-Offset", "0")),int(self._header("X-Total-Bytes")),length,self.rfile.read)
+                if replication is not None and result['status'] in ('committed','present'):
+                    replication.replicate_file(name,files.root/name,sha)
+                    marker.unlink();directory=os.open(marker.parent,os.O_RDONLY|os.O_DIRECTORY)
+                    try:os.fsync(directory)
+                    finally:os.close(directory)
                 self._json(200, result)
             except Conflict as exc:
                 self._json(409, {"error": str(exc), **exc.detail})

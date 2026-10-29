@@ -12,13 +12,14 @@ def _digest(path):
     with Path(path).open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
 
 
-def publish_seed(store, destination, *, expected_sequence, expected_head, lease_id):
+def publish_seed(store, destination, *, expected_sequence, expected_head, lease_id, freeze_nonce):
     """Pin exact immutable baseline and sealed WAL; lease remains until transfer receipt."""
     store=Path(store).resolve();pointer=json.loads((store/'replica-active.json').read_text())
+    if json.loads((store/'replica-files-frozen.json').read_text())!={'schema':'natlang.diloco-replica-file-freeze/1','nonce':freeze_nonce}:raise ValueError('replica file custody is not frozen')
     generation=pointer['id'];baseline=Path(pointer['baseline']).resolve();journal=Path(pointer['journal']).resolve()
     if not journal.is_relative_to(store):raise ValueError('replica journal escapes store')
     lease=None
-    if generation!='initial':
+    if generation not in ('initial','seeded'):
         if not re.fullmatch('[0-9a-f]{32}',generation):raise ValueError('invalid active generation')
         retention=Retention(store);retention.acquire(generation,lease_id);lease={'generation':generation,'id':lease_id}
     try:
@@ -37,6 +38,16 @@ def publish_seed(store, destination, *, expected_sequence, expected_head, lease_
         files=[]
         sources=[(baseline/'replica-baseline.json',Path('baseline/replica-baseline.json'))]
         sources.extend((baseline/item['path'],Path('baseline')/item['path']) for item in value['files'])
+        uploads=store/'replica-uploads'
+        if uploads.exists():
+            for source in sorted(uploads.iterdir()):
+                if source.is_symlink() or not source.is_file() or source.name.startswith('.'):
+                    raise ValueError('invalid committed replica upload inventory')
+                if source.name.endswith('.sha256'):
+                    payload=source.with_name(source.name[:-7])
+                    if not payload.is_file() or payload.is_symlink() or _digest(payload)!=source.read_text().strip():raise ValueError('replica upload hash differs')
+                elif not source.with_name(source.name+'.sha256').is_file():raise ValueError('unsealed replica upload')
+                sources.append((source,Path('replica-uploads')/source.name))
         sources.append((journal/'identity.json',Path('journal/identity.json')))
         for seq in range(1,expected_sequence+1):
             for name in ('record.json','payload'):sources.append((journal/f'{seq:020d}'/name,Path('journal')/f'{seq:020d}'/name))
@@ -44,7 +55,7 @@ def publish_seed(store, destination, *, expected_sequence, expected_head, lease_
             target=destination/relative;target.parent.mkdir(parents=True,exist_ok=True);os.link(source,target)
             files.append({'path':str(relative),'bytes':target.stat().st_size,'sha256':_digest(target)})
         record={'schema':'natlang.diloco-replica-seed/1','run_id':value['run_id'],'baseline_sha256':pointer['baseline_sha256'],
-                'sequence':expected_sequence,'head':expected_head,'lease':lease,'files':files}
+                'sequence':expected_sequence,'head':expected_head,'lease':lease,'freeze_nonce':freeze_nonce,'files':files}
         write_json_durable(destination/'seed-receipt.json',record)
         return record
     except BaseException:
@@ -169,3 +180,21 @@ def download_seed(url,token,destination,*,expected_receipt_sha256,gateway=None,a
     try:os.fsync(fd)
     finally:os.close(fd)
     return verify_seed(destination,expected_receipt_sha256=expected_receipt_sha256)
+
+
+def restore_replica_uploads(store, destination, *, freeze_nonce):
+    """Restore all frozen committed file-custody objects into a new primary root."""
+    store=Path(store).resolve()
+    if json.loads((store/'replica-files-frozen.json').read_text())!={'schema':'natlang.diloco-replica-file-freeze/1','nonce':freeze_nonce}:
+        raise ValueError('replica file custody is not frozen for promotion')
+    uploads=store/'replica-uploads';target=Path(destination)/'uploads';inventory=[]
+    if not uploads.exists():return inventory
+    target.mkdir(parents=True,exist_ok=False)
+    for path in sorted(uploads.iterdir()):
+        if path.is_symlink() or not path.is_file() or path.name.startswith('.'):raise ValueError('invalid frozen replica upload')
+        if path.name.endswith('.sha256'):
+            data=path.with_name(path.name[:-7])
+            if not data.is_file() or data.is_symlink() or _digest(data)!=path.read_text().strip():raise ValueError('frozen upload digest differs')
+        elif not path.with_name(path.name+'.sha256').is_file():raise ValueError('frozen upload lacks a sidecar')
+        os.link(path,target/path.name);inventory.append(path.name)
+    return inventory

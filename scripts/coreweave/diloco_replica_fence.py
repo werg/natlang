@@ -277,3 +277,18 @@ def sdk_authorize_coordinator(role, nonce):
     result=sandbox.exec(['python3','-c',program,role['directory'],request['owner_id'],role['boot_id'],nonce,role['runtime'],json.dumps(request,sort_keys=True)],timeout_seconds=30).result(timeout=60)
     if result.returncode!=0:raise ValueError('coordinator authorization failed; worker fence remains active')
     return json.loads(result.stdout)
+
+
+def verify_replica_loss_fence(owner_evidence, *, replica_sandbox_id, get_sandbox, now=time.time):
+    """Add a fresh provider fence for the lost peer to owned-primary stop evidence."""
+    if (owner_evidence.get('schema')!='natlang.diloco-owner-restart-fence/1' or
+            owner_evidence.get('primary_fenced') is not True or owner_evidence.get('all_workers_quiesced') is not True):
+        raise ValueError('primary owner and worker fence is incomplete')
+    started=now();sandbox=get_sandbox(replica_sandbox_id);state=_top_state(sandbox,replica_sandbox_id);finished=now()
+    if state!=COMPLETED or finished<started or finished-started>120:raise ValueError('lost replica provider fence is not proven')
+    result={'schema':'natlang.diloco-replica-loss-fence/1','run_id':owner_evidence['run_id'],
+            'primary':owner_evidence['primary'],'primary_process_absent':True,'replica_fenced':True,
+            'all_workers_quiesced':True,'quiesced_workers':owner_evidence['quiesced_workers'],
+            'owner_evidence':owner_evidence,'replica_sandbox_id':replica_sandbox_id,'replica_observed_at':finished}
+    result['proof_sha256']=hashlib.sha256(json.dumps(result,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    return result

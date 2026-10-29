@@ -15,6 +15,11 @@ class ReplicatedDispatch:
         # descriptor before returning. Streaming can happen outside the queue.
         return self.executor.read(function)
 
+    def replicate_file(self,name,path,sha256):
+        from .replica_transport import transmit_file
+        return transmit_file(self.executor.endpoint,self.executor.token,name,path,sha256,
+            allow_http=self.executor.allow_http,gateway=self.executor.gateway,timeout=max(self.executor.timeout,3600))
+
     def call(self, kind, args, payload=None):
         with self.cond:
             self.inflight+=1

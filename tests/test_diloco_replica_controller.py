@@ -4,7 +4,7 @@ from scripts.coreweave.diloco_replica_controller import run_promotion
 
 
 def test_controller_never_releases_before_exact_ready(tmp_path):
-    intent={'run_id':'r','generation_nonce':'n'*48,'sequence':4,'head':'h'*64,'new_url':'https://new','new_token_sha256':'t'*64}
+    intent={'run_id':'r','generation_nonce':'n'*48,'activation_nonce':'x'*48,'sequence':4,'head':'h'*64,'new_url':'https://new','new_token_sha256':'t'*64}
     fence=lambda i:[{'sandbox_id':'peer'}]
     verify=lambda i:{'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64}
     called=[]
@@ -28,7 +28,7 @@ def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch
     from natlang_neuralese.train.diloco import replica_transport
     import hashlib
     token='new-secret-'+'x'*32;(tmp_path/'token').write_text(token)
-    intent={'run_id':'r','generation_nonce':'n'*48,'sequence':4,'head':'h'*64,'new_url':'https://new','new_token_sha256':hashlib.sha256(token.encode()).hexdigest()}
+    intent={'run_id':'r','generation_nonce':'n'*48,'activation_nonce':'x'*48,'sequence':4,'head':'h'*64,'new_url':'https://new','new_token_sha256':hashlib.sha256(token.encode()).hexdigest()}
     old={'sandbox_id':'old','boot_id':'b','owner_id':'o','pid':1,'start_ticks':'1'}
     entries=[{'sandbox_id':'peer','boot_id':'bb','owner_id':'oo','directory':'/control','runtime':'/runtime'}]
     monkeypatch.setattr(fm,'owner_reference',lambda *args:{'run_id':'r','workers':{'0':dict(old),'1':dict(entries[0])}})
