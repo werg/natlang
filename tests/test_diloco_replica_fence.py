@@ -52,3 +52,17 @@ def test_local_role_observation_checks_actual_process(tmp_path):
     state['roles']['worker']={'pid':999999999,'alive':False}; state['pending_start']={'role':'worker'}
     (tmp_path/'state.json').write_text(json.dumps(state))
     with pytest.raises(ValueError): observe_local_worker(identity,'nonce',tmp_path)
+
+
+def test_completed_cohost_worker_never_executes_into_dead_sandbox(tmp_path):
+    primary={'sandbox_id':'old','boot_id':'boot','owner_id':'owner','pid':12,'start_ticks':'42'}
+    worker=dict(primary,pid=13,start_ticks='43')
+    path=tmp_path/'owner.json'; path.write_text(json.dumps({'run_id':'run','coordinator':primary,'workers':{'0':worker}}))
+    proof={'journal':{'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()},'expected_run_id':'run'}
+    provider=lambda _:SimpleNamespace(sandbox_id='old',status=SimpleNamespace(state=3))
+    probe=lambda *_: (_ for _ in ()).throw(AssertionError('completed cohost must not be execed'))
+    result=verify_provider_fence(proof,expected_primary=primary,expected_workers=[0],get_sandbox=provider,probe_worker=probe)
+    assert result['workers'][0]['method']=='provider-completed-cohost'
+    worker['boot_id']='other-boot'; path.write_text(json.dumps({'run_id':'run','coordinator':primary,'workers':{'0':worker}}))
+    proof['journal']['sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+    with pytest.raises(ValueError): verify_provider_fence(proof,expected_primary=primary,expected_workers=[0],get_sandbox=provider,probe_worker=probe)
