@@ -17,7 +17,7 @@ import { ensureNativeServer, stopNativeServer } from './native-managed.js';
 import { randomUUID } from 'node:crypto';
 import { schedulerForSettings, type Scheduler } from './scheduler.js';
 import { planServerSlots, type SlotPlan } from './server-slots.js';
-import { restorePrefixes } from '../package/warm.js';
+import { openingOf, pruneWarmStates, warmOpening, type WarmPrefix } from '../package/warm.js';
 import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest, SessionTurnOptions } from '../contracts.js';
 import { describeLlamaRuntime, discoverLlamaRuntime, type LlamaRuntimeDiscovery,
   type LlamaServerInspection } from './llama-runtime.js';
@@ -29,7 +29,9 @@ export type { ModelProfile } from './config.js';
 export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-provider'; endpoint: string | null;
   model: string; executable: string | null; modelPath: string | null; running: boolean;
   /** A managed server's stock model and llama.cpp build (undefined for other backends and configured GGUFs). */
-  release?: LocalModelRelease; runtimeBuild?: number | null };
+  release?: LocalModelRelease; runtimeBuild?: number | null;
+  /** The prompt openings this session warmed (prefilled and saved, or restored) on a managed server. */
+  warm?: WarmPrefix[] };
 export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   /** A native reference server's artifact store, for uploading tuned artifacts and states; undefined otherwise. */
   nativeArtifacts?(): import('./neuralese-server.js').HttpNeuraleseStore | undefined;
@@ -58,9 +60,6 @@ export type ManagedModelRuntimeOptions = { ensureRuntime?:
   loraAdapters?: () => readonly { readonly id: string; readonly path: string }[];
   /** Native state span files (tuned soft states) the managed server loads with `--native-state` (the llama.cpp fork). */
   nativeStates?: () => readonly { readonly id: string; readonly path: string }[];
-  /** Pre-warmed prompt prefixes (package/warm.ts): the server saves and restores slot states in `directory`, and each
-   * slot starts from one of `states` (prefilled by `natlang build --warm` for exactly this model file and build). */
-  warm?: { directory: string; states?: readonly { readonly id: string; readonly path: string }[] };
   /** Native reference server: request exact sampling receipts (`x_natlang_rl_capture`) on every turn, for RL rollouts. */
   rlCapture?: boolean;
   /** With rlCapture: also record the sampler's top-k log-probs at each sampled position (`x_natlang_rl_top_k`,
@@ -289,6 +288,35 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   const driver = (options: OpenAICompatibleOptions) => external?.neuraleseServer ? Object.assign(nativeDriver(),
     { contextWindow: () => serverContextWindow(options) }) : openai(options);
   let unscored: string | null = null;
+  // Warm openings: each distinct system prompt and tool list is prefilled once per machine and model, then restored.
+  const warmDirectory = join(defaultNatlangCacheDirectory(environment), 'warm-prefixes');
+  let warming = false, inflight = 0;
+  const openings = new Map<string, Promise<WarmPrefix | undefined>>(), warmed: WarmPrefix[] = [];
+  const warmFor = async (request: ModelTurnRequest): Promise<void> => {
+    if (choice.kind !== 'managed-local') return;
+    const opening = openingOf(request);
+    if (!opening) return;
+    let pending = openings.get(opening.key);
+    if (!pending) {
+      if (inflight > 0) return; // every slot must be idle to receive a state; a later idle moment warms it
+      pending = (async () => {
+        const options = await start();
+        if (!warming) return undefined;
+        const sha = await managedModelSha256(environment, release);
+        const build = prerequisites.runtime.selected?.build ?? 'x';
+        const state = await warmOpening(options.endpoint, warmDirectory, opening, `${sha.slice(0, 12)}-b${build}`, plan?.slots ?? 1);
+        if (state) {
+          warmed.push(state);
+          error.write(state.created ? `natlang: prefilled the ${state.tokens}-token prompt opening once for this model; later calls and runs restore it\n` :
+            `natlang: restored the warm ${state.tokens}-token prompt opening into ${state.restoredSlots} slot${state.restoredSlots === 1 ? '' : 's'}\n`);
+          pruneWarmStates(warmDirectory);
+        }
+        return state;
+      })().catch(failure => { error.write(`natlang: prompt warming skipped: ${(failure as Error).message.split('\n')[0]!.slice(0, 200)}\n`); return undefined; });
+      openings.set(opening.key, pending);
+    }
+    await pending;
+  };
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
     if (closed) throw new Error('model session is closed');
@@ -329,7 +357,9 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
         args.push('--lora-init-without-apply', ...(supportsPerSequenceLora(prerequisites.executable) ? ['--lora-per-sequence'] : []));
         for (const adapter of adapters) { loraIndex.set(adapter.id, loraIndex.size); args.push('--lora', adapter.path); }
       }
-      if (runtimeOptions.warm) { mkdirSync(runtimeOptions.warm.directory, { recursive: true }); args.push('--slot-save-path', runtimeOptions.warm.directory); }
+      // Warm prompt openings (package/warm.ts) are saved and restored here; not with adapters, whose KV differs.
+      warming = environment.NATLANG_WARM_PREFIXES !== 'off' && !adapters.length && !(runtimeOptions.nativeStates?.() ?? []).length;
+      if (warming) { mkdirSync(warmDirectory, { recursive: true }); args.push('--slot-save-path', warmDirectory); }
       nativeStatesLoaded.clear();
       const states = runtimeOptions.nativeStates?.() ?? [];
       if (states.length) {
@@ -346,10 +376,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
         if (child.exitCode !== null || child.signalCode !== null)
           throw new Error(`managed model server exited during startup\n${recentError.trim()}`);
         try { const response = await fetch(endpoint + '/health'); if (response.ok) {
-          const states = runtimeOptions.warm?.states ?? [];
-          const restored = states.length ? await restorePrefixes(endpoint, states, plan!.slots, line => error.write(line + '\n')) : 0;
-          error.write(`natlang: model ready in ${((Date.now() - startedAt) / 1000).toFixed(1)} s` +
-            `${restored ? `; ${restored} slot${restored === 1 ? '' : 's'} start from the build's warm prompt prefix` : ''}\n`);
+          error.write(`natlang: model ready in ${((Date.now() - startedAt) / 1000).toFixed(1)} s\n`);
           local = { endpoint, model: environment.NATLANG_MODEL ?? choice.model,
             // Prefix caching: a slot keeps the previous prompt's KV, so calls that share a prefix skip its prefill.
             headers: choice.headers, request: choice.kind === 'managed-local' ? { cache_prompt: true, ...choice.request } : undefined }; return local;
@@ -379,8 +406,11 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       signal?.throwIfAborted();
       if (choice.kind === 'pi-provider') return (await piBackend()).turn(request, signal, turnOptions);
       const options = await start(); signal?.throwIfAborted();
+      await warmFor(request); signal?.throwIfAborted();
+      inflight++;
       // The HTTP driver streams deltas; aggregate progress is a Pi backend's report.
-      return turnOptions?.onDelta ? driver(options)(request, signal, { onDelta: turnOptions.onDelta }) : driver(options)(request, signal);
+      try { return await (turnOptions?.onDelta ? driver(options)(request, signal, { onDelta: turnOptions.onDelta }) : driver(options)(request, signal)); }
+      finally { inflight--; }
     },
     async decide(request, signal) {
       signal?.throwIfAborted();
@@ -399,7 +429,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,
       model: environment.NATLANG_MODEL ?? choice.model, executable: prerequisites.executable,
       modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child),
-      ...(environment.NATLANG_MODEL_PATH ? {} : { release }), runtimeBuild: prerequisites.runtime.selected?.build ?? null }; },
+      ...(environment.NATLANG_MODEL_PATH ? {} : { release }), runtimeBuild: prerequisites.runtime.selected?.build ?? null, warm: [...warmed] }; },
     scheduler,
     /** The native reference server's artifact store (uploads of tuned artifacts and states), when this is one. */
     nativeArtifacts() { return external?.neuraleseServer ? nativeDriver().artifacts : undefined; },

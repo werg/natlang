@@ -4,14 +4,15 @@ import { basename, join, resolve } from 'node:path';
 
 export type LocalApplication = { path: string; name: string; version: string; targets: string[]; description: string };
 
-export function discoverLocalApplications(value = '.'): LocalApplication[] {
+/** With `libraries`, packages without targets (functions only) are included too. */
+export function discoverLocalApplications(value = '.', options: { libraries?: boolean } = {}): LocalApplication[] {
   const root = resolve(value);
   if (!existsSync(root)) throw new Error(`application search path does not exist: ${value}`);
   const manifests: string[] = [], ignored = new Set(['.git', '.natlang', 'node_modules', '.venv', 'dist']);
   const visit = (path: string, explicitRoot = false) => {
     const status = explicitRoot ? statSync(path) : lstatSync(path);
     if (status.isSymbolicLink()) return;
-    if (status.isFile()) { if ((basename(path) === 'natlang.json' || path.endsWith('.natlang.json')) && isApplicationManifest(path)) manifests.push(path); return; }
+    if (status.isFile()) { if ((basename(path) === 'natlang.json' || path.endsWith('.natlang.json')) && isApplicationManifest(path, options.libraries)) manifests.push(path); return; }
     if (!status.isDirectory() || ignored.has(basename(path))) return;
     for (const name of readdirSync(path).sort()) visit(join(path, name));
   };
@@ -24,10 +25,10 @@ export function discoverLocalApplications(value = '.'): LocalApplication[] {
   }).sort((left, right) => left.path.localeCompare(right.path));
 }
 
-export function isApplicationManifest(path: string): boolean {
+export function isApplicationManifest(path: string, libraries = false): boolean {
   if (!existsSync(path) || !lstatSync(path).isFile()) return false;
   try {
     const value = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-    return value.schema === 'natlang.package/v2' && Boolean(value.targets && typeof value.targets === 'object');
+    return value.schema === 'natlang.package/v2' && (libraries || Boolean(value.targets && typeof value.targets === 'object'));
   } catch { return false; }
 }

@@ -11,9 +11,7 @@
  * wires a profile's `escalate` teacher through the tiered engine, and reports each of these on `log` in one line.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
-import { usableWarmStates, type BuildLock } from './package/warm.js';
-import { discoverLlamaRuntime } from './model/llama-runtime.js';
+import { basename, join, resolve } from 'node:path';
 import type { ProgramDescriptor } from './adaptation/types.js';
 import { currentRelease } from './adaptation/weights/release.js';
 import { bindAdaptation } from './adaptation/compatibility.js';
@@ -58,11 +56,6 @@ export type NatlangRuntimeConfiguration = {
   escalationExamples?: boolean;
   /** One-line notices (tuned binding, newer checkpoints, escalations, server starts). Default: stderr. */
   log?: NodeJS.WritableStream;
-  /** A compiled program's warm prompt prefixes (package/warm.ts): restored into a managed llama.cpp server's slots when the
-   * lock's states were prefilled for exactly its model file and build; with no lock, the server only saves states there. */
-  warm?: { directory: string; lock?: BuildLock };
-  /** Sees every model request (the warm run collects their openings). */
-  observeRequest?: (request: ModelTurnRequest) => void;
   /** Further runtime options (services, trace, programRoot, refinements, ...). */
   runtime?: Omit<NatlangRuntimeOptions, 'model' | 'models' | 'tiers' | 'weights' | 'neuralese' | 'seed' | 'executorIdentity'
     | 'program' | 'adaptation'>;
@@ -225,27 +218,13 @@ export async function natlangRuntime(configuration: NatlangRuntimeConfiguration 
   if (release && choice.kind === 'external' && choice.managedNative) await ensureNativeServer(choice.managedNative, environment, log);
   const tuned = release ? await tunedServing(root!, program, choice, environment) : {};
   if (tuned.notice) log.write(tuned.notice + '\n');
-  let warm: { directory: string; states?: { id: string; path: string }[] } | undefined;
-  if (configuration.warm && choice.kind === 'managed-local') {
-    const { directory, lock } = configuration.warm;
-    if (!lock) warm = { directory };
-    else {
-      const { usable, reason } = usableWarmStates(dirname(directory), lock, choice.release?.sha256, discoverLlamaRuntime(environment).selected?.build);
-      if (usable.length) warm = { directory, states: usable };
-      else if (reason) log.write(`natlang: the build is not warm for this model (${reason}); natlang build --warm prefills it again\n`);
-    }
-  }
   const session = createResolvedModelSession(choice, environment, log, { ...(configuration.ensureRuntime ? { ensureRuntime: configuration.ensureRuntime } : {}),
     ...(tuned.loraAdapters ? { loraAdapters: tuned.loraAdapters } : {}), ...(tuned.nativeStates ? { nativeStates: tuned.nativeStates } : {}),
-    ...(warm ? { warm } : {}) });
+  });
   const closers: (() => Promise<void>)[] = [() => session.close()];
   try {
     if (tuned.vllmStacks) session.vllmStacks?.(tuned.vllmStacks);
-    const base = sessionDriver(session), observe = configuration.observeRequest;
-    const driver: ModelDriver = observe ? Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => {
-      try { observe(request); } catch { /* observers never affect the call */ }
-      return options ? base(request, signal, options) : base(request, signal);
-    }, { ...base }) : base;
+    const driver = sessionDriver(session);
     const student = await runtimeModel(choice, driver);
     const escalateTo = configuration.escalate === false ? undefined : configuration.escalate ?? selection.profile.escalate;
     const escalating = await escalation(escalateTo === 'none' ? undefined : escalateTo, selection, student.model, configuration, log);

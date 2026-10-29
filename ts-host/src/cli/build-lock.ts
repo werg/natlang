@@ -7,13 +7,11 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs
 import { basename, join, relative, resolve } from 'node:path';
 import { currentRelease } from '../adaptation/weights/release.js';
 import { natlangRuntime, type ConfiguredNatlangRuntime } from '../configured-runtime.js';
-import type { ModelTurnRequest } from '../contracts.js';
 import { readNatlangFrontmatter } from '../runtime/loader.js';
 import { fileTraceSink, loadNatlang } from '../runtime/node-files.js';
 import type { LiveSink } from '../runtime/runtime.js';
 import { parsePackageManifest, type NatlangPackageManifest } from '../package/manifest.js';
-import { BUILD_LOCK_SCHEMA, prefillPrefixes, readBuildLock, requestPrefixes, warmDirectory, writeBuildLock,
-  type BuildLock, type WarmCaseResult } from '../package/warm.js';
+import { BUILD_LOCK_SCHEMA, readBuildLock, writeBuildLock, type BuildLock, type WarmCaseResult } from '../package/warm.js';
 import type { LoadedModelConfiguration } from '../model/config.js';
 import { discoverLlamaRuntime, type LlamaRuntimeDiscovery, type LlamaServerInspection } from '../model/llama-runtime.js';
 
@@ -74,33 +72,33 @@ export function lockFor(root: string, selection: LoadedModelConfiguration, versi
 
 /**
  * The ahead-of-time tracing run: each `warmup` call of natlang.json runs on the program's model with traces recorded
- * under .natlang/build/warm/traces; the openings its requests sent are prefilled and saved for `natlang run`.
+ * under .natlang/build/warm/traces; on the managed llama.cpp server the prompt openings those calls send are prefilled
+ * and saved (package/warm.ts), so `natlang run` starts warm. The lock records the calls and the openings.
  */
 export async function warmProgram(root: string, options: { profile?: string; provider?: string; model?: string; version: string;
   live?: LiveSink; log: NodeJS.WritableStream; ensureRuntime: (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> }):
   Promise<{ lock: BuildLock; path: string }> {
   const manifest = readProgramManifest(root);
   const cases = manifest?.warmup ?? [];
-  const buildDirectory = join(root, '.natlang', 'build'), directory = warmDirectory(buildDirectory);
-  rmSync(directory, { recursive: true, force: true });
-  const requests: ModelTurnRequest[] = [];
+  const buildDirectory = join(root, '.natlang', 'build'), traces = join(buildDirectory, 'warm', 'traces');
+  rmSync(traces, { recursive: true, force: true });
+  if (!cases.length) options.log.write('natlang: natlang.json declares no "warmup" calls; nothing to trace or prefill ahead of time\n');
   const natlang = await natlangRuntime({ profile: options.profile, provider: options.provider, model: options.model,
     ...(manifest?.model ? { programModel: manifest.model } : {}), programRoot: root, ensureRuntime: options.ensureRuntime, log: options.log,
-    warm: { directory }, observeRequest: request => { requests.push(request); },
-    runtime: { trace: fileTraceSink(join(directory, 'traces')), programRoot: root, ...(options.live ? { onLive: options.live } : {}) } });
+    runtime: { trace: fileTraceSink(traces), programRoot: root, ...(options.live ? { onLive: options.live } : {}) } });
   const started = Date.now(), results: WarmCaseResult[] = [];
   try {
     for (const [index, item] of cases.entries()) {
       const fn = loadNatlang(resolve(root, item.function), root) as unknown as ((...args: unknown[]) => Promise<unknown>) &
         Record<symbol, { definition: { params: { name: string }[] } }>;
       const params = fn[Symbol.for('natlang.callable')]!.definition.params;
-      const roots: { callId: string; outcome: string; detail: string }[] = [];
+      const roots: { callId: string; outcome: string }[] = [];
       let calls = 0, tokensIn = 0, tokensOut = 0;
       const at = Date.now();
       let outcome = 'done', detail: string | undefined;
       try {
         await natlang.runtime.run(() => fn(...params.map(parameter => item.inputs[parameter.name])), { onLive: event => {
-          if (event.type === 'call_end') { calls++; if (!event.parentCallId) roots.push({ callId: event.callId, outcome: event.outcome, detail: event.detail }); }
+          if (event.type === 'call_end') { calls++; if (!event.parentCallId) roots.push({ callId: event.callId, outcome: event.outcome }); }
           if (event.type === 'trace' && event.event.kind === 'model_request' && event.event.phase === 'end') {
             tokensIn += Number(event.event.prompt_tokens ?? 0); tokensOut += Number(event.event.completion_tokens ?? 0);
           }
@@ -111,18 +109,10 @@ export async function warmProgram(root: string, options: { profile?: string; pro
       options.log.write(`natlang: warm-up ${results.at(-1)!.name}: ${outcome}${detail ? ` (${detail})` : ''} in ${((Date.now() - at) / 1000).toFixed(1)} s\n`);
     }
     const status = natlang.modelStatus();
-    let warm: BuildLock['warm'] = null;
-    if (status.source === 'managed-local' && status.endpoint && status.release && status.runtimeBuild) {
-      const prefixes = await prefillPrefixes(status.endpoint, directory, requestPrefixes(requests).slice(0, 4),
-        `${status.release.sha256.slice(0, 12)}-b${status.runtimeBuild}`);
-      warm = { at: new Date().toISOString(), modelSha256: status.release.sha256, runtimeBuild: status.runtimeBuild, directory: relative(root, directory),
-        prefixes, cases: results, wall_ms: Date.now() - started };
-      for (const prefix of prefixes) options.log.write(`natlang: prefilled a ${prefix.tokens}-token prompt prefix shared by ${prefix.requests} request${prefix.requests === 1 ? '' : 's'} (${(prefix.bytes / 2 ** 20).toFixed(1)} MiB)\n`);
-    } else if (cases.length) {
-      warm = { at: new Date().toISOString(), modelSha256: '', runtimeBuild: 0, directory: relative(root, directory), prefixes: [], cases: results,
-        wall_ms: Date.now() - started };
-      options.log.write(`natlang: traces recorded; prompt prefixes are prefilled only for the managed local model (this profile is ${status.source})\n`);
-    }
+    const warm: BuildLock['warm'] = cases.length ? { at: new Date().toISOString(), modelSha256: status.release?.sha256 ?? null,
+      runtimeBuild: status.runtimeBuild ?? null, prefixes: status.warm ?? [], cases: results, wall_ms: Date.now() - started } : null;
+    if (cases.length && status.source !== 'managed-local')
+      options.log.write(`natlang: traces recorded; prompt openings are prefilled only on the managed local model (this profile is ${status.source})\n`);
     const lock = lockFor(root, natlang.selection, options.version, natlang, warm ?? undefined);
     return { lock, path: writeBuildLock(buildDirectory, lock) };
   } finally { await natlang.close(); }

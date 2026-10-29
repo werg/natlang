@@ -259,7 +259,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       options.onTurn?.({ durationMs: Date.now() - started, promptTokens: hasPrompt ? promptTokens : null,
         completionTokens: hasCompletion ? completionTokens : null, cachedTokens: hasCached ? cachedTokens : null, retries,
         ...(scheduling ? { scheduling } : {}) });
-      return scheduling ? { ...turn, scheduling } : turn;
+      const counted = hasCached ? { ...turn, cached_tokens: cachedTokens } : turn;
+      return scheduling ? { ...counted, scheduling } : counted;
     };
     while (true) {
       if (signal?.aborted) throw new Error('model turn aborted');

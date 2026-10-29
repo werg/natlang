@@ -10,7 +10,7 @@ import { compareVersions, defaultNatlangConfigDirectory, satisfiesVersion } from
 import { modelStatus, programForStatus } from './status.js';
 import { commandProgress, parseProgressMode } from './progress.js';
 import { lockFor, readProgramManifest, warmProgram } from './build-lock.js';
-import { readBuildLock, warmDirectory, writeBuildLock, type BuildLock } from '../package/warm.js';
+import { writeBuildLock, type BuildLock } from '../package/warm.js';
 import { defaultNativePython, ensureNativeServer, ownsNativeServer, pinNativeCheckpoint, readCheckpointPointer, removeNativePin, exportNativeGguf, findNativeCheckpoint,
   stopNativeServer, type NativeModelSettings } from '../model/native-managed.js';
 import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
@@ -113,9 +113,11 @@ with (natlang.json "model", else the selected profile; a stock model pinned by
 revision and SHA-256), the llama.cpp build, the active tuning release and the
 program's functions. --warm is the ahead-of-time tracing run: each natlang.json
 "warmup" call ({ "function": "x.nl", "inputs": {...} }) runs with traces kept
-under .natlang/build/warm/traces, and the prompt prefixes those calls send are
-prefilled once and saved; natlang run restores them into every server slot, so
-the first calls skip that prefill.`;
+under .natlang/build/warm/traces, and the prompt openings those calls send are
+prefilled on the managed server and saved in the machine cache. A managed server
+restores a saved opening into every slot before the first call that sends it
+(and saves one it has not seen), so runs after a warm build start warm.
+NATLANG_WARM_PREFIXES=off turns this off.`;
   if (topic === 'call') return `Call a named natural-language function:
   natlang call NAME|FILE.nl [--inputs FILE] [--lines|--jsonl] [--trace DIR]
 
@@ -570,11 +572,9 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   // Crisp checkers of refined predicates come from the program's `refinements.ts`, which its compiled `.nl` modules load.
   const refinements = manifest.refinements;
   const progress = progressFor(parsed);
-  // The compiled program's own model and warm prompt prefixes (natlang build --warm); the command's selection wins.
+  // The compiled program's own model (natlang.json "model"); the command's selection wins.
   const declared = spec.package ? (() => { try { return readProgramManifest(spec.root); } catch { return undefined; } })() : undefined;
-  const lock = readBuildLock(buildDirectory);
   const natlang = await natlangRuntime({ ...selectionOptions(parsed), ...(declared?.model ? { programModel: declared.model } : {}),
-    ...(lock?.warm?.prefixes.length ? { warm: { directory: warmDirectory(buildDirectory), lock } } : {}),
     programRoot: spec.root, program: inventory.manifest.adaptation!,
     weights: !parsed.options.has('--no-weights'), escalate: escalateOption(parsed), ...(artifact ? { adaptation: artifact } : {}),
     ensureRuntime: discovery => ensureRuntime(discovery, parsed.options.has('--yes')),

@@ -51,6 +51,7 @@ for profiles, overrides, and provider options; see
 
 | Guide | Contents |
 |---|---|
+| [Running programs](docs/RUNNING_PROGRAMS.md) | The default model, profiles, progress, compiled programs with warm starts, the dashboard |
 | [Language specification](spec/SPEC.md) | Functions, callable folders, captures, iteration, services, the model surface |
 | [Skills](skills/README.md) | Authoring and integration guidance for coding agents |
 | [Native packages](NATIVE_PACKAGES.md) | `@natlang/node`, `@natlang/browser`, the CLI, and distribution packages |

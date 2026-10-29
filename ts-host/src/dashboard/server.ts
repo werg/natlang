@@ -165,7 +165,7 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
   });
 
   // Programs.
-  route('GET', '/api/programs', () => discoverLocalApplications(root).map(item => {
+  route('GET', '/api/programs', () => discoverLocalApplications(root, { libraries: true }).map(item => {
     const directory = dirname(item.path), lock = readBuildLock(join(directory, '.natlang', 'build'));
     return { ...item, directory: relative(root, directory) || '.', functions: programFunctions(directory).length,
       warm: lock?.warm ? { at: lock.warm.at, prefixes: lock.warm.prefixes.length, cases: lock.warm.cases.length,
@@ -326,6 +326,8 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     };
     attempt();
   });
+  const address = server.address();
+  if (address && typeof address === 'object') port = address.port;
   const url = `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}/?token=${token}`;
   log.write(`natlang dashboard on ${url}\n`);
   return { url, close: async () => { await jobs.close(); await new Promise<void>(resolveClose => server.close(() => resolveClose())); } };

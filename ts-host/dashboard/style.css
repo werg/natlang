@@ -117,3 +117,5 @@ pre.console { background: var(--sunk); border-radius: 6px; padding: 10px 12px; m
   .split { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+main > .view { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.list.scroll { max-height: calc(100vh - 210px); overflow-y: auto; margin-top: 8px; }
