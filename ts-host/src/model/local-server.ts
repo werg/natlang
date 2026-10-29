@@ -31,7 +31,7 @@ export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-pr
   model: string; executable: string | null; modelPath: string | null; running: boolean;
   /** A managed server's stock model and llama.cpp build (undefined for other backends and configured GGUFs). */
   release?: LocalModelRelease; runtimeBuild?: number | null;
-  /** The llama.cpp build and commit, git-describe style (`b11960g8642541`): fork builds all report build 1. */
+  /** The llama.cpp build and commit, git-describe style (`b12067ga6401bb`): fork builds all report build 1. */
   runtime?: string | null;
   /** The prompt openings this session warmed (prefilled and saved, or restored) on a managed server. */
   warm?: WarmPrefix[];

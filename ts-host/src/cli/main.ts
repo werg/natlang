@@ -480,8 +480,9 @@ function commandAvailable(command: string): boolean {
 function llamaRuntimeNote(): string {
   const selected = discoverLlamaRuntime().selected;
   if (!selected) return 'not installed: natlang setup';
-  if (selected.source === 'fork') return `natlang fork ${LLAMA_FORK_SOURCE.commit.slice(0, 12)}`;
-  return `${selected.source} b${selected.build}; natlang runtime build compiles the fork (decision scoring, guided generation, native states)`;
+  if (selected.source === 'fork') return `natlang fork ${LLAMA_FORK_SOURCE.commit.slice(0, 12)}, built from source`;
+  if (selected.source === 'managed') return `natlang fork release b${selected.build}`;
+  return `${selected.source} b${selected.build}`;
 }
 async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise<{ report: Record<string, unknown>; okay: boolean }> {
   const selected = modelSelection(parsed), choice = selected.choice;

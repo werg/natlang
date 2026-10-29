@@ -8,7 +8,7 @@ A fresh install runs every natural-language call on the stock instruction model 
 on natlang's managed llama.cpp server. Our own LFM3 checkpoints replace it once they are trained.
 
 ```sh
-natlang setup --yes     # the pinned llama.cpp build (v0.8.0, b11960) and the model, verified by SHA-256
+natlang setup --yes     # natlang's llama.cpp build (natlang-b12067) and the model, verified by SHA-256
 natlang doctor          # what would run, and whether it is ready
 ```
 
@@ -90,14 +90,16 @@ slots are idle. `NATLANG_SHARED_SERVER=off` makes a command start its own server
 
 ## llama.cpp
 
-The managed runtime is upstream llama.cpp v0.8.0 (b11960) until natlang's fork
-[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese) publishes runtime releases: its
-`natlang-runtime` workflow builds every platform and `node scripts/update_llama_runtime.mjs --fork natlang-bNNNN`
-pins a release. The fork adds decision scoring, guided generation, native states, RL capture and backend sampling;
-upstream serves the same programs without those. `natlang runtime build` compiles the fork at the commit this natlang
-pins (`ts-host/src/llama-fork-source.ts`; it needs git, cmake and a C++ compiler, and uses CUDA when `nvcc` is on PATH)
-into the runtime directory, and managed sessions prefer that build from then on; the System page has the same button and
-says which build runs. `NATLANG_LLAMA_SERVER` (or a profile's `local.server`) still selects any other binary.
+The managed runtime is a release of natlang's llama.cpp fork
+[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese), currently natlang-b12067 (llama.cpp 0.8.0):
+prebuilt CPU builds for Linux and Windows (x64, arm64) and Metal builds for macOS, checked by SHA-256. The fork adds
+decision scoring, guided generation (whose reasoning streams live), native states, RL capture and backend sampling; an
+upstream llama.cpp serves the same programs without those. Its `natlang-runtime` workflow publishes a release and
+`node scripts/update_llama_runtime.mjs --fork natlang-bNNNN` pins it. For a GPU, or a fork commit newer than the
+release, `natlang runtime build` compiles the commit this natlang pins (`ts-host/src/llama-fork-source.ts`; it needs
+git, cmake and a C++ compiler, and uses CUDA when `nvcc` is on PATH) into the runtime directory, and managed sessions
+prefer that build from then on; the System page has the same button and says which build runs. `NATLANG_LLAMA_SERVER`
+(or a profile's `local.server`) still selects any other binary.
 
 ## The dashboard
 
