@@ -3,6 +3,59 @@
 This document records recovery milestones. The newest update comes first;
 the later sections describe historical boundaries.
 
+## Update, 08:41 Berlin: regression diagnosis and prompt robustness
+
+Latest observed live steps were12930/11920/12336/10978, all advancing on the
+591119-row source, with no observed cgroup OOM kills. The four learners remain
+standalone; replicated distributed coordination is implemented but has not yet
+passed full-layout qualification or been deployed. Do not describe these steps
+as distributed outer-optimizer progress.
+
+The complete matched graph-search development packet scored base6/8 versus
+step8341 1/8. This is a real regression on that family, not evidence that all
+capabilities or the latest checkpoints have regressed. The native and GGUF
+paths agreed on254/256 sampled greedy positions, including every repeated-tail
+position in that comparison. The pinned tokenizer template is byte-identical
+to the official snapshot. Keeping earlier thinking is intentional and was
+already enabled for the8341 evaluation.
+
+A concrete prompt mismatch exists: ordinary training trajectories used a short
+program header without tool schemas, whereas this evaluator used the full prompt
+with schemas. On the same initial graph80 context, short prompts produced
+complete calls while the full prompt repeated an incomplete search expression.
+There was also a real transport bug: tool-less header serving returned complete
+XML in assistant content, which the harness rejected. The isolated parser repair
+executes those calls, but graph80 still returned null rather than the required
+3. The prompt/transport findings do not fully explain the capability regression.
+Four other short-prompt trials shared one server slot and hit wall budgets;
+they are inconclusive, not four established task-quality failures.
+
+Train on verified full and compact prompt variants while retaining the same
+semantic tool contract and exact assistant targets. Recompute all graph import
+and producer positions and keep supervision on the model's own outputs.
+Protected related worlds stay protected across variants. The first40 variants
+(19 ordinary actions and one genuine10-node/12-edge graph, each rendered twice)
+passed static target/import checks and the complete protection union. Exact
+content dedup and numerical graph qualification are still pending; the candidate
+591159-row source is not admitted. Expansion beyond this pilot remains required.
+
+Main b37c417a6 integrates one-time pending-group focus, preserving the complete
+packed groups, required credits and saved optimizer/RNG/exposure. It is being
+checked in a frozen worktree before rollout; the current live frozen runtime
+does not yet implement it. The67 targeted verified idiom rows had no recorded
+visits in the audited checkpoints, despite being present in the recipe.
+
+A full-size diagnostic loaded actual8341 weights and optimizer histories and
+used a real2762-token training row with369 positive targets. Production
+in-backward updates and deferred updates agreed exactly on scalar loss, all153
+Muon-routed gradients and every trained parameter, both in BF16 and under
+NVFP4 with the checkpoint's saved activation calibration. Parameter-addressed
+identical stochastic-rounding draws isolate the update schedules. This excludes
+that specific update-path error on this row; it does not test every batch, FP8,
+live-before-save identity, or whole-task behavior. Results are in
+`/home/werg/data/dgxops/claude-recovery-20261028/data/training-bug-audit-v1/real-update-parity{,-nvfp4}.json`.
+Continue investigating bugs rather than treating more data as an explanation.
+
 ## Update, 06:45 Berlin: four learners earning new graph exposure
 
 All four learners have resumed on the591119-row source1aa7 and native runtime1f0
