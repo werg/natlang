@@ -18,6 +18,7 @@ def live_facts(*, candidate, exports, intents, owners, current_owner, owner_stat
     successors=[e for e in exports if e.get('role')==successor_role]
     if len(successors)!=1 or successor_role not in intents:raise ValueError('successor journal entry is not unique')
     successor=successors[0];successor_intent=intents[successor_role]
+    if candidate.get('successor_role')!=successor_role or candidate.get('successor_sha256')!=successor_intent.get('sha256') or candidate.get('fallback_role')!=fallback_role:raise ValueError('durable successor or fallback binding differs')
     if successor.get('worker')!=entry.get('worker') or successor_intent.get('worker')!=intent.get('worker') or successor_intent.get('step')!=successor.get('step') or successor['step']<=entry['step']:
         raise ValueError('successor worker or step differs')
     successor_owner=owner_for_intent(successor_intent,owners)

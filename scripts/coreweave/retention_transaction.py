@@ -60,7 +60,7 @@ def retire_full(*, lock_path, state_path, candidate, inspect, remove, present, w
         if len(previous)>1:raise ValueError('duplicate retirement operation')
         if previous:
             op=previous[0]
-            if op.get('sha256')!=candidate['sha256'] or op.get('control_role'):raise ValueError('retirement identity changed')
+            if any(op.get(k)!=candidate.get(k) for k in ('sha256','successor_role','successor_sha256','fallback_role')) or op.get('control_role'):raise ValueError('retirement identity changed')
             if op.get('phase')=='deleted':return op
         else:
             inspect(candidate,'prepare');op={**candidate,'phase':'intent'};state['operations'].append(op);write_durable(state_path,state)

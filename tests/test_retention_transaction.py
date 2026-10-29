@@ -37,3 +37,10 @@ def test_crash_after_control_delete_before_phase_write_is_resumable(tmp_path):
     with pytest.raises(RuntimeError,match='before phase commit'):retire_pair(**args)
     assert json.loads((tmp_path/'state').read_text())['operations'][0]['phase']=='intent'
     crash[0]=False;assert retire_pair(**args)['phase']=='deleted';assert removed==['control','full']
+
+
+def test_full_retirement_resume_rejects_changed_successor(tmp_path):
+    from scripts.coreweave.retention_transaction import retire_full
+    state=tmp_path/'state';state.write_text(json.dumps({'retired_roles':[],'operations':[{'role':'old','sha256':'a'*64,'successor_role':'new','successor_sha256':'b'*64,'fallback_role':'backup','phase':'intent'}]}))
+    with pytest.raises(ValueError,match='identity changed'):
+        retire_full(lock_path=tmp_path/'lock',state_path=state,candidate={'role':'old','sha256':'a'*64,'successor_role':'new','successor_sha256':'c'*64,'fallback_role':'backup'},inspect=lambda *a:None,remove=lambda *a:None,present=lambda *a:False,write_durable=lambda p,v:None)
