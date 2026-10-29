@@ -20,6 +20,21 @@ def jsonl(path, rows):
     return str(path)
 
 
+def test_bank_init_mlp_only_preserves_the_actual_student_family(tmp_path):
+    engine=engine_fixture(tmp_path,'lfm')
+    checkpoint=str(tmp_path/'native.pt')
+    source=jsonl(tmp_path/'source.jsonl',rows_for(engine,'bx',2))
+    store=str(tmp_path/'store')
+    engine.store.close()
+    spec=write(tmp_path/'spec.json',{'checkpoint':checkpoint,'store':store,'out':str(tmp_path/'bank.json'),
+        'rank':2,'per_source_rank':1,'component_rank':1,'component_steps':1,'target_classes':['mlp'],
+        'sources':[{'name':'bx','kind':'binding','rows':source,'description':'t30 t31'}]})
+    assert main(['bank-init','--spec',spec])==0
+    # These MLP names fit both LFM tables; the complete LFM2 port determines
+    # the actual unquantized deploy policy before target-class filtering.
+    assert json.loads((tmp_path/'bank.json').read_text())['deploy_quantized']=={}
+
+
 def test_entrypoint_runs_the_whole_operation(tmp_path):
     engine = engine_fixture(tmp_path, 'lfm')
     checkpoint = str(tmp_path / 'native.pt')

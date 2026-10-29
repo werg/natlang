@@ -86,10 +86,12 @@ def bank_init(spec):
     from .bank import new_bank, save_bank, weight_svd_basis
     from .growth import source_component
     from .subspace import pooled_basis, row_loss_weights, row_losses, source_gradients
-    from ..targets import module_map
+    from ..targets import module_map, student_family
     from ...model.native_adapters import target_parameters
     engine = _engine(spec)
-    names, _ = module_map(sorted(target_parameters(engine.shared_model)), classes=spec.get('target_classes'))
+    inventory=sorted(target_parameters(engine.shared_model))
+    family=student_family(inventory)
+    names, _ = module_map(inventory, family=family, classes=spec.get('target_classes'))
     names = sorted(names)
     gradients, descriptors = [], []
     for source in spec['sources']:
@@ -112,7 +114,7 @@ def bank_init(spec):
     from ..targets import deploy_quantized
     # Targets a required deploy point re-quantizes (LFM3 NVFP4: w1/w2/w3): folded writes there are measured at that
     # precision before a capability claim (targets.DEPLOY_QUANTIZED).
-    _write(spec['out'], {'bank': manifest, 'reports': reports, 'deploy_quantized': deploy_quantized(names)})
+    _write(spec['out'], {'bank': manifest, 'reports': reports, 'deploy_quantized': deploy_quantized(names, family=family)})
     return manifest['snapshot']
 
 
