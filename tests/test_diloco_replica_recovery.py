@@ -7,7 +7,7 @@ from natlang_neuralese.train.diloco.replica_baseline import capture
 from natlang_neuralese.train.diloco.replica_dispatch import ReplicatedDispatch
 from natlang_neuralese.train.diloco.replica_executor import ReplicatedExecutor
 from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
-from natlang_neuralese.train.diloco.replica_recovery import capture_recovery,restore_recovery,finish_recovery
+from natlang_neuralese.train.diloco.replica_recovery import capture_recovery,restore_recovery,finish_recovery,prepare_restored_peer_seed
 from natlang_neuralese.train.diloco.replica_state import ReplayCoordinator
 
 
@@ -49,6 +49,12 @@ def test_recovery_closure_replays_and_continues_four_worker_state(tmp_path,monke
     assert archive_replicated_closure(tmp_path/'closure',archive,closure['sha256'])==exported
     _extract(archive,tmp_path/'download',prefix='diloco-replica-recovery')
     restored=restore_recovery(tmp_path/'download'/'diloco-replica-recovery',tmp_path/'restore',receipt_sha256=closure['sha256'],workers=workers,worker_components=components,owner_journal_sha256=owner_sha,owner_journal_path=owner_path,worker_paths=worker_paths)
+    restored['journal'].close()
+    seed=prepare_restored_peer_seed(closure=tmp_path/'download'/'diloco-replica-recovery',restored=tmp_path/'restore',destination=tmp_path/'seed-store',seed=tmp_path/'seed',receipt_sha256=closure['sha256'],freeze_nonce='a'*32)
+    from natlang_neuralese.train.diloco.replica_seed import install_seed
+    installed=install_seed(tmp_path/'seed',tmp_path/'seed-peer',expected_receipt_sha256=seed['receipt_sha256'])
+    assert installed['head']==seed['head'] and (tmp_path/'seed-peer'/'replica-uploads'/'source').read_bytes()==b'full-source'
+    restored['journal']=ReplicaJournal(tmp_path/'restore'/'journal',run_identity='r',baseline_sha256=closure['value']['current_baseline_sha256'],previous_generation={'sequence':closure['value']['lineage']['sequence'],'head':closure['value']['lineage']['head']})
     assert (restored['coordinator']/'uploads'/'source').read_bytes()==b'full-source'
     assert (restored['coordinator']/'pending'/'00000'/'000.safetensors').is_file()
     for i in range(4):assert torch.load(worker_paths[str(i)],weights_only=False)['training']['optimizer']['step']==i

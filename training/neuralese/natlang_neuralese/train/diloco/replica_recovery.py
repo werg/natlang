@@ -216,4 +216,42 @@ def restore_recovery(source,destination,*,receipt_sha256,workers,worker_componen
         for item in (source/'uploads').iterdir():os.link(item,destination/'coordinator'/'uploads'/item.name)
     new=ReplicaJournal(destination/'journal',run_identity=receipt['run_id'],baseline_sha256=receipt['current_baseline_sha256'],
         previous_generation={'sequence':receipt['lineage']['sequence'],'head':receipt['lineage']['head']})
+    write_json_durable(destination/'verified-restore.json',{'schema':'natlang.diloco-verified-restore/1','receipt_sha256':receipt_sha256,'owner_journal_sha256':owner_journal_sha256,'worker_sha256':{rank:worker_components[rank]['sha256'] for rank in workers}})
     return {'receipt':receipt,'journal':new,'coordinator':destination/'coordinator'}
+
+
+def prepare_restored_peer_seed(*, closure, restored, destination, seed, receipt_sha256, freeze_nonce):
+    """Prepare an exact frozen peer seed from an already verified staged restore."""
+    from .replica_seed import publish_seed
+    if not re.fullmatch('[A-Za-z0-9_-]{32,128}',freeze_nonce):raise ValueError('invalid recovery activation nonce')
+    closure=Path(closure).resolve();restored=Path(restored).resolve();destination=Path(destination)
+    receipt_path=closure/'recovery-closure.json'
+    if _digest(receipt_path)!=receipt_sha256:raise ValueError('recovery closure differs')
+    receipt=json.loads(receipt_path.read_text());baseline=closure/'current'
+    verified=json.loads((restored/'verified-restore.json').read_text())
+    if (verified.get('schema')!='natlang.diloco-verified-restore/1' or verified.get('receipt_sha256')!=receipt_sha256 or
+        verified.get('owner_journal_sha256')!=receipt['owner_journal_sha256'] or sorted(verified.get('worker_sha256',{}))!=sorted(receipt['workers'])):
+        raise ValueError('full-cohort restore was not verified')
+    verify(baseline,receipt['current_baseline_sha256'])
+    identity=json.loads((restored/'journal'/'identity.json').read_text())
+    if (identity.get('baseline_sha256')!=receipt['current_baseline_sha256'] or identity.get('run_identity')!=receipt['run_id'] or
+        identity.get('previous_generation')!={'sequence':receipt['lineage']['sequence'],'head':receipt['lineage']['head']}):
+        raise ValueError('restored journal ancestry differs')
+    check=ReplicaJournal(restored/'journal',run_identity=identity['run_identity'],baseline_sha256=identity['baseline_sha256'],
+        max_payload_bytes=identity['max_payload_bytes'],max_transactions=identity['max_transactions'],previous_generation=identity.get('previous_generation'))
+    try:
+        if check.sequence!=0:raise ValueError('restored journal must be unmodified')
+        head=check.head
+    finally:check.close()
+    destination.mkdir(parents=True,exist_ok=False)
+    for source,relative in [(baseline,Path('baseline')),(restored/'journal',Path('journal')),(closure/'uploads',Path('replica-uploads'))]:
+        if not source.exists():continue
+        for path in sorted(source.rglob('*')):
+            if path.is_symlink():raise ValueError('restored seed contains symlink')
+            if path.is_file() and path.name!='.writer.lock':
+                out=destination/relative/path.relative_to(source);out.parent.mkdir(parents=True,exist_ok=True);os.link(path,out)
+    write_json_durable(destination/'replica-active.json',{'id':'seeded','baseline':str((destination/'baseline').resolve()),
+        'journal':str((destination/'journal').resolve()),'baseline_sha256':receipt['current_baseline_sha256']})
+    write_json_durable(destination/'replica-files-frozen.json',{'schema':'natlang.diloco-replica-file-freeze/1','nonce':freeze_nonce})
+    result=publish_seed(destination,seed,expected_sequence=0,expected_head=head,lease_id='restored-closure',freeze_nonce=freeze_nonce)
+    return {'seed':str(Path(seed).resolve()),'receipt_sha256':_digest(Path(seed)/'seed-receipt.json'),'head':head,'value':result}

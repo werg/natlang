@@ -15,9 +15,13 @@ from .replica_attestation import load_owned_config,verify_attestation
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('role',choices=('peer','bootstrap','promote','restart','seed-freeze','seed-publish','seed-serve','seed-fetch','seed-install','seed-release','replica-loss-recover'));parser.add_argument('--config',required=True);parser.add_argument('--config-sha256',required=True)
+    parser=argparse.ArgumentParser();parser.add_argument('role',choices=('peer','bootstrap','promote','restart','seed-freeze','seed-publish','seed-serve','seed-fetch','seed-install','seed-release','seed-restored','replica-loss-recover'));parser.add_argument('--config',required=True);parser.add_argument('--config-sha256',required=True)
     args=parser.parse_args();config=load_owned_config(args.config,args.config_sha256);stop=threading.Event()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set())
+    if args.role=='seed-restored':
+        from .replica_recovery import prepare_restored_peer_seed
+        value=prepare_restored_peer_seed(closure=config['closure'],restored=config['restored'],destination=config['destination'],seed=config['seed'],receipt_sha256=config['receipt_sha256'],freeze_nonce=config['activation_nonce'])
+        print(json.dumps(value,sort_keys=True));return
     if args.role.startswith('seed-'):
         from .replica_seed import publish_seed,serve_seed,download_seed,install_seed,release_seed_lease
         if args.role=='seed-publish':
