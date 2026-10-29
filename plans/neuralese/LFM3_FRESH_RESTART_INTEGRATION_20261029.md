@@ -17,7 +17,7 @@ Do not restore suspect weights, optimizer moments or exposure as this run's stat
 | Genuine fresh initialization | `fd344fdd3`: save real step-zero model/optimizer/RNG and outstanding SFT obligations; no fabricated trained-parent or drain receipt. Initialization is not capacity qualification. |
 | Larger effective optimizer batches | `f7289bebc`: accumulate 16 packed micro-batches before one update; preserve whole graphs and count actual optimizer updates separately from row visits. Target memory qualification must retain accumulated gradients. |
 | Reply-token-aware loss | `f7289bebc`: generate and bind an explicit token-mass objective. The earlier invocation-mass CE declaration is historical and does not become token-mass by using newer code. Keep reasoning at its declared lower share. |
-| Logical source weighting | Initial launch retains exact CE `1234d1f1…`. Physical re-chunking must not change the objective. The measured old coding share is excessive; the next declared family-scale transition uses the source-bound own-output census, preserving historical objective custody. |
+| Logical source weighting | Correct the old CE `1234d1f1…` before the first distributed update. The source-bound census gives explicit scales for 40% communication, 15% coding and 45% ordinary own-output mass. Candidate `cc17e998…` needs a predecessor-bound objective-transition declaration before continuing earned step2/202 states. Physical re-chunking must not change the objective; retain exact objective history. |
 | Source diversity | Cohort-head packing through `be63cc2bf`, with monotone physical cursors independent of fairness flags in `2723c47c5`; preserve every required visit and protected split. |
 | Complete targets and current data | Initial 591,181-row source `9d93141d…`, including verified prompt variants and corrected communication targets. Use transfer v2 `fb4be9d9…`; v1 omitted nine logical evidence paths. Full and foundation named roles move together. |
 | Correct native graph computation | BF16 convolution gather-boundary fix through `cc3551dbd`; retain one-pass producer/consumer gradients and hybrid-state handling. Cached equivalence is distinct from behavior improvement. |
@@ -83,8 +83,13 @@ source-eviction correction. The sealed v2 controls bind disjoint shards,
 accumulation16, local_steps32, quorum3, coordinator grace30, BF16 wire and ten
 average rounds before Nesterov. f3 hosts primary coordination and b166 the
 replica, alongside their learners. Full coordinator initialization started at
-PID78260; initialization is not yet evidence of four advancing learners or an
-outer merge. Verify both before reporting distributed training active.
+PID78260, but correctly rejected nine missing source-evidence dependencies. Those
+nine files were repaired and all 635 declared dependency hashes now verify on
+all four hosts. The old-policy controls are superseded before launch; the new
+baseline must bind the corrected objective. Initialization is not evidence of
+four advancing learners or an outer merge. Verify both before reporting active
+distributed training. The replica can reconstruct deterministic seed files
+locally, but must verify every byte against the primary's exact baseline receipt.
 
 The cloud step33 evaluator was stopped to release rank3. Its partial unmatched
 results do not establish fresh-run regression or improvement. Run matched
