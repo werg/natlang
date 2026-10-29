@@ -1,7 +1,47 @@
 # Four-sandbox recovery and utilization, 2026-10-29
 
-This document records recovery milestones. The latest operational state is in
-the final update below; earlier step numbers describe historical boundaries.
+This document records recovery milestones. The newest update comes first;
+the later sections describe historical boundaries.
+
+## Update, 06:15 Berlin: expanded recipe and exporter fencing
+
+All four allocations remain assigned to useful training; rolling continuations
+preserve each learner's actual full optimizer/RNG/exposure state. There is no
+production distributed coordinator yet. Peer3 has resumed from its exact9756
+parent on the591119-row source and the normalized all-lane fairness scheduler.
+Its saved9758 checkpoint proves two newly added Big2 producer/consumer graphs
+visited, with25366 forward tokens. Peer2 has drained at9419 for the same
+scheduler continuation; peers1/4 still need the combined source/scheduler update.
+These are operational observations, not comparable model capability scores.
+
+The prior scheduler could postpone the first Big2 graph for2813 groups despite
+its source being adopted. Required-token-mass service now balances ordinary,
+urgent and communication cohorts using actual saved exposure while preserving
+every required visit. The complete future schedule and limiting packed groups
+are checked before each continuation; no optimizer or quota reset is needed.
+
+The new per-role publication watcher binds the actual accepted owner, runtime,
+source and selector. Its same remote scan checks boot ID, PID and start ticks,
+and its step floor includes the actual resumed parent's step. Control archives
+carry exact predecessor-retirement proof bytes and restoration maps. A failed
+control derivation is recorded while the canonical full-checkpoint backup
+continues. Independent full checkpoint GET, independent control GET and current
+source/ops object presence remain separate publication obligations. Peer3's
+reviewed v5 watcher is active; subsequent roles receive their own exact selectors.
+
+Local recovery now also includes independently retrieved and full-state-qualified
+peer1 step8341, SHA1b74798966c659b19c305bb84c7aa4d9c6576afae9f8b16d6ff7696b8c1f2c09.
+The Big2 original archive has independently completed private owner GET/hash.
+Tranche001 conversion has completed112674 train graphs and2269 protected test
+graphs; verification is still running, so these are not admitted or exposed yet.
+
+Remaining operational work is explicit: finish the four rolling updates,
+confirm sustained throughput and fresh graph exposure, keep checkpoint exports
+and owner readbacks moving, remove repeated retention scans and self-bookkeeping
+references that can obstruct bounded retention, and qualify complete replicated
+coordinator recovery before deploying distributed outer merges. The earlier
+64MiB authenticated replication measurement does not establish full-model cost
+or complete production recovery.
 
 ## Actual incident and retained progress
 
