@@ -185,6 +185,9 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
     assert state['training']['step'] == 1 and state['training']['global_step'] == 2
     assert state['training']['options']['continuation']['checkpoint_sha256'] == sha256_file_hex(parent)
     assert state['training']['optimizer']
+    progress=json.loads((tmp_path/'learner/train.jsonl').read_text().splitlines()[0])
+    assert progress['objective_details']['objective']=='rft'
+    assert progress['objective_details']['sampled_tokens']==2
     report=json.loads((tmp_path/'learner/report.json').read_text())
     assert report['completed'] is True
     assert report['completion_scope']=='policy-operation'

@@ -509,6 +509,12 @@ def merge_update_details(parts, scored):
     return merged
 
 
+def record_objective_details(progress,details):
+    """Persist actual policy/preference terms alongside the update telemetry."""
+    if not isinstance(details,dict):raise ValueError('objective update lacks its actual detail record')
+    progress['objective_details']=details
+
+
 @torch.no_grad()
 def sparse_row_updates(model, before):
     """Report actual gradient and committed update per learned vocabulary row.
@@ -3541,6 +3547,10 @@ def _main(argv=None, *, requested_refresh):
                 **(model.port.activation_checkpoint.snapshot() if hasattr(model.port.activation_checkpoint, 'snapshot') else {'checkpoint_calls': 0})}
             if getattr(model, 'native_sparse_updates', None):
                 progress['sparse_row_updates'] = model.native_sparse_updates
+            if objective is not None and isinstance(details,dict):
+                # Preserve the actual per-term policy/preference telemetry;
+                # checkpoint and train log still distinguish committed work.
+                record_objective_details(progress,details)
             if objective is None and details:
                 physical_tokens = details[0]['packed_physical_tokens']
                 progress['physical_forward_tokens'] = physical_tokens

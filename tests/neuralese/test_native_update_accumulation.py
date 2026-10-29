@@ -200,6 +200,11 @@ def test_real_jolt_student_teacher_microbatches_retain_distinct_role_telemetry(t
     _,details=native_training_update(model,optimizer,batch[1:],accumulate=[batch[:1]],objective=objective,checkpoint_layers=True,chunk_tokens=8)
     assert details['episodes']==2 and details['jolt']['positions']['student']>0 and details['jolt']['positions']['teacher']>0
     assert details['jolt']['mean_kl']['student'] is not None and details['jolt']['mean_kl']['teacher'] is not None
+    from natlang_neuralese.train.native_state_sft import record_objective_details
+    progress={};record_objective_details(progress,details)
+    saved=json.loads(json.dumps(progress))['objective_details']
+    assert saved['sampled_tokens']+saved['sampled_decisions']==sum(saved['jolt']['positions'].values())
+    assert all(name in saved['jolt'] for name in ('student_outcome','student_opsd','teacher_outcome','teacher_kl'))
     assert seen.keys() <= reference_grad.keys() and len(seen)>10
     for name in seen:
         expected_gradient=reference_grad[name]
