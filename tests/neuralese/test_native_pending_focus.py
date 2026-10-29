@@ -50,7 +50,7 @@ def test_actual_tiny_sgd_focus_matches_manual_order_and_resume(tmp_path,monkeypa
     doc={'schema':'natlang.native-pending-focus/1','rows':[{'id':'c','binding':indexed.bindings['c'],'source_sha256':cohort[2],'split':'train','evidence':[{'path':str(proof),'sha256':hashlib.sha256(proof.read_bytes()).hexdigest()}]}]}
     request=tmp_path/'focus.json';request.write_text(json.dumps(doc))
     def run(out,focus=False,resume=False):
-        args=['--base',str(base),'--dtype','bfloat16','--rank','4','--device','cpu','--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),'--epochs','1','--batch-graphs','1','--eval-every','1','--checkpoint-every','1','--checkpoint-seconds','0','--seed','23','--refresh-after-updates','1','--out',str(out)]
+        args=['--base',str(base),'--dtype','bfloat16','--rank','4','--device','cpu','--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),'--epochs','1','--batch-graphs','1','--accumulate-batches','1','--eval-every','1','--checkpoint-every','1','--checkpoint-seconds','0','--seed','23','--refresh-after-updates','1','--out',str(out)]
         if focus:args+=['--pending-focus',str(request)]
         if resume:args+=['--continue-from',str(out/'checkpoint.pt')]
         assert trainer.main(args)==0
@@ -58,7 +58,8 @@ def test_actual_tiny_sgd_focus_matches_manual_order_and_resume(tmp_path,monkeypa
     actual=torch.load(focused/'checkpoint.pt',weights_only=False,map_location='cpu')
     assert actual['training']['exposure_counts']['c']==1
     assert actual['training']['options']['pending_focus_history'][-1]['state']=='complete'
-    original=trainer.pending_exposure_batches;stream=trainer.stream_pending_batches
+    from natlang_neuralese.train import native_diversity
+    original=trainer.pending_exposure_batches;stream=native_diversity.stream_windows
     def manual(*args,**kwargs):
         required,batches=original(*args,**kwargs)
         match=next(i for i,b in enumerate(batches) if 2 in b[1]);chosen=batches.pop(match);batches.insert(0,chosen)
@@ -68,7 +69,7 @@ def test_actual_tiny_sgd_focus_matches_manual_order_and_resume(tmp_path,monkeypa
         kwargs['focus_ids']={'c'};return stream(*args,**kwargs)
     reference=tmp_path/'reference'
     with monkeypatch.context() as patch:
-        patch.setattr(trainer,'pending_exposure_batches',manual);patch.setattr(trainer,'stream_pending_batches',manual_stream)
+        patch.setattr(trainer,'pending_exposure_batches',manual);patch.setattr(native_diversity,'stream_windows',manual_stream)
         run(reference)
     expected=torch.load(reference/'checkpoint.pt',weights_only=False,map_location='cpu')
     for key in actual.keys()-{'training'}:equal(actual[key],expected[key])
@@ -236,3 +237,16 @@ def test_focus_composes_with_authenticated_source_and_ce_append(tmp_path):
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
+
+
+def test_policy_operation_defers_sft_focus_without_retiring_or_mutating_history(tmp_path):
+    import copy
+    from natlang_neuralese.train.native_pending_focus import active_for_operation
+    history=[{'state':'active','request':{'path':'focus','sha256':'a'*64},'consumed':['one'],'withdrawn':[]}]
+    expected=copy.deepcopy(history)
+    assert not active_for_operation(policy_operation=True,explicit_request=None)
+    assert history==expected
+    assert active_for_operation(policy_operation=False,explicit_request=None)
+    assert active_for_operation(policy_operation=False,explicit_request='focus')
+    with pytest.raises(ValueError,match='cannot target'):
+        active_for_operation(policy_operation=True,explicit_request='focus')

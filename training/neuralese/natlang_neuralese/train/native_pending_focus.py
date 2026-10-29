@@ -62,3 +62,8 @@ def promote(batches,entries,focus_ids):
     combined=focused+ordinary
     ends={visit:i for i,(visit,_,_) in enumerate(combined)}
     return [(visit,indexes,ends[visit]==i) for i,(visit,indexes,_) in enumerate(combined)]
+def active_for_operation(*, policy_operation, explicit_request):
+    """SFT focus remains pending across a distinct policy-objective source."""
+    if policy_operation and explicit_request is not None:
+        raise ValueError('pending SFT focus cannot target a policy-objective source')
+    return not policy_operation
