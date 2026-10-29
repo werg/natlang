@@ -61,11 +61,29 @@ def prepare(a):
         proof={'schema':'natlang.diloco-first-outer/1','worker':rank,'parent':{k:parent[k] for k in ('path','sha256','bytes')},'historical_outer_checkpoint':None,'seed_sha256':sha,'source_hash':source_hash,'held_sha256':held,'rng_fork_seed':fork};path=a.out/f'peer-{rank}.json';write_json_durable(path,proof);declarations.append({**resident.binding(path),'bytes':path.stat().st_size})
     manifest=a.out/'manifest.json';write_json_durable(manifest,{'schema':'natlang.diloco-new-outer-manifest/1','workers':4,'peers':declarations})
     recipe=copy.deepcopy(prior);stage=recipe['stages'][0];stage['inputs']['diloco_new_outer']='first_outer_manifest';recipe['input_bindings']['first_outer_manifest']=resident.binding(manifest);stage['parameters']['diloco']=settings;stage['parameters']['muon_rounding']='stochastic'
+    ce_ref=getattr(a,'ce_policy',None);old_for_outer=copy.deepcopy(old)
+    if ce_ref is not None:
+        from natlang_neuralese.train.own_output_supervision import identity,policy_objective
+        from natlang_neuralese.train.native_supervision import load_policy
+        old_ce=old['ce_supervision_policy'];before=load_policy(old_ce);after=load_policy(ce_ref)
+        left,right=policy_objective(before),policy_objective(after);prior_identity=identity(left)
+        left,right=copy.deepcopy(left),copy.deepcopy(right);lf,rf=left.get('family_balance') or {},right.get('family_balance') or {}
+        if (lf.get('key')!='logical-family' or rf.get('key')!='logical-family' or lf.get('normalization')!='bounded-mean-one/1'
+                or rf.get('normalization')!='declared/1' or lf.get('map')!=rf.get('map')
+                or (after.get('objective_transition') or {}).get('from')!=prior_identity['sha256']):
+            raise ValueError('fresh outer CE lacks its exact objective transition')
+        lf.pop('normalization');rf.pop('normalization');rf.pop('scales',None)
+        if left!=right or {k:v for k,v in before.items() if k not in ('objective','objective_transition') and not k.startswith('_')}!={k:v for k,v in after.items() if k not in ('objective','objective_transition') and not k.startswith('_')}:
+            raise ValueError('fresh outer CE changed unrelated supervision law')
+        recipe['input_bindings'][stage['inputs']['ce_supervision_policy']]=ce_ref
     path=a.out/'recipe.json';write_json_durable(path,recipe);recipe=R.load_recipe(path);stage=recipe['stages'][0];resolved=R.resolve_stage_inputs(recipe,stage,{})
-    if not R._new_outer_continuation(old,resolved):raise ValueError('fresh recipe reanchor handoff rejected')
+    if ce_ref is not None:old_for_outer['ce_supervision_policy']=resolved['ce_supervision_policy']
+    if not R._new_outer_continuation(old_for_outer,resolved):raise ValueError('fresh recipe reanchor handoff rejected')
     lineage=R.recipe_identity_sha256(bound(a.recipe))
+    runtime_plan=getattr(a,'runtime_plan',None)
+    runtime_code=json.loads(bound(runtime_plan).read_text())['code'] if runtime_plan is not None else resident.code_inventory(Path(R.__file__).resolve().parents[1])
     plan={'schema':'natlang.neuralese-recipe-plan/1','recipe':recipe,'recipe_sha256':lineage,'device':'cuda',
-          'code':resident.code_inventory(Path(R.__file__).resolve().parents[1]),
+          'code':runtime_code,
           'stage_inputs':{stage['id']:resolved},'inputs':{dep['path']:dep['sha256'] for value in resolved.values() for dep in R._binding_files(value)}}
     plan_file=a.out/'worker-plan.json';write_json_durable(plan_file,plan)
     binding=R.native_recipe_binding(path,lineage);argv=R.stage_input_args(resolved,'native_state_sft',target='portable')+['--device','cuda']+R.stage_parameter_args(R.effective_stage_parameters(stage,[],recipe))+['--recipe-binding',json.dumps(binding,sort_keys=True,separators=(',',':')),'--stage-id',stage['id'],'--prerequisite-stages','[]','--continue-from',a.seed_logical,'--out',a.worker_out,'--resident-data-directory',str(Path(a.worker_out)/'resident-data')];build_parser().parse_args(argv)
@@ -83,7 +101,12 @@ def prepare(a):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--inventory',type=Path,required=True);p.add_argument('--inventory-sha256',required=True);p.add_argument('--recipe',type=Path,required=True);p.add_argument('--recipe-sha256',required=True);p.add_argument('--out',type=Path,required=True)
-    p.add_argument('--local-steps',type=int,default=32)
+    p.add_argument('--local-steps',type=int,default=32);p.add_argument('--ce-policy',type=Path);p.add_argument('--ce-policy-sha256');p.add_argument('--runtime-plan',type=Path);p.add_argument('--runtime-plan-sha256')
     for name in ('seed-logical','worker-out','coordinator-root','coordinator-url','run-id'):p.add_argument('--'+name,required=True)
-    a=p.parse_args();a.inventory={'path':str(a.inventory),'sha256':a.inventory_sha256};a.recipe={'path':str(a.recipe),'sha256':a.recipe_sha256};print(json.dumps(prepare(a)))
+    a=p.parse_args();
+    if bool(a.ce_policy)!=bool(a.ce_policy_sha256):raise ValueError('CE path and SHA must be provided together')
+    a.ce_policy=({'path':str(a.ce_policy),'sha256':a.ce_policy_sha256} if a.ce_policy else None)
+    if bool(a.runtime_plan)!=bool(a.runtime_plan_sha256):raise ValueError('runtime plan path and SHA must be provided together')
+    a.runtime_plan=({'path':str(a.runtime_plan),'sha256':a.runtime_plan_sha256} if a.runtime_plan else None)
+    a.inventory={'path':str(a.inventory),'sha256':a.inventory_sha256};a.recipe={'path':str(a.recipe),'sha256':a.recipe_sha256};print(json.dumps(prepare(a)))
 if __name__=='__main__':main()

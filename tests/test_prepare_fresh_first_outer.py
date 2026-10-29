@@ -23,6 +23,11 @@ def test_first_outer_builder_exact_receipts_and_common_identity(tmp_path):
     args.local_steps=0;args.out=tmp_path/'invalid';
     with pytest.raises(ValueError):prepare(args)
     args.local_steps=8
+    candidate=os.environ.get('NATLANG_CORRECTED_CE_FIXTURE')
+    if candidate:
+        raw=Path(candidate).read_bytes();args.ce_policy={'path':candidate,'sha256':hashlib.sha256(raw).hexdigest()};args.out=tmp_path/'corrected';corrected=prepare(args)
+        newrecipe=json.loads(Path(corrected['recipe']['path']).read_text());assert newrecipe['input_bindings']['ce_supervision_policy']['sha256']==args.ce_policy['sha256']
+        args.ce_policy=None
     declarations=[json.loads(Path(x['path']).read_text()) for x in result['peer_declarations']]
     assert declarations[0]['rng_fork_seed'] is None and len({x['rng_fork_seed'] for x in declarations[1:]})==3
     assert all(x['owner_get']=='pending' for x in result['peers'])
