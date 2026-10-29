@@ -15,6 +15,25 @@ selected changes and unfinished work. This supersedes older operational updates
 below that describe resuming suspect weights. No restored capability or new
 production policy update is claimed by this note.
 
+The broader paired full-prompt diagnostic has now completed: instruction base
+17/23 successes versus trained step12957 3/23. Both used the same23 cases,
+1200-second case deadline,256-request/256-turn cap and8 workers. Base outcomes
+were17 successes,5 semantic mismatches and1 budget exhaustion; trained outcomes
+were3 successes,4 semantic mismatches and16 budget exhaustions, with no classified
+infrastructure errors. On the subset containing one representative from each of
+16 families, the scores were10/16 versus3/16. This supports a wider regression,
+not merely the previously inspected ownership-graph cases. These budgets differ
+from older baseline reports, so do not compare their percentages as a matched
+experiment. Receipts and per-case scalar comparison:
+`/mnt/external/natlang-training-recovery/lfm3-v3-live-20261028/paired-base-step12957-full-v1/paired-summary.json`.
+
+Fresh peer4 initialization is now real and verified: step-zero checkpoint SHA
+`752f16c0cc91e8a32f7dc671cb8f6f83525cd3275806c26b3596735ce18a3190`,
+9,480,524,323 bytes, zero prior optimizer history/steps/exposure, source9d931.
+Sequential official-base versus reloaded-native BF16 comparison on one256-token
+prompt gave254/256 argmax agreement, mean KL0.0002643 and maximum KL0.0027575.
+This is limited output-parity evidence, not task capability or an earned update.
+
 ## Operational update, 10:05 Berlin
 
 The original brief below is a timestamped account, not current launch state.

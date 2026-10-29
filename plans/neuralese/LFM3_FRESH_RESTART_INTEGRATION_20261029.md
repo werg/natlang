@@ -54,6 +54,14 @@ validation continues under `claude-v4-validate-4`; do not duplicate it or treat
 its checkpoints as production capability lift. A final runtime must include the
 merged fixes above, with target capacity and actual learner start recorded.
 
+Final recipe forwarding, initial RL collection and fresh-parent custody checks
+passed8 tests, followed by the quick checks on `bc319e606`. The full suite is
+running frozen `bc319e606` plus the separately recorded four-file local overlay
+under ledger `natlang-check-fresh-bc319-1029`, with scratch on the external disk.
+Peer4 saved and verified actual fresh state SHA `752f16c0…` with zero updates;
+JOLT setup is in progress. Peer1 fresh controls are staging independently.
+Neither initialization nor configuration is credited as completed training.
+
 Operational manifests and source inventory are under
 `/home/werg/data/dgxops/claude-recovery-20261028/data/`. Incomplete manifests
 remain explicitly non-launchable; update them with observed execution evidence,
