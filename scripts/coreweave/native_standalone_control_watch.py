@@ -3,7 +3,7 @@
 import hashlib,json,subprocess,sys,time,fcntl,types
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent));from native_remote_budget import bounded_remote
-from native_publication_state import full_readback_verified
+from native_publication_state import full_readback_verified, historical_owner_ready
 from natlang_neuralese.common.paths import resolve
 sys.path.insert(0,str(resolve('repo','scripts/coreweave')));import cwctl
 from natlang_neuralese.common.jsonio import write_json_durable
@@ -105,8 +105,24 @@ def refresh_publication(e):
  except Exception as error:e['publication_complete']=False;e['publication_error']=str(error)[:500]
  write_json_durable(journal,s)
 
+historical_cursor=0
 while True:
  try:
+  # Reconcile at most one older entry per cycle, after exact owner GET arrives.
+  # Existing selection, current private presence and every dependency are still
+  # rechecked by refresh_publication; other epochs remain untouched.
+  old=s['exports'][:-1]
+  if old:
+   for offset in range(len(old)):
+    i=(historical_cursor+offset)%len(old);entry=old[i]
+    try:
+     pin=json.loads(Path(entry['intent']).read_text())
+     path=OPS/('coreweave-production-'+entry['role']+'-private-export-receipt-20261014.json')
+     receipt=json.loads(path.read_text())
+     if historical_owner_ready(entry,pin,receipt,selection_sha):
+      refresh_publication(entry);historical_cursor=(i+1)%len(old);break
+    except (OSError,ValueError,KeyError,TypeError):
+     continue
   for e in s['exports']:
    if control_pending(e) and e.get('control_selection_sha256')==selection_sha:
     try:
