@@ -7,27 +7,33 @@ from pathlib import Path
 def _contains(value,digest):return digest in json.dumps(value,sort_keys=True)
 
 
-def own_bookkeeping(*, role, digest, receipt, phase=None, cache=None, reviews=(), retirement_state=None):
+def own_bookkeeping(*, role, digest, receipt, receipt_path=None, phase=None, cache=None, reviews=(), retirement_state=None, watched_digests=()):
     """Return exact document paths and contents that are only own bookkeeping.
 
     Other entries and fields remain protective even in the same JSON document.
     Caller must re-read and compare returned contents under the commit lock.
     """
-    out={};identity=receipt['identity']
+    out={};identity=receipt['identity'];watched=set(watched_digests)|{digest}
     if receipt.get('role')!=role or identity.get('sha256')!=digest:raise ValueError('receipt identity differs')
+    if receipt_path is not None:
+        p=Path(receipt_path);v=json.loads(p.read_text())
+        if v!=receipt:raise ValueError('receipt bytes changed')
+        extra={k:x for k,x in v.items() if k not in ('identity','independent_verification','upload','name','source')}
+        if any(_contains(extra,d) for d in watched):raise ValueError('receipt contains another reference')
+        out[str(p)]=v
     if phase is not None:
         p=Path(phase);v=json.loads(p.read_text())
         if any(v.get(k)!=receipt.get(k) for k in ('role','run','name','identity')):raise ValueError('upload phase identity differs')
         upload=v.get('upload') or {}
         if upload.get('sha256')!=digest or upload.get('bytes')!=identity.get('bytes'):raise ValueError('upload phase bytes differ')
         extra={k:x for k,x in v.items() if k not in ('role','run','name','identity','upload','at')}
-        if _contains(extra,digest):raise ValueError('upload phase contains another reference')
+        if any(_contains(extra,d) for d in watched):raise ValueError('upload phase contains another reference')
         out[str(p)]=v
     if cache is not None:
         p=Path(cache);v=json.loads(p.read_text())
         if v.get('schema')!='natlang.private-export-cache/1' or v.get('identity')!=identity or v.get('receipt')!=receipt:raise ValueError('export cache identity differs')
         extra={k:x for k,x in v.items() if k not in ('schema','identity','receipt')}
-        if _contains(extra,digest):raise ValueError('export cache contains another reference')
+        if any(_contains(extra,d) for d in watched):raise ValueError('export cache contains another reference')
         out[str(p)]=v
     for path in reviews:
         p=Path(path);v=json.loads(p.read_text());items=v.get('candidates')
@@ -38,7 +44,7 @@ def own_bookkeeping(*, role, digest, receipt, phase=None, cache=None, reviews=()
     if retirement_state is not None:
         p=Path(retirement_state);v=json.loads(p.read_text());items=v.get('operations')
         if not isinstance(items,list):raise ValueError('invalid retention state')
-        rest=dict(v);rest['operations']=[x for x in items if not (x.get('phase')=='deleted' and x.get('newer_role')==role and x.get('newer_sha256')==digest)]
+        rest=dict(v);rest['operations']=[x for x in items if not ((x.get('phase')=='deleted' and x.get('newer_role')==role and x.get('newer_sha256')==digest) or (x.get('phase') in ('intent','control_deleted') and x.get('role')==role and x.get('sha256')==digest))]
         if _contains(rest,digest):raise ValueError('retirement state contains another reference')
         out[str(p)]=v
     return out
@@ -48,5 +54,11 @@ def recheck_own_bookkeeping(documents, *, role, digest):
     for path,expected in documents.items():
         value=json.loads(Path(path).read_text())
         if 'operations' in expected:
-            value=dict(value);value['operations']=[x for x in value['operations'] if not (x.get('phase')=='intent' and x.get('role')==role and x.get('sha256')==digest)]
+            # A fresh operation may be appended while locked; an operation
+            # already captured in expected must remain byte-for-byte intact.
+            existing={(x.get('role'),x.get('sha256')) for x in expected['operations']}
+            value=dict(value);value['operations']=[x for x in value['operations'] if not (x.get('phase') in ('intent','control_deleted') and x.get('role')==role and x.get('sha256')==digest and (role,digest) not in existing)]
+            expected_op=next((x for x in expected['operations'] if x.get('role')==role and x.get('sha256')==digest),None)
+            if expected_op and expected_op.get('phase')=='intent':
+                value['operations']=[dict(x,phase='intent') if x.get('role')==role and x.get('sha256')==digest and x.get('phase')=='control_deleted' else x for x in value['operations']]
         if value!=expected:raise ValueError('own bookkeeping changed before commit: '+path)

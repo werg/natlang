@@ -32,3 +32,13 @@ def test_authenticated_owner_epoch_binds_runtime_and_parent(tmp_path):
     with pytest.raises(ValueError):owner_for_intent({**i,'owner':{**owner,'pid':8}},owners)
     p.write_text('{}')
     with pytest.raises(ValueError,match='digest'):authenticated_owner_epochs([b])
+
+
+def test_control_archive_identity_is_self_but_other_consumer_is_protected(tmp_path):
+    h='a'*64;c='b'*64;j=tmp_path/'journal.json';intent=tmp_path/'intent.json';receipt=tmp_path/'control.json';phase=tmp_path/'phase.json'
+    archive={'path':'/work/'+h+'-control.tar','sha256':c,'bytes':3};control={'role':'r-control','archive':archive};j.write_text(json.dumps({'exports':[{'role':'r','intent':str(intent),'control':control}]}))
+    receipt.write_text(json.dumps({'role':'r-control','source':archive['path'],'identity':{'sha256':c,'bytes':3},'independent_verification':{'sha256':c,'bytes':3},'name':'r-control/'+c+'/'+h+'-control.tar'}));phase.write_text(json.dumps({'role':'r-control','source':archive['path']}))
+    args={'allowed_paths':[],'journal_path':j,'role':'r','intent_path':intent,'control':control,'control_receipt':receipt,'control_phase':phase}
+    assert not external_references(c,[j,receipt,phase],**args)
+    value=json.loads(receipt.read_text());value['consumer']=c;receipt.write_text(json.dumps(value))
+    assert external_references(c,[receipt],**args)=={str(receipt)}

@@ -40,6 +40,8 @@ def external_references(digest, references, *, allowed_paths, journal_path, role
             basename=Path(archive['path']).name;expected_name=control['role']+'/'+archive['sha256']+'/'+basename
             if value.get('name')!=expected_name:raise ValueError('control receipt object name differs')
             copy=dict(value);copy.pop('source');copy.pop('name')
+            if digest==archive.get('sha256'):
+                copy.pop('identity',None);copy.pop('independent_verification',None);copy.pop('upload',None)
             if _contains(copy,digest):result.add(path)
             continue
         if control and control_phase and path==str(Path(control_phase)):
@@ -47,6 +49,8 @@ def external_references(digest, references, *, allowed_paths, journal_path, role
             if value.get('role')!=control.get('role') or value.get('source')!=archive.get('path'):
                 raise ValueError('control phase does not match the exact candidate journal entry')
             copy=dict(value);copy.pop('source')
+            if digest==archive.get('sha256'):
+                copy.pop('identity',None);copy.pop('upload',None);copy.pop('name',None)
             if _contains(copy,digest):result.add(path)
             continue
         result.add(path)
