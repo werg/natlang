@@ -1515,7 +1515,7 @@ def _without_unstarted_bindings(old_recipe, new_recipe, changes):
         for name in changed:
             value.get('input_bindings', {}).pop(name, None)
         for stage in value.get('stages', []):
-            if changes.get(stage['id'], {}).get('kind') in {'new_outer_continuation', 'data_continuation', 'scheduling_priority_continuation', 'metadata_classification_continuation', 'ce_supervision_continuation'}:
+            if changes.get(stage['id'], {}).get('kind') in {'source_predecessor_retirement', 'new_outer_continuation', 'data_continuation', 'scheduling_priority_continuation', 'metadata_classification_continuation', 'ce_supervision_continuation'}:
                 stage.pop('inputs', None)  # exact old inputs are preserved by the continuation predecessor binding
     return old_value, new_value
 
