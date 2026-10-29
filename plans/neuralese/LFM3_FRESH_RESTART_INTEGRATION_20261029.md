@@ -17,7 +17,7 @@ Do not restore suspect weights, optimizer moments or exposure as this run's stat
 | Genuine fresh initialization | `fd344fdd3`: save real step-zero model/optimizer/RNG and outstanding SFT obligations; no fabricated trained-parent or drain receipt. Initialization is not capacity qualification. |
 | Larger effective optimizer batches | `f7289bebc`: accumulate 16 packed micro-batches before one update; preserve whole graphs and count actual optimizer updates separately from row visits. Target memory qualification must retain accumulated gradients. |
 | Reply-token-aware loss | `f7289bebc`: generate and bind an explicit token-mass objective. The earlier invocation-mass CE declaration is historical and does not become token-mass by using newer code. Keep reasoning at its declared lower share. |
-| Logical source weighting | Logical mechanism map and bounded mean-one scales through `2b12a1579`; physical re-chunking must not change the objective. Recompute realized token and task contributions under token-mass, rather than reusing graph-weight percentages. |
+| Logical source weighting | Initial launch retains exact CE `1234d1f1…`. Physical re-chunking must not change the objective. The measured old coding share is excessive; the next declared family-scale transition uses the source-bound own-output census, preserving historical objective custody. |
 | Source diversity | Cohort-head packing through `be63cc2bf`, with monotone physical cursors independent of fairness flags in `2723c47c5`; preserve every required visit and protected split. |
 | Complete targets and current data | Initial 591,181-row source `9d93141d…`, including verified prompt variants and corrected communication targets. Use transfer v2 `fb4be9d9…`; v1 omitted nine logical evidence paths. Full and foundation named roles move together. |
 | Correct native graph computation | BF16 convolution gather-boundary fix through `cc3551dbd`; retain one-pass producer/consumer gradients and hybrid-state handling. Cached equivalence is distinct from behavior improvement. |
@@ -29,19 +29,24 @@ Do not restore suspect weights, optimizer moments or exposure as this run's stat
 
 ## Active follow-up, with explicit reasons
 
-- Big2-001/002: 226,019 candidate rows have archive-backed custody, no indexed
-  ID collisions and measured source geometry. Graph-content dedup/admission is
-  still running; append promptly once verified. They are not trained exposure.
+- Big2-001/002: 226,019 rows have archive-backed custody, no indexed ID or
+  complete graph-content collisions against current train/held data. The 817,200-row
+  successor is sealed; rebase its complete declared CE and append proof onto
+  the actual distributed recipe before adoption. The earlier incomplete 519-leaf
+  CE is invalid for the 521-leaf successor. Prepared rows are not trained exposure.
 - Historical DPO pairs: retain useful text and provenance, but re-encode for
   LFM3 and verify labels, protection, oracle custody and complete-graph capacity.
   LFM2.5 tokenized artifacts are not directly ready LFM3 training data.
-- Long communication chains and cross-model stages remain recipe obligations.
-  Neither one-node SFT nor prefix counts establishes complete graph exposure or
-  cross-model readiness. Preserve actual producer/consumer exposure requirements.
-- Kahan compensation for BF16 optimizer rounding is a follow-up if measured
-  noise remains problematic after accumulation. It is not implemented or
-  silently included; monitor the new run rather than assuming accumulation
-  cures every cause of the regression.
+- Long communication chains remain an admission/capacity obligation. Neither
+  one-node SFT nor prefix counts establishes complete graph exposure. The owner's
+  LFM3 direction explicitly removes cross-model stages and Mellum dependence.
+- Kahan compensation is implemented. Initial distributed controls explicitly
+  retain stochastic rounding while the real transition and fragment-aware outer
+  residual handling are integrated and qualified for the assigned host memory.
+  Do not silently change the optimizer algorithm under a recorded recipe.
+- Full teacher prompt variants and the authenticated four-family classification
+  are being sealed by the Claude process. Admit them through the same live
+  source continuation, preserving useful header variants and protected worlds.
 - The initial eight requalified RL cases are usable initial supply, not the
   complete curriculum. Continue expanding verified tasks and full graph capture.
 
@@ -49,18 +54,41 @@ Do not restore suspect weights, optimizer moments or exposure as this run's stat
 
 Root integrated diversity/resident/JOLT checks passed 148 tests before the
 accumulation merge. The subsequent combined accumulation, objective, initializer,
-diversity, publication and precision checks passed 54 tests. Local Claude fresh-base
-validation continues under `claude-v4-validate-4`; do not duplicate it or treat
-its checkpoints as production capability lift. A final runtime must include the
-merged fixes above, with target capacity and actual learner start recorded.
+diversity, publication and precision checks passed 54 tests. Claude stopped its
+local validation as redundant; termination interrupted its final HDD checkpoint.
+That partial file is not a verified recovery state or capability result.
 
 Final recipe forwarding, initial RL collection and fresh-parent custody checks
 passed8 tests, followed by the quick checks on `bc319e606`. The full suite is
 running frozen `bc319e606` plus the separately recorded four-file local overlay
 under ledger `natlang-check-fresh-bc319-1029`, with scratch on the external disk.
-Peer4 saved and verified actual fresh state SHA `752f16c0…` with zero updates;
-JOLT setup is in progress. Peer1 fresh controls are staging independently.
-Neither initialization nor configuration is credited as completed training.
+That older full run exposed fixture-path and HDD timing failures; 28 targeted
+HTTP/recovery/replica and assembler tests pass on current main with internal
+temporary storage. Failed child cleanup and fixture path custody were repaired.
+The full run remains incomplete; do not describe it as green.
+
+Peer4's separate fresh-base JOLT diagnostic completed one actual update. All
+three task executions succeeded, with zero outcome variance and no communication
+edges: this qualifies neither outcome lift nor learned Neuralese communication.
+Its checkpoint is preserved separately and is not transplanted into production.
+
+Peer1's fresh SFT earned step202, then drained with optimizer/RNG/exposure intact.
+The four-worker first outer session preserves this descendant on rank0 and uses
+the exact common step2 seed `51bacc47…` on ranks1–3. The seed has independently
+verified private owner readback; step202's newer independent export is tracked
+separately. A retained local full recovery copy still requires verification.
+
+All four hosts verified the 585-file b6c runtime, followed by the exact b0a mapped
+source-eviction correction. The sealed v2 controls bind disjoint shards,
+accumulation16, local_steps32, quorum3, coordinator grace30, BF16 wire and ten
+average rounds before Nesterov. f3 hosts primary coordination and b166 the
+replica, alongside their learners. Full coordinator initialization started at
+PID78260; initialization is not yet evidence of four advancing learners or an
+outer merge. Verify both before reporting distributed training active.
+
+The cloud step33 evaluator was stopped to release rank3. Its partial unmatched
+results do not establish fresh-run regression or improvement. Run matched
+development evaluation on DGX or short bursts, preserving protected data.
 
 Operational manifests and source inventory are under
 `/home/werg/data/dgxops/claude-recovery-20261028/data/`. Incomplete manifests
