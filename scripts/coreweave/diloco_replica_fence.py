@@ -463,3 +463,32 @@ print(json.dumps({'nonce':nonce,'identity':{'sandbox_id':v['sandbox_id'],'boot_i
     result=box.exec(['python3','-c',program,json.dumps(host,sort_keys=True),nonce],timeout_seconds=30).result(timeout=60)
     if result.returncode!=0:raise ValueError('live worker owner observation failed')
     return json.loads(result.stdout)
+
+
+def verify_full_restore_fence(*, journal_ref, expected_primary, expected_workers, replacements, nonce,
+                              get_sandbox, observe_owner, now=time.time):
+    """Fence every lost owner and authenticate each exact replacement lineage."""
+    owner=owner_reference(journal_ref['path'],journal_ref['sha256'],expected_primary)
+    if sorted(map(int,owner.get('workers',{})))!=sorted(expected_workers) or sorted(replacements)!=sorted(expected_workers):
+        raise ValueError('full restore must bind every original and replacement rank')
+    old_ids={expected_primary['sandbox_id'],*(owner['workers'][str(rank)]['sandbox_id'] for rank in expected_workers)}
+    observations=[]
+    for ident in sorted(old_ids):
+        before=now();result=get_sandbox(ident);after=now()
+        if after<before or after-before>120 or _top_state(result,ident)!=COMPLETED:
+            raise ValueError('full restore original owner is not provider completed')
+        observations.append({'sandbox_id':ident,'observed_at':after,'state':'STATE_COMPLETED'})
+    proofs=[];new_ids=set()
+    for rank in sorted(expected_workers):
+        item=replacements[rank];target=item['target'];ident=(target['sandbox_id'],target['boot_id'],target['owner_id'])
+        if ident in new_ids or target['sandbox_id'] in old_ids:raise ValueError('replacement owner is duplicated or belongs to a fenced sandbox')
+        new_ids.add(ident)
+        proofs.append(verify_replacement_owner(item['reference'],owner_journal=owner,expected_primary=expected_primary,
+            expected_target=target,worker_index=rank,nonce=nonce,get_sandbox=get_sandbox,observe_owner=observe_owner,
+            failed_sandbox_id=owner['workers'][str(rank)]['sandbox_id'],now=now))
+    owner_reference(journal_ref['path'],journal_ref['sha256'],expected_primary)
+    result={'schema':'natlang.diloco-full-restore-fence/1','run_id':owner['run_id'],'primary':expected_primary,
+        'primary_fenced':True,'all_workers_quiesced':True,'quiesced_workers':sorted(expected_workers),
+        'owner_journal':journal_ref,'completed_owners':observations,'replacement_owners':proofs,'nonce':nonce}
+    result['proof_sha256']=hashlib.sha256(json.dumps(result,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    return result

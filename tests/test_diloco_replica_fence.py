@@ -181,3 +181,23 @@ def test_live_worker_sdk_observer_captures_real_process_identity(tmp_path,monkey
         assert observed['identity']['pid']==result['pid'] and observed['identity']['start_ticks']
         with pytest.raises(ValueError):sdk_capture_live_worker(dict(host,worker_argv_sha256='0'*64),'n'*48)
     finally:proc.terminate();proc.wait(timeout=8)
+
+
+def test_full_restore_fences_every_old_owner_and_replacement(tmp_path):
+    from scripts.coreweave.diloco_replica_fence import verify_full_restore_fence
+    primary={'sandbox_id':'old0','boot_id':'boot0','owner_id':'owner0','pid':10,'start_ticks':'10'}
+    workers={str(i):{'sandbox_id':f'old{i}','boot_id':f'boot{i}','owner_id':f'owner{i}','pid':10+i,'start_ticks':str(10+i)} for i in range(4)}
+    owner={'run_id':'r','coordinator':primary,'workers':workers};path=tmp_path/'owner.json';path.write_text(json.dumps(owner))
+    ref={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()};replacements={}
+    supervisor={'pid':1,'start_ticks':'22','cmdline_sha256':'a'*64,'entrypoint_sha256':'b'*64}
+    for i in range(4):
+        new={'sandbox_id':f'new{i}','boot_id':f'newboot{i}','owner_id':f'newowner{i}'}
+        target={**new,'directory':'/control','runtime':'/runtime','supervisor':supervisor}
+        value={'schema':'natlang.diloco-replacement-owner/1','worker_index':i,'old_identity':workers[str(i)],'new_identity':new,'control_directory':'/control','owner_runtime':'/runtime','supervisor':supervisor}
+        p=tmp_path/f'replacement-{i}.json';p.write_text(json.dumps(value))
+        replacements[i]={'target':target,'reference':{'path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}}
+    provider=lambda ident:SimpleNamespace(sandbox_id=ident,status=SimpleNamespace(state=3 if ident.startswith('old') else 2))
+    observe=lambda value,nonce:{'nonce':nonce,'new_identity':value['new_identity'],'supervisor':supervisor,'owner_live':True,'worker_absent':True}
+    def verify(fn=provider):return verify_full_restore_fence(journal_ref=ref,expected_primary=primary,expected_workers=list(range(4)),replacements=replacements,nonce='n'*48,get_sandbox=fn,observe_owner=observe)
+    assert len(verify()['replacement_owners'])==4
+    with pytest.raises(ValueError):verify(lambda ident:SimpleNamespace(sandbox_id=ident,status=SimpleNamespace(state=2)))
