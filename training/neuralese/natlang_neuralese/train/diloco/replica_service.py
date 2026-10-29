@@ -43,9 +43,9 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
                       supervisor_proof, verify_supervisor_fence, expected_primary, expected_workers, stop, journal, sequence, head, session_transition, previous_token, gateway=None, allow_http=False, max_generations=3):
     """Start a fresh unique primary only after an explicit supervisor fence.
 
-    Old generations are retained. If `max_generations` is reached, writes
-    stop until the supervisor verifies independent recovery and retires a
-    superseded generation; no old WAL is silently deleted.
+    After both physical replicas confirm the new generation, local retention
+    keeps the active and previous generations plus any leased generations.
+    Independent private backup cadence and its receipts are managed separately.
     """
     required={'previous_url','new_url','previous_token_sha256','new_token_sha256','generation_nonce'}
     if (not isinstance(session_transition,dict) or set(session_transition)!=required or
