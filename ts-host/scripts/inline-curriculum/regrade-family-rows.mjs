@@ -13,6 +13,7 @@
 //     verdict by trajectory id (resolved in a second pass), else unresolved.
 // Writes OUT/verdicts.jsonl (one line per row) and OUT/summary.json (counts per corpus, file and verdict).
 // node scripts/inline-curriculum/regrade-family-rows.mjs --out DIR BY-CORPUS.json...
+import { createHash } from 'node:crypto';
 import { createReadStream, mkdirSync, writeFileSync, createWriteStream, readFileSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { createZstdDecompress } from 'node:zlib';
@@ -112,7 +113,7 @@ async function main() {
     for await (const [line, text] of lines(file)) {
       if (!text.includes('edit_stream') && !text.includes('contract_diagnosis')) continue;
       const row = safeJson(text);
-      const base = { file, line, corpora: [...corpora] };
+      const base = { file, line, row_sha256: createHash('sha256').update(text).digest('hex'), corpora: [...corpora] };
       if (!row || typeof row !== 'object') { verdicts.push({ ...base, kind: 'unparsed', verdict: 'unresolved' }); continue; }
       const record = programRecord(row);
       const rowId = row.id ?? row.row_id ?? null;
