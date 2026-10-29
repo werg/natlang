@@ -414,15 +414,19 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                         checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
                         objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
                         collect_accuracy=False, allow_communication_prefixes=backend is None)
+                parts.append(details)
+                # The last backward arms in-backward optimizer steps. Validate
+                # all telemetry first, while prior micros have only gradients.
+                if final:
+                    merged_details=parts[0] if len(parts)==1 else merge_update_details(parts,scored)
                 scaled = loss if share == 1. else loss * share
                 (scaled if loss_weight is None else scaled * loss_weight).backward()
                 cotangents.finish()
             losses.append(loss.detach() * share)
-            parts.append(details)
         if optimizer.latent is not None:
             optimizer.latent._armed = None
         loss = torch.stack(losses).sum() if len(losses) > 1 else losses[0]
-        details = parts[0] if len(parts) == 1 else merge_update_details(parts, scored)
+        details = merged_details
         params = [p for p in model.parameters() if p.requires_grad and p.grad is not None]
         if params:
             norm = torch.nn.utils.clip_grad_norm_(params, float('inf'))
@@ -442,6 +446,36 @@ _PACKED_DETAIL_KEYS = ('packed_physical_tokens', 'original_physical_tokens', 'pr
                        'reused_primal_projection_rows', 'readout_forward_rows', 'readout_original_rows')
 
 
+def merge_jolt_details(values, weights):
+    """Aggregate JOLT losses by optimizer share and KL telemetry by action count."""
+    terms=('student_outcome','student_opsd','teacher_outcome','teacher_kl')
+    counts=('unprivileged_episodes','privileged_episodes')
+    expected=set(terms+counts+('positions','guidance','mean_kl'))
+    if any(not isinstance(v,dict) or set(v)!=expected for v in values):
+        raise ValueError('accumulated JOLT details changed schema')
+    positions={role:sum(v['positions'][role] for v in values) for role in ('student','teacher')}
+    guidance_keys=('blocks','writer_blocks','text_fallbacks','verbatim_reference')
+    return {**{name:sum(weight*v[name] for weight,v in zip(weights,values)) for name in terms},
+        **{name:sum(v[name] for v in values) for name in counts},'positions':positions,
+        'guidance':{key:sum(v['guidance'][key] for v in values) for key in guidance_keys},
+        'mean_kl':{role:(sum(v['mean_kl'][role]*v['positions'][role] for v in values if v['positions'][role])
+                         /positions[role] if positions[role] else None) for role in positions}}
+
+
+def merge_score_centering(values):
+    """Position-weighted centering means and exact maximum across micros."""
+    keys=set(values[0]);count=sum(v['positions'] for v in values)
+    if count<=0 or any(not isinstance(v,dict) or set(v)!=keys for v in values):
+        raise ValueError('accumulated score-centering details changed schema')
+    result={'positions':count}
+    for key in keys-{'positions'}:
+        if key=='rho_max':result[key]=max(v[key] for v in values)
+        elif key.endswith('_mean') or key=='w_y_zero_fraction':
+            result[key]=sum(v[key]*v['positions'] for v in values)/count
+        else:raise ValueError('unknown accumulated score-centering detail '+key)
+    return result
+
+
 def merge_update_details(parts, scored):
     """Details of one accumulated update from its micro-batches' ``packed_graph_loss`` details.
 
@@ -454,11 +488,17 @@ def merge_update_details(parts, scored):
                 for part in parts for item in part]
     if not all(isinstance(part, dict) for part in parts):
         raise ValueError('accumulated micro-batches returned different detail kinds')
+    if any(set(part)!=set(parts[0]) for part in parts):
+        raise ValueError('accumulated micro-batches returned different detail fields')
     weights = [count / sum(scored) for count in scored] if sum(scored) else [1. / len(parts)] * len(parts)
     merged = {}
     for key in parts[0]:
         values = [part.get(key) for part in parts]
-        if all(type(value) is int for value in values):
+        if key=='jolt':
+            merged[key]=merge_jolt_details(values,weights)
+        elif key=='score_centering':
+            merged[key]=merge_score_centering(values)
+        elif all(type(value) is int for value in values):
             merged[key] = sum(values)
         elif all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
             merged[key] = sum(weight * value for weight, value in zip(weights, values))

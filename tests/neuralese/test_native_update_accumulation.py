@@ -140,3 +140,75 @@ def test_trainer_steps_once_per_accumulated_group_and_records_the_transition(tmp
     assert sorted(saved['exposure_counts'].values()) == [1, 1, 1, 1, 1]
     history = saved['options']['accumulate_batches_history']
     assert [(item['from'], item['to'], item['at_global_step']) for item in history] == [(1, 2, 2)]
+
+
+def test_real_jolt_multi_microbatch_summarizes_and_steps_once(tmp_path):
+    from test_rl_jolt import load,episode_with_top_k,rollouts,prepare,objective_for,forward
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
+    model,roles,identity=load('lfm')
+    episode=episode_with_top_k(model,roles,identity)
+    rows=rollouts(episode.turns,rewards=(1,0))
+    graphs,spec=prepare(rows,episode,roles,identity)
+    objective=objective_for(tmp_path,spec)
+    examples_=[forward(model,graph,identity)[0] for graph in graphs]
+    optimizer,_=make_native_optimizer(model,lr=1e-3,in_backward=True)
+    before={n:p.detach().clone() for n,p in model.named_parameters()}
+    loss,details=native_training_update(model,optimizer,examples_[1:],accumulate=[examples_[:1]],
+        objective=objective,checkpoint_layers=True,chunk_tokens=8)
+    assert torch.isfinite(loss) and details['episodes']==2
+    assert sum(details['jolt']['positions'].values())==details['sampled_tokens']+details['sampled_decisions']
+    assert details['jolt']['unprivileged_episodes']+details['jolt']['privileged_episodes']==2
+    assert any(not torch.equal(p,before[n]) for n,p in model.named_parameters())
+
+
+def test_bad_accumulation_telemetry_fails_before_any_optimizer_step(monkeypatch):
+    import pytest
+    from natlang_neuralese.train import native_state_sft as trainer
+    model,optimizer=build();graphs=examples();before={n:p.detach().clone() for n,p in model.named_parameters()}
+    def fail(*args,**kwargs):raise ValueError('bad telemetry')
+    monkeypatch.setattr(trainer,'merge_update_details',fail)
+    with pytest.raises(ValueError,match='bad telemetry'):
+        trainer.native_training_update(model,optimizer,graphs[1:],accumulate=[graphs[:1]],checkpoint_layers=True,chunk_tokens=3)
+    assert all(torch.equal(p,before[n]) for n,p in model.named_parameters())
+    assert all(not child['state'] for child in (optimizer.state_dict()['muon'],optimizer.state_dict()['adamw'],optimizer.state_dict().get(optimizer.latent_key)) if child)
+
+
+def test_real_jolt_student_teacher_microbatches_retain_distinct_role_telemetry(tmp_path):
+    from test_rl_jolt import load,episode_with_top_k,rollouts,DECLARATION,rendering,custody,train_case,objective_for,forward
+    from natlang_neuralese.rl.jolt import privileged_source
+    from natlang_neuralese.rl.native_replay import prepare_objective
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update,packed_graph_loss
+    model,roles,identity=load('lfm')
+    student=episode_with_top_k(model,roles,identity,mode='write-only')
+    teacher=episode_with_top_k(model,roles,identity,mode='text')
+    rows=rollouts(student.turns,rewards=(0,))+rollouts(teacher.turns,role='teacher',rewards=(1,))
+    rows[1]['sample']=1
+    states={**student.states,**teacher.states}
+    priv=privileged_source(rows,cases={train_case()['id']:train_case()},rendering=rendering(),custody=custody(),fetch_text=lambda key:states[key].text)
+    graphs,spec=prepare_objective(rows,identity=identity,roles=roles,fetch_block=states.__getitem__,policy_loss=DECLARATION,privileged=priv)
+    objective=objective_for(tmp_path,spec)
+    batch=[forward(model,graph,identity)[0] for graph in graphs]
+    reference=copy.deepcopy(model)
+    expected=[]
+    for example in batch:
+        value,_=packed_graph_loss(reference,[example],objective=objective,checkpoint_layers=True,chunk_tokens=8,collect_accuracy=False)
+        expected.append(value)
+    ((expected[0]+expected[1])/2).backward()
+    reference_grad={n:p.grad.detach().clone() for n,p in reference.named_parameters() if p.grad is not None}
+    optimizer,_=make_native_optimizer(model,lr=1e-3,in_backward=True)
+    seen=stepped_gradients(model,optimizer)
+    _,details=native_training_update(model,optimizer,batch[1:],accumulate=[batch[:1]],objective=objective,checkpoint_layers=True,chunk_tokens=8)
+    assert details['episodes']==2 and details['jolt']['positions']['student']>0 and details['jolt']['positions']['teacher']>0
+    assert details['jolt']['mean_kl']['student'] is not None and details['jolt']['mean_kl']['teacher'] is not None
+    assert seen.keys() <= reference_grad.keys() and len(seen)>10
+    for name in seen:
+        expected_gradient=reference_grad[name]
+        torch.testing.assert_close(seen[name],expected_gradient,rtol=1e-5,atol=1e-8,msg=name)
+
+
+def test_accumulated_centering_uses_position_weighted_means():
+    from natlang_neuralese.train.native_state_sft import merge_update_details
+    a={'positions':2,'rho_mean':1.,'rho_max':3.,'w_y_zero_fraction':0.}
+    b={'positions':6,'rho_mean':3.,'rho_max':5.,'w_y_zero_fraction':.5}
+    result=merge_update_details([{'score_centering':a},{'score_centering':b}],[1,1])['score_centering']
+    assert result=={'positions':8,'rho_mean':2.5,'rho_max':5.,'w_y_zero_fraction':.375}
