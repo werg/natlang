@@ -86,3 +86,15 @@ def test_repacked_schedule_enforces_four_to_one_while_both_lanes_pending():
         e=row(i,str(i));e['communication']=(i%5!=4);entries.append(e);source.append((0,[i],i==19))
     result=cohort_head_merge(entries,source,[str(i) for i in range(20)],batch_graphs=1,schedule_offset=0)
     assert [entries[ix[0]]['communication'] for _,ix,_ in result]==[i%5!=4 for i in range(20)]
+
+def test_reader_checks_actual_descriptor_headroom(monkeypatch):
+    import pytest
+    from natlang_neuralese.train import native_diversity as diversity
+    entries=[row(0,'a')]
+    class Source:
+        def __init__(self):self.entries=entries
+        def iter_indices(self,indices):raise AssertionError('should fail before opening reader')
+    monkeypatch.setattr(diversity.resource,'getrlimit',lambda _: (10,10))
+    monkeypatch.setattr(diversity.os,'listdir',lambda _: ['0','1'])
+    with pytest.raises(ValueError,match='file descriptors'):
+        list(diversity.stream_windows(Source(),[[(0,[0],True)]],cohort_ids=['a']))

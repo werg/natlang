@@ -2,6 +2,8 @@
 from __future__ import annotations
 from collections import Counter
 import re
+import os
+import resource
 from .native_source_streams import scheduling_rank
 
 _PROGRAM = re.compile(r'(?:^|:)teacher-program:([^:]+)')
@@ -41,7 +43,7 @@ def stream_windows(source, grouped, *, priority_ids=(), cohort_ids=None, rotatio
             if len(indices)!=len(set(indices)) or (k in last and indices[0]<=last[k]):
                 raise ValueError(f'diverse source windows are not monotone and distinct: {k!r}, last={last.get(k)}, next={indices[:2]}')
             requests.setdefault(k,[]).extend(indices);last[k]=indices[-1]
-    streams={}
+    streams={};remaining={k:len(indices) for k,indices in requests.items()}
     try:
         for window in grouped:
             parts={};values={}
@@ -49,21 +51,28 @@ def stream_windows(source, grouped, *, priority_ids=(), cohort_ids=None, rotatio
                 focused=any(entries[index]['id'] in focus_ids for index in indices)
                 for index in indices:parts.setdefault(key(visit,index,focused),[]).append(index)
             for k,indices in parts.items():
-                if k not in streams:streams[k]=source.iter_indices(requests[k])
+                if k not in streams:
+                    soft,_=resource.getrlimit(resource.RLIMIT_NOFILE)
+                    if soft!=resource.RLIM_INFINITY and len(os.listdir('/proc/self/fd'))+8>=soft:
+                        raise ValueError('native diversity source readers exceed available file descriptors')
+                    streams[k]=source.iter_indices(requests[k])
                 stream=streams[k]
                 for index in sorted(indices):
                     try:item=next(stream)
                     except StopIteration as exc:raise ValueError('diverse source ended early') from exc
                     if item.id!=entries[index]['id']:raise ValueError('diverse source row identity differs')
                     values[(k,index)]=item
+                    remaining[k]-=1
+                if remaining[k]==0:
+                    try:next(stream)
+                    except StopIteration:pass
+                    else:raise ValueError('diverse source yielded extra rows')
+                    stream.close();del streams[k]
             for visit,indices,end in window:
                 focused=any(entries[index]['id'] in focus_ids for index in indices)
                 yield visit,indices,end,[values.pop((key(visit,index,focused),index)) for index in indices]
             if values:raise ValueError('unused diverse source rows')
-        for stream in streams.values():
-            try:next(stream)
-            except StopIteration:continue
-            raise ValueError('diverse source yielded extra rows')
+        if any(remaining.values()):raise ValueError('diverse source rows remain unread')
     finally:
         for stream in streams.values():stream.close()
 
