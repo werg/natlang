@@ -80,7 +80,7 @@ def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
 
 def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0,
                              foundation_ids=None, foundation_communication_batches=1, minimum_visits=None,
-                             schedule_offset=0, cohort_ids=None, shard=None):
+                             schedule_offset=0, cohort_ids=None, shard=None, rotation_index=None):
     """Schedule only missing row visits, including rows appended after completion.
 
     Communication starts first and alternates with explicitly prioritized
@@ -155,6 +155,15 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     def foundational(batch):
         return bool(foundation_ids) and any(entries[index]['id'] in foundation_ids for index in batch[1])
     communication.sort(key=lambda batch: not foundational(batch))
+    if rotation_index is not None:
+        if type(rotation_index) is not int or not 0 <= rotation_index < len(entries):
+            raise ValueError('pending batch rotation anchor is outside the source')
+        def rotate_lane(lane):
+            return ([batch for batch in lane if batch[1][0] >= rotation_index]
+                    + [batch for batch in lane if batch[1][0] < rotation_index])
+        # Keep the existing communication / urgent / ordinary interleave;
+        # only choose the tail first inside each existing lane.
+        communication, urgent, ordinary = map(rotate_lane, (communication, urgent, ordinary))
     remaining_foundation_batches = sum(foundational(batch) for batch in communication)
     if urgent and communication:
         interleaved = []
@@ -1070,6 +1079,7 @@ def build_parser():
                         help='explicitly add learned existing reasoning token rows to an old parent')
     parser.add_argument('--foundation-communication-batches', type=int,
         help='while the exact declared foundation is pending, communication batches per priority ordinary batch')
+    parser.add_argument('--pending-rotation-anchor', default=None, help='Recorded source row identity for a standalone pending-batch branch')
     parser.add_argument('--urgent-cohort-fairness', action=argparse.BooleanOptionalAction, default=False,
         help='balance positive-priority source cohorts using actual completed indexed graph token exposure')
     parser.add_argument('--source-classification-migration', type=Path,
@@ -2512,6 +2522,8 @@ def _main(argv=None, *, requested_refresh):
     if matrix_reference is not None:
         checkpoint_options['matrix_norm_reference'] = matrix_reference
     saved_lr_anneal = saved_norm_reference = None
+    prior_rotation = (saved_options or {}).get('pending_batch_rotation') or {}
+    rotation_has_saved_parent = bool(saved_training)
     saved_options = ce_prior_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
@@ -2573,13 +2585,32 @@ def _main(argv=None, *, requested_refresh):
         'exposure_counts': dict(exposure_counts), 'options': checkpoint_options},
         carried_progress.get(args.stage_id or 'native-graph-ce') or {})
     from .native_cohort_schedule import source_cohort_ids
+    if prior_rotation and args.pending_rotation_anchor is None:
+        args.pending_rotation_anchor = prior_rotation['anchor_id']
+    rotation_index = None
+    if args.pending_rotation_anchor is not None:
+        if args.diloco is not None or args.standalone_diloco_parent is None or not rotation_has_saved_parent:
+            raise ValueError('pending rotation requires a pinned standalone continuation')
+        matches = [i for i, entry in enumerate(train.entries) if entry['id'] == args.pending_rotation_anchor]
+        if len(matches) != 1:raise ValueError('pending rotation anchor is absent or ambiguous')
+        rotation_index = matches[0]
+        binding = train.bindings[args.pending_rotation_anchor]
+        if prior_rotation:
+            if prior_rotation.get('anchor_id') != args.pending_rotation_anchor or prior_rotation.get('anchor_binding') != binding:
+                raise ValueError('pending rotation differs from its recorded branch')
+            checkpoint_options['pending_batch_rotation'] = prior_rotation
+        else:
+            checkpoint_options['pending_batch_rotation'] = {'schema':'natlang.pending-batch-rotation/1',
+                'anchor_id':args.pending_rotation_anchor,'anchor_binding':binding,'anchor_index':rotation_index,
+                'parent_checkpoint_sha256':sha256_file_hex_cached(args.standalone_diloco_parent),
+                'at_global_step':global_step,'original_cursor':cursor,'optimizer_rng_exposure':'preserved'}
     urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness else None
     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
         foundation_ids=foundation_priority_ids,
         foundation_communication_batches=args.foundation_communication_batches or 1,
         minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
-        cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None)
+        cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None, rotation_index=rotation_index)
     if args.memory_qualification and objective is None:
         from .native_packed_capacity import qualify_pending
         from ..eval.native_memory import capacity_identity
@@ -2617,7 +2648,7 @@ def _main(argv=None, *, requested_refresh):
     if args.refresh_at_checkpoint and args.refresh_after_updates is None and not (args.checkpoint_every or args.checkpoint_seconds):
         raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
-                                      cohort_ids=urgent_cohort_ids)
+                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index)
     resident = None
     if args.resident_data_directory is not None:
         from .native_resident import ResidentAdoption
@@ -2877,7 +2908,7 @@ def _main(argv=None, *, requested_refresh):
                         foundation_ids=foundation_priority_ids,
                         foundation_communication_batches=args.foundation_communication_batches or 1,
                         minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
-                        cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None)
+                        cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None, rotation_index=rotation_index)
                     if args.memory_qualification and objective is None:
                         packed = resident.packed_capacity_update
                         if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
@@ -2889,7 +2920,7 @@ def _main(argv=None, *, requested_refresh):
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
                     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
-                                                      cohort_ids=urgent_cohort_ids)
+                                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index)
             if anneal is not None:
                 # The branch ends after its declared updates, whatever data remains in the stage.
                 total_end = min(total_end, step + anneal.remaining(global_step))

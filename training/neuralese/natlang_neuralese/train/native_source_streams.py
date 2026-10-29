@@ -6,7 +6,7 @@ def scheduling_rank(entry):
     return (not bool(entry.get('communication')), -entry.get('training_priority', 0))
 
 
-def stream_pending_batches(source, pending_batches, *, priority_ids=None, cohort_ids=None):
+def stream_pending_batches(source, pending_batches, *, priority_ids=None, cohort_ids=None, rotation_index=None):
     """Keep exact batch order without rescanning sources at every rank switch.
 
     Each rank/visit is already monotone in the production scheduler. Separate
@@ -24,7 +24,7 @@ def stream_pending_batches(source, pending_batches, *, priority_ids=None, cohort
             if len(selected) != 1:
                 raise ValueError('native pending batch mixes source cohorts')
             cohort = next(iter(selected))
-        return (visit, rank, foundation, cohort)
+        return (visit, rank, foundation, cohort, bool(rotation_index is not None and indices[0] < rotation_index))
     requests = {}
     for visit, indices, _ in pending_batches:
         if not indices:

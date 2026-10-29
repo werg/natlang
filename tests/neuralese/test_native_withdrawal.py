@@ -331,6 +331,24 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
         withdrawal=tmp_path/'withdrawal.json';withdrawal.write_text(json.dumps({'schema':'natlang.native-graph-withdrawal/1','model_id':config['architecture']+':'+config['base_inventory_sha256'],
             'evidence':{'path':'audit.json','sha256':sha(evidence)},'rows':[{'id':'bad','binding':prior['source_row_bindings']['bad'],'source_sha256':sha(old),'reason':'rejected'}]}))
         pin=tmp_path/'immutable-parent.pt';pin.write_bytes((out/'checkpoint.pt').read_bytes())
+        # The independent standalone branch starts in the newly appended tail,
+        # retains every earlier obligation, and resumes with the same fork identity.
+        import shutil
+        forkout=tmp_path/'fork';forkout.mkdir();shutil.copyfile(pin,forkout/'checkpoint.pt')
+        fork_source=tmp_path/'fork-source.jsonl';fork_source.write_text(new.read_text()+json.dumps(dict(graph('extra2'),tokenizer_fingerprint=fp))+'\n')
+        fork=list(argv);n=fork.index('--diloco');del fork[n:n+2]
+        fork[fork.index('--native-graphs')+1]=str(fork_source);fork[fork.index('--continued-native-graphs')+1]=str(old);fork[fork.index('--out')+1]=str(forkout)
+        fork += ['--withdrawn-native-graphs',str(withdrawal),'--standalone-diloco-parent',str(pin),'--pending-rotation-anchor','extra2']
+        observed=[];original_update=trainer.native_training_update
+        def observe(*args,**kwargs):
+            observed.extend(item.id for item in args[2]);return original_update(*args,**kwargs)
+        with monkeypatch.context() as patch:
+            patch.setattr(trainer,'native_training_update',observe);assert trainer.main(fork)==0
+        branch=torch.load(forkout/'checkpoint.pt',weights_only=False)['training'];rotation=branch['options']['pending_batch_rotation']
+        assert observed[:2]==['extra2','extra'] and branch['exposure_counts']=={'good':1,'extra':1,'extra2':1}
+        assert rotation['anchor_id']=='extra2' and rotation['parent_checkpoint_sha256']==sha(pin) and rotation['optimizer_rng_exposure']=='preserved'
+        assert trainer.main(fork)==0
+        assert torch.load(forkout/'checkpoint.pt',weights_only=False)['training']['options']['pending_batch_rotation']==rotation
         resumed=list(argv);n=resumed.index('--diloco');del resumed[n:n+2]
         resumed[resumed.index('--native-graphs')+1]=str(new)
         resumed[resumed.index('--continued-native-graphs')+1]=str(old)
