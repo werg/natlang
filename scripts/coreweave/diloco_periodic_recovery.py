@@ -796,7 +796,7 @@ def run_once(record,state_path,backend):
 
 
 
-_HEALTH_PROBE = r"""import hashlib,json,pathlib,sys
+_HEALTH_PROBE = r"""import hashlib,json,pathlib,sys,time,subprocess,os
 expected=json.loads(sys.argv[1]);boot=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
 p=pathlib.Path('/proc')/str(expected['pid']); alive=False
 try:
@@ -810,6 +810,47 @@ module=pathlib.Path(sys.argv[2])
 try: module_sha=hashlib.sha256(module.read_bytes()).hexdigest()
 except OSError: module_sha=None
 result={'boot_id':boot,'pid_alive':alive,'progress':value,'runtime_module_sha256':module_sha}
+if alive and 'http_port' not in expected:
+ def read(path):
+  try:return pathlib.Path(path).read_text().strip()
+  except OSError:return None
+ def pairs(value):
+  result={}
+  for line in (value or '').splitlines():
+   parts=line.split()
+   if len(parts)==2 and parts[1].isdigit():result[parts[0]]=int(parts[1])
+  return result
+ root='/sys/fs/cgroup/'
+ result['resources']={'sampled_at':time.time(),'memory_current':read(root+'memory.current'),
+  'memory_max':read(root+'memory.max'),'memory_events':pairs(read(root+'memory.events')),
+  'memory_stat':{k:v for k,v in pairs(read(root+'memory.stat')).items() if k in ('anon','file','pgmajfault')},
+  'memory_pressure':read(root+'memory.pressure'),'cpu_stat':pairs(read(root+'cpu.stat')),
+  'cpu_max':read(root+'cpu.max'),'cpu_pressure':read(root+'cpu.pressure')}
+ try:
+  q=subprocess.run(['nvidia-smi','--query-gpu=utilization.gpu,memory.used,memory.total,power.draw','--format=csv,noheader,nounits'],capture_output=True,text=True,timeout=5,check=True)
+  rows=[line.strip().split(', ') for line in q.stdout.strip().splitlines()]
+  result['resources']['gpu']=[dict(zip(('utilization_percent','memory_used_mib','memory_total_mib','power_watts'),row)) for row in rows]
+ except (OSError,subprocess.SubprocessError):result['resources']['gpu']=None
+ try:
+  stat=os.statvfs('/work');result['resources']['workspace_free_bytes']=stat.f_bavail*stat.f_frsize
+ except OSError:result['resources']['workspace_free_bytes']=None
+ # The log is bounded and sampled once per health pass. Rates are over the
+ # observed completed-update time span, including gaps between those updates.
+ try:
+  log=pathlib.Path(expected.get('training_log_path','/work/recovery-role-control/worker.log'))
+  with log.open('rb') as f:
+   f.seek(0,2);size=f.tell();f.seek(max(0,size-1048576));lines=f.read().splitlines()
+  updates=[]
+  for line in lines:
+   try:row=json.loads(line)
+   except (ValueError,UnicodeDecodeError):continue
+   if isinstance(row,dict) and row.get('schema')=='natlang.native-training-progress/1' and isinstance(row.get('timestamp'),(int,float)) and row['timestamp']>=expected.get('launched_at',0) and isinstance(row.get('seconds'),(int,float)):updates.append(row)
+  updates=updates[-20:]
+  if updates:
+   first,last=updates[0],updates[-1];window=last['timestamp']-first['timestamp']+first['seconds']
+   totals={k:sum(row.get(k,0) or 0 for row in updates) for k in ('forward_tokens','physical_forward_tokens','supervised_tokens','target_tokens')}
+   result['resources']['training_window']={'start':first['timestamp']-first['seconds'],'end':last['timestamp'],'seconds':window,'updates':len(updates),'tokens':totals,'tokens_per_wall_second':{k:v/window for k,v in totals.items()} if window>0 else None}
+ except (OSError,ValueError,TypeError):result['resources']['training_window']=None
 if 'http_port' in expected:
  import urllib.request
  result['http_ok']=False

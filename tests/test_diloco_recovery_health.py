@@ -29,6 +29,16 @@ def test_health_identifies_actual_live_and_dead_owner(tmp_path):
         value=service.health_snapshot(record,ownership,read_sandbox=lambda ident:Box())
         assert value['0']['progress']['global_step']==2513
         assert value['0']['progress_path']==str(progress)
+        log=tmp_path/'worker.log'
+        log.write_text('\n'.join(json.dumps({'schema':'natlang.native-training-progress/1',
+            'timestamp':t,'seconds':2,'forward_tokens':100,'physical_forward_tokens':120,
+            'supervised_tokens':10,'target_tokens':10}) for t in (100,105)))
+        ownership['workers']['0']['training_log_path']=str(log)
+        value=service.health_snapshot(record,ownership,read_sandbox=lambda ident:Box())
+        window=value['0']['resources']['training_window']
+        assert window['updates']==2 and window['seconds']==7
+        assert window['tokens_per_wall_second']['physical_forward_tokens']==240/7
+        assert 'memory_events' in value['0']['resources']
         # A new worker can use a different exact package from an older cohort.
         bound=tmp_path/'current-trainer.py';bound.write_text('current runtime\n')
         ownership['workers']['0'].update(module_path=str(bound),module_sha256=hashlib.sha256(bound.read_bytes()).hexdigest())
