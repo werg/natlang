@@ -90,3 +90,21 @@ def own_pin_maintenance(paths, *, role, digest):
         if _contains(rest,digest):raise ValueError('local pin dry contains another reference')
         out[str(p)]=value
     return out
+
+
+def own_completed_pin_intents(paths, *, role, digest):
+    """Recognize only a completed exact local-unlink intent and its result."""
+    out={}
+    for path in paths:
+        p=Path(path)
+        if not p.name.startswith('local-pin-maintenance-') or not p.name.endswith('-intent.json'):continue
+        intent=json.loads(p.read_text());candidate=intent.get('candidate') or {}
+        if intent.get('schema')!='natlang.local-pin-exclusive-maintenance/1' or intent.get('role')!=role or intent.get('approved_sha256')!=digest or candidate.get('sha256')!=digest:continue
+        result_path=p.with_name(p.name.removesuffix('-intent.json')+'-result.json')
+        if not result_path.exists():continue
+        result=json.loads(result_path.read_text());remote=result.get('remote') or {}
+        if result.get('schema')!='natlang.local-pin-exclusive-maintenance-result/1' or result.get('intent')!=str(p) or result.get('status')!='unlinked' or remote.get('unlinked') is not True or remote.get('path')!=candidate.get('path') or remote.get('inode')!=candidate.get('inode'):continue
+        remainder=dict(intent);remainder.pop('candidate');remainder.pop('approved_sha256')
+        if _contains(remainder,digest) or _contains(result,digest):raise ValueError('completed local pin maintenance contains another reference')
+        out[str(p)]=intent;out[str(result_path)]=result
+    return out
