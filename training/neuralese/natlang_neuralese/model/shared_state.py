@@ -216,7 +216,16 @@ def _convolve(layer, gated, c, plan, rows, *, index=None):
         from .state_gather import gather_convolution_state
         gathered=gather_convolution_state(padded,index)
     else:
-        gathered = padded[:, index]  # B,Q,W,C; -1 selects the explicit zero row
+        # The cached oracle gathers one invocation at a time. BF16 scatter
+        # accumulates repeated source histories in its output dtype; a single
+        # flattened scatter changes that rounding and therefore source gradients.
+        # Keep the layer-major forward while retaining the same invocation
+        # boundaries and reverse-order autograd accumulation as the cache.
+        lengths=[len(node.token_ids) for node in plan.invocations if node.token_ids]
+        if len(rows)==plan.token_count and sum(lengths)==len(rows) and len(lengths)>1:
+            gathered=torch.cat([padded[:, part] for part in index.split(lengths,dim=0)],dim=1)
+        else:
+            gathered = padded[:, index]  # B,Q,W,C; -1 selects the explicit zero row
     if stop_mask is not None:gathered=torch.where(stop_mask[None,:,:,None],gathered.detach(),gathered)
     return _finite_convolution(kernel, gathered, c)
 

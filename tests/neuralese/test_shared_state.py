@@ -647,3 +647,36 @@ def test_attention_physical_index_reused_through_checkpoint_with_bitwise_adjoint
     monkeypatch.setattr(shared_state, 'graph_attention', observe)
     forward_graph(port, compile_graph([Invocation('other', (7, 6, 5, 4))]))
     assert observed[0][0] is not previous[0] and observed[0][1] is not previous[1]
+
+
+def test_bf16_convolution_graph_matches_cached_invocation_gradients():
+    from types import SimpleNamespace
+    from natlang_neuralese.model.shared_state import _convolve, _finite_convolution
+    torch.manual_seed(427)
+    plan=compile_graph([Invocation('a',tuple(range(5)),producing=((1,4),)),
+        Invocation('b',tuple(range(5,11)),imports=(ImportSpan(2,'a',1,4),)),
+        Invocation('c',tuple(range(11,18)),imports=(ImportSpan(1,'a',1,4),))])
+    width=4;channels=16
+    weight=torch.randn(channels,1,width).bfloat16();bias=torch.randn(channels).bfloat16()
+    kernel=SimpleNamespace(weight=weight,bias=bias)
+    layer=SimpleNamespace(conv=SimpleNamespace(conv=kernel))
+    source=torch.randn(1,plan.token_count,channels).bfloat16();gate=torch.randn_like(source)
+    def run(reference):
+        x=source.clone().requires_grad_()
+        if not reference:
+            result=_convolve(layer,x,gate,plan,range(plan.token_count))
+        else:
+            pieces=[]
+            for node,offset in zip(plan.invocations,plan.offsets):
+                indices=[];padding=[]
+                for local in range(len(node.token_ids)):
+                    history=plan.history(offset+local,width);n=width-len(history)
+                    indices.append((0,)*n+history);padding.append((True,)*n+(False,)*len(history))
+                data=x[:,torch.tensor(indices)].masked_fill(torch.tensor(padding)[None,:,:,None],0)
+                pieces.append(_finite_convolution(kernel,data,gate[:,offset:offset+len(node.token_ids)]))
+            result=torch.cat(pieces,dim=1)
+        loss=(result.float()*torch.arange(result.numel()).reshape(result.shape).float()).sum()
+        return result.detach(),torch.autograd.grad(loss,x)[0]
+    actual,actual_gradient=run(False);expected,expected_gradient=run(True)
+    assert torch.equal(actual,expected)
+    assert torch.equal(actual_gradient,expected_gradient)
