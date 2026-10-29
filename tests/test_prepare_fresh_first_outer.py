@@ -29,6 +29,16 @@ def test_first_outer_builder_exact_receipts_and_common_identity(tmp_path):
     argv=json.loads(Path(result['worker_args']['path']).read_text());assert argv[argv.index('--resident-data-directory')+1]=='/work/fresh/learner/resident-data';assert argv[argv.index('--muon-rounding')+1]=='stochastic'
     plan=json.loads(Path(result['worker_plan']['path']).read_text());assert result['worker_plan_target']=='/work/fresh/learner/recipe-plan.json'
     assert plan['stage_inputs']['native_full_sft']['native_graphs']==plan['stage_inputs']['native_full_sft']['foundation_native_graphs'] and plan['code']
+    # Launch may use the live, fully decoded newest rank-0 pin while its
+    # immutable seed remains independently owner-readback and present.
+    fallback=put('fallback',{'private':True,'identity':{'sha256':base},'independent_verification':{'sha256':base,'bytes':size,'readback_location':'owner'},'verified_at':1})
+    fallback_presence=put('fallback-presence',{'sha256':base,'bytes':size,'owner_access':True,'private_object_present':True,'observed_at':2})
+    live=json.loads(Path(inv['path']).read_text());live['peers'][0].update(parent_custody='live-with-verified-seed-fallback',private_receipt=fallback,owner_presence_receipt=fallback_presence)
+    args.inventory=put('live-inventory',live);args.out=tmp_path/'liveout';r=prepare(args)
+    assert r['peers'][0]['parent_private_readback']=='pending' and r['peers'][0]['fallback_sha256']==base
+    bad_fallback=json.loads(Path(fallback['path']).read_text());bad_fallback['independent_verification']['readback_location']='sandbox';live['peers'][0]['private_receipt']=put('bad-fallback',bad_fallback)
+    args.inventory=put('bad-live-inventory',live);args.out=tmp_path/'badliveout'
+    with pytest.raises(ValueError,match='private full readback missing'):prepare(args)
     invdoc=json.loads(Path(inv['path']).read_text());invdoc['peers'][2]['parent']['sha256']='c'*64;bad=put('bad-inventory',invdoc);args.inventory=bad;args.out=tmp_path/'badout'
     with pytest.raises(ValueError,match='pin receipt differs'):prepare(args)
 
