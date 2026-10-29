@@ -1,10 +1,12 @@
 import hashlib,json,types
+import pytest
 from pathlib import Path
 from scripts.coreweave import retention_periodic
 from scripts.coreweave.retention_eligibility import eligible_full
 
 
-def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,monkeypatch):
+@pytest.mark.parametrize('paired',[False,True])
+def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,monkeypatch,paired):
     monkeypatch.setenv('NATLANG_HASH_CACHE',str(tmp_path/'hash-cache.jsonl'))
     root=tmp_path/'state';ops=tmp_path/'ops';root.mkdir();ops.mkdir();(ops/'private-export-cache').mkdir()
     def put(p,v):p.write_text(json.dumps(v));return p
@@ -20,14 +22,33 @@ def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,m
     exports=[]
     for role,step,sha in [('old',6,'a'*64),('middle',7,'c'*64),('new',8,'b'*64)]:
         intent=put(root/(role+'.json'),base|{'step':step,'sha256':sha});exports.append({'role':role,'step':step,'worker':1,'unit':role+'-unit','intent':str(intent),'phase_path':str(root/(role+'-phase.json'))});put(ops/('coreweave-production-'+role+'-private-export-receipt-20261014.json'),receipt(role,sha))
+    if paired:
+        control_role='old-control';control_sha='d'*64;control_receipt=receipt(control_role,control_sha)
+        put(ops/('coreweave-production-'+control_role+'-private-export-receipt-20261014.json'),control_receipt)
+        control_progress=put(root/'control-progress.json',{'role':control_role,'source':'/work/archive'})
+        exports[0]['control_required']=True;exports[0]['control']={'role':control_role,'unit':'control-unit','status':'independently_verified','phase_path':str(control_progress),'archive':{'path':'/work/archive','sha256':control_sha,'bytes':2}}
     journals=[]
     for rank in range(1,5):journals.append(put(root/f'journal{rank}.json',{'exports':exports if rank==1 else []}))
-    config={'state_root':str(root),'operations_root':str(ops),'reference_roots':[str(root)],'fallback_role':'backup','qualified_local_parents':[str(qual)],'active_roles':str(manifest),'owner_state':str(owner_state),'roles':[{'rank':i+1,'journal':str(journals[i]),'owner_epochs':[str(owners[i])]} for i in range(4)]}
+    config={'cycle_index':0,'max_attempts_per_rank':2,'state_root':str(root),'operations_root':str(ops),'reference_roots':[str(root)],'fallback_role':'backup','qualified_local_parents':[str(qual)],'active_roles':str(manifest),'owner_state':str(owner_state),'roles':[{'rank':i+1,'journal':str(journals[i]),'owner_epochs':[str(owners[i])]} for i in range(4)]}
     monkeypatch.setattr(retention_periodic.subprocess,'run',lambda *a,**k:types.SimpleNamespace(stdout=''))
     monkeypatch.setattr(retention_periodic,'reference_paths',lambda ds,roots:{d:set() for d in ds})
     def guarded(**kw):
         assert not kw['apply']
-        if kw['candidate']['role']=='old':raise ValueError('external reference')
-        live=kw['read_live'](kw['candidate'],'prepare');assert eligible_full(kw['candidate'],**live['eligibility']);return {'role':kw['candidate']['role'],'mode':'dry'}
-    monkeypatch.setattr(retention_periodic,'guarded_full',guarded)
-    assert retention_periodic.run_cycle(config,api=None,get=None,write_durable=lambda *a:None)==[{'role':'middle','mode':'dry'}]
+        if not paired and kw['candidate']['role']=='old':raise ValueError('external reference')
+        live=kw['read_live'](kw['candidate'],'prepare')
+        if paired:
+            from scripts.coreweave.retention_eligibility import eligible_pair
+            assert eligible_pair(kw['candidate'],**live['eligibility'])
+        else:assert eligible_full(kw['candidate'],**live['eligibility'])
+        return {'role':kw['candidate']['role'],'mode':'dry'}
+    monkeypatch.setattr(retention_periodic,'guarded_full',guarded);monkeypatch.setattr(retention_periodic,'guarded_pair',guarded)
+    assert retention_periodic.run_cycle(config,api=None,get=None,write_durable=lambda *a:None)==[{'role':'old' if paired else 'middle','mode':'dry'}]
+    if not paired:
+        assert retention_periodic.run_cycle(config|{'max_attempts':1},api=None,get=None,write_durable=lambda *a:None)==[]
+
+
+def test_cycle_rotation_visits_each_rank_and_candidate():
+    from scripts.coreweave.retention_periodic import rotate_cycle
+    assert [rotate_cycle([1,2,3,4],i)[0] for i in range(4)]==[1,2,3,4]
+    assert [rotate_cycle(['a','b','c'],i)[0] for i in range(3)]==['a','b','c']
+    assert rotate_cycle([],1)==[]

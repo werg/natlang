@@ -5,7 +5,7 @@ Default is dry. Apply remains an explicit operation and every object is fenced,
 rechecked and durably recorded by the shared guard.
 """
 from __future__ import annotations
-import argparse,hashlib,json,subprocess
+import argparse,hashlib,json,subprocess,time
 from pathlib import Path
 from .dependency_references import reference_paths
 from .retention_bookkeeping import own_bookkeeping,recheck_own_bookkeeping
@@ -14,6 +14,11 @@ from .retention_guard import guarded_full,guarded_pair
 from .retention_live import live_facts
 from .retention_presence import resolve_object
 from .retention_select import candidates
+
+
+def rotate_cycle(items, cycle):
+    if not items:return []
+    offset=cycle%len(items);return items[offset:]+items[:offset]
 
 
 def run_cycle(config, *, api, get, write_durable, apply=False):
@@ -34,8 +39,11 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
     if sorted(x['rank'] for x in role_configs)!=[1,2,3,4]:raise ValueError('exactly four roles are required')
     preferred=config.get('priority_ranks',[1,2,3,4])
     if sorted(preferred)!=[1,2,3,4]:raise ValueError('invalid rank priority')
+    cycle=config.get('cycle_index',int(time.time()//300));max_attempts=config.get('max_attempts',4);per_rank=config.get('max_attempts_per_rank',1);max_seconds=config.get('max_start_seconds',240)
+    if type(cycle) is not int or cycle<0 or type(max_attempts) is not int or max_attempts<1 or type(per_rank) is not int or per_rank<1 or not isinstance(max_seconds,(int,float)) or max_seconds<=0:raise ValueError('invalid retention cycle budget')
+    preferred=rotate_cycle(preferred,cycle)
     role_configs=sorted(role_configs,key=lambda x:preferred.index(x['rank']))
-    outcomes=[]
+    outcomes=[];attempts=0;started=time.monotonic()
     for role_config in role_configs:
         rank=role_config['rank'];journal=Path(role_config['journal']);owner_bindings=bindings(role_config['owner_epochs']);owners=authenticated_owner_epochs(owner_bindings)
         def read_context():
@@ -68,9 +76,13 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
         context=read_context();exports,intents,owners,current,owner_state,units,receipts,protected,transitions=context
         retired_state=read(retired) if retired.exists() else {'retired_roles':[]}
         selected=candidates(exports=exports,intents=intents,owners=owners,current_owner=current,owner_state=owner_state,receipts=receipts,fallback_role=fallback,active_units=units,transitions=transitions,protected_sha256s=protected)
+        selected=[x for x in selected if x['role'] not in retired_state.get('retired_roles',[]) and (config.get('candidate_allowlist') is None or x['role'] in config['candidate_allowlist'])]
+        selected=rotate_cycle(selected,cycle)
+        rank_attempts=0
         for candidate in selected:
-            if candidate['role'] in retired_state.get('retired_roles',[]):continue
-            if config.get('candidate_allowlist') is not None and candidate['role'] not in config['candidate_allowlist']:continue
+            if attempts>=max_attempts or time.monotonic()-started>=max_seconds:return outcomes
+            if rank_attempts>=per_rank:break
+            attempts+=1;rank_attempts+=1
             try:
                 entry=next(x for x in exports if x['role']==candidate['role']);intent=intents[candidate['role']];receipt=next(x for x in receipts if x['role']==candidate['role'])
                 phase=ops/('coreweave-production-'+candidate['role']+'-private-upload-phase-20261014.json');cache_root=ops/'private-export-cache';cache_refs=reference_paths([candidate['sha256']],[cache_root])[candidate['sha256']]
