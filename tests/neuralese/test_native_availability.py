@@ -111,7 +111,8 @@ def test_real_trainer_continues_after_payload_loss_and_reactivates_exact_remaini
     full=manifest(tmp_path/'all.json',leaves[:3]);available=manifest(tmp_path/'available.json',leaves[:2])
     argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
         '--native-graphs',str(full),'--held-native-graphs',str(leaves[3]),'--epochs','1',
-        '--eval-every','100','--out',str(tmp_path/'run'),'--forward-atol','1e-4','--gradient-atol','1e-5']
+        '--eval-every','100','--out',str(tmp_path/'run'),'--forward-atol','1e-4','--gradient-atol','1e-5',
+        '--no-ordinary-cohort-fairness']
     assert trainer.main(argv+['--refresh-after-updates','1'])==0
     parent=torch.load(tmp_path/'run/checkpoint.pt',weights_only=False)
     t=parent['training'];assert t['exposure_counts']=={'a':1,'b':0,'c':0}

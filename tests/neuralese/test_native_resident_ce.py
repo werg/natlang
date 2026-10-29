@@ -144,21 +144,25 @@ def test_actual_trainer_live_append_matches_explicit_complete_source_updates(tmp
     def update(model,optimizer,batch,**kwargs):
         orders[mode].extend(row.id for row in batch)
         return original_update(model,optimizer,batch,**kwargs)
-    def run(out,resident_mode,resume=None):
+    def run(out,resident_mode,resume=None,reference_prefix=False):
         args=['--base',str(base),'--dtype','bfloat16','--rank','4','--device','cpu',
-            '--native-graphs',str(paths['old_train'] if resident_mode else paths['train']),
-            '--held-native-graphs',str(paths['held']),'--ce-supervision-policy',str(paths['old_ce']if resident_mode else paths['new_ce']),
+            '--native-graphs',str(paths['old_train'] if resident_mode or reference_prefix else paths['train']),
+            '--held-native-graphs',str(paths['held']),'--ce-supervision-policy',str(paths['old_ce']if resident_mode or reference_prefix else paths['new_ce']),
             '--epochs','2','--eval-every','1','--checkpoint-every','1','--checkpoint-seconds','0',
             '--seed','23','--out',str(out),'--stage-id','sft']
         if family=='mellum':args+=['--fp8-training','triton-experts']
         if resident_mode:args+=['--resident-data-directory',str(directory),'--recipe-binding',json.dumps(native_recipe_binding(paths['old_recipe'],old['recipe_sha256']))]
         if resume is not None:args+=['--continue-from',str(resume)]
+        if reference_prefix:args+=['--refresh-after-updates','1']
+        elif not resident_mode and resume is not None:args+=['--continued-native-graphs',str(paths['old_train'])]
         return trainer.main(args)
     with monkeypatch.context()as patch:
         patch.setattr(resident.ResidentAdoption,'__init__',initialize)
         patch.setattr(trainer,'_save',save);patch.setattr(trainer,'native_training_update',update)
         assert run(tmp_path/'live',True)==0
-        mode='reference';assert run(tmp_path/'reference',False)==0
+        mode='reference';assert run(tmp_path/'reference',False,reference_prefix=True)==0
+        assert orders['reference']==['old']
+        assert run(tmp_path/'reference',False,resume=tmp_path/'reference/checkpoint.pt')==0
     assert published and resident.current(directory)
     assert orders['live']==orders['reference']and 'extra'in orders['live']
     live=torch.load(tmp_path/'live/checkpoint.pt',weights_only=False,map_location='cpu')
