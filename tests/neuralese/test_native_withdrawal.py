@@ -338,7 +338,7 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
         fork_source=tmp_path/'fork-source.jsonl';fork_source.write_text(new.read_text()+json.dumps(dict(graph('extra2'),tokenizer_fingerprint=fp))+'\n')
         fork=list(argv);n=fork.index('--diloco');del fork[n:n+2]
         fork[fork.index('--native-graphs')+1]=str(fork_source);fork[fork.index('--continued-native-graphs')+1]=str(old);fork[fork.index('--out')+1]=str(forkout)
-        fork += ['--withdrawn-native-graphs',str(withdrawal),'--standalone-diloco-parent',str(pin),'--pending-rotation-anchor','extra2']
+        fork += ['--withdrawn-native-graphs',str(withdrawal),'--standalone-diloco-parent',str(pin),'--pending-rotation-anchor','extra2','--no-ordinary-cohort-fairness']
         observed=[];original_update=trainer.native_training_update
         def observe(*args,**kwargs):
             observed.extend(item.id for item in args[2]);return original_update(*args,**kwargs)
@@ -349,6 +349,30 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
         assert rotation['anchor_id']=='extra2' and rotation['parent_checkpoint_sha256']==sha(pin) and rotation['optimizer_rng_exposure']=='preserved'
         assert trainer.main(fork)==0
         assert torch.load(forkout/'checkpoint.pt',weights_only=False)['training']['options']['pending_batch_rotation']==rotation
+        forbidden=list(fork);forbidden.remove('--no-ordinary-cohort-fairness')
+        with pytest.raises(ValueError,match='must remove the retired pending rotation anchor'):
+            trainer.main(forbidden)
+        fairness=list(fork);n=fairness.index('--pending-rotation-anchor');del fairness[n:n+2];fairness.remove('--no-ordinary-cohort-fairness')
+        fairness[fairness.index('--epochs')+1]='2'
+        checked=[]
+        def inspect_resume(model,optimizer,batch,**kwargs):
+            if not checked:
+                assert torch.equal(torch.get_rng_state(),branch['rng']['torch_rng'])
+                assert optimizer.state_dict().keys()==branch['optimizer'].keys()
+                checked.append(True)
+            return original_update(model,optimizer,batch,**kwargs)
+        with monkeypatch.context() as patch:
+            patch.setattr(trainer,'native_training_update',inspect_resume);assert trainer.main(fairness)==0
+        assert checked
+        upgraded=torch.load(forkout/'checkpoint.pt',weights_only=False)['training']
+        history=upgraded['options']['pending_batch_rotation_history']
+        assert 'pending_batch_rotation' not in upgraded['options'] and upgraded['options']['pending_rotation_anchor'] is None
+        assert history[-1]['rotation']==rotation and history[-1]['fairness_transition']['to'] is True
+        assert all(upgraded['exposure_counts'][key]>=value for key,value in branch['exposure_counts'].items())
+        assert upgraded['global_step']>branch['global_step'] and upgraded['optimizer'] and upgraded['rng']
+        assert trainer.main(fairness)==0
+        restarted=torch.load(forkout/'checkpoint.pt',weights_only=False)['training']
+        assert restarted['options']['pending_batch_rotation_history']==history and 'pending_batch_rotation' not in restarted['options']
         resumed=list(argv);n=resumed.index('--diloco');del resumed[n:n+2]
         resumed[resumed.index('--native-graphs')+1]=str(new)
         resumed[resumed.index('--continued-native-graphs')+1]=str(old)

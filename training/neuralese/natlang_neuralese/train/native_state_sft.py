@@ -2630,6 +2630,19 @@ def _main(argv=None, *, requested_refresh):
         args.pending_rotation_anchor = None
         checkpoint_options['pending_rotation_anchor'] = None
         prior_rotation = {}
+    elif prior_rotation and fairness_had_saved_training and not prior_fairness and args.ordinary_cohort_fairness:
+        if args.pending_rotation_anchor is not None:
+            raise ValueError('ordinary cohort fairness transition must remove the retired pending rotation anchor')
+        if not fairness_history or fairness_history[-1]['to'] is not True:
+            raise ValueError('rotation retirement requires its recorded fairness transition')
+        rotation_history.append({'schema':'natlang.pending-batch-rotation-fairness-retirement/1',
+            'rotation':prior_rotation, 'fairness_transition':fairness_history[-1],
+            'at_global_step':global_step, 'source_bindings_sha256':source_hash,
+            'subsequent_schedule':'ordinary-cohort-fairness'})
+        checkpoint_options['pending_batch_rotation_history'] = rotation_history
+        checkpoint_options.pop('pending_batch_rotation', None)
+        checkpoint_options['pending_rotation_anchor'] = None
+        prior_rotation = {}
     elif rotation_history:
         checkpoint_options['pending_batch_rotation_history'] = rotation_history
     if prior_rotation and args.pending_rotation_anchor is None:
