@@ -45,18 +45,12 @@ def test_append_keeps_old_labels_and_rejects_tampering(tmp_path):
     ref=make(new,[a,b,c]);path.write_text(path.read_text()+' ')
     with pytest.raises(ValueError,match='SHA mismatch'):load_map(ref,new)
 
-def test_token_mass_normalization_equalizes_supervised_tokens_not_rows():
-    # One long coding trajectory against many short communication rows: under token mass the coding row already
-    # carries half the tokens, so it must not also receive the row-count cap.
-    entries=[{'id':f'c{i}','supervised_tokens':10} for i in range(100)]+[{'id':'code','supervised_tokens':1000}]
+def test_declared_scales_are_used_exactly_and_must_cover_every_family():
+    entries=[{'id':f'c{i}'} for i in range(100)]+[{'id':'code'}]
     ids=['communication']*100+['coding']
-    balance={'key':'logical-family','max_scale':8.,'normalization':'token-mass-mean-one/1','map':{}}
+    balance={'key':'logical-family','max_scale':8.,'normalization':'declared/1','map':{},
+             'scales':{'communication':.5,'coding':1.}}
     scales,census=family_scales({'mass':'token','family_balance':balance},entries,logical_ids=ids)
-    assert scales['code']==pytest.approx(1.) and scales['c0']==pytest.approx(1.)
-    assert census['supervised_tokens']==2000 and census['families']['coding']['supervised_tokens']==1000
-    entries[-1]['supervised_tokens']=4000  # coding now dominates: scaled down, token mass still mean one
-    scales,_=family_scales({'mass':'token','family_balance':balance},entries,logical_ids=ids)
-    assert scales['code']*4000==pytest.approx(scales['c0']*1000)
-    assert sum(scales[e['id']]*e['supervised_tokens'] for e in entries)==pytest.approx(5000)
-    with pytest.raises(ValueError,match="mass: 'token'"):
-        family_scales({'mass':'invocation','family_balance':balance},entries,logical_ids=ids)
+    assert scales['code']==1. and scales['c0']==.5 and census['normalization']=='declared/1'
+    with pytest.raises(ValueError,match='lack families'):
+        family_scales({'family_balance':{**balance,'scales':{'coding':1.}}},entries,logical_ids=ids)
