@@ -469,6 +469,7 @@ def verify_full_restore_fence(*, journal_ref, expected_primary, expected_workers
                               get_sandbox, observe_owner, now=time.time):
     """Fence every lost owner and authenticate each exact replacement lineage."""
     owner=owner_reference(journal_ref['path'],journal_ref['sha256'],expected_primary)
+    if owner.get('phase')!='complete':raise ValueError('full restore requires captured actual owner journal')
     if sorted(map(int,owner.get('workers',{})))!=sorted(expected_workers) or sorted(replacements)!=sorted(expected_workers):
         raise ValueError('full restore must bind every original and replacement rank')
     old_ids={expected_primary['sandbox_id'],*(owner['workers'][str(rank)]['sandbox_id'] for rank in expected_workers)}

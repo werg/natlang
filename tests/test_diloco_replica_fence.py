@@ -187,7 +187,7 @@ def test_full_restore_fences_every_old_owner_and_replacement(tmp_path):
     from scripts.coreweave.diloco_replica_fence import verify_full_restore_fence
     primary={'sandbox_id':'old0','boot_id':'boot0','owner_id':'owner0','pid':10,'start_ticks':'10'}
     workers={str(i):{'sandbox_id':f'old{i}','boot_id':f'boot{i}','owner_id':f'owner{i}','pid':10+i,'start_ticks':str(10+i)} for i in range(4)}
-    owner={'run_id':'r','coordinator':primary,'workers':workers};path=tmp_path/'owner.json';path.write_text(json.dumps(owner))
+    owner={'run_id':'r','phase':'complete','coordinator':primary,'workers':workers};path=tmp_path/'owner.json';path.write_text(json.dumps(owner))
     ref={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()};replacements={}
     supervisor={'pid':1,'start_ticks':'22','cmdline_sha256':'a'*64,'entrypoint_sha256':'b'*64}
     for i in range(4):
