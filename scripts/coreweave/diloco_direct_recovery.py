@@ -112,13 +112,18 @@ def load_control(path, record, *, control_bytes=None, read_bound=None, verify_he
             if common['peers'][index].get('sha256') != bindings[name].get('sha256'):
                 raise ValueError('direct reanchor peer differs from the common manifest')
             declaration=data(name)
-            if declaration.get('schema')!='natlang.diloco-new-outer/1' or declaration.get('worker')!=index:
+            if declaration.get('schema') not in ('natlang.diloco-new-outer/1','natlang.diloco-first-outer/1') or declaration.get('worker')!=index:
                 raise ValueError('direct reanchor worker declaration differs')
-            for field in ('parent','historical_outer_checkpoint'):
+            first=declaration.get('schema')=='natlang.diloco-first-outer/1'
+            if first and declaration.get('historical_outer_checkpoint') is not None:
+                raise ValueError('first reanchor cannot carry historical outer state')
+            for field in (('parent',) if first else ('parent','historical_outer_checkpoint')):
                 item=declaration.get(field) or {}
                 if (item.get('sha256'),item.get('bytes')) not in external:
                     raise ValueError('direct reanchor lacks privately verified '+field)
             declarations.append(declaration)
+        if len({x['schema'] for x in declarations}) != 1:
+            raise ValueError('direct reanchor declarations mix distinct outer origins')
         if len({(x.get('seed_sha256'),x.get('source_hash'),x.get('held_sha256')) for x in declarations}) != 1:
             raise ValueError('direct reanchor declarations do not share seed, source and held bindings')
     recipe=json.loads(_flag(argv,'--recipe-binding'))

@@ -337,7 +337,10 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             if transition is not None:
                 if transition.get('schema') != 'natlang.diloco-new-outer-transition/1':
                     raise ValueError('invalid new outer recovery transition')
-                for name in ('declaration', 'parent', 'historical_outer_checkpoint', 'seed'):
+                first = transition.get('origin') == 'first'
+                if first and transition.get('historical_outer_checkpoint') is not None:
+                    raise ValueError('first outer has unexpected historical outer custody')
+                for name in (('declaration', 'parent', 'seed') if first else ('declaration', 'parent', 'historical_outer_checkpoint', 'seed')):
                     reference = transition.get(name)
                     if not isinstance(reference, dict):
                         raise ValueError('new outer recovery lacks dependency ' + name)
@@ -349,8 +352,16 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
                 if manifest.get('schema') != 'natlang.diloco-new-outer-manifest/1' or \
                         len(manifest.get('peers', [])) != manifest.get('workers'):
                     raise ValueError('invalid common new outer manifest')
-                for reference in manifest['peers']:
-                    bound(reference)
+                for index, reference in enumerate(manifest['peers']):
+                    peer_path=bound(reference)
+                    if first:
+                        peer=json.loads(peer_path.read_text())
+                        if (peer.get('schema')!='natlang.diloco-first-outer/1' or peer.get('worker')!=index
+                                or peer.get('seed_sha256')!=transition['seed_sha256']
+                                or peer.get('historical_outer_checkpoint') is not None):
+                            raise ValueError('first outer declaration origin or seed differs')
+                        if index==transition.get('worker') and peer.get('parent')!=transition['parent']:
+                            raise ValueError('first outer parent differs from committed transition')
         foundation_inputs(training.get('options') or {})
         foundation_inputs(training.get('training_options') or {})
         packed_capacity_inputs(training.get('options') or {})

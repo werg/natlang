@@ -983,7 +983,7 @@ def _data_continuation(old, new):
 def _new_outer_continuation(old, new):
     """Permit a bound four-peer outer reset without changing any source roles."""
     old_pin=old.get('standalone_diloco_parent');reference=new.get('diloco_new_outer')
-    if not isinstance(old_pin,dict) or not isinstance(reference,dict) or 'diloco_new_outer' in old or 'standalone_diloco_parent' in new:
+    if not isinstance(reference,dict) or 'diloco_new_outer' in old or 'standalone_diloco_parent' in new:
         return False
     if {k:v for k,v in old.items() if k!='standalone_diloco_parent'} != {k:v for k,v in new.items() if k!='diloco_new_outer'}:
         return False
@@ -997,14 +997,18 @@ def _new_outer_continuation(old, new):
             part=Path(item['path']).resolve(strict=True)
             if part.stat().st_size!=item['bytes'] or sha(part)!=item['sha256']:return False
             value=json.loads(part.read_text())
-            if value.get('schema')!='natlang.diloco-new-outer/1' or value.get('worker')!=index:return False
+            if value.get('schema') not in ('natlang.diloco-new-outer/1','natlang.diloco-first-outer/1') or value.get('worker')!=index:return False
             peers.append(value)
         shared={(x.get('seed_sha256'),x.get('source_hash'),x.get('held_sha256')) for x in peers}
         if len(shared)!=1 or peers[0].get('held_sha256')!=old['held_native_graphs']['sha256']:return False
         if not all(isinstance(v,str) and re.fullmatch('[0-9a-f]{64}',v) for v in next(iter(shared))):return False
-        if not any((x.get('historical_outer_checkpoint') or {}).get('sha256')==old_pin.get('sha256') for x in peers):return False
+        if len({x['schema'] for x in peers}) != 1:return False
+        first=peers[0]['schema']=='natlang.diloco-first-outer/1'
+        if first:
+            if old_pin is not None or any(x.get('historical_outer_checkpoint') is not None for x in peers):return False
+        elif not isinstance(old_pin,dict) or not any((x.get('historical_outer_checkpoint') or {}).get('sha256')==old_pin.get('sha256') for x in peers):return False
         return all(all(isinstance(x.get(k),dict) and x[k].get('path') and x[k].get('sha256') and type(x[k].get('bytes')) is int
-                       for k in ('parent','historical_outer_checkpoint')) for x in peers)
+                       for k in (('parent',) if first else ('parent','historical_outer_checkpoint'))) for x in peers)
     except (OSError,ValueError,KeyError,TypeError):return False
 
 

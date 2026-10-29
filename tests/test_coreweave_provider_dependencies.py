@@ -988,3 +988,29 @@ def test_multi_tranche_publication_requires_exact_archived_subset_proof(tmp_path
     state['training']['options']['recipe_binding']=json.dumps(binding)
     with pytest.raises(ValueError,match='raw subset identity differs'):
         deps.dependency_closure({},namespace=str(root),_checkpoint_payload=state)
+
+
+def test_first_outer_transition_publishes_exact_recovery_dependencies(tmp_path):
+    import torch
+    refs = {name:write(tmp_path / name, name) for name in ('parent', 'seed')}
+    peers = [write(tmp_path / f'peer-{i}', {'schema':'natlang.diloco-first-outer/1','worker':i,'seed_sha256':refs['seed']['sha256'],'parent':refs['parent']}) for i in range(4)]
+    refs['declaration'] = write(tmp_path/'declaration', {'schema':'natlang.diloco-new-outer-manifest/1',
+                                                        'workers':4,'peers':peers})
+    transition = {'schema':'natlang.diloco-new-outer-transition/1', 'declaration':refs['declaration'],
+                  'parent':refs['parent'], 'historical_outer_checkpoint':None, 'seed':refs['seed'], 'origin':'first', 'worker':0,
+                  'declaration_sha256':refs['declaration']['sha256'], 'seed_sha256':refs['seed']['sha256']}
+    path = tmp_path / 'checkpoint.pt'
+    torch.save({'schema':'natlang.neuralese-native-checkpoint/1',
+                'training':{'options':{'new_outer_reanchor':transition}}}, path)
+    checkpoint = {'path':str(path), 'sha256':deps.sha256_file_hex_cached(path), 'bytes':path.stat().st_size}
+    closure = deps.dependency_closure({'parent_checkpoint':checkpoint}, namespace=str(tmp_path))
+    files = {row['path'] for row in closure['files']}
+    assert all(ref['path'] in files for ref in refs.values())
+    assert all(ref['path'] in files for ref in peers)
+    Path(refs['parent']['path']).write_text('tampered')
+    with pytest.raises(ValueError, match='hash changed'):
+        deps.dependency_closure({'parent_checkpoint':checkpoint}, namespace=str(tmp_path))
+    config=write(path,{'seed_native_graphs':str(tmp_path.parent/'external.jsonl')})
+    with pytest.raises(ValueError,match='escaped'):
+        deps.dependency_closure({'config':config},namespace=str(tmp_path))
+

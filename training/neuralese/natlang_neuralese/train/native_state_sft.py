@@ -2609,6 +2609,8 @@ def _main(argv=None, *, requested_refresh):
             held_sha256=prior_new_outer['held_sha256'] if prior_new_outer else held.file_sha256,
             history=prior_outer_history,
             saved=(resume or {}).get('options'))
+        if new_outer_proof['schema']=='natlang.diloco-first-outer/1' and previous_outer is not None and not new_outer_resumed:
+            raise ValueError('first outer cannot discard a committed DiLoCo state')
         # Once saved, the declaration is historical custody. A later source
         # append uses the normal identity-transition checks and does not
         # perform or gate the old reanchor again.
@@ -2650,7 +2652,7 @@ def _main(argv=None, *, requested_refresh):
                           'sha256':sha256_file_hex_cached(args.continue_from),
                           'bytes':args.continue_from.stat().st_size},
                 'global_step':global_step,'outer_history':'new',
-                'historical_outer_checkpoint':prior_outer_history[-1]['checkpoint']}
+                'historical_outer_checkpoint':prior_outer_history[-1]['checkpoint'] if prior_outer_history else None}
     from .native_diloco import attach_learner
     diloco_identity_transition = None
     if new_outer_proof is None and args.diloco is not None and not parent_continuation and (source_correction_result.get('changed') or diloco_withdrawal_changed or diloco_append_changed):
@@ -2675,18 +2677,19 @@ def _main(argv=None, *, requested_refresh):
             'schema':'natlang.diloco-new-outer-transition/1', 'declaration_sha256':new_outer_sha,
             'declaration':{'path':str(args.diloco_new_outer.resolve()), 'sha256':new_outer_sha,
                            'bytes':args.diloco_new_outer.stat().st_size},
-            'parent':new_outer_proof['parent'], 'historical_outer_checkpoint':new_outer_proof['historical_outer_checkpoint'],
+            'parent':new_outer_proof['parent'], 'historical_outer_checkpoint':new_outer_proof.get('historical_outer_checkpoint'),
+            'origin':'first' if new_outer_proof['schema']=='natlang.diloco-first-outer/1' else 'outer-loss',
             'seed_sha256':new_outer_proof['seed_sha256'],
             'seed':{'path':str(args.continue_from.resolve()), 'sha256':new_outer_proof['seed_sha256'],
                     'bytes':args.continue_from.stat().st_size},
             'source_hash':source_hash, 'held_sha256':held.file_sha256,
             'fingerprint':diloco.manifest['fingerprint'], 'worker':diloco.worker, 'global_step':global_step,
-            'old_outer':'lost; pending and accepted windows are historical and not replayed',
+            'old_outer':'none' if new_outer_proof['schema']=='natlang.diloco-first-outer/1' else 'lost; pending and accepted windows are historical and not replayed',
             'initial_deviations':diloco.reanchor_deviations}
         checkpoint_options['standalone_diloco_rejoin'] = {
             'schema':'natlang.diloco-standalone-rejoin/1', 'parent':new_outer_proof['parent'],
             'global_step':global_step, 'outer_history':'new',
-            'historical_outer_checkpoint':prior_outer_history[-1]['checkpoint']}
+            'historical_outer_checkpoint':prior_outer_history[-1]['checkpoint'] if prior_outer_history else None}
     if diloco is not None and getattr(diloco,'identity_transition',None):
         history=checkpoint_options.setdefault('diloco_identity_transition_history',list(((resume or {}).get('options') or {}).get('diloco_identity_transition_history') or []))
         if diloco.identity_transition not in history:history.append(diloco.identity_transition)
@@ -3116,6 +3119,12 @@ def _main(argv=None, *, requested_refresh):
         policy.drain_async()
         return
     if new_outer_proof is not None and diloco.local_steps == 0:
+        if not new_outer_resumed and new_outer_proof['schema']=='natlang.diloco-first-outer/1':
+            fork_seed=new_outer_proof.get('rng_fork_seed')
+            checkpoint_options['new_outer_reanchor']['rng_fork']={'seed':fork_seed, 'policy':'rank-derived-clone/1' if fork_seed is not None else 'preserve-parent/1'}
+            if fork_seed is not None:
+                random.seed(fork_seed)
+                torch.manual_seed(fork_seed)
         # Publish no readiness until the full peer-specific model, optimizer,
         # RNG, exposure and new baselines are durable in the rolling slot.
         if not new_outer_resumed:

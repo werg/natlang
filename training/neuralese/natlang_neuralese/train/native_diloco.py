@@ -33,6 +33,7 @@ The CoreWeave launcher is ``scripts/coreweave/diloco.py``.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -51,6 +52,12 @@ GLOBAL_EXPORT_SCHEMA = 'natlang.native-diloco-global-export/1'
 ARGUMENT = '--diloco'
 
 
+def first_outer_rng_seed(seed_sha256, worker):
+    """Stable rank-specific RNG for clones of one shared full checkpoint."""
+    payload = f'natlang.first-outer-rng/1:{seed_sha256}:{worker}'.encode()
+    return int.from_bytes(hashlib.sha256(payload).digest()[:8], 'big') & ((1 << 63) - 1)
+
+
 def validate_new_outer(declaration, *, slot, seed, worker, workers, source_hash, held_sha256, history, saved):
     """Authenticate this peer's own parent and the shared fresh seed before reanchor."""
     path = Path(declaration).resolve(strict=True)
@@ -66,7 +73,7 @@ def validate_new_outer(declaration, *, slot, seed, worker, workers, source_hash,
             or sha256_file_hex_cached(declaration_path) != reference.get('sha256')):
         raise ValueError('new outer peer declaration differs from its common manifest')
     proof = json.loads(declaration_path.read_text())
-    if (proof.get('schema') != 'natlang.diloco-new-outer/1' or proof.get('worker') != worker
+    if (proof.get('schema') not in ('natlang.diloco-new-outer/1', 'natlang.diloco-first-outer/1') or proof.get('worker') != worker
             or proof.get('source_hash') != source_hash or proof.get('held_sha256') != held_sha256
             or proof.get('seed_sha256') != sha256_file_hex_cached(seed)
             or not all(isinstance(proof.get(k),str) and re.fullmatch('[0-9a-f]{64}', proof[k])
@@ -74,9 +81,16 @@ def validate_new_outer(declaration, *, slot, seed, worker, workers, source_hash,
         raise ValueError('new outer declaration differs from the worker, source, held or seed binding')
     parent = proof.get('parent') or {}
     historical = proof.get('historical_outer_checkpoint') or {}
-    if not history or historical != history[-1].get('checkpoint'):
+    first = proof['schema'] == 'natlang.diloco-first-outer/1'
+    if first:
+        if history or proof.get('historical_outer_checkpoint') is not None:
+            raise ValueError('first outer cannot replace committed historical outer custody')
+        expected_fork = first_outer_rng_seed(proof['seed_sha256'], worker) if parent.get('sha256') == proof['seed_sha256'] else None
+        if proof.get('rng_fork_seed') != expected_fork:
+            raise ValueError('first outer clone RNG fork differs from its seed and worker')
+    elif not history or historical != history[-1].get('checkpoint'):
         raise ValueError('new outer declaration lacks the exact committed historical outer checkpoint')
-    for record in (parent, historical):
+    for record in ((parent,) if first else (parent, historical)):
         pinned = Path(record.get('path', '')).resolve(strict=True)
         if (not pinned.is_file() or pinned.stat().st_size != record.get('bytes')
                 or sha256_file_hex_cached(pinned) != record.get('sha256')):

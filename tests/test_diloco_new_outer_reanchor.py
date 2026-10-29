@@ -285,3 +285,62 @@ def test_fresh_outer_retains_peer_weights_until_actual_update(tmp_path):
             learner.close()
         stop.set()
         server.join(timeout=3)
+
+
+def test_first_outer_requires_no_prior_outer_and_exact_full_parent(tmp_path):
+    def ref(path):
+        return {'path':str(path),'bytes':path.stat().st_size,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+    seed=tmp_path/'seed';seed.write_bytes(b'common baseline');parent=tmp_path/'parent';parent.write_bytes(b'earned peer state');slot=tmp_path/'slot';slot.write_bytes(parent.read_bytes())
+    peers=[]
+    for worker in range(4):
+        path=tmp_path/f'peer-{worker}.json';path.write_text(json.dumps({'schema':'natlang.diloco-first-outer/1','worker':worker,'parent':ref(parent),'historical_outer_checkpoint':None,'seed_sha256':ref(seed)['sha256'],'source_hash':'a'*64,'held_sha256':'b'*64}));peers.append(ref(path))
+    manifest=tmp_path/'manifest';manifest.write_text(json.dumps({'schema':'natlang.diloco-new-outer-manifest/1','workers':4,'peers':peers}))
+    kw=dict(slot=slot,seed=seed,worker=0,workers=4,source_hash='a'*64,held_sha256='b'*64,history=[],saved=None)
+    assert validate_new_outer(manifest,**kw)[0]['schema']=='natlang.diloco-first-outer/1'
+    with pytest.raises(ValueError,match='historical'):
+        validate_new_outer(manifest,**{**kw,'history':[{'checkpoint':ref(parent)}]})
+    slot.write_bytes(b'wrong parent')
+    with pytest.raises(ValueError,match='resumed full checkpoint'):
+        validate_new_outer(manifest,**kw)
+
+
+def test_first_outer_clone_rng_is_bound_to_rank_and_seed(tmp_path):
+    from natlang_neuralese.train.native_diloco import first_outer_rng_seed
+    seed=tmp_path/'seed';seed.write_bytes(b'baseline');slot=tmp_path/'slot';slot.write_bytes(seed.read_bytes())
+    def ref(p):return {'path':str(p),'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+    refs=[]; forks=[]
+    for worker in range(4):
+        fork=first_outer_rng_seed(ref(seed)['sha256'],worker);forks.append(fork);path=tmp_path/f'peer-{worker}';path.write_text(json.dumps({'schema':'natlang.diloco-first-outer/1','worker':worker,'parent':ref(seed),'seed_sha256':ref(seed)['sha256'],'source_hash':'a'*64,'held_sha256':'b'*64,'rng_fork_seed':fork}));refs.append(ref(path))
+    assert len(set(forks))==4
+    manifest=tmp_path/'manifest';manifest.write_text(json.dumps({'schema':'natlang.diloco-new-outer-manifest/1','workers':4,'peers':refs}))
+    kw=dict(slot=slot,seed=seed,worker=1,workers=4,source_hash='a'*64,held_sha256='b'*64,history=[],saved=None)
+    assert validate_new_outer(manifest,**kw)[0]['rng_fork_seed']==forks[1]
+    peer=tmp_path/'peer-1';data=json.loads(peer.read_text());data['rng_fork_seed']=forks[0];peer.write_text(json.dumps(data));refs[1]=ref(peer);manifest.write_text(json.dumps({'schema':'natlang.diloco-new-outer-manifest/1','workers':4,'peers':refs}))
+    with pytest.raises(ValueError,match='RNG fork'):
+        validate_new_outer(manifest,**kw)
+
+
+def test_recipe_first_outer_handoff_preserves_sources(tmp_path):
+    from natlang_neuralese.train.recipe import _new_outer_continuation, unstarted_stage_input_changes
+    peers=[]
+    for i in range(4):
+        item={'schema':'natlang.diloco-first-outer/1','worker':i,'seed_sha256':'a'*64,
+              'source_hash':'b'*64,'held_sha256':'c'*64,
+              'parent':{'path':f'/work/peer{i}','sha256':str(i)*64,'bytes':100+i},
+              'historical_outer_checkpoint':None}
+        path=tmp_path/f'peer-{i}.json';path.write_text(json.dumps(item))
+        peers.append({'path':str(path),'bytes':path.stat().st_size,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
+    path=tmp_path/'manifest.json';path.write_text(json.dumps({'schema':'natlang.diloco-new-outer-manifest/1','workers':4,'peers':peers}))
+    old={'native_graphs':{'sha256':'d'*64},'held_native_graphs':{'sha256':'c'*64}}
+    new={'native_graphs':old['native_graphs'],'held_native_graphs':old['held_native_graphs'],
+         'diloco_new_outer':{'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'binding':'new'}}
+    assert _new_outer_continuation(old,new)
+    def plan(inputs):
+        return {'recipe':{'stages':[{'id':'sft','kind':'native_state_sft','inputs':{}}]},
+                'stage_inputs':{'sft':inputs}}
+    changes=unstarted_stage_input_changes(plan(old),plan(new),tmp_path,started_stage_ids=['sft'])
+    assert changes['sft']['kind']=='new_outer_continuation'
+    assert not _new_outer_continuation(old,{**new,'native_graphs':{'sha256':'e'*64}})
+    Path(peers[0]['path']).write_text('tampered')
+    assert not _new_outer_continuation(old,new)
+
