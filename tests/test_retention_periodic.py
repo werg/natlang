@@ -18,7 +18,7 @@ def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,m
     fallback=receipt('backup',fallback_sha);put(ops/'coreweave-production-backup-private-export-receipt-20261014.json',fallback)
     base={'bytes':2,'worker':1,'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','owner':accepted,'outer_credit':False}
     exports=[]
-    for role,step,sha in [('old',6,'a'*64),('new',8,'b'*64)]:
+    for role,step,sha in [('old',6,'a'*64),('middle',7,'c'*64),('new',8,'b'*64)]:
         intent=put(root/(role+'.json'),base|{'step':step,'sha256':sha});exports.append({'role':role,'step':step,'worker':1,'unit':role+'-unit','intent':str(intent),'phase_path':str(root/(role+'-phase.json'))});put(ops/('coreweave-production-'+role+'-private-export-receipt-20261014.json'),receipt(role,sha))
     journals=[]
     for rank in range(1,5):journals.append(put(root/f'journal{rank}.json',{'exports':exports if rank==1 else []}))
@@ -26,6 +26,8 @@ def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,m
     monkeypatch.setattr(retention_periodic.subprocess,'run',lambda *a,**k:types.SimpleNamespace(stdout=''))
     monkeypatch.setattr(retention_periodic,'reference_paths',lambda ds,roots:{d:set() for d in ds})
     def guarded(**kw):
-        assert not kw['apply'];live=kw['read_live'](kw['candidate'],'prepare');assert eligible_full(kw['candidate'],**live['eligibility']);return {'role':kw['candidate']['role'],'mode':'dry'}
+        assert not kw['apply']
+        if kw['candidate']['role']=='old':raise ValueError('external reference')
+        live=kw['read_live'](kw['candidate'],'prepare');assert eligible_full(kw['candidate'],**live['eligibility']);return {'role':kw['candidate']['role'],'mode':'dry'}
     monkeypatch.setattr(retention_periodic,'guarded_full',guarded)
-    assert retention_periodic.run_cycle(config,api=None,get=None,write_durable=lambda *a:None)==[{'role':'old','mode':'dry'}]
+    assert retention_periodic.run_cycle(config,api=None,get=None,write_durable=lambda *a:None)==[{'role':'middle','mode':'dry'}]
