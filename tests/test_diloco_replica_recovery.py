@@ -71,7 +71,11 @@ def test_recovery_closure_replays_and_continues_four_worker_state(tmp_path,monke
     sdk=SimpleNamespace(read_sandbox=lambda name,**kwargs:boxes[name])
     runtime=str(__import__('pathlib').Path(__file__).resolve().parents[1])
     hosts=[{'sandbox_id':name,'restore_root':'/work/seed','store':'/work/seed/store','runtime':runtime,'python':sys.executable} for name in boxes]
+    interrupted=boxes['remote1'].base/'seed'/'store';interrupted.mkdir(parents=True)
+    (interrupted/'partial').write_bytes(b'incomplete')
+    (interrupted.parent/'store.install-intent.json').write_text(json.dumps({'seed_receipt_sha256':seed['receipt_sha256'],'store':str(interrupted)}))
     transfer=stage_replica_seed(tmp_path/'seed',hosts,cwctl=sdk,archive_path=tmp_path/'seed-transfer.tar')
+    assert not (interrupted/'partial').exists()
     assert len(transfer['replicas'])==2
     assert stage_replica_seed(tmp_path/'seed',hosts,cwctl=sdk,archive_path=tmp_path/'seed-transfer.tar')==transfer
     assert installed['head']==seed['head'] and (tmp_path/'seed-peer'/'replica-uploads'/'source').read_bytes()==b'full-source'

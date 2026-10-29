@@ -106,7 +106,7 @@ def stage_replica_seed(seed, hosts, *, cwctl, archive_path):
             uploaded=box.exec(['python3','-c',publish,partial,remote,archive_sha,str(size)],timeout_seconds=7200).result(timeout=7230)
             if uploaded.returncode:raise ValueError('replica seed upload failed verification')
         # Each extraction is private and no peer starts until the seed verifies.
-        script=('import hashlib,json,os,pathlib,sys,tarfile,uuid\n'
+        script=('import hashlib,json,os,pathlib,shutil,sys,tarfile,uuid\n'
                 'from natlang_neuralese.train.diloco.replica_seed import verify_seed,install_seed\n'
                 'from natlang_neuralese.common.jsonio import write_json_durable\n'
                 'a=pathlib.Path(sys.argv[1]);d=pathlib.Path(sys.argv[2]);store=pathlib.Path(sys.argv[3]);sha=sys.argv[4]\n'
@@ -119,6 +119,12 @@ def stage_replica_seed(seed, hosts, *, cwctl, archive_path):
                 '   t.extract(m,tmp,filter="data")\n'
                 ' verify_seed(tmp/"seed",expected_receipt_sha256=sha);os.rename(tmp,d)\n'
                 'verify_seed(d/"seed",expected_receipt_sha256=sha)\n'
+                'intent=store.parent/(store.name+".install-intent.json");binding={"seed_receipt_sha256":sha,"store":str(store)}\n'
+                'if intent.exists() and json.loads(intent.read_text())!=binding:raise ValueError("seed install intent differs")\n'
+                'if store.exists() and not (store/"seed-install.json").exists():\n'
+                ' if not intent.exists() or store.is_symlink():raise ValueError("unowned incomplete seed store")\n'
+                ' shutil.rmtree(store)\n'
+                'if not intent.exists():write_json_durable(intent,binding)\n'
                 'if not store.exists():install_seed(d/"seed",store,expected_receipt_sha256=sha)\n'
                 'freeze={"schema":"natlang.diloco-replica-file-freeze/1","nonce":json.loads((d/"seed"/"seed-receipt.json").read_text())["freeze_nonce"]};fp=store/"replica-files-frozen.json"\n'
                 'if fp.exists() and json.loads(fp.read_text())!=freeze:raise ValueError("file custody freeze differs")\n'
@@ -127,7 +133,7 @@ def stage_replica_seed(seed, hosts, *, cwctl, archive_path):
                 'if v.get("seed_receipt_sha256")!=sha:raise ValueError("installed seed differs")\n'
                 'print(json.dumps(v))\n')
         extraction=root+'/extract-'+archive_sha;store=host['store']
-        if not store.startswith('/work/') or '..' in Path(store).parts:raise ValueError('invalid replica store')
+        if not store.startswith('/work/') or '..' in Path(store).parts or not Path(store).is_relative_to(root) or store==root:raise ValueError('invalid replica store')
         cmd=['env','PYTHONPATH='+host['runtime']+'/training/neuralese',host['python'],'-c',script,remote,extraction,store,receipt_sha]
         installed=box.exec(cmd,timeout_seconds=7200).result(timeout=7230)
         if installed.returncode:raise ValueError('replica seed installation failed')
@@ -348,7 +354,11 @@ def run_full_restore(directory, config):
             pins=stage_worker_checkpoints(staging,workers,cwctl=cwctl);state.update(phase='workers-staged',pins=pins,dependencies=dependencies);write_json_durable(journal,state)
         if state['phase']=='workers-staged':
             seed=directory/'seed';seed_store=directory/'seed-store';closure=staging/'diloco-replica-recovery'
-            if not seed.exists():
+            if not (seed/'seed-receipt.json').is_file():
+                import shutil
+                for incomplete in (seed,seed_store):
+                    if incomplete.is_symlink():raise ValueError('restore scratch is a symlink')
+                    if incomplete.exists():shutil.rmtree(incomplete)
                 prepared=prepare_restored_peer_seed(closure=closure,restored=staging/'replica-restored',destination=seed_store,seed=seed,
                     receipt_sha256=verified['receipt_sha256'],freeze_nonce=nonce)
                 seed_sha=prepared['receipt_sha256']
