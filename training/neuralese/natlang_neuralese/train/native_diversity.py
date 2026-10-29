@@ -67,7 +67,7 @@ def stream_windows(source, grouped, *, priority_ids=(), cohort_ids=None, rotatio
     finally:
         for stream in streams.values():stream.close()
 
-def cohort_head_merge(entries,batches,cohorts,*,priority_ids=(),focus_ids=(),batch_tokens=0,batch_graphs=1,lookahead=256):
+def cohort_head_merge(entries,batches,cohorts,*,priority_ids=(),focus_ids=(),batch_tokens=0,batch_graphs=1,lookahead=256,schedule_offset=0):
     """Pack ordered cohort heads, bounded by metadata lookahead, preserving all visits.
 
     Existing focus batches stay exact. Each other scheduling-class queue retains
@@ -75,7 +75,7 @@ def cohort_head_merge(entries,batches,cohorts,*,priority_ids=(),focus_ids=(),bat
     through those slots. No graph is decoded while constructing the schedule.
     """
     from collections import deque
-    if len(entries)!=len(cohorts) or type(lookahead) is not int or lookahead<1 or batch_graphs<1 or batch_tokens<0:
+    if len(entries)!=len(cohorts) or type(lookahead) is not int or lookahead<1 or batch_graphs<1 or batch_tokens<0 or type(schedule_offset) is not int or schedule_offset<0:
         raise ValueError('invalid cohort-head merge inputs')
     priorities=set(priority_ids or ());focus=set(focus_ids or ());groups={};slots=[]
     def key(visit,indices):
@@ -119,5 +119,21 @@ def cohort_head_merge(entries,batches,cohorts,*,priority_ids=(),focus_ids=(),bat
             selected=pack(groups[k],position+sweep*len(slots))
             if selected:result.append((visit,selected,False));consumed+=len(selected)
         if not consumed:raise ValueError('cohort-head merge cannot make progress')
+    # Reapply the existing four-fast/one-debt cycle after repacking changes
+    # the number of batches. Focus remains an explicit leading obligation.
+    focused=[b for b in result if any(entries[i]['id'] in focus for i in b[1])]
+    other=[b for b in result if not any(entries[i]['id'] in focus for i in b[1])]
+    fast=[b for b in other if entries[b[1][0]].get('communication') or entries[b[1][0]].get('training_priority',0)>0]
+    debt=[b for b in other if not entries[b[1][0]].get('communication') and entries[b[1][0]].get('training_priority',0)==0]
+    if fast and debt:
+        interleaved=[];i=j=0;cursor=schedule_offset%5
+        while i<len(fast) or j<len(debt):
+            if cursor!=4 and i<len(fast):interleaved.append(fast[i]);i+=1
+            elif cursor==4 and j<len(debt):interleaved.append(debt[j]);j+=1
+            elif i<len(fast):interleaved.append(fast[i]);i+=1
+            else:interleaved.append(debt[j]);j+=1
+            cursor=(cursor+1)%5
+        result=focused+interleaved
+    else:result=focused+other
     last={visit:i for i,(visit,_,_) in enumerate(result)}
     return [(visit,indices,last[visit]==i) for i,(visit,indices,_) in enumerate(result)]

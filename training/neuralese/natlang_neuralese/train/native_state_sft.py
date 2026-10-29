@@ -2815,7 +2815,7 @@ def _main(argv=None, *, requested_refresh):
             'preserved':'weights, optimizer, RNG, row exposures and quotas'})
     checkpoint_options['native_diversity_history']=diversity_history
     pending_batches=cohort_head_merge(train.entries,pending_batches,urgent_cohort_ids,
-        priority_ids=foundation_priority_ids,focus_ids=focus_ids,batch_tokens=args.batch_tokens,batch_graphs=args.batch_graphs)
+        priority_ids=foundation_priority_ids,focus_ids=focus_ids,batch_tokens=args.batch_tokens,batch_graphs=args.batch_graphs,schedule_offset=global_step)
     if args.memory_qualification and objective is None:
         from .native_packed_capacity import qualify_pending
         from ..eval.native_memory import capacity_identity
@@ -3146,7 +3146,7 @@ def _main(argv=None, *, requested_refresh):
                         from .native_cohort_schedule import source_cohort_ids
                         urgent_cohort_ids=source_cohort_ids(train)
                     pending_batches=cohort_head_merge(train.entries,pending_batches,urgent_cohort_ids,
-                        priority_ids=foundation_priority_ids,focus_ids=focus_ids,batch_tokens=args.batch_tokens,batch_graphs=args.batch_graphs)
+                        priority_ids=foundation_priority_ids,focus_ids=focus_ids,batch_tokens=args.batch_tokens,batch_graphs=args.batch_graphs,schedule_offset=global_step)
                     if args.memory_qualification and objective is None:
                         # The committed source can change actual packed KV topology.
                         # Qualify the transformed schedule before the next update.

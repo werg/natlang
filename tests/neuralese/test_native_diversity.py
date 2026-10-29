@@ -78,3 +78,11 @@ def test_cohort_head_repacking_preserves_slots_and_monotone_heads():
         indices=[i for _,batch,_ in result for i in batch if cohorts[i]==group]
         assert indices==sorted(indices)
     assert Counter((v,i) for v,ix,_ in result for i in ix)==Counter((v,i) for v,ix,_ in source for i in ix)
+
+def test_repacked_schedule_enforces_four_to_one_while_both_lanes_pending():
+    from natlang_neuralese.train.native_diversity import cohort_head_merge
+    entries=[];source=[]
+    for i in range(20):
+        e=row(i,str(i));e['communication']=(i%5!=4);entries.append(e);source.append((0,[i],i==19))
+    result=cohort_head_merge(entries,source,[str(i) for i in range(20)],batch_graphs=1,schedule_offset=0)
+    assert [entries[ix[0]]['communication'] for _,ix,_ in result]==[i%5!=4 for i in range(20)]
