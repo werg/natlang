@@ -8,6 +8,14 @@ from pathlib import Path
 # same value; a plain ``python -m pytest`` run (the GitHub workflow) now gets it
 # too. Tests of the default resolution remove it with monkeypatch.
 os.environ["NATLANG_REPO"] = str(Path(__file__).resolve().parents[1])
+# Pytest's configured pythonpath updates only this interpreter's sys.path.
+# Actual owner/launcher tests spawn Python children, which must import the same
+# checkout even in a linked worktree without an editable package installation.
+_test_root = Path(__file__).resolve().parents[1]
+os.environ["PYTHONPATH"] = os.pathsep.join(dict.fromkeys([
+    str(_test_root / "training" / "neuralese"), str(_test_root),
+    *filter(None, os.environ.get("PYTHONPATH", "").split(os.pathsep)),
+]))
 
 # Native execution is batch invariant: a row's arithmetic must not depend on how
 # many other rows share its GEMM (graph vs cached execution, chunked guidance
