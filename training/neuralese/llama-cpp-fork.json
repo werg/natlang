@@ -1,13 +1,13 @@
 {
-  "description": "llama.cpp fork serving natlang's native models: native state spans (consume), native state production (producer adapter and capture) and the native-state protocol (/v1/neuralese/info, /v1/neuralese/native-states), decision readout (/v1/natlang/score), guided generation (guidance) and per-sequence LoRA in llama-server; parity dumps in tools/neuralese. The LFM3 work (Lfm3ForCausalLM, conversion/lfm3.py, native state on LFM3) is merged into the default branch neuralese (NATLANG_FORK.md there); the pinned commit is on it. A separate git checkout, not vendored; vendor/llama.cpp is a converter snapshot of the pinned commit. The browser's wllama is built from this branch.",
+  "description": "llama.cpp fork serving natlang's native models: native state spans (consume), native state production (producer adapter and capture) and the native-state protocol (/v1/neuralese/info, /v1/neuralese/native-states), decision readout (/v1/natlang/score), guided generation (guidance) and per-sequence LoRA in llama-server; parity dumps in tools/neuralese. The pinned commit is the default branch neuralese merged with upstream 0893ec98f (NATLANG_FORK.md there), including backend-sampling RL capture and guidance bans; it is also natlang's managed runtime release natlang-b12067. A separate git checkout, not vendored; vendor/llama.cpp is a converter snapshot of the pinned commit. The browser's wllama is built from this branch.",
   "path": "../llama.cpp-neuralese",
   "branch": "neuralese",
-  "commit": "85a2e7167fcf578e7823f639971ff51b79549a96",
+  "commit": "a6401bbd37529eda6b94e38d8ab63a35647c5204",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
   "converter_snapshot": {
     "path": "vendor/llama.cpp",
-    "target": ".development-source-snapshots/llama.cpp-85a2e716",
+    "target": ".development-source-snapshots/llama.cpp-a6401bbd",
     "contents": "git archive of the pinned commit: convert_hf_to_gguf.py convert_lora_to_gguf.py conversion gguf-py requirements"
   },
   "build_cpu": "cmake -S . -B build-cpu && cmake --build build-cpu --target llama-server llama-state-span-dump llama-logits-dump -j16",
@@ -17,12 +17,9 @@
     "scripts/neuralese_data/check_tuned_lora_llama_parity.py (tuned LoRA against the native adapted model)",
     "scripts/neuralese_data/check_llama_native_state_protocol.py (llama-server native-state protocol: store, consumption receipts, production, exact reference encoding)"
   ],
-  "published": {
-    "description": "Newest published fork state, merged with upstream and verified on DGX (ctest with CUDA hidden, test-backend-ops on CUDA0, native-state protocol and producer parity on LFM3 step142, greedy completions bit-identical to the pinned actor build b89457f32 on CPU and CUDA). Not yet adopted as the converter/serving pin above; NATLANG_FORK.md in the fork documents features and builds.",
-    "repository": "https://github.com/werg/llama.cpp-neuralese",
-    "branch": "neuralese",
-    "commit": "61704e992a500cedbdaf11720488c70c6b2fa7b8",
-    "upstream_merged": "0893ec98f5eafad36a43a72cd1c3723d72b0d03a",
-    "date": "2026-10-29"
+  "verification": {
+    "date": "2026-10-29",
+    "converter": "LFM3-1.7B base converted to BF16 GGUF by the 85a2e716 and a6401bbd converters: all 287 tensors and every metadata field identical",
+    "serving": "61704e99 (a6401bbd minus backend-sampling capture, CI and reasoning streaming): greedy completions bit-identical to b89457f32 on CPU and CUDA; native-state protocol and producer parity on LFM3 step142"
   }
 }
