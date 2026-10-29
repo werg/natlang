@@ -135,6 +135,8 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
     bindings[call] = binding;
     const message = ((raw.choices as Json[] | undefined)?.[0]?.message ?? {}) as Json;
     turns.push({ messages: structuredClone(request.messages), ...(request.tools?.length ? { tools: structuredClone(request.tools) } : {}),
+      ...(request.response_tools ? {response_tools: structuredClone(request.response_tools)} : {}),
+      ...(reply.tool_parse ? {tool_parse: structuredClone(reply.tool_parse)} : {}),
       target: { role: 'assistant', content: message.content ?? '', ...(message.tool_calls ? { tool_calls: structuredClone(message.tool_calls) } : {}) },
       invocation_id: call, sampling: { ...structuredClone(capture), ...(Array.isArray(imports) ? { native_state_imports: structuredClone(imports) } : {}) },
       replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });
