@@ -476,6 +476,13 @@ function commandAvailable(command: string): boolean {
 }
 
 
+/** Which llama.cpp build serves managed models, and what natlang's fork would add when it is not the one. */
+function llamaRuntimeNote(): string {
+  const selected = discoverLlamaRuntime().selected;
+  if (!selected) return 'not installed: natlang setup';
+  if (selected.source === 'fork') return `natlang fork ${LLAMA_FORK_SOURCE.commit.slice(0, 12)}`;
+  return `${selected.source} b${selected.build}; natlang runtime build compiles the fork (decision scoring, guided generation, native states)`;
+}
 async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise<{ report: Record<string, unknown>; okay: boolean }> {
   const selected = modelSelection(parsed), choice = selected.choice;
   const local = choice.kind === 'managed-local' ? localModelPrerequisites(process.env, choice.release) : null;
@@ -499,6 +506,7 @@ async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise
     modelSource: choice.kind, endpoint: choice.kind === 'external' ? choice.endpoint : null,
     model: choice.model, provider: choice.kind === 'pi-provider' ? choice.provider : null,
     modelPath: local?.modelPath ?? null, modelServer: local?.executable ?? null,
+    ...(choice.kind === 'managed-local' ? { llamaRuntime: llamaRuntimeNote() } : {}),
     modelDownloadAvailable: local?.downloadable ?? null,
     apiKey: choice.kind === 'external' ? Boolean(process.env[choice.apiKeyEnv]) : null,
     providerAuthConfigured: choice.kind === 'pi-provider' ? piReady : null,
