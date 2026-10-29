@@ -18,13 +18,39 @@ s=json.loads(journal.read_text()) if journal.exists() else {'last':selection['in
 for prior in s['exports']:
  if prior.get('control_required') and prior.get('control',{}).get('status')!='independently_verified' and prior.get('control_selection_sha256')!=selection_sha:
   raise ValueError('unfinished historical control belongs to a different or unbound selection')
-code=bound(selection['scanner']).decode();compile(code,'<remote-scanner>','exec')
+code=bound(selection['scanner']).decode()
+OWNER_GUARD = r'''import json,os,pathlib,sys
+expected=json.loads(sys.argv[3]);pid=expected['pid']
+try:
+ boot=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+ fields=pathlib.Path('/proc/%d/stat'%pid).read_text().rsplit(')',1)[1].split()
+ if boot!=expected['boot_id'] or fields[0]=='Z' or fields[19]!=str(expected['process_start_ticks']):raise ValueError('owner identity differs')
+except (OSError,ValueError,IndexError,KeyError,TypeError):
+ print(json.dumps({'ready':False,'reason':'owner process identity unavailable or changed'}));raise SystemExit(0)
+'''
+code=OWNER_GUARD+code;compile(code,'<remote-scanner>','exec')
 hook=None;hook_error=None
 try:
  hook_ref=selection['hook'];hook_raw=bound(hook_ref);name='selected_native_control_hook_'+hook_ref['sha256'];hook=types.ModuleType(name);hook.__file__=hook_ref['path'];sys.modules[name]=hook;exec(compile(hook_raw,hook_ref['path'],'exec'),hook.__dict__)
 except Exception as error:
  hook=None;hook_error=type(error).__name__+': '+str(error)[:400]
 cwctl.load_env_file()
+
+def validate_owner(actual, expected):
+ for key in ('sandbox_id','plan_sha256','runtime_commit','source_sha256'):
+  if actual.get(key)!=expected.get(key):raise ValueError('owner '+key+' differs from selected role')
+ accepted=actual.get('accepted') or {};identity=expected.get('accepted') or {}
+ for key in ('owner_id','generation','boot_id','pid','process_start_ticks'):
+  if accepted.get(key)!=identity.get(key):raise ValueError('owner '+key+' differs from selected role')
+ if accepted.get('accepted') is not True:raise ValueError('selected owner is not accepted')
+
+def minimum_step(saved, selected, parent):
+ if any(type(x) is not int or x < 0 for x in (saved, selected, parent)):
+  raise ValueError('invalid saved, selected or owner parent step')
+ return max(saved,selected,parent)
+
+initial_owner=json.loads(owner.read_text());validate_owner(initial_owner,selection['owner_binding'])
+s['last']=minimum_step(s.get('last',0),selection['initial_step'],initial_owner['parent_step']);write_json_durable(journal,s)
 
 def control_attempt(v,b,e):
  if hook is None:raise ValueError('selected control hook unavailable: '+hook_error)
@@ -109,7 +135,7 @@ while True:
    fcntl.flock(lock,fcntl.LOCK_EX)
    owner_state_path=root/'standalone-cloud-owner-verification.json';verified=set(json.loads(owner_state_path.read_text()).get('verified_roles',[])) if owner_state_path.exists() else set();retired_path=root/'standalone-retired-cloud-objects.json';retired=json.loads(retired_path.read_text()) if retired_path.exists() else {};blocked=set(retired.get('retired_roles',[]))|{x['role'] for x in retired.get('operations',[]) if x.get('phase') in ('intent','deleted')};unverified=[e for e in s['exports'] if e['role'] not in verified and e['role'] not in blocked]
   if len(unverified)>=4:print('cloud queue capped: owner verification behind',rank,flush=True);time.sleep(60);continue
-  o=json.loads(owner.read_text());b=cwctl.read_sandbox(o['sandbox_id']);r=b.exec(['python3','-c',code,str(rank),str(s['last'])],timeout_seconds=900).result(timeout=930)
+  o=json.loads(owner.read_text());validate_owner(o,selection['owner_binding']);b=cwctl.read_sandbox(o['sandbox_id']);r=b.exec(['python3','-c',code,str(rank),str(s['last']),json.dumps(o['accepted'],sort_keys=True)],timeout_seconds=900).result(timeout=930)
   if r.returncode:print('scan failed',r.stderr[-500:],flush=True);time.sleep(60);continue
   v=json.loads(r.stdout.strip().splitlines()[-1]);
   if not v['ready']:time.sleep(60);continue

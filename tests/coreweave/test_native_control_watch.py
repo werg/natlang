@@ -59,3 +59,40 @@ def test_complete_publication_requires_exact_private_selector_owner_get(tmp_path
     entry={'full_backup_verified':True,'role':'full','intent':str(intent),'control':{'role':'control','status':'independently_verified','archive':{'sha256':'c'*64}}}
     env['refresh_publication'](entry);assert entry['publication_complete']
     env['selection_sha']='d'*64;env['refresh_publication'](entry);assert not entry['publication_complete']
+
+
+def test_owner_binding_rejects_changed_sandbox_plan_or_process():
+    import ast
+    from pathlib import Path
+    source=Path(__file__).resolve().parents[2]/'scripts/coreweave/native_standalone_control_watch.py'
+    node=next(x for x in ast.parse(source.read_text()).body if isinstance(x,ast.FunctionDef) and x.name=='validate_owner')
+    env={};exec(compile(ast.Module(body=[node],type_ignores=[]),str(source),'exec'),env)
+    accepted={'accepted':True,'owner_id':'o','generation':4,'boot_id':'b','pid':7,'process_start_ticks':'12'}
+    value={'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','source_sha256':'t','accepted':accepted}
+    env['validate_owner'](value,value)
+    with pytest.raises(ValueError,match='plan_sha256'):env['validate_owner']({**value,'plan_sha256':'other'},value)
+    with pytest.raises(ValueError,match='pid'):env['validate_owner']({**value,'accepted':{**accepted,'pid':8}},value)
+
+
+def test_minimum_step_never_scans_older_or_equal_parent():
+    import ast
+    from pathlib import Path
+    source=Path(__file__).resolve().parents[2]/'scripts/coreweave/native_standalone_control_watch.py'
+    node=next(x for x in ast.parse(source.read_text()).body if isinstance(x,ast.FunctionDef) and x.name=='minimum_step')
+    env={};exec(compile(ast.Module(body=[node],type_ignores=[]),str(source),'exec'),env)
+    assert env['minimum_step'](700,800,900)==900
+    assert env['minimum_step'](1000,800,900)==1000
+    with pytest.raises(ValueError):env['minimum_step'](1,2,-1)
+
+
+def test_remote_scanner_owner_guard_rejects_dead_reused_and_reset_processes():
+    import ast,subprocess,sys
+    from pathlib import Path
+    source=Path(__file__).resolve().parents[2]/'scripts/coreweave/native_standalone_control_watch.py'
+    node=next(x for x in ast.parse(source.read_text()).body if isinstance(x,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='OWNER_GUARD' for t in x.targets));guard=ast.literal_eval(node.value)
+    prefix="import json,os,pathlib,sys\npid=os.getpid();fields=pathlib.Path('/proc/%d/stat'%pid).read_text().rsplit(')',1)[1].split();boot=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip();expected={'pid':pid,'boot_id':boot,'process_start_ticks':fields[19]}\n"
+    for alteration,accepted in [('',True),("expected['pid']=999999999\n",False),("expected['process_start_ticks']='0'\n",False),("expected['boot_id']='other'\n",False)]:
+        code=prefix+alteration+"sys.argv=['x','2','0',json.dumps(expected)]\n"+guard+"\nprint('SCANNER_REACHED')\n"
+        output=subprocess.check_output([sys.executable,'-c',code],text=True)
+        assert ('SCANNER_REACHED' in output)==accepted
+        if not accepted:assert json.loads(output)['ready'] is False
