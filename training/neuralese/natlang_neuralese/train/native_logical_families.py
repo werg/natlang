@@ -2,12 +2,19 @@
 import hashlib,json,re
 from pathlib import Path
 
-def load_map(reference, source):
+def _verified_bytes(reference):
     path=Path(reference['path']).resolve(strict=True)
     before=path.stat();raw=path.read_bytes();after=path.stat()
     stat=lambda s:(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
     if stat(before)!=stat(after):raise ValueError('logical family map changed while reading')
     if hashlib.sha256(raw).hexdigest()!=reference['sha256']:raise ValueError('logical family map SHA mismatch')
+    return path,raw
+
+def checked(reference):
+    return _verified_bytes(reference)[0]
+
+def load_map(reference, source):
+    _,raw=_verified_bytes(reference)
     doc=json.loads(raw)
     if doc.get('schema')!='natlang.logical-family-map/1' or doc.get('source_sha256')!=source.file_sha256:
         raise ValueError('logical family map source differs')
