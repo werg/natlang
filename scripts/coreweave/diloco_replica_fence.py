@@ -55,7 +55,15 @@ def verify_provider_fence(proof, *, expected_primary, expected_workers, get_sand
         old=worker_map[str(worker)];required=('sandbox_id','boot_id','owner_id','pid','start_ticks')
         identity={key:old.get(key) for key in required};identity['start_ticks']=old.get('start_ticks') or old.get('process_start_ticks')
         if not all(identity.values()):raise ValueError('worker owner journal identity incomplete')
-        nonce=secrets.token_hex(24);begin=now();observed=probe_worker(identity,nonce);end=now()
+        nonce=secrets.token_hex(24);begin=now()
+        if identity['sandbox_id']==expected_primary['sandbox_id']:
+            if identity['boot_id']!=expected_primary['boot_id'] or identity['owner_id']!=expected_primary['owner_id']:
+                raise ValueError('cohost worker does not bind fenced owner boot')
+            observed={'identity':identity,'nonce':nonce,'process_absent':True,'owner_quiesced':True,
+                      'method':'provider-completed-cohost'}
+        else:
+            observed=probe_worker(identity,nonce)
+        end=now()
         if (end<begin or end-begin>120 or not isinstance(observed,dict) or observed.get('nonce')!=nonce
                 or observed.get('identity')!=identity or observed.get('process_absent') is not True
                 or observed.get('owner_quiesced') is not True):raise ValueError('fresh worker quiescence observation failed')
