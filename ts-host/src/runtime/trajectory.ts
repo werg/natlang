@@ -19,7 +19,8 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
     request_sha256: sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id")))),
     model_response: { calls: structuredClone(response.calls ?? []), text: response.text ?? '',
       raw_calls: structuredClone(response.raw_calls ?? []),
-      ...(response.tool_parse ? { tool_parse: structuredClone(response.tool_parse) } : {}),
+      ...(response.tool_parse ? { tool_parse: structuredClone(response.tool_parse),
+        ...(raw ? { raw_response: structuredClone(raw) } : {}) } : {}),
       ...(raw?.x_natlang_rl_capture && typeof raw.x_natlang_rl_capture === 'object' ?
         { rl_sampling: structuredClone(raw.x_natlang_rl_capture) } : {}),
       ...(Array.isArray((raw?.native_state as {imports?:unknown}|undefined)?.imports) ?
