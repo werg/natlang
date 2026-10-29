@@ -77,7 +77,7 @@ def test_storage_budget_fails_closed_without_discarding_acknowledged_events(tmp_
 
 
 def test_live_peer_credential_rotation_rejects_old_token_and_survives_restart(tmp_path):
-    import multiprocessing as mp,socket,time
+    import json,multiprocessing as mp,socket,time
     from natlang_neuralese.train.diloco.replica_transport import serve,witness_head,rotate_replica_credential
     from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
     from natlang_neuralese.train.diloco.worker import RemoteError
@@ -94,6 +94,8 @@ def test_live_peer_credential_rotation_rejects_old_token_and_survives_restart(tm
             except OSError:time.sleep(.02)
         rotate_replica_credential(url,old,new,sequence=head['sequence'],head=head['head'],nonce='z'*48,allow_http=True)
         assert tokenpath.read_text()==new and tokenpath.stat().st_mode & 0o077==0
+        history=json.loads((root.parent/'credential-history'/('z'*48+'.json')).read_text())
+        assert history['state']=='committed' and history['old_token_sha256']==__import__('hashlib').sha256(old.encode()).hexdigest() and history['new_token_sha256']==__import__('hashlib').sha256(new.encode()).hexdigest()
         with pytest.raises(RemoteError):witness_head(url,old,allow_http=True)
         assert witness_head(url,new,allow_http=True)==head
         stop.set();p.join(8);assert p.exitcode==0;stop.clear()
