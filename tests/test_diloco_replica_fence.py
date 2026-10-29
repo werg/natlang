@@ -45,13 +45,15 @@ def test_local_role_observation_checks_actual_process(tmp_path):
     state={'schema':'natlang.diloco-role-supervisor/1','boot_id':boot,'owner_id':'owner',
            'supervisor_pid':pid,'supervisor_start_ticks':ticks,'roles':{'worker':{'pid':999999999,'alive':False}}}
     (tmp_path/'state.json').write_text(json.dumps(state))
-    assert observe_local_worker(identity,'nonce',tmp_path)['process_absent']
-    with pytest.raises(ValueError): observe_local_worker(dict(identity,pid=pid,start_ticks=ticks),'nonce',tmp_path)
+    cmdsha=hashlib.sha256(Path(f'/proc/{pid}/cmdline').read_bytes()).hexdigest()
+    (tmp_path/'promotion-fence.json').write_text(json.dumps({'schema':'natlang.diloco-role-promotion-fence/1','owner_id':'owner','boot_id':boot,'nonce':'x'*48}))
+    assert observe_local_worker(identity,'nonce',tmp_path,'x'*48,cmdsha)['process_absent']
+    with pytest.raises(ValueError): observe_local_worker(dict(identity,pid=pid,start_ticks=ticks),'nonce',tmp_path,'x'*48,cmdsha)
     state['roles']['worker']={'pid':pid,'alive':True}; (tmp_path/'state.json').write_text(json.dumps(state))
-    with pytest.raises(ValueError): observe_local_worker(identity,'nonce',tmp_path)
+    with pytest.raises(ValueError): observe_local_worker(identity,'nonce',tmp_path,'x'*48,cmdsha)
     state['roles']['worker']={'pid':999999999,'alive':False}; state['pending_start']={'role':'worker'}
     (tmp_path/'state.json').write_text(json.dumps(state))
-    with pytest.raises(ValueError): observe_local_worker(identity,'nonce',tmp_path)
+    with pytest.raises(ValueError): observe_local_worker(identity,'nonce',tmp_path,'x'*48,cmdsha)
 
 
 def test_completed_cohost_worker_never_executes_into_dead_sandbox(tmp_path):

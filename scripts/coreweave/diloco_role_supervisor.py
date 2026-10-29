@@ -6,7 +6,7 @@ A controller publishes one atomic request.json; this process starts/stops and
 reaps its own replacement children, retaining an auditable role journal.
 """
 from __future__ import annotations
-import hashlib, json, os, signal, subprocess, sys, time, uuid
+import fcntl, hashlib, json, os, signal, subprocess, sys, time, uuid
 from natlang_neuralese.common.jsonio import write_json_durable
 from pathlib import Path
 
@@ -75,21 +75,24 @@ def main(directory: Path) -> None:
                 if role not in ('coordinator','worker','actor'):raise ValueError('invalid role')
                 prior=roles.get(role)
                 if action=='start':
-                    if prior and prior.poll() is None:raise ValueError('role already alive')
-                    argv=v.get('argv');env=v.get('env',{})
-                    if not isinstance(argv,list) or not argv or not all(isinstance(x,str) and x for x in argv):raise ValueError('invalid argv')
-                    if not isinstance(env,dict) or not all(isinstance(k,str) and isinstance(x,str) for k,x in env.items()):raise ValueError('invalid environment')
-                    child_env={**os.environ,**env}
-                    if role=='coordinator':child_env['CUDA_VISIBLE_DEVICES']=''
-                    state['pending_start']={'request_id':v['id'],'role':role,'owner_id':owner_id,
-                        'argv_sha256':hashlib.sha256(json.dumps(argv,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()}
-                    save()
-                    log=(directory/(role+'.log')).open('ab',buffering=0)
-                    try:
-                        try:roles[role]=subprocess.Popen(argv,env=child_env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
-                        except Exception:
-                            state.pop('pending_start',None);save();raise
-                    finally:log.close()
+                    with (directory/'promotion-authority.lock').open('a+b') as authority:
+                        fcntl.flock(authority,fcntl.LOCK_EX)
+                        if (directory/'promotion-fence.json').exists():raise ValueError('role starts fenced for coordinator promotion')
+                        if prior and prior.poll() is None:raise ValueError('role already alive')
+                        argv=v.get('argv');env=v.get('env',{})
+                        if not isinstance(argv,list) or not argv or not all(isinstance(x,str) and x for x in argv):raise ValueError('invalid argv')
+                        if not isinstance(env,dict) or not all(isinstance(k,str) and isinstance(x,str) for k,x in env.items()):raise ValueError('invalid environment')
+                        child_env={**os.environ,**env}
+                        if role=='coordinator':child_env['CUDA_VISIBLE_DEVICES']=''
+                        state['pending_start']={'request_id':v['id'],'role':role,'owner_id':owner_id,
+                            'argv_sha256':hashlib.sha256(json.dumps(argv,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()}
+                        save()
+                        log=(directory/(role+'.log')).open('ab',buffering=0)
+                        try:
+                            try:roles[role]=subprocess.Popen(argv,env=child_env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+                            except Exception:
+                                state.pop('pending_start',None);save();raise
+                        finally:log.close()
                 elif action=='stop':
                     if not prior or prior.poll() is not None:raise ValueError('role not alive')
                     if v.get('expected_pid')!=prior.pid:raise ValueError('role ownership changed')
