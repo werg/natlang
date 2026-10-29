@@ -8,6 +8,7 @@ A resume replays exact input identities and preserves only closed chunks.
 import argparse,hashlib,json
 from pathlib import Path
 from transformers import AutoTokenizer
+from natlang_neuralese.common import paths
 from natlang_neuralese.common.hashing import sha256_file_hex
 from natlang_neuralese.common.jsonio import canonical_json_str,iter_jsonl_rows,write_json_durable
 from natlang_neuralese.common import line_backbones
@@ -133,7 +134,7 @@ def main():
         if item['sha256']!=expected_file['sha256']:raise ValueError('protection dependency changed')
     tokenizer_files=[binding(a.tokenizer/x) for x in ('tokenizer.json','tokenizer_config.json','chat_template.jinja') if (a.tokenizer/x).is_file()]
     review_names=('holds.jsonl','family-holds.json','datasets.json')
-    source_reviews=[binding(root/'training/source-reviews'/x) for root in (repo,Path('/home/werg/natlang')) for x in review_names]
+    source_reviews=[binding(root/'training/source-reviews'/x) for root in (repo,paths.resolve('repo')) for x in review_names]
     if any(source_reviews[i]['sha256']!=source_reviews[i+len(review_names)]['sha256'] for i in range(len(review_names))):
         raise ValueError('frozen source reviews differ from the live current reviews')
     identity={'schema':'natlang.lfm3-pair-verifier-identity/1','inputs':inputs,'model_id':model_id,'tokenizer_fingerprint':fp,'roles':list(roles),

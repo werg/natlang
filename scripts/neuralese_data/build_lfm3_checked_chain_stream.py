@@ -10,6 +10,7 @@ import argparse,fcntl,hashlib,json,os
 from collections import defaultdict
 from pathlib import Path
 from transformers import AutoTokenizer
+from natlang_neuralese.common import paths
 from natlang_neuralese.common.hashing import sha256_file_hex
 from natlang_neuralese.common.jsonio import iter_jsonl_rows,write_json_durable
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
@@ -52,7 +53,7 @@ def main():
   'training/neuralese/natlang_neuralese/train/own_output_supervision.py','training/neuralese/natlang_neuralese/model/native_graph_plan.py',
   'training/neuralese/natlang_neuralese/model/shared_state.py'))]
  code=[bound(x) for x in codepaths];reviews=[bound(package/'training/source-reviews'/n) for n in ('holds.jsonl','family-holds.json','datasets.json')]
- live=[bound(Path('/home/werg/natlang/training/source-reviews')/n) for n in ('holds.jsonl','family-holds.json','datasets.json')]
+ live=[bound(paths.resolve('repo','training/source-reviews')/n) for n in ('holds.jsonl','family-holds.json','datasets.json')]
  if any(x['sha256']!=y['sha256'] for x,y in zip(reviews,live,strict=True)):raise ValueError('source reviews differ from live')
  protection_doc=json.loads(a.protection.read_text());guarded=[bound(a.protection),*(bound(a.protection.parent/x['path']) for x in protection_doc['files']),*(bound(x['path']) for x in hold_refs)]
  tok=AutoTokenizer.from_pretrained(str(a.tokenizer),local_files_only=True,trust_remote_code=False);role_ids=provision(tok);fp=tokenizer_fingerprint(tok)
