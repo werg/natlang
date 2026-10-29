@@ -145,6 +145,34 @@ cold fixture preparation and cache offload from starving an earned checkpoint
 write; reuse verified current sealed test fixtures and use internal disposable
 scratch when its measured headroom permits.
 
+Four-worker operational findings (2026-10-29): initialize coordinator seeds from
+the exact mmap-backed optimizer-bound tensors and bounded durable serialization;
+constructing a second full CPU model and serializing the whole FP32 seed exhausted
+the actual 16GiB allocation. Keep snapshot/publication traffic bounded and account
+for all planned copies together on each actual filesystem. Coordinator `public/`
+is a derived serving cache: new recovery pins omit it and the qualified restore
+path rebuilds exact theta/version from authoritative fragments. Preserve seed,
+outer momentum/EMA, pending windows and sequence custody.
+
+Health follows actual per-role boot/PID/start, runtime and output paths. The
+coordinator's full status endpoint waits behind tensor merges; use authenticated
+manifest responsiveness plus committed progress for routine health, and do not
+restart a progressing coordinator solely for a short status timeout. Treat short
+HTTP bodies and invalid downloaded safetensors as retryable transfer failures;
+never install them or replay an already-counted optimizer update on recovery.
+Current process selection alone does not establish which runtime wrote an older
+checkpoint slot: verify the actual new save/source/proof before labeling it.
+
+During adaptive rolling handoffs, retain each rank's actual old/new runtime and
+source identity without pretending the intermediate cohort is uniform. Keep
+other ranks useful, verify real resumed SGD before the next drain when practical,
+and preserve the existing coordinator root on a serve-only restart. Full-cohort
+recovery must match committed source-transition proofs on both sides and seal the
+actual direct launch controls; old resident controls are not substitutes. A cloud
+PUT or cloud-side GET does not satisfy a later workstation GET requirement, and
+cached export receipts must not skip that stronger readback or a requested local
+copy.
+
 ## Learned LoRA mixtures and bases (owner, 2026-10-27)
 
 Make direct component-mixture and native soft-state fitting an operational part
