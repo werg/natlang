@@ -107,7 +107,7 @@ def test_actual_tiny_stop_append_resume_keeps_optimizer_rng_and_all_row_visits(t
     first=tmp_path/'first';first.mkdir();source=source_manifest(first,ordinary,pairs)
     declaration=json.loads(source.read_text());declaration['sources'][0]['training_priority']=1;source.write_text(json.dumps(declaration))
     held=tmp_path/'held.jsonl';held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
-    out=tmp_path/'run';argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu','--native-graphs',str(source),'--foundation-native-graphs',str(source),'--foundation-communication-batches','4','--held-native-graphs',str(held),'--epochs','1','--eval-every','100','--out',str(out),'--held-eval-tokens','4']
+    out=tmp_path/'run';argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu','--native-graphs',str(source),'--foundation-native-graphs',str(source),'--foundation-communication-batches','4','--held-native-graphs',str(held),'--epochs','1','--eval-every','100','--out',str(out),'--held-eval-tokens','4','--no-ordinary-cohort-fairness']
     def stop(policy,step,**kwargs):
         policy.stop.requested=step==2
         return False
@@ -122,7 +122,7 @@ def test_actual_tiny_stop_append_resume_keeps_optimizer_rng_and_all_row_visits(t
     assert all(partial['exposure_counts']['lfm:foundation-'+str(i)]==(i<2) for i in range(4))
     second=tmp_path/'second';second.mkdir();new=source_manifest(second,ordinary,[*pairs,*[authenticated_pair('expanded-'+str(i),roles=roles.ids,fingerprint=fp) for i in range(2)]])
     declaration=json.loads(new.read_text());declaration['sources'][0]['training_priority']=1;new.write_text(json.dumps(declaration))
-    continued=argv.copy();continued[continued.index('--native-graphs')+1]=str(new);continued+=['--continued-native-graphs',str(source)]
+    continued=argv.copy();continued.remove('--no-ordinary-cohort-fairness');continued[continued.index('--native-graphs')+1]=str(new);continued+=['--continued-native-graphs',str(source)]
     actual=trainer.native_training_update;observed=[]
     def update(model,optimizer,batch,**kwargs):
         if not observed:
@@ -135,6 +135,8 @@ def test_actual_tiny_stop_append_resume_keeps_optimizer_rng_and_all_row_visits(t
         assert trainer.main(continued)==0
     assert observed[:3]==['lfm:foundation-2','lfm:foundation-3','ordinary-0']
     final=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    transition=final['options']['ordinary_cohort_fairness_history'][-1]
+    assert transition['from'] is False and transition['to'] is True and transition['at_global_step']==2
     assert final['global_step']==10 and all(v==1 for v in final['exposure_counts'].values())
     assert final['optimizer'] and final['metrics']['held']['scope']=='full'
 

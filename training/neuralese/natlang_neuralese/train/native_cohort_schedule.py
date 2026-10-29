@@ -31,8 +31,10 @@ def source_cohort_ids(source):
     return result
 
 
-def balance_urgent_batches(entries, batches, exposure_counts, cohort_ids, *, foundation_ids=()):
+def balance_urgent_batches(entries, batches, exposure_counts, cohort_ids, *, foundation_ids=(), lane="urgent"):
     """Choose least served pending cohort; saved row visits are the history."""
+    if lane not in ("urgent", "ordinary"):
+        raise ValueError("unknown cohort service lane")
     queues = {}
     for batch in batches:
         ids = {cohort_ids[index] for index in batch[1]}
@@ -43,7 +45,9 @@ def balance_urgent_batches(entries, batches, exposure_counts, cohort_ids, *, fou
     service = dict.fromkeys(queues, 0)
     for index, entry in enumerate(entries):
         key = cohort_ids[index]
-        if key in service and entry.get('training_priority', 0) > 0 and entry['id'] not in foundation_ids:
+        if key in service and entry['id'] not in foundation_ids and (
+                entry.get('training_priority', 0) > 0 if lane == 'urgent'
+                else entry.get('training_priority', 0) == 0 and not entry.get('communication')):
             credit = exposure_counts.get(entry['id'], 0)
             if type(credit) is not int or credit < 0:
                 raise ValueError('cohort service requires nonnegative integer row credits')
@@ -51,7 +55,11 @@ def balance_urgent_batches(entries, batches, exposure_counts, cohort_ids, *, fou
     heap = []
     for ordinal, (key, queue) in enumerate(queues.items()):
         priority = entries[queue[0][1][0]].get('training_priority', 0)
-        heapq.heappush(heap, (service[key], -priority, ordinal, key))
+        # A newly appended unserved ordinary cohort must not sit behind many
+        # equally unserved historical cohorts. Token service is still the
+        # primary key; newest source order only resolves exact service ties.
+        tie = -ordinal if lane == 'ordinary' else ordinal
+        heapq.heappush(heap, (service[key], -priority, tie, key))
     result = []
     while heap:
         served, priority, ordinal, key = heapq.heappop(heap)

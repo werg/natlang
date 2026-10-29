@@ -80,7 +80,8 @@ def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
 
 def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0,
                              foundation_ids=None, foundation_communication_batches=1, minimum_visits=None,
-                             schedule_offset=0, cohort_ids=None, shard=None, rotation_index=None):
+                             schedule_offset=0, cohort_ids=None, shard=None, rotation_index=None,
+                             urgent_cohort_fairness=True, ordinary_cohort_fairness=True):
     """Schedule only missing row visits, including rows appended after completion.
 
     Communication starts first and alternates with explicitly prioritized
@@ -126,7 +127,8 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
             cohorts = {}
             for index in indices:
                 urgent = entries[index].get('training_priority', 0) > 0 and entries[index]['id'] not in foundation_ids
-                key = cohort_ids[index] if cohort_ids is not None and urgent else None
+                ordinary = not entries[index].get('communication') and not urgent
+                key = cohort_ids[index] if cohort_ids is not None and ((urgent and urgent_cohort_fairness) or (ordinary and ordinary_cohort_fairness)) else None
                 cohorts.setdefault(key, []).append(index)
             for selected_indices in cohorts.values():
                 selected = [entries[index] for index in selected_indices]
@@ -150,8 +152,12 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
         destination.append(batch)
     if cohort_ids is not None:
         from .native_cohort_schedule import balance_urgent_batches
-        urgent = balance_urgent_batches(entries, urgent, exposure_counts, cohort_ids,
-                                       foundation_ids=foundation_ids)
+        if urgent_cohort_fairness:
+            urgent = balance_urgent_batches(entries, urgent, exposure_counts, cohort_ids,
+                                           foundation_ids=foundation_ids)
+        if ordinary_cohort_fairness:
+            ordinary = balance_urgent_batches(entries, ordinary, exposure_counts, cohort_ids,
+                                             foundation_ids=foundation_ids, lane='ordinary')
     def foundational(batch):
         return bool(foundation_ids) and any(entries[index]['id'] in foundation_ids for index in batch[1])
     communication.sort(key=lambda batch: not foundational(batch))
@@ -194,7 +200,7 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
         fast = interleaved
     else:
         fast = communication + urgent
-    if urgent and ordinary:
+    if ordinary and (urgent or (ordinary_cohort_fairness and fast)):
         # Keep priority useful without letting an ongoing stream of new rows
         # turn already-admitted ordinary work into permanent debt. Four fast
         # batches receive slots in each five-update cycle; ordinary receives
@@ -1091,6 +1097,8 @@ def build_parser():
     parser.add_argument('--foundation-communication-batches', type=int,
         help='while the exact declared foundation is pending, communication batches per priority ordinary batch')
     parser.add_argument('--pending-rotation-anchor', default=None, help='Recorded source row identity for a standalone pending-batch branch')
+    parser.add_argument('--ordinary-cohort-fairness', action=argparse.BooleanOptionalAction, default=True,
+        help='balance ordinary source cohorts using completed token exposure')
     parser.add_argument('--urgent-cohort-fairness', action=argparse.BooleanOptionalAction, default=False,
         help='balance positive-priority source cohorts using actual completed indexed graph token exposure')
     parser.add_argument('--source-classification-migration', type=Path,
@@ -1618,6 +1626,8 @@ def _main(argv=None, *, requested_refresh):
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
     saved_options = saved_training.get('options') or {}
+    fairness_saved_options = saved_options
+    fairness_had_saved_training = bool(saved_training)
     if args.chunk_tokens is None:
         # Readout chunking is exact but part of a resident geometry identity: a resume keeps its geometry.
         args.chunk_tokens = saved_options.get('chunk_tokens', 128) if saved_training else 1024
@@ -2597,6 +2607,14 @@ def _main(argv=None, *, requested_refresh):
         'exposure_counts': dict(exposure_counts), 'options': checkpoint_options},
         carried_progress.get(args.stage_id or 'native-graph-ce') or {})
     from .native_cohort_schedule import source_cohort_ids
+    fairness_history = list(fairness_saved_options.get('ordinary_cohort_fairness_history') or [])
+    prior_fairness = fairness_saved_options.get('ordinary_cohort_fairness', False)
+    if fairness_had_saved_training and bool(prior_fairness) != args.ordinary_cohort_fairness:
+        fairness_history.append({'schema': 'natlang.ordinary-cohort-fairness-transition/1',
+            'from': bool(prior_fairness), 'to': args.ordinary_cohort_fairness,
+            'at_global_step': global_step, 'source_bindings_sha256': source_hash,
+            'optimizer_rng_exposure': 'preserved'})
+    checkpoint_options['ordinary_cohort_fairness_history'] = fairness_history
     if prior_rotation and args.diloco is not None:
         if new_outer_proof is None or not new_outer_sha:
             raise ValueError('pending rotation can retire only at an authenticated new outer boundary')
@@ -2632,13 +2650,14 @@ def _main(argv=None, *, requested_refresh):
                 'anchor_id':args.pending_rotation_anchor,'anchor_binding':binding,'anchor_index':rotation_index,
                 'parent_checkpoint_sha256':sha256_file_hex_cached(args.standalone_diloco_parent),
                 'at_global_step':global_step,'original_cursor':cursor,'optimizer_rng_exposure':'preserved'}
-    urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness else None
+    urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness or args.ordinary_cohort_fairness else None
     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
         foundation_ids=foundation_priority_ids,
         foundation_communication_batches=args.foundation_communication_batches or 1,
         minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
-        cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None, rotation_index=rotation_index)
+        cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None, rotation_index=rotation_index,
+        urgent_cohort_fairness=args.urgent_cohort_fairness, ordinary_cohort_fairness=args.ordinary_cohort_fairness)
     if args.memory_qualification and objective is None:
         from .native_packed_capacity import qualify_pending
         from ..eval.native_memory import capacity_identity
@@ -2676,7 +2695,8 @@ def _main(argv=None, *, requested_refresh):
     if args.refresh_at_checkpoint and args.refresh_after_updates is None and not (args.checkpoint_every or args.checkpoint_seconds):
         raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
-                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index)
+                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index,
+                                      urgent_cohort_fairness=args.urgent_cohort_fairness, ordinary_cohort_fairness=args.ordinary_cohort_fairness)
     resident = None
     if args.resident_data_directory is not None:
         from .native_resident import ResidentAdoption
@@ -2830,7 +2850,7 @@ def _main(argv=None, *, requested_refresh):
                     candidate_frame = _retain_pending_sources({'source_row_bindings':candidate_train.bindings,
                         'source_row_order':candidate_train.ordered_ids(), 'exposure_counts':dict(candidate_counts),
                         'options':candidate_options}, pending_frame)
-                    candidate_cohorts = source_cohort_ids(candidate_train) if args.urgent_cohort_fairness else None
+                    candidate_cohorts = source_cohort_ids(candidate_train) if args.urgent_cohort_fairness or args.ordinary_cohort_fairness else None
                     candidate_foundation_ids = foundation_priority_ids
                     candidate_foundation = payload['plan']['stage_inputs'][args.stage_id].get('foundation_native_graphs')
                     if (candidate_foundation and candidate_foundation['sha256'] == candidate_train.file_sha256
@@ -2841,7 +2861,8 @@ def _main(argv=None, *, requested_refresh):
                         foundation_ids=candidate_foundation_ids,
                         foundation_communication_batches=args.foundation_communication_batches or 1,
                         minimum_visits=candidate_frame.get('required_visits'),schedule_offset=global_step,
-                        cohort_ids=candidate_cohorts)
+                        cohort_ids=candidate_cohorts, urgent_cohort_fairness=args.urgent_cohort_fairness,
+                        ordinary_cohort_fairness=args.ordinary_cohort_fairness)
                     return qualify_pending(model,optimizer,candidate_train,candidate_batches,args,backend=backend,
                         checkpoint_sha256=sha256_file_hex_cached(policy.slot) if policy.slot.exists() else config['base_inventory_sha256'],
                         global_step=global_step,prior_geometry=payload.get('sft_packed_geometry'),live_uncommitted=True,
@@ -2930,13 +2951,15 @@ def _main(argv=None, *, requested_refresh):
                     pending_frame = _retain_pending_sources({
                         'source_row_bindings': source_row_bindings, 'source_row_order': source_order,
                         'exposure_counts': dict(exposure_counts), 'options': checkpoint_options}, pending_frame)
-                    urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness else None
+                    urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness or args.ordinary_cohort_fairness else None
                     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
                         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
                         foundation_ids=foundation_priority_ids,
                         foundation_communication_batches=args.foundation_communication_batches or 1,
                         minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
-                        cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None, rotation_index=rotation_index)
+                        cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None, rotation_index=rotation_index,
+                        urgent_cohort_fairness=args.urgent_cohort_fairness,
+                        ordinary_cohort_fairness=args.ordinary_cohort_fairness)
                     if args.memory_qualification and objective is None:
                         packed = resident.packed_capacity_update
                         if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
@@ -2948,7 +2971,9 @@ def _main(argv=None, *, requested_refresh):
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
                     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
-                                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index)
+                                                      cohort_ids=urgent_cohort_ids, rotation_index=rotation_index,
+                                                      urgent_cohort_fairness=args.urgent_cohort_fairness,
+                                                      ordinary_cohort_fairness=args.ordinary_cohort_fairness)
             if anneal is not None:
                 # The branch ends after its declared updates, whatever data remains in the stage.
                 total_end = min(total_end, step + anneal.remaining(global_step))

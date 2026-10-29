@@ -55,6 +55,23 @@ def test_token_service_balances_work_and_priority_breaks_ties():
         assert last==all(other!=visit for other,_,_ in batches[index+1:])
 
 
+def test_ordinary_new_cohort_receives_service_without_losing_old_debt():
+    entries = ([dict(id=f'old-{i}', forward_tokens=10) for i in range(100)]
+               + [dict(id=f'new-{i}', forward_tokens=10) for i in range(8)]
+               + [dict(id=f'comm-{i}', forward_tokens=10, communication=True) for i in range(8)]
+               + [dict(id=f'urgent-{i}', forward_tokens=10, training_priority=3) for i in range(8)])
+    cohorts = ['old'] * 100 + ['new'] * 8 + ['comm'] * 8 + ['urgent'] * 8
+    credits = {f'old-{i}': 1 for i in range(10)}
+    quotas, batches = pending_exposure_batches(entries, credits, epochs=1, cohort_ids=cohorts)
+    scheduled = names(entries, batches)
+    assert 'new-0' in scheduled[:8]
+    assert 'comm-0' in scheduled[:8] and 'urgent-0' in scheduled[:8]
+    assert Counter(scheduled) == {e['id']: quotas[e['id']] - credits.get(e['id'], 0)
+                                  for e in entries if quotas[e['id']] > credits.get(e['id'], 0)}
+    _, tied = pending_exposure_batches(entries, {}, epochs=1, cohort_ids=cohorts)
+    assert 'new-0' in names(entries, tied)[:8]
+
+
 def test_foundation_and_zero_priority_debt_lanes_keep_their_service():
     entries=([dict(id=f'comm-{i}',forward_tokens=10,communication=True)for i in range(20)]
         +rows()+[dict(id=f'debt-{i}',forward_tokens=10)for i in range(10)])
@@ -92,6 +109,24 @@ def test_real_equal_rank_compressed_cohorts_resume_without_rescans_or_lost_rows(
         e['id']:quotas[e['id']]-credits.get(e['id'],0)for e in source.entries}
     assert set(counts.values())=={2} and not active
     assert source.entries==entries
+
+
+def test_real_ordinary_cohorts_have_independent_monotone_readers(tmp_path, monkeypatch):
+    source=real_source(tmp_path)
+    manifest=json.loads(source.path.read_text())
+    for declaration in manifest['sources']: declaration['training_priority']=0
+    source.path.write_text(json.dumps(manifest))
+    source=NativeGraphSource(source.path,'1'*64,required_split='train',role_ids=(58,59,60,61))
+    cohorts=source_cohort_ids(source); credits={'old-0':1,'old-1':1}
+    quotas,batches=pending_exposure_batches(source.entries,credits,epochs=1,batch_graphs=2,
+        cohort_ids=cohorts,urgent_cohort_fairness=False)
+    assert names(source.entries,batches)[0]=='new-0'
+    counts,active=count_readers(monkeypatch)
+    actual=list(stream_pending_batches(source,batches,cohort_ids=cohorts,urgent_cohort_fairness=False))
+    assert [e.id for _,_,_,batch in actual for e in batch]==names(source.entries,batches)
+    assert Counter(names(source.entries,batches))=={e['id']:quotas[e['id']]-credits.get(e['id'],0)
+        for e in source.entries if quotas[e['id']]>credits.get(e['id'],0)}
+    assert not active
 
 
 def test_nested_cohort_identity_survives_wrapping_and_rejects_mutation(tmp_path):
