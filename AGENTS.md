@@ -29,6 +29,20 @@ owner. Keep backup queues bounded and retry failed publications while protecting
 the last verified recovery state. Do not let preparation or diagnostic probes
 become a substitute for the four learners advancing the complete evolving recipe.
 
+Coordinator loss is distinct from worker loss (engineering incident, 2026-10-29).
+A same-ID workspace reset destroyed the cohost's unexported outer state while
+three peer full checkpoints survived. Provider snapshot requests had failed;
+the prepared direct cohort exporter had not completed a verified cycle. Do not
+describe those mechanisms as qualified recovery. Preserve each peer's weights,
+inner optimizer/RNG and exposure, and archive uncertain old pending updates as
+history rather than replaying them into a new outer session. Continue useful
+standalone SGD while preparing an authenticated new common outer baseline.
+An explicit new session may incorporate the peers' existing weight deviations;
+it must not fabricate lost coordinator momentum or count initialization as SGD.
+Coordinator durability must cover accepted queues, sequence/session and source
+transitions as well as global weights. Measure replication and export overhead;
+check actual durable commits before relying on failover.
+
 Use the platform maximum sandbox lifetime for training. Do not introduce short
 expiry limits or routine sandbox cycling to control spend: they interrupt
 healthy work and force unnecessary recovery. Supervise actual useful progress,

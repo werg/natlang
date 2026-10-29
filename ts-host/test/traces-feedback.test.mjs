@@ -143,16 +143,23 @@ test('good refuses outputs of models that are neither a tuning teacher nor our o
     mkdirSync(models);
     writeFileSync(join(models, 'pins.json'), JSON.stringify({ [sha]: { identity: { architecture: 'lfm2', checkpoint_sha256: sha,
       embedding_weight_sha256: 'cd'.repeat(32), tokenizer_fingerprint: 'ef'.repeat(32) } } }));
-    // Our native profile escalates to a hosted model: that model is the tuning teacher, so its outputs are labels.
-    const config = escalate => writeFileSync(join(t.dir, 'config.json'), JSON.stringify({ defaultProfile: 'ours', profiles: {
+    // Escalation alone does not authorize external tuning labels: tuning defaults
+    // to self-teaching. External teachers must be selected explicitly.
+    const config = (escalate, teacher) => writeFileSync(join(t.dir, 'config.json'), JSON.stringify({ defaultProfile: 'ours', profiles: {
       ours: { native: { checkpoint: join(models, `${sha}.pt`), sha256: sha }, ...(escalate ? { escalate: 'hosted' } : {}) },
       hosted: { endpoint: 'http://127.0.0.1:9', model: 'model-a' }, other: { endpoint: 'http://127.0.0.1:9', model: 'model-b' } },
-      tune: escalate ? {} : { teacher: 'other' } }));
+      tune: teacher ? { teacher } : {} }));
     const run = (...argv) => spawnSync(process.execPath, [bin, 'traces', ...argv, '--store', join(t.dir, 'calls')],
       { encoding: 'utf8', env: { ...process.env, NATLANG_FEEDBACK_GROUP: '', NATLANG_CONFIG_HOME: t.dir, NATLANG_NATIVE_MODELS: models } });
     config(true);
-    assert.equal(run('good', 'c/1').status, 0);
-    config(false);
+    const implicit = run('good', 'c/1');
+    assert.notEqual(implicit.status, 0);
+    assert.match(implicit.stderr, /not a tuning teacher or one of our models/);
+    assert.equal(t.examples().length, 0);
+    config(true, 'hosted');
+    const authorized = run('good', 'c/1');
+    assert.equal(authorized.status, 0, authorized.stderr);
+    config(false, 'other');
     const refused = run('good', 'c/2');
     assert.notEqual(refused.status, 0);
     assert.match(refused.stderr, /came from model-a, which is not a tuning teacher or one of our models/);
