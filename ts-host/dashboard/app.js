@@ -98,6 +98,7 @@ async function overview(_arg, target) {
       tile('Runtime', runtime ? `llama.cpp ${runtime.version}` : 'not installed', runtime ? `build ${runtime.build} · ${runtime.source}` : `pinned ${status.runtime.recommended.version} (b${status.runtime.recommended.build})`),
       tile('Traces', status.calls ? `${status.calls.calls} calls` : 'recording off', status.calls ? `${bytes(status.calls.bytes)} · specialization ${status.calls.settings.specialization}` : ''),
       tile('Machine', `${status.machine.cpus} CPUs · ${bytes(status.machine.memory)}`, `${bytes(status.machine.free)} free · ${status.machine.platform}`)),
+    await keptModelPanel(),
     h('div', { class: 'grid', style: 'grid-template-columns: repeat(auto-fit, minmax(360px, 1fr))' },
       h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Recent runs'), h('a', { href: '#runs' }, 'All runs')),
         jobs.length ? jobTable(jobs.slice(0, 8)) : h('div', { class: 'empty' }, 'No runs yet. Start one from Programs or the Playground.')),
@@ -107,6 +108,27 @@ async function overview(_arg, target) {
             h('td', {}, row.definition_name, h('div', { class: 'small muted' }, row.definition_source ?? '')), h('td', { class: 'num' }, row.calls),
             h('td', { class: 'num' }, row.crisp_calls), h('td', { class: 'num' }, tokens(row.tokens))))))) :
           h('div', { class: 'empty' }, 'No recorded calls yet.'))));
+}
+/** The model the dashboard keeps loaded for every natlang command on this machine (one server, warm slots, no load time). */
+async function keptModelPanel() {
+  const [state, config] = await Promise.all([get('/api/model-server'), profilesCache ? Promise.resolve(profilesCache) : get('/api/config')]);
+  profilesCache = config;
+  const local = Object.entries(config.profiles).filter(([, entry]) => entry.kind === 'managed-local').map(([name]) => name);
+  const choose = h('select', { id: 'kept-profile' }, h('option', { value: '' }, 'built-in LFM3 1.7B'),
+    local.map(name => h('option', { value: name, selected: name === state.profile }, name)));
+  const panel = h('section', { class: 'panel' });
+  const busy = label => attempt(async action => { fill(panel, h('div', { class: 'muted' }, label)); await action(); });
+  const start = () => busy('Loading the model…')(async () => { await api('POST', '/api/model-server', { profile: choose.value || undefined }); toast('Model kept loaded'); route(); });
+  const stop = () => busy('Stopping…')(async () => { await api('DELETE', '/api/model-server'); toast('Model unloaded'); route(); });
+  const server = state.server;
+  fill(panel, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Keep the model loaded'),
+      state.running ? h('div', { class: 'row' }, pill('loaded', 'ok'), h('button', { onclick: stop }, 'Unload')) :
+        h('div', { class: 'row' }, choose, h('button', { class: 'primary', onclick: start }, 'Load'))),
+    h('div', { class: 'small muted' }, 'One llama.cpp server for every run, call and terminal command on this machine whose model matches: no load time per run, warm slots, and one copy of the model in memory.'),
+    server ? kv([['Model', `${server.model} (profile ${server.profile})`], ['Server', `${server.endpoint} · ${server.slots} slots of ${tokens(server.contextPerSlot)} tokens`],
+      ['Since', ago(server.startedAt)]]) : state.other ? h('div', { class: 'small' }, `Another natlang process (pid ${state.other.pid}) keeps ${state.other.model} loaded at ${state.other.endpoint}.`) : null,
+    state.log?.length ? h('pre', { class: 'block small' }, state.log.slice(-4).join('\n')) : null);
+  return panel;
 }
 const tile = (label, value, sub) => h('div', { class: 'panel tile' }, h('div', { class: 'label' }, label), h('div', { class: 'value' }, value), h('div', { class: 'sub' }, sub));
 function jobTable(jobs) {
@@ -457,7 +479,7 @@ async function models(_arg, target) {
             h('button', { onclick: () => startJob({ kind: 'ask', instruction: 'Reply with the single word: ready', input: '', profile: name }) }, 'Test'),
             h('button', { class: 'danger', onclick: attempt(async () => { await api('DELETE', `/api/profiles/${encodeURIComponent(name)}`); toast(`Deleted ${name}`); route(); }) }, 'Delete')))))))) :
         h('div', { class: 'muted' }, 'No profiles yet: every command runs the built-in default, the stock LFM3 1.7B on the managed local llama.cpp server.')),
-    editor,
+    editor, await keptModelPanel(),
     h('section', { class: 'panel' }, h('h2', {}, 'Local models'), h('div', { class: 'muted small' }, 'Stock GGUF files natlang serves on its managed llama.cpp server, pinned to one repository revision and checked by SHA-256.'),
       h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Model'), h('th', { class: 'num' }, 'Size'), h('th', {}, 'State'), h('th', {}))), stockRows))));
 
@@ -500,6 +522,12 @@ async function models(_arg, target) {
     };
     kindField.addEventListener('change', drawFields);
     const temperature = h('input', { id: 'p-temperature', type: 'number', min: 0, max: 2, step: 0.1, value: profile.request?.temperature ?? '', placeholder: 'model default' });
+    // llama.cpp's per-request reasoning budget: unlimited is how the stock model was evaluated; a budget trades some
+    // accuracy for speed, mostly on a CPU. Pi providers set reasoning through their own options.
+    const budget = profile.request?.thinking_budget_tokens;
+    const thinking = h('select', { id: 'p-thinking', title: 'Reasoning tokens per model turn' },
+      [['', 'unlimited'], ['2048', '2,048 tokens'], ['1024', '1,024 tokens'], ['512', '512 tokens'], ['256', '256 tokens'], ['0', 'off']]
+        .map(([value, label]) => h('option', { value, selected: String(budget ?? '') === value }, label)));
     const save = attempt(async () => {
       const profileName = nameField.value.trim();
       if (!profileName) throw new Error('Give the profile a name');
@@ -519,15 +547,19 @@ async function models(_arg, target) {
         if (key) await api('PUT', `/api/credentials/${encodeURIComponent(`env:${apiKeyEnv}`)}`, { key });
         next = { endpoint: document.getElementById('p-endpoint').value.trim(), ...(document.getElementById('p-model-name').value.trim() ? { model: document.getElementById('p-model-name').value.trim() } : {}), apiKeyEnv };
       } else next = profile;
-      const t = number('p-temperature');
-      if (t !== undefined && value !== 'provider') next.request = { ...(profile.request ?? {}), temperature: t };
+      if (value !== 'provider') {
+        const request = { ...(profile.request ?? {}) }, t = number('p-temperature'), think = number('p-thinking');
+        if (t === undefined) delete request.temperature; else request.temperature = t;
+        if (think === undefined) delete request.thinking_budget_tokens; else request.thinking_budget_tokens = think;
+        if (Object.keys(request).length) next.request = request; else delete next.request;
+      }
       if (profile.escalate) next.escalate = profile.escalate;
       await api('PUT', `/api/profiles/${encodeURIComponent(profileName)}`, { profile: next, makeDefault: makeDefault.checked });
       toast(`Saved profile ${profileName}`); refreshRail(); route();
     });
     fill(editor, h('section', { class: 'panel' }, h('h2', {}, name ? `Edit ${name}` : 'New profile'),
       h('div', { class: 'row' }, h('label', { class: 'field' }, 'Name', nameField), h('label', { class: 'field' }, 'Backend', kindField),
-        h('label', { class: 'field' }, 'Temperature', temperature)),
+        h('label', { class: 'field' }, 'Temperature', temperature), h('label', { class: 'field' }, 'Thinking', thinking)),
       fields, h('label', { class: 'row small' }, makeDefault, 'Make this the default profile'),
       h('div', { class: 'row' }, h('button', { class: 'primary', onclick: save }, 'Save profile'), h('button', { onclick: () => fill(editor, ) }, 'Cancel'))));
     drawFields(); editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -541,15 +573,17 @@ async function system(_arg, target) {
   const warmPanel = h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Warm prompt openings'),
       warm.length ? h('button', { onclick: attempt(async () => { await api('DELETE', '/api/warm'); toast('Cleared; the next calls prefill again'); route(); }) }, 'Clear') : null),
     h('div', { class: 'small muted' }, 'Every call starts with the same long system prompt and tools. The managed server prefills each distinct opening once, saves it here and restores it into every slot, so later calls and runs skip that prefill.'),
-    warm.length ? h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'State'), h('th', { class: 'num' }, 'Tokens'), h('th', { class: 'num' }, 'Size'), h('th', {}, 'Model · build'), h('th', {}, 'Last used'))),
+    warm.length ? h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'State'), h('th', { class: 'num' }, 'Tokens'), h('th', { class: 'num' }, 'Size'), h('th', {}, 'Model · build · slots'), h('th', {}, 'Last used'))),
       h('tbody', {}, warm.map(item => h('tr', {}, h('td', { class: 'mono small' }, item.file.slice(0, 16)), h('td', { class: 'num' }, item.tokens ?? '–'),
-        h('td', { class: 'num' }, bytes(item.bytes)), h('td', { class: 'mono small' }, `${item.model ?? '?'} · b${item.build ?? '?'}`), h('td', {}, ago(item.usedAt))))))) :
+        h('td', { class: 'num' }, bytes(item.bytes)), h('td', { class: 'mono small' }, `${item.model ?? '?'} · b${item.build ?? '?'} · ${item.layout ? item.layout.replace('x', ' × ') : '?'}`), h('td', {}, ago(item.usedAt))))))) :
       h('div', { class: 'muted' }, 'None saved yet; the first call of each kind saves one.'));
   const mode = h('select', { id: 'spec-mode', onchange: attempt(async event => { await api('PUT', '/api/store/settings', { specialization: event.target.value }); toast('Saved'); }) },
     ['off', 'shadow', 'on'].map(value => h('option', { value, selected: status.calls?.settings.specialization === value }, value)));
   fill(target, header('System', 'The model runtime, the call record store and where natlang keeps its state.'),
     h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'llama.cpp runtime'),
-      h('button', { class: 'primary', onclick: () => startJob({ kind: 'setup' }) }, runtime.selected ? 'Check and download the default model' : 'Install runtime and default model')),
+      h('div', { class: 'row' }, runtime.selected?.fork ? null : h('button', { title: `Compile ${runtime.fork.repository} at ${runtime.fork.commit.slice(0, 10)} (needs git, cmake and a C++ compiler; CUDA when nvcc is present)`,
+        onclick: () => startJob({ kind: 'runtime-build' }) }, 'Build the natlang fork'),
+        h('button', { class: 'primary', onclick: () => startJob({ kind: 'setup' }) }, runtime.selected ? 'Check and download the default model' : 'Install runtime and default model'))),
       kv([['Selected', runtime.selected ? `${runtime.selected.source} · ${runtime.selected.version} (build ${runtime.selected.build})` : 'none'],
         runtime.selected ? ['Build', runtime.selected.fork ? 'natlang fork: decision scoring, guided generation and native states' :
           'upstream llama.cpp: decisions fall back to model turns, no guided generation or tuned soft states'] : null,

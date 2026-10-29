@@ -15,10 +15,13 @@ import { CallStore, machineStoreRoot } from '../calls/store.js';
 import { expandedRecord } from '../cli/calls.js';
 import { programFunctions, readProgramManifest } from '../cli/build-lock.js';
 import { currentRelease } from '../adaptation/weights/release.js';
-import { resolveModelChoice, type ModelProfile } from '../model/config.js';
+import { loadModelConfiguration, resolveModelChoice, type ModelProfile } from '../model/config.js';
 import { DEFAULT_LOCAL_MODEL, STOCK_MODELS, stockModel, type LocalModelRelease } from '../model-catalog.js';
-import { ensureStockModel, stockModelPath, supportsNativeStates } from '../model/local-server.js';
+import { createResolvedModelSession, ensureStockModel, managedModelSha256, profileEnvironment, stockModelPath, supportsNativeStates, warmTag,
+  type ManagedModelSession } from '../model/local-server.js';
+import { publishSharedServer, readSharedServer, withdrawSharedServer } from '../model/shared-server.js';
 import { discoverLlamaRuntime, LLAMA_RUNTIME_RELEASE } from '../model/llama-runtime.js';
+import { LLAMA_FORK_SOURCE } from '../llama-fork-source.js';
 import { discoverLocalApplications } from '../package/discover.js';
 import { defaultNatlangCacheDirectory, defaultNatlangConfigDirectory, defaultNatlangStateDirectory } from '../package/store.js';
 import { readBuildLock } from '../package/warm.js';
@@ -92,6 +95,7 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     } catch (error) { model = { profile: name, error: (error as Error).message }; }
     return { version: options.version, node: process.version, root, configPath, model, calls,
       runtime: { selected: runtime.selected ? { ...runtime.selected, fork: supportsNativeStates(runtime.selected.path) } : null, recommended: { version: LLAMA_RUNTIME_RELEASE.version, build: LLAMA_RUNTIME_RELEASE.build },
+        fork: { repository: LLAMA_FORK_SOURCE.repository, commit: LLAMA_FORK_SOURCE.commit },
         candidates: runtime.candidates.map(item => ({ path: item.path, source: item.source, compatible: item.compatible, reason: item.reason })) },
       machine: { cpus: cpus().length, cpu: cpus()[0]?.model ?? null, memory: totalmem(), free: freemem(), platform: `${process.platform}-${process.arch}` },
       jobs: { running: jobs.running(), total: jobs.list().length } };
@@ -103,10 +107,57 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     const stat = statSync(join(warmDirectory, name));
     let meta: { tokens?: number; chars?: number } = {};
     try { meta = JSON.parse(readFileSync(join(warmDirectory, `${name}.json`), 'utf8')) as typeof meta; } catch { /* no sidecar */ }
-    const [, model, build] = /^[0-9a-f]{16}-([0-9a-f]{12})-b(\w+)\.slot$/.exec(name) ?? [];
-    return { file: name, bytes: stat.size, usedAt: stat.mtime.toISOString(), tokens: meta.tokens ?? null, model: model ?? null, build: build ?? null };
+    const [, model, build, layout] = /^[0-9a-f]{16}-([0-9a-f]{12})-b(\w+?)(?:-p(\d+x\d+))?\.slot$/.exec(name) ?? [];
+    return { file: name, bytes: stat.size, usedAt: stat.mtime.toISOString(), tokens: meta.tokens ?? null, model: model ?? null, build: build ?? null,
+      layout: layout ?? null };
   }).sort((a, b) => b.usedAt.localeCompare(a.usedAt)) : []);
   route('DELETE', '/api/warm', () => { rmSync(warmDirectory, { recursive: true, force: true }); return { ok: true }; });
+
+  // The model the dashboard keeps loaded for every natlang process on this machine (model/shared-server.ts).
+  let kept: { session: ManagedModelSession; profile: string; log: string[] } | undefined;
+  const keptStatus = () => {
+    const published = readSharedServer(environment);
+    return kept ? { running: true, profile: kept.profile, ...(published?.pid === process.pid ? { server: published } : {}), log: kept.log.slice(-20) } :
+      { running: false, ...(published ? { other: published } : {}) };
+  };
+  const stopKept = async () => {
+    if (!kept) return;
+    const { session } = kept; kept = undefined;
+    withdrawSharedServer(process.pid, environment);
+    await session.close();
+  };
+  route('GET', '/api/model-server', keptStatus);
+  route('POST', '/api/model-server', async (_request, _params, _query, body) => {
+    await stopKept();
+    const requested = (body as { profile?: string } | undefined)?.profile || undefined;
+    const selection = loadModelConfiguration(requested, {}, environment);
+    if (selection.choice.kind !== 'managed-local') throw new HttpError(400, `profile ${selection.name} is not a local model; only the managed llama.cpp server can be kept loaded`);
+    const log: string[] = [];
+    const session = createResolvedModelSession(selection.choice, environment, { write: (text: string) => { log.push(...String(text).trim().split('\n')); return true; } } as unknown as NodeJS.WritableStream);
+    kept = { session, profile: selection.name, log };
+    try {
+      await session.prepare();
+      const status = session.status(), plan = session.slotPlan();
+      if (!status.endpoint || !plan) throw new Error('the model server did not start');
+      const sha = await managedModelSha256(profileEnvironment(selection.choice, environment), selection.choice.release);
+      publishSharedServer({ pid: process.pid, endpoint: status.endpoint, modelSha256: sha, runtimeBuild: status.runtimeBuild ?? null,
+        slots: plan.slots, contextPerSlot: plan.contextPerSlot, model: status.model, profile: selection.name, startedAt: new Date().toISOString(),
+        warm: environment.NATLANG_WARM_PREFIXES !== 'off' }, environment);
+      // Start every slot from the openings earlier runs saved for this model file, build and slot layout, most recent first.
+      const tag = `-${warmTag(sha, status.runtimeBuild ?? null, plan)}.slot`;
+      const saved = existsSync(warmDirectory) ? readdirSync(warmDirectory).filter(name => name.endsWith(tag))
+        .sort((a, b) => statSync(join(warmDirectory, b)).mtimeMs - statSync(join(warmDirectory, a)).mtimeMs) : [];
+      let restored = 0;
+      for (let slot = 0; slot < plan.slots && saved.length; slot++) {
+        const response = await fetch(`${status.endpoint}/slots/${slot}?action=restore`, { method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ filename: saved[slot % saved.length] }) }).catch(() => undefined);
+        if (response?.ok) restored++;
+      }
+      log.push(`kept loaded at ${status.endpoint} with ${plan.slots} slots; ${restored} slot${restored === 1 ? '' : 's'} start from a saved prompt opening`);
+      return keptStatus();
+    } catch (error) { await stopKept(); throw new HttpError(500, `${(error as Error).message}\n${log.slice(-6).join('\n')}`); }
+  });
+  route('DELETE', '/api/model-server', async () => { await stopKept(); return keptStatus(); });
 
   // Model configuration.
   route('GET', '/api/config', async () => {
@@ -230,6 +281,8 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
         argv: ['build', path, ...(input.warm ? ['--warm'] : []), ...selection(input), '--yes'], meta: { path: relative(root, path) } };
     } else if (kind === 'setup') {
       spec = { kind, title: 'setup', cwd: root, argv: ['setup', '--yes', ...selection(input)] };
+    } else if (kind === 'runtime-build') {
+      spec = { kind, title: 'build natlang llama.cpp fork', cwd: root, argv: ['runtime', 'build', ...(input.cuda === true ? ['--cuda'] : input.cuda === false ? ['--no-cuda'] : [])] };
     } else if (kind === 'tune') {
       const path = inside(string(input.path, 'path'));
       spec = { kind, title: `tune ${relative(root, path) || '.'}`, cwd: root, argv: ['tune', path], meta: { path: relative(root, path) } };
@@ -341,5 +394,5 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
   if (address && typeof address === 'object') port = address.port;
   const url = `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}/?token=${token}`;
   log.write(`natlang dashboard on ${url}\n`);
-  return { url, close: async () => { await jobs.close(); await new Promise<void>(resolveClose => server.close(() => resolveClose())); } };
+  return { url, close: async () => { await jobs.close(); await stopKept(); await new Promise<void>(resolveClose => server.close(() => resolveClose())); } };
 }

@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { schedulerForSettings, type Scheduler } from './scheduler.js';
 import { planServerSlots, type SlotPlan } from './server-slots.js';
 import { openingOf, pruneWarmStates, warmOpening, type WarmPrefix } from '../package/warm.js';
+import { findSharedServer } from './shared-server.js';
 import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest, SessionTurnOptions } from '../contracts.js';
 import { describeLlamaRuntime, discoverLlamaRuntime, type LlamaRuntimeDiscovery,
   type LlamaServerInspection } from './llama-runtime.js';
@@ -31,7 +32,9 @@ export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-pr
   /** A managed server's stock model and llama.cpp build (undefined for other backends and configured GGUFs). */
   release?: LocalModelRelease; runtimeBuild?: number | null;
   /** The prompt openings this session warmed (prefilled and saved, or restored) on a managed server. */
-  warm?: WarmPrefix[] };
+  warm?: WarmPrefix[];
+  /** The session uses a server another process keeps loaded (model/shared-server.ts). */
+  shared?: boolean };
 export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   /** A native reference server's artifact store, for uploading tuned artifacts and states; undefined otherwise. */
   nativeArtifacts?(): import('./neuralese-server.js').HttpNeuraleseStore | undefined;
@@ -224,6 +227,22 @@ async function stopChild(child: ChildProcess): Promise<void> {
   if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
 }
 
+/**
+ * The key part of a warm state for this model file, llama.cpp build and slot layout: a saved slot state restores only
+ * into a server with the same number of slots and context per slot.
+ */
+export const warmTag = (modelSha256: string, build: number | null, plan: Pick<SlotPlan, 'slots' | 'contextPerSlot'>) =>
+  `${modelSha256.slice(0, 12)}-b${build ?? 'x'}-p${plan.slots}x${plan.contextPerSlot}`;
+
+/** Whether no slot of a llama.cpp server is processing (its /slots listing). */
+async function serverIdle(endpoint: string): Promise<boolean> {
+  try {
+    const response = await fetch(endpoint + '/slots', { signal: AbortSignal.timeout(2000) });
+    const slots = await response.json() as { is_processing?: boolean }[];
+    return response.ok && Array.isArray(slots) && slots.every(slot => !slot.is_processing);
+  } catch { return false; }
+}
+
 export function createManagedModelSession(profile: ModelProfile,
   environment: NodeJS.ProcessEnv = process.env, error: NodeJS.WritableStream = process.stderr,
   runtimeOptions: ManagedModelRuntimeOptions = {}): ManagedModelSession {
@@ -293,7 +312,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   let unscored: string | null = null;
   // Warm openings: each distinct system prompt and tool list is prefilled once per machine and model, then restored.
   const warmDirectory = join(defaultNatlangCacheDirectory(environment), 'warm-prefixes');
-  let warming = false, inflight = 0;
+  let warming = false, inflight = 0, sharedEndpoint: string | null = null;
   const openings = new Map<string, Promise<WarmPrefix | undefined>>(), warmed: WarmPrefix[] = [];
   const warmFor = async (request: ModelTurnRequest): Promise<void> => {
     if (choice.kind !== 'managed-local') return;
@@ -305,9 +324,10 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       pending = (async () => {
         const options = await start();
         if (!warming) return undefined;
+        // A shared server also serves other processes: warm it only while none of its slots is working.
+        if (sharedEndpoint && !await serverIdle(sharedEndpoint)) { openings.delete(opening.key); return undefined; }
         const sha = await managedModelSha256(environment, release);
-        const build = prerequisites.runtime.selected?.build ?? 'x';
-        const state = await warmOpening(options.endpoint, warmDirectory, opening, `${sha.slice(0, 12)}-b${build}`, plan?.slots ?? 1);
+        const state = await warmOpening(options.endpoint, warmDirectory, opening, warmTag(sha, prerequisites.runtime.selected?.build ?? null, plan!), plan?.slots ?? 1);
         if (state) {
           warmed.push(state);
           error.write(state.created ? `natlang: prefilled the ${state.tokens}-token prompt opening once for this model; later calls and runs restore it\n` :
@@ -338,6 +358,22 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
         const explicit = prerequisites.runtime.candidates.find(candidate => candidate.source === 'explicit');
         if (explicit) throw new Error(`NATLANG_LLAMA_SERVER is incompatible: ${describeLlamaRuntime(prerequisites.runtime)}`);
         throw new Error(`managed model server is unavailable: ${describeLlamaRuntime(prerequisites.runtime)}; run natlang --setup or natlang --runtime install`);
+      }
+      // A server another natlang process keeps loaded for exactly this model file and build (model/shared-server.ts).
+      const adapterless = !(runtimeOptions.loraAdapters?.() ?? []).length && !(runtimeOptions.nativeStates?.() ?? []).length;
+      const shared = adapterless && choice.kind === 'managed-local' ?
+        await findSharedServer(await managedModelSha256(environment, release), prerequisites.runtime.selected?.build ?? null, environment) : undefined;
+      if (shared) {
+        plan = { budgetSource: 'configured-parallel', slots: shared.slots, contextPerSlot: shared.contextPerSlot,
+          totalContext: shared.slots * shared.contextPerSlot, source: 'configured', budgetBytes: null, modelBytes: 0, kvBytesPerToken: 0,
+          formula: `shared model server (pid ${shared.pid})` };
+        if (scheduler && choice.batching?.maxConcurrent === undefined && choice.concurrency === undefined) scheduler.setMaxConcurrent(shared.slots);
+        sharedEndpoint = shared.endpoint;
+        warming = environment.NATLANG_WARM_PREFIXES !== 'off' && !!shared.warm;
+        error.write(`natlang: using the ${shared.model} model kept loaded at ${shared.endpoint} (${shared.slots} slots)\n`);
+        local = { endpoint: shared.endpoint, model: environment.NATLANG_MODEL ?? choice.model, headers: choice.headers,
+          request: choice.kind === 'managed-local' ? { cache_prompt: true, ...choice.request } : undefined };
+        return local;
       }
       const modelPath = await ensureModel(environment, error, release);
       if (closed) throw new Error('model session is closed');
@@ -431,8 +467,9 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       executable: null, modelPath: null, running: false } : external ? { source: 'external', endpoint: external.endpoint, model: external.model,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,
       model: environment.NATLANG_MODEL ?? choice.model, executable: prerequisites.executable,
-      modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child),
-      ...(environment.NATLANG_MODEL_PATH ? {} : { release }), runtimeBuild: prerequisites.runtime.selected?.build ?? null, warm: [...warmed] }; },
+      modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child || sharedEndpoint),
+      ...(environment.NATLANG_MODEL_PATH ? {} : { release }), runtimeBuild: prerequisites.runtime.selected?.build ?? null, warm: [...warmed],
+      ...(sharedEndpoint ? { shared: true } : {}) }; },
     scheduler,
     /** The native reference server's artifact store (uploads of tuned artifacts and states), when this is one. */
     nativeArtifacts() { return external?.neuraleseServer ? nativeDriver().artifacts : undefined; },

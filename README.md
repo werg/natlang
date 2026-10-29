@@ -35,6 +35,7 @@ natlang setup --yes                     # the llama.cpp runtime and the default 
 natlang run examples/triage             # triage the bundled support tickets
 natlang dashboard --open                # the local dashboard: models, programs, live runs, traces
 natlang build examples/triage --warm    # compile with its model lock and a pre-warmed, traced warm-up run
+natlang runtime build                   # optional: compile natlang's llama.cpp fork (scoring, guidance, native states)
 ```
 
 `natlang setup` prepares the selected model backend. The CLI can use its managed

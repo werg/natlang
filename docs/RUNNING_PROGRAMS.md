@@ -26,6 +26,12 @@ Other choices are model profiles in `~/.config/natlang/config.json`, edited by h
 `--profile NAME`, `--provider ID --model ID`, `NATLANG_PROFILE`, `NATLANG_SERVER` and `NATLANG_PROVIDER` select one
 for a single command.
 
+A local profile's `request` refines the stock model's serving settings (greedy decoding, reasoning kept in the
+history) field by field. The stock model reasons before every action, which is slow on a CPU (about 10 generated tokens
+a second for Q4_K_M on four cores, and a turn often thinks for 1,500 tokens). `"request": { "thinking_budget_tokens":
+512 }` caps each turn's reasoning (0 turns it off); the dashboard's profile editor sets it as **Thinking**. Unlimited
+is how the model was evaluated, so a budget trades some accuracy for speed.
+
 ## Running
 
 ```sh
@@ -66,11 +72,32 @@ tokens), and llama.cpp cannot reuse a hybrid model's cached prefix in the ordina
 and sliding-window state only from a checkpoint at least 256 tokens before the point where two prompts differ, and it
 creates none there. Without help each call prefills the whole opening again, minutes on a CPU. The managed server
 therefore prefills each distinct opening once, saves that slot state (whose checkpoints are early enough) in the machine
-cache (`warm-prefixes/`, keyed by the exact opening, model file and llama.cpp build; the 24 most recent are kept), and
+cache (`warm-prefixes/`, keyed by the exact opening, model file, llama.cpp build and slot layout, since a slot state
+restores only into a server with the same slots; the 24 most recent are kept), and
 restores it into every slot before the first call that sends it. Later calls in a warm slot keep reusing it, and later
 runs start warm. The warm build fills this cache ahead of time and lists the openings in the lock. Measured on four CPU
 cores with Q4_K_M, a first call reused 2,923 of its 3,439 opening tokens after a 0.07 s restore. `NATLANG_WARM_PREFIXES=off`
 turns it off; states are not used while tuned LoRA adapters or native states are loaded.
+
+## One loaded model for every run
+
+The managed server sizes its slots from the model's measured context memory (LFM3 1.7B: about 12.5 KiB per token, so
+the default 4 GiB budget holds 8 slots of 32,768 tokens). The dashboard's **Keep the model loaded** starts one server
+and publishes it in the state directory (`model-server.json`); every natlang command on the machine whose model file and
+llama.cpp build match uses it instead of starting its own, whether it was started from the dashboard or a terminal: no
+load time, the server's warm slots, and one copy of the model in memory. Runs warm openings on it only while all its
+slots are idle. `NATLANG_SHARED_SERVER=off` makes a command start its own server.
+
+## llama.cpp
+
+The managed runtime is upstream llama.cpp v0.8.0 (b11960) until natlang's fork
+[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese) publishes runtime releases: its
+`natlang-runtime` workflow builds every platform and `node scripts/update_llama_runtime.mjs --fork natlang-bNNNN`
+pins a release. The fork adds decision scoring, guided generation, native states, RL capture and backend sampling;
+upstream serves the same programs without those. `natlang runtime build` compiles the fork at the commit this natlang
+pins (`ts-host/src/llama-fork-source.ts`; it needs git, cmake and a C++ compiler, and uses CUDA when `nvcc` is on PATH)
+into the runtime directory, and managed sessions prefer that build from then on; the System page has the same button and
+says which build runs. `NATLANG_LLAMA_SERVER` (or a profile's `local.server`) still selects any other binary.
 
 ## The dashboard
 
@@ -81,7 +108,8 @@ natlang dashboard --root ~/work --port 9000
 
 It binds to loopback; the printed URL carries a session token that every request must present. Pages:
 
-- **Overview**: the selected model, runtime, call store and machine; recent runs; the busiest functions.
+- **Overview**: the selected model, runtime, call store and machine; the kept-loaded model; recent runs; the busiest
+  functions.
 - **Programs**: every `natlang.json` under the root. Run a target with arguments and a profile, call any `.nl` function
   from a form generated from its signature, build or build warm, and see the lock and warm-up results.
 - **Runs**: every run, call, ask, build, setup, tuning and specializer job, live: the tree of calls, each turn's
@@ -92,4 +120,5 @@ It binds to loopback; the printed URL carries a session token that every request
 - **Playground**: one `natlang ask` with an instruction, input, result type and profile.
 - **Models**: profiles (local stock model, API provider with its key, OpenAI-compatible server), the default profile,
   stock model downloads with progress, and a one-click test of each profile.
-- **System**: the llama.cpp runtime and its installation, call-store specialization mode, paths.
+- **System**: the llama.cpp runtime (upstream or natlang's fork) and its installation, call-store specialization mode,
+  the saved warm prompt openings, paths.

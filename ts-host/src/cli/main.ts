@@ -18,7 +18,7 @@ import { discoverLocalApplications, isApplicationManifest } from '../package/dis
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
 import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
-  installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites, localSlotPlan, ensureStockModel,
+  installManagedLlamaRuntime, buildForkLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites, localSlotPlan, ensureStockModel,
   type LlamaRuntimeDiscovery, type LlamaServerInspection, type LoadedModelConfiguration,
   type ResolvedModelChoice } from '../model/index.js';
 import type { AuthPrompt } from '@earendil-works/pi-ai';
@@ -193,12 +193,18 @@ carries the session's access token; --open also opens it in a browser.`;
   natlang serve [--profile NAME]
   natlang runtime status [--json]
   natlang runtime install [--yes] [--json]
+  natlang runtime build [--cuda|--no-cuda] [--jobs N] [--json]
 
 Setup reuses a compatible explicit, managed, or PATH llama-server. If none is
 compatible, interactive use asks before installing the verified managed build.
 Profiles live in ~/.config/natlang/config.json. Environment overrides are
 NATLANG_SERVER, NATLANG_MODEL, NATLANG_MODEL_PATH, NATLANG_LLAMA_SERVER,
 NATLANG_RUNTIME_HOME, NATLANG_PROVIDER, and NATLANG_API_KEY.
+
+runtime build compiles natlang's llama.cpp fork (werg/llama.cpp-neuralese, at
+the commit this natlang pins) into the runtime directory; managed sessions then
+prefer it over the upstream build. It needs git, cmake and a C++ compiler, and
+builds with CUDA when nvcc is on PATH.
 
 setup --native pins a trained native checkpoint: SOURCE is a checkpoint file,
 a JSON pointer to one (local_full_state, checkpoint or path, with sha256 and
@@ -237,7 +243,7 @@ type Parsed = { words: string[]; options: Map<string, string | true>; rest: stri
 function parseArgs(args: string[]): Parsed {
   const words: string[] = [], options = new Map<string, string | true>(), rest: string[] = [];
   const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes', '--refresh',
-    '--lines', '--jsonl', '--filter', '--no-adaptation', '--no-weights', '--fusion', '--default', '--warm', '--open']);
+    '--lines', '--jsonl', '--filter', '--no-adaptation', '--no-weights', '--fusion', '--default', '--warm', '--open', '--cuda', '--no-cuda']);
   let separated = false;
   for (let index = 0; index < args.length; index++) {
     const value = args[index]!;
@@ -965,8 +971,14 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   }
   if (command === 'setup' || command === 'runtime') {
     const action = command === 'setup' ? 'ensure' : words[0] ?? 'status';
-    acceptOptions(parsed, command === 'setup' ? ['--yes', '--json', '--profile', '--provider', '--model'] : action === 'install' ? ['--yes', '--json'] : ['--json']);
+    acceptOptions(parsed, command === 'setup' ? ['--yes', '--json', '--profile', '--provider', '--model'] : action === 'install' ? ['--yes', '--json'] :
+      action === 'build' ? ['--cuda', '--no-cuda', '--jobs', '--json'] : ['--json']);
     noTrailingArguments(parsed);
+    if (action === 'build') {
+      await buildForkLlamaRuntime({ cuda: parsed.options.has('--cuda') ? true : parsed.options.has('--no-cuda') ? false : undefined,
+        jobs: parsed.options.has('--jobs') ? numericOption(parsed, '--jobs', 1) : undefined });
+      outputRuntime(discoverLlamaRuntime(), json); return 0;
+    }
     if (command === 'setup') {
       const { choice } = modelSelection(parsed);
       if (choice.kind !== 'managed-local') {
@@ -996,7 +1008,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       else { outputRuntime(discoverLlamaRuntime(), false); if (release) output(`model: ${release.label} (${modelPath})`, false); }
       return 0;
     }
-    throw new Error('usage: natlang runtime status|install');
+    throw new Error('usage: natlang runtime status|install|build');
   }
   if (command === 'apps') {
     acceptOptions(parsed, ['--json']); noTrailingArguments(parsed);

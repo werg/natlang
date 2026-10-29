@@ -73,6 +73,14 @@ export type LoadedModelConfiguration = { name: string; configPath: string; profi
   /** Named checkpoint pointers for `natlang setup --native NAME` (config `nativeSources`). */
   nativeSources: Record<string, string> };
 
+const plainObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+function mergeRequest(defaults: Record<string, unknown>, request: Record<string, unknown> | undefined): Record<string, unknown> {
+  const merged = { ...defaults };
+  for (const [key, value] of Object.entries(request ?? {}))
+    merged[key] = plainObject(value) && plainObject(merged[key]) ? { ...merged[key], ...value } : value;
+  return merged;
+}
+
 export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   if (profile.promptRendering !== undefined && !['full', 'program-header'].includes(profile.promptRendering))
     throw new Error('promptRendering must be full or program-header');
@@ -162,11 +170,11 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
     ...(profile.vllm ? { vllm: true as const } : {}) };
   if (profile.model) throw new Error('a configured model ID needs an endpoint; omit both to use the managed local default');
   // A stock model's own serving settings (greedy decoding, template arguments) apply when the profile runs it; the
-  // profile's request overrides them.
+  // profile's request overrides them, field by field inside object fields such as chat_template_kwargs.
   const release = profile.local?.modelPath ? undefined : profile.local?.stock ? stockModel(profile.local.stock) : DEFAULT_LOCAL_MODEL;
   const defaults = release?.request as Record<string, unknown> | undefined;
   return { ...common, kind: 'managed-local', model: profile.local?.modelId ?? release?.id ?? 'local-gguf',
-    request: defaults ? { ...structuredClone(defaults), ...profile.request } : profile.request, local: profile.local, ...(release ? { release } : {}) };
+    request: defaults ? mergeRequest(structuredClone(defaults), profile.request) : profile.request, local: profile.local, ...(release ? { release } : {}) };
 }
 
 /**
