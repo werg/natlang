@@ -133,7 +133,8 @@ export async function buildForkLlamaRuntime(options: { environment?: NodeJS.Proc
     run('git', ['checkout', '-q', 'FETCH_HEAD'], source);
     const rpath = process.platform === 'darwin' ? '@loader_path' : '$ORIGIN';
     run('cmake', ['-S', '.', '-B', 'build', '-DCMAKE_BUILD_TYPE=Release', '-DLLAMA_CURL=OFF', '-DLLAMA_BUILD_TESTS=OFF',
-      '-DLLAMA_BUILD_EXAMPLES=OFF', `-DCMAKE_INSTALL_RPATH=${rpath}`, '-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON',
+      // natlang does not serve llama.cpp's web UI, which would otherwise be fetched from an unpinned "latest" bucket.
+      '-DLLAMA_BUILD_EXAMPLES=OFF', '-DLLAMA_USE_PREBUILT_UI=OFF', '-DLLAMA_BUILD_UI=OFF', `-DCMAKE_INSTALL_RPATH=${rpath}`, '-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON',
       ...(cuda ? ['-DGGML_CUDA=ON', '-DCMAKE_CUDA_ARCHITECTURES=native'] : [])], source);
     run('cmake', ['--build', 'build', '--config', 'Release', '--target', 'llama-server', '-j', String(options.jobs ?? Math.max(1, cpus().length))], source);
     const built = [join(source, 'build', 'bin'), join(source, 'build', 'bin', 'Release')].find(path => existsSync(join(path,

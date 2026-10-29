@@ -53,3 +53,17 @@ test('progress reports a failed call in one line and stays quiet without a termi
   reporter.close();
   assert.equal(written, 'natlang: classify stopped: model_incomplete: repeated_failed_action (q is not defined)\n');
 });
+
+test('the status line counts consecutive rejected actions and their speed', async () => {
+  let written = '';
+  const reporter = progressReporter({ write: text => { written += text; return true; }, isTTY: true, columns: 400 }, 'auto');
+  const call = { taskId: 't', callId: 'c1', parentCallId: null, definitionId: 'd', name: 'ask' };
+  reporter.live({ type: 'call_start', ...call });
+  reporter.live({ type: 'trace', ...call, event: { kind: 'model_request', phase: 'end', turn: 1, prompt_tokens: 10, completion_tokens: 40, generation_ms: 4000 } });
+  for (const text of ['1:7 invalid-binding: input is this call\'s input', '2:17 nl-not-tag: nl is a template tag'])
+    reporter.live({ type: 'trace', ...call, event: { kind: 'action', name: 'eval', outcome: 'rejected', result_text: text } });
+  await new Promise(resolve => setTimeout(resolve, 300));
+  reporter.close();
+  assert.match(written, /last 2 actions rejected \(nl-not-tag\)/);
+  assert.match(written, /40 generated tokens \(10\.0\/s\)/);
+});

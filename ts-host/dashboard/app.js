@@ -170,7 +170,8 @@ function liveModel() {
       const data = event.event;
       if (data.kind === 'model_request' && data.phase === 'start') { const turn = turnOf(call, data.turn); turn.working = true; call.lastTurn = data.turn; }
       if (data.kind === 'model_request' && data.phase !== 'start') { const turn = turnOf(call, data.turn); turn.working = false;
-        turn.prompt = data.prompt_tokens ?? 0; turn.cached = data.cached_tokens ?? 0; turn.completion = data.completion_tokens ?? 0; turn.ms = data.duration_ms; if (data.error) turn.failures.push(data.error); }
+        turn.prompt = data.prompt_tokens ?? 0; turn.cached = data.cached_tokens ?? 0; turn.completion = data.completion_tokens ?? 0; turn.ms = data.duration_ms;
+        turn.prefillMs = data.prefill_ms; turn.generationMs = data.generation_ms; if (data.error) turn.failures.push(data.error); }
       if (data.kind === 'action' && call.lastTurn) { const turn = turnOf(call, call.lastTurn);
         if (turn.tools.length <= turn.results.length) turn.tools.push({ name: data.name, arguments: JSON.stringify(data.arguments ?? {}) });
         if (typeof data.result_text === 'string' && data.result_text) turn.results.push(data.result_text); }
@@ -183,6 +184,8 @@ function liveModel() {
     }
   } };
 }
+// Generation speed as the server measured it, and the prefill time when the prompt took noticeably long.
+const rate = turn => turn.generationMs > 0 ? ` · ${(turn.completion * 1000 / turn.generationMs).toFixed(1)} tokens/s${turn.prefillMs > 1000 ? ` after ${ms(turn.prefillMs)} prefill` : ''}` : '';
 function renderCall(call, all = false) {
   const turns = [...call.turns.values()].sort((a, b) => a.number - b.number);
   const totals = turns.reduce((sum, turn) => [sum[0] + turn.prompt, sum[1] + turn.completion], [0, 0]);
@@ -193,7 +196,7 @@ function renderCall(call, all = false) {
       call.ended && call.started ? ` · ${ms(call.ended - call.started)}` : ''),
     call.detail && call.status !== 'done' ? h('div', { class: 'turn' }, h('div', { class: 'fail' }, call.detail)) : null,
     (all ? turns : turns.slice(-4)).map(turn => h('div', { class: 'turn' },
-      h('div', { class: 'meta' }, `turn ${turn.number}${turn.working ? ' · model working…' : turn.ms ? ` · ${ms(turn.ms)} · ${tokens(turn.prompt)} prompt (${tokens(turn.cached ?? 0)} cached) + ${tokens(turn.completion)} generated` : ''}`),
+      h('div', { class: 'meta' }, `turn ${turn.number}${turn.working ? ' · model working…' : turn.ms ? ` · ${ms(turn.ms)} · ${tokens(turn.prompt)} prompt (${tokens(turn.cached ?? 0)} cached) + ${tokens(turn.completion)} generated${rate(turn)}` : ''}`),
       turn.reasoning ? h('div', { class: 'reason' }, turn.reasoning.slice(-1500)) : null,
       turn.text ? h('div', {}, turn.text.slice(-1500)) : null,
       turn.tools.map((tool, index) => [h('div', { class: 'code' }, toolText(tool)),

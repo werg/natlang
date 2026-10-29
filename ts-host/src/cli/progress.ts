@@ -8,7 +8,9 @@ import { appendFileSync } from 'node:fs';
 import type { LiveEvent, LiveSink } from '../runtime/runtime.js';
 
 export type ProgressMode = 'auto' | 'line' | 'off';
-type Active = { name: string; turn: number; started: number; requesting: boolean; thought: number; written: number };
+type Active = { name: string; turn: number; started: number; requesting: boolean; thought: number; written: number;
+  /** Consecutive actions the runtime rejected, and the first diagnostic code of the latest one. */
+  rejected: number; rejection: string };
 
 const FRAMES = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏';
 const tokens = (count: number) => count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
@@ -25,7 +27,7 @@ export function progressReporter(stream: NodeJS.WritableStream & { isTTY?: boole
   if (mode === 'off') return { live: undefined, close() {} };
   const terminal = mode === 'auto' && stream.isTTY === true;
   const active = new Map<string, Active>();
-  let promptTokens = 0, completionTokens = 0, cachedTokens = 0, finished = 0, frame = 0, shown = false, since = 0, lastLine = 0;
+  let promptTokens = 0, completionTokens = 0, cachedTokens = 0, timedTokens = 0, generationMs = 0, finished = 0, frame = 0, shown = false, since = 0, lastLine = 0;
   const describe = () => {
     const calls = [...active.values()];
     const now = Date.now(), oldest = calls.reduce((first, call) => Math.min(first, call.started), now);
@@ -33,8 +35,9 @@ export function progressReporter(stream: NodeJS.WritableStream & { isTTY?: boole
     const others = calls.length > 1 ? ` +${calls.length - 1} more` : '';
     const doing = !focus.requesting ? '' : focus.written ? ` (writing, ${tokens(focus.written)} chars)` :
       focus.thought ? ` (thinking, ${tokens(focus.thought)} chars)` : ' (reading the prompt)';
-    return `${focus.name} · turn ${Math.max(1, focus.turn)}${doing}${others} · ` +
-      `${finished} done · ${tokens(promptTokens)} prompt${cachedTokens ? ` (${tokens(cachedTokens)} cached)` : ''} + ${tokens(completionTokens)} generated tokens · ${seconds(now - (since || oldest))}`;
+    const stuck = focus.rejected >= 2 ? ` · last ${focus.rejected} actions rejected${focus.rejection ? ` (${focus.rejection})` : ''}` : '';
+    return `${focus.name} · turn ${Math.max(1, focus.turn)}${doing}${stuck}${others} · ` +
+      `${finished} done · ${tokens(promptTokens)} prompt${cachedTokens ? ` (${tokens(cachedTokens)} cached)` : ''} + ${tokens(completionTokens)} generated tokens${generationMs > 0 ? ` (${(timedTokens * 1000 / generationMs).toFixed(1)}/s)` : ''} · ${seconds(now - (since || oldest))}`;
   };
   const clear = () => { if (shown) { stream.write('\r\x1b[2K'); shown = false; } };
   const render = () => {
@@ -50,7 +53,7 @@ export function progressReporter(stream: NodeJS.WritableStream & { isTTY?: boole
   const live: LiveSink = (event: LiveEvent) => {
     if (event.type === 'call_start') {
       if (!active.size) { since = Date.now(); lastLine = Date.now(); }
-      active.set(event.callId, { name: event.name, turn: 0, started: Date.now(), requesting: false, thought: 0, written: 0 });
+      active.set(event.callId, { name: event.name, turn: 0, started: Date.now(), requesting: false, thought: 0, written: 0, rejected: 0, rejection: '' });
     } else if (event.type === 'call_end') {
       active.delete(event.callId); finished++;
       if (event.outcome !== 'done')
@@ -67,9 +70,14 @@ export function progressReporter(stream: NodeJS.WritableStream & { isTTY?: boole
       const call = active.get(event.callId), data = event.event;
       if (!call) return;
       if (data.kind === 'model_request' && data.phase === 'start') { call.turn = Number(data.turn ?? call.turn); call.requesting = true; call.thought = 0; call.written = 0; }
+      if (data.kind === 'action') {
+        if (data.outcome === 'rejected') { call.rejected++; call.rejection = /\b([a-z]+(?:-[a-z]+)+):/.exec(String(data.result_text ?? ''))?.[1] ?? ''; }
+        else call.rejected = 0;
+      }
       if (data.kind === 'model_request' && data.phase !== 'start') {
         call.requesting = false;
         promptTokens += Number(data.prompt_tokens ?? 0); completionTokens += Number(data.completion_tokens ?? 0); cachedTokens += Number(data.cached_tokens ?? 0);
+        if (typeof data.generation_ms === 'number' && data.generation_ms > 0) { generationMs += data.generation_ms; timedTokens += Number(data.completion_tokens ?? 0); }
         if (data.phase === 'error') persistent(`natlang: ${event.name} model request failed: ${String(data.error ?? '').split('\n')[0]!.slice(0, 300)}`);
       }
     }

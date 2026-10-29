@@ -1492,6 +1492,7 @@ export class NativeToolAgent {
         duration_ms: Math.round(performance.now() - started),
         prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null,
         ...(response.cached_tokens !== undefined ? { cached_tokens: response.cached_tokens } : {}),
+        ...(response.generation_ms !== undefined ? { prefill_ms: response.prefill_ms, generation_ms: response.generation_ms } : {}),
         ...(response.scheduling ? { batch_id: response.scheduling.batch_id, batch_size: response.scheduling.batch_size,
           in_flight: response.scheduling.in_flight, queue_wait_ms: response.scheduling.queue_wait_ms,
           schedule_priority: response.scheduling.priority } : {}) });
