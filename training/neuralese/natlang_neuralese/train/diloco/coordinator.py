@@ -909,6 +909,10 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
             try:
                 if parsed.path == "/v1/manifest":
                     self._json(200, coordinator.manifest)
+                elif parsed.path == "/v1/replica-promotion" and replication is not None:
+                    path=coordinator.root / "replica-session.json"
+                    if not path.is_file():self._json(404, {"error":"no promoted session"})
+                    else:self._json(200, json.loads(path.read_text()))
                 elif parsed.path == "/v1/status":
                     self._json(200, read(coordinator.status))
                 elif parsed.path.startswith("/v1/files/"):

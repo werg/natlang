@@ -65,6 +65,8 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
         expected_primary=expected_primary,expected_workers=expected_workers)
     write_json_durable(store/'supervisor-start.json',{'schema':'natlang.diloco-replica-start/1',
         'baseline_sha256':baseline_sha256,'promotion':receipt,'session_transition':session_transition})
+    write_json_durable(Path(root)/'replica-session.json',{'run_id':receipt['run_id'],'sequence':receipt['sequence'],
+        'head':receipt['head'],'url':session_transition['new_url'],'token_sha256':session_transition['new_token_sha256'],'ready':True})
     empty=store/'empty-payload';write_bytes_durable(empty,b'')
     writer=ReplicatedExecutor(journal,peer_url,token,allow_http=allow_http,gateway=gateway)
     dispatch=ReplicatedDispatch(machine,writer,empty)

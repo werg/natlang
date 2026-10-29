@@ -294,5 +294,6 @@ def test_service_bootstrap_requires_fence_and_serves_with_peer(tmp_path):
     for _ in range(150):
         try:client.json('GET','/v1/manifest');break
         except OSError:time.sleep(.02)
+    ready=client.json('GET','/v1/replica-promotion');assert ready['ready'] and ready['run_id']=='r' and ready['sequence']==0
     assert client.json('POST','/v1/lease',{'worker':0,'session':'00000000-0000-0000-0000-000000000001'})['run_id']=='r'
     leaderstop.set();process.join(10);assert process.exitcode==0;peerstop.set();peerproc.join(10);assert peerproc.exitcode==0
