@@ -49,6 +49,7 @@ def live_facts(*, candidate, exports, intents, owners, current_owner, owner_stat
     if len(by_role)!=len(receipts):raise ValueError('duplicate receipts')
     for role in (candidate['role'],successor_role,fallback_role):
         if role not in by_role:raise ValueError('required receipt absent')
+    if by_role[fallback_role].get('identity',{}).get('sha256')!=candidate.get('fallback_sha256'):raise ValueError('durable fallback identity differs')
     if candidate.get('control_role') and candidate['control_role'] not in by_role:raise ValueError('control receipt absent')
     for role,v in intents.items():
         if role in by_role and by_role[role].get('identity')!={'sha256':v['sha256'],'bytes':v['bytes']}:raise ValueError('full receipt identity mismatch')

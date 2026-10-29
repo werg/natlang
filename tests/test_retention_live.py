@@ -8,11 +8,12 @@ def test_actual_epoch_process_and_pending_state_are_bound():
     e={'role':'old','step':6,'worker':2,'unit':'u'};new={'role':'new','step':8,'worker':2,'unit':'v'}
     intent={'sha256':'a'*64,'bytes':2,'step':6,'worker':2,'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','owner':accepted,'outer_credit':False};ni={**intent,'sha256':'b'*64,'step':8}
     def receipt(role,digest):return {'role':role,'private':True,'identity':{'sha256':digest,'bytes':2},'independent_verification':{'sha256':digest,'bytes':2}}
-    args={'candidate':{'role':'old','sha256':'a'*64,'full_unit':'u','successor_role':'new','successor_sha256':'b'*64,'fallback_role':'fallback'},'exports':[e,new],'intents':{'old':intent,'new':ni},'owners':[owner],'current_owner':owner,'owner_state':{'verified_roles':['new'],'pending':{'role':'old'}},'receipts':[receipt('old','a'*64),receipt('new','b'*64),receipt('fallback','c'*64)],'successor_role':'new','fallback_role':'fallback','active_units':[]}
+    args={'candidate':{'role':'old','sha256':'a'*64,'full_unit':'u','successor_role':'new','successor_sha256':'b'*64,'fallback_role':'fallback','fallback_sha256':'c'*64},'exports':[e,new],'intents':{'old':intent,'new':ni},'owners':[owner],'current_owner':owner,'owner_state':{'verified_roles':['new'],'pending':{'role':'old'}},'receipts':[receipt('old','a'*64),receipt('new','b'*64),receipt('fallback','c'*64)],'successor_role':'new','fallback_role':'fallback','active_units':[]}
     facts=live_facts(**args);assert facts['eligibility']['latest_role']=='new' and facts['eligibility']['pending_roles']==['old'] and 'z'*64 in facts['eligibility']['protected_sha256s']
     with pytest.raises(ValueError):live_facts(**(args|{'intents':{'old':intent|{'owner':accepted|{'pid':99}},'new':ni}}))
     with pytest.raises(ValueError):live_facts(**(args|{'candidate':args['candidate']|{'control_role':'fake'}}))
     with pytest.raises(ValueError,match='successor'):live_facts(**(args|{'intents':{'old':intent,'new':ni|{'step':4}}}))
+    with pytest.raises(ValueError,match='fallback identity'):live_facts(**(args|{'candidate':args['candidate']|{'fallback_sha256':'f'*64}}))
     current=owner|{'parent_sha256':'d'*64,'parent_step':9,'accepted':accepted|{'pid':8}}
     transition={'full_state_verified':True,'immutable_pin_verified':True,'optimizer_verified':True,'rng_verified':True,'sha256':'d'*64,'step':9,'sandbox_id':'s','plan_sha256':'p','runtime_commit':'r','boot_id':'boot','pid':7,'start_ticks':'9'}
     assert live_facts(**(args|{'owners':[owner,current],'current_owner':current,'transition':transition}))
