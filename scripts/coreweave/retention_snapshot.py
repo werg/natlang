@@ -57,6 +57,20 @@ def _checked_changed(paths, digests, *, attempts=3):
     return results
 
 
+def refresh_point_in_time(roots, previous, references, digests):
+    """One namespace snapshot and checked delta, for a bounded commit fence.
+
+    Each changed file is checked by descriptor and path identity. Concurrent
+    writers outside the shared lease lock mean this is not a global snapshot.
+    """
+    current=snapshot(roots);refs={d:set(references[d]) for d in digests}
+    changed={p for p in set(previous)|set(current) if p.endswith('.json') and previous.get(p)!=current.get(p)}
+    for values in refs.values():values.difference_update(changed)
+    fresh=_checked_changed([p for p in changed if p in current],digests)
+    for digest in digests:refs[digest].update(fresh[digest])
+    return current,refs
+
+
 def refresh_references(roots, previous, references, digests, scan, *, attempts=3, allow_busy=False):
     """Refresh only JSON names whose five-field identity changed or appeared.
 

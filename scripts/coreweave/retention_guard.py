@@ -2,7 +2,7 @@
 from __future__ import annotations
 import fcntl
 from pathlib import Path
-from .retention_snapshot import snapshot,refresh_references
+from .retention_snapshot import snapshot,refresh_references,refresh_point_in_time
 from .retention_evidence import external_references
 from .retention_eligibility import eligible_pair
 from .retention_presence import current_presence
@@ -26,7 +26,7 @@ def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, loc
             raise ValueError('external dependency protects candidate')
     def inspect(value,phase):
         if phase=='prepare':
-            _,updated=refresh_references(roots,before,refs,[value['sha256'],value['control_sha256']],scan,allow_busy=True)
+            _,updated=refresh_point_in_time(roots,before,refs,[value['sha256'],value['control_sha256']])
             for digest in (value['sha256'],value['control_sha256']):
                 if external_references(digest,updated[digest],**reference_scope):raise ValueError('new external dependency protects candidate')
         live=read_live(value,phase)
@@ -64,7 +64,7 @@ def guarded_full(*, candidate, roots, scan, reference_scope, read_live, api, loc
     if blocking:raise ValueError('external dependency protects candidate: '+repr(sorted(blocking)))
     def inspect(value,phase):
         if phase=='prepare':
-            _,updated=refresh_references(roots,before,refs,[value['sha256']],scan,allow_busy=True)
+            _,updated=refresh_point_in_time(roots,before,refs,[value['sha256']])
             if external_references(value['sha256'],updated[value['sha256']],**reference_scope):raise ValueError('new external dependency protects candidate')
         live=read_live(value,phase);eligible_full(value,**live['eligibility'])
         receipts=live['receipts'];by_role={r.get('role'):r for r in receipts}

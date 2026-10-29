@@ -30,3 +30,9 @@ def test_delta_refresh_discovers_consumer_created_after_original_scan(tmp_path):
     def scan(ds,paths):return {d:{str(p) for p in map(Path,paths) if d in p.read_text()} for d in ds}
     _,refs=refresh_references([tmp_path],old,{digest:set()},[digest],scan)
     assert refs[digest]=={str(new)}
+
+
+def test_commit_delta_checked_read_finds_new_reference(tmp_path):
+    from scripts.coreweave.retention_snapshot import refresh_point_in_time
+    digest='d'*64;old=snapshot([tmp_path]);p=tmp_path/'consumer.json';p.write_text(digest)
+    _,refs=refresh_point_in_time([tmp_path],old,{digest:set()},[digest]);assert refs[digest]=={str(p)}
