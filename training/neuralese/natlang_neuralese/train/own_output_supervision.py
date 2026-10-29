@@ -130,13 +130,20 @@ def _role_tokens(value):
 def _family_balance(value):
     if value is None:
         return None
-    if not isinstance(value, dict) or value.get('key') not in ('source-cohort', 'source-group'):
+    if not isinstance(value, dict) or value.get('key') not in ('source-cohort', 'source-group', 'logical-family'):
         raise ValueError("family_balance is {key: 'source-cohort'|'source-group', [pattern], max_scale}")
-    allowed = {'key', 'max_scale'} | ({'pattern'} if value['key'] == 'source-group' else set())
+    allowed = {'key', 'max_scale'} | ({'pattern'} if value['key'] == 'source-group' else set()) | ({'map', 'normalization'} if value['key'] == 'logical-family' else set())
     scale = value.get('max_scale')
     if set(value) != allowed or type(scale) not in (int, float) or not math.isfinite(scale) or scale < 1:
         raise ValueError('family_balance needs exactly its key fields and a finite max_scale >= 1')
     result = {'key': value['key'], 'max_scale': float(scale)}
+    if value['key'] == 'logical-family':
+        ref = value['map']
+        if (value['normalization'] != 'bounded-mean-one/1' or not isinstance(ref, dict)
+                or set(ref) != {'path', 'sha256'} or not isinstance(ref['path'], str) or not ref['path']
+                or not isinstance(ref['sha256'], str) or not _SHA.fullmatch(ref['sha256'])):
+            raise ValueError('logical family balance requires an exact map and bounded normalization version')
+        result.update(map=dict(ref), normalization=value['normalization'])
     if value['key'] == 'source-group':
         pattern = value['pattern']
         if not isinstance(pattern, str) or not pattern:
@@ -486,7 +493,7 @@ def attach_measurements(example, row, objective, *, source_sha256):
     return attach_held_measurements(example, sidecars, binding)
 
 
-def family_scales(objective, entries, *, cohort_ids=None):
+def family_scales(objective, entries, *, cohort_ids=None, logical_ids=None):
     """Bounded per-graph scales that equalize declared families in expectation, with a census receipt."""
     balance = objective['family_balance']
     if balance is None:
@@ -495,6 +502,10 @@ def family_scales(objective, entries, *, cohort_ids=None):
         if cohort_ids is None or len(cohort_ids) != len(entries):
             raise ValueError('source-cohort family balance needs one cohort identity per TRAIN row')
         families = list(cohort_ids)
+    elif balance['key'] == 'logical-family':
+        if logical_ids is None or len(logical_ids) != len(entries):
+            raise ValueError('logical family balance needs one authenticated family per TRAIN row')
+        families = list(logical_ids)
     else:
         pattern = re.compile(balance['pattern'])
         families = []
@@ -510,9 +521,20 @@ def family_scales(objective, entries, *, cohort_ids=None):
     for family in families:
         counts[family] = counts.get(family, 0) + 1
     total, number = len(families), len(counts)
-    capped = {family: min(balance['max_scale'], total / (number * count)) for family, count in counts.items()}
-    normal = total / sum(capped[family] * count for family, count in counts.items())
-    per_family = {family: capped[family] * normal for family in counts}
+    raw = {family: total / (number * count) for family, count in counts.items()}
+    if balance['key'] == 'logical-family':
+        cap = balance['max_scale']; lo, hi = 0., 1.
+        def mass(multiplier):return sum(counts[f] * min(cap, multiplier * raw[f]) for f in counts)
+        while mass(hi) < total:hi *= 2.
+        for _ in range(80):
+            mid = (lo + hi) / 2.
+            if mass(mid) < total:lo = mid
+            else:hi = mid
+        per_family = {family: min(cap, hi * raw[family]) for family in counts}
+    else:
+        capped = {family: min(balance['max_scale'], raw[family]) for family in counts}
+        normal = total / sum(capped[family] * count for family, count in counts.items())
+        per_family = {family: capped[family] * normal for family in counts}
     scales = {entry['id']: per_family[family] for entry, family in zip(entries, families)}
     census = {'families': {family: {'rows': counts[family], 'scale': per_family[family]} for family in sorted(counts)},
               'rows': total, 'key': balance['key']}
@@ -531,7 +553,11 @@ def prepare_policy(policy, train):
     if objective['family_balance']['key'] == 'source-cohort':
         from .native_cohort_schedule import source_cohort_ids
         cohort_ids = source_cohort_ids(train)
-    scales, census = family_scales(objective, train.entries, cohort_ids=cohort_ids)
+    logical_ids = None
+    if objective['family_balance']['key'] == 'logical-family':
+        from .native_logical_families import load_map
+        logical_ids = load_map(objective['family_balance']['map'], train)
+    scales, census = family_scales(objective, train.entries, cohort_ids=cohort_ids, logical_ids=logical_ids)
     return {**policy, '_family_scales': scales, '_family_census': census}
 
 

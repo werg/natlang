@@ -67,9 +67,14 @@ def _load_policy_and_dependencies(binding):
     if not isinstance(value.get('failed_history_masks',[]),list):
         raise ValueError('failed-history mask inputs must be an explicit list')
     dependencies=[]
+    balance = ((value.get('objective') or {}).get('family_balance') or {})
+    if balance.get('key') == 'logical-family':
+        from .native_logical_families import checked
+        reference = balance['map']; map_path = checked(reference)
+        dependencies.append({'path': str(map_path), 'sha256': reference['sha256'], 'bytes': map_path.stat().st_size})
     if value.get('failed_history_masks'):
         from .native_failed_history import prepare_masks
-        dependencies=prepare_masks(value)
+        dependencies.extend(prepare_masks(value))
         held={item['sha256']for item in value.get('held_sources',[])}
         if held.intersection(value.get('_failed_history_rows',{})):
             raise ValueError('failed-history TRAIN masks overlap held declarations')
