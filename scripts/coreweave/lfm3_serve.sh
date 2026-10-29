@@ -30,13 +30,38 @@ if [ ! -f "$GGUF" ]; then
   mkdir -p "$(dirname "$GGUF")"; curl -fsSL --retry 4 -o "$GGUF.partial" "$URL"; mv "$GGUF.partial" "$GGUF"
 fi
 echo "$SHA  $GGUF" | sha256sum -c - > /dev/null
+# Exported checkpoints declare the history-rendering policy they trained with.
+# Pass its exact template kwargs to the server; the tokenizer template's own
+# defaults can otherwise silently discard reasoning that training retained.
+TEMPLATE_ARGS=()
+TEMPLATE_MANIFEST=$(dirname "$GGUF")/manifest.json
+if [ -f "$TEMPLATE_MANIFEST" ]; then
+  TEMPLATE_KWARGS=$(python3 - "$TEMPLATE_MANIFEST" "$GGUF" "$SHA" <<'PY'
+import json, sys
+from pathlib import Path
+manifest, gguf, sha = map(str, sys.argv[1:])
+value = json.loads(Path(manifest).read_text())
+if value.get('schema') != 'natlang.native-gguf/1':
+    raise ValueError('unexpected GGUF export manifest')
+matches = [f for f in value['files'] if f['file'] == Path(gguf).name and f['sha256'] == sha]
+if len(matches) != 1:
+    raise ValueError('GGUF export manifest does not bind the selected model')
+kwargs = value['serving']['chat_template_kwargs']
+if not isinstance(kwargs, dict):
+    raise ValueError('GGUF template kwargs must be an object')
+print(json.dumps(kwargs, separators=(',', ':')))
+PY
+  )
+  TEMPLATE_ARGS=(--chat-template-kwargs "$TEMPLATE_KWARGS")
+  printf '%s\n' "$TEMPLATE_KWARGS" > "$OUT/chat-template.kwargs.json"
+fi
 download_s=$(el)
 read -r -a ARGS <<< "${LFM3_SERVER_ARGS:--np 16 -c 1048576}"
 if [ "$MODE" = actor ]; then
   echo "{\"mode\":\"actor\",\"download_seconds\":$download_s}" > "$OUT/timings.json"
-  exec "$SERVER" -m "$GGUF" --jinja -ngl 999 "${ARGS[@]}" --host "$HOST" --port "$PORT" 2>&1 | tee "$OUT/llama-server.log"
+  exec "$SERVER" -m "$GGUF" --jinja -ngl 999 "${ARGS[@]}" "${TEMPLATE_ARGS[@]}" --host "$HOST" --port "$PORT" 2>&1 | tee "$OUT/llama-server.log"
 fi
-"$SERVER" -m "$GGUF" --jinja -ngl 999 "${ARGS[@]}" --host "$HOST" --port "$PORT" > "$OUT/llama-server.log" 2>&1 &
+"$SERVER" -m "$GGUF" --jinja -ngl 999 "${ARGS[@]}" "${TEMPLATE_ARGS[@]}" --host "$HOST" --port "$PORT" > "$OUT/llama-server.log" 2>&1 &
 pid=$!; trap 'kill $pid 2>/dev/null || true' EXIT
 until curl -fs "http://$HOST:$PORT/health" > /dev/null; do
   kill -0 $pid 2>/dev/null || { echo '{"error":"llama-server exited"}' > "$OUT/timings.json"; tail -40 "$OUT/llama-server.log"; exit 1; }

@@ -1637,3 +1637,15 @@ nothing serves the prompt yet. Before selecting `nl`, sample it on the live
 executor (~48 samples over varied discovery tables) in `shadow` mode and compare
 with the crisp proposals. Answers naming members outside the discovery fall back
 to the crisp proposals.
+
+## LFM3 exported history settings (2026-10-29, live measurement pending)
+
+`scripts/coreweave/lfm3_serve.sh` now passes an exported model's exact
+`serving.chat_template_kwargs` to llama.cpp after verifying that the export
+manifest binds the selected GGUF hash. Previously the launcher's implicit
+template default could discard earlier reasoning despite the checkpoint's
+declared `preserve_thinking:true` training policy. Official base files without
+an export manifest retain their existing launcher behavior. Measure ordinary
+natlang execution on the development packet with the bound settings; the first
+step4751 diagnostic launch with implicit defaults was stopped and is not the
+declared-policy result. This does not establish Neuralese task capability.
