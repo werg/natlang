@@ -1697,3 +1697,26 @@ test('cyclic and deeply nested diagnostic values render finitely with an explici
   assert.ok(deepText.length < 2000);
   assert.match(deepText, /inspection limit reached/);
 });
+
+test('the full-prompt numeric filter and sort example executes and returns its count', async () => {
+  const {lam,session} = open({type:'() => number',instructions:'Return the count.'});
+  const result=await session.applyAsync('eval',{code:'const sampleValues = [3, 1, 2]; const orderedValues = [...sampleValues].sort((a, b) => a - b); const matchingValues = orderedValues.filter(value => value > 1); const matchingCount = matchingValues.length; return matchingCount;',finish:true});
+  assert.equal(result.kind,'completed',result.text);assert.equal(lam.return,2);
+});
+
+test('full on-policy request supplies executable examples and native tool schemas to captured context', async () => {
+  const {trajectoryTurn}=await import('../dist/runtime/trajectory.js');
+  let wire,reply;
+  const answer=await run({type:'() => number',instructions:'Return 2.'},{agent:session=>
+    new NativeToolAgent(request=>{
+      wire=structuredClone(request);
+      reply={calls:[['return_result',{status:'success',value:2}]],text:'',raw_calls:[]};
+      return reply;
+    },{maxTurns:2,promptRendering:'full'}).run(session)});
+  assert.equal(answer.value,2);
+  const system=wire.messages.filter(m=>m.role==='system').map(m=>String(m.content)).join('\n');
+  for(const expected of ['sampleValues','matchingCount','Promise.all','iterateOn','finish:true']) assert.ok(system.includes(expected),expected);
+  const names=wire.tools.map(tool=>tool.function.name);assert.ok(names.includes('eval'));assert.ok(names.includes('return_result'));
+  assert.ok(wire.tools.every(tool=>tool.function.parameters && typeof tool.function.parameters==='object'));
+  const captured=trajectoryTurn(wire,reply);assert.deepEqual(captured.context,wire.messages);assert.deepEqual(captured.tools_offered,wire.tools);
+});

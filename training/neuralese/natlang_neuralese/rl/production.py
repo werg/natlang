@@ -407,11 +407,22 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
             raise RuntimeError('collector session-custody helper changed during owned execution')
 
 
+def bind_collection_prompt(entries, mode):
+    """Bind the collector's real wire mode for every student/teacher attempt."""
+    if mode is None:return entries
+    if mode!='full':raise ValueError('native on-policy collection requires the full prompt contract')
+    for entry in entries:
+        if entry.get('prompt_rendering') not in (None,mode):
+            raise ValueError('sealed rollout entry changed its prompt contract')
+        entry['prompt_rendering']=mode
+    return entries
+
+
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
-            system_prompt=None):
+            system_prompt=None, prompt_rendering=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -420,6 +431,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     ``jolt_role: teacher``. Students write guidance without importing it (rl.jolt.student_guidance).
     ``system_prompt`` (text) replaces the collector's default system prompt for every entry (e.g. stored program
     guidance measured by the memetic learner); it is bound by digest into the collection binding."""
+    if prompt_rendering not in (None,'full'):
+        raise ValueError('native on-policy collection requires the full prompt contract')
+    if prompt_rendering=='full' and system_prompt is not None:
+        raise ValueError('full on-policy collection cannot replace the runtime system prompt')
     if control is not None and control.stop.requested:
         raise InterruptedError('collection stop requested')
     if not endpoints or workers < 1:
@@ -434,6 +449,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         'seed_base': seed_base, 'temperature': 1., 'guided': False,
         'case_seconds': case_seconds, 'max_model_requests': max_model_requests, 'max_turns': max_turns,
         'endpoints': endpoints, 'neuralese_server': neuralese_server,
+        **({'prompt_rendering':prompt_rendering} if prompt_rendering is not None else {}),
         'runtime': {str(p.relative_to(runtime)): sha256_file_hex(p)
                     for p in sorted((runtime / 'dist').rglob('*.js'))},
         'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py'),
@@ -469,8 +485,18 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             return saved
     from .actor_client import NativeActorClient
     def actor_receipts():
-        receipts = {url: json.loads(NativeActorClient(url).get_bytes('/v1/neuralese/info'))
-                    .get('rl_policy_binding') for url in endpoints}
+        infos = {url: json.loads(NativeActorClient(url).get_bytes('/v1/neuralese/info')) for url in endpoints}
+        if prompt_rendering is not None:
+            if any(info.get('prompt_rendering')!=prompt_rendering or not re.fullmatch(r'[0-9a-f]{64}',str(info.get('prompt_rendering_identity_sha256',''))) for info in infos.values()):
+                raise ValueError('RL actor did not attest the full prompt rendering contract')
+            prompt_binding={'schema':'natlang.rl-prompt-rendering-binding/1','policy_id':policy_id,
+                'actors':{url:{'mode':info['prompt_rendering'],'sha256':info['prompt_rendering_identity_sha256']}
+                          for url,info in infos.items()}}
+            path=out/'actor-prompt-binding.json'
+            if path.exists() and json.loads(path.read_text())!=prompt_binding:
+                raise ValueError('RL actor prompt rendering changed within the bound collection')
+            if not path.exists():write_json_durable(path,prompt_binding)
+        receipts = {url:info.get('rl_policy_binding') for url,info in infos.items()}
         return validate_actor_receipts(receipts, policy_id=policy_id, neuralese_server=neuralese_server, expected_native=expected_native,expected_coefficient=coefficient_runtime)
     actors = actor_receipts()
     preparation = prepare(SimpleNamespace(cases=Path(cases), out=out, rows=rows, offset=offset,
@@ -479,6 +505,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         seed_base=seed_base, root_mode=root_mode, match_seeds_from=None,
         policy_checkpoint_sha256=policy_id))
     entries = list(read_jsonl(out / 'queue.jsonl'))
+    bind_collection_prompt(entries,prompt_rendering)
     if system_prompt is not None:
         system = out / 'system.md'
         system.write_text(system_prompt)
@@ -548,6 +575,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                                        seed_base=seed_base, plan_command=(plan_command(endpoints[0])
                                                                           if teacher_plan == 'nl' else None))
             if teachers['entries']:
+                bind_collection_prompt(teachers['entries'],prompt_rendering)
                 entries.extend(teachers['entries'])
                 phase.update(entries=teachers['entries'], name='teacher-')
                 with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -1035,7 +1063,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
                     teacher_attempts=(config.get('jolt_teacher_attempts', 1)
                                       if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else 0),
-                    teacher_plan=config.get('jolt_teacher_plan', 'nl'))
+                    teacher_plan=config.get('jolt_teacher_plan', 'nl'),
+                    prompt_rendering=config.get('prompt_rendering'))
             except InterruptedError:
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)
@@ -1371,6 +1400,24 @@ def bind_policy_loss(config, values):
     return policy_loss
 
 
+def bind_explicit_task_eval(parameters, declaration, *, cadence=None):
+    """Bind an explicit protected-task evaluation to a recipe lacking one."""
+    if declaration is None:
+        return parameters
+    from ..eval.task_cadence import parse_task_eval
+    from ..common.hashing import sha256_file_hex_cached
+    spec=parse_task_eval(declaration)
+    if spec is None:raise ValueError('explicit task evaluation must be a real protected packet spec')
+    packet=Path(spec['packet']['path']).resolve(strict=True)
+    if sha256_file_hex_cached(packet)!=spec['packet']['sha256']:
+        raise ValueError('explicit task evaluation packet differs from its exact hash')
+    if parameters.get('task_eval') not in (None,spec):
+        raise ValueError('explicit task evaluation conflicts with the production recipe')
+    if type(cadence) is not int or cadence<1:
+        raise ValueError('explicit task evaluation requires a positive cadence')
+    return {**parameters,'task_eval':spec,'task_eval_every':cadence}
+
+
 def configure_native(args):
     """Declare both cloud/local native learners using the same trainer and refresh."""
     from ..train.recipe import resolve_recipe_data, effective_stage_parameters, HANDLERS
@@ -1419,6 +1466,7 @@ def configure_native(args):
     parameters.pop('memory_qualification',None)  # one-time source-capacity probe already bound to the SFT parent
     parameters.update(base=str(args.base.resolve()))
     parameters.setdefault('epochs', 1)
+    parameters=bind_explicit_task_eval(parameters,getattr(args,'task_eval',None),cadence=getattr(args,'task_eval_every',None))
     cadence = parameters.get('task_eval_every')
     if not parameters.get('task_eval') or type(cadence) is not int or cadence < 0:
         raise ValueError('native production must retain real task evaluation and its cadence')
@@ -1458,7 +1506,7 @@ def configure_native(args):
         'cases': str(args.cases.resolve()), 'runtime': str(args.runtime.resolve()),
         'endpoints': [endpoint], 'rows_per_round': 32, 'group': 4, 'workers': 4,
         'task_curriculum': DEFAULT_TASK_CURRICULUM.copy(),
-        'neuralese_server': True, 'trainer_parameters': parameters,
+        'neuralese_server': True, 'prompt_rendering': 'full', 'trainer_parameters': parameters,
         'production_recipe': str(args.production_recipe.resolve()), 'production_stage': args.production_stage,
         'actor_command': [python, str(actor_repo/'scripts/neuralese_data/serve_native_checkpoint.py'),
             '--store-dir', '{out}/actor-store',
@@ -1466,7 +1514,7 @@ def configure_native(args):
             '--base', '{base}',
             *(['--native-participant', '{native_participant}',
                '--semantic-adapter', '{semantic_adapter}', '--semantic-adapter-sha256', '{semantic_adapter_sha256}'] if semantic else []),
-            '--port', str(args.port)],
+            '--port', str(args.port), '--prompt-rendering', 'full'],
         'learner_command': [python, '-m', 'natlang_neuralese.rl.native_stage',
             '--rollouts', '{rollouts}', '--rl-tokenizer', '{rl_tokenizer}', '--rl-mode', '{mode}',
             '--rl-block-bundle', '{block_bundle}', *common],
@@ -1565,6 +1613,8 @@ def main(argv=None):
         g.add_argument('--' + key, type=Path)
     g.add_argument('--production-recipe', type=Path, required=True)
     g.add_argument('--production-stage', required=True)
+    g.add_argument('--task-eval',type=json.loads,help='explicit protected task evaluation when the current recipe has none')
+    g.add_argument('--task-eval-every',type=int,help='positive update cadence for the explicit task evaluation')
     g.add_argument('--port', type=int, default=8097)
     g.add_argument('--rl-policy-loss', type=json.loads, help='grpo policy loss declaration, e.g. {"schema":"score-centered/1","k":128}')
     a = p.parse_args(argv)

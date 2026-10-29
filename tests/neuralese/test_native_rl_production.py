@@ -478,3 +478,29 @@ def test_joint_stop_waits_for_both_learners_without_refresh_or_publication(tmp_p
     result = native_rounds.run_rounds(paths, tmp_path/'joint', rounds=1, stop=stop)
     assert result['phase'] == 'requested_stop' and len(drained) == 2
     assert len(result['states']) == 2
+
+
+def test_explicit_task_eval_for_recipe_without_cadence_is_exact_and_bound(tmp_path):
+    from natlang_neuralese.rl.production import bind_explicit_task_eval
+    import hashlib
+    packet=tmp_path/'held.jsonl';packet.write_text('{"split":"test"}\n')
+    spec={'packet':{'path':str(packet),'sha256':hashlib.sha256(packet.read_bytes()).hexdigest()},
+        'cases':[0],'neuralese_server':True,'reference_successes':None}
+    result=bind_explicit_task_eval({'task_eval_every':0},spec,cadence=25)
+    assert result['task_eval_every']==25 and result['task_eval']['reference_successes'] is None
+    assert result['task_eval']['packet']==spec['packet']
+    with pytest.raises(ValueError,match='positive cadence'):bind_explicit_task_eval({},spec,cadence=0)
+    packet.write_text('changed')
+    with pytest.raises(ValueError,match='exact hash'):bind_explicit_task_eval({},spec,cadence=25)
+
+
+def test_student_and_self_teacher_entries_keep_the_full_prompt_binding():
+    import copy
+    entries=[{'key':'student','sample':0},{'key':'student2','sample':1}]
+    production.bind_collection_prompt(entries,'full')
+    teacher=copy.deepcopy(entries[0]);teacher.update(key='teacher',sample=2,jolt_role='teacher')
+    assert all(entry['prompt_rendering']=='full' for entry in [*entries,teacher])
+    with pytest.raises(ValueError,match='prompt contract'):
+        production.bind_collection_prompt([{'prompt_rendering':'program-header'}],'full')
+    with pytest.raises(ValueError,match='full prompt'):
+        production.bind_collection_prompt(entries,'program-header')
