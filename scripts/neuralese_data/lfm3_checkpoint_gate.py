@@ -104,11 +104,11 @@ def main(argv=None):
                         help='earlier checkpoints of the same lineage, in order, for weight coherence')
     parser.add_argument('--base', type=Path, default=Path.home() / '.cache/huggingface/hub/models--LiquidAI--'
                         'LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
-    parser.add_argument('--base-gguf', type=Path, default=Path('/home/werg/data/lfm3-eval/LFM3-1.7B-BF16.gguf'))
-    parser.add_argument('--base-dir', type=Path, default=Path('/home/werg/data/lfm3-eval/gate-base-v1'),
+    parser.add_argument('--base-gguf', type=Path, default=paths.resolve('data_nvme','lfm3-eval/LFM3-1.7B-BF16.gguf'))
+    parser.add_argument('--base-dir', type=Path, default=paths.resolve('data_nvme','lfm3-eval/gate-base-v1'),
                         help='cached base execution of the gate cases')
-    parser.add_argument('--llama-server', type=Path, default=Path(
-        '/home/werg/data/dgxops/claude-recovery-20261028/data/llama-actor-worktree/build-cuda-121/bin/llama-server'))
+    parser.add_argument('--llama-server', type=Path, default=paths.resolve('data_nvme',
+        'dgxops/claude-recovery-20261028/data/llama-actor-worktree/build-cuda-121/bin/llama-server'))
     parser.add_argument('--port', type=int, default=8170)
     parser.add_argument('--noise', type=int, default=2, help='successes below base tolerated as noise')
     args = parser.parse_args(argv)
