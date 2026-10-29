@@ -35,6 +35,8 @@ import time
 import uuid
 from pathlib import Path
 
+from natlang_neuralese.common.hashing import sha256_hex
+
 SEED_SCHEMA = 'natlang.diloco-replica-seed/1'
 EXPORT_SCHEMA = 'natlang.diloco-replica-export/1'
 JOURNAL_SCHEMA = 'natlang.diloco-replica-export-journal/1'
@@ -45,10 +47,6 @@ RESTARTED = 'interrupted before verification (supervisor restart)'
 def identity(value):
     """Exactly replica_journal._identity: the chain hash of a record or identity."""
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-
-
-def sha256_bytes(data):
-    return hashlib.sha256(data).hexdigest()
 
 
 # ---------------------------------------------------------------- sandbox side
@@ -90,7 +88,7 @@ def select_sealed(store):
         raise RotationInProgress('coordinator generation rotation in progress')
     baseline = Path(pointer['baseline']); journal = Path(pointer['journal'])
     receipt_raw = (baseline / 'replica-baseline.json').read_bytes()
-    if sha256_bytes(receipt_raw) != pointer['baseline_sha256']: raise ValueError('active baseline receipt differs from pointer')
+    if sha256_hex(receipt_raw) != pointer['baseline_sha256']: raise ValueError('active baseline receipt differs from pointer')
     value = json.loads(receipt_raw)
     if value.get('schema') != 'natlang.diloco-replica-baseline/1': raise ValueError('unsupported baseline')
     identity_raw = (journal / 'identity.json').read_bytes(); ident = json.loads(identity_raw)
@@ -132,7 +130,7 @@ def pack(plan):
     if out.exists(): raise ValueError('archive already exists')
     files = []; members = []  # (arcname, bytes-or-path, size, declared sha)
     def small(relative, raw):
-        files.append({'path': relative, 'bytes': len(raw), 'sha256': sha256_bytes(raw)}); members.append(('seed/' + relative, raw, len(raw), None))
+        files.append({'path': relative, 'bytes': len(raw), 'sha256': sha256_hex(raw)}); members.append(('seed/' + relative, raw, len(raw), None))
     references = {}
     def large(relative, path, size, digest):
         files.append({'path': relative, 'bytes': size, 'sha256': digest})
@@ -180,7 +178,7 @@ def pack(plan):
                         raise ValueError('source changed while archiving: ' + arcname)
                     if reader.count != size or reader.hash.hexdigest() != digest: raise ValueError('content differs from its sealed digest: ' + arcname)
                     stored += size
-            export = {'schema': EXPORT_SCHEMA, 'export_id': plan['export_id'], 'seed_receipt_sha256': sha256_bytes(receipt_raw),
+            export = {'schema': EXPORT_SCHEMA, 'export_id': plan['export_id'], 'seed_receipt_sha256': sha256_hex(receipt_raw),
                       'run_id': receipt['run_id'], 'baseline_sha256': receipt['baseline_sha256'], 'sequence': s['sequence'],
                       'head': s['head'], 'references': references, 'stored_bytes': stored, 'meta': meta,
                       'owner': owner, 'owner_alive': owner_alive, 'packed_at': time.time()}
@@ -221,7 +219,7 @@ def verify_archive(path, *, expected_export_id=None):
                 elif relative == 'baseline/replica-baseline.json': baseline_raw = raw_bytes
                 elif relative.endswith('/record.json'): records[int(relative.split('/')[1])] = json.loads(raw_bytes)
     if files is None or export is None: raise ValueError('archive lacks its receipt or export record')
-    if export['schema'] != EXPORT_SCHEMA or export['seed_receipt_sha256'] != sha256_bytes(receipt_raw): raise ValueError('export record does not bind the seed receipt')
+    if export['schema'] != EXPORT_SCHEMA or export['seed_receipt_sha256'] != sha256_hex(receipt_raw): raise ValueError('export record does not bind the seed receipt')
     if expected_export_id is not None and export['export_id'] != expected_export_id: raise ValueError('export id differs')
     for relative, item in files.items():
         if relative in seen:
@@ -231,7 +229,7 @@ def verify_archive(path, *, expected_export_id=None):
             if (ref['sha256'], ref['bytes']) != (item['sha256'], item['bytes']): raise ValueError('reference differs from receipt: ' + relative)
         else: raise ValueError('receipt file is neither stored nor referenced: ' + relative)
     if set(seen) - set(files): raise ValueError('archive has members outside the receipt')
-    if sha256_bytes(baseline_raw) != receipt['baseline_sha256']: raise ValueError('baseline receipt digest differs')
+    if sha256_hex(baseline_raw) != receipt['baseline_sha256']: raise ValueError('baseline receipt digest differs')
     if ident['baseline_sha256'] != receipt['baseline_sha256']: raise ValueError('journal identity differs')
     baseline = json.loads(baseline_raw)
     expected = {'baseline/' + x['path']: (x['bytes'], x['sha256']) for x in baseline['files']}
@@ -285,8 +283,9 @@ def restore(journal_path, export_id, destination):
 # ---------------------------------------------------------------- workstation side
 
 CW_PYTHON = Path.home() / '.local/share/natlang/cw-venv/bin/python'
-EXPORTER = Path('/home/werg/data/dgxops/coreweave-private-runfile-export-20261014.py')
-RECEIPTS = Path('/home/werg/data/dgxops')
+def _dgxops():
+    from natlang_neuralese.common.paths import resolve
+    return resolve('data_nvme', 'dgxops')
 CODE = ('scripts/__init__.py', 'scripts/coreweave/diloco_replica_export.py',
         'scripts/coreweave/cache_bounded_archive.py', 'scripts/coreweave/private_export_guard.py')
 
@@ -300,7 +299,7 @@ def _remote_code(box, directory):
     repo = Path(__file__).resolve().parents[2]; digests = {}
     for relative in CODE:
         raw = (repo / relative).read_bytes(); compile(raw, relative, 'exec')
-        box.write_file(directory + '/' + relative, raw).result(timeout=120); digests[relative] = sha256_bytes(raw)
+        box.write_file(directory + '/' + relative, raw).result(timeout=120); digests[relative] = sha256_hex(raw)
     return digests
 
 
@@ -365,11 +364,12 @@ def cycle(config, state, journal):
             'owner': config.get('owner'), 'dedupe_bytes': config.get('dedupe_bytes', 1 << 20),
             'exclude': _exclusions(state)}
     box.write_file(staging + '/plan.json', json.dumps(plan).encode()).result(timeout=120)
-    runner = ('import json,sys;sys.path.insert(0,sys.argv[1]);from scripts.coreweave.diloco_replica_export import pack;'
+    runner = ('import json,sys;sys.path[:0]=[sys.argv[1],sys.argv[3]];from scripts.coreweave.diloco_replica_export import pack;'
               'print(json.dumps(pack(json.loads(open(sys.argv[2]).read()))))')
     compile(runner, 'runner', 'exec')
     result = box.exec(['nice', '-n', '19', 'ionice', '-c', '2', '-n', '7', 'env', 'OMP_NUM_THREADS=1', 'python3', '-c', runner,
-                       staging + '/code', staging + '/plan.json'], timeout_seconds=4 * 3600).result(timeout=4 * 3600 + 60)
+                       staging + '/code', staging + '/plan.json',
+                       config['remote_runtime'].rstrip('/') + '/training/neuralese'], timeout_seconds=4 * 3600).result(timeout=4 * 3600 + 60)
     if result.returncode != 0: raise RuntimeError('pack failed: ' + result.stderr[-1500:])
     packed = json.loads(result.stdout.strip().splitlines()[-1])
     export = packed['export']
@@ -396,8 +396,8 @@ def cycle(config, state, journal):
            'CW_EXPORT_OWNER_RESERVE_BYTES': str(config.get('owner_reserve_bytes', 80 << 30))}
     log = Path(config['state_root']) / f'coordinator-v5-export-{export_id}.log'
     with log.open('ab') as output:
-        code = subprocess.run([str(CW_PYTHON), str(EXPORTER), role, packed['path']], env=env, stdout=output, stderr=subprocess.STDOUT).returncode
-    receipt_path = RECEIPTS / f'coreweave-production-{role}-private-export-receipt-20261014.json'
+        code = subprocess.run([str(CW_PYTHON), str(_dgxops() / 'coreweave-private-runfile-export-20261014.py'), role, packed['path']], env=env, stdout=output, stderr=subprocess.STDOUT).returncode
+    receipt_path = _dgxops() / f'coreweave-production-{role}-private-export-receipt-20261014.json'
     if code != 0 or not receipt_path.exists(): raise RuntimeError(f'private export failed ({code}); see {log}')
     receipt = json.loads(receipt_path.read_text()); check = receipt['independent_verification']
     if (not receipt.get('private') or check.get('readback_location') != 'owner' or check.get('sha256') != packed['sha256']
