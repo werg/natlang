@@ -1414,20 +1414,20 @@ def _point_has_static_inputs(quantization, name):
                for c in quantization.points[name]['modules'].values())
 
 
-def _quantization_pass(quantization, *, global_step, batch, forward, cursor):
+def _quantization_pass(quantization, *, global_step, batch, forward, cursor, force_refresh=False):
     """Calibrate the static activation ranges when due (BF16 forwards over this and the following updates' batches,
     as ModelOpt ``max``) and choose this update's precision pass: (point, λ, loss weight). A point that needs a
     static range before the window has its declared batches commits the window early."""
     config = quantization.calibration_config()
     if config is not None:
         window = quantization.calibration_window
-        if window is None and quantization.calibration_due(global_step):
+        if window is None and (force_refresh or quantization.calibration_due(global_step)):
             quantization.begin_calibration(global_step)
             window = quantization.calibration_window
         if window is not None:
             quantization.observe_calibration(forward, batch)
             uncalibrated = any(h.static and h.amax is None for h in quantization.inputs.values())
-            needs_now = uncalibrated and any(name != 'bf16' and _point_has_static_inputs(quantization, name)
+            needs_now = (uncalibrated or force_refresh) and any(name != 'bf16' and _point_has_static_inputs(quantization, name)
                                              for name, _, _ in quantization.plan(global_step))
             if quantization._observed_batches >= config['batches'] or needs_now:
                 quantization.commit_calibration(global_step, source={'start_global_step': window['start'],
@@ -1436,6 +1436,38 @@ def _quantization_pass(quantization, *, global_step, batch, forward, cursor):
     if name != 'bf16':
         quantization.check_calibrated(name)
     return name, mix, weight
+
+
+def policy_qat_update(checkpoint_options, quantization, global_step):
+    """Record a real BF16 policy update without discarding saved QAT state."""
+    if quantization is None:return
+    obligation=checkpoint_options.get('policy_qat_refresh_required')
+    if obligation is None:
+        obligation={'schema':'natlang.policy-qat-refresh/1','first_policy_step':global_step,
+            'last_policy_step':global_step,'calibration_before':dict(quantization.calibration),
+            'policy_precision':'bf16','qat_declaration_sha256':checkpoint_options['quantization']['sha256']}
+        checkpoint_options['policy_qat_refresh_required']=obligation
+    else:obligation['last_policy_step']=global_step
+
+
+def training_precision_pass(quantization, *, policy_operation, checkpoint_options, global_step, batch, cursor, forward):
+    """Match the captured BF16 policy, or resume and requalify saved SFT QAT."""
+    if quantization is None or policy_operation:return None
+    obligation=checkpoint_options.get('policy_qat_refresh_required')
+    force_refresh=bool(obligation)
+    if force_refresh and obligation.get('refresh_started_step') is None:
+        # Do not mix partial pre-policy observations with newly updated weights.
+        if quantization.calibration_window is not None:
+            obligation['retired_partial_calibration'] = quantization.state_dict()['window']
+            quantization.cancel_calibration()
+        obligation['refresh_started_step']=global_step
+    precision=(quantization,)+_quantization_pass(quantization,global_step=global_step,batch=batch,
+        cursor=cursor,forward=forward,force_refresh=force_refresh)
+    if force_refresh and (quantization.calibration_config() is None or
+            (quantization.calibration_window is None and quantization.calibration.get('step')==global_step)):
+        checkpoint_options['quantization_history'].append({'event':'policy-calibration-refreshed',
+            'at_global_step':global_step,'obligation':checkpoint_options.pop('policy_qat_refresh_required')})
+    return precision
 
 
 def main(argv=None):
@@ -1558,7 +1590,7 @@ def _main(argv=None, *, requested_refresh):
     saved_ema = (resume or {}).get('ema')
     saved_quantization = (resume or {}).get('quantization')
     saved_quantization_options = {key: ((resume or {}).get('options') or {}).get(key)
-                                  for key in ('quantization', 'quantization_history')}
+                                  for key in ('quantization', 'quantization_history', 'policy_qat_refresh_required')}
     saved_lr_anneal = None if parent_continuation else ((resume or {}).get('options') or {}).get('lr_anneal')
     saved_norm_reference = ((resume or {}).get('options') or {}).get('matrix_norm_reference')
     if args.share_causal_prefixes is None:
@@ -1953,6 +1985,10 @@ def _main(argv=None, *, requested_refresh):
         checkpoint_options['failure_repair_objective_row_bindings']=objective.row_bindings()
     mandatory_objective=bool(getattr(objective,'mandatory_progress',False))
     policy_operation=objective is not None and not mandatory_objective
+    if policy_operation and args.fp8_training != 'off':
+        raise ValueError('native policy replay must use the captured BF16 actor precision')
+    if policy_operation and getattr(args, 'quantization', None) == 'off' and saved_quantization is not None:
+        raise ValueError('native policy continuation must preserve the parent QAT calibration')
     held_objective=objective if mandatory_objective else None
     if (args.preference_beta is not None or args.preference_margin is not None) and not mandatory_objective:
         raise ValueError('preference beta/margin require the declared native offline pairwise objective')
@@ -2797,6 +2833,10 @@ def _main(argv=None, *, requested_refresh):
         default_bind={'stage': args.stage_id or 'native-graph-ce', 'start': global_step,
                       'end': global_step + max(1, len(pending_batches))}
         if config.get('source_architecture') == 'lfm3' and objective is None else None)
+    # A policy round samples the unquantized actor, while QAT is retained for
+    # the continuing SFT lineage. Carry the pending refresh across resumes.
+    policy_qat_refresh = saved_quantization_options.get('policy_qat_refresh_required')
+    if policy_qat_refresh is not None:checkpoint_options['policy_qat_refresh_required']=policy_qat_refresh
     saved_quantization = saved_quantization_options = None
     resumed_step = step
     last_saved_step = step if policy.slot.is_file() and not parent_continuation else -1
@@ -3150,11 +3190,12 @@ def _main(argv=None, *, requested_refresh):
                 from .matrix_telemetry import choose_attention_layers
                 logit_probe = AttentionLogitProbe(choose_attention_layers(model.port, telemetry_spec['layers']))
             precision_pass = None
-            if quantization is not None:
+            if quantization is not None and not policy_operation:
                 calibration_rng = capture_training_rng_state(args.device)
                 try:
-                    precision_pass = (quantization,) + _quantization_pass(quantization, global_step=global_step,
-                        batch=batch, cursor=cursor, forward=lambda examples: packed_graph_loss(model, examples,
+                    precision_pass=training_precision_pass(quantization,policy_operation=False,
+                        checkpoint_options=checkpoint_options,global_step=global_step,batch=batch,cursor=cursor,
+                        forward=lambda examples: packed_graph_loss(model, examples,
                             checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens,
                             objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
                             collect_accuracy=False, allow_communication_prefixes=backend is None))
@@ -3182,6 +3223,7 @@ def _main(argv=None, *, requested_refresh):
                     anneal.restore()
             step += 1
             global_step += 1
+            if policy_operation:policy_qat_update(checkpoint_options,quantization,global_step)
             for example in batch:
                 exposure_counts[example.id] += 1
                 if example.id in foundation_missing:

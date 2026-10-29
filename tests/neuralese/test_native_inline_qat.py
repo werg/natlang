@@ -293,3 +293,22 @@ def test_diloco_export_retains_each_workers_qat_declaration_and_calibration():
         assert result['learners'][str(i)]=={'amax':i}
         assert result['learner_declarations'][str(i)]=={
             'declaration':{'bind':{'end':100+i}},'history':[{'event':'transition','worker':i}]}
+
+
+def test_policy_round_keeps_inline_qat_state_but_uses_unquantized_actor_law(base):
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train.native_state_sft import training_precision_pass,policy_qat_update,packed_graph_loss
+    torch.manual_seed(5);actor,_,_,_=load_native_model(base,rank=4,dtype=torch.bfloat16)
+    learner,qat=model_with_points(base);example=graph()
+    actor_loss=packed_graph_loss(actor,[example],checkpoint_layers=False)[0]
+    options={'quantization':{'sha256':'a'*64},'quantization_history':[]}
+    before=copy.deepcopy(qat.state_dict())
+    assert training_precision_pass(qat,policy_operation=True,checkpoint_options=options,global_step=5,
+        batch=[example],cursor=1,forward=lambda rows:loss_of(learner,rows[0])) is None
+    learner_loss=packed_graph_loss(learner,[example],checkpoint_layers=False)[0]
+    assert torch.equal(actor_loss,learner_loss)
+    a=torch.autograd.grad(actor_loss,actor.adapter.down.weight)[0]
+    b=torch.autograd.grad(learner_loss,learner.adapter.down.weight)[0]
+    assert torch.equal(a,b) and qat.state_dict()==before
+    policy_qat_update(options,qat,6)
+    assert options['policy_qat_refresh_required']['policy_precision']=='bf16'
