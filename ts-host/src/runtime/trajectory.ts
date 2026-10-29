@@ -19,6 +19,8 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
     request_sha256: sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id")))),
     model_response: { calls: structuredClone(response.calls ?? []), text: response.text ?? '',
       raw_calls: structuredClone(response.raw_calls ?? []),
+      ...(response.tool_parse ? { tool_parse: structuredClone(response.tool_parse),
+        ...(raw ? { raw_response: structuredClone(raw), raw_response_canonical: canonical(raw) } : {}) } : {}),
       ...(raw?.x_natlang_rl_capture && typeof raw.x_natlang_rl_capture === 'object' ?
         { rl_sampling: structuredClone(raw.x_natlang_rl_capture) } : {}),
       ...(Array.isArray((raw?.native_state as {imports?:unknown}|undefined)?.imports) ?
@@ -32,7 +34,9 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
       ...(response.prompt_tokens === undefined ? {} : { prompt_tokens: response.prompt_tokens }),
       ...(response.protocol_failure ? {protocol_failure:structuredClone(response.protocol_failure)} : {}),
       ...(response.transport_provenance ? { transport_provenance: structuredClone(response.transport_provenance) } : {}) },
-    tools_offered: structuredClone(request.tools), assistant: { content: response.text ?? '',
+    tools_offered: structuredClone(request.tools),
+    ...(request.response_tools ? { response_tools: structuredClone(request.response_tools),
+      model_request: structuredClone(request), model_request_canonical: canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id'))) } : {}), assistant: { content: response.text ?? '',
       ...(planned ? { execution_plan: response.execution_plan } : {}),
       reasoning: retainedReasoning,
       calls: (response.calls ?? []).map(([tool, args]) => ({ tool, source_tool: tool, arguments: args, call_id: null })) },

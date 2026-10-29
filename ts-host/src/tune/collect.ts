@@ -8,6 +8,7 @@ import { tuneRuntime, rethrowInfrastructureFailure, type TuneExecution } from '.
  * its exact request and reply, and separate evidence fields. Protected examples never enter collection.
  */
 import { createHash } from 'node:crypto';
+import { trajectoryTurn } from '../runtime/trajectory.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
@@ -39,7 +40,8 @@ export type CollectedTurn = {
   readonly schema: 'natlang.tune-turn/v1';
   readonly root: string; readonly component: string; readonly partition: Partition;
   readonly binding: string | null; readonly definition: string | null; readonly call: string | null; readonly turn: number;
-  readonly messages: unknown[]; readonly tools: unknown[]; readonly reply: Pick<ModelTurn, 'calls' | 'text' | 'reasoning' | 'truncated'>;
+  readonly messages: unknown[]; readonly tools: unknown[]; readonly response_tools?: unknown[]; readonly reply: Pick<ModelTurn, 'calls' | 'text' | 'reasoning' | 'truncated'>;
+  readonly tool_parse?: ModelTurn['tool_parse']; readonly parsed_raw_response?: Record<string, unknown>; readonly native_xml_turn?: Record<string, unknown>;
   readonly decision?: { readonly options: readonly string[]; readonly chosen: number };
   readonly teacher: string; readonly source: 'real' | 'synthetic';
   /** The invocation's exact instruction text and disclosed skill documents, where training places soft states. */
@@ -174,8 +176,12 @@ export async function collect(options: { root: string; program: ProgramDescripto
       pending.push({ schema: 'natlang.tune-turn/v1', root: example.id, component: example.component, partition: example.partition,
         binding: frame?.weights?.binding ?? null, definition: frame?.chain.at(-1) ?? null, call, turn,
         messages: structuredClone(request.messages), tools: structuredClone(request.tools),
+        ...(request.response_tools ? {response_tools: structuredClone(request.response_tools)} : {}),
         reply: { ...(reply.calls ? { calls: reply.calls } : {}), ...(reply.text !== undefined ? { text: reply.text } : {}),
           ...(reply.reasoning ? { reasoning: reply.reasoning } : {}), ...(reply.truncated ? { truncated: true } : {}) },
+        ...(reply.tool_parse ? {tool_parse: structuredClone(reply.tool_parse),
+          ...(reply.raw_response ? {parsed_raw_response: structuredClone(reply.raw_response)} : {}),
+          native_xml_turn: trajectoryTurn(request,reply)} : {}),
         rawCallIds: (reply.raw_calls ?? []).map(item => item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string'
           ? (item as { id: string }).id : null),
         teacher: options.teacherId, source: example.source ?? 'real', texts: structuredClone(frame?.invocationTexts ?? {}),

@@ -43,7 +43,22 @@ def pair_graph(record,tokenizer,*,tokenizer_fingerprint):
         counts[name]=0
         for index,target in enumerate(messages[name]):
             if index<common or target.get('role')!='assistant':continue
-            _,ids,boundary=native_gold_packet(tokenizer,messages[name][:index],target,alternative.get('tools'))
+            captured=(alternative.get('native_xml_turns') or {}).get(str(index))
+            if captured is not None:
+                from .native_xml_custody import authenticate,render_packet
+                calls=authenticate(captured)
+                actual=[]
+                for item in target.get('tool_calls') or []:
+                    import json
+                    function=item['function'];args=function['arguments']
+                    actual.append([function['name'],json.loads(args) if isinstance(args,str) else args])
+                if (captured['context']!=messages[name][:index] or captured['tools_offered']!=(alternative.get('tools') or [])
+                        or calls!=actual or (target.get('content') or '')!=''
+                        or (target.get('reasoning_content') or None)!=(captured['assistant'].get('reasoning') or None)):
+                    raise ValueError('preference target differs from authenticated native XML action')
+                _,ids,boundary=render_packet(tokenizer,captured)
+            else:
+                _,ids,boundary=native_gold_packet(tokenizer,messages[name][:index],target,alternative.get('tools'))
             if not 0<boundary<len(ids):raise ValueError('offline pair target suffix lacks a predecessor or output')
             node=name+':'+str(index)
             nodes.append({'name':node,'token_ids':ids,'target_weights':[0.]*len(ids)})

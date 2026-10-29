@@ -26,6 +26,20 @@ def bound_preference_record(trajectories,binding):
     chosen,rejected=[trajectories[name] for name in ('chosen','rejected')]
     if chosen.split!=rejected.split or set(chosen.split_groups)!=set(rejected.split_groups):
         raise Reject('offline preference alternatives disagree on protected task/split')
+    # Authenticate source evidence before sealing it into the preference.  Do not
+    # turn XML into a fabricated provider tool call.
+    from natlang_neuralese.data.native_xml_custody import verify_projection
+    for trajectory in (chosen,rejected):
+        for key,turn in trajectory.native_xml_turns.items():
+            if not isinstance(key,str) or not key.isdigit() or str(int(key))!=key:
+                raise ValueError('native XML turn index must be canonical')
+            index=int(key)
+            if index>=len(trajectory.messages) or trajectory.messages[index].get('role')!='assistant':
+                raise ValueError('native XML evidence does not address an assistant message')
+            target=trajectory.messages[index]
+            verify_projection(turn,trajectory.messages[:index],trajectory.tools,target)
+            if (target.get('reasoning_content',target.get('reasoning')) or None)!=(turn['assistant'].get('reasoning') or None):
+                raise ValueError('native XML preference reasoning differs from captured source')
     common=0
     for left,right in zip(chosen.messages,rejected.messages):
         if left!=right:break

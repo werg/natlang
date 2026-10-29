@@ -249,7 +249,7 @@ class Engine:
         return self.tokenizer.apply_chat_template(messages, tools=tools or None, tokenize=False,
                                                   add_generation_prompt=True)
 
-    def render_request(self, messages, tools=None, template=None):
+    def render_request(self, messages, tools=None, template=None, *, response_tools=None):
         """Render an ordinary text or native-state prompt under the declared chat-template policy."""
         from ..data.prompt_rendering import apply_prompt_rendering
         from .chat import render_messages
@@ -262,7 +262,8 @@ class Engine:
         except ValueError as error:  # the messages do not fit the declared prompt rendering
             raise RequestError("prompt-rendering", str(error)) from error
         return render_messages(messages, tools, template or self._template, self.specials,
-                               call_format=getattr(self, 'tool_call_format', None))
+                               call_format=getattr(self, 'tool_call_format', None),
+                               schema_tools=tools if response_tools is None else response_tools)
 
     def _tokens(self, text: str) -> list[int]:
         cache = getattr(self, '_token_cache', None)

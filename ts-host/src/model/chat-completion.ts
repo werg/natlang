@@ -9,6 +9,8 @@ import type { DecisionScorer, ModelContentPart, ModelTurn, ModelTurnDelta, Model
 import { nativeProtocolFailure } from '../native/native-protocol.js';
 import { runtimePartsToText, type RuntimeContentPart } from '../native/neuralese.js';
 import { TOOL_MARKUP } from '../native/tool-markup.js';
+import { parseNativeXmlCalls } from './native-xml-calls.js';
+import { NATIVE_XML_POLICY_SHA256 } from './native-xml-policy.js';
 
 type Json = Record<string, unknown>;
 /** Streamed chunks (`chat.completion.chunk`), or a single complete `chat.completion` body. */
@@ -227,6 +229,9 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     const recordedRequest = options.onExchange ? structuredClone(request) : undefined;
     const tools = modelTools(request.tools);
     for (const tool of tools) tool.function.name = forward[tool.function.name] ?? tool.function.name;
+    const responseTools = request.response_tools ? modelTools(request.response_tools) : undefined;
+    if (responseTools && tools.length) throw new Error('out-of-band response tools require an empty prompt tool list');
+    for (const tool of responseTools ?? []) tool.function.name = forward[tool.function.name] ?? tool.function.name;
     const messages = structuredClone(request.messages) as Array<Json & { tool_calls?: Array<{ function?: { name?: string } }> }>;
     // This marker is internal provenance used by adapters that need to render host-supplied context differently.
     // It is never part of the chat-completions wire schema.
@@ -322,12 +327,21 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         });
         // A tool call the server could not parse arrives as markup in the text: it is a malformed call, not a reply.
         const replyText = contentText(message?.content);
-        if (!calls.length && TOOL_MARKUP.test(replyText)) throw new LeakedCall('the tool call came back as text');
+        let parsedNative = false;
+        if (!calls.length && TOOL_MARKUP.test(replyText)) {
+          if (responseTools && !truncated) {
+            try {
+              calls.push(...parseNativeXmlCalls(replyText, responseTools).map(([name,args]) => [reverse[name] ?? name,args] as [string,Json]));
+              parsedNative = true;
+            } catch { throw new LeakedCall('the tool call came back as invalid native XML'); }
+          } else throw new LeakedCall('the tool call came back as text');
+        }
         // A reply that is nothing but one offered tool's arguments, written out as JSON, is that call.
         const written = calls.length ? undefined : callWrittenAsText(replyText, tools);
         if (written) calls.push([reverse[written[0]] ?? written[0], written[1]]);
         const reasoning = message?.reasoning_content ?? message?.reasoning;
-        return finish({ calls, text: replyText, raw_calls: rawCalls,
+        return finish({ calls, text: parsedNative ? '' : replyText, raw_calls: rawCalls,
+          ...(parsedNative ? {tool_parse: {schema:'natlang.native-xml-tool-parse/1' as const, source:'assistant-content' as const, schema_custody:'response_tools' as const, policy_sha256:NATIVE_XML_POLICY_SHA256, wire_tool_aliases:structuredClone(forward)}} : {}),
           ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}),
           ...(truncated ? { truncated: true } : {}), ...counts(), raw_response: body });
       } catch (error) {

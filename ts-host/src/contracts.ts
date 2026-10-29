@@ -2,6 +2,8 @@
 /** temperature is omitted unless the application configures one; the model's server keeps its own sampling. */
 /** Invocation identity is collector metadata; transports do not send it as model input. */
 export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; tools: unknown[]; temperature?: number;
+  /** Exact allowed tools for parsing native XML replies, never included in the model-facing prompt. */
+  response_tools?: unknown[];
   seed: number | null; max_tokens: number | null;
   /** "required": the reply must be a tool call (a turn that offers exactly the tool it must use). Default "auto". */
   tool_choice?: 'auto' | 'required';
@@ -56,6 +58,8 @@ export type NativeProtocolFailure = { schema: 'natlang.native-marker-failure/1';
 
 export type ModelTurn = { protocol_failure?: NativeProtocolFailure; calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number; prompt_tokens?: number;
+  /** Native XML was parsed from this actual assistant content, never fabricated provider tool_calls. */
+  tool_parse?: { schema: 'natlang.native-xml-tool-parse/1'; source: 'assistant-content'; schema_custody: 'response_tools'; policy_sha256: string; wire_tool_aliases: Record<string,string> };
   /** Exact provider-context provenance, when an adapter supplies it. */
   transport_provenance?: Record<string, unknown>;
   value_confidence?: (number | { geometric_mean?: number } | null)[];
