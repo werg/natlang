@@ -12,7 +12,7 @@ def provenance(path,sha):
 def test_reconstruction_and_append_preserve_all_external_histories(tmp_path):
     first=provenance('/archive/first','a'*64);second=provenance('/archive/second','b'*64)
     recipe=tmp_path/'recipe.json';recipe.write_text(json.dumps({'schema':'fixture'}))
-    original={**native_recipe_binding(recipe,'c'*64),'external_provenance':first}
+    original={**native_recipe_binding(recipe,'c'*64),'external_provenances':[first]}
     reconstructed=native_recipe_binding(recipe,'c'*64,previous=original)
     assert external_source_provenances(reconstructed)==[first]
     recipe.write_text(json.dumps({'schema':'fixture','external_provenances':[first,second]}))
@@ -40,7 +40,7 @@ def test_actual_sft_resume_saves_reconstructed_external_provenance(tmp_path,monk
     old=tmp_path/'old.jsonl';new=tmp_path/'new.jsonl';held=tmp_path/'held.jsonl'
     rows=[dict(graph(name),tokenizer_fingerprint=fp) for name in ('a','b','c')]
     old.write_text(''.join(json.dumps(row)+'\n' for row in rows[:2]));new.write_text(''.join(json.dumps(row)+'\n' for row in rows));held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
-    first=provenance('/history/first','a'*64);rp=tmp_path/'recipe.json';rp.write_text(json.dumps({'schema':'fixture'}));binding={**native_recipe_binding(rp,'c'*64),'external_provenance':first}
+    first=provenance('/history/first','a'*64);rp=tmp_path/'recipe.json';rp.write_text(json.dumps({'schema':'fixture'}));binding={**native_recipe_binding(rp,'c'*64),'external_provenances':[first]}
     out=tmp_path/'run';args=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu','--native-graphs',str(old),'--held-native-graphs',str(held),'--epochs','1','--eval-every','100','--held-eval-tokens','4','--out',str(out),'--recipe-binding',json.dumps(binding)]
     def stop(policy,step,**kwargs):policy.stop.requested=step==1;return False
     with monkeypatch.context() as patch:

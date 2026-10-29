@@ -589,9 +589,9 @@ def recipe_identity_sha256(path):
 def external_source_provenances(value):
     """Return exact external source histories without importing unrelated options."""
     value = native_recipe_provenance(value) if value else {}
+    if 'external_provenance' in value:
+        raise ValueError('retired singular external source provenance is unsupported')
     items = list(value.get('external_provenances') or [])
-    if value.get('external_provenance') is not None:
-        items.append(value['external_provenance'])
     seen = {}
     for item in items:
         if not isinstance(item, dict) or item.get('schema') != 'natlang.external-source-publication-provenance/1':
@@ -610,7 +610,7 @@ def preserve_recipe_external_provenance(previous, current):
     """Carry omitted history on reconstruction; reject explicit drops or rewrites."""
     current = native_recipe_provenance(current)
     prior = external_source_provenances(previous)
-    has_declaration = 'external_provenances' in current or 'external_provenance' in current
+    has_declaration = 'external_provenances' in current
     incoming = external_source_provenances(current)
     if has_declaration:
         if any(item not in incoming for item in prior):
@@ -1573,6 +1573,17 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
         record_activated = sorted(activated)
     else:
         record_activated = []
+    old_external = existing['recipe'].get('external_provenances')
+    new_external = plan['recipe'].get('external_provenances')
+    if old_external is not None and (not isinstance(old_external, list) or not isinstance(new_external, list)
+            or any(item not in new_external for item in old_external)):
+        raise ValueError('handoff refused: historical external source provenance was dropped or changed')
+    for declared in (old_external, new_external):
+        if declared is not None:
+            external_source_provenances({'path':'/recipe-provenance-validation','sha256':'0'*64,
+                                         'external_provenances':declared})
+    old_handoff_recipe = dict(old_handoff_recipe);new_handoff_recipe = dict(new_handoff_recipe)
+    old_handoff_recipe.pop('external_provenances', None);new_handoff_recipe.pop('external_provenances', None)
     native_parameter_changes, old_handoff_recipe, new_handoff_recipe = native_stage_parameter_handoffs(
         old_handoff_recipe, new_handoff_recipe, out)
     old_contract = _without_package_code(_without_operational(old_handoff_recipe))

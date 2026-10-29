@@ -935,7 +935,7 @@ def test_external_source_publication_binds_compact_proofs_without_offbox_raw(tmp
             info=tarfile.TarInfo(name);info.size=len(data);tar.addfile(info,io.BytesIO(data))
     content=file('content-audit.json',b'{}');split=file('split-audit.json',b'{}')
     provenance={'schema':'natlang.external-source-publication-provenance/1','closure':ref(closurefile),'custody':closure,'mechanisms_archive':ref(bundle),'content_audit':ref(content),'clean_closure_audit':ref(split)}
-    binding={'path':str(root/'recipe.json'),'sha256':'c'*64,'lineage_sha256':'d'*64,'external_provenance':provenance}
+    binding={'path':str(root/'recipe.json'),'sha256':'c'*64,'lineage_sha256':'d'*64,'external_provenances':[provenance]}
     graph=file('train.jsonl',b'{"id":"row"}\n');manifest=file('train-sources.json',json.dumps({'schema':'natlang.native-graph-sources/1','sources':[{'kind':'native-graphs',**ref(graph)}]}).encode())
     state={'training':{'schema':'natlang.neuralese-native-sft-training/1','options':{'recipe_binding':json.dumps(binding),'stage_id':'native_full_sft'},'source_row_order':['row'],'source_row_bindings':{'row':'e'*64},'required_visits':{'row':1},'exposure_counts':{'row':0},'source_receipts':[ref(manifest)]}}
     result=deps.dependency_closure({},namespace=str(root),_checkpoint_payload=state)
@@ -949,7 +949,7 @@ def test_external_source_publication_binds_compact_proofs_without_offbox_raw(tmp
             info=tarfile.TarInfo(name);info.size=len(data);tar.addfile(info,io.BytesIO(data))
     second_provenance={**provenance,'closure':ref(secondfile),'custody':second,'mechanisms_archive':ref(bundle2)}
     from natlang_neuralese.train.recipe import preserve_recipe_external_provenance
-    original=copy.deepcopy(binding);binding.pop('external_provenance');binding['external_provenances']=[provenance,second_provenance]
+    original=copy.deepcopy(binding);binding['external_provenances']=[provenance,second_provenance]
     binding=preserve_recipe_external_provenance(original,binding)
     state['training']['options']['recipe_binding']=json.dumps(binding)
     import torch

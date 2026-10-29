@@ -81,7 +81,7 @@ def test_resident_append_preserves_parent_and_new_external_provenance(tmp_path,m
     paths,directory,manager,recipe=setup(tmp_path)
     first={'schema':'natlang.external-source-publication-provenance/1','closure':{'path':'/history/one','sha256':'a'*64}}
     second={'schema':'natlang.external-source-publication-provenance/1','closure':{'path':'/history/two','sha256':'b'*64}}
-    manager.recipe_binding={**manager.recipe_binding,'external_provenance':first}
+    manager.recipe_binding={**manager.recipe_binding,'external_provenances':[first]}
     initial=directory/'initial.json';value=json.loads(initial.read_text());value['recipe']=manager.recipe_binding;write_json(initial,value)
     proposed=json.loads(recipe.read_text());proposed['external_provenances']=[first,second];write_json(recipe,proposed)
     resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=())
@@ -104,6 +104,21 @@ def test_resident_contract_rejects_dropped_external_provenance(tmp_path,monkeypa
     proposed['stage_inputs']={'sft':resolve_stage_inputs(proposed['recipe'],proposed['recipe']['stages'][0],{})}
     with pytest.raises(ValueError,match='dropped or changed historical external'):
         resident._contract(plan,proposed,'sft')
+
+
+def test_recipe_handoff_allows_only_extending_external_provenance(tmp_path,monkeypatch):
+    from natlang_neuralese.train.recipe import lineage_handoff
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    _,directory,_,_=setup(tmp_path)
+    old=json.loads((directory.parent/'recipe-plan.json').read_text());new=copy.deepcopy(old)
+    first={'schema':'natlang.external-source-publication-provenance/1','closure':{'path':'/history/one','sha256':'a'*64}}
+    second={'schema':'natlang.external-source-publication-provenance/1','closure':{'path':'/history/two','sha256':'b'*64}}
+    old['recipe']['external_provenances']=[first];new['recipe']['external_provenances']=[first,second]
+    pkg=Path(resident.__file__).parents[1]
+    assert lineage_handoff(old,new,pkg,pkg,tmp_path/'unused.json',directory.parent,dry_run=True,started_stage_ids=['sft'])
+    new['recipe']['external_provenances']=[second]
+    with pytest.raises(ValueError,match='historical external source provenance was dropped or changed'):
+        lineage_handoff(old,new,pkg,pkg,tmp_path/'unused.json',directory.parent,dry_run=True,started_stage_ids=['sft'])
 
 
 def test_startup_rejects_wrong_runtime_before_rewriting_resident_state(tmp_path):
