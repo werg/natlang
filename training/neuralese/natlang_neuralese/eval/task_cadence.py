@@ -28,9 +28,11 @@ The spec (stage parameter ``task_eval``, JSON):
   noise_successes  declared run-to-run noise of the success count on this subset (from repeat runs)
   noise_repeats   runs of the stage's first evaluation (default 2): their spread is the measured noise; the bar
                   uses the larger of the declared and the measured noise
-  temperature     sampling temperature the collector sends (default 0: the server's greedy argmax). At 0 a repeat
-                  run replays the same actions, so its noise is zero by construction; above 0 each repeat run gets
-                  its own seeds (REPETITION_DRAGNET_20261013.md)
+  temperature     sampling temperature the collector sends (default 0: the server's greedy argmax). Greedy is not
+                  deterministic on a batching server: llama.cpp picks matmul kernels by batch size, so a reply depends
+                  on the other slots' load (measured 2026-10-29, plans/neuralese/LFM3_DECISION_EVAL_20261029.md); only
+                  a single-sequence server without prompt-cache reuse replays the same actions. Above 0 each repeat
+                  run gets its own seeds (REPETITION_DRAGNET_20261013.md)
 
 The pass bar is relative (coordinator 2026-10-12): the final evaluation is eligible, reaches the base
 (``reference_successes``; an unmeasured reference fails the gate) and ``min_successes``, and is not below the
