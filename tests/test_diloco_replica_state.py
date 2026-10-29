@@ -297,3 +297,43 @@ def test_service_bootstrap_requires_fence_and_serves_with_peer(tmp_path):
     ready=client.json('GET','/v1/replica-promotion');assert ready['ready'] and ready['run_id']=='r' and ready['sequence']==0
     assert client.json('POST','/v1/lease',{'worker':0,'session':'00000000-0000-0000-0000-000000000001'})['run_id']=='r'
     leaderstop.set();process.join(10);assert process.exitcode==0;peerstop.set();peerproc.join(10);assert peerproc.exitcode==0
+
+
+def test_retention_three_real_rollovers_recover_after_primary_kill(tmp_path):
+    import json,multiprocessing as mp,os,signal,socket,time
+    from natlang_neuralese.common.jsonio import write_json_durable
+    from natlang_neuralese.train.diloco.replica_generation import rotate,load_active
+    from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
+    from natlang_neuralese.train.diloco.replica_executor import ReplicatedExecutor
+    from natlang_neuralese.train.diloco.replica_dispatch import ReplicatedDispatch
+    from natlang_neuralese.train.diloco.replica_transport import serve,generation_request
+    from natlang_neuralese.train.diloco.replica_retention import Retention
+    base=tmp_path/'base';initialize_coordinator(base,run_id='r',masters={'weight':torch.ones(4)},identity={'parent':'p'},workers=1,min_quorum=1,fragment_bytes=1024)
+    primary=tmp_path/'primary';peer=tmp_path/'peer';shutil.copytree(base,primary);shutil.copytree(base,peer)
+    ctx=mp.get_context('fork');stop=ctx.Event();ready=ctx.Pipe(duplex=False);coord=ctx.Pipe();token='s'*32
+    with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+    store=tmp_path/'peer-store';store.mkdir()
+    def receiver():
+        j=ReplicaJournal(store/'journal0',run_identity='r',baseline_sha256='a'*64,max_transactions=2)
+        m=ReplayCoordinator(peer,quorum_since={});ready[1].send(True);serve(j,'127.0.0.1',port,token,max_bytes=1<<20,stop=stop,machine=m,store_root=store)
+    proc=ctx.Process(target=receiver);proc.start();ready[0].recv();url=f'http://127.0.0.1:{port}'
+    def primary_process():
+        leader_store=tmp_path/'leader-store';leader_store.mkdir();j=ReplicaJournal(leader_store/'journal0',run_identity='r',baseline_sha256='a'*64,max_transactions=2)
+        machine=ReplayCoordinator(primary,quorum_since={});writer=ReplicatedExecutor(j,url,token,allow_http=True);empty=leader_store/'empty';empty.write_bytes(b'');dispatch=ReplicatedDispatch(machine,writer,empty)
+        session='00000000-0000-0000-0000-000000000001';dispatch.call('lease',{'worker':0,'session':session})
+        for n in range(1,4):
+            ident=str(n)*32;directory=leader_store/('generation-'+ident)
+            def prepare(previous,clock):return generation_request(url,token,'prepare',{'id':ident,'previous':previous,'captured_monotonic':clock},allow_http=True)
+            def commit(intent):return generation_request(url,token,'commit',{'id':ident,'previous':intent['previous'],'baseline_sha256':intent['baseline_sha256'],'new_head':intent['new_head']},allow_http=True)
+            receipt=rotate(dispatch,local_baseline_dir=directory/'baseline',local_journal_dir=directory/'journal',receipt_path=directory/'generation.json',peer_prepare=prepare,peer_commit=commit)
+            pointer=leader_store/'primary-active.json';write_json_durable(pointer,{'id':ident,'baseline_sha256':receipt['baseline_sha256'],'head':receipt['new_head'],'previous':receipt['previous']})
+            confirmation=generation_request(url,token,'retain',{'id':ident,'previous':receipt['previous'],'baseline_sha256':receipt['baseline_sha256'],'new_head':receipt['new_head']},allow_http=True)
+            retention=Retention(leader_store);retention.register(generation=ident,baseline_sha256=receipt['baseline_sha256'],head=receipt['new_head'],previous=retention.latest(),replica_confirmation=confirmation,active_pointer=pointer);retention.collect()
+        coord[1].send({'progress':machine.coordinator.progress});time.sleep(30)
+    leader=ctx.Process(target=primary_process);leader.start();assert coord[0].poll(30);saved=coord[0].recv();os.kill(leader.pid,signal.SIGKILL);leader.join(5);assert leader.exitcode==-signal.SIGKILL
+    stop.set();proc.join(5);assert proc.exitcode==0
+    for root in (store,tmp_path/'leader-store'):
+        assert not (root/('generation-'+'1'*32)).exists()
+        assert all((root/('generation-'+str(n)*32)).exists() for n in (2,3))
+    recovered,machine,_=load_active(store,run_identity='r',destination=tmp_path/'recovered')
+    assert machine.coordinator.progress==saved['progress'];recovered.close()

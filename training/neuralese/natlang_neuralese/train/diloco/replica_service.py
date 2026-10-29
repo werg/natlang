@@ -74,15 +74,25 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
     dispatch=ReplicatedDispatch(machine,writer,empty)
     def rollover():
         existing=[p for p in store.glob('generation-*') if p.is_dir()]
-        if len(existing)>=max_generations:raise ValueError('replica generation retention requires verified supervisor cleanup')
+        if len(existing)>max_generations:raise ValueError('replica generation retention exceeds its local bound')
         identifier=uuid.uuid4().hex;directory=store/('generation-'+identifier)
         def prepare(previous,clock):
             return generation_request(peer_url,token,'prepare',{'id':identifier,'previous':previous,'captured_monotonic':clock},allow_http=allow_http,gateway=gateway)
         def commit(intent):
             return generation_request(peer_url,token,'commit',{'id':identifier,'previous':intent['previous'],
                 'baseline_sha256':intent['baseline_sha256'],'new_head':intent['new_head']},allow_http=allow_http,gateway=gateway)
-        return rotate(dispatch,local_baseline_dir=directory/'baseline',local_journal_dir=directory/'journal',
+        receipt=rotate(dispatch,local_baseline_dir=directory/'baseline',local_journal_dir=directory/'journal',
                       receipt_path=directory/'generation.json',peer_prepare=prepare,peer_commit=commit,within_writer=True)
+        pointer=store/'primary-active.json'
+        write_json_durable(pointer,{'id':identifier,'baseline_sha256':receipt['baseline_sha256'],'head':receipt['new_head'],'previous':receipt['previous']})
+        confirmation=generation_request(peer_url,token,'retain',{'id':identifier,'previous':receipt['previous'],
+            'baseline_sha256':receipt['baseline_sha256'],'new_head':receipt['new_head']},allow_http=allow_http,gateway=gateway)
+        from .replica_retention import Retention
+        retention=Retention(store);prior=retention.latest()
+        retention.register(generation=identifier,baseline_sha256=receipt['baseline_sha256'],head=receipt['new_head'],
+            previous=prior,replica_confirmation=confirmation,active_pointer=pointer)
+        retention.collect()
+        return receipt
     writer.rollover_callback=rollover
     try:serve_coordinator(root,host,port,token,stop=stop,replication=dispatch)
     finally:

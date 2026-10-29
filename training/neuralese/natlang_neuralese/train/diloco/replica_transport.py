@@ -119,6 +119,21 @@ def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared
                                 'max_payload_bytes':prepared['journal'].max_payload_bytes,'max_transactions':prepared['journal'].max_transactions})
                             active['journal']=prepared['journal'];active['prepared']=None;current.close()
                             (store_root/'replica-prepared.json').unlink(missing_ok=True)
+                    elif self.path=='/v1/generation/retain':
+                        if set(value)!={'id','previous','baseline_sha256','new_head'}:raise ValueError('invalid retention confirmation')
+                        pointer=store_root/'replica-active.json';pointer_value=json.loads(pointer.read_text())
+                        if (pointer_value.get('id')!=value['id'] or pointer_value.get('previous')!=value['previous'] or
+                                pointer_value.get('baseline_sha256')!=value['baseline_sha256'] or pointer_value.get('head')!=value['new_head']):
+                            raise ValueError('peer active generation differs')
+                        if current.sequence!=0 or current.head!=value['new_head']:raise ValueError('retention boundary changed')
+                        from .replica_retention import Retention
+                        retention=Retention(store_root);prior=retention.latest()
+                        if prior==value['id']:
+                            entries=retention._read()['generations'];prior=entries[-1]['previous']
+                        reply={'baseline_sha256':value['baseline_sha256'],'new_head':value['new_head']}
+                        retention.register(generation=value['id'],baseline_sha256=value['baseline_sha256'],head=value['new_head'],
+                            previous=prior,replica_confirmation=reply,active_pointer=pointer)
+                        retention.collect()
                     else:raise ValueError('unknown generation operation')
                 payload=json.dumps(reply,sort_keys=True).encode();self.send_response(200);self.send_header('Content-Length',str(len(payload)));self.end_headers();self.wfile.write(payload)
             except (KeyError,ValueError,OSError,TypeError):
@@ -153,7 +168,7 @@ def transmit(url, token, *, sequence, previous, event, payload, timeout=30, allo
 
 
 def generation_request(url, token, operation, body, *, timeout=3600, allow_http=False, gateway=None):
-    if operation not in ('prepare','commit'):raise ValueError('invalid generation operation')
+    if operation not in ('prepare','commit','retain'):raise ValueError('invalid generation operation')
     address=urlsplit(url)
     if address.scheme not in ('https','http') or (address.scheme=='http' and not allow_http) or not address.hostname or address.path not in ('','/'):
         raise ValueError('replica endpoint must be an HTTPS origin')
