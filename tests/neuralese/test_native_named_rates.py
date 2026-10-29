@@ -250,3 +250,26 @@ def test_declared_role_only_rate_requires_finite_positive_number(value):
     from natlang_neuralese.train.recipe import validate_stage_parameters
     with pytest.raises(ValueError,match='interface_row_learning_rate'):
         validate_stage_parameters('native_state_sft',{'interface_row_learning_rate':value})
+
+
+def test_fresh_outer_v5_rates_preserve_loaded_optimizer_history_and_rng():
+    from test_shared_state import tiny
+    from test_native_optimizer_checkpointing import examples
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
+    from natlang_neuralese.train.native_learning_rates import apply_native_learning_rates,INTERFACE_ROWS,LEARNED_ROWS
+    model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4,token_override_ids=(54,55),sparse_row_dtype=torch.float32,token_override_dtype=torch.float32)
+    optimizer,_=make_native_optimizer(model,lr=1e-6,learned_row_lr=1e-4,interface_row_lr=1e-4,in_backward=True)
+    native_training_update(model,optimizer,examples(),checkpoint_layers=True,chunk_tokens=3)
+    saved=copy.deepcopy(optimizer.state_dict());weights={k:v.detach().clone() for k,v in model.state_dict().items()};rng=torch.get_rng_state().clone()
+    restored,_=make_native_optimizer(model,lr=2e-5,learned_row_lr=1e-3,interface_row_lr=1e-3,in_backward=True);restored.load_state_dict(saved)
+    previous={n:copy.deepcopy(h) for n,(_,h) in named_history(restored).items()}
+    apply_native_learning_rates(restored,backbone_lr=2e-5,learned_row_lr=1e-3,interface_row_lr=1e-3)
+    assert torch.equal(rng,torch.get_rng_state())
+    for key,value in model.state_dict().items():assert torch.equal(weights[key],value)
+    for name,(group,history) in named_history(restored).items():
+        assert group['lr']==(1e-3 if name in LEARNED_ROWS or name in INTERFACE_ROWS else 2e-5)
+        assert previous[name].keys()==history.keys()
+        for key,value in previous[name].items():
+            if torch.is_tensor(value):assert torch.equal(value,history[key]),(name,key)
+            else:assert value==history[key],(name,key)

@@ -60,7 +60,7 @@ def prepare(a):
         parent=record['parent'];fork=first_outer_rng_seed(sha,rank) if parent['sha256']==sha else None
         proof={'schema':'natlang.diloco-first-outer/1','worker':rank,'parent':{k:parent[k] for k in ('path','sha256','bytes')},'historical_outer_checkpoint':None,'seed_sha256':sha,'source_hash':source_hash,'held_sha256':held,'rng_fork_seed':fork};path=a.out/f'peer-{rank}.json';write_json_durable(path,proof);declarations.append({**resident.binding(path),'bytes':path.stat().st_size})
     manifest=a.out/'manifest.json';write_json_durable(manifest,{'schema':'natlang.diloco-new-outer-manifest/1','workers':4,'peers':declarations})
-    recipe=copy.deepcopy(prior);stage=recipe['stages'][0];stage['inputs']['diloco_new_outer']='first_outer_manifest';recipe['input_bindings']['first_outer_manifest']=resident.binding(manifest);stage['parameters']['diloco']=settings;stage['parameters']['muon_rounding']='kahan';stage['parameters']['weight_ema']='off'
+    recipe=copy.deepcopy(prior);stage=recipe['stages'][0];stage['inputs']['diloco_new_outer']='first_outer_manifest';recipe['input_bindings']['first_outer_manifest']=resident.binding(manifest);stage['parameters']['diloco']=settings;stage['parameters']['muon_rounding']='kahan';stage['parameters']['weight_ema']='off';stage['parameters']['learning_rate']=2e-5;stage['parameters']['learned_row_learning_rate']=1e-3;stage['parameters']['interface_row_learning_rate']=1e-3
     ce_ref=getattr(a,'ce_policy',None);old_for_outer=copy.deepcopy(old)
     if ce_ref is not None:
         from natlang_neuralese.train.own_output_supervision import identity,policy_objective

@@ -31,7 +31,7 @@ def test_first_outer_builder_exact_receipts_and_common_identity(tmp_path):
     declarations=[json.loads(Path(x['path']).read_text()) for x in result['peer_declarations']]
     assert declarations[0]['rng_fork_seed'] is None and len({x['rng_fork_seed'] for x in declarations[1:]})==3
     assert all(x['owner_get']=='pending' for x in result['peers'])
-    argv=json.loads(Path(result['worker_args']['path']).read_text());assert argv[argv.index('--resident-data-directory')+1]=='/work/fresh/learner/resident-data';assert argv[argv.index('--muon-rounding')+1]=='kahan';assert argv[argv.index('--weight-ema')+1]=='off'
+    argv=json.loads(Path(result['worker_args']['path']).read_text());assert argv[argv.index('--resident-data-directory')+1]=='/work/fresh/learner/resident-data';assert argv[argv.index('--muon-rounding')+1]=='kahan';assert argv[argv.index('--weight-ema')+1]=='off';assert float(argv[argv.index('--learning-rate')+1])==2e-5;assert float(argv[argv.index('--learned-row-learning-rate')+1])==1e-3;assert float(argv[argv.index('--interface-row-learning-rate')+1])==1e-3
     from natlang_neuralese.train.native_state_sft import build_parser,validate_static_args
     validate_static_args(build_parser().parse_args(argv),check_output=False)
     badargs=list(argv);badargs[badargs.index('--weight-ema')+1]=json.dumps({'decay':.99,'warmup':0,'eval':'raw'})
