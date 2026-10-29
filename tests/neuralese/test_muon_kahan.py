@@ -95,3 +95,28 @@ def test_outer_fragment_install_refuses_bad_compensation_before_any_write():
         install_fragment(surface,fragment,torch.tensor([1.003,1.004,1.005,1.006]))
     assert torch.equal(first,torch.ones_like(first)) and torch.equal(second,torch.ones_like(second))
     assert 'compensation' not in latent.state[first]
+
+def test_actual_trainer_rounding_switch_clears_stale_compensation_and_same_mode_retains(tmp_path,monkeypatch):
+    import json
+    from test_native_source_fetch_recovery import source
+    from natlang_neuralese.train import native_state_sft as trainer
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    base=tmp_path/'base';paths=source(base,'lfm');row=json.loads(paths['train'].read_text())
+    paths['train'].write_text(''.join(json.dumps({**row,'id':str(i),'source_groups':[str(i)]})+'\n' for i in range(5)))
+    out=tmp_path/'run';args=['--base',str(base),'--dtype','bfloat16','--rank','4','--device','cpu',
+        '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),'--epochs','1',
+        '--batch-graphs','1','--accumulate-batches','1','--eval-every','1','--checkpoint-every','1',
+        '--checkpoint-seconds','0','--seed','23','--refresh-after-updates','1','--out',str(out)]
+    def run(mode):
+        assert trainer.main([*args,'--muon-rounding',mode])==0
+        return torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    first=run('kahan');states=first['optimizer']['muonsr']['state']
+    assert any('compensation' in state for state in states.values())
+    second=run('stochastic');states=second['optimizer']['muonsr']['state']
+    assert all('compensation' not in state for state in states.values())
+    assert second['options']['muon_rounding_history'][-1]['cleared_compensation_buffers']>0
+    third=run('kahan');states=third['optimizer']['muonsr']['state']
+    assert any('compensation' in state for state in states.values())
+    assert third['options']['muon_rounding_history'][-1]['cleared_compensation_buffers']==0
+    fourth=run('kahan');assert len(fourth['options']['muon_rounding_history'])==2
+    assert fourth['global_step']==4
