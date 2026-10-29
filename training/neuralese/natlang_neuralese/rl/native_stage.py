@@ -147,8 +147,14 @@ def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerpri
         if case.get('id') in worlds:
             raise ValueError('JOLT+ training cases repeat a world id')
         worlds[case.get('id')] = case
-    renderer = Renderer(tokenizer, SimpleNamespace(open_id=roles.produce_open, close_id=roles.produce_close))
-    rendering = PrivilegedRendering.from_renderer(renderer, template=tokenizer_model_type(tokenizer),
+    # Raw-policy tokenizers are saved separately from the base config.json. The
+    # checkpoint-bound history sidecar was already verified by prepare(); use
+    # its backbone rather than guessing from the exported tokenizer directory.
+    model_type=(getattr(tokenizer,'natlang_history_reasoning',None) or {}).get('backbone') or tokenizer_model_type(tokenizer)
+    if not model_type:
+        raise ValueError('JOLT replay requires its authenticated tokenizer backbone')
+    renderer = Renderer(tokenizer, SimpleNamespace(open_id=roles.produce_open, close_id=roles.produce_close),model_type=model_type)
+    rendering = PrivilegedRendering.from_renderer(renderer, template=model_type,
                                                   tokenizer_fingerprint=tokenizer_fingerprint,
                                                   consume_open=roles.consume_open, consume_close=roles.consume_close)
     return privileged_source(rows, cases=worlds, rendering=rendering, custody=custody, fetch_text=fetch_text)
