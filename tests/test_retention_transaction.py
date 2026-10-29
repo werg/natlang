@@ -25,3 +25,15 @@ def test_inspection_failure_never_persists_or_deletes(tmp_path):
     with pytest.raises(ValueError,match='protected owner'):
         retire_pair(lock_path=tmp_path/'lock',state_path=state,candidate={'role':'f','sha256':'a'*64,'control_role':'c','control_sha256':'b'*64},inspect=reject,remove=lambda *a:pytest.fail('removed'),present=lambda *a:True,write_durable=lambda p,v:p.write_text(json.dumps(v)))
     assert not state.exists()
+
+
+def test_crash_after_control_delete_before_phase_write_is_resumable(tmp_path):
+    candidate={'role':'full','sha256':'a'*64,'control_role':'control','control_sha256':'b'*64};objects={'full':'a'*64,'control':'b'*64};crash=[True];removed=[]
+    def write(path,state):
+        if state['operations'][-1]['phase']=='control_deleted' and crash[0]:raise RuntimeError('crash before phase commit')
+        path.write_text(json.dumps(state))
+    def remove(role,sha):assert objects.pop(role)==sha;removed.append(role)
+    args={'lock_path':tmp_path/'lock','state_path':tmp_path/'state','candidate':candidate,'inspect':lambda *a:None,'remove':remove,'present':lambda r,h:objects.get(r)==h,'write_durable':write}
+    with pytest.raises(RuntimeError,match='before phase commit'):retire_pair(**args)
+    assert json.loads((tmp_path/'state').read_text())['operations'][0]['phase']=='intent'
+    crash[0]=False;assert retire_pair(**args)['phase']=='deleted';assert removed==['control','full']
