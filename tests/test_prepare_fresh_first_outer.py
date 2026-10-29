@@ -22,6 +22,9 @@ def test_first_outer_builder_exact_receipts_and_common_identity(tmp_path):
     declarations=[json.loads(Path(x['path']).read_text()) for x in result['peer_declarations']]
     assert declarations[0]['rng_fork_seed'] is None and len({x['rng_fork_seed'] for x in declarations[1:]})==3
     assert all(x['owner_get']=='pending' for x in result['peers'])
+    argv=json.loads(Path(result['worker_args']['path']).read_text());assert argv[argv.index('--resident-data-directory')+1]=='/work/fresh/learner/resident-data'
+    plan=json.loads(Path(result['worker_plan']['path']).read_text());assert result['worker_plan_target']=='/work/fresh/learner/recipe-plan.json'
+    assert plan['stage_inputs']['native_full_sft']['native_graphs']==plan['stage_inputs']['native_full_sft']['foundation_native_graphs'] and plan['code']
     invdoc=json.loads(Path(inv['path']).read_text());invdoc['peers'][2]['parent']['sha256']='c'*64;bad=put('bad-inventory',invdoc);args.inventory=bad;args.out=tmp_path/'badout'
     with pytest.raises(ValueError,match='pin receipt differs'):prepare(args)
 
