@@ -507,3 +507,19 @@ def test_student_and_self_teacher_entries_keep_the_full_prompt_binding():
         production.bind_collection_prompt([{'prompt_rendering':'program-header'}],'full')
     with pytest.raises(ValueError,match='full prompt'):
         production.bind_collection_prompt(entries,'program-header')
+
+
+def test_actual_policy_update_keeps_pending_sft_focus_without_resolving_rl_rows(tmp_path):
+    import hashlib
+    focus=tmp_path/'focus.json';evidence=tmp_path/'evidence';evidence.write_text('oracle')
+    evidence_ref={'path':str(evidence),'sha256':hashlib.sha256(evidence.read_bytes()).hexdigest()}
+    focus.write_text(json.dumps({'schema':'natlang.native-pending-focus/1','rows':[{'id':'sft-only',
+        'binding':'a'*64,'source_sha256':'b'*64,'split':'train','evidence':[evidence_ref]}]}))
+    ref={'path':str(focus),'sha256':hashlib.sha256(focus.read_bytes()).hexdigest()}
+    history=[{'schema':'natlang.native-pending-focus-history/1','request':ref,'at_global_step':1,
+        'initial_credits':{'sft-only':0},'state':'active','consumed':[],'withdrawn':[]}]
+    def setup(saved,held,roles,config):saved['training']['options']['pending_focus_history']=copy.deepcopy(history)
+    test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,False,parent_setup=setup)
+    updated=torch.load(tmp_path/'learner/checkpoint.pt',map_location='cpu',weights_only=False)
+    assert updated['training']['global_step']==2
+    assert updated['training']['options']['pending_focus_history']==history
