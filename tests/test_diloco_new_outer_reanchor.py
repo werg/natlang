@@ -4,6 +4,7 @@ import time
 import json
 import hashlib
 import multiprocessing
+from pathlib import Path
 
 import torch
 import pytest
@@ -127,6 +128,32 @@ def test_recipe_and_direct_recovery_share_per_peer_identity():
     assert all(trainer_argv(argv) == _identity_argv(argv) for argv in arguments)
     assert stage_input_args({'diloco_new_outer':{'path':'/shared/manifest.json'}}, 'native_state_sft') == [
         '--diloco-new-outer','/shared/manifest.json']
+
+
+def test_recipe_new_outer_handoff_binds_all_peer_proofs_and_keeps_sources(tmp_path):
+    from natlang_neuralese.train.recipe import _new_outer_continuation, unstarted_stage_input_changes
+    peers=[]
+    for i in range(4):
+        item={'schema':'natlang.diloco-new-outer/1','worker':i,'seed_sha256':'a'*64,
+              'source_hash':'b'*64,'held_sha256':'c'*64,
+              'parent':{'path':f'/work/peer{i}','sha256':str(i)*64,'bytes':100+i},
+              'historical_outer_checkpoint':{'path':f'/work/old{i}','sha256':str(i+4)*64,'bytes':200+i}}
+        path=tmp_path/f'peer-{i}.json';path.write_text(json.dumps(item))
+        peers.append({'path':str(path),'bytes':path.stat().st_size,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
+    path=tmp_path/'manifest.json';path.write_text(json.dumps({'schema':'natlang.diloco-new-outer-manifest/1','workers':4,'peers':peers}))
+    old={'native_graphs':{'sha256':'d'*64},'held_native_graphs':{'sha256':'c'*64},
+         'standalone_diloco_parent':{'path':'/work/old1','sha256':'5'*64,'binding':'old'}}
+    new={'native_graphs':old['native_graphs'],'held_native_graphs':old['held_native_graphs'],
+         'diloco_new_outer':{'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'binding':'new'}}
+    assert _new_outer_continuation(old,new)
+    def plan(inputs):
+        return {'recipe':{'stages':[{'id':'sft','kind':'native_state_sft','inputs':{}}]},
+                'stage_inputs':{'sft':inputs}}
+    changes=unstarted_stage_input_changes(plan(old),plan(new),tmp_path,started_stage_ids=['sft'])
+    assert changes['sft']['kind']=='new_outer_continuation'
+    assert not _new_outer_continuation(old,{**new,'native_graphs':{'sha256':'e'*64}})
+    Path(peers[0]['path']).write_text('tampered')
+    assert not _new_outer_continuation(old,new)
 
 
 def test_fresh_outer_retains_peer_weights_until_actual_update(tmp_path):

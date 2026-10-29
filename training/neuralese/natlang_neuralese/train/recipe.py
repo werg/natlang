@@ -330,6 +330,18 @@ def native_source_dependencies(path, *, parents=(), source_route=None):
 
 
 def _bind_native_source_dependencies(inputs, *, source_route=None):
+    if 'diloco_new_outer' in inputs:
+        reference=inputs['diloco_new_outer'];manifest=json.loads(Path(reference['path']).read_text())
+        if (manifest.get('schema')!='natlang.diloco-new-outer-manifest/1' or
+                manifest.get('workers')!=4 or len(manifest.get('peers',[]))!=4):
+            raise ValueError('new outer recipe input requires the exact four-peer manifest')
+        dependencies=[]
+        for item in manifest['peers']:
+            path=Path(item['path']).resolve(strict=True)
+            if path.stat().st_size!=item.get('bytes') or sha(path)!=item.get('sha256'):
+                raise ValueError('new outer peer declaration differs from manifest')
+            dependencies.append({'path':str(path),'sha256':item['sha256']})
+        reference['dependencies']=dependencies
     if 'ce_supervision_policy' in inputs:
         from .native_supervision import ce_policy_dependencies
         reference=inputs['ce_supervision_policy']
@@ -922,6 +934,34 @@ def _data_continuation(old, new):
     return False
 
 
+def _new_outer_continuation(old, new):
+    """Permit a bound four-peer outer reset without changing any source roles."""
+    old_pin=old.get('standalone_diloco_parent');reference=new.get('diloco_new_outer')
+    if not isinstance(old_pin,dict) or not isinstance(reference,dict) or 'diloco_new_outer' in old or 'standalone_diloco_parent' in new:
+        return False
+    if {k:v for k,v in old.items() if k!='standalone_diloco_parent'} != {k:v for k,v in new.items() if k!='diloco_new_outer'}:
+        return False
+    try:
+        path=Path(reference['path']).resolve(strict=True)
+        if sha(path)!=reference['sha256']:return False
+        manifest=json.loads(path.read_text());members=manifest['peers']
+        if manifest['schema']!='natlang.diloco-new-outer-manifest/1' or manifest['workers']!=4 or len(members)!=4:return False
+        peers=[]
+        for index,item in enumerate(members):
+            part=Path(item['path']).resolve(strict=True)
+            if part.stat().st_size!=item['bytes'] or sha(part)!=item['sha256']:return False
+            value=json.loads(part.read_text())
+            if value.get('schema')!='natlang.diloco-new-outer/1' or value.get('worker')!=index:return False
+            peers.append(value)
+        shared={(x.get('seed_sha256'),x.get('source_hash'),x.get('held_sha256')) for x in peers}
+        if len(shared)!=1 or peers[0].get('held_sha256')!=old['held_native_graphs']['sha256']:return False
+        if not all(isinstance(v,str) and re.fullmatch('[0-9a-f]{64}',v) for v in next(iter(shared))):return False
+        if not any((x.get('historical_outer_checkpoint') or {}).get('sha256')==old_pin.get('sha256') for x in peers):return False
+        return all(all(isinstance(x.get(k),dict) and x[k].get('path') and x[k].get('sha256') and type(x[k].get('bytes')) is int
+                       for k in ('parent','historical_outer_checkpoint')) for x in peers)
+    except (OSError,ValueError,KeyError,TypeError):return False
+
+
 def _source_correction_continuation(old, new):
     """Allow only a proof-bound, exact source repair on an active native SFT stage."""
     role = 'source_correction'
@@ -1371,6 +1411,7 @@ def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
         if stage_id in started_stage_ids or stage_started(out, stage_id):
             if stage_finished(out, stage_id) or not (
                     _priority_only_native_source_continuation(old, new) or _data_continuation(old, new)
+                    or _new_outer_continuation(old, new)
                     or _pending_source_continuation(old, new)
                     or _combined_native_source_continuation(old, new)
                     or _source_correction_continuation(old, new)
@@ -1380,7 +1421,8 @@ def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
                 raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
                                  'that has not started may take new inputs, and the active stage only by an explicit metadata classification or declared '
                                  'data continuation that retains the exact authenticated native predecessor')
-            changes[stage_id] = {'kind': ('source_correction_continuation'
+            changes[stage_id] = {'kind': ('new_outer_continuation'
+                if _new_outer_continuation(old, new) else 'source_correction_continuation'
                 if _source_correction_continuation(old, new) else 'ce_supervision_continuation'
                 if _ce_supervision_input_continuation(old, new) else 'metadata_classification_continuation'
                 if _classification_input_continuation(old, new) else 'scheduling_priority_continuation'
@@ -1418,7 +1460,7 @@ def _without_unstarted_bindings(old_recipe, new_recipe, changes):
         for name in changed:
             value.get('input_bindings', {}).pop(name, None)
         for stage in value.get('stages', []):
-            if changes.get(stage['id'], {}).get('kind') in {'data_continuation', 'scheduling_priority_continuation', 'metadata_classification_continuation', 'ce_supervision_continuation'}:
+            if changes.get(stage['id'], {}).get('kind') in {'new_outer_continuation', 'data_continuation', 'scheduling_priority_continuation', 'metadata_classification_continuation', 'ce_supervision_continuation'}:
                 stage.pop('inputs', None)  # exact old inputs are preserved by the continuation predecessor binding
     return old_value, new_value
 
