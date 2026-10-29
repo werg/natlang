@@ -35,6 +35,8 @@ def test_native_entry_saves_full_transition_before_readiness(tmp_path, monkeypat
                 'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
     original = torch.load(slot, weights_only=True)
     original['training']['options']['standalone_diloco_history'] = [{'checkpoint':ref(old)}]
+    rotation={'schema':'natlang.pending-batch-rotation/1','anchor_id':'train','anchor_binding':original['training']['source_row_bindings']['train'],'parent_checkpoint_sha256':ref(old)['sha256']}
+    original['training']['options']['pending_batch_rotation']=rotation
     torch.save(original, slot)
     parent = tmp_path / 'peer.pt'
     shutil.copyfile(slot, parent)
@@ -54,10 +56,20 @@ def test_native_entry_saves_full_transition_before_readiness(tmp_path, monkeypat
     class FakeLearner:
         worker=0; shard=(0,4); local_steps=0; reanchor_deviations=[]; manifest={'fingerprint':'f'*64}
         def state_dict(self, **kwargs): return {'local_steps':0, 'pending':{}}
+        def await_update_capacity(self, **kwargs):
+            saved=torch.load(slot,weights_only=True)['training']['options']
+            assert len(saved['pending_batch_rotation_history'])==1
+            assert 'pending_batch_rotation' not in saved
+            raise Ready()
         def await_reanchor_cohort(self, digest, **kwargs):
             saved = torch.load(slot, weights_only=True)
             assert ref(slot)['sha256'] == digest
             assert saved['training']['options']['new_outer_reanchor']['parent'] == ref(parent)
+            options=saved['training']['options'];history=options['pending_batch_rotation_history']
+            assert 'pending_batch_rotation' not in options and len(history)==1
+            assert history[0]['rotation']==rotation and history[0]['new_outer_parent']==ref(parent)
+            assert history[0]['new_outer_declaration_sha256']==ref(declaration)['sha256']
+            assert history[0]['subsequent_schedule']=='normal-sharded-interleave'
             assert saved['training']['diloco']['local_steps'] == 0
             assert saved['training']['exposure_counts'] == original['training']['exposure_counts']
             assert same(saved['training']['optimizer'], original['training']['optimizer'])
@@ -67,6 +79,9 @@ def test_native_entry_saves_full_transition_before_readiness(tmp_path, monkeypat
             raise Ready()
     monkeypatch.setattr(native_diloco, 'attach_learner', lambda *args, **kwargs: FakeLearner())
     settings = json.dumps({'run_id':'new', 'workers':4, 'worker_id':0, 'coordinator_url':'http://127.0.0.1:1'})
+    with pytest.raises(Ready):
+        trainer.main([*argv, '--continue-from',str(seed), '--diloco',settings,
+                      '--diloco-new-outer',str(declaration)])
     with pytest.raises(Ready):
         trainer.main([*argv, '--continue-from',str(seed), '--diloco',settings,
                       '--diloco-new-outer',str(declaration)])

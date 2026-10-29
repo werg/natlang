@@ -2525,6 +2525,7 @@ def _main(argv=None, *, requested_refresh):
         checkpoint_options['matrix_norm_reference'] = matrix_reference
     saved_lr_anneal = saved_norm_reference = None
     prior_rotation = (saved_options or {}).get('pending_batch_rotation') or {}
+    rotation_history = list((saved_options or {}).get('pending_batch_rotation_history') or [])
     rotation_has_saved_parent = bool(saved_training)
     saved_options = ce_prior_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
@@ -2587,6 +2588,22 @@ def _main(argv=None, *, requested_refresh):
         'exposure_counts': dict(exposure_counts), 'options': checkpoint_options},
         carried_progress.get(args.stage_id or 'native-graph-ce') or {})
     from .native_cohort_schedule import source_cohort_ids
+    if prior_rotation and args.diloco is not None:
+        if new_outer_proof is None or not new_outer_sha:
+            raise ValueError('pending rotation can retire only at an authenticated new outer boundary')
+        if args.pending_rotation_anchor not in (None, prior_rotation['anchor_id']):
+            raise ValueError('new outer cannot relabel the recorded pending rotation')
+        rotation_history.append({'schema':'natlang.pending-batch-rotation-retirement/1',
+            'rotation':prior_rotation, 'new_outer_declaration_sha256':new_outer_sha,
+            'new_outer_parent':new_outer_proof['parent'], 'at_global_step':global_step,
+            'subsequent_schedule':'normal-sharded-interleave'})
+        checkpoint_options['pending_batch_rotation_history'] = rotation_history
+        checkpoint_options.pop('pending_batch_rotation', None)
+        args.pending_rotation_anchor = None
+        checkpoint_options['pending_rotation_anchor'] = None
+        prior_rotation = {}
+    elif rotation_history:
+        checkpoint_options['pending_batch_rotation_history'] = rotation_history
     if prior_rotation and args.pending_rotation_anchor is None:
         args.pending_rotation_anchor = prior_rotation['anchor_id']
     rotation_index = None
