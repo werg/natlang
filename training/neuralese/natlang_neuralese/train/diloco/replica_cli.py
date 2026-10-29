@@ -15,9 +15,28 @@ from .replica_attestation import load_owned_config,verify_attestation
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('role',choices=('peer','bootstrap','promote','restart'));parser.add_argument('--config',required=True);parser.add_argument('--config-sha256',required=True)
+    parser=argparse.ArgumentParser();parser.add_argument('role',choices=('peer','bootstrap','promote','restart','seed-publish','seed-serve','seed-fetch','seed-install','seed-release'));parser.add_argument('--config',required=True);parser.add_argument('--config-sha256',required=True)
     args=parser.parse_args();config=load_owned_config(args.config,args.config_sha256);stop=threading.Event()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set())
+    if args.role.startswith('seed-'):
+        from .replica_seed import publish_seed,serve_seed,download_seed,install_seed,release_seed_lease
+        if args.role=='seed-publish':
+            value=publish_seed(config['store'],config['destination'],expected_sequence=config['sequence'],expected_head=config['head'],lease_id=config['lease_id'])
+            print(json.dumps(value,sort_keys=True));return
+        if args.role=='seed-install':
+            value=install_seed(config['seed'],config['store'],expected_receipt_sha256=config['receipt_sha256']);print(json.dumps(value,sort_keys=True));return
+        if args.role=='seed-release':
+            import hashlib
+            from .replica_transport import witness_head
+            raw=Path(config['seed_receipt']).read_bytes()
+            if hashlib.sha256(raw).hexdigest()!=config['receipt_sha256']:raise ValueError('seed receipt hash differs')
+            record=json.loads(raw);peer_token=Path(config['token_file']).read_text().strip()
+            witness=witness_head(config['peer_url'],peer_token,gateway=config.get('gateway'),allow_http=config.get('allow_http',False))
+            release_seed_lease(config['store'],record,witnessed=witness);return
+        seed_token=Path(config['token_file']).read_text().strip()
+        if args.role=='seed-serve':return serve_seed(config['seed'],config['host'],config['port'],seed_token,stop=stop)
+        value=download_seed(config['url'],seed_token,config['destination'],expected_receipt_sha256=config['receipt_sha256'],
+            gateway=config.get('gateway'),allow_http=config.get('allow_http',False));print(json.dumps(value,sort_keys=True));return
     token=Path(config['token_file']).read_text().strip()
     if not token:raise ValueError('empty replication token')
     common=dict(baseline=config['baseline'],baseline_sha256=config['baseline_sha256'],store=config['store'],
