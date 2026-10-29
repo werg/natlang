@@ -208,9 +208,59 @@ def outer_nesterov(
     return next_theta, velocity
 
 
+class MappedInputEvictor:
+    """Discard only clean pages from one authenticated, immutable file mapping.
+
+    Use only when the caller owns an immutable checkpoint and never mutates its
+    mapped tensor views. Other tensor storage is deliberately ignored.
+    """
+    def __init__(self, path):
+        import ctypes, os
+        self._libc = ctypes.CDLL(None, use_errno=True)
+        self._libc.madvise.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
+        self._page = os.sysconf('SC_PAGE_SIZE')
+        st = os.stat(path)
+        self._identity = (os.major(st.st_dev), os.minor(st.st_dev), st.st_ino)
+        self._maps = []
+        for line in open('/proc/self/maps'):
+            fields = line.split(None, 5)
+            if len(fields) < 6: continue
+            bounds, perms, _, dev, inode, _ = fields
+            major, minor = (int(x, 16) for x in dev.split(':'))
+            if (major, minor, int(inode)) != self._identity: continue
+            if not perms.startswith('r') or not perms.endswith('p'):
+                raise ValueError('checkpoint mapping is not private and readable')
+            lo, hi = (int(x, 16) for x in bounds.split('-'))
+            self._maps.append((lo, hi))
+        if not self._maps: raise ValueError('checkpoint has no matching file-backed mapping')
+        # A private dirty page would lose caller-owned changes under DONTNEED.
+        lines = open('/proc/self/smaps').read().splitlines()
+        selected = False
+        for line in lines:
+            parts = line.split()
+            if parts and '-' in parts[0] and len(parts) >= 5 and ':' in parts[3]:
+                try:
+                    major, minor = (int(x, 16) for x in parts[3].split(':'))
+                    selected = (major, minor, int(parts[4])) == self._identity
+                except ValueError: selected = False
+            elif selected and line.startswith('Private_Dirty:') and int(parts[1]) != 0:
+                raise ValueError('checkpoint mapping contains private dirty pages')
+
+    def release(self, tensor):
+        import ctypes
+        if tensor.device.type != 'cpu' or not tensor.is_contiguous() or not tensor.numel(): return
+        lo = tensor.data_ptr(); hi = lo + tensor.numel() * tensor.element_size()
+        for start, end in self._maps:
+            a = max(lo, start); b = min(hi, end)
+            a = ((a + self._page - 1) // self._page) * self._page
+            b = (b // self._page) * self._page
+            if b > a and self._libc.madvise(ctypes.c_void_p(a), b - a, 4) != 0:
+                raise OSError(ctypes.get_errno(), 'checkpoint mapping madvise failed')
+
+
 def save_tensors(
     path: str | Path, tensors: Mapping[str, torch.Tensor], metadata: dict[str, str] | None = None,
-    *, dtype: torch.dtype | None = None,
+    *, dtype: torch.dtype | None = None, input_evictor: MappedInputEvictor | None = None,
 ) -> None:
     """Atomically publish safetensors with bounded conversion and dirty-page buffers.
 
@@ -273,6 +323,7 @@ def save_tensors(
                 for start in range(0, flat.numel(), elements):
                     chunk = flat[start:start + elements].to(device='cpu', dtype=target_dtype).contiguous()
                     write(chunk.view(torch.uint8).numpy())
+                    if input_evictor is not None: input_evictor.release(flat[start:start + elements])
             os.fsync(stream.fileno())
             if hasattr(os, 'posix_fadvise'):
                 os.posix_fadvise(stream.fileno(), released, 0, os.POSIX_FADV_DONTNEED)

@@ -112,6 +112,7 @@ def initialize_coordinator(
     token_budget: int = 0,
     seed_source: Mapping | None = None,
     ema: Mapping | None = None,
+    input_evictor=None,
     outer_schedule: list | None = None,
 ) -> dict:
     """Create a new run from the seed masters; never overwrite an existing trajectory.
@@ -183,9 +184,12 @@ def initialize_coordinator(
     }
     manifest["fingerprint"] = _manifest_fingerprint(manifest)
     try:
-        save_tensors(root / "seed.safetensors", masters, dtype=torch.float32)
+        save_tensors(root / "seed.safetensors", masters, dtype=torch.float32, input_evictor=input_evictor)
         for fragment in fragments:
             values = pack_fragment(masters, fragment)
+            if input_evictor is not None:
+                for part in fragment.slices:
+                    input_evictor.release(masters[part.name].detach().reshape(-1)[part.offset:part.offset + part.length])
             save_tensors(
                 root / "fragments" / f"{fragment.index:05d}.safetensors",
                 {"theta": values, "momentum": torch.zeros_like(values), **({"ema": values.clone()} if ema else {})},

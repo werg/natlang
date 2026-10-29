@@ -3,7 +3,7 @@ import argparse,json,os,resource,shutil,time,uuid
 from pathlib import Path
 import torch
 from natlang_neuralese.train.diloco.coordinator import initialize_coordinator
-from natlang_neuralese.train.diloco.protocol import load_tensors,save_tensors,plan_fragments
+from natlang_neuralese.train.diloco.protocol import load_tensors,save_tensors,plan_fragments,MappedInputEvictor
 from natlang_neuralese.train.diloco.replica_baseline import capture,reconstruct,verify
 from natlang_neuralese.train.diloco.replica_generation import rotate
 from natlang_neuralese.train.diloco.replica_retention import Retention
@@ -56,7 +56,7 @@ def main():
         selection=None
         if a.full:masters=surface
         else:masters,selection=select_first_fragment(surface)
-        root=out/'coordinator';manifest=initialize_coordinator(root,run_id='physical-qualification',masters=masters,identity={'purpose':'isolated-physical-qualification'},workers=a.workers,min_quorum=a.quorum,fragment_bytes=64<<20,grace_seconds=30,ema={'decay':.88,'warmup':0})
+        root=out/'coordinator';manifest=initialize_coordinator(root,run_id='physical-qualification',masters=masters,identity={'purpose':'isolated-physical-qualification'},input_evictor=MappedInputEvictor(a.checkpoint),workers=a.workers,min_quorum=a.quorum,fragment_bytes=64<<20,grace_seconds=30,ema={'decay':.88,'warmup':0})
         machine=ReplayCoordinator(root,quorum_since={})
         class Pin:
             def __init__(self):self.machine=machine
