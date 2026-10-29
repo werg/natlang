@@ -49,6 +49,11 @@ Git metadata was omitted. This supplies HF/GGUF and LoRA conversion tools withou
 copying the home machine's x64 inference binaries. Local Bonsai serving remains
 stopped as requested.
 
+The fork is published privately at https://github.com/werg/llama.cpp-neuralese.
+Its default branch `neuralese` carries all fork work merged with current upstream
+(record: `published` in the pin file). `NATLANG_FORK.md` there describes
+the additions and the CPU/CUDA builds for other machines.
+
 ## Replicated pipeline
 
 Large untracked branches within `data/`, `runs/` and source-dataset directories

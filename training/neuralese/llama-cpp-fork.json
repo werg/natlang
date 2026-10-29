@@ -16,5 +16,13 @@
     "scripts/neuralese_data/check_llama_producer_parity.py (native state production against the native engine)",
     "scripts/neuralese_data/check_tuned_lora_llama_parity.py (tuned LoRA against the native adapted model)",
     "scripts/neuralese_data/check_llama_native_state_protocol.py (llama-server native-state protocol: store, consumption receipts, production, exact reference encoding)"
-  ]
+  ],
+  "published": {
+    "description": "Newest published fork state, merged with upstream and verified on DGX (ctest with CUDA hidden, test-backend-ops on CUDA0, native-state protocol and producer parity on LFM3 step142, greedy completions bit-identical to the pinned actor build b89457f32 on CPU and CUDA). Not yet adopted as the converter/serving pin above; NATLANG_FORK.md in the fork documents features and builds.",
+    "repository": "https://github.com/werg/llama.cpp-neuralese",
+    "branch": "neuralese",
+    "commit": "61704e992a500cedbdaf11720488c70c6b2fa7b8",
+    "upstream_merged": "0893ec98f5eafad36a43a72cd1c3723d72b0d03a",
+    "date": "2026-10-29"
+  }
 }
