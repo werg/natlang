@@ -3,6 +3,10 @@ from pathlib import Path
 import pytest
 from natlang_neuralese.data.native_xml_custody import authenticate,derived_tool_calls,validate_replay_turn,render_packet,POLICY_SHA256
 from natlang_neuralese.rl.task_rollouts import rollout_turns
+from natlang_neuralese.common import paths
+
+LFM3=Path.home()/'.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
+CAPTURED_GRAPH80=paths.resolve('data_nvme','dgxops/claude-recovery-20261028/data/training-bug-audit-v1/synthetic-wrapper-real-xml-turn-schema-v2.json')
 
 
 def fixture():
@@ -47,7 +51,7 @@ def test_rollout_projection_retains_actual_empty_prompt_tools_and_reauthenticate
 def test_render_exact_actual_xml_and_refuse_noncanonical_frame():
     from transformers import AutoTokenizer
     from natlang_neuralese.serve.chat import bind_history_reasoning
-    base=Path('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+    base=LFM3
     if not base.is_dir():pytest.skip('pinned real tokenizer unavailable')
     tokenizer=AutoTokenizer.from_pretrained(base,trust_remote_code=False);bind_history_reasoning(tokenizer,policy='keep')
     turn=fixture();text,ids,boundary=render_packet(tokenizer,turn)
@@ -69,7 +73,7 @@ def test_dpo_uses_exact_authenticated_xml_projection_and_preserves_prompt_tools(
     from natlang_neuralese.serve.chat import bind_history_reasoning
     from natlang_neuralese.data.native_preference import pair_graph,SCHEMA_PREFERENCE,KIND
     from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
-    base=Path('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+    base=LFM3
     if not base.is_dir():pytest.skip('pinned real tokenizer unavailable')
     tokenizer=AutoTokenizer.from_pretrained(base,trust_remote_code=False);bind_history_reasoning(tokenizer,policy='keep')
     turn=fixture();target={'role':'assistant','content':'','reasoning_content':'thinking','tool_calls':derived_tool_calls(turn)}
@@ -85,7 +89,7 @@ def test_dpo_uses_exact_authenticated_xml_projection_and_preserves_prompt_tools(
 def test_real_captured_assistant_content_with_synthetic_custody_envelope():
     # The content is the saved graph-80 model response; its request envelope was
     # reconstructed for this test and is not claimed as the original transport.
-    path=Path('/home/werg/data/dgxops/claude-recovery-20261028/data/training-bug-audit-v1/synthetic-wrapper-real-xml-turn-schema-v2.json')
+    path=CAPTURED_GRAPH80
     if not path.is_file():pytest.skip('captured graph-80 response unavailable')
     turn=json.loads(path.read_text())
     assert authenticate(turn) and turn['model_response']['raw_calls']==[]
@@ -101,12 +105,12 @@ def test_capture_to_offline_pair_to_dpo_and_forged_evidence(captured):
     from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
     from natlang_neuralese.serve.chat import bind_history_reasoning
     from transformers import AutoTokenizer
-    base=Path('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+    base=LFM3
     if not base.is_dir():pytest.skip('pinned real tokenizer unavailable')
     tok=AutoTokenizer.from_pretrained(base,trust_remote_code=False);bind_history_reasoning(tok,policy='keep')
     source=fixture()
     if captured:
-        path=Path('/home/werg/data/dgxops/claude-recovery-20261028/data/training-bug-audit-v1/synthetic-wrapper-real-xml-turn-schema-v2.json')
+        path=CAPTURED_GRAPH80
         if not path.is_file():pytest.skip('captured graph-80 response unavailable')
         source=json.loads(path.read_text())
     def trajectory(name):

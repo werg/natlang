@@ -407,6 +407,96 @@ paths. Propose/implement the changes most likely to restore and improve actual
 behavior; neither additional data nor a numerical fix counts as restored ability
 until task outcomes show it.
 
+## Independent Claude findings (2026-10-29, ~10:00): the weights are random-walking
+
+Workspace and scripts: `/home/werg/data/dgxops/claude-regression-1029/`
+(`window_cos.py`, `sr_noise.py`, `mass_census.py` + `mass-census.json`, `interp.py`,
+`run_eval.sh`, `eval-*/`). All measurements use the actual checkpoints and the
+trainer's own `own_output_supervision.graph_weights`.
+
+**1. Successive training windows move the weights in unrelated directions.**
+Over 142 hidden matrices of the peer1 lineage, the cosine between the weight
+deltas of disjoint windows is mean 0.029 (0→4751 vs 4751→8341), 0.002
+(4751→8341 vs 8341→12957) and 0.016 (0→4751 vs 8341→12957). Total displacement
+0→12957 is 8.84 (MLP matrices, Frobenius) against window displacements
+5.04/4.60/5.41: the root sum of squares is 8.71, the coherent sum would be 15.
+The trajectory is diffusion: under 3% of each window's movement is a direction
+the next window repeats. The no-signal part keeps growing like sqrt(steps) (rms
+of the exponent-independent delta 1.5e-3 at 4751, 2.05e-3 at 8341).
+
+**2. About 35% of the weight-change energy is BF16 stochastic-rounding noise.**
+With lr 2e-5 the Muon per-element update is ~0.2·lr = 4e-6, about 1/30 of the
+BF16 spacing of a typical weight (~1.2e-4 at |w|≈0.02). Stochastic rounding is
+unbiased but adds variance u·s per step, so its accumulated energy is
+proportional to each weight's BF16 spacing s. Bucketing elements by base
+exponent: E[d²] is flat for small weights and rises linearly with s for large
+ones (fit slope 0.0126 at 4751, 0.0224 at 8341; the SR model predicts ≈N·|u|,
+0.019/0.033). Six matrices, consistent noise share 0.31–0.39 at both steps.
+
+**3. The remaining movement is small-batch noise amplified by normalized
+updates.** Exposure counts: 33,414 graph visits over 8,341 updates = **4.0 graphs
+per optimizer update** (telemetry: 24–32k forward tokens, often only 340–3,400
+supervised tokens per update). MuonSR (and AdamWSR) apply a fixed-size step
+whatever the gradient's signal-to-noise, `step_in_backward` makes every
+32k-token micro-batch one update, and there is no gradient accumulation. With
+momentum 0.95 the measured window cosines imply roughly 1% signal per step.
+Every peer is doing this independently; with no outer merges, nothing averages
+the noise away.
+
+**4. Behaviour tracks the noise, not a learned skill.** Same capped spec
+(150 requests/turns, 3600 s, cb57 server, keep-thinking kwargs, 8 slots):
+
+| Weights | Successes | Behaviour |
+|---|---:|---|
+| base | 6/8 | `read_code(graph)` then BFS-style exploration, ≤45 requests |
+| base + 0.25·(8341−base) | 5/7 done, 1 running | direct `graph.links` code, short turns |
+| base + 0.5·(8341−base) | 2/8 | every case: one request, `return_result(null)` |
+| 8341 | 1/8 | 4 cases: 8192-token runaway call then null; 4 cases: the same ~45-token `graph.search` call repeated 147 times |
+
+Shrinking the delta 4× (noise energy 16×) is as good as base; the full delta
+produces repetition loops, the classic damaged-weights signature.
+
+**5. The objective concentrates mass on one-step answers.** Full census of the
+478,664-row 8341 source under the actual objective and family scales:
+85.8% of loss mass is on invocations with a single decision; trajectories with
+10+ decisions hold 14.2% of decisions but 0.9% of mass. `return_result` gets
+39.4% of all mass. Replies ≥512 tokens are 21.9% of supervised reply tokens but
+0.9% of mass (<32-token replies: 10.4% of tokens, 40.9% of mass). Source-cohort
+family scales span 0.17–14.9 although `max_scale` is 8: `family_scales` caps
+before renormalizing, so the cap does not hold. This shapes *what* the small
+signal teaches (answer at once, little long-code practice) and plausibly the
+α=0.5 immediate-return mode. It is secondary to the noise.
+
+**Why the existing checks did not catch it.** The real-update parity checks
+compare the trainer with itself and confirm that each update is computed as
+designed; they cannot see that the designed update is 4-graph noise. Matrix
+norms stay flat because a random walk mostly rotates. Held CE is a single
+number per eval. Lower train loss on 4-graph batches is expected either way.
+
+**Ruled out here:** tied `lm_head` (identical storage to `embed_tokens` in
+8341); target alignment (query `target-1` predicts token `target`); the
+convolution rounding order (≈1e-3 relative accumulation-order differences,
+orders of magnitude below items 1–3; fine to merge as oracle fidelity).
+
+**Recommended changes (not yet applied; operations owner decides):**
+
+1. Accumulate gradients to ≥64 graphs per update (≈16 micro-batches of 32k
+   tokens) at the same lr. SR energy per epoch scales with the number of
+   updates, so this cuts both noise sources ~16× while keeping the signal per
+   sample. The gated `step_in_backward` already lets backwards outside
+   `in_backward()` accumulate `.grad`; the last micro-batch steps.
+2. If SR noise still shows in the exponent-bucket fit afterwards, add Kahan
+   compensation (a BF16 error buffer) for the Muon matrices. That keeps BF16
+   storage and removes the rounding random walk.
+3. Restart from the base weights (or from the 0.25 shrink) with fresh optimizer
+   moments. The current moments and most of the current delta are noise. Keep the
+   exposure history as history.
+4. Normalize per decision rather than per invocation, make the within-decision
+   mass token-aware, and fix the family-scale cap.
+5. Monitor coherence: displacement versus root-sum-of-squares of windows, and
+   the exponent-bucket SR fit, at each saved checkpoint. A ratio near 1 means
+   the run is diffusing.
+
 ## Workspace and execution guidance
 
 Read `AGENTS.md`. Root main at document preparation: `e14dd0476`; unpushed work
