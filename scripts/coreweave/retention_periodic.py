@@ -14,6 +14,7 @@ from .retention_guard import guarded_full,guarded_pair
 from .retention_live import live_facts
 from .retention_presence import resolve_object
 from .retention_select import candidates
+from .retention_manual import normalize_manual
 
 
 def rotate_cycle(items, cycle):
@@ -48,16 +49,26 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
         rank=role_config['rank'];journal=Path(role_config['journal']);owner_bindings=bindings(role_config['owner_epochs']);owners=authenticated_owner_epochs(owner_bindings)
         def read_context():
             manifest=read(config['active_roles']);current_name=next(x['ownership'] for x in manifest['roles'] if x['rank']==rank);current=read(root/current_name)
-            exports=read(journal)['exports'];manual=root/('standalone-peer%d-manual-cloud-journal.json'%rank)
-            if manual.exists():exports+=read(manual)['exports']
-            intents={x['role']:read(x['intent']) for x in exports};owner_state=read(config['owner_state']);units=current_units()
+            exports=read(journal)['exports'];manual=root/('standalone-peer%d-manual-cloud-journal.json'%rank);manual_exports=read(manual)['exports'] if manual.exists() else []
+            exports+=manual_exports
+            epoch_owners=authenticated_owner_epochs(owner_bindings)
+            intents={x['role']:read(x['intent']) for x in exports}
+            for e in manual_exports:intents[e['role']]=normalize_manual(e,intents[e['role']],epoch_owners)
+            owner_state=read(config['owner_state']);units=current_units()
             wanted={fallback,*intents}
             wanted.update((e.get('control') or {}).get('role') for e in exports if (e.get('control') or {}).get('role'))
             receipts=[read(receipt_path(role)) for role in wanted if receipt_path(role).exists()]
             protected=set()
             for item in manifest['roles']:protected.add(read(root/item['ownership'])['parent_sha256'])
             for path in root.glob('standalone-peer*-manual-cloud-journal.json'):
-                for e in read(path)['exports']:protected.add(read(e['intent'])['sha256'])
+                entries=read(path)['exports'];verified_manual=[]
+                if entries:protected.add(read(max(entries,key=lambda e:e['step'])['intent'])['sha256'])
+                for e in entries:
+                    pin=read(e['intent']);rp=receipt_path(e['role']);r=read(rp) if rp.exists() else None;identity=(r or {}).get('identity') or {};proof=(r or {}).get('independent_verification') or {}
+                    settled=bool(r and r.get('private') and identity=={'sha256':pin['sha256'],'bytes':pin['bytes']} and proof.get('sha256')==pin['sha256'] and proof.get('bytes')==pin['bytes'])
+                    if not settled or e.get('unit') in units or (owner_state.get('pending') or {}).get('role')==e['role']:protected.add(pin['sha256'])
+                    if settled:verified_manual.append((e,pin))
+                if verified_manual:protected.add(max(verified_manual,key=lambda x:x[0]['step'])[1]['sha256'])
             for path in root.glob('*intent.json'):
                 item=read(path)
                 for key in ('historical_parent_sha256','parent_sha256'):
@@ -72,7 +83,7 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
             fallback_receipt=next((r for r in receipts if r.get('role')==fallback),None)
             if fallback_receipt is None or fallback_receipt.get('identity',{}).get('sha256') not in qualified_shas:raise ValueError('fallback receipt is not a qualified local parent')
             transitions={key:read(path) for key,path in role_config.get('transitions',{}).items()}
-            return exports,intents,authenticated_owner_epochs(owner_bindings),current,owner_state,units,receipts,protected,transitions
+            return exports,intents,epoch_owners,current,owner_state,units,receipts,protected,transitions
         context=read_context();exports,intents,owners,current,owner_state,units,receipts,protected,transitions=context
         retired_state=read(retired) if retired.exists() else {'retired_roles':[]}
         selected=candidates(exports=exports,intents=intents,owners=owners,current_owner=current,owner_state=owner_state,receipts=receipts,fallback_role=fallback,active_units=units,transitions=transitions,protected_sha256s=protected)
@@ -84,7 +95,7 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
             if rank_attempts>=per_rank:break
             attempts+=1;rank_attempts+=1
             try:
-                entry=next(x for x in exports if x['role']==candidate['role']);intent=intents[candidate['role']];receipt=next(x for x in receipts if x['role']==candidate['role'])
+                entry=next(x for x in exports if x['role']==candidate['role']);intent=read(entry['intent']);receipt=next(x for x in receipts if x['role']==candidate['role'])
                 phase=ops/('coreweave-production-'+candidate['role']+'-private-upload-phase-20261014.json');cache_root=ops/'private-export-cache';cache_refs=reference_paths([candidate['sha256']],[cache_root])[candidate['sha256']]
                 if len(cache_refs)>1:raise ValueError('ambiguous candidate export cache')
                 reviews=[Path(x) for x in config.get('reviews',[]) if candidate['sha256'] in Path(x).read_text()]
@@ -97,7 +108,9 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
                     if len(control_cache)>1:raise ValueError('ambiguous control export cache')
                     own.update(own_bookkeeping(role=candidate['control_role'],digest=candidate['control_sha256'],receipt=control_receipt,receipt_path=receipt_path(candidate['control_role']),phase=control_phase if control_phase.exists() else None,cache=next(iter(control_cache),None),watched_digests=(candidate['sha256'],)))
                 allowed=[str(Path(entry['intent'])),*own]
-                scope={'allowed_paths':allowed,'journal_path':journal,'role':candidate['role'],'intent_path':entry['intent']}
+                manual_journal=root/('standalone-peer%d-manual-cloud-journal.json'%rank)
+                is_manual=manual_journal.exists() and any(x['role']==candidate['role'] for x in read(manual_journal)['exports'])
+                scope={'allowed_paths':allowed,'journal_path':manual_journal if is_manual else journal,'role':candidate['role'],'intent_path':entry['intent']}
                 if candidate['control_required']:
                     scope.update(control=control,control_receipt=receipt_path(candidate['control_role']),control_phase=Path(control['phase_path']))
                 def read_live(value,phase_name):

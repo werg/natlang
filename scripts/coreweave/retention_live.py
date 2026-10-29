@@ -1,6 +1,7 @@
 """Build retention facts from actual journal, owner and receipt records."""
 from __future__ import annotations
 from .retention_evidence import owner_for_intent
+from .private_export_guard import has_owner_readback
 
 
 def live_facts(*, candidate, exports, intents, owners, current_owner, owner_state, receipts, successor_role, fallback_role, active_units, transition=None):
@@ -37,7 +38,9 @@ def live_facts(*, candidate, exports, intents, owners, current_owner, owner_stat
     elif entry.get('control'):raise ValueError('unexpected control on full-only entry')
     if not exports:raise ValueError('empty source journal')
     latest=max(exports,key=lambda e:e['step'])['role']
-    verified=set(owner_state.get('verified_roles') or []);owner_exports=[e for e in exports if e.get('role') in verified]
+    by_role={r['role']:r for r in receipts}
+    if len(by_role)!=len(receipts):raise ValueError('duplicate receipts')
+    verified=set(owner_state.get('verified_roles') or []);owner_exports=[e for e in exports if e.get('role') in verified and e.get('role') in by_role and has_owner_readback(by_role[e['role']])]
     latest_owner=max(owner_exports,key=lambda e:e['step'])['role'] if owner_exports else None
     pending=owner_state.get('pending') or {};pending_roles=[pending['role']] if pending.get('role') else []
     for e in exports:
@@ -45,8 +48,6 @@ def live_facts(*, candidate, exports, intents, owners, current_owner, owner_stat
             pending_roles.append(e['role']);pending_roles.extend([((e.get('control') or {}).get('role'))] if (e.get('control') or {}).get('role') else [])
     protected={o['parent_sha256'] for o in owners}|{current_owner['parent_sha256']}
     protected.update(v['historical_parent_sha256'] for v in intents.values() if v.get('historical_parent_sha256'))
-    by_role={r['role']:r for r in receipts}
-    if len(by_role)!=len(receipts):raise ValueError('duplicate receipts')
     for role in (candidate['role'],successor_role,fallback_role):
         if role not in by_role:raise ValueError('required receipt absent')
     if by_role[fallback_role].get('identity',{}).get('sha256')!=candidate.get('fallback_sha256'):raise ValueError('durable fallback identity differs')
@@ -58,4 +59,6 @@ def live_facts(*, candidate, exports, intents, owners, current_owner, owner_stat
     for role,r in by_role.items():
         proof=r.get('independent_verification') or {};identity=r.get('identity') or {}
         if r.get('private') and proof.get('sha256')==identity.get('sha256') and proof.get('bytes')==identity.get('bytes'):verified_roles.append(role)
+    verified_exports=[e for e in exports if e.get('role') in verified_roles]
+    if verified_exports:protected.add(intents[max(verified_exports,key=lambda e:e['step'])['role']]['sha256'])
     return {'eligibility':{'latest_role':latest,'latest_owner_role':latest_owner,'pending_roles':pending_roles,'protected_sha256s':protected,'active_units':active_units,'verified_roles':verified_roles,'successor_role':successor_role,'fallback_role':fallback_role},'receipts':receipts}
