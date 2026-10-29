@@ -380,3 +380,38 @@ def test_self_distillation_trains_own_successes_even_with_spread(tmp_path, monke
         state = production.run(config, rounds=1)
         assert seen['teacher_attempts'] == 0 and calls == []
         assert state['phase'] == 'await_successful_episodes' and state['trained_rounds'] == 0
+
+
+def test_llama_actor_binds_exact_export_and_receipt(tmp_path):
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    policy = 'a' * 64
+    identity = {'architecture': 'lfm3', 'checkpoint_sha256': policy, 'tokenizer_fingerprint': 'b' * 64,
+                'embedding_weight_sha256': 'c' * 64}
+    raw = {'native_identity': identity, 'native_participant': None, 'semantic_adapter_sha256': None,
+           'history_reasoning': {'policy': 'keep', 'template_kwargs': {'preserve_thinking': True}}}
+    directory = tmp_path / 'actor-gguf' / policy
+    directory.mkdir(parents=True)
+    (directory / 'model-bf16.gguf').write_bytes(b'gguf bytes')
+    gguf_sha = sha256_file_hex(directory / 'model-bf16.gguf')
+    manifest = {'schema': 'natlang.native-gguf/1', 'checkpoint_sha256': policy,
+                'serving': {'chat_template': 'chat-template.jinja', 'history_reasoning': 'keep',
+                            'chat_template_kwargs': {'preserve_thinking': True}},
+                'files': [{'outtype': 'bf16', 'file': 'model-bf16.gguf', 'sha256': gguf_sha, 'native_identity': identity}]}
+    (directory / 'manifest.json').write_text(json.dumps(manifest))
+    config = {'out': str(tmp_path), 'base': 'unused'}
+    expected, values = production.prepare_llama_actor(config, 'unused.pt', policy, raw)
+    assert expected['actor_export'] == {'kind': 'exact', 'format': 'gguf-bf16', 'sha256': gguf_sha}
+    assert 'history_reasoning' not in expected and values['actor_gguf'].endswith('model-bf16.gguf')
+    receipt = {'schema': 'natlang.rl-policy-binding/2', 'checkpoint_sha256': policy, 'communication': 'native-state',
+               'native_identity': identity, 'actor_export': dict(expected['actor_export'])}
+    production.validate_actor_receipts({'u': receipt}, policy_id=policy, neuralese_server=True, expected_native=expected)
+    with pytest.raises(ValueError, match='different export'):
+        production.validate_actor_receipts({'u': {**receipt, 'actor_export': {**receipt['actor_export'], 'sha256': 'd' * 64}}},
+            policy_id=policy, neuralese_server=True, expected_native=expected)
+    (directory / 'manifest.json').write_text(json.dumps({**manifest, 'serving': {**manifest['serving'], 'history_reasoning': 'drop'}}))
+    with pytest.raises(ValueError, match='history reasoning'):
+        production.prepare_llama_actor(config, 'unused.pt', policy, raw)
+    (directory / 'manifest.json').write_text(json.dumps({**manifest, 'files': [{**manifest['files'][0],
+        'native_identity': {**identity, 'embedding_weight_sha256': 'e' * 64}}]}))
+    with pytest.raises(ValueError, match='native identity'):
+        production.prepare_llama_actor(config, 'unused.pt', policy, raw)
