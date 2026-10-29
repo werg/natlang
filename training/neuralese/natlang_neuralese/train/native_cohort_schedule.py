@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import deque
 import heapq
+from fractions import Fraction
 import hashlib
 import json
 
@@ -31,7 +32,7 @@ def source_cohort_ids(source):
     return result
 
 
-def balance_urgent_batches(entries, batches, exposure_counts, cohort_ids, *, foundation_ids=(), lane="urgent"):
+def balance_urgent_batches(entries, batches, exposure_counts, cohort_ids, *, foundation_ids=(), lane="urgent", quotas=None):
     """Choose least served pending cohort; saved row visits are the history."""
     if lane not in ("urgent", "ordinary", "communication"):
         raise ValueError("unknown cohort service lane")
@@ -43,29 +44,33 @@ def balance_urgent_batches(entries, batches, exposure_counts, cohort_ids, *, fou
         key = next(iter(ids))
         queues.setdefault(key, deque()).append(batch)
     service = dict.fromkeys(queues, 0)
+    required = dict.fromkeys(queues, 0)
     for index, entry in enumerate(entries):
         key = cohort_ids[index]
-        if key in service and ((bool(entry.get('communication')) if lane == 'communication' else
+        if key in service and (quotas is None or entry['id'] in quotas) and ((bool(entry.get('communication')) if lane == 'communication' else
                 (entry['id'] not in foundation_ids and (entry.get('training_priority', 0) > 0 if lane == 'urgent'
                 else entry.get('training_priority', 0) == 0 and not entry.get('communication'))))):
             credit = exposure_counts.get(entry['id'], 0)
             if type(credit) is not int or credit < 0:
                 raise ValueError('cohort service requires nonnegative integer row credits')
             service[key] += credit * entry['forward_tokens']
+            required[key] += (quotas.get(entry['id'], 0) if quotas is not None else 1) * entry['forward_tokens']
     heap = []
     for ordinal, (key, queue) in enumerate(queues.items()):
         priority = entries[queue[0][1][0]].get('training_priority', 0)
         # A newly appended unserved ordinary cohort must not sit behind many
         # equally unserved historical cohorts. Token service is still the
         # primary key; newest source order only resolves exact service ties.
-        tie = -ordinal if lane == 'ordinary' else ordinal
-        heapq.heappush(heap, (service[key], -priority, tie, key))
+        tie = -ordinal if lane in ('ordinary', 'communication') else ordinal
+        if required[key] <= 0:
+            raise ValueError('pending cohort has no required token mass')
+        heapq.heappush(heap, (Fraction(service[key], required[key]), -priority, tie, key))
     result = []
     while heap:
-        served, priority, ordinal, key = heapq.heappop(heap)
+        _, priority, ordinal, key = heapq.heappop(heap)
         batch = queues[key].popleft()
         result.append(batch)
-        served += sum(entries[index]['forward_tokens'] for index in batch[1])
+        service[key] += sum(entries[index]['forward_tokens'] for index in batch[1])
         if queues[key]:
-            heapq.heappush(heap, (served, priority, ordinal, key))
+            heapq.heappush(heap, (Fraction(service[key], required[key]), priority, ordinal, key))
     return result

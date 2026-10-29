@@ -141,6 +141,8 @@ def test_actual_tiny_stop_append_resume_keeps_optimizer_rng_and_all_row_visits(t
     assert communication_transition['from'] is False and communication_transition['to'] is True and communication_transition['at_global_step']==2
     urgent_transition=final['options']['urgent_cohort_fairness_history'][-1]
     assert urgent_transition['from'] is False and urgent_transition['to'] is True and urgent_transition['at_global_step']==2
+    assert final['options']['cohort_service_policy']=='required-token-mass-v1'
+    assert isinstance(final['options']['cohort_service_policy_history'],list)
     assert final['global_step']==10 and all(v==1 for v in final['exposure_counts'].values())
     assert final['optimizer'] and final['metrics']['held']['scope']=='full'
     from natlang_neuralese.common.hashing import sha256_file_hex
@@ -227,3 +229,18 @@ def test_communication_fairness_streams_each_cohort_monotonically():
             yield from [type('Item',(),{'id':rows[i]['id']})() for i in indices]
     actual=list(stream_pending_batches(Source(),batches,cohort_ids=cohorts,communication_cohort_fairness=True))
     assert [item.id for _,_,_,batch in actual for item in batch]==names(rows,batches)
+
+
+def test_normalized_service_is_proportional_and_ignores_out_of_shard_credit():
+    from natlang_neuralese.train.native_cohort_schedule import balance_urgent_batches
+    rows=[dict(id=f'old-{i}',communication=True,training_priority=0,forward_tokens=1) for i in range(1000)] + [dict(id=f'new-{i}',communication=True,training_priority=0,forward_tokens=1) for i in range(1000)]
+    batches=[(0,[i],False) for i in range(2000)]
+    amounts=[]
+    for count in (1,10,100):
+        cohorts=[f'old-{i*count//1000}' for i in range(1000)]+['new']*1000
+        selected=balance_urgent_batches(rows,batches,{},cohorts,lane='communication')[:256]
+        amounts.append(sum(i>=1000 for _,(i,),_ in selected))
+    assert amounts[0]==128 and amounts[1]>=120 and amounts[2]>=95
+    subset=[(0,[0],False),(0,[1000],False)]
+    result=balance_urgent_batches(rows,subset,{'old-1':100},['old']*1000+['new']*1000,lane='communication',quotas={'old-0':1,'new-0':1})
+    assert result[0][1]==[1000]

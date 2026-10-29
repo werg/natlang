@@ -154,20 +154,20 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
         from .native_cohort_schedule import balance_urgent_batches
         if urgent_cohort_fairness:
             urgent = balance_urgent_batches(entries, urgent, exposure_counts, cohort_ids,
-                                           foundation_ids=foundation_ids)
+                                           foundation_ids=foundation_ids, quotas=quotas)
         if ordinary_cohort_fairness:
             ordinary = balance_urgent_batches(entries, ordinary, exposure_counts, cohort_ids,
-                                             foundation_ids=foundation_ids, lane='ordinary')
+                                             foundation_ids=foundation_ids, lane='ordinary', quotas=quotas)
     if cohort_ids is not None and communication_cohort_fairness:
         from .native_cohort_schedule import balance_urgent_batches
         def is_foundation(batch):
             return bool(foundation_ids) and entries[batch[1][0]]['id'] in foundation_ids
-        communication = (balance_urgent_batches(entries, [b for b in communication if is_foundation(b)], exposure_counts, cohort_ids, lane='communication')
-                         + balance_urgent_batches(entries, [b for b in communication if not is_foundation(b)], exposure_counts, cohort_ids, lane='communication'))
+        communication = (balance_urgent_batches(entries, [b for b in communication if is_foundation(b)], exposure_counts, cohort_ids, lane='communication', quotas=quotas)
+                         + balance_urgent_batches(entries, [b for b in communication if not is_foundation(b)], exposure_counts, cohort_ids, lane='communication', quotas=quotas))
         priorities = {entries[b[1][0]].get('training_priority', 0) for b in urgent if entries[b[1][0]].get('communication')}
         for priority in priorities:
             comm_slots = [i for i, b in enumerate(urgent) if entries[b[1][0]].get('communication') and entries[b[1][0]].get('training_priority', 0) == priority]
-            balanced = balance_urgent_batches(entries, [urgent[i] for i in comm_slots], exposure_counts, cohort_ids, lane='communication')
+            balanced = balance_urgent_batches(entries, [urgent[i] for i in comm_slots], exposure_counts, cohort_ids, lane='communication', quotas=quotas)
             for i, batch in zip(comm_slots, balanced):
                 urgent[i] = batch
     def foundational(batch):
@@ -1642,6 +1642,8 @@ def _main(argv=None, *, requested_refresh):
     saved_training = resume or shared_resume or {}
     saved_options = saved_training.get('options') or {}
     checkpoint_options['source_predecessor_retirement_history'] = list(saved_options.get('source_predecessor_retirement_history') or [])
+    prior_service_policy = saved_options.get('cohort_service_policy', 'absolute-token-service-v1')
+    service_history = list(saved_options.get('cohort_service_policy_history') or [])
     urgent_prior = bool(saved_options.get('urgent_cohort_fairness', False))
     urgent_history = list(saved_options.get('urgent_cohort_fairness_history') or [])
     communication_prior = bool(saved_options.get('communication_cohort_fairness', False))
@@ -2659,6 +2661,13 @@ def _main(argv=None, *, requested_refresh):
         urgent_history.append({'schema':'natlang.urgent-cohort-fairness-transition/1', 'from':urgent_prior, 'to':args.urgent_cohort_fairness, 'at_global_step':global_step, 'source_bindings_sha256':source_hash, 'optimizer_rng_exposure':'preserved'})
     checkpoint_options['urgent_cohort_fairness_history'] = urgent_history
     checkpoint_options['urgent_cohort_fairness'] = args.urgent_cohort_fairness
+    if fairness_had_saved_training and prior_service_policy != 'required-token-mass-v1':
+        service_history.append({'schema':'natlang.cohort-service-policy-transition/1',
+            'from':prior_service_policy, 'to':'required-token-mass-v1', 'at_global_step':global_step,
+            'source_bindings_sha256':source_hash, 'optimizer_rng_exposure':'preserved',
+            'scope':'per declared source leaf and scheduling lane; indivisible initial ties may depend on partitioning'})
+    checkpoint_options['cohort_service_policy'] = 'required-token-mass-v1'
+    checkpoint_options['cohort_service_policy_history'] = service_history
     checkpoint_options['communication_cohort_fairness_history'] = communication_history
     checkpoint_options['communication_cohort_fairness'] = args.communication_cohort_fairness
     if prior_rotation and args.diloco is not None:
