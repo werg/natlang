@@ -34,7 +34,10 @@ def run_promotion(directory, *, intent, fence_workers, verify_fence, start_prima
         ready=start_primary(intent,evidence)
         if (ready.get('run_id')!=intent['run_id'] or ready.get('sequence')!=intent['sequence']
                 or ready.get('head')!=intent['head'] or ready.get('url')!=intent['new_url']
-                or ready.get('token_sha256')!=intent['new_token_sha256'] or ready.get('ready') is not True):
+                or ready.get('token_sha256')!=intent['new_token_sha256'] or ready.get('ready') is not True
+                or not isinstance(ready.get('clock_rebase'),dict) or not isinstance(ready.get('sealed_rebase'),dict)
+                or type(ready['sealed_rebase'].get('sequence')) is not int or ready['sealed_rebase']['sequence']<2
+                or not ready['sealed_rebase'].get('head')):
             raise ValueError('new primary did not prove exact WAL and session identity')
         record.update(phase='primary-ready',primary=ready);write_json_durable(journal,record)
         released=release_workers(intent,fences)

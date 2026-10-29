@@ -15,7 +15,7 @@ def test_controller_never_releases_before_exact_ready(tmp_path):
     with pytest.raises(ValueError):
         run_promotion(tmp_path,intent=intent,fence_workers=fence,verify_fence=verify,start_primary=lambda *_:{},release_workers=release)
     good=tmp_path/'good'
-    ready={'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':'t'*64}
+    ready={'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':'t'*64,'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64}}
     result=run_promotion(good,intent=intent,fence_workers=fence,verify_fence=verify,start_primary=lambda *_:ready,release_workers=release)
     assert result['phase']=='released' and called==[True]
 
@@ -40,7 +40,7 @@ def test_concrete_controller_binds_sdk_roles_and_ready_head(tmp_path,monkeypatch
     monkeypatch.setattr(cwctl,'read_sandbox',lambda *args,**kwargs:Sandbox())
     class Transport:
         def __init__(self,*args,**kwargs):pass
-        def json(self,*args):return {'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':intent['new_token_sha256']}
+        def json(self,*args):return {'ready':True,'run_id':'r','sequence':4,'head':'h'*64,'url':'https://new','token_sha256':intent['new_token_sha256'],'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64}}
     monkeypatch.setattr(worker,'Transport',Transport)
     config={'intent':intent,'workers':entries,'expected_primary':old,'expected_workers':[0,1],'control_dirs':{},
         'supervisor_proof':{'journal':{'path':'p','sha256':'x'}},'new_token_file':str(tmp_path/'token'),

@@ -75,7 +75,7 @@ def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared
                     if failure or active['machine'] is None:raise ValueError('replica cannot rotate')
                     current=active['journal']
                     if self.path=='/v1/generation/prepare':
-                        if set(value)!={'id','previous','captured_monotonic'} or not re.fullmatch('[0-9a-f]{32}',value['id']):
+                        if set(value)!={'id','previous','captured_monotonic','captured_wall'} or not re.fullmatch('[0-9a-f]{32}',value['id']):
                             raise ValueError('invalid generation identity')
                         prepared=active['prepared']
                         if prepared is not None:
@@ -86,7 +86,7 @@ def serve(journal, host, port, token, *, max_bytes, stop, machine=None, prepared
                             from ...common.jsonio import write_json_durable
                             root=store_root/('generation-'+value['id'])
                             baseline,next_journal=prepare_peer_generation(active['machine'],current,root/'baseline',root/'journal',
-                                previous=value['previous'],captured_monotonic=value['captured_monotonic'])
+                                previous=value['previous'],captured_monotonic=value['captured_monotonic'],captured_wall=value['captured_wall'])
                             reply={'baseline_sha256':baseline['sha256'],'new_head':next_journal.head}
                             active['prepared']={'request':value,'reply':reply,'journal':next_journal,'baseline':str(root/'baseline')}
                             write_json_durable(store_root/'replica-prepared.json',{'schema':'natlang.diloco-replica-prepared-generation/1',

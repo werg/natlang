@@ -223,8 +223,8 @@ def test_generation_switch_matches_peer_without_transferring_weights(tmp_path):
     from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
     root=tmp_path/'root';initialize_coordinator(root,run_id='r',masters={'weight':torch.ones(4)},identity={'parent':'p'},workers=1,min_quorum=1,fragment_bytes=1024);peer=tmp_path/'peer';shutil.copytree(root,peer)
     left=ReplayCoordinator(root,quorum_since={});right=ReplayCoordinator(peer,quorum_since={});leader=ReplicaJournal(tmp_path/'leader-wal',run_identity='r',baseline_sha256='a'*64);remote=ReplicaJournal(tmp_path/'peer-wal',run_identity='r',baseline_sha256='a'*64);writer=ReplicatedExecutor(leader,'http://unused','s'*32,allow_http=True);empty=tmp_path/'empty';empty.write_bytes(b'');dispatch=ReplicatedDispatch(left,writer,empty);staged={}
-    def prepare(previous,clock):
-        baseline,journal=prepare_peer_generation(right,remote,tmp_path/'peer-base-next',tmp_path/'peer-wal-next',previous=previous,captured_monotonic=clock);staged['journal']=journal
+    def prepare(previous,clock,wall):
+        baseline,journal=prepare_peer_generation(right,remote,tmp_path/'peer-base-next',tmp_path/'peer-wal-next',previous=previous,captured_monotonic=clock,captured_wall=wall);staged['journal']=journal
         return {'baseline_sha256':baseline['sha256'],'new_head':journal.head}
     def commit(intent):return {'baseline_sha256':intent['baseline_sha256'],'new_head':staged['journal'].head}
     receipt=rotate(dispatch,local_baseline_dir=tmp_path/'leader-base-next',local_journal_dir=tmp_path/'leader-wal-next',receipt_path=tmp_path/'generation.json',peer_prepare=prepare,peer_commit=commit)
@@ -251,8 +251,8 @@ def test_real_peer_generation_switch_preserves_materialized_state(tmp_path):
         j=ReplicaJournal(store/'journal0',run_identity='r',baseline_sha256='a'*64,max_transactions=2);machine=ReplayCoordinator(peer,quorum_since={});ready[1].send(True);serve(j,'127.0.0.1',port,token,max_bytes=1<<20,stop=stop,machine=machine)
     proc=ctx.Process(target=receiver);proc.start();ready[0].recv();time.sleep(.1);url=f'http://127.0.0.1:{port}';j=ReplicaJournal(tmp_path/'leader-wal0',run_identity='r',baseline_sha256='a'*64,max_transactions=2);machine=ReplayCoordinator(primary,quorum_since={});writer=ReplicatedExecutor(j,url,token,allow_http=True);empty=tmp_path/'empty';empty.write_bytes(b'');dispatch=ReplicatedDispatch(machine,writer,empty);session='00000000-0000-0000-0000-000000000001'
     dispatch.call('lease',{'worker':0,'session':session});generation='b'*32
-    def prepare(previous,clock):
-        body={'id':generation,'previous':previous,'captured_monotonic':clock}
+    def prepare(previous,clock,wall):
+        body={'id':generation,'previous':previous,'captured_monotonic':clock,'captured_wall':wall}
         result=generation_request(url,token,'prepare',body,allow_http=True)
         assert generation_request(url,token,'prepare',body,allow_http=True)==result
         return result
@@ -323,7 +323,7 @@ def test_retention_three_real_rollovers_recover_after_primary_kill(tmp_path):
         session='00000000-0000-0000-0000-000000000001';dispatch.call('lease',{'worker':0,'session':session})
         for n in range(1,4):
             ident=str(n)*32;directory=leader_store/('generation-'+ident)
-            def prepare(previous,clock):return generation_request(url,token,'prepare',{'id':ident,'previous':previous,'captured_monotonic':clock},allow_http=True)
+            def prepare(previous,clock,wall):return generation_request(url,token,'prepare',{'id':ident,'previous':previous,'captured_monotonic':clock,'captured_wall':wall},allow_http=True)
             def commit(intent):return generation_request(url,token,'commit',{'id':ident,'previous':intent['previous'],'baseline_sha256':intent['baseline_sha256'],'new_head':intent['new_head']},allow_http=True)
             receipt=rotate(dispatch,local_baseline_dir=directory/'baseline',local_journal_dir=directory/'journal',receipt_path=directory/'generation.json',peer_prepare=prepare,peer_commit=commit)
             pointer=leader_store/'primary-active.json';write_json_durable(pointer,{'id':ident,'baseline_sha256':receipt['baseline_sha256'],'head':receipt['new_head'],'previous':receipt['previous']})
@@ -337,3 +337,31 @@ def test_retention_three_real_rollovers_recover_after_primary_kill(tmp_path):
         assert all((root/('generation-'+str(n)*32)).exists() for n in (2,3))
     recovered,machine,_=load_active(store,run_identity='r',destination=tmp_path/'recovered')
     assert machine.coordinator.progress==saved['progress'];recovered.close()
+
+
+def test_cross_host_clock_rebase_sealed_and_pending_grace_exact(tmp_path):
+    from natlang_neuralese.train.diloco.replica_journal import ReplicaJournal
+    from natlang_neuralese.train.diloco.replica_state import replay
+    root=tmp_path/'base';initialize_coordinator(root,run_id='r',masters={'weight':torch.ones(4)},identity={'parent':'p'},workers=2,min_quorum=1,fragment_bytes=1024,grace_seconds=10)
+    live=tmp_path/'live';restored=tmp_path/'restored';shutil.copytree(root,live);shutil.copytree(root,restored)
+    machine=ReplayCoordinator(live,quorum_since={});journal=ReplicaJournal(tmp_path/'wal',run_identity='r',baseline_sha256='a'*64)
+    empty=tmp_path/'empty';empty.write_bytes(b'');delta=tmp_path/'delta';save_tensors(delta,{'delta':torch.ones(4)})
+    session='00000000-0000-0000-0000-000000000001'
+    def sealed(kind,args,wall,mono,payload=empty):
+        event={'kind':kind,'args':args,'wall':wall,'monotonic':mono};seq=journal.sequence+1
+        journal.append(event,payload,expected_sequence=seq,expected_previous=journal.head)
+        state=machine.apply(event,payload);assert state['error'] is None
+        journal.append({'kind':'seal','operation_sequence':seq,'state':state},empty,expected_sequence=seq+1,expected_previous=journal.head)
+        return state
+    sealed('lease',{'worker':0,'session':session},99,999999)
+    sealed('submit',{'index':0,'worker':0,'session':session,'sequence':1,'base_version':0,'steps':1,'tokens':3},100,1000000,delta)
+    sealed('heartbeat',{'worker':0,'session':session,'steps':1,'tokens':3,'metrics':None},102,1000002)
+    old={str(k):v for k,v in machine.coordinator.quorum_since.items()};assert old=={'0':1000000}
+    change=sealed('clock_rebase',{'old_wall':102,'old_monotonic':1000002,'old_timers':old},105,1)
+    assert change['result']['elapsed_wall']==3 and change['quorum_since']=={'0':-4}
+    assert sealed('tick',{},109.9,5.9)['versions']==[0]
+    assert sealed('tick',{},110.1,6.1)['versions']==[1]
+    recovered=replay(journal,restored,expected_sequence=journal.sequence,expected_head=journal.head,quorum_since={})
+    assert recovered.coordinator.progress==machine.coordinator.progress
+    assert all(torch.equal(a,b) for a,b in zip(load_tensors(live/'fragments/00000.safetensors').values(),load_tensors(restored/'fragments/00000.safetensors').values()))
+    journal.close()

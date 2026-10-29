@@ -67,8 +67,6 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
         expected_primary=expected_primary,expected_workers=expected_workers)
     write_json_durable(store/'supervisor-start.json',{'schema':'natlang.diloco-replica-start/1',
         'baseline_sha256':baseline_sha256,'promotion':receipt,'session_transition':session_transition})
-    write_json_durable(Path(root)/'replica-session.json',{'run_id':receipt['run_id'],'sequence':receipt['sequence'],
-        'head':receipt['head'],'url':session_transition['new_url'],'token_sha256':session_transition['new_token_sha256'],'ready':True})
     empty=store/'empty-payload';write_bytes_durable(empty,b'')
     writer=ReplicatedExecutor(journal,peer_url,token,allow_http=allow_http,gateway=gateway)
     dispatch=ReplicatedDispatch(machine,writer,empty)
@@ -76,8 +74,8 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
         existing=[p for p in store.glob('generation-*') if p.is_dir()]
         if len(existing)>max_generations:raise ValueError('replica generation retention exceeds its local bound')
         identifier=uuid.uuid4().hex;directory=store/('generation-'+identifier)
-        def prepare(previous,clock):
-            return generation_request(peer_url,token,'prepare',{'id':identifier,'previous':previous,'captured_monotonic':clock},allow_http=allow_http,gateway=gateway)
+        def prepare(previous,clock,wall):
+            return generation_request(peer_url,token,'prepare',{'id':identifier,'previous':previous,'captured_monotonic':clock,'captured_wall':wall},allow_http=allow_http,gateway=gateway)
         def commit(intent):
             return generation_request(peer_url,token,'commit',{'id':identifier,'previous':intent['previous'],
                 'baseline_sha256':intent['baseline_sha256'],'new_head':intent['new_head']},allow_http=allow_http,gateway=gateway)
@@ -94,6 +92,12 @@ def serve_new_primary(*, baseline, baseline_sha256, store, root, host, port, tok
         retention.collect()
         return receipt
     writer.rollover_callback=rollover
+    rebase=dispatch.call('clock_rebase',{'old_wall':receipt['clock_anchor']['wall'],'old_monotonic':receipt['clock_anchor']['monotonic'],
+        'old_timers':receipt['old_timers']})
+    sealed=writer.read(lambda:{'sequence':writer.journal.sequence,'head':writer.journal.head})
+    write_json_durable(Path(root)/'replica-session.json',{'run_id':receipt['run_id'],'sequence':receipt['sequence'],
+        'head':receipt['head'],'url':session_transition['new_url'],'token_sha256':session_transition['new_token_sha256'],
+        'clock_rebase':rebase,'sealed_rebase':sealed,'ready':True})
     try:serve_coordinator(root,host,port,token,stop=stop,replication=dispatch)
     finally:
         writer.close();writer.journal.close()

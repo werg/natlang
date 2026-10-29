@@ -39,22 +39,14 @@ def promote(*, baseline, baseline_sha256, journal, sequence, head, destination,
     if sorted(expected_workers)!=list(range(int(json.loads((Path(destination)/'manifest.json').read_text())['workers']))):
         raise ValueError('fence does not cover every coordinator worker')
     timers={int(k):v for k,v in value['quorum_since'].items()}
-    machine=replay(journal,destination,expected_sequence=sequence,expected_head=head,quorum_since=timers)
-    old_now=value['captured_monotonic']
-    if sequence:
-        operation=json.loads((journal.root/f'{sequence-1:020d}'/'record.json').read_text())['event']
-        old_now=operation['monotonic']
-    new_now=time.monotonic();old_timers=dict(machine.coordinator.quorum_since)
-    if any(start > old_now for start in old_timers.values()):
-        raise ValueError('replica quorum timer is newer than its sealed event clock')
-    machine.coordinator.quorum_since={key:new_now-(old_now-start) for key,start in old_timers.items()}
+    machine=replay(journal,destination,expected_sequence=sequence,expected_head=head,quorum_since=timers,
+                   clock_anchor={'wall':value['captured_wall'],'monotonic':value['captured_monotonic']})
+    anchor=machine.last_clock
+    if anchor is None:raise ValueError('promotion lacks an authenticated clock anchor')
     receipt={'schema':'natlang.diloco-replica-promotion/1','run_id':value['run_id'],
-             'timer_rebase':{'old_monotonic':old_now,'new_monotonic':new_now,
-                             'old_timers':{str(k):v for k,v in old_timers.items()},
-                             'new_timers':{str(k):v for k,v in machine.coordinator.quorum_since.items()},
-                             'downtime_counts_toward_grace':False},
+             'clock_anchor':anchor,'old_timers':{str(k):v for k,v in sorted(machine.coordinator.quorum_since.items())},
              'baseline_sha256':baseline_sha256,'sequence':sequence,'head':head,
-             'fence':evidence,'scope':'supervisor-fenced exact journal replay; independent private export remains required'}
+             'fence':evidence,'scope':'supervisor-fenced exact journal replay; clock rebase must be sealed before publication'}
     write_json_durable(Path(destination)/'replica-promotion.json',receipt)
     return machine,receipt
 
@@ -72,4 +64,4 @@ def recover_receiver(*, baseline, baseline_sha256, journal, destination):
         raise ValueError('receiver journal belongs to another run')
     timers={int(k):v for k,v in value['quorum_since'].items()}
     return replay(journal,destination,expected_sequence=journal.sequence,expected_head=journal.head,
-                  quorum_since=timers,receiver_restart=True)
+                  quorum_since=timers,receiver_restart=True,clock_anchor={'wall':value['captured_wall'],'monotonic':value['captured_monotonic']})

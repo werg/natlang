@@ -7,14 +7,14 @@ from .replica_baseline import capture
 from .replica_journal import ReplicaJournal
 
 
-def prepare_peer_generation(machine, journal, baseline_dir, journal_dir, *, previous, captured_monotonic):
+def prepare_peer_generation(machine, journal, baseline_dir, journal_dir, *, previous, captured_monotonic, captured_wall):
     """Pin a peer's locally materialized state; retain the previous journal."""
     journal.verify(expected_sequence=previous['sequence'],expected_head=previous['head'])
     if previous['sequence'] % 2:raise ValueError('cannot rotate an unsealed coordinator operation')
     class Immediate:
         def __init__(self):self.machine=machine
         def read(self,fn):return fn()
-    baseline=capture(Immediate(),baseline_dir,captured_monotonic=captured_monotonic)
+    baseline=capture(Immediate(),baseline_dir,captured_monotonic=captured_monotonic,captured_wall=captured_wall)
     next_journal=ReplicaJournal(journal_dir,run_identity=journal.identity['run_identity'],
         baseline_sha256=baseline['sha256'],previous_generation=previous,
         max_payload_bytes=journal.max_payload_bytes,max_transactions=journal.max_transactions)
@@ -32,18 +32,18 @@ def rotate(dispatch, *, local_baseline_dir, local_journal_dir, receipt_path, pee
         old=executor.journal;previous={'sequence':old.sequence,'head':old.head}
         old.verify(expected_sequence=previous['sequence'],expected_head=previous['head'])
         if previous['sequence']%2:raise ValueError('cannot rotate unsealed journal')
-        clock=__import__('time').monotonic()
+        clock=__import__('time').monotonic();wall=__import__('time').time()
         if previous['sequence']:
             op=json.loads((old.root/f"{previous['sequence']-1:020d}"/'record.json').read_text())['event']
-            clock=op['monotonic']
+            clock=op['monotonic'];wall=op['wall']
         local,next_journal=prepare_peer_generation(dispatch.machine,old,local_baseline_dir,local_journal_dir,
-            previous=previous,captured_monotonic=clock)
-        peer=peer_prepare(previous,clock)
+            previous=previous,captured_monotonic=clock,captured_wall=wall)
+        peer=peer_prepare(previous,clock,wall)
         if peer.get('baseline_sha256')!=local['sha256'] or peer.get('new_head')!=next_journal.head:
             next_journal.close();raise ValueError('peer baseline or new generation differs')
         intent={'schema':'natlang.diloco-replica-generation/1','state':'prepared','previous':previous,
                 'baseline_sha256':local['sha256'],'baseline':str(Path(local_baseline_dir).resolve()),
-                'journal':str(Path(local_journal_dir).resolve()),'new_head':next_journal.head,'captured_monotonic':clock}
+                'journal':str(Path(local_journal_dir).resolve()),'new_head':next_journal.head,'captured_monotonic':clock,'captured_wall':wall}
         write_json_durable(receipt_path,intent)
         confirmed=peer_commit(intent)
         if confirmed != {'baseline_sha256':local['sha256'],'new_head':next_journal.head}:
