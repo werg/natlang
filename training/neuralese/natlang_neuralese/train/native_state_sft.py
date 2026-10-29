@@ -2803,6 +2803,19 @@ def _main(argv=None, *, requested_refresh):
         pending_batches=promote_focus(pending_batches,train.entries,focus_ids)
         focus_record['consumed']=[x for x in focus_record['initial_credits'] if x in focus_active and exposure_counts.get(x,0)>focus_record['initial_credits'][x]]
         if not focus_ids:focus_record['state']='complete'
+    # Record the ordering change while preserving all checkpointed row credits.
+    from .native_diversity import cohort_head_merge, stream_windows
+    if urgent_cohort_ids is None:
+        from .native_cohort_schedule import source_cohort_ids
+        urgent_cohort_ids = source_cohort_ids(train)
+    diversity_history=list(checkpoint_options.get('native_diversity_history') or [])
+    if not diversity_history:
+        diversity_history.append({'schema':'natlang.native-diversity-transition/1',
+            'policy':'cohort-head-merge/1','at_global_step':int(global_step),'lookahead':256,
+            'preserved':'weights, optimizer, RNG, row exposures and quotas'})
+    checkpoint_options['native_diversity_history']=diversity_history
+    pending_batches=cohort_head_merge(train.entries,pending_batches,urgent_cohort_ids,
+        priority_ids=foundation_priority_ids,focus_ids=focus_ids,batch_tokens=args.batch_tokens,batch_graphs=args.batch_graphs)
     if args.memory_qualification and objective is None:
         from .native_packed_capacity import qualify_pending
         from ..eval.native_memory import capacity_identity
@@ -2843,7 +2856,7 @@ def _main(argv=None, *, requested_refresh):
     refresh_boundary = False
     if args.refresh_at_checkpoint and args.refresh_after_updates is None and not (args.checkpoint_every or args.checkpoint_seconds):
         raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
-    schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
+    schedule = stream_windows(train, [[batch] for batch in pending_batches], priority_ids=foundation_priority_ids,
                                       cohort_ids=urgent_cohort_ids, rotation_index=rotation_index, focus_ids=focus_ids,
                                       urgent_cohort_fairness=args.urgent_cohort_fairness, ordinary_cohort_fairness=args.ordinary_cohort_fairness, communication_cohort_fairness=args.communication_cohort_fairness)
     resident = None
@@ -3129,8 +3142,22 @@ def _main(argv=None, *, requested_refresh):
                         focus_ids=pending_focus_ids()
                         pending_batches=promote_focus(pending_batches,train.entries,focus_ids)
                         if not focus_ids:focus_record['state']='complete'
+                    if urgent_cohort_ids is None:
+                        from .native_cohort_schedule import source_cohort_ids
+                        urgent_cohort_ids=source_cohort_ids(train)
+                    pending_batches=cohort_head_merge(train.entries,pending_batches,urgent_cohort_ids,
+                        priority_ids=foundation_priority_ids,focus_ids=focus_ids,batch_tokens=args.batch_tokens,batch_graphs=args.batch_graphs)
                     if args.memory_qualification and objective is None:
-                        packed = resident.packed_capacity_update
+                        # The committed source can change actual packed KV topology.
+                        # Qualify the transformed schedule before the next update.
+                        from .native_packed_capacity import qualify_pending
+                        from ..eval.native_memory import capacity_identity
+                        checked=qualify_pending(model,optimizer,train,pending_batches,args,backend=backend,
+                            checkpoint_sha256=sha256_file_hex_cached(policy.slot) if policy.slot.exists() else config['base_inventory_sha256'],global_step=global_step,
+                            prior_geometry=resident.state['payload'].get('sft_packed_geometry'),
+                            live_uncommitted=True,capacity_identity=capacity_identity(config,args,backend))
+                        if checked is not None:checkpoint_options['sft_packed_capacity']=checked
+                        packed = checked if checked is not None else resident.packed_capacity_update
                         if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
                         adopted_geometry = resident.state['payload'].get('sft_packed_geometry')
                         if adopted_geometry is not None:
@@ -3139,7 +3166,7 @@ def _main(argv=None, *, requested_refresh):
                             checkpoint_options['sft_packed_geometry'] = args.sft_packed_geometry
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
-                    schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
+                    schedule = stream_windows(train, [[batch] for batch in pending_batches], priority_ids=foundation_priority_ids,
                                                       cohort_ids=urgent_cohort_ids, rotation_index=rotation_index, focus_ids=focus_ids,
                                                       urgent_cohort_fairness=args.urgent_cohort_fairness,
                                                       ordinary_cohort_fairness=args.ordinary_cohort_fairness, communication_cohort_fairness=args.communication_cohort_fairness)
