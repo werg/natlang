@@ -97,12 +97,20 @@ def load_control(path, record, *, control_bytes=None, read_bound=None, verify_he
     if _flag(coord,'--parent')!=_flag(argv,'--continue-from'):
         raise ValueError('direct coordinator and worker parent differ')
     if '--diloco-new-outer' in argv:
+        if 'reanchor_manifest' not in bindings:
+            raise ValueError('direct reanchor lacks its common manifest')
+        common=data('reanchor_manifest')
+        if (common.get('schema')!='natlang.diloco-new-outer-manifest/1' or
+                common.get('workers')!=settings['workers'] or len(common.get('peers',[]))!=settings['workers']):
+            raise ValueError('invalid direct reanchor common manifest')
         external={(x.get('sha256'),x.get('bytes')) for x in control.get('external_dependencies', [])}
         declarations=[]
         for index in range(settings['workers']):
             name=f'reanchor_worker_{index}'
             if name not in bindings:
                 raise ValueError('direct reanchor lacks per-worker declaration: '+name)
+            if common['peers'][index].get('sha256') != bindings[name].get('sha256'):
+                raise ValueError('direct reanchor peer differs from the common manifest')
             declaration=data(name)
             if declaration.get('schema')!='natlang.diloco-new-outer/1' or declaration.get('worker')!=index:
                 raise ValueError('direct reanchor worker declaration differs')
@@ -120,6 +128,11 @@ def load_control(path, record, *, control_bytes=None, read_bound=None, verify_he
     if canonical_json_sha256_hex(plan['code'])!=control['runtime_code_sha256']:
         raise ValueError('direct plan runtime inventory differs')
     stage=plan['stage_inputs'][_flag(argv,'--stage-id')]
+    if '--diloco-new-outer' in argv:
+        common_role=stage.get('diloco_new_outer') or {}
+        if (common_role.get('path') != _flag(argv,'--diloco-new-outer') or
+                common_role.get('sha256') != bindings['reanchor_manifest']['sha256']):
+            raise ValueError('direct reanchor common recipe binding differs')
     roles={'native_graphs':'--native-graphs','held_native_graphs':'--held-native-graphs',
            'foundation_native_graphs':'--foundation-native-graphs','ce_supervision_policy':'--ce-supervision-policy'}
     for key,flag in roles.items():

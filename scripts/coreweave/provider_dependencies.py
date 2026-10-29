@@ -267,6 +267,12 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
                 if transition['declaration']['sha256'] != transition.get('declaration_sha256') or \
                         transition['seed']['sha256'] != transition.get('seed_sha256'):
                     raise ValueError('new outer recovery dependency binding differs')
+                manifest = json.loads(Path(transition['declaration']['path']).read_text())
+                if manifest.get('schema') != 'natlang.diloco-new-outer-manifest/1' or \
+                        len(manifest.get('peers', [])) != manifest.get('workers'):
+                    raise ValueError('invalid common new outer manifest')
+                for reference in manifest['peers']:
+                    bound(reference)
         foundation_inputs(training.get('options') or {})
         foundation_inputs(training.get('training_options') or {})
         packed_capacity_inputs(training.get('options') or {})

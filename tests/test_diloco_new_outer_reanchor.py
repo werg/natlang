@@ -97,9 +97,16 @@ def test_new_outer_authenticates_parent_seed_and_history(tmp_path):
     proof = {'schema':'natlang.diloco-new-outer/1', 'worker':2, 'parent':parent,
              'historical_outer_checkpoint':old, 'seed_sha256':seed['sha256'],
              'source_hash':'a'*64, 'held_sha256':'b'*64}
-    declaration = tmp_path / 'declaration.json'
-    declaration.write_text(json.dumps(proof))
-    kwargs = dict(slot=slot, seed=seed['path'], worker=2, source_hash='a'*64,
+    declarations = []
+    for index in range(4):
+        path = tmp_path / f'declaration-{index}.json'
+        path.write_text(json.dumps({**proof, 'worker':index}))
+        declarations.append({'path':str(path), 'bytes':path.stat().st_size,
+                             'sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
+    declaration = tmp_path / 'manifest.json'
+    declaration.write_text(json.dumps({'schema':'natlang.diloco-new-outer-manifest/1',
+                                       'workers':4,'peers':declarations}))
+    kwargs = dict(slot=slot, seed=seed['path'], worker=2, workers=4, source_hash='a'*64,
                   held_sha256='b'*64, history=history, saved=None)
     assert not validate_new_outer(declaration, **kwargs)[2]
     with pytest.raises(ValueError, match='source'):
@@ -112,13 +119,14 @@ def test_new_outer_authenticates_parent_seed_and_history(tmp_path):
 def test_recipe_and_direct_recovery_share_per_peer_identity():
     from natlang_neuralese.train.recipe import stage_input_args
     from scripts.coreweave.diloco_direct_recovery import _identity_argv
-    left = ['--continue-from','/shared/seed', '--diloco-new-outer','/peer/0.json',
-            '--standalone-diloco-parent','/peer/0.pt', '--diloco','{}']
-    right = ['--continue-from','/shared/seed', '--diloco-new-outer','/peer/1.json',
-             '--standalone-diloco-parent','/peer/1.pt', '--diloco','{}']
-    assert trainer_argv(left) == trainer_argv(right) == _identity_argv(left) == _identity_argv(right)
-    assert stage_input_args({'diloco_new_outer':{'path':'/peer/0.json'}}, 'native_state_sft') == [
-        '--diloco-new-outer','/peer/0.json']
+    recipe = json.dumps({'path':'/shared/recipe', 'sha256':'a'*64})
+    arguments = [['--continue-from','/shared/seed', '--recipe-binding',recipe,
+                  '--diloco-new-outer','/shared/manifest.json', '--standalone-diloco-parent',f'/peer/{i}.pt',
+                  '--diloco',json.dumps({'worker_id':i})] for i in range(4)]
+    assert len({tuple(trainer_argv(argv)) for argv in arguments}) == 1
+    assert all(trainer_argv(argv) == _identity_argv(argv) for argv in arguments)
+    assert stage_input_args({'diloco_new_outer':{'path':'/shared/manifest.json'}}, 'native_state_sft') == [
+        '--diloco-new-outer','/shared/manifest.json']
 
 
 def test_fresh_outer_retains_peer_weights_until_actual_update(tmp_path):

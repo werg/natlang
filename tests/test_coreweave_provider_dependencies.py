@@ -147,7 +147,10 @@ def test_config_cycle_and_external_payloads_fail_before_launch(tmp_path):
 
 def test_new_outer_transition_publishes_all_exact_recovery_dependencies(tmp_path):
     import torch
-    refs = {name:write(tmp_path / name, name) for name in ('declaration', 'parent', 'historical', 'seed')}
+    refs = {name:write(tmp_path / name, name) for name in ('parent', 'historical', 'seed')}
+    peers = [write(tmp_path / f'peer-{i}', str(i)) for i in range(4)]
+    refs['declaration'] = write(tmp_path/'declaration', {'schema':'natlang.diloco-new-outer-manifest/1',
+                                                        'workers':4,'peers':peers})
     transition = {'schema':'natlang.diloco-new-outer-transition/1', 'declaration':refs['declaration'],
                   'parent':refs['parent'], 'historical_outer_checkpoint':refs['historical'], 'seed':refs['seed'],
                   'declaration_sha256':refs['declaration']['sha256'], 'seed_sha256':refs['seed']['sha256']}
@@ -158,6 +161,7 @@ def test_new_outer_transition_publishes_all_exact_recovery_dependencies(tmp_path
     closure = deps.dependency_closure({'parent_checkpoint':checkpoint}, namespace=str(tmp_path))
     files = {row['path'] for row in closure['files']}
     assert all(ref['path'] in files for ref in refs.values())
+    assert all(ref['path'] in files for ref in peers)
     Path(refs['historical']['path']).write_text('tampered')
     with pytest.raises(ValueError, match='hash changed'):
         deps.dependency_closure({'parent_checkpoint':checkpoint}, namespace=str(tmp_path))

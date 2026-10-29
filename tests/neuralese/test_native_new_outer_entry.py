@@ -38,10 +38,13 @@ def test_native_entry_saves_full_transition_before_readiness(tmp_path, monkeypat
     torch.save(original, slot)
     parent = tmp_path / 'peer.pt'
     shutil.copyfile(slot, parent)
-    declaration = tmp_path / 'reanchor.json'
-    declaration.write_text(json.dumps({'schema':'natlang.diloco-new-outer/1', 'worker':0,
+    peer_declaration = tmp_path / 'peer.json'
+    peer_declaration.write_text(json.dumps({'schema':'natlang.diloco-new-outer/1', 'worker':0,
         'parent':ref(parent), 'historical_outer_checkpoint':ref(old), 'seed_sha256':ref(seed)['sha256'],
         'source_hash':original['training']['source_hash'], 'held_sha256':ref(paths['test'])['sha256']}))
+    declaration = tmp_path / 'reanchor.json'
+    declaration.write_text(json.dumps({'schema':'natlang.diloco-new-outer-manifest/1',
+                                       'workers':4, 'peers':[ref(peer_declaration)]*4}))
     class Ready(Exception): pass
     def same(left, right):
         if isinstance(left, torch.Tensor): return isinstance(right, torch.Tensor) and torch.equal(left, right)

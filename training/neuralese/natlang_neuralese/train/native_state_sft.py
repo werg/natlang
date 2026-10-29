@@ -2345,11 +2345,20 @@ def _main(argv=None, *, requested_refresh):
             raise ValueError('new outer requires a resumed peer slot and a fresh coordinator')
         from .native_diloco import validate_new_outer
         from .diloco.worker import DilocoSettings
+        new_outer_settings = DilocoSettings.from_dict(json.loads(args.diloco))
         new_outer_proof, new_outer_sha, new_outer_resumed = validate_new_outer(
             args.diloco_new_outer, slot=policy.slot, seed=args.continue_from,
-            worker=DilocoSettings.from_dict(json.loads(args.diloco)).resolved_worker_id, source_hash=source_hash,
-            held_sha256=held.file_sha256, history=prior_outer_history,
+            worker=new_outer_settings.resolved_worker_id, workers=new_outer_settings.workers,
+            source_hash=prior_new_outer['source_hash'] if prior_new_outer else source_hash,
+            held_sha256=prior_new_outer['held_sha256'] if prior_new_outer else held.file_sha256,
+            history=prior_outer_history,
             saved=(resume or {}).get('options'))
+        # Once saved, the declaration is historical custody. A later source
+        # append uses the normal identity-transition checks and does not
+        # perform or gate the old reanchor again.
+        if new_outer_resumed and (prior_new_outer['source_hash'] != source_hash or
+                                  prior_new_outer['held_sha256'] != held.file_sha256):
+            new_outer_proof = None
     if args.diloco is None and previous_outer is not None:
         if args.standalone_diloco_parent is None or not policy.slot.is_file():
             raise ValueError('standalone continuation from DiLoCo requires an immutable full checkpoint pin')
@@ -2388,7 +2397,7 @@ def _main(argv=None, *, requested_refresh):
                 'historical_outer_checkpoint':prior_outer_history[-1]['checkpoint']}
     from .native_diloco import attach_learner
     diloco_identity_transition = None
-    if args.diloco_new_outer is None and args.diloco is not None and not parent_continuation and (source_correction_result.get('changed') or diloco_withdrawal_changed or diloco_append_changed):
+    if new_outer_proof is None and args.diloco is not None and not parent_continuation and (source_correction_result.get('changed') or diloco_withdrawal_changed or diloco_append_changed):
         diloco_identity_transition = {'schema':'natlang.diloco-source-identity-transition/1',
             'correction_verified':True, 'checkpoint_sha256':sha256_file_hex_cached(policy.slot),
             'correction_sha256':(source_correction_result.get('proof_sha256') if source_correction_result.get('changed') else sha256_file_hex_cached(args.withdrawn_native_graphs) if diloco_withdrawal_changed else source_receipts[0]['sha256']),
@@ -2396,7 +2405,7 @@ def _main(argv=None, *, requested_refresh):
             'withdrawal_sha256':sha256_file_hex_cached(args.withdrawn_native_graphs) if diloco_withdrawal_changed else None,
             'previous_source_hash':diloco_previous_source_hash, 'source_hash':source_hash,
             'stage_id':args.stage_id, 'recipe_binding':args.recipe_binding}
-    if args.diloco_new_outer is None and args.diloco is not None and not parent_continuation and diloco_identity_transition is None:
+    if new_outer_proof is None and args.diloco is not None and not parent_continuation and diloco_identity_transition is None:
         carried=((resume or {}).get('options') or {}).get('diloco_identity_transition_history') or []
         if carried and diloco_previous_source_hash==source_hash:
             diloco_identity_transition={**carried[-1], 'replay_verified_checkpoint_sha256':sha256_file_hex_cached(policy.slot)}

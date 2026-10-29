@@ -51,10 +51,21 @@ GLOBAL_EXPORT_SCHEMA = 'natlang.native-diloco-global-export/1'
 ARGUMENT = '--diloco'
 
 
-def validate_new_outer(declaration, *, slot, seed, worker, source_hash, held_sha256, history, saved):
+def validate_new_outer(declaration, *, slot, seed, worker, workers, source_hash, held_sha256, history, saved):
     """Authenticate this peer's own parent and the shared fresh seed before reanchor."""
     path = Path(declaration).resolve(strict=True)
-    proof = json.loads(path.read_text())
+    manifest = json.loads(path.read_text())
+    if manifest.get('schema') != 'natlang.diloco-new-outer-manifest/1':
+        raise ValueError('new outer requires the common peer declaration manifest')
+    peers = manifest.get('peers')
+    if not isinstance(peers, list) or len(peers) != workers or manifest.get('workers') != workers or not 0 <= worker < len(peers):
+        raise ValueError('new outer common manifest has invalid peer inventory')
+    reference = peers[worker]
+    declaration_path = Path(reference['path']).resolve(strict=True)
+    if (not declaration_path.is_file() or declaration_path.stat().st_size != reference.get('bytes')
+            or sha256_file_hex_cached(declaration_path) != reference.get('sha256')):
+        raise ValueError('new outer peer declaration differs from its common manifest')
+    proof = json.loads(declaration_path.read_text())
     if (proof.get('schema') != 'natlang.diloco-new-outer/1' or proof.get('worker') != worker
             or proof.get('source_hash') != source_hash or proof.get('held_sha256') != held_sha256
             or proof.get('seed_sha256') != sha256_file_hex_cached(seed)

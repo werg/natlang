@@ -80,6 +80,16 @@ def test_direct_reanchor_requires_every_peer_declaration_and_parent_custody(tmp_
                      'historical_outer_checkpoint':old}
         control['bindings'][f'reanchor_worker_{index}']=put(f'reanchor-{index}.json',declaration)
     control['external_dependencies']=external
+    common={'schema':'natlang.diloco-new-outer-manifest/1','workers':4,
+            'peers':[control['bindings'][f'reanchor_worker_{i}'] for i in range(4)]}
+    control['bindings']['reanchor_manifest']=put('common.json',common)
+    plan=json.loads(Path(control['bindings']['plan']['path']).read_text())
+    plan['stage_inputs']['native_full_sft']['diloco_new_outer']={
+        'path':'/work/reanchor.json','sha256':control['bindings']['reanchor_manifest']['sha256']}
+    control['bindings']['plan']=put('plan.json',plan)
+    owner=json.loads(Path(control['bindings']['owner_journal']['path']).read_text())
+    owner['plan']=control['bindings']['plan']
+    control['bindings']['owner_journal']=put('owner.json',owner)
     descriptor.write_text(json.dumps(control));record=mod.record_from_control(descriptor,'run')
     mod.load_control(descriptor,record)
     control['external_dependencies'].pop()
