@@ -917,3 +917,32 @@ def test_unselected_stale_foundation_bindings_are_not_runtime_dependencies(tmp_p
     closure=deps.dependency_closure({'parent_checkpoint':{'path':str(checkpoint),
         'sha256':deps.sha256_file_hex_cached(checkpoint)}},namespace=str(tmp_path))
     assert {item['path']for item in closure['files']}=={str(checkpoint)}
+def test_external_source_publication_binds_compact_proofs_without_offbox_raw(tmp_path):
+    import hashlib, io, json, tarfile
+    from scripts.coreweave.recovery_readiness import required_bindings
+    root=tmp_path/'provider';root.mkdir()
+    def ref(path):
+        return {'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+    def file(name, data):
+        path=root/name;path.write_bytes(data);return path
+    verifier=file('verifier.py',b'verifier');helper=file('helper.py',b'helper');runtime=file('runtime.tar',b'runtime');runtime_receipt=file('runtime-receipt.json',b'{}');proof=file('proof.json',b'{}')
+    absent_archive={'path':str(tmp_path/'not-present-original.tar.zst'),'sha256':'a'*64}
+    absent_raw={'path':str(tmp_path/'not-present-records.jsonl'),'sha256':'b'*64,'bytes':20}
+    closure={'schema':'natlang.big2-tranche-custody-publication-closure/1','verifier':ref(verifier),'tokenizer_helper':ref(helper),'runtime_snapshot':ref(runtime),'runtime_snapshot_receipt':ref(runtime_receipt),'historical_proofs':[ref(proof)],'archive':absent_archive,'recovered_raw_records':absent_raw}
+    closurefile=file('closure.json',json.dumps(closure).encode());members={'verify.py':verifier.read_bytes(),'student_tokenizers.py':helper.read_bytes(),'runtime.tar':runtime.read_bytes(),'runtime-receipt.json':runtime_receipt.read_bytes(),'closure.json':closurefile.read_bytes(),'proofs/0.json':proof.read_bytes()};bundle=root/'mechanisms.tar.gz'
+    with tarfile.open(bundle,'w:gz') as tar:
+        for name,data in members.items():
+            info=tarfile.TarInfo(name);info.size=len(data);tar.addfile(info,io.BytesIO(data))
+    content=file('content-audit.json',b'{}');split=file('split-audit.json',b'{}')
+    provenance={'schema':'natlang.external-source-publication-provenance/1','closure':ref(closurefile),'custody':closure,'mechanisms_archive':ref(bundle),'content_audit':ref(content),'clean_closure_audit':ref(split)}
+    binding={'path':str(root/'recipe.json'),'sha256':'c'*64,'lineage_sha256':'d'*64,'external_provenance':provenance}
+    state={'training':{'options':{'recipe_binding':json.dumps(binding)}}}
+    result=deps.dependency_closure({},namespace=str(root),_checkpoint_payload=state)
+    actual={item['path'] for item in result['files']};assert {str(closurefile),str(bundle),str(content),str(split)}<=actual
+    assert absent_archive['path'] not in actual and absent_raw['path'] not in actual
+    required=required_bindings({'training':state['training'],'model_config':{'base':''}});keys={(x['path'],x['sha256']) for x in required}
+    assert (absent_archive['path'],absent_archive['sha256']) in keys and (absent_raw['path'],absent_raw['sha256']) in keys
+    bundle.write_bytes(b'tampered')
+    import pytest
+    with pytest.raises(ValueError,match='dependency hash changed'):
+        deps.dependency_closure({},namespace=str(root),_checkpoint_payload=state)
