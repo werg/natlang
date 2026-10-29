@@ -41,6 +41,12 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
         if old_family.get('key')!='logical-family' or new_family.get('key')!='logical-family':
             raise ValueError('resident CE objective change is not a logical-family map extension')
         old_map=old_family.pop('map',None);new_map=new_family.pop('map',None)
+        # A declared objective transition may replace row-count balancing with
+        # explicit measured own-output family scales. Keep all other objective
+        # settings and the cap identical; load_policy validates the scales.
+        if old_family.get('normalization') == 'bounded-mean-one/1' and new_family.get('normalization') == 'declared/1':
+            old_family.pop('normalization');new_family.pop('normalization')
+            new_family.pop('scales',None)
         if left!=right or not old_map or not new_map or (b.get('objective_transition') or {}).get('from')!=identity(policy_objective(prior))['sha256']:
             raise ValueError('resident logical-family extension changed objective law or lacks its exact predecessor')
         previous=json.loads(_verified_bytes(old_map)[1]);current=json.loads(_verified_bytes(new_map)[1])

@@ -300,6 +300,18 @@ def test_resident_logical_family_extension_preserves_old_rows_and_records_transi
     adopt_policy_update((new['stage_inputs']['sft']['ce_supervision_policy'],loaded),current_binding=resident.binding(paths['old_ce']),args=args,checkpoint_options=options,global_step=7)
     assert options['supervision_objective']['sha256']==identity(policy_objective(newdoc))['sha256']
     assert options['supervision_objective_history'][-1]['at_global_step']==7
+    # Explicit, predecessor-bound row-count -> measured token-mass scales.
+    newdoc['objective']['family_balance']={'key':'logical-family','max_scale':8.,'normalization':'declared/1','map':newmap,'scales':{'ordinary':1.25}}
+    write_json(paths['new_ce'],newdoc);new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+    declared=extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
+    options={'supervision_objective':identity(policy_objective(olddoc))}
+    adopt_policy_update((new['stage_inputs']['sft']['ce_supervision_policy'],declared),current_binding=resident.binding(paths['old_ce']),args=args,checkpoint_options=options,global_step=8)
+    assert options['supervision_objective']==identity(policy_objective(newdoc))
+    assert options['supervision_objective_history'][-1]['at_global_step']==8
+    bad=copy.deepcopy(newdoc);bad['objective']['reasoning_share']=0.7;write_json(paths['new_ce'],bad)
+    new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+    with pytest.raises(ValueError,match='changed objective law'):
+        extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
     damaged=json.loads((tmp_path/'new-family.json').read_text());damaged['rows'][0]['family']='changed';write_json(tmp_path/'new-family.json',damaged);newdoc['objective']['family_balance']['map']=resident.binding(tmp_path/'new-family.json');write_json(paths['new_ce'],newdoc);new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
     with pytest.raises(ValueError,match='changed prior source row families'):
         extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
