@@ -480,7 +480,7 @@ TEACHER_SEED_OFFSET = 900
 GUIDANCE_RUN_SCHEMA = 'natlang.guidance-run/1'
 
 
-def guidance_controls(base, *, role, custody_receipt, facts, selection=None):
+def guidance_controls(base, *, role, custody_receipt, facts, selection=None, writer=None):
     """Run-level chat controls of one JOLT+ episode: the world's custody-checked facts for the in-run guidance writer.
 
     The natlang runtime (``applications/guidance-writer``) filters them by visibility per invocation, selects with
@@ -492,7 +492,8 @@ def guidance_controls(base, *, role, custody_receipt, facts, selection=None):
     from .privileged_context import fact_request
     return {**base, 'x_natlang_guidance': {'schema': GUIDANCE_RUN_SCHEMA, 'role': role, 'custody': custody_receipt,
                                            'facts': [fact_request(fact) for fact in facts],
-                                           **({'selection': selection} if selection is not None else {})}}
+                                           **({'selection': selection} if selection is not None else {}),
+                                           **({'writer': writer} if writer is not None else {})}}
 
 
 def _load_custody(custody):
@@ -505,7 +506,7 @@ def _load_custody(custody):
         return None, str(error)
 
 
-def student_guidance(student_entries, *, ids, cases, config, out, custody=None, selection=None):
+def student_guidance(student_entries, *, ids, cases, config, out, custody=None, selection=None, writer=None):
     """Bind each student entry to its world's guidance controls (write-only writer for the OPSD twin).
 
     ``ids``: the prepared packet's case ids by queue ``index``. A world refused by custody keeps the plain controls;
@@ -534,7 +535,7 @@ def student_guidance(student_entries, *, ids, cases, config, out, custody=None, 
         path = out / f"row-{entry['group']:03d}" / f"student-{entry['sample']:02d}-chat-request-config.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         write_json_durable(path, guidance_controls(base, role='student', custody_receipt=receipt, facts=facts,
-                                                   selection=selection))
+                                                   selection=selection,writer=writer))
         entry['chat_request_config'] = str(path)
     return None
 
@@ -584,7 +585,7 @@ def plan_teacher_attempts(groups, *, default, budget, command=None):
 
 
 def teacher_entries(student_entries, student_rows, *, cases, config, out, attempts, seed_base, custody=None,
-                    selection=None, plan_command=None):
+                    selection=None, writer=None, plan_command=None):
     """JOLT+ teacher-attempt collector entries for the scored student groups of one collection.
 
     Each attempt samples the same world after its group's students with ``guidance_controls`` (role teacher): the
@@ -645,7 +646,7 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
             directory.mkdir(parents=True, exist_ok=True)
             controls = directory / 'chat-request-config.json'
             write_json_durable(controls, guidance_controls(base, role='teacher', custody_receipt=receipt,
-                                                           facts=facts, selection=selection))
+                                                           facts=facts, selection=selection,writer=writer))
             entry = copy.deepcopy(first)
             entry.pop('rl_endpoint', None)
             entry.pop('chat_request_config', None)

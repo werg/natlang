@@ -67,6 +67,22 @@ def checked_fresh_parent(checkpoint, *, expected_sha256, source_sha256):
     return path
 
 
+def initial_training_world(rows, cases_sha256):
+    """Prefer the simplest authenticated train-world reference, retaining the full packet."""
+    candidates=[]
+    for row in rows:
+        curriculum=row.get('curriculum') or {};ref=curriculum.get('reference') or {};rl=curriculum.get('rl') or {}
+        root=ref.get('root');children=ref.get('children')
+        if row.get('split')!='train' or not isinstance(root,list) or not isinstance(children,list) or type(rl.get('level')) is not int:
+            raise ValueError('initial JOLT world lacks train split and authenticated reference geometry')
+        actions=len(root)+sum(len(child.get('calls') or []) for child in children)
+        candidates.append((rl['level'],actions,len(children),row['id']))
+    level,actions,children,case_id=min(candidates)
+    return {'schema':'natlang.initial-jolt-train-world/1','cases_sha256':cases_sha256,'case_id':case_id,
+        'reference_level':level,'reference_actions':actions,'reference_children':children,
+        'ranking':'level,reference-actions,children,case-id'}
+
+
 def prepare(args):
     from .production import configure_native
     source=Path(args.source).resolve(strict=True);cases=Path(args.cases).resolve(strict=True)
@@ -106,6 +122,11 @@ def prepare(args):
         from ..common.jsonio import write_json_durable
         configured['initial_capacity_collection']={'schema':'natlang.initial-whole-graph-collection/1',
             'rows':1,'group':2,'workers':1}
+        configured['jolt_guidance_stage']='backbone'
+        configured['jolt_teacher_plan']='crisp'
+        configured['max_model_requests']=16
+        configured['max_turns']=16
+        configured['initial_train_world']=initial_training_world(rows,args.cases_sha256)
         write_json_durable(config,configured)
     return configured
 

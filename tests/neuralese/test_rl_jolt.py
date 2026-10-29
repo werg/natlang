@@ -434,3 +434,19 @@ def test_teacher_and_student_entries_carry_the_worlds_guidance_controls(tmp_path
             assert student['role'] == 'student' and not any(f['kind'] == 'attempt_feedback' for f in student['facts'])
         else:
             assert 'chat_request_config' not in item
+
+
+def test_backbone_stage_preserves_privileged_facts_without_guidance_authoring(tmp_path):
+    from natlang_neuralese.rl.jolt import student_guidance,teacher_entries
+    from natlang_neuralese.rl.task_rollouts import build_queue
+    case=train_case();cases=tmp_path/'cases.jsonl';cases.write_text(json.dumps(case)+'\n')
+    config=tmp_path/'controls.json';config.write_text(json.dumps({'x_natlang_rl_capture':True}))
+    entries=build_queue(cases,1,2,tmp_path,temperature=1.,case_seconds=60,max_model_requests=16,max_turns=16,seed_base=1)
+    student_guidance(entries,ids=[case['id']],cases=cases,config=config,out=tmp_path,custody=custody(),selection='crisp',writer='off')
+    for entry in entries:
+        g=json.loads(open(entry['chat_request_config']).read())['x_natlang_guidance']
+        assert g['role']=='student' and g['writer']=='off' and g['selection']=='crisp' and g['facts']
+    rows=[{'task_id':case['id'],'group':0,'sample':i,'reward':{'quality':0.}} for i in range(2)]
+    teachers=teacher_entries(entries,rows,cases=cases,config=config,out=tmp_path,attempts=1,seed_base=1,custody=custody(),selection='crisp',writer='off')
+    g=json.loads(open(teachers['entries'][0]['chat_request_config']).read())['x_natlang_guidance']
+    assert g['role']=='teacher' and g['writer']=='off' and g['selection']=='crisp' and g['facts']

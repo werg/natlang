@@ -422,7 +422,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
-            system_prompt=None, prompt_rendering=None):
+            system_prompt=None, prompt_rendering=None, guidance_stage=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -433,6 +433,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     guidance measured by the memetic learner); it is bound by digest into the collection binding."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
+    if guidance_stage not in (None,'backbone'):
+        raise ValueError('unsupported JOLT guidance stage')
+    if guidance_stage=='backbone' and teacher_plan!='crisp':
+        raise ValueError('backbone JOLT requires its declared crisp privileged-attempt plan')
     if prompt_rendering=='full' and system_prompt is not None:
         raise ValueError('full on-policy collection cannot replace the runtime system prompt')
     if control is not None and control.stop.requested:
@@ -448,6 +452,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         'rows': rows, 'offset': offset, 'group': group, 'root_mode': root_mode,
         'seed_base': seed_base, 'temperature': 1., 'guided': False,
         'case_seconds': case_seconds, 'max_model_requests': max_model_requests, 'max_turns': max_turns,
+        **({'guidance_stage':guidance_stage} if guidance_stage is not None else {}),
         'endpoints': endpoints, 'neuralese_server': neuralese_server,
         **({'prompt_rendering':prompt_rendering} if prompt_rendering is not None else {}),
         'runtime': {str(p.relative_to(runtime)): sha256_file_hex(p)
@@ -522,7 +527,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         # JOLT+ students write (without importing) their guidance for the OPSD twin.
         from .jolt import student_guidance
         guidance_refusal = student_guidance(entries, ids=preparation['ids'], cases=Path(cases), config=config,
-                                            out=directory)
+                                            out=directory,**({'selection':'crisp','writer':'off'} if guidance_stage=='backbone' else {}))
     runtime = Path(runtime or root('repo') / 'ts-host')
     if not (runtime / 'dist/teacher/cli.js').is_file():
         raise FileNotFoundError('RL requires the built natlang collector runtime')
@@ -572,7 +577,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             from .jolt import plan_command
             teachers = teacher_entries(entries, list(read_jsonl(out / 'student-rollouts.jsonl')),
                                        cases=Path(cases), config=config, out=out, attempts=teacher_attempts,
-                                       seed_base=seed_base, plan_command=(plan_command(endpoints[0])
+                                       seed_base=seed_base, **({'selection':'crisp','writer':'off'} if guidance_stage=='backbone' else {}), plan_command=(plan_command(endpoints[0])
                                                                           if teacher_plan == 'nl' else None))
             if teachers['entries']:
                 bind_collection_prompt(teachers['entries'],prompt_rendering)
@@ -956,8 +961,17 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 snapshot = json.loads(selection_file.read_text())
                 selection, selected = snapshot['selection'], snapshot['cases']
             else:
+                initial_world=config.get('initial_train_world')
+                selection_offset=state['offset']
+                if initial_world is not None and state.get('trained_rounds',0)==0:
+                    if (initial_world.get('schema')!='natlang.initial-jolt-train-world/1' or
+                            initial_world.get('cases_sha256')!=sha256_file_hex(Path(config['cases']))):
+                        raise ValueError('initial JOLT world is not bound to the actual training packet')
+                    indices=[i for i,row in enumerate(cases) if row.get('id')==initial_world.get('case_id')]
+                    if len(indices)!=1:raise ValueError('initial JOLT world is absent or ambiguous')
+                    selection_offset=indices[0]
                 selection = select_tasks(cases, [*state.get('task_curriculum_history', {}).values(), *state.get('group_stats', [])],
-                    {'rows': config.get('rows_per_round', 32), 'group': config.get('group', 4), 'offset': state['offset']},
+                    {'rows': config.get('rows_per_round', 32), 'group': config.get('group', 4), 'offset': selection_offset},
                     command=config.get('select_tasks_command'),curriculum=config.get('task_curriculum'))
                 selected = [cases[item['row']] for item in selection]
                 if selection:
@@ -1075,6 +1089,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     teacher_attempts=(config.get('jolt_teacher_attempts', 1)
                                       if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else 0),
                     teacher_plan=config.get('jolt_teacher_plan', 'nl'),
+                    guidance_stage=config.get('jolt_guidance_stage'),
                     prompt_rendering=config.get('prompt_rendering'))
             except InterruptedError:
                 state['phase'] = 'requested_stop'
