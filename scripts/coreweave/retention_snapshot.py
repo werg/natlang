@@ -52,7 +52,10 @@ def _checked_changed(paths, digests, *, attempts=3):
                     if sig(os.fstat(handle.fileno()))!=before or sig(os.stat(path))!=before:raise RuntimeError('changed during checked read')
                 for digest in found:results[digest].add(path)
                 break
-            except (FileNotFoundError,RuntimeError):
+            except FileNotFoundError:
+                if not os.path.lexists(path):break
+                if attempt+1==attempts:raise
+            except RuntimeError:
                 if attempt+1==attempts:raise
     return results
 
@@ -81,10 +84,14 @@ def refresh_references(roots, previous, references, digests, scan, *, attempts=3
     for _ in range(attempts):
         current=snapshot(roots)
         changed={p for p in set(previous)|set(current) if p.endswith('.json') and previous.get(p)!=current.get(p)}
+        prior={key:set(value) for key,value in refs.items()}
         for paths in refs.values():paths.difference_update(changed)
         existing=[p for p in changed if p in current]
         if existing:
-            fresh=scan(digests,existing)
+            try:fresh=scan(digests,existing)
+            except (RuntimeError,FileNotFoundError):
+                refs=prior
+                continue
             for digest in digests:refs[digest].update(fresh[digest])
         after=snapshot(roots)
         # Directory identities guard each walk, but unrelated non-JSON writes

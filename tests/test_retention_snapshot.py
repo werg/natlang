@@ -36,3 +36,12 @@ def test_commit_delta_checked_read_finds_new_reference(tmp_path):
     from scripts.coreweave.retention_snapshot import refresh_point_in_time
     digest='d'*64;old=snapshot([tmp_path]);p=tmp_path/'consumer.json';p.write_text(digest)
     _,refs=refresh_point_in_time([tmp_path],old,{digest:set()},[digest]);assert refs[digest]=={str(p)}
+
+
+def test_delta_retries_disappeared_file_without_losing_other_references(tmp_path):
+    from scripts.coreweave.retention_snapshot import refresh_references
+    digest='c'*64;old=tmp_path/'old.json';old.write_text(digest);previous=snapshot([tmp_path]);old.write_text(digest+'changed');calls=[]
+    def scan(ds,paths):
+        calls.append(1);old.unlink();raise RuntimeError('file vanished during scan')
+    _,refs=refresh_references([tmp_path],previous,{digest:{str(old)}},[digest],scan)
+    assert refs[digest]==set() and len(calls)==1
