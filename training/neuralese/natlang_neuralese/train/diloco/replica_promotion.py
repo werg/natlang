@@ -95,6 +95,10 @@ def recover_after_replica_loss(*, baseline, baseline_sha256, journal, sequence, 
     previous_start=json.loads((source_store/'supervisor-start.json').read_text())
     if previous_start.get('schema')!='natlang.diloco-replica-start/1' or previous_start.get('promotion',{}).get('run_id')!=value['run_id'] or not previous_start.get('session_transition'):
         raise ValueError('old primary session custody differs')
+    active=json.loads((source_store/'primary-active.json').read_text())
+    if (active.get('baseline_sha256')!=baseline_sha256 or Path(active.get('baseline','')).resolve()!=Path(baseline).resolve() or
+            Path(active.get('journal','')).resolve()!=journal.root.resolve() or Path(active.get('work_root','')).resolve()!=source_root):
+        raise ValueError('old primary active generation or work root differs')
 
     uploads=source_root/'uploads';target_uploads=target/'replica-uploads';files=[]
     if uploads.exists():

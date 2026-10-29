@@ -536,6 +536,7 @@ def test_replica_loss_after_seal_ack_loss_preserves_locally_sealed_state(tmp_pat
     evidence={'run_id':'r','primary_process_absent':True,'replica_fenced':True,'all_workers_quiesced':True,'proof_sha256':'f'*64}
     from natlang_neuralese.common.jsonio import write_json_durable
     oldstore=tmp_path/'old-primary-store';oldstore.mkdir();write_json_durable(oldstore/'supervisor-start.json',{'schema':'natlang.diloco-replica-start/1','promotion':{'run_id':'r'},'session_transition':{'generation_nonce':'g'*48}})
+    write_json_durable(oldstore/'primary-active.json',{'baseline_sha256':receipt['sha256'],'baseline':str(baseline),'journal':str(local.root),'work_root':str(root)})
     recovered=recover_after_replica_loss(baseline=baseline,baseline_sha256=receipt['sha256'],journal=local,sequence=local.sequence,head=local.head,destination=tmp_path/'new-seed',verified_owner_evidence=evidence,source_work_root=root,source_primary_store=oldstore,freeze_nonce='f'*48)
     assert recovered['sealed_predecessor']=={'sequence':2,'head':local.head} and not recovered['unsealed_tail_retained']
     new,replayed,_=load_active(tmp_path/'new-seed',run_identity='r',destination=tmp_path/'peer')
