@@ -60,7 +60,8 @@ def guarded_full(*, candidate, roots, scan, reference_scope, read_live, api, loc
     from .retention_transaction import retire_full
     if candidate.get('control_required') or candidate.get('control'):raise ValueError('control-bearing record needs paired retirement')
     before=snapshot(roots);refs=scan([candidate['sha256']],roots);before,refs=refresh_references(roots,before,refs,[candidate['sha256']],scan,allow_busy=True)
-    if external_references(candidate['sha256'],refs[candidate['sha256']],**reference_scope):raise ValueError('external dependency protects candidate')
+    blocking=external_references(candidate['sha256'],refs[candidate['sha256']],**reference_scope)
+    if blocking:raise ValueError('external dependency protects candidate: '+repr(sorted(blocking)))
     def inspect(value,phase):
         if phase=='prepare':
             _,updated=refresh_references(roots,before,refs,[value['sha256']],scan,allow_busy=True)
