@@ -440,3 +440,37 @@ def test_actual_preference_prefix_recipe_parser_keeps_parameters_command_and_ide
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
+
+
+def test_actual_preference_update_preserves_pending_sft_focus_and_sft_resume(tmp_path,monkeypatch):
+    import hashlib
+    from test_native_model import tiny_source
+    from test_native_state_sft import graph
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.train.native_preference import main
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.train.native_cohort_schedule import source_cohort_ids
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    base=tmp_path/'base';tiny_source(base)
+    _,_,roles,config=load_native_model(base,dtype=torch.float32,rank=4)
+    fingerprint=config['tokenizer_fingerprint']
+    sft=tmp_path/'sft.jsonl';sft.write_text(json.dumps(dict(graph('sft-focus'),split='train',source_groups=['sft-world'],tokenizer_fingerprint=fingerprint))+'\n')
+    held=tmp_path/'held.jsonl';held.write_text(json.dumps(dict(graph('held'),split='test',source_groups=['held-world'],tokenizer_fingerprint=fingerprint))+'\n')
+    native=NativeGraphSource(sft,fingerprint,required_split='train',role_ids=roles.ids)
+    evidence=tmp_path/'proof';evidence.write_text('accepted')
+    request=tmp_path/'focus.json';request.write_text(json.dumps({'schema':'natlang.native-pending-focus/1','rows':[{'id':'sft-focus',
+      'binding':native.bindings['sft-focus'],'source_sha256':source_cohort_ids(native)[0],'split':'train',
+      'evidence':[{'path':str(evidence),'sha256':hashlib.sha256(evidence.read_bytes()).hexdigest()}]}]}))
+    common=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu','--held-native-graphs',str(held),'--epochs','1','--accumulate-batches','1','--eval-every','1','--seed','23']
+    parent=tmp_path/'parent';trainer.main([*common,'--native-graphs',str(sft),'--pending-focus',str(request),'--out',str(parent),'--initialize-only'])
+    before=torch.load(parent/'checkpoint.pt',weights_only=False)['training'];history=before['options']['pending_focus_history']
+    assert history[-1]['state']=='active'
+    example,objective=example_spec(tmp_path,fingerprint=fingerprint)
+    pair=tmp_path/'pair.jsonl';pair.write_text(json.dumps({'schema':SCHEMA,'id':example.id,'split':'train','source_groups':['exact-task'],'tokenizer_fingerprint':fingerprint,'nodes':[{'name':n.name,'token_ids':list(n.token_ids),'target_weights':[0.]*len(n.token_ids)} for n in example.plan.invocations]})+'\n')
+    pref=tmp_path/'preference';main([*common,'--native-graphs',str(pair),'--objective-spec',str(objective.path),'--continue-from',str(parent/'checkpoint.pt'),'--objective-continuation','--out',str(pref)])
+    after=torch.load(pref/'checkpoint.pt',weights_only=False)['training'];assert after['global_step']==1
+    assert after['options']['pending_focus_history']==history
+    resumed=tmp_path/'sft-resumed';trainer.main([*common,'--native-graphs',str(sft),'--continue-from',str(pref/'checkpoint.pt'),'--objective-continuation','--out',str(resumed)])
+    final=torch.load(resumed/'checkpoint.pt',weights_only=False)['training'];assert final['options']['pending_focus_history'][-1]['state']=='complete'
+    assert final['exposure_counts']['sft-focus']==1

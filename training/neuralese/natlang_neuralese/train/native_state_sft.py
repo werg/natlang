@@ -2908,7 +2908,7 @@ def _main(argv=None, *, requested_refresh):
     from .native_pending_focus import dependencies as focus_dependencies, resolve as resolve_focus, promote as promote_focus, active_for_operation
     focus_history=saved_focus_history
     focus_request=None;focus_record=None;focus_active=set()
-    focus_enabled=active_for_operation(policy_operation=policy_operation,explicit_request=args.pending_focus)
+    focus_enabled=active_for_operation(ordinary_sft=objective is None,explicit_request=args.pending_focus)
     if focus_enabled and args.pending_focus is not None:
         focus_path=args.pending_focus.resolve(strict=True);focus_reference={'path':str(focus_path),'sha256':sha256_file_hex_cached(focus_path)}
         focus_request,_=focus_dependencies(focus_reference)

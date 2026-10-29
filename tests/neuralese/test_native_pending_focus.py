@@ -244,9 +244,9 @@ def test_policy_operation_defers_sft_focus_without_retiring_or_mutating_history(
     from natlang_neuralese.train.native_pending_focus import active_for_operation
     history=[{'state':'active','request':{'path':'focus','sha256':'a'*64},'consumed':['one'],'withdrawn':[]}]
     expected=copy.deepcopy(history)
-    assert not active_for_operation(policy_operation=True,explicit_request=None)
+    assert not active_for_operation(ordinary_sft=False,explicit_request=None)
     assert history==expected
-    assert active_for_operation(policy_operation=False,explicit_request=None)
-    assert active_for_operation(policy_operation=False,explicit_request='focus')
+    assert active_for_operation(ordinary_sft=True,explicit_request=None)
+    assert active_for_operation(ordinary_sft=True,explicit_request='focus')
     with pytest.raises(ValueError,match='cannot target'):
-        active_for_operation(policy_operation=True,explicit_request='focus')
+        active_for_operation(ordinary_sft=False,explicit_request='focus')
