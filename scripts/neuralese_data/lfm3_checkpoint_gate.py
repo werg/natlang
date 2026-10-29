@@ -70,6 +70,11 @@ def execute(binary, gguf, kwargs, out, port, cases):
     summary_path = out / 'summary.json'
     if summary_path.exists():
         return json.loads(summary_path.read_text())
+    if (out / 'probe' / 'budget-probe.json').exists():
+        try:
+            return finish(out)  # a completed run whose summary was not cached by an older gate
+        except RuntimeError:
+            pass
     spec = {'async': True, 'cases': cases, 'case_seconds': 3600, 'max_model_requests': 150, 'max_turns': 150,
             'min_successes': 0, 'noise_successes': 1, 'reference_successes': None, 'workers': 8,
             'packet': {'path': str(DATA / PACKET), 'sha256': PACKET_SHA256}}
@@ -84,14 +89,24 @@ def execute(binary, gguf, kwargs, out, port, cases):
         finally:
             server.terminate()
             server.wait(timeout=60)
+    return finish(out)
+
+
+def finish(out):
+    """Validate a completed probe run in `out` and cache its summary."""
+    summary_path = out / 'summary.json'
     lines = [line for line in (out / 'probe.log').read_text().splitlines() if line.startswith('{"task_successes"')]
     if not lines:
         raise RuntimeError(f'probe printed no summary: {out / "probe.log"}')
     summary = json.loads(lines[-1])
     probe = json.loads((out / 'probe' / 'budget-probe.json').read_text())
-    failed = sum(1 for code in probe.get('collector_exit_codes', []) if code)
-    if failed:  # e.g. ts-host/dist rebuilt mid-run: those cases never executed, so the count is not a measurement
-        raise RuntimeError(f'{failed} collectors failed, not caching a partial result: {out / "probe"}')
+    # A nonzero collector exit is also how a case that exhausted its model budget ends; that is a classified
+    # outcome. Cases that never executed (e.g. ts-host/dist rebuilt mid-run) are unresolved or infrastructure
+    # errors, and then the count is not a measurement.
+    counts = summary.get('outcome_counts') or {}
+    broken = counts.get('unresolved', 0) + counts.get('infrastructure_error', 0)
+    if broken or sum(counts.values()) != len(probe.get('collector_exit_codes', [])):
+        raise RuntimeError(f'{broken} cases unresolved or infrastructure errors, not caching a partial result: {out / "probe"}')
     summary_path.write_text(json.dumps(summary, indent=1) + '\n')
     return summary
 
