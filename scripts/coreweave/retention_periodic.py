@@ -15,6 +15,7 @@ from .retention_live import live_facts
 from .retention_presence import resolve_object
 from .retention_select import candidates
 from .retention_manual import normalize_manual
+from .retention_batch import prepare_reference_evidence
 
 
 def rotate_cycle(items, cycle):
@@ -44,10 +45,10 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
     if type(cycle) is not int or cycle<0 or type(max_attempts) is not int or max_attempts<1 or type(per_rank) is not int or per_rank<1 or not isinstance(max_seconds,(int,float)) or max_seconds<=0:raise ValueError('invalid retention cycle budget')
     preferred=rotate_cycle(preferred,cycle)
     role_configs=sorted(role_configs,key=lambda x:preferred.index(x['rank']))
-    outcomes=[];attempts=0;started=time.monotonic()
+    outcomes=[];attempts=0;started=time.monotonic();plans=[]
     for role_config in role_configs:
         rank=role_config['rank'];journal=Path(role_config['journal']);owner_bindings=bindings(role_config['owner_epochs']);owners=authenticated_owner_epochs(owner_bindings)
-        def read_context():
+        def read_context(rank=rank,journal=journal,owner_bindings=owner_bindings,role_config=role_config):
             manifest=read(config['active_roles']);current_name=next(x['ownership'] for x in manifest['roles'] if x['rank']==rank);current=read(root/current_name)
             exports=read(journal)['exports'];manual=root/('standalone-peer%d-manual-cloud-journal.json'%rank);manual_exports=read(manual)['exports'] if manual.exists() else []
             exports+=manual_exports
@@ -89,43 +90,48 @@ def run_cycle(config, *, api, get, write_durable, apply=False):
         selected=candidates(exports=exports,intents=intents,owners=owners,current_owner=current,owner_state=owner_state,receipts=receipts,fallback_role=fallback,active_units=units,transitions=transitions,protected_sha256s=protected)
         selected=[x for x in selected if x['role'] not in retired_state.get('retired_roles',[]) and (config.get('candidate_allowlist') is None or x['role'] in config['candidate_allowlist'])]
         selected=rotate_cycle(selected,cycle)
-        rank_attempts=0
-        for candidate in selected:
-            if attempts>=max_attempts or time.monotonic()-started>=max_seconds:return outcomes
-            if rank_attempts>=per_rank:break
-            attempts+=1;rank_attempts+=1
-            try:
-                entry=next(x for x in exports if x['role']==candidate['role']);intent=read(entry['intent']);receipt=next(x for x in receipts if x['role']==candidate['role'])
-                phase=ops/('coreweave-production-'+candidate['role']+'-private-upload-phase-20261014.json');cache_root=ops/'private-export-cache';cache_refs=reference_paths([candidate['sha256']],[cache_root])[candidate['sha256']]
-                if len(cache_refs)>1:raise ValueError('ambiguous candidate export cache')
-                reviews=[Path(x) for x in config.get('reviews',[]) if candidate['sha256'] in Path(x).read_text()]
-                own=own_bookkeeping(role=candidate['role'],digest=candidate['sha256'],receipt=receipt,receipt_path=receipt_path(candidate['role']),phase=phase if phase.exists() else None,cache=next(iter(cache_refs),None),reviews=reviews,retirement_state=retired if retired.exists() else None)
-                control=entry.get('control') or {}
-                if candidate['control_required']:
-                    control_receipt=next(x for x in receipts if x['role']==candidate['control_role'])
-                    control_phase=ops/('coreweave-production-'+candidate['control_role']+'-private-upload-phase-20261014.json')
-                    control_cache=reference_paths([candidate['control_sha256']],[cache_root])[candidate['control_sha256']]
-                    if len(control_cache)>1:raise ValueError('ambiguous control export cache')
-                    own.update(own_bookkeeping(role=candidate['control_role'],digest=candidate['control_sha256'],receipt=control_receipt,receipt_path=receipt_path(candidate['control_role']),phase=control_phase if control_phase.exists() else None,cache=next(iter(control_cache),None),watched_digests=(candidate['sha256'],)))
-                allowed=[str(Path(entry['intent'])),*own]
-                manual_journal=root/('standalone-peer%d-manual-cloud-journal.json'%rank)
-                is_manual=manual_journal.exists() and any(x['role']==candidate['role'] for x in read(manual_journal)['exports'])
-                scope={'allowed_paths':allowed,'journal_path':manual_journal if is_manual else journal,'role':candidate['role'],'intent_path':entry['intent']}
-                if candidate['control_required']:
-                    scope.update(control=control,control_receipt=receipt_path(candidate['control_role']),control_phase=Path(control['phase_path']))
-                def read_live(value,phase_name):
-                    recheck_own_bookkeeping(own,role=value['role'],digest=value['sha256'])
-                    if read(entry['intent'])!=intent:raise ValueError('candidate intent changed')
-                    ex,ins,os_,cu,st,active,rs,pro,ts=read_context()
-                    value['operation_units']=[u for u in active if value['role'] in u or (value.get('control_role') and value['control_role'] in u)]
-                    live=live_facts(candidate=value,exports=ex,intents=ins,owners=os_,current_owner=cu,owner_state=st,receipts=rs,successor_role=value['successor_role'],fallback_role=fallback,active_units=active,transition=ts.get(cu['parent_sha256']))
-                    live['eligibility']['protected_sha256s'].update(pro);return live
-                guard=guarded_pair if candidate['control_required'] else guarded_full
-                outcomes.append(guard(candidate=candidate,roots=roots,scan=reference_paths,reference_scope=scope,read_live=read_live,api=api,lock_path=lock,state_path=retired,remove=remove,present=present,write_durable=write_durable,apply=apply))
-            except (ValueError,RuntimeError,OSError,KeyError) as error:
-                print(json.dumps({'role':candidate['role'],'status':'protected_or_unavailable','reason':str(error)}),flush=True)
-                continue
-            if len(outcomes)>=config.get('max_per_cycle',1):return outcomes
+        for candidate in selected[:per_rank]:
+            if attempts>=max_attempts or time.monotonic()-started>=max_seconds:break
+            plans.append((candidate,rank,journal,exports,intents,receipts,read_context));attempts+=1
+        if attempts>=max_attempts or time.monotonic()-started>=max_seconds:break
+    if not plans:return outcomes
+    digests={candidate['sha256'] for candidate,*_ in plans}
+    digests.update(candidate['control_sha256'] for candidate,*_ in plans if candidate['control_required'])
+    evidence=prepare_reference_evidence(roots,digests,reference_paths)
+    for candidate,rank,journal,exports,intents,receipts,read_context in plans:
+        if time.monotonic()-started>=max_seconds:break
+        try:
+            entry=next(x for x in exports if x['role']==candidate['role']);intent=read(entry['intent']);receipt=next(x for x in receipts if x['role']==candidate['role'])
+            phase=ops/('coreweave-production-'+candidate['role']+'-private-upload-phase-20261014.json');cache_root=ops/'private-export-cache';cache_refs=reference_paths([candidate['sha256']],[cache_root])[candidate['sha256']]
+            if len(cache_refs)>1:raise ValueError('ambiguous candidate export cache')
+            reviews=[Path(x) for x in config.get('reviews',[]) if candidate['sha256'] in Path(x).read_text()]
+            own=own_bookkeeping(role=candidate['role'],digest=candidate['sha256'],receipt=receipt,receipt_path=receipt_path(candidate['role']),phase=phase if phase.exists() else None,cache=next(iter(cache_refs),None),reviews=reviews,retirement_state=retired if retired.exists() else None)
+            control=entry.get('control') or {}
+            if candidate['control_required']:
+                control_receipt=next(x for x in receipts if x['role']==candidate['control_role'])
+                control_phase=ops/('coreweave-production-'+candidate['control_role']+'-private-upload-phase-20261014.json')
+                control_cache=reference_paths([candidate['control_sha256']],[cache_root])[candidate['control_sha256']]
+                if len(control_cache)>1:raise ValueError('ambiguous control export cache')
+                own.update(own_bookkeeping(role=candidate['control_role'],digest=candidate['control_sha256'],receipt=control_receipt,receipt_path=receipt_path(candidate['control_role']),phase=control_phase if control_phase.exists() else None,cache=next(iter(control_cache),None),watched_digests=(candidate['sha256'],)))
+            allowed=[str(Path(entry['intent'])),*own]
+            manual_journal=root/('standalone-peer%d-manual-cloud-journal.json'%rank)
+            is_manual=manual_journal.exists() and any(x['role']==candidate['role'] for x in read(manual_journal)['exports'])
+            scope={'allowed_paths':allowed,'journal_path':manual_journal if is_manual else journal,'role':candidate['role'],'intent_path':entry['intent']}
+            if candidate['control_required']:
+                scope.update(control=control,control_receipt=receipt_path(candidate['control_role']),control_phase=Path(control['phase_path']))
+            def read_live(value,phase_name):
+                recheck_own_bookkeeping(own,role=value['role'],digest=value['sha256'])
+                if read(entry['intent'])!=intent:raise ValueError('candidate intent changed')
+                ex,ins,os_,cu,st,active,rs,pro,ts=read_context()
+                value['operation_units']=[u for u in active if value['role'] in u or (value.get('control_role') and value['control_role'] in u)]
+                live=live_facts(candidate=value,exports=ex,intents=ins,owners=os_,current_owner=cu,owner_state=st,receipts=rs,successor_role=value['successor_role'],fallback_role=fallback,active_units=active,transition=ts.get(cu['parent_sha256']))
+                live['eligibility']['protected_sha256s'].update(pro);return live
+            guard=guarded_pair if candidate['control_required'] else guarded_full
+            outcomes.append(guard(candidate=candidate,roots=roots,scan=reference_paths,reference_scope=scope,read_live=read_live,api=api,lock_path=lock,state_path=retired,remove=remove,present=present,write_durable=write_durable,apply=apply,evidence=evidence))
+        except (ValueError,RuntimeError,OSError,KeyError) as error:
+            print(json.dumps({'role':candidate['role'],'status':'protected_or_unavailable','reason':str(error)}),flush=True)
+            continue
+        if len(outcomes)>=config.get('max_per_cycle',1):return outcomes
     return outcomes
 
 

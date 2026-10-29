@@ -31,7 +31,11 @@ def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,m
     for rank in range(1,5):journals.append(put(root/f'journal{rank}.json',{'exports':exports if rank==1 else []}))
     config={'cycle_index':0,'max_attempts_per_rank':2,'state_root':str(root),'operations_root':str(ops),'reference_roots':[str(root)],'fallback_role':'backup','qualified_local_parents':[str(qual)],'active_roles':str(manifest),'owner_state':str(owner_state),'roles':[{'rank':i+1,'journal':str(journals[i]),'owner_epochs':[str(owners[i])]} for i in range(4)]}
     monkeypatch.setattr(retention_periodic.subprocess,'run',lambda *a,**k:types.SimpleNamespace(stdout=''))
-    monkeypatch.setattr(retention_periodic,'reference_paths',lambda ds,roots:{d:set() for d in ds})
+    scans=[]
+    def scan(ds,roots):
+        if list(map(str,roots))==[str(root)]:scans.append(set(ds))
+        return {d:set() for d in ds}
+    monkeypatch.setattr(retention_periodic,'reference_paths',scan)
     def guarded(**kw):
         assert not kw['apply']
         if not paired and kw['candidate']['role']=='old':raise ValueError('external reference')
@@ -43,6 +47,7 @@ def test_four_role_cycle_selects_actual_bound_candidate_and_keeps_dry(tmp_path,m
         return {'role':kw['candidate']['role'],'mode':'dry'}
     monkeypatch.setattr(retention_periodic,'guarded_full',guarded);monkeypatch.setattr(retention_periodic,'guarded_pair',guarded)
     assert retention_periodic.run_cycle(config,api=None,get=None,write_durable=lambda *a:None)==[{'role':'old' if paired else 'middle','mode':'dry'}]
+    assert len(scans)==1 and {'a'*64,'c'*64}<=scans[0]
     if not paired:
         assert retention_periodic.run_cycle(config|{'max_attempts':1},api=None,get=None,write_durable=lambda *a:None)==[]
 

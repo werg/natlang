@@ -9,9 +9,10 @@ from .retention_presence import current_presence
 from .retention_transaction import retire_pair
 from .retention_leases import leased_roles
 from .private_export_guard import has_owner_readback
+from .retention_batch import use_reference_evidence
 
 
-def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, lock_path, state_path, remove, present, write_durable, apply=False):
+def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, lock_path, state_path, remove, present, write_durable, apply=False, evidence=None):
     """Scan outside the lock, then revalidate and refresh live facts under it.
 
     read_live(candidate, phase) returns current eligibility facts and authenticated
@@ -19,9 +20,10 @@ def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, loc
     active service instances, including retries. The caller owns provider access.
     Dry output is advisory and does not authorize later apply.
     """
-    before=snapshot(roots)
-    refs=scan([candidate['sha256'],candidate['control_sha256']],roots)
-    before,refs=refresh_references(roots,before,refs,[candidate['sha256'],candidate['control_sha256']],scan,allow_busy=True)
+    digests=[candidate['sha256'],candidate['control_sha256']]
+    if evidence is None:
+        before=snapshot(roots);refs=scan(digests,roots);before,refs=refresh_references(roots,before,refs,digests,scan,allow_busy=True)
+    else:before,refs=use_reference_evidence(evidence,roots,digests)
     for digest in (candidate['sha256'],candidate['control_sha256']):
         if external_references(digest,refs[digest],**reference_scope):
             raise ValueError('external dependency protects candidate')
@@ -56,12 +58,14 @@ def guarded_pair(*, candidate, roots, scan, reference_scope, read_live, api, loc
     return retire_pair(lock_path=lock_path,state_path=state_path,candidate=candidate,inspect=inspect,remove=remove,present=present,write_durable=write_durable)
 
 
-def guarded_full(*, candidate, roots, scan, reference_scope, read_live, api, lock_path, state_path, remove, present, write_durable, apply=False):
+def guarded_full(*, candidate, roots, scan, reference_scope, read_live, api, lock_path, state_path, remove, present, write_durable, apply=False, evidence=None):
     """Guard a historical full-only journal entry without inventing a control."""
     from .retention_eligibility import eligible_full
     from .retention_transaction import retire_full
     if candidate.get('control_required') or candidate.get('control'):raise ValueError('control-bearing record needs paired retirement')
-    before=snapshot(roots);refs=scan([candidate['sha256']],roots);before,refs=refresh_references(roots,before,refs,[candidate['sha256']],scan,allow_busy=True)
+    if evidence is None:
+        before=snapshot(roots);refs=scan([candidate['sha256']],roots);before,refs=refresh_references(roots,before,refs,[candidate['sha256']],scan,allow_busy=True)
+    else:before,refs=use_reference_evidence(evidence,roots,[candidate['sha256']])
     blocking=external_references(candidate['sha256'],refs[candidate['sha256']],**reference_scope)
     if blocking:raise ValueError('external dependency protects candidate: '+repr(sorted(blocking)))
     def inspect(value,phase):
