@@ -37,5 +37,9 @@ def run_promotion(directory, *, intent, fence_workers, verify_fence, start_prima
                 or ready.get('token_sha256')!=intent['new_token_sha256'] or ready.get('ready') is not True):
             raise ValueError('new primary did not prove exact WAL and session identity')
         record.update(phase='primary-ready',primary=ready);write_json_durable(journal,record)
-        released=release_workers(intent,fences);record.update(phase='released',released=released);write_json_durable(journal,record)
+        released=release_workers(intent,fences)
+        if (not isinstance(fences,list) or not fences or not isinstance(released,list) or
+                sorted(x['sandbox_id'] for x in released)!=sorted(x['sandbox_id'] for x in fences)):
+            raise ValueError('worker release did not cover exact fenced owners')
+        record.update(phase='released',released=released);write_json_durable(journal,record)
         return record

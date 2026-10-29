@@ -5,7 +5,7 @@ from scripts.coreweave.diloco_replica_controller import run_promotion
 
 def test_controller_never_releases_before_exact_ready(tmp_path):
     intent={'run_id':'r','generation_nonce':'n'*48,'sequence':4,'head':'h'*64,'new_url':'https://new','new_token_sha256':'t'*64}
-    fence=lambda i:['fenced']
+    fence=lambda i:[{'sandbox_id':'peer'}]
     verify=lambda i:{'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64}
     called=[]
     def release(i,f):called.append(True);return f
