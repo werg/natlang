@@ -51,6 +51,10 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
         if old_family.get('normalization') == 'bounded-mean-one/1' and new_family.get('normalization') == 'declared/1':
             old_family.pop('normalization');new_family.pop('normalization')
             new_family.pop('scales',None)
+        elif not same_source and old_family.get('normalization') == new_family.get('normalization') == 'declared/1':
+            old_scales=old_family.pop('scales',None);new_scales=new_family.pop('scales',None)
+            if not isinstance(old_scales,dict) or not isinstance(new_scales,dict) or set(old_scales)!=set(new_scales):
+                raise ValueError('resident declared-scale refresh changed the family set')
         if left!=right or not old_map or not new_map or (b.get('objective_transition') or {}).get('from')!=identity(policy_objective(prior))['sha256']:
             raise ValueError('resident logical-family extension changed objective law or lacks its exact predecessor')
         previous=json.loads(_verified_bytes(old_map)[1]);current=json.loads(_verified_bytes(new_map)[1])

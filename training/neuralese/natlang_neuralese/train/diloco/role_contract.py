@@ -129,8 +129,9 @@ def resident_argv(original, payload, stage_id):
     pairs=[(new_inputs[i],new_inputs[i+1]) for i in range(0,len(new_inputs),2) if new_inputs[i]!='--continue-from']
     updates={'--recipe-binding':json.dumps(payload['recipe'],sort_keys=True,separators=(',',':'))}
     for key in ('sft_packed_geometry','memory_qualification'):
-        if key in stage['parameters'] and stage['parameters'][key] is not None:
-            updates['--'+key.replace('_','-')]=json.dumps(stage['parameters'][key],sort_keys=True,separators=(',',':'))
+        value=payload.get(key) if key=='sft_packed_geometry' and payload.get(key) is not None else stage['parameters'].get(key)
+        if value is not None:
+            updates['--'+key.replace('_','-')]=json.dumps(value,sort_keys=True,separators=(',',':'))
     out=[];inserted=False;seen=set();i=0
     while i<len(original):
         name=original[i]

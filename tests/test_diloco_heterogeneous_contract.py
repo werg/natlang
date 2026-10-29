@@ -123,6 +123,9 @@ def test_resident_argv_rebinds_only_declared_source_and_keeps_actual_runtime_con
     result=resident_argv(old,payload,'sft');assert result[result.index('--native-graphs')+1]=='/work/new';assert result[result.index('--continued-native-graphs')+1]=='/work/old';assert result[result.index('--foundation-native-graphs')+1]=='/work/new'
     assert result[result.index('--resident-data-directory')+1]=='/work/resident' and result[result.index('--learning-rate')+1]=='0.000001' and result[result.index('--continue-from')+1]=='/work/seed'
     assert json.loads(result[result.index('--recipe-binding')+1])==payload['recipe']
+    payload['plan']['recipe']['stages'][0]['parameters']['sft_packed_geometry']={'path':'/work/old-geometry','sha256':'b'*64}
+    payload['sft_packed_geometry']={'path':'/work/new-geometry','sha256':'c'*64}
+    result=resident_argv(old,payload,'sft');assert json.loads(result[result.index('--sft-packed-geometry')+1])==payload['sft_packed_geometry']
 
 def test_logical_source_paths_preserve_sandbox_alias(tmp_path):
     from natlang_neuralese.rl.diloco_contract import _logical_source_paths
