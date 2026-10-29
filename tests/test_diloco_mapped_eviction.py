@@ -23,3 +23,12 @@ def test_reject_dirty_checkpoint_mapping(tmp_path):
     mapped=torch.load(path,mmap=True,weights_only=True)['x'];mapped[0]=1
     with pytest.raises(ValueError,match='private dirty'):
         MappedInputEvictor(path)
+
+
+def test_reject_wrong_file_identity(tmp_path):
+    first=tmp_path/'first.pt';other=tmp_path/'other.pt'
+    torch.save({'x':torch.ones(10000)},first);torch.save({'x':torch.zeros(10000)},other)
+    mapped=torch.load(first,mmap=True,weights_only=True)['x']
+    with pytest.raises(ValueError,match='no matching file-backed mapping'):
+        MappedInputEvictor(other)
+    assert mapped[0].item()==1
