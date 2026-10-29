@@ -33,3 +33,22 @@ def test_actual_historical_owner_journal():
     sha=hashlib.sha256(path.read_bytes()).hexdigest()
     assert owner_reference(path,sha,primary)['run_id']==journal['run_id']
     with pytest.raises(ValueError): owner_reference(path,sha,dict(primary,owner_id='wrong'))
+
+
+def test_local_role_observation_checks_actual_process(tmp_path):
+    import os
+    from scripts.coreweave.diloco_replica_fence import observe_local_worker
+    pid=os.getpid()
+    ticks=Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()[19]
+    boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    identity={'sandbox_id':'peer','boot_id':boot,'owner_id':'owner','pid':999999999,'start_ticks':'1'}
+    state={'schema':'natlang.diloco-role-supervisor/1','boot_id':boot,'owner_id':'owner',
+           'supervisor_pid':pid,'supervisor_start_ticks':ticks,'roles':{'worker':{'pid':999999999,'alive':False}}}
+    (tmp_path/'state.json').write_text(json.dumps(state))
+    assert observe_local_worker(identity,'nonce',tmp_path)['process_absent']
+    with pytest.raises(ValueError): observe_local_worker(dict(identity,pid=pid,start_ticks=ticks),'nonce',tmp_path)
+    state['roles']['worker']={'pid':pid,'alive':True}; (tmp_path/'state.json').write_text(json.dumps(state))
+    with pytest.raises(ValueError): observe_local_worker(identity,'nonce',tmp_path)
+    state['roles']['worker']={'pid':999999999,'alive':False}; state['pending_start']={'role':'worker'}
+    (tmp_path/'state.json').write_text(json.dumps(state))
+    with pytest.raises(ValueError): observe_local_worker(identity,'nonce',tmp_path)
