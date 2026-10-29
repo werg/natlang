@@ -147,19 +147,38 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             if provenance.get('schema') != 'natlang.external-source-publication-provenance/1':
                 raise ValueError('external source publication provenance schema differs')
             closure = json.loads(bound(provenance['closure']).read_text())
-            if closure != provenance.get('custody') or closure.get('schema') != 'natlang.big2-tranche-custody-publication-closure/1':
+            schema = closure.get('schema')
+            if closure != provenance.get('custody') or schema not in ('natlang.big2-tranche-custody-publication-closure/1', 'natlang.big2-multi-tranche-custody-closure/1'):
                 raise ValueError('external source custody differs from its exact closure')
-            for key in ('archive', 'recovered_raw_records'):
-                item = closure.get(key) or {}
-                if not isinstance(item.get('path'), str) or not isinstance(item.get('sha256'), str) or len(item['sha256']) != 64 or any(c not in '0123456789abcdef' for c in item['sha256']):
+            def historical_identity(item):
+                return (isinstance(item, dict) and isinstance(item.get('path'), str) and item['path'].startswith('/')
+                        and isinstance(item.get('sha256'), str) and len(item['sha256']) == 64
+                        and all(c in '0123456789abcdef' for c in item['sha256']))
+            if not historical_identity(closure.get('archive')):
+                raise ValueError('external source historical identity is malformed')
+            if schema == 'natlang.big2-tranche-custody-publication-closure/1':
+                if not historical_identity(closure.get('recovered_raw_records')):
                     raise ValueError('external source historical identity is malformed')
+            else:
+                proofs = [json.loads(bound(ref).read_text()) for ref in closure['historical_proofs']]
+                subset = next((p for p in proofs if p.get('schema') == 'natlang.big2-multi-tranche-archive-subset-proof/1'), None)
+                if not subset or subset.get('archive') != closure['archive'] or not closure.get('tranches'):
+                    raise ValueError('multi-tranche archive subset proof differs')
+                for name, tranche in closure['tranches'].items():
+                    raw = tranche.get('raw_subset')
+                    if raw != subset.get('tranches', {}).get(name) or not isinstance(raw.get('records_sha256'), str) or len(raw['records_sha256']) != 64 or any(c not in '0123456789abcdef' for c in raw['records_sha256']):
+                        raise ValueError('multi-tranche raw subset identity differs')
+                    if type(raw.get('records_bytes')) is not int or raw['records_bytes'] <= 0 or type(raw.get('records_rows')) is not int or raw['records_rows'] <= 0:
+                        raise ValueError('multi-tranche raw subset size differs')
+                    bound(raw['extract_receipt'])
             archive = bound(provenance['mechanisms_archive'])
             bound(provenance['content_audit']); bound(provenance['clean_closure_audit'])
             members = {'verify.py': closure['verifier']['sha256'],
                        'student_tokenizers.py': closure['tokenizer_helper']['sha256'],
                        'runtime.tar': closure['runtime_snapshot']['sha256'],
-                       'runtime-receipt.json': closure['runtime_snapshot_receipt']['sha256'],
                        'closure.json': provenance['closure']['sha256']}
+            if schema == 'natlang.big2-tranche-custody-publication-closure/1':
+                members['runtime-receipt.json'] = closure['runtime_snapshot_receipt']['sha256']
             members.update({f'proofs/{index}.json': proof['sha256']
                             for index, proof in enumerate(closure['historical_proofs'])})
             with tarfile.open(archive, 'r:*') as tar:

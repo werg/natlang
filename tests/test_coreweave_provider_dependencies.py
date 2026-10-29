@@ -960,3 +960,31 @@ def test_external_source_publication_binds_compact_proofs_without_offbox_raw(tmp
     import pytest
     with pytest.raises(ValueError,match='dependency hash changed'):
         deps.dependency_closure({},namespace=str(root),_checkpoint_payload=state)
+
+def test_multi_tranche_publication_requires_exact_archived_subset_proof(tmp_path):
+    import hashlib,io,json,tarfile,pytest
+    root=tmp_path
+    def file(name,data):
+        p=root/name;p.write_bytes(data);return p
+    def ref(p):return {'path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+    verifier=file('verify',b'v');helper=file('helper',b'h');runtime=file('runtime',b'r');extract=file('extract',b'{}')
+    archive={'path':str(root/'offbox-archive'),'sha256':'a'*64,'bytes':77}
+    raw={'records_sha256':'b'*64,'records_bytes':24,'records_rows':2,'extract_receipt':ref(extract)}
+    proof=file('proof',json.dumps({'schema':'natlang.big2-multi-tranche-archive-subset-proof/1','archive':archive,'tranches':{'001':raw}}).encode())
+    closure={'schema':'natlang.big2-multi-tranche-custody-closure/1','archive':archive,'historical_proofs':[ref(proof),ref(extract)],'tranches':{'001':{'raw_subset':raw}},'verifier':ref(verifier),'tokenizer_helper':ref(helper),'runtime_snapshot':ref(runtime)}
+    c=file('closure',json.dumps(closure).encode());bundle=root/'bundle'
+    entries={'verify.py':verifier.read_bytes(),'student_tokenizers.py':helper.read_bytes(),'runtime.tar':runtime.read_bytes(),'closure.json':c.read_bytes(),'proofs/0.json':proof.read_bytes(),'proofs/1.json':extract.read_bytes()}
+    with tarfile.open(bundle,'w:gz') as tar:
+        for name,data in entries.items():
+            info=tarfile.TarInfo(name);info.size=len(data);tar.addfile(info,io.BytesIO(data))
+    content=file('content',b'{}');split=file('split',b'{}')
+    prov={'schema':'natlang.external-source-publication-provenance/1','closure':ref(c),'custody':closure,'mechanisms_archive':ref(bundle),'content_audit':ref(content),'clean_closure_audit':ref(split)}
+    binding={'path':str(root/'recipe'),'sha256':'c'*64,'lineage_sha256':'d'*64,'external_provenances':[prov]}
+    state={'training':{'schema':'natlang.neuralese-native-sft-training/1','options':{'recipe_binding':json.dumps(binding),'stage_id':'native_full_sft'}}}
+    result=deps.dependency_closure({},namespace=str(root),_checkpoint_payload=state)
+    assert str(c) in {x['path'] for x in result['files']}
+    assert archive['path'] not in {x['path'] for x in result['files']}
+    closure['tranches']['001']['raw_subset']={**raw,'records_sha256':'f'*64};c.write_text(json.dumps(closure));prov['closure']=ref(c)
+    state['training']['options']['recipe_binding']=json.dumps(binding)
+    with pytest.raises(ValueError,match='raw subset identity differs'):
+        deps.dependency_closure({},namespace=str(root),_checkpoint_payload=state)
