@@ -22,7 +22,9 @@ def select_first_fragment(surface, *, target_bytes=64<<20):
     selected={};custody=[]
     for part in fragment.slices:
         if part.name in selected:raise ValueError('duplicate parameter slice in first fragment')
-        tensor=surface[part.name];selected[part.name]=tensor.reshape(-1)[part.offset:part.offset+part.length]
+        tensor=surface[part.name]
+        if not tensor.is_contiguous():raise ValueError('representative source tensor is not contiguous; refusing an implicit full copy')
+        selected[part.name]=tensor.view(-1)[part.offset:part.offset+part.length]
         custody.append({'name':part.name,'original_shape':list(tensor.shape),'offset':part.offset,'length':part.length})
     derived=plan_fragments(selected,target_bytes=target_bytes)[0]
     if [(x.name,x.length) for x in derived.slices]!=[(x.name,x.length) for x in fragment.slices]:
