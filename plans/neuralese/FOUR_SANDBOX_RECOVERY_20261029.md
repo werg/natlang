@@ -1,5 +1,8 @@
 # Four-sandbox recovery and utilization, 2026-10-29
 
+This document records recovery milestones. The latest operational state is in
+the final update below; earlier step numbers describe historical boundaries.
+
 ## Actual incident and retained progress
 
 The cohost `edad6d6e-b02e-4cf8-a0d2-0a3129420a18` reset under the same ID.
@@ -95,3 +98,69 @@ real four-native-worker cutover, which has not happened yet. All workers must
 use the same current source and common manifest; each retains its own newest
 weights, optimizer, RNG and exposure. Coordinator replication is still being
 implemented and is not qualified by these tests.
+
+## 04:00 Berlin update: four productive standalone learners
+
+The former peer1 sandbox `b1040a7d-7226-4c3a-afe5-f00afbaf71e6` also reset
+under the same ID and lost its workspace. It was replaced and closed. Its
+newest independently recoverable full checkpoint was step5500; at least 627
+subsequent observed updates remain unrecovered. Failed snapshots do not cover
+that loss.
+
+| Peer | Current sandbox | Observed optimizer step | Active source |
+| --- | --- | ---: | --- |
+| 1 | `f3ad785f-9f0b-4716-905a-ed26f0a83e1e` | 6683 | 480754 rows, b9a |
+| 2 | `ea17666b-084f-4236-b552-48efd43f9f74` | 6909 | 294747 rows, 105f |
+| 3 | `3aba3399-4a8d-4e48-b8a9-069e653bf0ef` | 6995 | 294747 rows, 105f |
+| 4 | `b1662ef1-2514-49f4-be56-645e83a6712c` | 5971 | 480754 rows, b9a |
+
+These are four separate advancing histories. Distributed outer merges have
+not resumed. All retain their own optimizer/RNG/exposure; the common new outer
+session must incorporate useful existing deviations without fabricating lost
+momentum or replaying uncertain old pending updates.
+
+Peer1's expanded source initially received no appended ordinary-row exposure:
+the pending schedule left those rows at the tail. Default ordinary-cohort
+token-service fairness now addresses this. At exact step6680, all nine physical
+packed checks passed on its H100 (three limiting groups across BF16, FP8 and
+NVFP4 full mixes); the actual remaining schedule retained exact quotas and
+matched the tested scalar limits. Its checkpoint-preserving continuation has
+performed real SGD. Saved new-row exposure still needs confirmation. Other
+peers have inert successor plans and staged source/cache dependencies; their
+own newest checkpoint and target-device checks precede rolling adoption.
+Peer4's earlier explicit rotation must retire through the recorded fairness
+transition rather than overriding the new scheduler.
+
+Recovery improvements already in operation:
+
+- A private, independently GET/hash-verified 1.155GB warm recovery bundle
+  includes current source/runtime dependencies and all 513 authenticated
+  parser indexes. Base weights and full checkpoints remain explicit separate
+  dependencies. The local warm restore took 5.38 seconds; this is not a network
+  or learner-start measurement.
+- Existing private checkpoint objects can now be fully retrieved and verified
+  without contacting their disappeared sandbox. A real private canary passed
+  after its original file was removed and with an invalid sandbox ID.
+- Bounded per-rank export queues and dynamic fail-closed retention protect
+  current cloud heads, independently verified fallback parents, in-flight
+  publications and readbacks. Provider zero-byte tombstones plus fresh 404
+  checks establish logical deletion, not physical backend garbage collection.
+- Qualified local full-state recovery copies at steps2512 and4751 remain.
+  Step4519 completed independent GET/hash verification but its requested new
+  local copy was discarded at the filesystem reserve floor; do not call that
+  copy retained. Peer1's new exact6680 pin has cloud PUT and full cloud GET/hash;
+  its workstation readback is a separate pending obligation.
+
+Coordinator replication is implemented in an isolated review branch and is
+not deployed. It must cover accepted queues, state seals, source/session
+transitions, clock rebasing, normal restart, bounded generation retention and
+actual owned-role fencing. Remaining gates include concrete initial bootstrap,
+replacement-replica placement after primary loss and measured overhead on the
+16Gi host allocation. Healthy standalone SGD continues during this work.
+
+The Big2 verifier's quadratic target-count loop has been replaced by an exact
+linear count, and cold parsing now collects capacity geometry in the same
+pass. Tranche000 has passed verification: 112455 training communication graphs
+and 2739 protected test graphs. No candidate exceeds the current 108272
+forward/KV capacity bound. Deduplication and exact raw-source recovery from its
+retained archive remain admission work; these rows are not yet learner exposure.
