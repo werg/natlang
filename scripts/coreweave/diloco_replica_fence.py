@@ -89,7 +89,7 @@ def sdk_get_sandbox(sandbox_id):
     return sandbox._loop_manager.run_sync(request())
 
 
-def observe_local_worker(identity, nonce, control_dir, fence_nonce, supervisor_cmdline_sha256):
+def observe_local_worker(identity, nonce, control_dir, fence_nonce, supervisor_cmdline_sha256, entrypoint_sha256=None):
     """Observe an exact role owner and its stopped worker on its sandbox host.
 
     The controlling supervisor must also prevent new role requests through
@@ -112,8 +112,13 @@ def observe_local_worker(identity, nonce, control_dir, fence_nonce, supervisor_c
             ticks(state.get('supervisor_pid'))!=state.get('supervisor_start_ticks')):
         raise ValueError('role supervisor identity is not live and exact')
     import hashlib
-    if hashlib.sha256(Path(f"/proc/{state['supervisor_pid']}/cmdline").read_bytes()).hexdigest()!=supervisor_cmdline_sha256:
+    cmdline=Path(f"/proc/{state['supervisor_pid']}/cmdline").read_bytes()
+    if hashlib.sha256(cmdline).hexdigest()!=supervisor_cmdline_sha256:
         raise ValueError('role supervisor executable identity differs')
+    if entrypoint_sha256 is not None:
+        args=cmdline.split(b'\0')
+        if b'-c' not in args or args.index(b'-c')+1>=len(args) or hashlib.sha256(args[args.index(b'-c')+1]).hexdigest()!=entrypoint_sha256:
+            raise ValueError('role supervisor authority entrypoint differs')
     fence=json.loads((directory/'promotion-fence.json').read_text())
     if fence!={'schema':'natlang.diloco-role-promotion-fence/1','owner_id':identity['owner_id'],'boot_id':identity['boot_id'],'nonce':fence_nonce}:
         raise ValueError('durable promotion authority fence is missing or changed')
@@ -137,15 +142,15 @@ def sdk_worker_probe(control_dirs):
     except ImportError: import cwctl
     source=inspect.getsource(observe_local_worker)
     program=('import json,sys\nfrom pathlib import Path\n'+source+
-             '\nprint(json.dumps(observe_local_worker(json.loads(sys.argv[1]),sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5])))\n')
+             '\nprint(json.dumps(observe_local_worker(json.loads(sys.argv[1]),sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5],sys.argv[6])))\n')
     def probe(identity,nonce):
         entry=control_dirs.get(identity['sandbox_id'])
-        if not isinstance(entry,dict) or set(entry)!={'directory','nonce','supervisor_cmdline_sha256'}: raise ValueError('missing exact worker promotion authority')
-        directory=entry['directory']; fence_nonce=entry['nonce']; command_sha=entry['supervisor_cmdline_sha256']
-        if not isinstance(directory,str) or not directory.startswith('/') or not isinstance(fence_nonce,str) or len(fence_nonce)<32 or not re.fullmatch('[0-9a-f]{64}',str(command_sha)): raise ValueError('invalid worker promotion authority')
+        if not isinstance(entry,dict) or set(entry)!={'directory','nonce','supervisor_cmdline_sha256','entrypoint_sha256'}: raise ValueError('missing exact worker promotion authority')
+        directory=entry['directory']; fence_nonce=entry['nonce']; command_sha=entry['supervisor_cmdline_sha256']; entrypoint_sha=entry['entrypoint_sha256']
+        if not isinstance(directory,str) or not directory.startswith('/') or not isinstance(fence_nonce,str) or len(fence_nonce)<32 or not re.fullmatch('[0-9a-f]{64}',str(command_sha)) or not re.fullmatch('[0-9a-f]{64}',str(entrypoint_sha)): raise ValueError('invalid worker promotion authority')
         cwctl.load_env_file();cwctl.require_key()
         sandbox=cwctl.read_sandbox(identity['sandbox_id'],patience=60)
-        result=sandbox.exec(['python3','-c',program,json.dumps(identity,sort_keys=True),nonce,directory,fence_nonce,command_sha],timeout_seconds=30).result(timeout=60)
+        result=sandbox.exec(['python3','-c',program,json.dumps(identity,sort_keys=True),nonce,directory,fence_nonce,command_sha,entrypoint_sha],timeout_seconds=30).result(timeout=60)
         if result.returncode!=0: raise ValueError('worker identity observation failed')
         return json.loads(result.stdout)
     return probe
