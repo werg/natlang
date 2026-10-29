@@ -1411,6 +1411,9 @@ def bind_explicit_task_eval(parameters, declaration, *, cadence=None):
     packet=Path(spec['packet']['path']).resolve(strict=True)
     if sha256_file_hex_cached(packet)!=spec['packet']['sha256']:
         raise ValueError('explicit task evaluation packet differs from its exact hash')
+    rows=list(read_jsonl(packet))
+    if any(index>=len(rows) or rows[index].get('split')!='test' for index in spec['cases']):
+        raise ValueError('explicit task evaluation must select existing protected test cases')
     if parameters.get('task_eval') not in (None,spec):
         raise ValueError('explicit task evaluation conflicts with the production recipe')
     if type(cadence) is not int or cadence<1:
