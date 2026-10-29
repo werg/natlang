@@ -12,3 +12,4 @@ def test_actual_epoch_process_and_pending_state_are_bound():
     facts=live_facts(**args);assert facts['eligibility']['latest_role']=='new' and facts['eligibility']['pending_roles']==['old'] and 'z'*64 in facts['eligibility']['protected_sha256s']
     with pytest.raises(ValueError):live_facts(**(args|{'intents':{'old':intent|{'owner':accepted|{'pid':99}},'new':ni}}))
     with pytest.raises(ValueError):live_facts(**(args|{'candidate':args['candidate']|{'control_role':'fake'}}))
+    with pytest.raises(ValueError,match='successor'):live_facts(**(args|{'intents':{'old':intent,'new':ni|{'step':4}}}))

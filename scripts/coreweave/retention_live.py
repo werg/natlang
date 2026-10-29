@@ -14,7 +14,14 @@ def live_facts(*, candidate, exports, intents, owners, current_owner, owner_stat
     entry=matches[0];intent=intents[candidate['role']]
     if intent.get('sha256')!=candidate['sha256'] or intent.get('step')!=entry.get('step') or intent.get('worker')!=entry.get('worker'):
         raise ValueError('candidate intent differs from journal')
-    owner_for_intent(intent,owners)
+    candidate_owner=owner_for_intent(intent,owners)
+    successors=[e for e in exports if e.get('role')==successor_role]
+    if len(successors)!=1 or successor_role not in intents:raise ValueError('successor journal entry is not unique')
+    successor=successors[0];successor_intent=intents[successor_role]
+    if successor.get('worker')!=entry.get('worker') or successor_intent.get('worker')!=intent.get('worker') or successor_intent.get('step')!=successor.get('step') or successor['step']<=entry['step']:
+        raise ValueError('successor worker or step differs')
+    successor_owner=owner_for_intent(successor_intent,owners)
+    if successor_owner!=candidate_owner:raise ValueError('successor is not from the same authenticated owner epoch')
     if entry.get('unit')!=candidate['full_unit']:raise ValueError('candidate full unit differs')
     if bool(entry.get('control_required')) != bool(candidate.get('control_role')):raise ValueError('candidate control requirement differs')
     if entry.get('control_required'):

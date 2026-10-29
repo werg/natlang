@@ -23,3 +23,20 @@ def current_presence(api, receipts):
             if obj is None or obj.size!=item['identity']['bytes']:
                 raise ValueError('required private object missing or changed: '+item['name'])
     return True
+
+
+def resolve_object(api, receipt, role, digest, *, get):
+    """Return an exact object or a confirmed absence, including tombstones."""
+    identity=receipt['identity']
+    if receipt.get('private') is not True or receipt.get('role')!=role or identity.get('sha256')!=digest:raise ValueError('provider deletion identity differs')
+    values=list(api.run(receipt['run']).files(names=[receipt['name']]))
+    if not values:return None
+    if len(values)!=1 or values[0].name!=receipt['name']:raise ValueError('provider object identity differs')
+    obj=values[0]
+    if obj.size==0:
+        response=get(obj.url,headers={'Range':'bytes=0-1'},timeout=15,stream=True)
+        status=response.status_code;response.close()
+        if status==404:return None
+        raise ValueError('zero-byte listing not confirmed absent')
+    if obj.size!=identity['bytes']:raise ValueError('provider object size differs')
+    return obj
