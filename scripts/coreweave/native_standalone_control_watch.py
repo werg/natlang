@@ -10,6 +10,8 @@ def bound(ref):
  path=Path(ref['path']);raw=path.read_bytes();actual=hashlib.sha256(raw).hexdigest()
  if actual!=ref['sha256']:raise ValueError('selected watcher dependency changed: '+str(path))
  return raw
+def control_pending(entry):
+ return bool(entry.get('control_required')) and entry.get('control',{}).get('status') not in ('independently_verified','retired')
 selection_path=Path(sys.argv[1]);selection_sha=sys.argv[2];selector_receipt=Path(sys.argv[3]) if len(sys.argv)>3 else None;selector_receipt_sha=sys.argv[4] if len(sys.argv)>4 else None;raw=selection_path.read_bytes()
 if hashlib.sha256(raw).hexdigest()!=selection_sha:raise ValueError('watcher selection changed')
 selection=json.loads(raw)
@@ -17,7 +19,7 @@ if selection.get('schema')!='natlang.native-standalone-control-watcher/1':raise 
 rank=selection['rank'];root=Path(selection['state_root']);journal=Path(selection['journal']);owner=Path(selection['owner_journal'])
 s=json.loads(journal.read_text()) if journal.exists() else {'last':selection['initial_step'],'exports':[]}
 for prior in s['exports']:
- if prior.get('control_required') and prior.get('control',{}).get('status')!='independently_verified' and prior.get('control_selection_sha256')!=selection_sha:
+ if control_pending(prior) and prior.get('control_selection_sha256')!=selection_sha:
   raise ValueError('unfinished historical control belongs to a different or unbound selection')
 code=bound(selection['scanner']).decode()
 OWNER_GUARD = r'''import json,os,pathlib,sys
@@ -101,7 +103,7 @@ def refresh_publication(e):
 while True:
  try:
   for e in s['exports']:
-   if e.get('control_required') and e.get('control_selection_sha256')==selection_sha and e.get('control',{}).get('status')!='independently_verified':
+   if control_pending(e) and e.get('control_selection_sha256')==selection_sha:
     try:
      v=json.loads(Path(e['intent']).read_text());o=json.loads(owner.read_text());b=None
      if o['sandbox_id']==v['sandbox_id']:

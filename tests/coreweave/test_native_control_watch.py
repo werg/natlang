@@ -37,6 +37,16 @@ def test_durable_retirement_intent_fences_source_free_control_retry(tmp_path):
     assert entry['control']['status']=='retired' and not calls
 
 
+def test_retired_status_is_terminal_for_watcher_retry_and_epoch_check():
+    import ast
+    from pathlib import Path
+    source=(Path(__file__).resolve().parents[2]/'scripts/coreweave/native_standalone_control_watch.py').read_text()
+    node=next(x for x in ast.parse(source).body if isinstance(x,ast.FunctionDef) and x.name=='control_pending');env={}
+    exec(compile(ast.Module(body=[node],type_ignores=[]),'<watcher>','exec'),env)
+    for status in ('retired','independently_verified'):assert not env['control_pending']({'control_required':True,'control':{'status':status}})
+    assert env['control_pending']({'control_required':True,'control':{'status':'derived'}})
+
+
 def test_missing_hook_reports_failure_without_executing_untrusted_code():
     import ast
     from pathlib import Path
