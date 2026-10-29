@@ -37,3 +37,25 @@ def test_missing_hook_reports_failure_without_executing_untrusted_code():
     exec(compile(ast.Module(body=[node],type_ignores=[]),str(source),'exec'),env)
     with pytest.raises(ValueError,match='selected control hook unavailable'):
         env['control_attempt']({},None,{})
+
+
+def test_complete_publication_requires_exact_private_selector_owner_get(tmp_path,monkeypatch):
+    import ast,sys
+    from pathlib import Path
+    source=Path(__file__).resolve().parents[2]/'scripts/coreweave/native_standalone_control_watch.py'
+    node=next(x for x in ast.parse(source.read_text()).body if isinstance(x,ast.FunctionDef) and x.name=='refresh_publication')
+    class Api:
+        def run(self,*args):return self
+        def file(self,*args):return types.SimpleNamespace(size=2)
+    monkeypatch.setitem(sys.modules,'wandb',types.SimpleNamespace(Api=lambda:Api()))
+    intent=tmp_path/'intent';intent.write_text(json.dumps({'sha256':'b'*64}))
+    def receipt(role,sha):
+        path=tmp_path/('coreweave-production-'+role+'-private-export-receipt-20261014.json')
+        path.write_text(json.dumps({'role':role,'private':True,'run':'r','name':role,'identity':{'sha256':sha,'bytes':2},'independent_verification':{'readback_location':'owner','sha256':sha,'bytes':2}}));return path
+    full=receipt('full','b'*64);control=receipt('control','c'*64);selector=receipt('selector','a'*64)
+    def path_factory(x):return tmp_path if str(x)=='/home/werg/data/dgxops' else Path(x)
+    env={'selection':{'publication_dependencies':[]},'selector_receipt':selector,'selector_receipt_sha':hashlib.sha256(selector.read_bytes()).hexdigest(),'selection_sha':'a'*64,'Path':path_factory,'json':json,'write_json_durable':lambda *args:None,'journal':tmp_path/'j','s':{}}
+    exec(compile(ast.Module(body=[node],type_ignores=[]),str(source),'exec'),env)
+    entry={'full_backup_verified':True,'role':'full','intent':str(intent),'control':{'role':'control','status':'independently_verified','archive':{'sha256':'c'*64}}}
+    env['refresh_publication'](entry);assert entry['publication_complete']
+    env['selection_sha']='d'*64;env['refresh_publication'](entry);assert not entry['publication_complete']

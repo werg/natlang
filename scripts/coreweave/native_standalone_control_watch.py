@@ -9,7 +9,7 @@ def bound(ref):
  path=Path(ref['path']);raw=path.read_bytes();actual=hashlib.sha256(raw).hexdigest()
  if actual!=ref['sha256']:raise ValueError('selected watcher dependency changed: '+str(path))
  return raw
-selection_path=Path(sys.argv[1]);selection_sha=sys.argv[2];raw=selection_path.read_bytes()
+selection_path=Path(sys.argv[1]);selection_sha=sys.argv[2];selector_receipt=Path(sys.argv[3]) if len(sys.argv)>3 else None;selector_receipt_sha=sys.argv[4] if len(sys.argv)>4 else None;raw=selection_path.read_bytes()
 if hashlib.sha256(raw).hexdigest()!=selection_sha:raise ValueError('watcher selection changed')
 selection=json.loads(raw)
 if selection.get('schema')!='natlang.native-standalone-control-watcher/1':raise ValueError('invalid watcher selection')
@@ -49,7 +49,15 @@ def refresh_publication(e):
  dependencies=[(v['role'],v['receipt_sha256']) for v in selection['publication_dependencies']]
  if not e.get('full_backup_verified') or e.get('control',{}).get('status')!='independently_verified':e['publication_complete']=False;return
  try:
+  if selector_receipt is None or selector_receipt_sha is None:raise ValueError('independent selector receipt not declared')
+  selector_raw=selector_receipt.read_bytes()
+  if hashlib.sha256(selector_raw).hexdigest()!=selector_receipt_sha:raise ValueError('selector receipt changed')
+  selector=json.loads(selector_raw);selector_identity=selector['identity'];selector_get=selector['independent_verification']
+  if not selector.get('private') or selector_identity['sha256']!=selection_sha or selector_get.get('readback_location')!='owner' or selector_get.get('sha256')!=selection_sha or selector_get.get('bytes')!=selector_identity['bytes']:
+   raise ValueError('selector lacks exact private owner readback')
   checks=dependencies+[(e['role'],None),(e['control']['role'],None)];bindings=[];api=wandb.Api()
+  if api.run(selector['run']).file(selector['name']).size!=selector_identity['bytes']:raise ValueError('selector private object missing')
+  bindings.append({'role':selector['role'],'receipt':str(selector_receipt),'receipt_sha256':selector_receipt_sha,'sha256':selection_sha,'bytes':selector_identity['bytes']})
   for role,expected in checks:
    path=Path('/home/werg/data/dgxops')/('coreweave-production-'+role+'-private-export-receipt-20261014.json');raw=path.read_bytes();digest=hashlib.sha256(raw).hexdigest()
    if expected and digest!=expected:raise ValueError('dependency receipt changed: '+role)
