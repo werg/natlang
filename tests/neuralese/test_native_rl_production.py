@@ -490,6 +490,9 @@ def test_explicit_task_eval_for_recipe_without_cadence_is_exact_and_bound(tmp_pa
     assert result['task_eval_every']==25 and result['task_eval']['reference_successes'] is None
     assert result['task_eval']['packet']==spec['packet']
     with pytest.raises(ValueError,match='positive cadence'):bind_explicit_task_eval({},spec,cadence=0)
+    packet.write_text('{"split":"train"}\n')
+    wrong={**spec,'packet':{'path':str(packet),'sha256':hashlib.sha256(packet.read_bytes()).hexdigest()}}
+    with pytest.raises(ValueError,match='protected test'):bind_explicit_task_eval({},wrong,cadence=25)
     packet.write_text('changed')
     with pytest.raises(ValueError,match='exact hash'):bind_explicit_task_eval({},spec,cadence=25)
 
