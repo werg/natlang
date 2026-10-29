@@ -53,6 +53,27 @@ def test_recovery_closure_replays_and_continues_four_worker_state(tmp_path,monke
     seed=prepare_restored_peer_seed(closure=tmp_path/'download'/'diloco-replica-recovery',restored=tmp_path/'restore',destination=tmp_path/'seed-store',seed=tmp_path/'seed',receipt_sha256=closure['sha256'],freeze_nonce='a'*32)
     from natlang_neuralese.train.diloco.replica_seed import install_seed
     installed=install_seed(tmp_path/'seed',tmp_path/'seed-peer',expected_receipt_sha256=seed['receipt_sha256'])
+    from scripts.coreweave.diloco_full_restore_controller import stage_replica_seed
+    from types import SimpleNamespace
+    import subprocess,sys
+    class Future:
+        def __init__(self,value):self.value=value
+        def result(self,**kwargs):return self.value
+    class Box:
+        def __init__(self,name):self.base=tmp_path/name;self.base.mkdir()
+        def map(self,v):return str(self.base/v.removeprefix('/work/')) if v.startswith('/work/') else v
+        def exec(self,argv,**kwargs):return Future(subprocess.run([self.map(v) for v in argv],capture_output=True,text=True))
+        def write_file_streaming(self,path,chunks,**kwargs):
+            with open(self.map(path),'wb') as f:
+                for chunk in chunks:f.write(chunk)
+            return Future(None)
+    boxes={name:Box(name) for name in ('remote0','remote1')}
+    sdk=SimpleNamespace(read_sandbox=lambda name,**kwargs:boxes[name])
+    runtime=str(__import__('pathlib').Path(__file__).resolve().parents[1])
+    hosts=[{'sandbox_id':name,'restore_root':'/work/seed','store':'/work/seed/store','runtime':runtime,'python':sys.executable} for name in boxes]
+    transfer=stage_replica_seed(tmp_path/'seed',hosts,cwctl=sdk,archive_path=tmp_path/'seed-transfer.tar')
+    assert len(transfer['replicas'])==2
+    assert stage_replica_seed(tmp_path/'seed',hosts,cwctl=sdk,archive_path=tmp_path/'seed-transfer.tar')==transfer
     assert installed['head']==seed['head'] and (tmp_path/'seed-peer'/'replica-uploads'/'source').read_bytes()==b'full-source'
     restored['journal']=ReplicaJournal(tmp_path/'restore'/'journal',run_identity='r',baseline_sha256=closure['value']['current_baseline_sha256'],previous_generation={'sequence':closure['value']['lineage']['sequence'],'head':closure['value']['lineage']['head']})
     assert (restored['coordinator']/'uploads'/'source').read_bytes()==b'full-source'

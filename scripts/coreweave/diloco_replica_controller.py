@@ -59,6 +59,13 @@ def run_promotion(directory, *, intent, fence_workers, verify_fence, start_prima
         evidence=record['fence'];expected={str(item['worker']):{k:item['identity'][k] for k in ('sandbox_id','boot_id','owner_id')} for item in evidence.get('workers',[])}
         replacement=evidence.get('replacement_owner')
         if replacement is not None:expected[str(replacement['worker_index'])]=replacement['new_identity']
+        replacements=evidence.get('replacement_owners',[])
+        if replacements:
+            if expected or replacement is not None:raise ValueError('ambiguous restored owner lineage')
+            for item in replacements:
+                rank=str(item['worker_index'])
+                if rank in expected or not item.get('proof_sha256'):raise ValueError('duplicate or unverified restored owner')
+                expected[rank]=item['new_identity']
         required_workers=sorted(evidence.get('quiesced_workers') or [])
         if sorted(map(int,expected))!=required_workers:raise ValueError('worker owner lineage is incomplete')
         custody={'schema':'natlang.diloco-replica-owner-journal/1','run_id':intent['run_id'],'coordinator':owner,
@@ -94,20 +101,31 @@ def run_coreweave_promotion(directory, config):
     ref=config['supervisor_proof']['journal']
     owner=fence_module.owner_reference(ref['path'],ref['sha256'],config['expected_primary'])
     if owner['run_id']!=intent['run_id']:raise ValueError('owner journal run differs from promotion')
-    expected={(w['sandbox_id'],w['boot_id'],w['owner_id']) for w in owner['workers'].values()
-              if w['sandbox_id']!=config['expected_primary']['sandbox_id']}
     actual={(w['sandbox_id'],w['boot_id'],w['owner_id']) for w in workers}
-    if not expected<=actual:raise ValueError('worker authority omits an exact surviving owner')
-    extra=actual-expected;replacement_proof=None
-    if extra:
-        replacement=config.get('replacement_owner')
-        if len(extra)!=1 or not isinstance(replacement,dict):raise ValueError('unverified replacement owner')
-        target=replacement['target'];identity=(target['sandbox_id'],target['boot_id'],target['owner_id'])
-        if extra!={identity}:raise ValueError('replacement owner differs from authority set')
-        replacement_proof=fence_module.verify_replacement_owner(replacement['reference'],owner_journal=owner,expected_primary=config['expected_primary'],
-            expected_target=target,worker_index=replacement['worker_index'],nonce=nonce,get_sandbox=fence_module.sdk_get_sandbox,observe_owner=fence_module.sdk_observe_replacement_owner)
-    verifier=fence_module.provider_fence_verifier(expected_primary=config['expected_primary'],
-        expected_workers=config['expected_workers'],control_dirs=config['control_dirs'])
+    full_restore=config.get('full_restore')
+    replacement_proof=None
+    if full_restore:
+        replacements={int(k):v for k,v in full_restore['replacements'].items()}
+        target={(v['target']['sandbox_id'],v['target']['boot_id'],v['target']['owner_id']) for v in replacements.values()}
+        if actual!=target or len(actual)!=len(config['expected_workers']):raise ValueError('full restore owner set differs')
+        def verifier(_):
+            return fence_module.verify_full_restore_fence(journal_ref=ref,expected_primary=config['expected_primary'],
+                expected_workers=config['expected_workers'],replacements=replacements,nonce=nonce,
+                get_sandbox=fence_module.sdk_get_sandbox,observe_owner=fence_module.sdk_observe_replacement_owner)
+    else:
+        expected={(w['sandbox_id'],w['boot_id'],w['owner_id']) for w in owner['workers'].values()
+                  if w['sandbox_id']!=config['expected_primary']['sandbox_id']}
+        if not expected<=actual:raise ValueError('worker authority omits an exact surviving owner')
+        extra=actual-expected
+        if extra:
+            replacement=config.get('replacement_owner')
+            if len(extra)!=1 or not isinstance(replacement,dict):raise ValueError('unverified replacement owner')
+            target=replacement['target'];identity=(target['sandbox_id'],target['boot_id'],target['owner_id'])
+            if extra!={identity}:raise ValueError('replacement owner differs from authority set')
+            replacement_proof=fence_module.verify_replacement_owner(replacement['reference'],owner_journal=owner,expected_primary=config['expected_primary'],
+                expected_target=target,worker_index=replacement['worker_index'],nonce=nonce,get_sandbox=fence_module.sdk_get_sandbox,observe_owner=fence_module.sdk_observe_replacement_owner)
+        verifier=fence_module.provider_fence_verifier(expected_primary=config['expected_primary'],
+            expected_workers=config['expected_workers'],control_dirs=config['control_dirs'])
     token=Path(config['new_token_file']).read_text().strip()
     if hashlib.sha256(token.encode()).hexdigest()!=intent['new_token_sha256']:
         raise ValueError('new token file does not match promotion intent')

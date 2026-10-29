@@ -260,3 +260,15 @@ def test_worker_custody_requires_actual_complete_owner_set(tmp_path,monkeypatch)
     assert json.loads((tmp_path/'promotion.json').read_text())['phase']=='released'
     assert fm.owner_reference(captured['path'],captured['sha256'],newcoord)['workers']['0']['pid']==10
     assert capture_worker_ownership(tmp_path,coordinator_role={},hosts=hosts,nonce='x'*48)['sha256']==captured['sha256']
+
+
+def test_full_restore_promotion_records_each_replacement_owner(tmp_path):
+    intent={'run_id':'r','generation_nonce':'n'*48,'activation_nonce':'x'*48,'sequence':0,'head':'h'*64,'new_url':'https://new','new_token_sha256':'t'*64}
+    replacements=[{'worker_index':i,'new_identity':{'sandbox_id':f'h{i}','boot_id':f'b{i}','owner_id':f'o{i}'},'proof_sha256':str(i)*64} for i in range(4)]
+    evidence={'run_id':'r','primary_fenced':True,'all_workers_quiesced':True,'proof_sha256':'p'*64,'quiesced_workers':list(range(4)),'replacement_owners':replacements}
+    fence=lambda i:[{'sandbox_id':f'h{j}'} for j in range(4)]
+    ready={'ready':True,'run_id':'r','sequence':0,'head':'h'*64,'url':'https://new','token_sha256':'t'*64,'clock_rebase':{},'sealed_rebase':{'sequence':2,'head':'q'*64},'owner':{'sandbox_id':'h0','boot_id':'b0','owner_id':'o0','pid':7,'start_ticks':'8'}}
+    result=run_promotion(tmp_path,intent=intent,fence_workers=fence,verify_fence=lambda _:evidence,start_primary=lambda *_:ready,release_workers=lambda _,f:f)
+    assert result['phase']=='workers-released'
+    owner=json.loads((tmp_path/'owner-journal.json').read_text())
+    assert owner['phase']=='awaiting-worker-capture' and owner['expected_workers']=={str(i):replacements[i]['new_identity'] for i in range(4)}
