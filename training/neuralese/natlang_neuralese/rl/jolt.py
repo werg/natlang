@@ -175,7 +175,8 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
 
     The actor recorded each model turn's guidance (``privileged_context.captured_block``): the policy's own
     ``writeGuidance`` state imported after the leading system turn (teacher attempts), the same writer's state
-    written but not imported (student attempts, for the OPSD twin), or the recorded text fallback. The learner
+    written but not imported (student attempts, for the OPSD twin), or the recorded text fallback (inserted for a
+    teacher; for a student recorded as ``text-twin`` with its exact token ids, never sampled). The learner
     re-verifies custody, every credited fact (this world's ``case_facts`` with the group's ``group_feedback``),
     visibility to the consuming invocation (root/child from ``root_calls``), the declared rendering and that the
     in-graph writer's own prompt carried those facts. Raises ``CustodyError``/``ValueError`` when an episode has no
@@ -211,7 +212,7 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
             invocation = {'name': name.rsplit('#turn', 1)[0], 'role': descriptor['role'], 'text': descriptor['text']}
             used = verify_captured_block(block, rendering, custody_receipt=receipt, facts=facts, invocation=invocation)
             telemetry['blocks'] += 1
-            if block.receipt['mode'] == 'text':
+            if block.receipt['mode'] in ('text', 'text-twin'):
                 telemetry['text_fallbacks'] += 1
                 telemetry['fallback_reasons'].append(block.receipt['fallback'])
             elif block.state_id is not None:
@@ -286,8 +287,9 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
     * Teacher attempt: the twin is ``student_form`` (guidance turns and their imports removed). The policy turns
       keep the teacher outcome term (whole-graph RL through the producer/consumer import) with no KL twin.
     * Student episode: the twin is ``teacher_form`` with the writer's write-only state imported at the declared
-      place (OPSD target, stop-gradient). The policy turns carry no student loss (they do not affect the student's
-      outcome): they are removed from the actions and their target weights.
+      place, or the recorded ``text-twin`` turn inserted there (OPSD target, stop-gradient). The policy turns
+      carry no student loss (they do not affect the student's outcome): they are removed from the actions and
+      their target weights.
 
     A student episode without verified guidance keeps its plain outcome term; the record names the refusal.
     """
@@ -302,7 +304,7 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
         capture = turn.get('sampling') or {}
         sampled = any(segment.get('privileged') for segment in capture.get('prompt') or [])
         mode = (capture.get('privileged') or {}).get('mode')
-        if role == 'student' and (sampled or mode not in (None, 'write-only')):
+        if role == 'student' and (sampled or mode not in (None, 'write-only', 'text-twin')):
             raise ValueError('a student episode was sampled with guidance; mark it as a teacher attempt')
         if (sampled or mode is not None) and turn.get('graph_turn') in flagged:
             raise ValueError('a guidance policy turn carries guidance itself')
@@ -312,8 +314,8 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
         blocks, telemetry = source(rollout, replay, turns)
         modes = {block.receipt['mode'] for block in blocks.values()}
         if role == 'teacher':
-            if 'write-only' in modes:
-                raise ValueError('a teacher attempt imports its guidance; write-only guidance belongs to students')
+            if modes & {'write-only', 'text-twin'}:
+                raise ValueError('a teacher attempt imports its guidance; recorded guidance belongs to students')
             blocks = {name: block for name, block in blocks.items() if block.token_ids}
             if not blocks:
                 raise CustodyError('no guidance entered any invocation of this teacher attempt')
@@ -321,7 +323,11 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
 
         else:
             turn = source.rendering.state_turn()
-            blocks = {name: _as_insertion(block, turn) for name, block in blocks.items()}
+            blocks = {name: _as_insertion(block, turn) if block.receipt['mode'] == 'write-only' else block
+                      for name, block in blocks.items()}
+            blocks = {name: block for name, block in blocks.items() if block.token_ids}
+            if not blocks:
+                raise CustodyError('no recorded guidance fits any invocation of this student episode')
             twin = teacher_form(replay, blocks)
         writers = {writer_span(replay, block)[0] for block in blocks.values() if block.state_id is not None}
         if not writers <= flagged:

@@ -17,7 +17,10 @@ the same episode graph. This module is the crisp mechanism around it:
 4. ``PrivilegedRendering`` (hash-bound placement): the consumer import is one declared ChatML turn after the
    leading system turn (else after BOS): ``<header>`` then the guidance state between consume markers
    (``mode: import``), or the selected facts' texts packed whole into a token budget (``mode: text``, the recorded
-   fallback when the writer fails). ``guidance_plan`` renders a runtime request into engine prompt pieces and its
+   fallback when the writer fails or is switched off). A student never receives guidance in its sampled prompt: it
+   records the state its writer wrote (``mode: write-only``) or, without one, the exact text turn a teacher would
+   have received (``mode: text-twin``, its token ids in the receipt); both are inserted only into the learner's
+   stop-gradient OPSD twin. ``guidance_plan`` renders a runtime request into engine prompt pieces and its
    receipt; ``verify_captured_block`` re-verifies a captured block against custody, facts, visibility, rendering
    and the in-graph writer.
 """
@@ -36,7 +39,9 @@ REQUEST_SCHEMA = 'natlang.guidance-request/1'
 RENDERING_SCHEMA = 'natlang.jolt-privileged-rendering/2'
 WRITER_FUNCTION = 'writeGuidance'
 SELECTION_FUNCTION = 'selectGuidanceFacts'
-MODES = ('import', 'write-only', 'text')
+MODES = ('import', 'write-only', 'text', 'text-twin')
+TEXT_MODES = ('text', 'text-twin')
+RECORDED_MODES = ('write-only', 'text-twin')  # recorded for the OPSD twin, never in the sampled prompt
 FACT_KINDS = ('expected_result', 'expected_stop', 'expected_files', 'expected_effects', 'reference_failure',
               'reference_solution', 'child_value', 'minimum_sequence', 'decisive', 'teacher_trajectory',
               'attempt_feedback', 'fit_hindsight')
@@ -261,7 +266,7 @@ def _request_parts(request):
             or not isinstance(invocation['name'], str) or invocation['role'] not in ('root', 'child')):
         raise ValueError('guidance requests name the consuming invocation {name, role: root|child}')
     if mode not in MODES:
-        raise ValueError('guidance mode is import, write-only or text')
+        raise ValueError('guidance mode is import, write-only, text or text-twin')
     custody = request.get('custody')
     if not isinstance(custody, dict) or custody.get('schema') != CUSTODY_SCHEMA or custody.get('split') != 'train':
         raise CustodyError('guidance needs the custody receipt of a training world')
@@ -273,7 +278,7 @@ def _request_parts(request):
     if len({fact.id for fact in facts}) != len(facts):
         raise ValueError('guidance facts repeat an id')
     state = request.get('state')
-    if mode == 'text':
+    if mode in TEXT_MODES:
         if state is not None or request.get('writer') is not None:
             raise ValueError('text guidance carries no writer state')
         if not isinstance(request.get('fallback'), str) or not request['fallback']:
@@ -296,7 +301,8 @@ def guidance_plan(rendering, request, *, token_ids, text):
 
     ``token_ids``: the turn's own prompt tokens (no guidance); ``text``: its messages' text (visibility). Pieces are
     ``('privileged', tokens)`` and ``('privileged_state', {id, source_occurrence?})``, inserted at ``insert_at``.
-    Returns ``(insert_at, pieces, receipt)``; ``pieces`` is empty for write-only or when no fact fits the budget.
+    Returns ``(insert_at, pieces, receipt)``; ``pieces`` is empty for write-only and text-twin (recorded for the
+    OPSD twin, never sampled: a text-twin receipt carries its ``token_ids``) or when no fact fits the budget.
     """
     invocation, mode, custody, selection, facts, state = _request_parts(request)
     visible = {**invocation, 'text': text}
@@ -305,7 +311,8 @@ def guidance_plan(rendering, request, *, token_ids, text):
         raise CustodyError('guidance facts are not visible to this invocation: ' + ', '.join(hidden))
     insert_at, placement = rendering.insertion_point(token_ids)
     included, omitted, pieces = list(facts), [], []
-    if mode == 'text':
+    recorded = mode in RECORDED_MODES
+    if mode in TEXT_MODES:
         included = []
         for fact in facts:
             if len(rendering.turn([item.text for item in [*included, fact]])) <= rendering.budget_tokens:
@@ -313,7 +320,7 @@ def guidance_plan(rendering, request, *, token_ids, text):
             else:
                 omitted.append({'id': fact.id, 'reason': 'token_budget'})
         tokens = rendering.turn([fact.text for fact in included]) if included else []
-        if tokens:
+        if tokens and not recorded:
             pieces = [('privileged', tokens)]
     else:
         tokens, _ = rendering.state_turn()
@@ -324,10 +331,12 @@ def guidance_plan(rendering, request, *, token_ids, text):
                'rendering_sha256': rendering.digest, 'selection': selection, 'custody': custody,
                'facts': [{'id': fact.id, 'kind': fact.kind, 'sha256': fact.digest} for fact in included],
                'omitted': omitted, 'insert_at': insert_at, 'placement': placement,
-               'token_count': len(tokens) if pieces or mode == 'write-only' else 0,
-               'token_ids_sha256': canonical_json_sha256_hex(list(tokens) if pieces or mode == 'write-only' else [])}
-    if mode == 'text':
+               'token_count': len(tokens) if pieces or recorded else 0,
+               'token_ids_sha256': canonical_json_sha256_hex(list(tokens) if pieces or recorded else [])}
+    if mode in TEXT_MODES:
         receipt['fallback'] = request['fallback']
+        if mode == 'text-twin':
+            receipt['token_ids'] = list(tokens)
     else:
         receipt['writer'] = request['writer']
         receipt['state'] = dict(state)
@@ -362,9 +371,14 @@ def captured_block(turn):
         own += len(segment['token_ids'])
     mode = receipt.get('mode')
     state_receipt = receipt.get('state') or {}
-    if mode == 'write-only':
+    if mode in RECORDED_MODES:
         if tokens or state is not None:
-            raise ValueError('write-only guidance must not enter the sampled prompt')
+            raise ValueError(f'{mode} guidance must not enter the sampled prompt')
+        if mode == 'text-twin':
+            recorded = receipt.get('token_ids')
+            if not isinstance(recorded, list) or any(type(token) is not int for token in recorded):
+                raise ValueError('text-twin guidance records its token ids')
+            return PrivilegedBlock(turn['graph_turn'], receipt['insert_at'], tuple(recorded), '', receipt)
         return PrivilegedBlock(turn['graph_turn'], receipt['insert_at'], (), '', receipt,
                                state_id=state_receipt.get('id'), source_occurrence=state_receipt.get('source_occurrence'))
     if start is None:
@@ -402,7 +416,7 @@ def verify_captured_block(block, rendering, *, custody_receipt, facts, invocatio
             raise CustodyError('guidance used a fact not visible to its invocation')
         used.append(fact)
     mode = receipt.get('mode')
-    if mode == 'text':
+    if mode in TEXT_MODES:
         expected = rendering.turn([fact.text for fact in used]) if used else []
         offset = None
     else:

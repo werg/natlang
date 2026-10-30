@@ -3,7 +3,8 @@
 Content comes from a synthetic TRAINING-split world built here; no development or held packet row is used as
 privileged content. The fixture episode has a root that imports a child's produced state and, per mode, the
 in-run guidance writers (``writeGuidance`` producer turns) whose states the consumers import after their leading
-system turn (``import``), only record (``write-only``, a student attempt) or replace by the text fallback (``text``).
+system turn (``import``), only record (``write-only``, a student attempt), replace by the text fallback (``text``)
+or record the text fallback for a student's OPSD twin without inserting it (``text-twin``).
 """
 import copy
 import re
@@ -88,7 +89,7 @@ def request(name, mode, state_id=None):
     value = {'schema': REQUEST_SCHEMA, 'invocation': {'name': call(name), 'role': role}, 'mode': mode,
              'custody': custody().check(train_case()), 'facts': [fact_request(fact) for fact in visible(name)],
              'selection': {'implementation': 'crisp', 'sha256': 'b' * 64}}
-    if mode == 'text':
+    if mode in ('text', 'text-twin'):
         value['fallback'] = 'writer returned no native state'
     else:
         value.update(writer=POLICY, state={'id': state_id})
@@ -316,6 +317,12 @@ def test_guidance_turn_is_placed_after_the_leading_system_turn_and_bound_to_its_
     assert [fact['kind'] for fact in receipt['facts']] == ['expected_result', 'reference_solution', 'minimum_sequence']
     assert pieces[0][1] == spec.turn([fact.text for fact in visible('root#turn1')])
     assert receipt['fallback'] == 'writer returned no native state'
+    # A student's text-twin: the same selection, rendering and insertion point, recorded in the receipt, never sampled.
+    twin_at, twin_pieces, twin = guidance_plan(spec, request('root#turn1', 'text-twin'), token_ids=prompt, text='program')
+    assert twin_pieces == [] and twin_at == at
+    assert twin['token_ids'] == list(pieces[0][1]) and twin['token_count'] == len(pieces[0][1])
+    assert {key: value for key, value in twin.items() if key not in ('mode', 'token_ids')} == \
+        {key: value for key, value in receipt.items() if key != 'mode'}
     # The engine refuses a fact the consuming invocation may not see (visibility is an exact data rule).
     leaky = request('root#turn1', 'import', 'nzs1_state')
     leaky['facts'].append(fact_request(next(f for f in case_facts(train_case(), custody=custody())[1]
@@ -343,7 +350,7 @@ def test_budget_packs_whole_facts_of_the_text_fallback_in_policy_order():
     assert pieces == [] and receipt['token_count'] == 0 and len(receipt['omitted']) == 3
 
 
-@pytest.mark.parametrize('mode', ['import', 'text', 'write-only'])
+@pytest.mark.parametrize('mode', ['import', 'text', 'write-only', 'text-twin'])
 def test_captured_guidance_is_verified_against_custody_facts_visibility_and_rendering(mode):
     model, roles, identity = load('lfm')
     episode = run_episode(model, roles, identity, mode)
@@ -351,7 +358,7 @@ def test_captured_guidance_is_verified_against_custody_facts_visibility_and_rend
     for name, (role, text) in CONSUMERS.items():
         item = next(turn for turn in episode.turns if turn['graph_turn'] == name)
         block = captured_block(item)
-        assert block.receipt['mode'] == mode and (block.state_id is not None) == (mode != 'text')
+        assert block.receipt['mode'] == mode and (block.state_id is not None) == (mode in ('import', 'write-only'))
         invocation = {'name': call(name), 'role': role, 'text': text}
         used = verify_captured_block(block, rendering(), custody_receipt=receipt, facts=facts, invocation=invocation)
         assert [fact.id for fact in used] == [fact.id for fact in visible(name)]
@@ -372,9 +379,19 @@ def test_captured_guidance_is_verified_against_custody_facts_visibility_and_rend
                                   invocation={**invocation, 'role': 'child' if role == 'root' else 'root'})
     unflagged = copy.deepcopy(episode.turns[0])
     unflagged['sampling'].pop('privileged')
-    if mode != 'write-only':
+    if mode not in ('write-only', 'text-twin'):
         with pytest.raises(ValueError, match='receipt'):
             captured_block(unflagged)
+    if mode == 'text-twin':  # recorded tokens are bound to the receipt's hash and never enter the sampled prompt
+        item = copy.deepcopy(next(turn for turn in episode.turns if turn['graph_turn'] == 'root#turn1'))
+        assert not any(segment.get('privileged') for segment in item['sampling']['prompt'])
+        item['sampling']['privileged']['token_ids'][0] += 1
+        with pytest.raises(ValueError):
+            verify_captured_block(captured_block(item), rendering(), custody_receipt=receipt, facts=facts,
+                                  invocation={'name': 'root', 'role': 'root', 'text': 'program'})
+        item['sampling']['prompt'][0]['privileged'] = True
+        with pytest.raises(ValueError, match='sampled prompt'):
+            captured_block(item)
 
 
 def test_verbatim_reference_telemetry():

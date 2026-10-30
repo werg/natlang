@@ -107,8 +107,9 @@ call may see (`applications/guidance-writer/visibility.ts`), selects them
 (`selectGuidanceFacts`, crisp or NL by `selection`; a failed or invalid NL
 selection falls back to crisp and is recorded) and runs `writeGuidance` in-process
 as a child call on the same model and recorder. A teacher imports the written
-state after the leading system turn, a student only writes it, and a failed writer
-gives a teacher its facts as text. Recovery: `guidance-run-invalid` names the bad
+state after the leading system turn, a student only writes it, and a failed or
+switched-off writer gives a teacher its facts as text and records the same text
+turn for a student's training twin (`text-twin`; the student never sees it). Recovery: `guidance-run-invalid` names the bad
 field (regenerate the control); `training-guidance-unavailable` means use a
 native-state server (`--neuralese-server`); `guidance-writer-missing` means set
 `NATLANG_GUIDANCE_WRITER` to the package directory.

@@ -21,13 +21,15 @@ Per consumer call, on its first model turn (ts-host/src/native/training-guidance
 3. `writeGuidance(consumer, selected)` runs in-process as a child call of the consumer, on the same model and recorder.
    Its result is the written native state. A teacher imports it (`mode: import`); a student only writes it
    (`mode: write-only`, for the OPSD twin). When the writer fails, a teacher gets the selected facts as text
-   (`mode: text`, with the reason) and a student gets nothing.
+   (`mode: text`, with the reason); a student's engine renders the same text turn and only records it (`mode: text-twin`:
+   token ids and insertion point in the capture receipt) for the OPSD twin, never in the student's prompt.
 4. Every turn of the consumer carries `x_natlang_privileged_context` (`natlang.guidance-request/1`); every turn of the
    selection and writer calls carries `x_natlang_guidance_policy` `{function, sha256 of the .nl file}` and gets no
    guidance itself. The engine renders the request (rl/privileged_context `guidance_plan`) and the learner re-verifies it.
 
 The run-level control is `x_natlang_guidance` (`natlang.guidance-run/1`, written by rl/jolt.py `guidance_controls`):
-`{schema, role: teacher | student, custody, facts, selection?: crisp | nl | shadow, budgetTokens?, writer?: native | off}`; `writer: off` (opt-out, the measurement baseline) gives a teacher the selected facts as text and a student nothing. The collector
+`{schema, role: teacher | student, custody, facts, selection?: crisp | nl | shadow, budgetTokens?, writer?: native | off}`; `writer: off` (opt-out, the measurement baseline; the backbone JOLT stage) skips the writer: a teacher gets the selected
+facts as text and a student has the same turn recorded (`text-twin`). The collector
 hands it to the agent; it is never sent to the model server.
 
 Model-facing text (both `.nl` files) is unmeasured debt in plans/MODEL_FACING_CHANGES.md until sampled live.

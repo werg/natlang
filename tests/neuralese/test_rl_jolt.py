@@ -97,14 +97,18 @@ def test_declarations_default_to_jolt_plus_and_keep_explicit_opt_outs():
 
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
-def test_packed_twin_rows_equal_shared_teacher_scores(family):
-    """The twin appended to the packed graph scores exactly what privileged_scoring.teacher_scores scores."""
+@pytest.mark.parametrize('family,mode', [('lfm', 'write-only'), ('mellum', 'write-only'), ('lfm', 'text-twin')])
+def test_packed_twin_rows_equal_shared_teacher_scores(family, mode):
+    """The twin appended to the packed graph scores exactly what privileged_scoring.teacher_scores scores.
+
+    ``text-twin``: a student under the backbone stage (writer off) records the teacher's text turn without sampling it;
+    its twin inserts those recorded tokens.
+    """
     from natlang_neuralese.model.native_graph_plan import ImportSpan, Invocation, compile_graph
     from natlang_neuralese.rl.jolt import add_privileged_twin
     from natlang_neuralese.rl.privileged_scoring import processed_logits, teacher_scores
     model, roles, identity = load(family)
-    episode = episode_with_top_k(model, roles, identity)
+    episode = episode_with_top_k(model, roles, identity, mode)
     rows = rollouts(episode.turns)
     weights = [0.] * episode.replay.plan.token_count  # as prepare_objective: 1 at each sampled action's target
     for action in episode.replay.actions:
@@ -114,10 +118,12 @@ def test_packed_twin_rows_equal_shared_teacher_scores(family):
     actions, record = add_privileged_twin(episode.replay, rows[0], graph, source_for(rows, episode),
                                           turns=episode.turns)
     assert record['privileged'] and set(record['twin_turns']) == {'root#turn1#privileged', 'child#turn1#privileged'}
-    assert set(record['policy_turns']) == set(WRITERS.values()) and record['guidance']['writer_blocks'] == 2
+    writers = set(WRITERS.values()) if mode == 'write-only' else set()
+    assert set(record['policy_turns']) == writers and record['guidance']['writer_blocks'] == len(writers)
+    assert record['guidance']['text_fallbacks'] == (2 if mode == 'text-twin' else 0)
     assert {action['turn'] for action in actions} == set(CONSUMERS)  # the writer carries no student loss
     weights = {node['name']: node['target_weights'] for node in graph['nodes'][:len(episode.replay.plan.invocations)]}
-    assert all(not any(weights[name]) for name in WRITERS.values())
+    assert all(not any(weights[name]) for name in writers)
     twins = [Invocation(n['name'], tuple(n['token_ids']), tuple(ImportSpan(**edge) for edge in n['imports']),
                         tuple(map(tuple, n['producing'])), tuple(map(tuple, n.get('logical_producing', ()))))
              for n in graph['nodes'][len(episode.replay.plan.invocations):]]
@@ -126,7 +132,7 @@ def test_packed_twin_rows_equal_shared_teacher_scores(family):
         hidden = model(plan, retain_states=False)['h_final'][0]
         packed = torch.stack([processed_logits(model.logits(hidden[a['twin_query']]).float(), a).log_softmax(-1)
                               for a in actions])
-        shared = teacher_scores(model, episode.replay, insertion_blocks(episode))
+        shared = teacher_scores(model, episode.replay, insertion_blocks(episode, 'text' if mode == 'text-twin' else 'import'))
         rows_of = {(a['turn'], a['sample']): row for row, a in enumerate(episode.replay.actions)}
         expected = torch.stack([processed_logits(shared.logits[rows_of[(a['turn'], a['sample'])]], a).log_softmax(-1)
                                 for a in actions])
@@ -160,10 +166,10 @@ def gradient_vector(model, loss):
                       for g, p in zip(grads, parameters)])
 
 
-@pytest.mark.parametrize('role', ['student', 'teacher'])
-def test_each_jolt_term_matches_its_reference_gradient(tmp_path, role):
+@pytest.mark.parametrize('role,mode', [('student', 'write-only'), ('student', 'text-twin'), ('teacher', 'import')])
+def test_each_jolt_term_matches_its_reference_gradient(tmp_path, role, mode):
     model, roles, identity = load('lfm')
-    episode = episode_with_top_k(model, roles, identity, 'write-only' if role == 'student' else 'import')
+    episode = episode_with_top_k(model, roles, identity, mode)
     rows = rollouts(episode.turns, role=role)
     graphs, spec = prepare(rows, episode, roles, identity)
     canonical = policy_loss_declaration(DECLARATION)
@@ -179,8 +185,12 @@ def test_each_jolt_term_matches_its_reference_gradient(tmp_path, role):
         assert details['policy_loss'] == 'jolt-plus/1' and details['sampled_tokens'] == (8 if role == 'student' else 20)
         parts = details['jolt']
         assert parts['privileged_episodes'] == 1 and parts['unprivileged_episodes'] == 0
-        assert parts['guidance']['writer_blocks'] == 2 and parts['guidance']['text_fallbacks'] == 0
-        assert parts['guidance']['verbatim_reference'] == 1  # the root hint copies a reference line
+        if mode == 'text-twin':  # backbone stage: the teacher's text turn, recorded for the twin only
+            assert parts['guidance']['writer_blocks'] == 0 and parts['guidance']['text_fallbacks'] == 2
+            assert not row['jolt']['policy_turns']
+        else:
+            assert parts['guidance']['writer_blocks'] == 2 and parts['guidance']['text_fallbacks'] == 0
+            assert parts['guidance']['verbatim_reference'] == 1  # the root hint copies a reference line
         outcome_ref, kl_ref = literal_reference(model, result['h_final'][0], row, canonical)
         term = 'student_opsd' if role == 'student' else 'teacher_kl'
         assert parts[role + '_outcome'] != 0  # the surrogate value is estimator-specific; gradients compared below
@@ -309,7 +319,7 @@ def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
         value = {'schema': REQUEST_SCHEMA, 'invocation': {'name': 'run-1', 'role': role}, 'mode': mode,
                  'custody': custody_receipt, 'facts': [facts[0] if role == 'root' else facts[1]],
                  'selection': {'implementation': 'nl', 'sha256': 'b' * 64}}
-        if mode == 'text':
+        if mode in ('text', 'text-twin'):
             value['fallback'] = 'writer failed'
         else:
             value.update(writer=writer, state={'id': state})
@@ -321,7 +331,7 @@ def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
     try:
         state = engine.native_write_text('t8 t9')['id']
         replies = {mode: generate(privileged_context=request('root', mode, state))
-                   for mode in ('import', 'write-only', 'text')}
+                   for mode in ('import', 'write-only', 'text', 'text-twin')}
         policy = generate(guidance_policy=writer)
         plain = generate()
         from natlang_neuralese.serve.native_learning import decide_native
@@ -348,6 +358,12 @@ def test_engine_renders_each_guidance_mode_at_the_declared_place(tmp_path):
             assert own(capture['prompt']) == expected and block.state_id == state
             continue
         tokens = spec.state_turn()[0] if mode == 'import' else spec.turn([facts[0]['text']])
+        if mode == 'text-twin':  # the teacher's exact text turn, recorded at the same place, never sampled
+            text = replies['text']['x_natlang_rl_capture']['privileged']
+            assert list(block.token_ids) == tokens == capture['privileged']['token_ids']
+            assert block.insert_at == text['insert_at'] and own(capture['prompt']) == expected
+            assert not any(s.get('privileged') for s in capture['prompt'])
+            continue
         assert list(block.token_ids) == tokens and block.insert_at == block.receipt['insert_at']
         assert own(capture['prompt']) == expected[:block.insert_at] + tokens + expected[block.insert_at:]
         imports = [s for s in capture['prompt'] if s['kind'] == 'native_state']

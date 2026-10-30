@@ -20,12 +20,14 @@ custody are shared. Sources: `TRAINING_INSIGHTS_20261028.md` §7, `LFM3_RECIPE_2
 3. Every model turn of the consumer sends `x_natlang_privileged_context` (`natlang.guidance-request/1`). The
    engine (`privileged_context.guidance_plan`) inserts the declared guidance turn after the leading system turn:
    the header, then the writer's state between consume markers (`import`, teacher). For a student it only records
-   the request (`write-only`, the OPSD twin's guidance). If the writer failed, a teacher gets the selected facts as
-   text (`text`, with the reason recorded). The receipt goes into the capture.
+   the request (`write-only`, the OPSD twin's guidance). If the writer failed or is off, a teacher gets the selected
+   facts as text (`text`, with the reason recorded) and a student's engine renders the same text turn without
+   inserting it (`text-twin`, its token ids recorded in the receipt). The receipt goes into the capture.
 4. The learner (`rl/jolt.py` `privileged_source`, `add_privileged_twin`) re-verifies the captured guidance and adds
    each episode's whole-graph twin to the packed forward:
    - a teacher attempt's twin is `student_form`, with the guidance turns and their imports removed;
-   - a student's twin is `teacher_form`, which imports its write-only state at the declared place.
+   - a student's twin is `teacher_form`, which imports its write-only state, or inserts its recorded `text-twin`
+     tokens, at the declared place.
 
 ## Parts
 
@@ -37,7 +39,7 @@ custody are shared. Sources: `TRAINING_INSIGHTS_20261028.md` §7, `LFM3_RECIPE_2
 | Fact choice and order (`selectGuidanceFacts`) | policy: own NL function, crisp alternative behind `pluggable` (default `nl`) | `applications/guidance-writer/selectGuidanceFacts.nl` | Which facts help this call is a judgment. It also chooses which earlier-attempt feedback to include, from the crisp candidate pool (`group_feedback`: the last 3 scored earlier attempts of the group). Its turns are graph nodes, trained by the teacher outcome. Failure or an invalid answer falls back to crisp, recorded. |
 | Guidance writing (`writeGuidance`) | policy: NL function executed by the policy model, `Neuralese<string>` producer span | `applications/guidance-writer/writeGuidance.nl` | The guidance itself is the model's own Neuralese, not a fixed template. It is trained by whole-graph RL through the producer/consumer import. |
 | Consumer import (`PrivilegedRendering`, `guidance_plan`) | crisp, hash-bound declaration | `privileged_context.py`, `serve/engine.py` | One ChatML turn per backbone template (header, then consume markers around the state), placed after the leading system turn, else after BOS. Exact positions are needed so the learner can rebase the graph. |
-| Text fallback | crisp mechanism, recorded | `guidance_plan` mode `text` | Used only when the writer fails: whole facts are packed in selection order into `budget_tokens`, and the reason is recorded in the receipt and the learner telemetry. |
+| Text fallback | crisp mechanism, recorded | `guidance_plan` modes `text` / `text-twin` | Used when the writer fails or is off (`writer: off`, the backbone stage): whole facts are packed in selection order into `budget_tokens`, and the reason is recorded in the receipt and the learner telemetry. A teacher's turn is inserted (`text`); a student's identical turn is only recorded, with its token ids in the receipt, for the OPSD twin (`text-twin`). |
 | Receipt and verification (`captured_block`, `verify_captured_block`, `writer_saw`) | crisp durability and verifier | `privileged_context.py` | Binds mode, rendering hash, selection identity, writer identity, custody, fact ids and hashes, insertion index, token hash and state id. The learner re-verifies custody, every fact, visibility against the graph's role, the rendering, and that the in-graph writer's own prompt carried the facts. |
 | Graph edit (`teacher_form`, `student_form`, `writer_span`) | crisp mechanism | `privileged_scoring.py` | Rebases token IDs, producer spans and import boundaries/spans of the actual compiled `NativeReplay`. Inserts or removes a guidance turn together with its import of the in-graph writer. Refuses edits that cross spans or share an import boundary. |
 | Teacher scoring (`teacher_scores`, `teacher_role_logps`) | crisp mechanism | `privileged_scoring.py` | Stop-gradient one-pass forward of the edited whole graph, aligned 1:1 with student actions, and teacher-role log-probs with gradients. |

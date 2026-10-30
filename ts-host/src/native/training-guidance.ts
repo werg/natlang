@@ -31,7 +31,8 @@ export type GuidanceFact = { id: string; kind: typeof GUIDANCE_FACT_KINDS[number
 export type GuidanceConsumer = { name: string; role: 'root' | 'child' | 'binding'; text: string };
 export type GuidanceRun = { schema: typeof GUIDANCE_RUN_SCHEMA; role: 'teacher' | 'student';
   custody: Record<string, unknown>; facts: GuidanceFact[]; selection?: PluggableMode; budgetTokens?: number;
-  /** `off` (opt-out, the measurement baseline): no writer; a teacher gets the selected facts as text, a student nothing. */
+  /** `off` (opt-out, the measurement baseline): no writer; a teacher gets the selected facts as text, a student has the
+   * same text turn recorded for its OPSD twin (`text-twin`) and sees nothing. */
   writer?: 'native' | 'off' };
 export type GuidancePolicyFunction = { function: 'selectGuidanceFacts' | 'writeGuidance'; sha256: string };
 
@@ -140,7 +141,6 @@ export class TrainingGuidance {
     const emit = (phase: string, data: Record<string, unknown> = {}) =>
       trace.emit('training_guidance', { call_id: callId, phase, ...data });
     if (!visible.length) { emit('none', { reason: 'no visible facts' }); return undefined; }
-    if (this.run.writer === 'off' && this.run.role === 'student') { emit('none', { reason: WRITER_OFF }); return undefined; }
     const budget = this.run.budgetTokens ?? DEFAULT_GUIDANCE_BUDGET_TOKENS;
     const frame = session.runtime.frame;
     const { invokeDefinition } = await import('../runtime/kernel.js');
@@ -183,8 +183,10 @@ export class TrainingGuidance {
       emit('written', { mode, state: state.id, facts: ids, selection: implementation });
       return { ...base, mode, writer: { function: 'writeGuidance', sha256: pkg.writer.sha256 }, state };
     }
-    if (this.run.role === 'student') { emit('none', { reason: failure, selection: implementation }); return undefined; }
-    emit('text_fallback', { reason: failure, facts: ids, selection: implementation });
-    return { ...base, mode: 'text', fallback: failure };
+    // Text fallback: a teacher gets the selected facts as a text turn; a student's engine renders the same turn and only
+    // records it (`text-twin`: token ids and insertion point in the capture receipt) for the learner's OPSD twin.
+    const mode = this.run.role === 'teacher' ? 'text' : 'text-twin';
+    emit('text_fallback', { mode, reason: failure, facts: ids, selection: implementation });
+    return { ...base, mode, fallback: failure };
   }
 }

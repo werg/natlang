@@ -177,7 +177,7 @@ test('a student writes guidance without importing it', async () => {
   assert.equal(policyTurns(requests, 'writeGuidance').length, 2);
 });
 
-test('a failed writer gives a teacher the selected facts as text and a student nothing', async () => {
+test('a failed writer gives a teacher the selected facts as text and records them for a student\'s twin', async () => {
   const teacher = await episode({ writer: 'fail' });
   assert.equal(teacher.result.outcome.kind, 'done', teacher.result.outcome.detail);
   const root = consumerTurns(teacher.requests).find(request => request.invocation_id === 'run-1').privileged_context;
@@ -188,9 +188,12 @@ test('a failed writer gives a teacher the selected facts as text and a student n
   assert.deepEqual(root.facts.map(fact => fact.id), ['reference_solution:0', 'expected_result:0', 'attempt_feedback:0']);
   const student = await episode({ role: 'student', writer: 'fail' });
   assert.equal(student.result.outcome.kind, 'done', student.result.outcome.detail);
-  for (const request of consumerTurns(student.requests)) assert.equal(request.privileged_context, undefined);
+  const studentRoot = consumerTurns(student.requests).find(request => request.invocation_id === 'run-1').privileged_context;
+  assert.equal(studentRoot.mode, 'text-twin');
+  assert.match(studentRoot.fallback, /^writeGuidance failed: /);
+  assert.equal(studentRoot.state, undefined);
   const events = student.traces.flatMap(trace => trace.events).filter(event => event.kind === 'training_guidance');
-  assert.ok(events.some(event => event.phase === 'none' && /writeGuidance failed/.test(event.reason)));
+  assert.ok(events.some(event => event.phase === 'text_fallback' && event.mode === 'text-twin' && /writeGuidance failed/.test(event.reason)));
 });
 
 test('an invalid natural-language selection falls back to crisp and records it', async () => {
@@ -206,7 +209,7 @@ test('an invalid natural-language selection falls back to crisp and records it',
   assert.equal(consumerTurns(crisp.requests)[0].privileged_context.selection.implementation, 'crisp');
 });
 
-test('writer: off is the text baseline: no writer call, teacher text, student nothing', async () => {
+test('writer: off is the text baseline: no writer call, teacher text, the student\'s same text recorded for its twin', async () => {
   const teacher = await episode({ writerSetting: 'off', selection: 'crisp' });
   assert.equal(policyTurns(teacher.requests, 'writeGuidance').length, 0);
   assert.equal(policyTurns(teacher.requests, 'selectGuidanceFacts').length, 0);
@@ -214,7 +217,14 @@ test('writer: off is the text baseline: no writer call, teacher text, student no
     assert.equal(request.privileged_context.mode, 'text');
     assert.equal(request.privileged_context.fallback, 'writer disabled by run setting');
   }
-  const student = await episode({ role: 'student', writerSetting: 'off' });
+  // The student gets the exact request a teacher gets (same crisp selection, facts and custody) in mode text-twin:
+  // the engine renders and records the turn for the OPSD twin and inserts nothing into the student's prompt.
+  const student = await episode({ role: 'student', writerSetting: 'off', selection: 'crisp' });
   assert.equal(student.requests.filter(request => request.guidance_policy).length, 0);
-  for (const request of consumerTurns(student.requests)) assert.equal(request.privileged_context, undefined);
+  const teacherTurns = consumerTurns(teacher.requests), studentTurns = consumerTurns(student.requests);
+  assert.equal(studentTurns.length, teacherTurns.length);
+  // Child call ids are fresh per episode; everything else (role, facts, selection, custody, reason) is identical.
+  const sameCall = (context) => ({ ...context, invocation: { ...context.invocation, name: context.invocation.role === 'root' ? context.invocation.name : 'child' } });
+  for (const [index, request] of studentTurns.entries())
+    assert.deepEqual(sameCall(request.privileged_context), sameCall({ ...teacherTurns[index].privileged_context, mode: 'text-twin' }));
 });

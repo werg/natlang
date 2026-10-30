@@ -37,8 +37,13 @@ def test_recorded_collector_turns_stay_on_sglang():
     assert SglangEngine.sglang_unsupported(recorded, [('tokens', [1, 2])]) is None
 
 
-def test_privileged_text_guidance_is_captured_like_the_native_engine(tmp_path):
-    """JOLT+ text guidance on the SGLang path: same rendered prompt, insertion point and receipt as serve/engine.py."""
+@pytest.mark.parametrize('mode', ['text', 'text-twin'])
+def test_privileged_text_guidance_is_captured_like_the_native_engine(tmp_path, mode):
+    """JOLT+ text guidance on the SGLang path: same rendered prompt, insertion point and receipt as serve/engine.py.
+
+    ``text-twin`` (a student under writer off): nothing enters the sampled prompt; the receipt records the same token
+    ids and insertion point on both engines.
+    """
     import threading
     from test_native_serving_adapters import engine_fixture
     from natlang_neuralese.rl.privileged_context import REQUEST_SCHEMA, captured_block
@@ -49,7 +54,7 @@ def test_privileged_text_guidance_is_captured_like_the_native_engine(tmp_path):
     front.sglang_banned = sorted(front.role_tokens.ids)
     front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
     front.native_fallback_reasons = {}
-    request = {'schema': REQUEST_SCHEMA, 'invocation': {'name': 'run-1', 'role': 'root'}, 'mode': 'text',
+    request = {'schema': REQUEST_SCHEMA, 'invocation': {'name': 'run-1', 'role': 'root'}, 'mode': mode,
                'custody': {'schema': 'natlang.jolt-privileged-custody/1', 'case_id': 'c', 'split': 'train',
                            'world_sha256': 'd' * 64, 'protected_sha256': 'c' * 64},
                'fallback': 'writer failed', 'selection': {'implementation': 'nl', 'sha256': 'b' * 64},
@@ -64,7 +69,11 @@ def test_privileged_text_guidance_is_captured_like_the_native_engine(tmp_path):
                                                                            for t in sampled]}}
     actual = front.generate(make())['x_natlang_rl_capture']
     assert actual['prompt'] == expected['prompt'] and actual['privileged'] == expected['privileged']
-    assert captured_block({'graph_turn': 'run-1#turn1', 'sampling': actual}).insert_at == expected['privileged']['insert_at']
+    block = captured_block({'graph_turn': 'run-1#turn1', 'sampling': actual})
+    assert block.insert_at == expected['privileged']['insert_at'] and block.token_ids
+    if mode == 'text-twin':
+        assert list(block.token_ids) == actual['privileged']['token_ids'] == expected['privileged']['token_ids']
+        assert not any(segment.get('privileged') for segment in actual['prompt'])
     assert [s['token_id'] for s in actual['samples']] == sampled and actual['finish_reason'] == expected['finish_reason']
 
 
