@@ -121,7 +121,7 @@ def _span_fixture(tmp_path):
     roles = front.role_tokens
     word = lambda text: list(front.tokenizer(text, add_special_tokens=False)['input_ids'])
 
-    def capture(ids, start, end):
+    def capture(ids, start, end, adapter=None):
         # What the fork exports for ids[start:end]: the native forward of the whole sequence with its producing mask.
         import torch
         from natlang_neuralese.model.shared_state import native_step
@@ -286,3 +286,96 @@ def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):
     assert actual['tokens'] == expected['tokens'] and actual['native_state_imports'] == expected['native_state_imports']
     assert actual['log_probs'] == [-0.25 * n for n in expected['tokens']]
     assert all(r['sampling_params']['custom_params']['natlang_import'] for r in sent) and front.native_fallbacks == 0
+
+
+def _adapters(engine, names):
+    """An xs adapter and a free-lora adapter with nonzero factors on `names`."""
+    from dataclasses import replace
+    from natlang_neuralese.model.native_adapters import create_adapter
+    made = []
+    for kind, seed in (('xs', 1), ('free-lora', 2)):
+        artifact = create_adapter(engine, {'kind': kind, 'rank': 2, 'seed': seed, 'parameter_names': names}).artifact
+        generator = __import__('torch').Generator().manual_seed(seed)
+        values = {name: __import__('torch').randn(value.shape, generator=generator) * .05 for name, value in artifact.tensors.items()}
+        made.append(engine.store.put_native_tensor_artifact(replace(artifact, tensors=values)).id)
+    return made
+
+
+def test_lowrank_factors_reproduce_the_native_effective_deltas(tmp_path):
+    import torch
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.model.native_adapters import (_effective_replacements, lowrank_factors, resolve_adapters,
+                                                          target_parameters)
+    engine = engine_fixture(tmp_path, 'lfm')
+    available = target_parameters(engine.shared_model)
+    names = [name for name in available if name.endswith(('q_proj.weight', 'v_proj.weight'))][:3]
+    xs, free = _adapters(engine, names)
+    entries = [{'id': xs, 'scale': .75}, {'id': free, 'scale': 1.5}]
+    resolved = resolve_adapters(engine, entries)
+    factors = lowrank_factors(resolved)
+    float_params = {name: value.float() for name, value in available.items()}
+    replacement, _ = _effective_replacements(float_params, resolved, None)
+    for name in names:
+        factor_b, factor_a = factors[name]
+        assert factor_a.shape[0] == 4  # the two rank-2 adapters' ranks concatenated
+        torch.testing.assert_close(float_params[name] + factor_b @ factor_a, replacement['model.' + name], atol=1e-6, rtol=1e-5)
+
+
+def test_adapted_turns_bind_like_the_native_engine_and_pack_module_factors(tmp_path):
+    """On SGLang an adapted turn records the native policy identity and adapter binding, and the slot file packs each
+    native matrix's factors at its row offset inside the fork module (q|k|v)."""
+    import threading
+    import torch
+    from safetensors.torch import load_file
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.serve import load_native_engine
+    from natlang_neuralese.model.native_adapters import lowrank_factors, resolve_adapters, target_parameters
+    native = engine_fixture(tmp_path, 'lfm')
+    front = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', dtype=native.backbone.embedding_weight.dtype,
+                               engine_class=SglangEngine, store=native.store)
+    available = target_parameters(native.shared_model)
+    names = [name for name in available if name.endswith(('q_proj.weight', 'k_proj.weight'))][:2]
+    layer = names[0].split('.layers.')[1].split('.')[0]
+    q, k = (f'port.hf.model.layers.{layer}.self_attn.{part}_proj.weight' for part in ('q', 'k'))
+    targets = {q: {'module': f'layers.{layer}.qkv_proj', 'offset': 0, 'shape': list(available[q].shape)},
+               k: {'module': f'layers.{layer}.qkv_proj', 'offset': available[q].shape[0], 'shape': list(available[k].shape)}}
+    xs, free = _adapters(native, [q, k])
+    entries = [{'id': xs, 'scale': .5}, free]
+    front.sglang_banned, front.sglang_capture_dir = [], None
+    front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
+    front.native_fallback_reasons, front.sglang_state_writes = {}, 0
+    front.sglang_adapter_slots, front.sglang_adapter_rank, front.sglang_adapter_targets = 2, 8, targets
+    front.native_target_shapes = {name: tuple(value.shape) for name, value in available.items()}
+    front.sglang_module_rows = {f'layers.{layer}.qkv_proj': available[q].shape[0] + 2 * available[k].shape[0]}
+    front._adapter_condition = threading.Condition()
+    front._adapter_slot_of, front._adapter_slot_users, front._adapter_slot_key = {}, {}, {}
+    front._adapter_files, front._adapter_clock = {}, 0
+    word = lambda text: list(front.tokenizer(text, add_special_tokens=False)['input_ids'])
+    tokens = word('t6 t7') + [sorted(front.stop_ids)[0]]
+    make = lambda: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0, max_tokens=8,
+                                     rl_capture=True, rl_top_k=2, native_recording=True, request_id='r', seed=1,
+                                     adapters=entries)
+    assert front._sglang_reason(make(), [('tokens', [1])]) is None
+    expected, sent = None, []
+    script = iter(tokens)
+    native._native_token = lambda seq: (next(script), -0.5)
+    expected = native.generate(make())
+    records = [record(-0.5, [t, t + 1], [-0.5, -1.5]) for t in tokens]
+    front._sglang_generate = lambda body: (sent.append(body), {'output_ids': tokens, 'meta_info': {'natlang_top_k': records}})[1]
+    actual = front.generate(make())
+    mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
+    assert mine['schema'] == theirs['schema'] == 'natlang.native-rl-sampling/3'
+    assert mine['policy'] == theirs['policy'] and mine['adapter_binding'] == theirs['adapter_binding']
+    spec = sent[0]['sampling_params']['custom_params']['natlang_adapter']
+    assert spec['slot'] == 1 and front._adapter_slot_users[1] == 0
+    packed = load_file(spec['path'])
+    factor_b, factor_a = packed[f'layers.{layer}.qkv_proj.B'], packed[f'layers.{layer}.qkv_proj.A']
+    delta = factor_b @ factor_a
+    expected_factors = lowrank_factors(resolve_adapters(native, entries))
+    for name, offset in ((q, 0), (k, available[q].shape[0])):
+        b, a = expected_factors[name]
+        torch.testing.assert_close(delta[offset:offset + b.shape[0]], b @ a)
+    torch.testing.assert_close(delta[available[q].shape[0] + available[k].shape[0]:], torch.zeros_like(delta[:available[k].shape[0]]))
+    front.sglang_adapter_rank = 4  # summed rank 8 in qkv_proj no longer fits: the native engine serves it
+    front._adapter_files.clear()
+    assert front._sglang_reason(make(), [('tokens', [1])]) == 'adapter rank'

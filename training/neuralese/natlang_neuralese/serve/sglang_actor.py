@@ -37,6 +37,7 @@ from .native_protocol import FAILURE_CODES, capture_enabled, failure_descriptor
 TOP_K_KEY = 'natlang_top_k'
 CAPTURE_KEY = 'natlang_capture'
 IMPORT_KEY = 'natlang_import'
+ADAPTER_KEY = 'natlang_adapter'
 BAN_BIAS = -1e30
 
 
@@ -120,8 +121,21 @@ class SglangEngine(Engine):
             self.__dict__['_native_model'] = model
             self.native_reloads = getattr(self, 'native_reloads', 0) + 1
 
-    def bind_sglang(self, url, *, export_manifest, fork, workers=512):
+    def bind_sglang(self, url, *, export_manifest, fork, workers=512, adapter_slots=0, adapter_rank=32):
         self.sglang_url, self.sglang_workers = url.rstrip('/'), workers
+        # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
+        # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
+        self.sglang_adapter_slots, self.sglang_adapter_rank = int(adapter_slots), int(adapter_rank)
+        targets = export_manifest.get('adapter_targets') or {}
+        self.native_target_shapes = {name: tuple(target['shape']) for name, target in targets.items()} or None
+        self.sglang_adapter_targets = targets
+        self.sglang_module_rows = {}
+        for target in targets.values():
+            rows = target['offset'] + target['shape'][0]
+            self.sglang_module_rows[target['module']] = max(self.sglang_module_rows.get(target['module'], 0), rows)
+        self._adapter_condition = threading.Condition()
+        self._adapter_slot_of, self._adapter_slot_users, self._adapter_slot_key = {}, {}, {}
+        self._adapter_files, self._adapter_clock = {}, 0
         roles = self.role_tokens
         markers = {int(roles.produce_open), int(roles.produce_close), int(roles.consume_open), int(roles.consume_close)}
         self.sglang_banned = sorted(int(token) for token in export_manifest['serving']['banned_token_ids'])
@@ -173,9 +187,108 @@ class SglangEngine(Engine):
                          if kind not in ('tokens', 'privileged', 'native_state', 'native_state_constant')})
         return ', '.join(names) or None
 
+    def _adapter_entries(self, request):
+        """The adapter stack a request runs with (the native engine's default stack when it names none)."""
+        if request.adapters is None:
+            return getattr(self, 'native_default_adapters', None) or None
+        return request.adapters or None
+
+    def _sglang_reason(self, request, plan):
+        """Why SGLang cannot serve this request on this actor (None: it can)."""
+        reason = self.sglang_unsupported(request, plan)
+        names = [name for name in (reason or '').split(', ') if name]
+        entries = self._adapter_entries(request)
+        if 'adapters' in names:
+            names.remove('adapters')
+        if entries:
+            if not getattr(self, 'sglang_adapter_slots', 0) or not getattr(self, 'sglang_adapter_targets', None):
+                names.append('adapters')
+            else:
+                try:
+                    if self._sglang_adapter_file(entries)[1] > self.sglang_adapter_rank:
+                        names.append('adapter rank')
+                except Exception:  # an invalid stack fails on the native engine with its exact error
+                    names.append('adapters')
+        return ', '.join(names) or None
+
+    def _sglang_adapter_file(self, entries):
+        """(path, largest module rank) of an adapter stack's summed low-rank factors in the fork's slot format."""
+        from ..common.hashing import canonical_json_sha256_hex
+        from ..model.native_adapters import bound_execution, lowrank_factors
+        key = canonical_json_sha256_hex(entries)
+        known = self._adapter_files.get(key)
+        if known is not None:
+            return known
+        import torch
+        from safetensors.torch import save_file
+        with bound_execution(self, entries) as resolved:
+            factors = lowrank_factors(resolved)
+        modules = {}
+        for name, (factor_b, factor_a) in factors.items():
+            target = self.sglang_adapter_targets[name]
+            modules.setdefault(target['module'], []).append((target['offset'], factor_b, factor_a))
+        tensors, largest = {}, 0
+        for module, parts in modules.items():
+            rank = sum(part[2].shape[0] for part in parts)
+            factor_b = torch.zeros(self.sglang_module_rows[module], rank)
+            column = 0
+            for offset, part_b, part_a in parts:
+                factor_b[offset:offset + part_b.shape[0], column:column + part_b.shape[1]] = part_b
+                column += part_b.shape[1]
+            tensors[f'{module}.A'] = torch.cat([part[2] for part in parts]).contiguous()
+            tensors[f'{module}.B'] = factor_b.contiguous()
+            largest = max(largest, rank)
+        path = os.path.join(self._sglang_scratch(), f'adapter-{key}.safetensors')
+        if not os.path.exists(path):
+            tmp = f'{path}.{uuid.uuid4().hex}.partial'
+            save_file(tensors, tmp)
+            os.replace(tmp, path)
+        self._adapter_files[key] = (path, largest, key)
+        return self._adapter_files[key]
+
+    def _adapter_acquire(self, entries):
+        """A slot holding this stack for one request (waits while every slot serves another stack)."""
+        path, _rank, key = self._sglang_adapter_file(entries)
+        with self._adapter_condition:
+            while True:
+                slot = self._adapter_slot_of.get(key)
+                if slot is None:
+                    free = [s for s in range(1, self.sglang_adapter_slots + 1) if not self._adapter_slot_users.get(s)]
+                    if free:
+                        # An empty slot first, else the least recently used free one.
+                        slot = min(free, key=lambda s: (s in self._adapter_slot_key, self._adapter_slot_key.get(s, ('', 0))[1]))
+                        old = self._adapter_slot_key.get(slot)
+                        if old is not None:
+                            self._adapter_slot_of.pop(old[0], None)
+                        self._adapter_slot_of[key] = slot
+                if slot is not None:
+                    self._adapter_clock += 1
+                    self._adapter_slot_key[slot] = (key, self._adapter_clock)
+                    self._adapter_slot_users[slot] = self._adapter_slot_users.get(slot, 0) + 1
+                    return {'slot': slot, 'id': key, 'path': path}
+                self._adapter_condition.wait()
+
+    def _adapter_release(self, spec):
+        with self._adapter_condition:
+            self._adapter_slot_users[spec['slot']] -= 1
+            self._adapter_condition.notify_all()
+
+    def _with_adapters(self, request, work):
+        """Run `work(spec)` inside the request's native adapter binding with a slot (spec None without adapters)."""
+        entries = self._adapter_entries(request)
+        if not entries:
+            return work(None)
+        from ..model.native_adapters import bound_execution
+        with bound_execution(self, entries):
+            spec = self._adapter_acquire(entries)
+            try:
+                return work(spec)
+            finally:
+                self._adapter_release(spec)
+
     def _routes_native(self, request, plan):
         """Whether this request runs on the native engine (counted per reason in /metrics)."""
-        reason = self.sglang_unsupported(request, plan)
+        reason = self._sglang_reason(request, plan)
         if reason is None and request.privileged_context is not None and any(
                 kind == 'privileged_state' for kind, _ in self._guidance(request, plan)[1] or ()):
             reason = 'privileged state'
@@ -230,7 +343,7 @@ class SglangEngine(Engine):
     def _sglang_prompt(self, seq):
         """The prompt ids and capture segments, as `_native_prefill_impl` records them for ordinary tokens."""
         request = seq.request
-        unsupported = self.sglang_unsupported(request, seq.prompt_plan or ())
+        unsupported = self._sglang_reason(request, seq.prompt_plan or ())
         if unsupported:
             raise RequestError('sglang-actor-unsupported', 'the SGLang actor does not serve ' + unsupported)
         if request.rl_capture and request.temperature <= 0 and not request.native_recording:
@@ -238,6 +351,10 @@ class SglangEngine(Engine):
         seq.native_trace_enabled = request.native_protocol_recovery
         if capture_enabled(seq):
             seq.native_rl_policy = dict(self.execution_native_identity)
+            from ..model.native_adapters import execution_binding, SCHEMA
+            bindings = execution_binding(self)
+            seq.native_rl_adapter_binding = ({'schema': SCHEMA, 'base_native_identity': dict(self.native_identity),
+                                              'adapters': bindings} if bindings else None)
         seq.native_sampling_seed = (int(request.seed) if request.seed is not None else
                                     derive_seed('native-chat', request.request_id))
         plan = list(seq.prompt_plan or ())
@@ -270,6 +387,9 @@ class SglangEngine(Engine):
         return ids
 
     def _sglang_run(self, seq):
+        return self._with_adapters(seq.request, lambda spec: self._sglang_run_bound(seq, spec))
+
+    def _sglang_run_bound(self, seq, adapter):
         request = seq.request
         ids = self._sglang_prompt(seq)
         sampling = request.temperature is not None and request.temperature > 0
@@ -278,11 +398,13 @@ class SglangEngine(Engine):
                   'max_new_tokens': min(int(request.max_tokens), self.context - len(ids)),
                   'stop_token_ids': sorted(self.stop_ids), 'skip_special_tokens': False,
                   'no_stop_trim': True, 'custom_params': {TOP_K_KEY: max(k, 1),
-                                                          **({IMPORT_KEY: seq.sglang_imports} if seq.sglang_imports else {})}}
+                                                          **({IMPORT_KEY: seq.sglang_imports} if seq.sglang_imports else {}),
+                                                          **({ADAPTER_KEY: adapter} if adapter else {})}}
         if self.sglang_banned:
             params['logit_bias'] = {str(token): BAN_BIAS for token in self.sglang_banned}
         body = {'input_ids': ids, 'sampling_params': params, 'rid': request.request_id}
-        state = {'index': 0, 'finish': 'length', 'done': False, 'text': '', 'run': 0, 'prompt': ids, 'fed': []}
+        state = {'index': 0, 'finish': 'length', 'done': False, 'text': '', 'run': 0, 'prompt': ids, 'fed': [],
+                 'adapter': adapter}
         try:
             if request.on_delta is None:
                 result = self._sglang_generate(body)
@@ -396,10 +518,14 @@ class SglangEngine(Engine):
         request.request_id = request.request_id or f"decide-{next(self._ids)}"
         if self._routes_native(request, plan):
             return None
+        return self._with_adapters(request, lambda adapter: self._sglang_score_bound(item, plan, continuations, request, adapter))
+
+    def _sglang_score_bound(self, item, plan, continuations, request, adapter):
+        from .native_learning import decision_response
         seq = Sequence(request, None, prompt_plan=plan)
         ids = self._sglang_prompt(seq)
-        params = {'temperature': 0.0, 'max_new_tokens': 1,
-                  **({'custom_params': {IMPORT_KEY: seq.sglang_imports}} if seq.sglang_imports else {})}
+        custom = {**({IMPORT_KEY: seq.sglang_imports} if seq.sglang_imports else {}), **({ADAPTER_KEY: adapter} if adapter else {})}
+        params = {'temperature': 0.0, 'max_new_tokens': 1, **({'custom_params': custom} if custom else {})}
 
         def score(continuation):
             if not continuation:
@@ -515,13 +641,13 @@ class SglangEngine(Engine):
         end = start + len(seq.native_capture_ids)
         if end != len(ids) or ids[start:end] != seq.native_capture_ids:
             raise RequestError('sglang-actor-capture', 'produce span positions disagree with the generated tokens')
-        seq.native_capture_chunks = [self._sglang_capture(ids, start, end)]
+        seq.native_capture_chunks = [self._sglang_capture(ids, start, end, state['adapter'])]
         self._native_finish_block(seq)
         with self._sglang_lock:
             self.sglang_state_writes += 1
         state['run'], state['text'] = len(seq.items), ''
 
-    def _sglang_capture(self, ids, start, end):
+    def _sglang_capture(self, ids, start, end, adapter=None):
         """The native capture chunk (`native_step`'s token_ids/embeddings/positions/layers) of ids[start:end].
 
         One SGLang request recomputes the sequence with the radix match capped below the span (logprob_start_len), so
@@ -531,7 +657,8 @@ class SglangEngine(Engine):
         path = os.path.join(self._sglang_scratch(), f'{uuid.uuid4().hex}.safetensors')
         body = {'input_ids': ids, 'return_logprob': True, 'logprob_start_len': max(start - 1, 0),
                 'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1,
-                                    'custom_params': {CAPTURE_KEY: {'path': path, 'start': start, 'end': end}}}}
+                                    'custom_params': {CAPTURE_KEY: {'path': path, 'start': start, 'end': end},
+                                                      **({ADAPTER_KEY: adapter} if adapter else {})}}}
         self._sglang_generate(body)
         try:
             tensors = load_file(path)

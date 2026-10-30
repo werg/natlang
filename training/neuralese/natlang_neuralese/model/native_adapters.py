@@ -151,7 +151,7 @@ def resolve_adapters(engine, entries, leaves=None):
     if not isinstance(entries, list):
         raise ValueError('adapters must be a list of native coefficient artifact IDs or id/scale objects')
     resolved = []
-    available = target_parameters(engine.shared_model)
+    available = target_shapes(engine)
     for entry in entries:
         if isinstance(entry, str):
             adapter_id, scale = entry, 1.
@@ -226,7 +226,7 @@ def resolve_adapters(engine, entries, leaves=None):
         for name in names:
             if name not in available:
                 raise ValueError(f'native adapter target is not a supported layer matrix: {name}')
-            shape = available[name].shape
+            shape = available[name]
             if free:
                 ok = (tuple(values['lora_B.'+name].shape) == (*shape[:-1], rank)
                       and tuple(values['lora_A.'+name].shape) == (*shape[:-2], rank, shape[-1]))
@@ -238,6 +238,59 @@ def resolve_adapters(engine, entries, leaves=None):
                 raise ValueError(f'native adapter tensor geometry differs for {name}')
         resolved.append((record.id, float(scale), spec, values, basis_tensors))
     return resolved
+
+
+def target_shapes(engine):
+    """Adaptable matrix name -> shape: the live model's, or a serving front's declared ones (no resident model)."""
+    declared = getattr(engine, 'native_target_shapes', None)
+    if declared is not None:
+        return declared
+    return {name: tuple(value.shape) for name, value in target_parameters(engine.shared_model).items()}
+
+
+def lowrank_factors(resolved):
+    """Each adapted matrix's summed delta as one FP32 low-rank pair (B [out, r], A [r, in]), delta = B @ A: the
+    deltas `_effective_replacements` adds, with ranks of stacked adapters concatenated."""
+    factors = {}
+    for _, scale, spec, coefficients, bases in resolved:
+        for name in spec['parameter_names']:
+            if spec['kind'] == 'free-lora':
+                factor_b = coefficients['lora_B.'+name].float() * (spec['alpha'] / spec['rank'] * scale)
+                factor_a = coefficients['lora_A.'+name].float()
+            else:
+                left, right = bases['left.'+name].float(), bases['right.'+name].float()
+                core = coefficients[name].float().reshape(*coefficients[name].shape[:-1], spec['rank'], spec['rank'])
+                factor_b, factor_a = (left @ core) * scale, right.transpose(-2, -1)
+            if factor_b.ndim != 2:
+                raise ValueError(f'low-rank serving supports 2-D layer matrices, not {name}')
+            if name in factors:
+                previous_b, previous_a = factors[name]
+                factor_b, factor_a = torch.cat([previous_b, factor_b], 1), torch.cat([previous_a, factor_a], 0)
+            factors[name] = (factor_b, factor_a)
+    return factors
+
+
+class bound_execution:
+    """The native execution binding of `run_native` (effective identity, adapter binding) for work that runs the
+    adapters elsewhere (the SGLang actor): resolves the entries and exposes them; substitutes no parameters."""
+
+    def __init__(self, engine, entries):
+        self.engine, self.entries = engine, entries
+
+    def __enter__(self):
+        try:
+            self.resolved = resolve_adapters(self.engine, self.entries)
+        except (ValueError, TypeError, KeyError) as error:
+            raise NativeAdapterError(str(error)) from error
+        identity = effective_identity(self.engine, self.resolved)
+        binding = [{'id': ident, 'scale_hex': scale.hex()} for ident, scale, *_ in self.resolved]
+        self.token = _ACTIVE.set((*_ACTIVE.get(), (self.engine, identity, binding, self.entries, set(), {}, 'storage',
+                                                   {'active': True})))
+        return self.resolved
+
+    def __exit__(self, *exc):
+        _ACTIVE.reset(self.token)
+        return False
 
 
 def effective_identity(engine, resolved):
