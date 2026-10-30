@@ -17,10 +17,15 @@ npm ci
 npm run build              # Node build, then the browser bundle
 npm test                   # build, applications, type checks, tests, conformance
 npm run test:browser       # real Chromium smoke (needs a Playwright browser)
+npm run test:dashboard-embed   # the dashboard pages mounted into a bare host page (Chromium)
 ```
 
 Node 22.13 or newer is required. `docs/TS_NATIVE_IMPLEMENTATION_STATUS.md` maps
 the source modules.
+
+The dashboard (`dashboard/`) is framework-free ES modules: one `pages/<name>.js` per page, each
+`mount(el, host) => dispose`, plus `app.js`, the standalone shell `natlang dashboard` serves. A host page can mount the
+same pages with its own `DashboardApi` and `RunHost`; see [RUNNING_PROGRAMS.md](../docs/RUNNING_PROGRAMS.md#embedding-the-dashboard-pages).
 
 ## Use
 

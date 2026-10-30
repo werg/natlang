@@ -52,6 +52,22 @@ Compiled browser code restores the natlang task across `await`. Callbacks invoke
 
 `BrowserDomRenderer` renders checked `UiNode` trees with text nodes and typed events; it rejects executable markup. Keep high-frequency input and animation exact.
 
+## Mount the dashboard pages
+
+The dashboard's pages (`ts-host/dashboard/pages/*.js`: overview, programs, runs, traces, playground, models, system) are
+framework-free modules a host page can mount, so a panel shows natlang's live execution view, typed run forms and traces
+instead of reimplementing them. A page is `mount(el, host) => dispose`; `host = { api, runs?, navigate, toast, arg?, href?, refreshStatus?, h? }`
+(types in `ts-host/dashboard/types.d.ts`). `api` is a `DashboardApi` (groups `status`, `models`, `programs`, `traces`, `system`, `jobs`;
+`httpDashboardApi({ baseUrl, token })` talks to `natlang dashboard`); `runs` is a `RunHost` (`kinds`, `list`, `start`, `watch`, `subscribe`,
+`stop`, `remove`, `input`), either `httpRunHost(api)` or `inProcessRunHost(runtime, executors)`, which runs each spec inside `runtime.run`
+with `onLive` and prints the executor's result to the run's output. Supply only the groups and run kinds the host has:
+`availablePages({ api, runs })` returns the pages those support (no `models` group, no Models page; no `ask` kind, no Playground), and a
+page mounted without what it needs throws. `navigate(route)` takes `page` or `page-ARG` and must mount that page again even when it is
+current; dispose the returned function when the host leaves the page. Load `style.css` once: its rules apply only under `.nl-dash`
+(a mounted element gets the class when no ancestor has it) in the `natlang` cascade layer, so host rules win and nothing leaks out.
+Vibestudio vendors the modules with `node scripts/stage-vibestudio.mjs --out DIR --only dashboard`. Anchors: `ts-host/scripts/dashboard-embed-smoke.mjs`,
+`ts-host/test/dashboard-run-host.test.mjs`.
+
 ## Playground projects and workers
 
 `newPlaygroundProject`, `runPlaygroundProject`, `projectEntry`, `projectSignature`, and `traceFrame` run and inspect small projects (a `.nl` root called with named inputs, or a `.ts` module exporting `main(inputs)`). Run user programs in a worker when they may block the page; post model turns back to the page's model, as Studio's `child-worker.mjs` does.
