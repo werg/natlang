@@ -75,8 +75,8 @@ of all SFT before outcome learning can begin. Collect from the actual trained
 checkpoint being updated, preserving actor/checkpoint identity, sampled token
 probabilities, complete execution graphs and unfinished SFT obligations. Historical
 teacher continuations and a different checkpoint's attempts are not current-policy
-rollouts. Correct task outcomes remain eligible without Neuralese; actual graphs
-receive whole-graph updates under the standing producer/consumer custody rules.
+rollouts. Actual graphs receive whole-graph updates under the standing
+producer/consumer custody rules.
 
 Early RL must use the full explanatory prompt and complete tool schemas so correct
 idiomatic behavior is accessible. Include valid examples of awaited per-item `nl`,
