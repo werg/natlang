@@ -4,23 +4,24 @@
  *
  * `lowerHostCell` plans every ambient `nl` expression in a cell with the project compiler's own analysis
  * (`analyzeInlineLambdas`: contextual type, immediate call arguments, result context, typed holes) over the cell plus
- * the host's ambient declarations, and rewrites each into the lowered form project builds emit
- * (`nl.__inline(plan, values, accessors, context)`, see `lower.ts`). Everything else in the cell stays as written, types
- * and JSX included, so the host's own transform runs next, and a lowered site keeps the lines of the code it replaces.
+ * the host's ambient declarations, and lowers it with the project transformer (`lower.ts`): `nl.__inline(plan, values,
+ * accessors, context)`, `iterateOn` call sites, typed Neuralese readouts. Only the lowered expressions are rewritten;
+ * everything else in the cell stays as written, types and JSX included, so the host's own transform runs next, and a
+ * lowered site keeps the lines of the code it replaces.
  *
  * `declarationsForValues` is how a host describes the current contents of ambient bindings (`scope`) to that analysis.
  */
 import ts from 'typescript';
 import { createNatlangCompilerHost, EVAL_COMPILER_OPTIONS, type CompilerFiles, type LibProvider } from './host.js';
-import { analyzeInlineLambdas, resolveIntrinsic, suffixWithCallOf, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
-import { explicitInlineCall, plainInlineCall, type InlineSite } from './lower.js';
+import { analyzeInlineLambdas, resolveIntrinsic, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
+import { analysisLowering, natlangTransformer } from './lower.js';
 import { applyNlCallEdits, nlCallEdits } from './nl-call.js';
 import { INTRINSICS_FILE } from './intrinsics.js';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { loadCallableFolder, NatlangSourceError, type SourceFiles } from '../runtime/loader.js';
 import { declarationNamespace } from '../native/external.js';
 import { hexDigest } from '../native/hash.js';
-import { isLive, isPlainRecord } from '../native/values.js';
+import { isPlainRecord } from '../native/values.js';
 import { inferValueType } from '../native/runtime.js';
 
 export type HostCellOptions = {
@@ -39,6 +40,11 @@ export type HostCellOptions = {
   services?: ProgramDescriptor['services'];
   /** The callable folder every `nl` in the cell is bound to (a `natlang.d` directory), embedded in each site as in project builds. */
   context?: { directory: string; files: SourceFiles };
+  /**
+   * The host's scope holds Neuralese values: analyze every cell, so their opacity is checked and typed readouts
+   * (string coercion, `read`, `JSON.stringify`, ...) are lowered even where the cell never writes `nl`.
+   */
+  neuralese?: boolean;
   /** Identity of this cell's source revision, mixed into the plans' definition IDs (default: a hash of the source). */
   revision?: string;
   /** TypeScript library declarations, for hosts without a TypeScript install on disk. */
@@ -68,8 +74,12 @@ const CELL_COMPILER_OPTIONS: ts.CompilerOptions = { ...EVAL_COMPILER_OPTIONS,
 // Cells are checked against what the host declares, never against whatever files the process can see.
 const NO_FILES: CompilerFiles = { readFile: () => undefined, fileExists: () => false, directoryExists: () => false,
   getDirectories: () => [], realpath: path => path };
-// A cell that never writes the name `nl` cannot use it: no program is built for it.
+// A cell that never writes `nl`, `iterateOn`, `Neuralese` or a call of `read` has nothing for natlang to plan: no program
+// is built for it (unless the host says its scope holds Neuralese values).
 const MENTIONS_NL = /(?<![\w$])nl(?![\w$])/;
+const MENTIONS_OTHER = /(?<![\w$])(?:iterateOn|Neuralese)(?![\w$])|(?<![\w$.])read\s*[(<]/;
+// The binding through which lowered code reaches the runtime support functions, as in project builds.
+const RUNTIME = '__natlang';
 const NL_CALL = /\bnl\s*(?:<[^()]*>)?\s*\(/;
 
 function servicesDeclarations(services: ProgramDescriptor['services']): string {
@@ -78,7 +88,7 @@ function servicesDeclarations(services: ProgramDescriptor['services']): string {
 }
 
 export function lowerHostCell(source: string, options: HostCellOptions): HostCellResult {
-  if (!MENTIONS_NL.test(source)) return { code: source, plans: [], diagnostics: [], usesNl: false };
+  if (!options.neuralese && !MENTIONS_NL.test(source) && !MENTIONS_OTHER.test(source)) return { code: source, plans: [], diagnostics: [], usesNl: false };
   const display = options.fileName ?? (options.jsx ? 'cell.tsx' : 'cell.ts');
   const cellFile = `${CELL_DIRECTORY}/cell${options.jsx ? '.tsx' : '.ts'}`;
   const ambient = `${options.ambientDeclarations}\n${servicesDeclarations(options.services)}\n`;
@@ -106,8 +116,8 @@ export function lowerHostCell(source: string, options: HostCellOptions): HostCel
     return found;
   };
   const usesNl = referencesNl(cell, checker);
-  // A cell with no ambient `nl` is the host's own to parse and report.
-  if (!usesNl) return { code: source, plans: [], diagnostics: [], usesNl };
+  // A cell that writes the words but resolves none of them to natlang is the host's own to parse and report.
+  if (!usesNl && !options.neuralese && !MENTIONS_OTHER.test(source)) return { code: source, plans: [], diagnostics: [], usesNl };
   const ambientFile = program.getSourceFile(AMBIENT_FILE)!;
   const syntax = [...program.getSyntacticDiagnostics(ambientFile).map(item => diagnosticOf(ambientFile, 'ambient declarations', item)),
     ...program.getSyntacticDiagnostics(cell).map(item => diagnosticOf(cell, display, item))];
@@ -122,7 +132,7 @@ export function lowerHostCell(source: string, options: HostCellOptions): HostCel
   }
 
   const analysis = analyzeInlineLambdas(program, [cell], { displayPath: () => display, sourceRevision: options.revision ?? hexDigest(source),
-    recursiveTypes: true, allowShadowing: true });
+    recursiveTypes: true, allowShadowing: true, topLevelAwait: true });
   const diagnostics = [...analysis.diagnostics];
   let context: string | undefined;
   if (options.context && analysis.plans.length) {
@@ -134,51 +144,26 @@ export function lowerHostCell(source: string, options: HostCellOptions): HostCel
   }
   if (diagnostics.some(item => item.severity === 'error')) return { code: source, plans: analysis.plans, diagnostics, usesNl };
 
-  // The sites to rewrite: a tagged template with a plan, or its `.with(...)` suffix call (the whole call is the site).
-  const planAt = new Map(analysis.plans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan]));
-  const f = ts.factory, printer = ts.createPrinter();
-  type Site = { start: number; end: number; expression: () => ts.Expression };
-  const sites: Site[] = [];
-  // Text of the cell between two positions, nested sites lowered. A lowered expression stands in the call's arguments
-  // as raw text, keeping its formatting; one beginning with `{` is parenthesized so an arrow body cannot read it as a block.
-  const render = (from: number, to: number): string => {
-    let out = '', cursor = from;
-    for (const site of sites) {
-      if (site.start < cursor || site.end > to) continue;
-      out += text.slice(cursor, site.start) + lowered(site);
-      cursor = site.end;
-    }
-    return out + text.slice(cursor, to);
-  };
-  const raw = (node: ts.Expression): ts.Expression => {
-    const code = render(node.getStart(cell), node.getEnd());
-    return f.createIdentifier(code.startsWith('{') ? `(${code})` : code);
-  };
-  const lowered = (site: Site): string => {
-    const printed = printer.printNode(ts.EmitHint.Expression, site.expression(), cell);
+  // The project transformer lowers the cell; each outermost replaced node is printed and spliced into the cell's own text,
+  // so everything else stays as written.
+  const replaced: { start: number; end: number; lowered: ts.Node }[] = [];
+  const result = ts.transform(cell, [natlangTransformer({
+    ...analysisLowering(analysis, item => `${display}:${item.line}`), checker, runtime: RUNTIME, context,
+    constrained: false, guardPrefix: display, modulePath: display,
+    replaced: (site, lowered) => replaced.push({ start: site.getStart(cell), end: site.getEnd(), lowered }) })]);
+  result.dispose();
+  replaced.sort((a, b) => a.start - b.start || b.end - a.end);
+  const printer = ts.createPrinter();
+  let code = '', cursor = 0;
+  for (const site of replaced) {
+    if (site.start < cursor) continue;   // inside a site already printed with it
+    const printed = printer.printNode(ts.EmitHint.Unspecified, site.lowered, cell);
     // The cell's later lines stay where they were: the newlines the site's source held are kept inside the call.
     const lost = (text.slice(site.start, site.end).match(/\n/g)?.length ?? 0) - (printed.match(/\n/g)?.length ?? 0);
-    return lost > 0 && printed.endsWith(')') ? `${printed.slice(0, -1)}${'\n'.repeat(lost)})` : printed;
-  };
-  const visit = (node: ts.Node): void => {
-    const plan = ts.isTaggedTemplateExpression(node) ? planAt.get(`${node.getStart(cell)}:${node.getEnd()}`) : undefined;
-    if (plan && ts.isTaggedTemplateExpression(node)) {
-      const site: InlineSite = { plan, context, lower: raw };
-      const suffix = plan.explicitCaptures ? suffixWithCallOf(node) : undefined;
-      if (suffix) sites.push({ start: node.getStart(cell), end: suffix.getEnd(),
-        expression: () => explicitInlineCall(f, site, raw(node.tag), suffix.arguments[0], node.template) });
-      else if (plan.explicitCaptures) {
-        const withCall = ts.isCallExpression(node.tag) ? node.tag : undefined;
-        sites.push({ start: node.getStart(cell), end: node.getEnd(), expression: () => explicitInlineCall(f,
-          site, withCall && ts.isPropertyAccessExpression(withCall.expression) ? raw(withCall.expression.expression) : f.createIdentifier('nl'),
-          withCall?.arguments[0], node.template) });
-      } else sites.push({ start: node.getStart(cell), end: node.getEnd(), expression: () => plainInlineCall(f, site, raw(node.tag), node.template) });
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(cell);
-  sites.sort((a, b) => a.start - b.start || b.end - a.end);
-  return { code: render(0, text.length), plans: analysis.plans, diagnostics, usesNl };
+    code += text.slice(cursor, site.start) + (lost > 0 && printed.endsWith(')') ? `${printed.slice(0, -1)}${'\n'.repeat(lost)})` : printed);
+    cursor = site.end;
+  }
+  return { code: code + text.slice(cursor), plans: analysis.plans, diagnostics, usesNl };
 }
 
 export type ValueDeclarationLimits = {
@@ -218,31 +203,13 @@ function typeSample(value: unknown, limits: Required<ValueDeclarationLimits>, de
   return value;
 }
 
-/** Carried by identity, not as data: a function, a class instance, a built-in, a folder handle. */
-const opaque = (value: unknown): boolean => typeof value === 'function' ||
-  (value !== null && typeof value === 'object' && !Array.isArray(value) && !isPlainRecord(value));
-const holdsOpaque = (value: unknown): boolean => opaque(value) || (Array.isArray(value) ? value.some(holdsOpaque) :
-  isPlainRecord(value) && Object.values(value).some(holdsOpaque));
-
-/**
- * TypeScript for a sampled value. Data is typed by natlang's own scope-value rule (`inferValueType`). That rule declares a
- * whole list or record opaque once anything in it is carried by identity; a cell wants the fields around a handle
- * typed, so such containers are typed field by field and only the handle itself is natlang's live type.
- */
+/** TypeScript for a sampled value: natlang's scope type for it, with its live types written as TypeScript ones. */
 function shape(sample: unknown): string {
   if (sample === undefined) return 'undefined';
-  if (opaque(sample) || !holdsOpaque(sample)) {
-    try {
-      return inferValueType(sample).replace(LIVE_TYPE, (_, _label, kind, tag) =>
-        kind === 'function' ? '(...args: any[]) => any' : kind === 'tag' ? TAGGED_GLOBALS[tag] ?? 'any' : 'any');
-    } catch { return 'any'; }
-  }
-  const union = (types: string[]) => [...new Set(types)].join(' | ');
-  if (Array.isArray(sample)) return `(${union(sample.map(shape))})[]`;
-  const entries = Object.entries(sample as Record<string, unknown>);
-  if (entries.length > 12 || entries.some(([key]) => !/^[A-Za-z_$][\w$]*$/.test(key)))
-    return `Record<string, ${union(entries.map(([, item]) => shape(item)))}>`;
-  return `{ ${entries.map(([key, item]) => item === undefined ? `${key}?: unknown` : `${key}: ${shape(item)}`).join('; ')} }`;
+  try {
+    return inferValueType(sample, { liveFields: true }).replace(LIVE_TYPE, (_, _label, kind, tag) =>
+      kind === 'function' ? '(...args: any[]) => any' : kind === 'tag' ? TAGGED_GLOBALS[tag] ?? 'any' : 'any');
+  } catch { return 'any'; }
 }
 
 /**

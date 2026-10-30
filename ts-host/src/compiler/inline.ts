@@ -92,6 +92,8 @@ export type InlineAnalysisOptions = {
    * ordinary lexical shadowing, not an error. Uses of that local are simply not natlang's.
    */
   allowShadowing?: boolean;
+  /** Code outside any function may `await` (an eval cell, an ES module): a typed Neuralese readout there is not a sync readout. */
+  topLevelAwait?: boolean;
 };
 
 const IDENTIFIER_TOKEN = /(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*(?![A-Za-z0-9_$])/g;
@@ -917,7 +919,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   const neuralese: NeuraleseLiteral[] = [];
   const readouts: NeuraleseReadout[] = [];
   for (const file of files) neuralese.push(...checkNeuralese(checker, file, report,
-    { recursiveTypes: options.recursiveTypes, readouts }).map(literal => ({ ...literal, file: displayPath(file) })));
+    { recursiveTypes: options.recursiveTypes, readouts, topLevelAwait: options.topLevelAwait }).map(literal => ({ ...literal, file: displayPath(file) })));
   // Representation-generic results: the instance each call site's expected type picks (DECISIONS.md 2026-10-09).
   const instantiations: GenericInstantiation[] = [];
   for (const file of files) checkGenericResults(checker, file, report, instantiations);

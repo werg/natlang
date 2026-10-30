@@ -157,7 +157,7 @@ export function checkGenericResults(checker: ts.TypeChecker, file: ts.SourceFile
  * Report misuse of soft values in `file` and return the model-written literals it contains, typed from context.
  */
 export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, report: Report,
-  options: { recursiveTypes?: boolean; readouts?: NeuraleseReadout[] } = {}): NeuraleseLiteral[] {
+  options: { recursiveTypes?: boolean; readouts?: NeuraleseReadout[]; topLevelAwait?: boolean } = {}): NeuraleseLiteral[] {
   const literals: NeuraleseLiteral[] = [];
   const soft = (node: ts.Node | undefined): boolean => !!node && ts.isExpression(node) && isNeuralese(checker, checker.getTypeAtLocation(node));
   const opaque = (node: ts.Node, what: string) => report(node, 'neuralese-opaque-access',
@@ -171,7 +171,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       ...(conditional ? { conditional: true } : {}) });
     let parent: ts.Node | undefined = node.parent;
     while (parent && !ts.isFunctionLike(parent)) parent = parent.parent;
-    const async = parent && ts.canHaveModifiers(parent) && ts.getModifiers(parent)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+    const async = parent ? ts.canHaveModifiers(parent) && ts.getModifiers(parent)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) :
+      options.topLevelAwait;
     if (!async && parent && (ts.isArrowFunction(parent) || ts.isFunctionExpression(parent))) {
       const map = asyncArrayMapCallback(parent);
       const enclosing = map && enclosingAsyncFunction(map.call);
