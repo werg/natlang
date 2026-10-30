@@ -26,10 +26,11 @@ import { createResolvedModelSession, type ManagedModelSession } from './model/lo
 import { defaultNativePython, ensureNativeServer, findNativeCheckpoint, newerNativeCheckpoint, pinNativeCheckpoint,
   type NativeModelSettings } from './model/native-managed.js';
 import { defaultNatlangConfigDirectory } from './package/store.js';
-import { createNatlangRuntime, type InvocationTrace, type ModelDriver, type NatlangRuntime, type NatlangRuntimeOptions,
-  type TraceSink } from './runtime/runtime.js';
+import type { InvocationTrace, ModelDriver, NatlangRuntime, NatlangRuntimeOptions, TraceSink } from './runtime/runtime.js';
+import { createNatlangRuntime } from './runtime/node.js';
 import { llamaServesRelease, tunedServing, type TunedServing } from './tuned-serving.js';
-import { machineStoreRoot, openCallStore, type CallStore } from './calls/store.js';
+import type { CallStore } from './calls/store.js';
+import { machineStoreRoot, openMachineStore } from './machine-store.js';
 import { recordEscalation } from './calls/feedback.js';
 import { supportsGuidance } from './native/neuralese.js';
 
@@ -232,7 +233,7 @@ export async function natlangRuntime(configuration: NatlangRuntimeConfiguration 
     const adaptation = configuration.adaptation && program ? bindAdaptation(configuration.adaptation, program, executorIdentity) : null;
     // An explicit environment chooses the call store too (NATLANG_CALL_STORE), not this process's.
     const calls = configuration.runtime?.calls !== undefined || !configuration.environment ? undefined : machineStoreRoot(environment);
-    const runtime = createNatlangRuntime({ ...(calls !== undefined ? { calls: calls === null ? false as const : openCallStore(calls) } : {}),
+    const runtime = createNatlangRuntime({ ...(calls !== undefined ? { calls: calls === null ? false as const : openMachineStore(calls, environment) } : {}),
       ...configuration.runtime, ...student, ...(program ? { program } : {}), adaptation, executorIdentity,
       ...(root ? { programRoot: configuration.runtime?.programRoot ?? root } : {}),
       ...traceSinks(configuration.runtime?.trace, escalating?.notice), ...escalating?.options,

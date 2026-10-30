@@ -1,0 +1,242 @@
+[
+  {
+    "name": "classify 1: billing",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "I was charged twice for invoice INV-2291 this month. Please refund one of the charges.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "billing"
+  },
+  {
+    "name": "classify 2: billing",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "Can you send me a copy of last month's invoice? I need it for my accountant.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "billing"
+  },
+  {
+    "name": "classify 3: billing",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "My credit card payment was declined but my bank says the card is fine.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "billing"
+  },
+  {
+    "name": "classify 4: billing",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "Why did my subscription price go up from $10 to $15 without notice?",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "billing"
+  },
+  {
+    "name": "classify 5: billing",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "Please update the billing address on my invoices to 12 Elm Street.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "billing"
+  },
+  {
+    "name": "classify 6: technical",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "Checkout fails with a 500 error for every customer since the 14:05 deploy; we are losing orders.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "technical"
+  },
+  {
+    "name": "classify 7: technical",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "The mobile app crashes as soon as I open the settings screen.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "technical"
+  },
+  {
+    "name": "classify 8: technical",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "Password reset emails never arrive, I have checked my spam folder.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "technical"
+  },
+  {
+    "name": "classify 9: technical",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "The export button overlaps the page title on mobile Safari; it still works.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "technical"
+  },
+  {
+    "name": "classify 10: technical",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "Search returns no results for any query since this morning.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "technical"
+  },
+  {
+    "name": "classify 11: technical",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "The API returns 'invalid token' even with a freshly generated key.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "technical"
+  },
+  {
+    "name": "classify 12: spam",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "BUY CHEAP WATCHES NOW!!! Visit our store for 90% off.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "spam"
+  },
+  {
+    "name": "classify 13: spam",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "Congratulations, you have won a free cruise! Click here to claim your prize.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "spam"
+  },
+  {
+    "name": "classify 14: spam",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "Grow your Instagram followers fast with our marketing package, only $19.",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "spam"
+  },
+  {
+    "name": "classify 15: spam",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "Hot singles in your area are waiting to meet you. Sign up today!",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "spam"
+  },
+  {
+    "name": "classify 16: spam",
+    "function": "classify.nl",
+    "inputs": {
+      "ticket": "Earn $5000 a week from home with this one simple trick. Limited offer!",
+      "rubric": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising"
+    },
+    "expected": "spam"
+  },
+  {
+    "name": "urgent 1: true",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "Checkout fails with a 500 error for every customer since the 14:05 deploy; we are losing orders."
+    },
+    "expected": true
+  },
+  {
+    "name": "urgent 2: true",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "Our whole team has been locked out of the dashboard for the last 20 minutes, nobody can log in."
+    },
+    "expected": true
+  },
+  {
+    "name": "urgent 3: true",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "Customer credit card numbers are visible to other users on the order history page."
+    },
+    "expected": true
+  },
+  {
+    "name": "urgent 4: true",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "The site is completely down for all users right now."
+    },
+    "expected": true
+  },
+  {
+    "name": "urgent 5: true",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "Someone is logging into admin accounts from an unknown IP; we think our admin password leaked."
+    },
+    "expected": true
+  },
+  {
+    "name": "urgent 6: true",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "Payments are failing for every customer since 9am, so no orders are going through."
+    },
+    "expected": true
+  },
+  {
+    "name": "urgent 7: false",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "The export button overlaps the page title on mobile Safari; it still works."
+    },
+    "expected": false
+  },
+  {
+    "name": "urgent 8: false",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "It would be nice to have a dark mode option in the settings."
+    },
+    "expected": false
+  },
+  {
+    "name": "urgent 9: false",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "Can you send me a copy of last month's invoice? I need it for my accountant."
+    },
+    "expected": false
+  },
+  {
+    "name": "urgent 10: false",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "There is a typo on the About page: 'recieve' should be 'receive'."
+    },
+    "expected": false
+  },
+  {
+    "name": "urgent 11: false",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "Please update the billing address on my invoices to 12 Elm Street."
+    },
+    "expected": false
+  },
+  {
+    "name": "urgent 12: false",
+    "function": "is_urgent.nl",
+    "inputs": {
+      "ticket": "Could you add an option to export reports as CSV in a future release?"
+    },
+    "expected": false
+  }
+]

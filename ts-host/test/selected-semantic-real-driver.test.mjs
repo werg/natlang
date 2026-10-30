@@ -4,9 +4,9 @@ import {createNatlangSelectedEnvironment}
   from 'tracing-js-self/natlang-selected';
 import {encodeWitness,decodeWitness,analyzeSemanticProgram}
   from 'tracing-js-self/training';
-import {createNatlangRuntime,installSelectedSemanticEnvironment,setDefaultEnvironmentFactory}
+import {createNatlangRuntime,selectedSemanticPlatform}
   from '../dist/runtime/node.js';
-import {setModuleRealm,moduleInstanceAsync}
+import {moduleInstanceAsync}
   from '../dist/runtime/modules.js';
 import {parseModule,PATH_ONLY} from '../dist/runtime/loader.js';
 import {itemValue} from '../dist/runtime/callable.js';
@@ -41,30 +41,23 @@ const valid=prefix=>{
   }
   throw new Error('Selected Natlang test did not supply source context or entry');
 };
-function restore(){
-  setDefaultEnvironmentFactory(options=>new TypeScriptEnvironment({
-    workspace:options.workspace,network:options.network
-  }));
-  setModuleRealm(()=>new TypeScriptEnvironment({mode:'retained'}));
-}
-
 test('actual pinned tracer selected output runs Natlang callable module through async realm',async()=>{
   const record=parseModule('/__natlang__/folder/owned.ts',
     'export default function answer(): number {return 42;}',{},PATH_ONLY);
   const selected=[];
-  try{
-    installSelectedSemanticEnvironment(mode=>createNatlangSelectedEnvironment({
+  {
+    const platform=selectedSemanticPlatform(mode=>createNatlangSelectedEnvironment({
       mode,select:prefix=>{selected.push([prefix.entry,prefix.committed.length]);
         return valid(prefix);}
     }));
-    const exports=await moduleInstanceAsync(record,{owned:record});
+    const exports=await moduleInstanceAsync(platform,record,{owned:record});
     assert.equal(typeof exports.default,'function');
     assert.equal(await exports.default(),42);
-    const callable=itemValue(record,{owned:record});
+    const callable=itemValue(record,{owned:record},undefined,platform);
     assert.equal(await callable(),42);
     assert.deepEqual(selected.filter(s=>s[0]==='initialize').length,4);
     assert.equal(selected.filter(s=>s[0]==='answer').length,4);
-  }finally{restore();}
+  }
 });
 
 test('actual generated scope binds live locals, creates inline child and commits selected capture writes',{timeout:10000},async()=>{
@@ -166,8 +159,8 @@ test('actual compiled sibling imports read a live selected module export through
   const parent=parseModule('/__natlang__/folder/parent.ts',
     'import {value} from "./child"; export default function answer(): number {return value+1;}',{},PATH_ONLY);
   const receipts=[];
-  try{
-    installSelectedSemanticEnvironment(mode=>createNatlangSelectedEnvironment({mode,select:prefix=>{
+  {
+    const platform=selectedSemanticPlatform(mode=>createNatlangSelectedEnvironment({mode,select:prefix=>{
       receipts.push(prefix);
       const count=prefix.committed.filter(item=>item.kind==='semantic').length;
       if(prefix.entry==='initialize'){
@@ -201,13 +194,13 @@ test('actual compiled sibling imports read a live selected module export through
       }
       if(count===4)return encodeWitness('return',{value:['num',13]});return encodeWitness('end',{kind:'return'});
     }}));
-    const loaded=await moduleInstanceAsync(parent,{parent,child});
+    const loaded=await moduleInstanceAsync(platform,parent,{parent,child});
     assert.equal(await loaded.default(),13);
-    assert.equal(await itemValue(parent,{parent,child})(),13);
+    assert.equal(await itemValue(parent,{parent,child},undefined,platform)(),13);
     const initializations=new Set(receipts.filter(prefix=>prefix.entry==='initialize').map(prefix=>prefix.invocationId));
     assert.equal(initializations.size,2,'each dependency initialized exactly once');
     assert(receipts.some(prefix=>prefix.source.includes('__imports["./child"]')));
-  }finally{restore();}
+  }
 });
 
 test('declared FileHandle surface performs selected ordered read/write/read and revokes on close',async()=>{
@@ -267,10 +260,10 @@ test('real selected console observations and logs survive the shared EvalFailure
 test('retained imported services resolve the current task and preserve actual effect recording',async()=>{
   const record=parseModule('/__natlang__/folder/service.ts',
     'import {store} from "natlang:services"; export default async function read(): Promise<number> {return await store.lookup(7);}',{},PATH_ONLY);
-  const effects=[],calls=[],runtime=createNatlangRuntime({calls:false});let initializations=0;
+  const effects=[],calls=[];let initializations=0,runtime;
   const services=base=>recordingServices({store:{base,async lookup(value){calls.push(this.base);return this.base+value;}}},event=>effects.push(event));
   try{
-    installSelectedSemanticEnvironment(mode=>createNatlangSelectedEnvironment({mode,select:prefix=>{
+    const platform=selectedSemanticPlatform(mode=>createNatlangSelectedEnvironment({mode,select:prefix=>{
       const count=prefix.committed.filter(item=>item.kind==='semantic').length;
       if(prefix.entry==='initialize'){
         if(count===0){initializations++;return encodeWitness('allocate',{name:'o99',kind:'closure',code:'read',properties:[],captures:[]});}
@@ -300,7 +293,8 @@ test('retained imported services resolve the current task and preserve actual ef
       if(count===6)return encodeWitness('return',{value:observed.result});
       return encodeWitness('end',{kind:'return'});
     }}));
-    const invoke=async()=>await (await moduleInstanceAsync(record,{service:record})).default();
+    runtime=createNatlangRuntime({calls:false,platform});
+    const invoke=async()=>await (await moduleInstanceAsync(platform,record,{service:record})).default();
     assert.equal(await runtime.run(invoke,{services:services(5)}),12);
     assert.equal(await runtime.run(invoke,{services:services(20)}),27);
     assert.equal(initializations,1);assert.deepEqual(calls,[5,20]);
@@ -309,15 +303,15 @@ test('retained imported services resolve the current task and preserve actual ef
       ['requested','store','lookup'],['completed','store','lookup']]);
     assert.deepEqual(effects.filter(event=>event.phase==='completed').map(event=>event.exact),[
       {result:12,async:true},{result:27,async:true}]);
-  }finally{runtime.close();restore();}
+  }finally{runtime?.close();}
 });
 
 test('cyclic selected modules publish live import cells before either initializer completes',async()=>{
   const a=parseModule('/__natlang__/folder/a.ts','import "./b"; export const count: number = 5;',{},PATH_ONLY);
   const b=parseModule('/__natlang__/folder/b.ts','import {count} from "./a"; export function read(): number {return count;}',{},PATH_ONLY);
   const initialized=[];
-  try{
-    installSelectedSemanticEnvironment(mode=>createNatlangSelectedEnvironment({mode,select:prefix=>{
+  {
+    const platform=selectedSemanticPlatform(mode=>createNatlangSelectedEnvironment({mode,select:prefix=>{
       const count=prefix.committed.filter(item=>item.kind==='semantic').length;
       if(prefix.entry==='initialize'){
         const isA=prefix.source.includes('exports.count = 5');
@@ -350,7 +344,7 @@ test('cyclic selected modules publish live import cells before either initialize
       if(count===3)return encodeWitness('return',{value:observed.result});
       return encodeWitness('end',{kind:'return'});
     }}));
-    const [first,second]=await Promise.all([moduleInstanceAsync(a,{a,b}),moduleInstanceAsync(b,{a,b})]);
+    const [first,second]=await Promise.all([moduleInstanceAsync(platform,a,{a,b}),moduleInstanceAsync(platform,b,{a,b})]);
     assert.equal(first.count,5);assert.equal(await second.read(),5);assert.deepEqual(initialized,['b','a']);
-  }finally{restore();}
+  }
 });

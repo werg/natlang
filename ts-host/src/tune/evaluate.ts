@@ -7,7 +7,8 @@ import { tuneRuntime, rethrowInfrastructureFailure, type TuneExecution } from '.
 import { resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import type { WeightBinding, ResolvedWeightStack } from '../adaptation/weights/binding.js';
-import { createNatlangRuntime, type ModelDriver, type Services } from '../runtime/runtime.js';
+import type { ModelDriver, Services } from '../runtime/runtime.js';
+import { createNatlangRuntime } from '../runtime/node.js';
 import { loadNatlang } from '../runtime/node-files.js';
 import type { ModelTurn } from '../contracts.js';
 import type { Partition, SplitExample } from './collect.js';

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createNatlangRuntime, loadVirtualNatlang } from '../dist/index.js';
+import { createNatlangRuntime, loadVirtualNatlang, nodePlatform } from '../dist/index.js';
 
 /** Run root.nl with scripted root tool calls; returns each tool result and the call's value. */
-async function script(calls, returns = 'string') {
+async function script(calls, returns = 'string', platform) {
   const results = [];
   let step = 0;
   const model = async request => {
@@ -11,7 +11,7 @@ async function script(calls, returns = 'string') {
     const call = calls[step++];
     return call ? { calls: [call] } : { calls: [['return_result', { status: 'failed', reason: 'The scripted test has no more calls.' }]] };
   };
-  const runtime = createNatlangRuntime({ model, seed: { mode: 'backend' } });
+  const runtime = createNatlangRuntime({ model, seed: { mode: 'backend' }, ...(platform ? { platform } : {}) });
   const fn = loadVirtualNatlang({ 'root.nl': `---\nargs: {}\nreturns: ${JSON.stringify(returns)}\n---\nSay hello.\n` }, 'root.nl');
   let value;
   try { value = await runtime.run(() => fn()); } catch {}
@@ -83,14 +83,18 @@ test('return_result value rejections render in each wording; the sentence wordin
       assert.doesNotMatch(render(variant, problem), /bad-action|verdict|^value:/);
   assert.deepEqual([...RETURN_ERROR_TEXTS], ['legacy', 'field', 'sentence', 'steps']);
   assert.throws(() => returnErrorText('loud'), /returnErrorText is one of legacy, field, sentence, steps/);
+  // The kernel reads no environment: the Node platform supplies NATLANG_RETURN_ERROR_TEXT, and a platform value can set it.
   const previous = process.env.NATLANG_RETURN_ERROR_TEXT;
-  process.env.NATLANG_RETURN_ERROR_TEXT = 'sentence';
+  process.env.NATLANG_RETURN_ERROR_TEXT = 'steps';
   try {
     const { results, value } = await script([
       ['return_result', { status: 'success', verdict: 'hello' }],
       ['return_result', { status: 'success', value: 'hello' }]]);
-    assert.equal(results[0].split('\n')[1], 'return_result needs the string itself as its value argument.');
+    assert.match(results[0], /Call return_result again with status "success" and value set to the string/);
     assert.equal(value, 'hello');
+    const legacy = await script([['return_result', { status: 'success', verdict: 'hello' }], ['return_result', { status: 'success', value: 'hello' }]],
+      'string', { ...nodePlatform(), returnErrorText: 'legacy' });
+    assert.match(legacy.results[0], /value: bad-action/);
   } finally {
     if (previous === undefined) delete process.env.NATLANG_RETURN_ERROR_TEXT; else process.env.NATLANG_RETURN_ERROR_TEXT = previous;
   }

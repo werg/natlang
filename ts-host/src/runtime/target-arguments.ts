@@ -4,9 +4,10 @@
  * into checked values for `context.arguments` (the same `coerce` the runtime applies at every typed slot); the dashboard
  * renders its run form from the expanded types and checks drafts through `readTargetArguments`.
  *
- * On the command line an argument whose type is text (string, string literals, refinements of those) is written as
- * is; any other type is written as JSON. A `path` argument is text naming a file or folder in the workspace, which the
- * launcher checks and passes on as an absolute path.
+ * On the command line, words fill the arguments in order, or name one (`--rubric "..."`, `--count=3`). An argument
+ * whose type is text (string, string literals, refinements of those) is written as is; any other type is written as
+ * JSON. A `path` argument is text naming a file or folder in the workspace, which the launcher checks and passes on as
+ * an absolute path.
  */
 import { existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -143,7 +144,8 @@ export function argumentSignature(declared: TargetArgument[]): string {
     (arg.default !== undefined ? ` = ${JSON.stringify(arg.default)}` : '')).join(', ');
 }
 
-/** `<input: string> [count: number]`: the command-line usage of the arguments, required ones in angle brackets. */
+/** `<input: string> [count: number]`: the command-line usage of the arguments, required ones in angle brackets. Each can
+ * also be given by name (`--count 3`). */
 export function argumentUsage(declared: TargetArgument[]): string {
   return declared.map(arg => { const text = `${arg.name}: ${formatType(parseType(arg.type))}`;
     return arg.required ? `<${text}>` : `[${text}]`; }).join(' ');
@@ -158,12 +160,12 @@ export function readTargetArguments(declared: TargetArgument[] | undefined, raw:
   { values: Record<string, unknown>; problems: ArgumentProblem[] } {
   const values: Record<string, unknown> = {}, problems: ArgumentProblem[] = [];
   if (!declared) return { values, problems };
-  if (raw.length > declared.length)
-    problems.push({ argument: '', path: '', message: `takes ${declared.length} argument${declared.length === 1 ? '' : 's'} (${declared.map(arg => arg.name).join(', ') || 'none'}); got ${raw.length}` });
+  const { words, problems: wordProblems } = assignWords(declared, raw);
+  problems.push(...wordProblems);
   let env: TypeEnv;
   try { env = programTypes(root).env; } catch (error) { problems.push({ argument: '', path: '', message: `types.ts: ${(error as Error).message}` }); return { values, problems }; }
   declared.forEach((arg, index) => {
-    const type = parseType(arg.type), text = raw[index];
+    const type = parseType(arg.type), text = words[index];
     let value: unknown;
     if (text === undefined || text === '') {
       if (arg.default !== undefined) value = arg.default;
@@ -195,6 +197,34 @@ export function readTargetArguments(declared: TargetArgument[] | undefined, raw:
     values[arg.name] = coerceQuiet(value, type, env);
   });
   return { values, problems };
+}
+
+/**
+ * The word for each declared argument: `--name value` or `--name=value` sets that argument, and the other words fill the
+ * remaining arguments in order. Only declared names are names; an empty value (`--name=`) leaves the argument out.
+ */
+function assignWords(declared: TargetArgument[], raw: string[]): { words: (string | undefined)[]; problems: ArgumentProblem[] } {
+  const words: (string | undefined)[] = declared.map(() => undefined), named = new Set<number>(), positional: string[] = [];
+  const problems: ArgumentProblem[] = [];
+  const names = declared.map(arg => arg.name);
+  for (let index = 0; index < raw.length; index++) {
+    const option = /^--([a-zA-Z][a-zA-Z0-9_-]*)(?:=([\s\S]*))?$/.exec(raw[index]!);
+    if (!option) { positional.push(raw[index]!); continue; }
+    const at = names.indexOf(option[1]!);
+    if (at < 0) { problems.push({ argument: '', path: '', message: `--${option[1]} is not an argument of this target; its arguments are ${names.map(name => `--${name}`).join(', ') || 'none'}` }); continue; }
+    if (named.has(at)) problems.push({ argument: option[1]!, path: option[1]!, message: `--${option[1]} is given twice` });
+    let value = option[2];
+    if (value === undefined) {
+      if (index + 1 >= raw.length) { problems.push({ argument: option[1]!, path: option[1]!, message: `--${option[1]} needs a value: --${option[1]} VALUE or --${option[1]}=VALUE` }); continue; }
+      value = raw[++index]!;
+    }
+    named.add(at); words[at] = value;
+  }
+  const open = declared.map((_, index) => index).filter(index => !named.has(index));
+  if (positional.length > open.length)
+    problems.push({ argument: '', path: '', message: `takes ${declared.length} argument${declared.length === 1 ? '' : 's'} (${names.join(', ') || 'none'}); got ${positional.length + named.size}` });
+  positional.forEach((word, index) => { if (index < open.length) words[open[index]!] = word; });
+  return { words, problems };
 }
 
 /** Problems of `value` as a `type`: the runtime's own check, plus record fields that are required and absent. */

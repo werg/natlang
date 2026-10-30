@@ -12,7 +12,7 @@ export { loadNamedFunction, loadCallableFolder, NatlangSourceError } from './run
 export type { ItemRecord, NatlangRecord, ModuleRecord, NamespaceRecord } from './runtime/loader.js';
 export { EventLoop, EventQueue, KeyedEventLoop } from './app/event-loop.js';
 export { newPlaygroundProject, editPlaygroundProject, validatePlaygroundProject, assertPlaygroundProject,
-  validProjectPath, runPlaygroundProject, projectEntry, projectSignature, traceFrame, admitPlaygroundRun } from './app/playground.js';
+  validProjectPath, runPlaygroundProject, projectSignature, traceFrame, admitPlaygroundRun } from './app/playground.js';
 export type { PlaygroundProject, PlaygroundRun, PlaygroundDiagnostic, TraceFrame } from './app/playground.js';
 export type { AppEvent, Transition, Commit, Failure, StepContext, EventLoopOptions, KeyedEventLoopOptions, WakeEvent } from './app/event-loop.js';
 export { TerminalSessionStore, renderTerminalView, runTerminalShell } from './terminal/index.js';
@@ -21,9 +21,8 @@ export { Folder, FolderSnapshot, FolderHandle, FileHandle, EntryHandle, FolderTr
 export type { FolderSource, FolderAccess, FileContents, EntryStat, SearchMatch, Change, ChangeSet, ChangeKind, EntryKind } from './native/scoped-fs.js';
 export { folderFromData, folderToData } from './native/data-layout.js';
 export type { FolderDataLayout, FolderDataResult } from './native/data-layout.js';
-export { FolderFs, checkBashPolicy, runFolderBash } from './native/folder-shell.js';
+export { FolderFs, checkBashPolicy } from './native/folder-shell.js';
 export type { FolderBashResult, FolderBashOptions } from './native/folder-shell.js';
-export { runFolderPython } from './native/folder-python.js';
 export type { PythonHost, PythonResult } from './native/folder-python.js';
 export { openFolder, openArchiveFile, saveFolder } from './native/node-files.js';
 export { openArchive } from './native/archive.js';
@@ -54,7 +53,7 @@ export type { OpenAICompatibleOptions, OpenAICompatibleExchange, ChatTransport, 
   LoadedModelConfiguration, ModelSelectionOverrides, LlamaRuntimeArtifact, LlamaRuntimeRelease,
   LlamaServerInspection, LlamaRuntimeDiscovery } from './model/index.js';
 export * from './package/index.js';
-export { compileVirtualProject, virtualProjectFiles, virtualSourceFiles, loadVirtualNatlang, loadVirtualCallables } from './runtime/virtual-project.js';
+export { virtualProjectFiles, virtualSourceFiles } from './runtime/virtual-project.js';
 export type { VirtualProject, CompiledProject } from './runtime/virtual-project.js';
 
 export * from './adaptation/index.js';
@@ -85,7 +84,6 @@ export { FileNeuraleseStore, type FileNeuraleseStoreOptions } from './neuralese/
 export { MemoryNeuraleseStore } from './native/neuralese-store.js';
 export type { NeuraleseStore, NeuraleseBlockMeta, NativeStateArtifact, NativeStateMetadata, NativeStateTensor, NativeTensorArtifact, NativeTensorArtifactMetadata, NativeTensorValue } from './native/neuralese-store.js';
 export type { StandardLibrary, CombinatorName } from './neuralese/combinators.js';
-export { registerBuiltinModule } from './runtime/modules.js';
 export { replayRecordSink, REPLAY_RECORD_SCHEMA } from './neuralese/replay-records.js';
 export type { ReplayRecordSink, ReplaySession } from './neuralese/replay-records.js';
 export * as gepa from './gepa/index.js';

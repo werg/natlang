@@ -1,17 +1,17 @@
 # Selected semantic execution in Natlang
 
-`installSelectedSemanticEnvironment` installs the asynchronous executor at both
-the task evaluator and callable-folder module loader. The implementation uses
+`selectedSemanticPlatform` builds a `Platform` with the asynchronous executor at both
+the task evaluator and callable-folder module loader; pass it to `createNatlangRuntime({ platform })`. The implementation uses
 the `semantic-trace/5` / `semantic-execution/5` contract supplied by the pinned
 tracer. The JavaScript source is published before an explicit invocation. Model
 selections drive the guest; declared native bindings run only after a committed
 request, and their actual results become observations.
 
 ```ts
-import { installSelectedSemanticEnvironment, EvalFailure } from '@natlang/node';
+import { createNatlangRuntime, selectedSemanticPlatform, EvalFailure } from '@natlang/node';
 import { createNatlangSelectedEnvironment } from 'tracing-js-self/natlang-selected';
 
-installSelectedSemanticEnvironment(mode => createNatlangSelectedEnvironment({
+const platform = selectedSemanticPlatform(mode => createNatlangSelectedEnvironment({
   mode,
   EvalFailure,
   select: selectedGroupAdapter,
@@ -120,14 +120,14 @@ detaches callback scheduling and releases owned resource cleanup hooks. A late
 callback cannot revive the environment. `EvalRequest.signal` and `timeoutMs`
 reach the selected driver and its owned dependency cancellation path.
 
-The installer wraps failures in Natlang's actual shared `EvalFailure` class.
+The platform wraps failures in Natlang's actual shared `EvalFailure` class.
 Its `events` include observed invocation, effect-result and cancellation
 records; `debug.logs` retains console output produced before failure. This
 lets `NativeRuntime` record effects even when the scope transaction fails.
 
-Changing `setModuleRealm` advances the module authority generation. Old handed-out
-namespaces and callable wrappers reject instead of executing in the replacement
-authority. Isolated task module realms close with their task. A module whose
+Module instances belong to the platform value: another platform never serves this
+one's exports or callables. Old handed-out namespaces and callable wrappers of an
+isolated task module realm reject once it closes with its task. A module whose
 initializer failed remains failed in its cache: an automatic retry could repeat
 an uncertain native write. Repair the cause, reconcile external effects from
 the broker journal, then explicitly start a new task/realm or a new source

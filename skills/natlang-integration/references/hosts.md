@@ -29,10 +29,17 @@ port, and `natlang serve` keeps it loaded between commands.
 
 To wire the model yourself, build the runtime directly:
 
-| Target | Package | Context propagation |
-|---|---|---|
-| Node | `@natlang/node` | `AsyncLocalStorage` |
-| Browser | `@natlang/browser` | Compiled code restores the task after each `await`; `runtime.bind` for uncompiled callbacks |
+| Target | Package | Platform | Context propagation |
+|---|---|---|---|
+| Node | `@natlang/node` | `nodePlatform()` | `AsyncLocalStorage` |
+| Browser | `@natlang/browser` | `browserPlatform()` | Compiled code restores the task after each `await`; `runtime.bind` for uncompiled callbacks |
+| workerd | the core bundle (`natlang-core.js`) | `workerdPlatform({ realm })` | `AsyncLocalStorage` (`nodejs_compat`) |
+
+What a runtime runs on is a `Platform` value passed to `createNatlangRuntime({ platform })`: the context store, the evaluator for a task's evals (`environment(options)`) and for callable-folder modules (`moduleRealm()`), the default call store, platform modules (`builtinModules`: `natlang:neuralese` ...), the package loader, the `bash` and `python` folder tools, and the `return_result` wording. Nothing is registered process-wide, so runtimes on different platforms coexist in one process and a platform's module instances never serve another's. `@natlang/node` and `@natlang/browser` pass their own platform when you pass none (`createNatlangRuntime`, `compileVirtualProject`, `loadVirtualNatlang`, `loadVirtualCallables`, `projectEntry` take an optional `platform`); the core's `createNatlangRuntime` requires one and fails with `NatlangPlatformUnavailableError` otherwise. Make a variant with a spread (`{ ...nodePlatform(), builtinModules }`); module state belongs to the platform value. The Node platform reads `NATLANG_CALL_STORE`, `NATLANG_SPECIALIZATION` and `NATLANG_RETURN_ERROR_TEXT`; the kernel (`runtime/`, `native/`, `calls/`, `compiler/`) reads no environment and no home directory (`machineStoreRoot`/`openMachineStore` live in `machine-store.ts`, the CLI passes `--group`/`NATLANG_FEEDBACK_GROUP` itself).
+
+An evaluator is the shared one over a `Realm`: `realm.call(body, parameters, args, { timeoutMs? })` runs a strict-mode function body with the named parameters in the platform's global scope and returns its result. TypeScript compilation (`compileEval`), the scope snapshot, the console and the failure reports are shared. Node's realm is a `node:vm` context, the browser's the page's Function constructor, and a host's anything it can build: `constructorRealm(newFunction)` wraps `(body, name, ...parameterNames) => fn`, which is workerd's `UNSAFE_EVAL.newFunction`. `realmPlatform({ name, contextStore, realm })` makes a platform from a realm. Compiled projects (`compileVirtualProject`) and callable-folder modules run through the platform's module realm too, so a workerd host never needs `new Function`.
+
+Compiled program code (the output of `compileVirtualProject`) reaches the runtime only through `require(specifier)` for the project's `runtimeSpecifiers` (default `@natlang/browser`, `@natlang/node`) and `NEUTRAL_RUNTIME_SPECIFIER`; the loader answers all of them with the `runtime` namespace passed to `compileVirtualProject`. A host that loads the core once per isolate passes that one module namespace, so every compiled program binds to the same instance, the same context store and the same `nl`/`iterateOn`. The core also exports the host-cell compiler (`lowerHostCell`, `declarationsForValues`) and Pi's pure request/reply translation.
 
 ```ts
 import { createNatlangRuntime, fileTraceSink, openAICompatibleModelTurn } from '@natlang/node';

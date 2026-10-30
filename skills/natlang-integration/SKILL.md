@@ -39,13 +39,13 @@ Relative module imports, including erased type imports, must resolve inside the 
 
 ## Operational commitments
 
-For a selected semantic executor, install `installSelectedSemanticEnvironment`
-at both fresh-task and retained-module seams and use `executeAsync` /
-`moduleInstanceAsync`. The selected binding bridge awaits generated inline
-capture accessors and guard callbacks; it never executes guest bodies natively.
+For a selected semantic executor, build a platform with `selectedSemanticPlatform(factory)` and pass it
+to `createNatlangRuntime({ platform })`; it supplies the executor at both the fresh-task and retained-module
+seams. Use `executeAsync` / `moduleInstanceAsync(platform, ...)`. The selected binding bridge awaits generated
+inline capture accessors and guard callbacks; it never executes guest bodies natively.
 Keep declared service return classes, resource identities and the actual
-`EvalFailure` events/logs. Realm cutover invalidates old exports and callables;
-failed module initialization is not automatically retried. Native effects are
+`EvalFailure` events/logs. Module instances belong to the platform value, so another platform never serves
+this one's exports or callables; failed module initialization is not automatically retried. Native effects are
 not rolled back by a failed eval. See the checkout's
 `ts-host/SELECTED_SEMANTIC_INTEGRATION.md` for exact adapter surfaces and recovery.
 For outside events use stable source/epoch and event identities, bounded ingress,

@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {
-  installOwnedTracingEnvironment,createNatlangRuntime,
-  setDefaultEnvironmentFactory,currentFrame
+  ownedTracingPlatform,createNatlangRuntime,currentFrame
 } from '../dist/runtime/node.js';
-import {setModuleRealm,moduleInstance} from '../dist/runtime/modules.js';
+import {moduleInstance} from '../dist/runtime/modules.js';
 import {parseModule,PATH_ONLY} from '../dist/runtime/loader.js';
 import {TypeScriptEnvironment} from '../dist/environment.js';
 
-test('opt-in owned evaluator wiring replaces the per-call Node evaluator without implicit fallback',async()=>{
+test('opt-in owned evaluator platform replaces the per-call Node evaluator without implicit fallback',async()=>{
   const created=[];
   const make=mode=>{
     const env={
@@ -23,52 +22,34 @@ test('opt-in owned evaluator wiring replaces the per-call Node evaluator without
     created.push(mode);
     return env;
   };
-  try{
-    installOwnedTracingEnvironment(mode=>make(mode));
-    const runtime=createNatlangRuntime();
-    const authority=await runtime.run(()=>{
-      const env=currentFrame().task.environment();
-      assert.equal(env.mode,'fresh');
-      assert.equal(env.execute({code:'7',body:false,scope:{},path:'test'}).result,7);
-      return env.authority;
-    });
-    assert.equal(authority,'owned-training-js/1');
-    assert.deepEqual(created,['fresh']);
-    runtime.close();
-    installOwnedTracingEnvironment(mode=>
-      new TypeScriptEnvironment({mode}));
-    const rejected=createNatlangRuntime();
-    await assert.rejects(rejected.run(()=>
-      currentFrame().task.environment()),/native fallback forbidden/);
-    rejected.close();
-  }finally{
-    // Restore the default Node environment for other tests in this process.
-    setDefaultEnvironmentFactory(options=>new TypeScriptEnvironment({
-      workspace:options.workspace,network:options.network
-    }));
-    setModuleRealm(()=>new TypeScriptEnvironment({mode:'retained'}));
-  }
+  const runtime=createNatlangRuntime({platform:ownedTracingPlatform(mode=>make(mode))});
+  const authority=await runtime.run(()=>{
+    const env=currentFrame().task.environment();
+    assert.equal(env.mode,'fresh');
+    assert.equal(env.execute({code:'7',body:false,scope:{},path:'test'}).result,7);
+    return env.authority;
+  });
+  assert.equal(authority,'owned-training-js/1');
+  assert.deepEqual(created,['fresh']);
+  runtime.close();
+  const rejected=createNatlangRuntime({platform:ownedTracingPlatform(mode=>new TypeScriptEnvironment({mode}))});
+  await assert.rejects(rejected.run(()=>
+    currentFrame().task.environment()),/native fallback forbidden/);
+  rejected.close();
 });
 
 test('owned dual-seam factory rejects missing capabilities or invalid mode',async()=>{
-  assert.throws(()=>installOwnedTracingEnvironment(null),/factory required/);
-  const bad=createNatlangRuntime();
+  assert.throws(()=>ownedTracingPlatform(null),/factory required/);
+  const bad=createNatlangRuntime({platform:ownedTracingPlatform(mode=>({
+    authority:'owned-training-js/1',mode:'retained',
+    execute(){},executeAsync(){},evaluateModule(){},close(){},fork(){}
+  }))});
   try{
-    installOwnedTracingEnvironment(mode=>({
-      authority:'owned-training-js/1',mode:'retained',
-      execute(){},executeAsync(){},evaluateModule(){},close(){},fork(){}
-    }));
     await assert.rejects(bad.run(()=>currentFrame().task.environment()),/incompatible evaluator/);
-  }finally{
-    bad.close();
-    setDefaultEnvironmentFactory(options=>new TypeScriptEnvironment({
-      workspace:options.workspace,network:options.network
-    }));
-    setModuleRealm(()=>new TypeScriptEnvironment({mode:'retained'}));
-  }
+  }finally{bad.close();}
 });
 
-test('switching module realm authorities invalidates cached untraced module exports',()=>{
+test('each platform value owns its module realm and module exports',()=>{
   const record=parseModule('/__natlang__/folder/test.ts',
     'export const answer: number = 1;',{},PATH_ONLY);
   let closed=0;
@@ -80,16 +61,14 @@ test('switching module realm authorities invalidates cached untraced module expo
     fork(){throw new Error('not used');},
     close(){closed++;}
   });
-  try{
-    setModuleRealm(()=>authority(2));
-    const first=moduleInstance(record,{test:record});
-    assert.equal(first.answer,2);
-    assert.equal(moduleInstance(record,{test:record}),first);
-    setModuleRealm(()=>authority(3));
-    assert.equal(closed,1,'old retained module realm must be disposed');
-    const second=moduleInstance(record,{test:record});
-    assert.equal(second.answer,3);
-    assert.notEqual(first,second,'stale old-authority exports must not be returned');
-    assert.equal(first.answer,2);
-  }finally{setModuleRealm(()=>new TypeScriptEnvironment({mode:'retained'}));}
+  const two=ownedTracingPlatform(()=>authority(2)),three=ownedTracingPlatform(()=>authority(3));
+  const first=moduleInstance(two,record,{test:record});
+  assert.equal(first.answer,2);
+  assert.equal(moduleInstance(two,record,{test:record}),first);
+  const second=moduleInstance(three,record,{test:record});
+  assert.equal(second.answer,3);
+  assert.notEqual(first,second,'exports of one authority are never served by another');
+  assert.equal(first.answer,2);
+  assert.equal(moduleInstance(two,record,{test:record}),first,'the first platform is unaffected');
+  assert.equal(closed,0);
 });

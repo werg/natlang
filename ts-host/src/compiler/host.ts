@@ -15,10 +15,13 @@ export type LibProvider = (fileName: string) => string | undefined;
 
 const VIRTUAL_LIB_DIR = '/__natlang__/lib';
 const dirname = (path: string) => { const at = path.replace(/[\\/]+$/, '').lastIndexOf('/'); return at <= 0 ? '/' : path.slice(0, at); };
-let defaultLibs: LibProvider | undefined;
 
-/** Browser bundles install embedded library declarations here. */
-export function setDefaultLibProvider(provider: LibProvider): void { defaultLibs = provider; }
+/**
+ * The library declarations a bundle embeds when its platform has no TypeScript install to read them from (the browser and
+ * workerd builds define this at build time; scripts/build-browser.mjs, scripts/build-core.mjs). Under Node it is not defined.
+ */
+declare const __NATLANG_TS_LIBS__: Record<string, string> | undefined;
+const embeddedLibs: LibProvider | undefined = typeof __NATLANG_TS_LIBS__ === 'undefined' ? undefined : name => __NATLANG_TS_LIBS__![name];
 
 /** Parsed library and intrinsic files are shared by every program with the same target. */
 const sharedSourceFiles = new Map<string, { text: string; file: ts.SourceFile }>();
@@ -50,9 +53,9 @@ export function createNatlangCompilerHost(config: NatlangCompilerHostOptions): t
   virtual.set(INTRINSICS_FILE, INTRINSICS_GLOBAL_DTS);
   virtual.set(SURFACE_MODULE_FILE, INTRINSICS_MODULE_DTS);
   const files: CompilerFiles | undefined = config.files ?? (ts.sys as CompilerFiles | undefined);
-  // Library declarations come from an explicit provider, the platform default (browsers), or the TypeScript install.
+  // Library declarations come from an explicit provider, the bundle's embedded ones (browsers, workerd), or the TypeScript install.
   const system = ts.sys as CompilerFiles | undefined;
-  const libs = config.libs ?? defaultLibs ?? (system ? undefined : () => undefined);
+  const libs = config.libs ?? embeddedLibs ?? (system ? undefined : () => undefined);
   const libDir = libs ? VIRTUAL_LIB_DIR : dirname(ts.getDefaultLibFilePath(config.options));
   const read = (fileName: string): string | undefined => {
     const direct = virtual.get(fileName);

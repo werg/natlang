@@ -192,3 +192,35 @@ It binds to loopback; the printed URL carries a session token that every request
   stock model downloads with progress, and a one-click test of each profile.
 - **System**: the llama.cpp runtime (upstream or natlang's fork) and its installation, call-store specialization mode,
   the saved warm prompt openings, paths.
+
+### Embedding the dashboard pages
+
+Each page is a module under `ts-host/dashboard/pages/` that draws into an element it is given and returns the function
+that disposes everything it started (timers, listeners, dialogs, run watchers); `app.js` is only the standalone shell
+(rail, hash router, token from the page) around them. A host mounts the same pages with its own data and navigation:
+
+```js
+import { availablePages, httpDashboardApi, httpRunHost, inProcessRunHost } from './dashboard/pages.js';
+const host = { api, runs, navigate: route => router.go(route), toast: (text, isError) => notify(text, isError) };
+const page = availablePages(host).find(item => item.id === 'runs');
+const dispose = page.mount(element, { ...host, arg: runId });   // dispose() when the host navigates away
+```
+
+- `api` is a `DashboardApi` (`dashboard/types.d.ts`): groups `status`, `models`, `programs`, `traces`, `system` and `jobs`, each
+  a set of named async methods. `httpDashboardApi({ baseUrl, token })` is the implementation for natlang's own dashboard
+  server. A host may supply a subset; `availablePages` offers only pages whose groups (and `runs`) are present, so a host can
+  leave out `models` (provider sign-in and keys stay in the host's own settings) or `traces`.
+- `runs` is a `RunHost`: `start(spec)`, `watch(id, observer)`, `list()`, `subscribe(listener)`, `stop`, `remove`, `input`, and
+  `kinds`, the run kinds it starts (`run`, `call`, `ask`, `test`, `build`, `setup`, `runtime-build`, `tune`, `specialize`);
+  pages offer only buttons for those. `httpRunHost(api)` follows the server's CLI-subprocess jobs by output offsets;
+  `inProcessRunHost(runtime, executors)` runs each spec as `runtime.run(() => executors[kind](spec, io), { onLive, signal })`
+  and delivers the runtime's live events and the executor's output the same way, so the Runs page cannot tell them apart.
+- `navigate(route)` receives `page` or `page-ARG` (a program directory, a run id, `call-ID` for a trace) and must mount
+  that page again, even when it is the current one. `href(route)` (default `#route`) builds the links pages show.
+- `style.css` applies only under a `.nl-dash` root (a mounted page makes its element one when no ancestor is) and sits in
+  the `natlang` cascade layer, so a host's own unlayered rules win and the dashboard's never reach the host. Theme it by
+  overriding the custom properties on `.nl-dash`.
+
+`npm run test:dashboard-embed` (in `ts-host`) mounts every page into a bare element with fixtures and an in-process run host,
+checks that disposing leaves no interval, pending timer, document listener, run watcher or dialog, and that a host without
+a capability is not offered the pages that need it.

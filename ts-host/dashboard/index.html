@@ -7,25 +7,20 @@
 <title>natlang dashboard</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230e6e66'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='17' fill='white' text-anchor='middle'%3Enl%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
+<style>html, body { height: 100%; margin: 0; }</style>
 </head>
 <body>
-<div class="shell">
-  <aside class="rail" aria-label="Sections">
-    <div class="brand"><span class="mark">nl</span><span>natlang</span></div>
-    <nav id="nav">
-      <a href="#overview" data-view="overview">Overview</a>
-      <a href="#programs" data-view="programs">Programs</a>
-      <a href="#runs" data-view="runs">Runs <span class="count" id="running-count" hidden></span></a>
-      <a href="#traces" data-view="traces">Traces</a>
-      <a href="#playground" data-view="playground">Playground</a>
-      <a href="#models" data-view="models">Models</a>
-      <a href="#system" data-view="system">System</a>
-    </nav>
-    <div class="rail-foot" id="rail-model">…</div>
-  </aside>
-  <main id="main" tabindex="-1"></main>
+<div class="nl-dash nl-app">
+  <div class="shell">
+    <aside class="rail" aria-label="Sections">
+      <div class="brand"><span class="mark">nl</span><span>natlang</span></div>
+      <nav id="nav"></nav>
+      <div class="rail-foot" id="rail-model">…</div>
+    </aside>
+    <main id="main" tabindex="-1"></main>
+  </div>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
 </div>
-<div id="toast" role="status" aria-live="polite" hidden></div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

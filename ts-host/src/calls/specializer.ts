@@ -207,7 +207,7 @@ export type CaseCheck = { position: number; hash: string; source: string; admitt
 export async function verifyCases(runtime: NatlangRuntime, store: CallStore, subject: Study, text: string,
   options: { bound?: number; maxJudged?: number; signal?: AbortSignal } = {}): Promise<{ checks: CaseCheck[]; error?: string }> {
   let cases;
-  try { cases = loadCases(`candidate-${subject.key.slice(0, 8)}`, text, subject.definition.codebase, subject.definition.types); }
+  try { cases = loadCases(runtime.platform, `candidate-${subject.key.slice(0, 8)}`, text, subject.definition.codebase, subject.definition.types); }
   catch (error) { return { checks: [], error: error instanceof Error ? error.message : String(error) }; }
   const sources = caseSources(text);
   const checks: CaseCheck[] = cases.map((item, position) => ({ position, hash: item.hash, source: sources[position]!, admitted: 0, heldOutAdmitted: 0,

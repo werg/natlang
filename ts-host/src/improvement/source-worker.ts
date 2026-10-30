@@ -5,7 +5,7 @@ import * as targetRuntime from './target-runtime.js';
 import ts from 'typescript';
 import { Folder,APPLY_TO_FOLDER } from '../native/scoped-fs.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
-import { compileVirtualProject } from '../runtime/virtual-project.js';
+import { compileVirtualProject } from '../runtime/node.js';
 import type { ModelTurn } from '../contracts.js';
 class FixtureError extends Error {}
 const pending = new Map<number, { resolve: (turn: ModelTurn) => void; reject: (error: Error) => void }>();

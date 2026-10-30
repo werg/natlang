@@ -1,17 +1,18 @@
 # Native observation tracing for unsupported JS/TS
 
-Use `installObservedNativeTracingEnvironment(onTrace)` from `@natlang/node`
-to run ordinary Node/TypeScript natlang evaluations and receive an execution
+Use `observedNativeTracingPlatform(onTrace)` from `@natlang/node`
+to build a platform that runs ordinary Node/TypeScript natlang evaluations and receive an execution
 record even when the owned interpreter does not support their language
 constructs.
 
 ```ts
-import {installObservedNativeTracingEnvironment} from '@natlang/node';
+import {createNatlangRuntime, observedNativeTracingPlatform} from '@natlang/node';
 
-installObservedNativeTracingEnvironment(record => {
+const platform = observedNativeTracingPlatform(record => {
   // Persist start, completed and failed records to a separate observation store.
   writeObservation(record);
 });
+const runtime = createNatlangRuntime({platform});
 ```
 
 Each record is `natlang-native-observation/1` and contains the phase
@@ -54,6 +55,6 @@ failed API call; native side effects already performed are not rolled back.
 5. Extend the owned interpreter to absorb supported native-observed cases,
    with independent exact replay and corpus admission checks.
 
-The distinct `installHybridTracingEnvironment` currently refuses native
+The distinct `hybridTracingPlatform` currently refuses native
 execution to satisfy its trace-required policy. Choose observation mode only
 when boundary-level coverage is preferable to refusal.

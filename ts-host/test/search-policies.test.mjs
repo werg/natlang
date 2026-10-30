@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AUTHORED_IMPROVER } from '../dist/improvement/authored-source.js';
-import { compileVirtualProject } from '../dist/runtime/virtual-project.js';
+import { compileVirtualProject } from '../dist/runtime/node.js';
 import * as runtime from '../dist/runtime/node.js';
 import { gepaModule } from '../dist/gepa/index.js';
 import { crispMove, verifyMove, verifyComponents, verifyParent, closeUnderDependencies, parentChoices, moveFacts, componentFactsOf, checkPolicySettings }

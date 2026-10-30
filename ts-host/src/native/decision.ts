@@ -44,10 +44,9 @@ export const decisionPrompt = (replies: string[]) =>
   'Answer this call now, without tools. Reply with exactly one of these JSON values and nothing else: ' +
   replies.join(', ') + '.';
 
-/** The driver's decision scorer, if its transport has one. */
-export function decisionScorer(driver: unknown): DecisionScorer | undefined {
-  const decide = (driver as { decide?: unknown } | null)?.decide;
-  return typeof decide === 'function' ? decide as DecisionScorer : undefined;
+/** The driver's decision scorer (contracts.ts `DecisionRequest`), if it carries the optional capability. */
+export function decisionScorer(driver: { decide?: DecisionScorer } | null | undefined): DecisionScorer | undefined {
+  return typeof driver?.decide === 'function' ? driver.decide : undefined;
 }
 
 /**

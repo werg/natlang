@@ -39,7 +39,7 @@ test('directory campaign starts with executing partial programs and independentl
 
 test('source editor receives rejected helper source and causal diagnostics in its first compact card',async()=>{
  const {AUTHORED_IMPROVER}=await import('../dist/improvement/authored-source.js');
- const {compileVirtualProject}=await import('../dist/runtime/virtual-project.js');
+ const {compileVirtualProject}=await import('../dist/runtime/node.js');
  const runtime=await import('../dist/runtime/node.js');
  const build=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts'],'transformations.ts':AUTHORED_IMPROVER['improveStep/transformations.ts']}},runtime,{constrained:true,target:'node'});
  assert.equal(build.ok,true,JSON.stringify(build.diagnostics));

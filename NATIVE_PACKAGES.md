@@ -20,6 +20,12 @@ For instruction adaptation APIs and their current implementation status, see
 uses the translation functions in `@natlang/node/model` needs no particular copy.
 `@natlang/cli` depends on it, so `natlang` itself installs it.
 
+Hosts that vendor natlang instead of installing it (Vibestudio) get generated ESM bundles from one commit:
+`ts-host/scripts/stage-vibestudio.mjs --out DIR` writes the platform-neutral core for workerd
+(`core/natlang-core.js`, run with `nodejs_compat`), the llama package (`llama/natlang-llama.js`) and the
+evaluation APIs (`eval/natlang-eval.js` with its worker), each with declarations, and `natlang-pin.json`
+(commit, SHA-256 of every file). npm packages stay external; `--check DIR` verifies a vendored copy.
+
 The browser package carries the 35 MB inference bundle, so it is separate from
 Node installs. The checkout builds both from one implementation. `npm pack` in
 each directory under `npm-packages/` stages and packs the build
@@ -79,7 +85,9 @@ in scope:
 ```
 
 `natlang run` reads the words after `--` into `context.arguments` by name,
-checked against their types before anything is built or a model starts. An
+checked against their types before anything is built or a model starts. Words
+fill the arguments in order, or name one: `-- --rubric "billing; spam"` or
+`--count=3`; `natlang inspect` prints a target's signature and usage. An
 argument whose type is text (`string`, string literals, `Is<string, "…">`) is
 written as is; any other type is written as JSON (`3`, `true`,
 `'[{"title": "Refund"}]'`). An empty or absent optional argument takes its

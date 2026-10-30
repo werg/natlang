@@ -57,7 +57,7 @@ import { familyRegistry, familyStore, registerTunedProgram, runFamilies, type Fa
 import { calibrateTeachers, routedTeacherProfile, routeTeacher, saveTeacherChoice } from '../tune/teachers.js';
 import { currentSplit } from '../tune/pipeline.js';
 import { readPrivileged, selfTeacherId, SELF_TEACHER } from '../tune/selfteach.js';
-import { createNatlangRuntime } from '../runtime/runtime.js';
+import { createNatlangRuntime } from '../runtime/node.js';
 import { loadNatlang } from '../runtime/node-files.js';
 import { requireNativeReaderIdentity } from '../model/index.js';
 

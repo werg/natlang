@@ -2,7 +2,7 @@ import { valueSummary, valueView, fieldLabel } from './presentation.js';
 // The run form of a target (natlang.json targets.<name>.arguments; ts-host/src/runtime/target-arguments.ts). Each argument gets
 // an editor generated from its natlang type, expanded through the program's types.ts: text, numbers, switches, choices,
 // records with their field docs, lists, dictionaries, unions, file paths and an explicit value-kind chooser. The type
-// is shown as a hint everywhere; drafts are checked by the same reader `natlang run` uses (POST /api/programs/arguments),
+// is shown as a hint everywhere; drafts are checked by the same reader `natlang run` uses (api.programs.checkArguments),
 // whose problems appear at the field they name; the equivalent command line is kept current.
 
 const PRIMS = new Set(['string', 'number', 'boolean', 'null', 'unknown', 'Blob', 'Folder', 'FileHandle']);
@@ -146,6 +146,7 @@ export function argumentForm(ui, { program, target, form, previous, onSubmit }) 
   const slots = new Map(); // problem path -> where its message is shown
   let local = [];          // Problems a typed control finds before the server checks the complete value.
   let timer = 0, revision = 0, lastProblems = [];
+  ui.scope?.defer(() => clearTimeout(timer));
   const ctx = {
     ui,
     slot(path, slotElement) { slots.set(path, slotElement); },
@@ -187,7 +188,7 @@ export function argumentForm(ui, { program, target, form, previous, onSubmit }) 
     const current = ++revision, args = words(), found = local.slice();
     commandToCopy = command(args); commandLine.textContent = `natlang run ${program} — ${args.length} ${args.length === 1 ? 'input' : 'inputs'}`;
     try {
-      const { problems } = await api('POST', '/api/programs/arguments', { path: program, target, args });
+      const { problems } = await api.programs.checkArguments({ path: program, target, args });
       if (current !== revision) return lastProblems;
       // An argument an editor could not turn into a value is reported by that editor, not as missing.
       const withLocal = new Set(found.map(problem => problem.path.split('/')[0]));
@@ -597,7 +598,8 @@ function dictEditor(ctx, type, value, path) {
 
 /** A file or folder in the dashboard root: a path field with completion and a browser. */
 function pathEditor(ctx, value, path, { placeholder, pathKind }) {
-  const { h, fill, get } = ctx.ui;
+  const { h, fill, api } = ctx.ui;
+  const files = dir => api.programs ? api.programs.files(dir) : Promise.reject(new Error('This host does not offer file browsing.'));
   const list = `paths-${Math.random().toString(36).slice(2)}`;
   const field = h('input', { placeholder: placeholder ?? `${pathKind} path`, spellcheck: 'false', list, value: typeof value === 'string' ? value : '', class: 'mono' });
   const options = h('datalist', { id: list });
@@ -607,12 +609,12 @@ function pathEditor(ctx, value, path, { placeholder, pathKind }) {
     const dir = field.value.includes('/') ? field.value.slice(0, field.value.lastIndexOf('/')) : '.';
     if (listed === dir) return;
     listed = dir;
-    try { const result = await get(`/api/files?dir=${encodeURIComponent(dir)}`);
+    try { const result = await files(dir);
       fill(options, result.entries.map(entry => h('option', { value: `${dir === '.' ? '' : dir + '/'}${entry.name}${entry.kind === 'folder' ? '/' : ''}` }))); } catch { /* completion is optional */ }
   };
   const browse = async dir => {
     try {
-      const result = await get(`/api/files?dir=${encodeURIComponent(dir)}`);
+      const result = await files(dir);
       // A typed path whose folder does not exist opens its nearest existing parent.
       if (result.missing && dir !== '.' && dir !== '') return browse(dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : '.');
       const prefix = result.dir ? `${result.dir}/` : '';

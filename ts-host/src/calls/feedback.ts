@@ -20,11 +20,9 @@ export type FeedbackOptions = { verdict: Verdict; call: string; expected?: strin
 const stable = (value: unknown): string => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ?
   Object.fromEntries(Object.keys(v).sort().map(key => [key, (v as Record<string, unknown>)[key]])) : v);
 
-/** `--group`, else `NATLANG_FEEDBACK_GROUP`, else one group per tester and day: `feedback-<YYYYMMDD>-<hash of host and user>`. */
+/** The explicit group (the CLI's `--group`, else `NATLANG_FEEDBACK_GROUP`), else one group per tester and day: `feedback-<YYYYMMDD>-<hash of host and user>`. */
 export function feedbackGroup(record: CallRecord, explicit?: string, prefix = 'feedback'): string {
   if (explicit) return explicit;
-  const fromEnv = process.env.NATLANG_FEEDBACK_GROUP;
-  if (fromEnv) return fromEnv;
   let user = 'unknown'; try { user = userInfo().username; } catch { /* no passwd entry */ }
   const who = createHash('sha256').update(`${hostname()}\0${user}`).digest('hex').slice(0, 8);
   return `${prefix}-${record.started_at.slice(0, 10).replaceAll('-', '')}-${who}`;

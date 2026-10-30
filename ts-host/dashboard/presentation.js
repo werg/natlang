@@ -172,7 +172,7 @@ export function createOutputView(h, { label = 'Result', empty = 'Nothing to show
       else if (next === 'entries') content.replaceChildren(h('div', { class: 'log-entries' }, result.entries.map((entry, index) => h('div', { class: 'log-entry' },
         entry.prefix ? h('div', { class: 'log-entry-label' }, entry.prefix) : null,
         'value' in entry ? valueView(h, entry.value, { openPaths, path: `entry/${index}` }) : 'pending' in entry ? h('span', { class: 'small muted' }, entry.pending ? 'Receiving details…' : 'Structured details could not be read. Download the output to inspect them.') : h('span', {}, entry.text)))));
-      else content.replaceChildren(document.createTextNode(current));
+      else content.replaceChildren(current);
     }
     kind.textContent = next === 'value' ? Array.isArray(value) ? `${value.length} items` : value && typeof value === 'object' ? 'Structured result' : 'Result' : next === 'pending' ? 'Receiving' : next === 'text' ? 'Text output' : '';
     content.dataset.format = next; content.scrollTop = following ? content.scrollHeight : top;

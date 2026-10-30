@@ -10,8 +10,8 @@
  *
  * Small executors read the `value: bad-action` form as "the value was bad-action" and answer `return bad-action`
  * (LFM2.5-350M held cases 10 and 53, 2026-10-12); the sentence forms carry no token that reads as a value.
- * The runtime option `returnErrorText`, else the environment's NATLANG_RETURN_ERROR_TEXT, selects; the default is the
- * adopted variant.
+ * The runtime option `returnErrorText`, else the platform's (Node reads NATLANG_RETURN_ERROR_TEXT), selects; the default
+ * is the adopted variant.
  *
  * Adopted: sentence (2026-10-13, scripts/error_text_replay.py on captured contexts). LFM2.5-2.6B recovered on the
  * next turn in 63/66 (legacy), 63/66 (field), 62/66 (sentence), 60/66 (steps); LFM2.5-350M base recovered in none, but
@@ -28,10 +28,9 @@ export const DEFAULT_RETURN_ERROR_TEXT: ReturnErrorText = 'sentence';
 export type ReturnValueProblem = { kind: 'misplaced'; fields: string[] } | { kind: 'missing' } | { kind: 'incomplete' };
 
 export function returnErrorText(setting?: string): ReturnErrorText {
-  const chosen = setting ?? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_RETURN_ERROR_TEXT;
-  if (chosen === undefined || chosen === '') return DEFAULT_RETURN_ERROR_TEXT;
-  if ((RETURN_ERROR_TEXTS as readonly string[]).includes(chosen)) return chosen as ReturnErrorText;
-  throw new TypeError(`returnErrorText is one of ${RETURN_ERROR_TEXTS.join(', ')}, not ${JSON.stringify(chosen)}`);
+  if (setting === undefined || setting === '') return DEFAULT_RETURN_ERROR_TEXT;
+  if ((RETURN_ERROR_TEXTS as readonly string[]).includes(setting)) return setting as ReturnErrorText;
+  throw new TypeError(`returnErrorText is one of ${RETURN_ERROR_TEXTS.join(', ')}, not ${JSON.stringify(setting)}`);
 }
 
 /** The diagnostic for `problem` with the result type `type` (formatted) in `variant`'s wording. */

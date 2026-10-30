@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Freezes the directory-level import cycles of ts-host/src: the set of directory edges that sit on a cycle may
-// shrink but not grow. Usage: node scripts/check-layering.mjs [--update]
+// shrink but not grow. Also holds the workerd core's import graph (src/core/index.ts) to its allowance: no Node-only
+// module and no Node built-in beyond CORE_NODE_IMPORTS. Usage: node scripts/check-layering.mjs [--update]
 import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { coreGraphProblems } from './vendor-build.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = resolve(here, '../src');
@@ -75,6 +77,14 @@ const current = [...edges.keys()].filter(key => {
   const [a, b] = key.split(' -> ');
   return comp.get(a) === comp.get(b);
 }).sort();
+
+// The workerd core: what its entry point bundles must be what a workerd isolate can run.
+const core = await coreGraphProblems();
+if (core.problems.length) {
+  console.error(`layering: the workerd core graph (src/core/index.ts, ${core.modules} modules) reaches what workerd cannot run:`);
+  for (const problem of core.problems) console.error(`  ${problem}`);
+  process.exitCode = 1;
+} else console.log(`core graph ok: ${core.modules} modules`);
 
 if (process.argv.includes('--update')) {
   writeFileSync(baselinePath, JSON.stringify({

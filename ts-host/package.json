@@ -10,9 +10,11 @@
     "natlang": "bin/natlang.mjs"
   },
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && npm run build:node && node scripts/build-browser.mjs",
+    "build": "node scripts/clean-dist.mjs && npm run build:node && npm run build:core && node scripts/build-browser.mjs",
     "build:node": "node scripts/generate-builtin.mjs && node scripts/bundle-improver.mjs && tsc -p tsconfig.json && tsc -p tsconfig.workers.json && node ../scripts/stage-npm-package.mjs node",
     "build:browser": "node scripts/build-browser.mjs",
+    "build:core": "node scripts/build-core.mjs",
+    "stage:vibestudio": "node scripts/stage-vibestudio.mjs",
     "check:browser-types": "tsc -p tsconfig.browser-smoke.json",
     "check:browser-build": "node scripts/browser-build-freshness.mjs",
     "check:layering": "node scripts/check-layering.mjs",
@@ -24,6 +26,7 @@
     "test:dashboard": "npm run build:node && node scripts/dashboard-smoke.mjs",
     "test:dashboard-streaming": "node scripts/dashboard-streaming-smoke.mjs",
     "test:dashboard-presentation": "node scripts/dashboard-presentation-smoke.mjs",
+    "test:dashboard-embed": "node scripts/dashboard-embed-smoke.mjs",
     "serve:browser": "node scripts/browser-build-freshness.mjs --rebuild && node scripts/serve-browser-local.mjs",
     "playground": "npm run build && node scripts/serve-browser-local.mjs --playground --open-gpu",
     "test": "npm run build && npm run build:applications && npm run check:browser-types && npm run check:layering && node --test test/*.test.mjs && npm run test:conformance",
@@ -46,7 +49,8 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "playwright-core": "^1.55.0"
+    "playwright-core": "^1.55.0",
+    "workerd": "1.20261002.1"
   },
   "exports": {
     ".": {

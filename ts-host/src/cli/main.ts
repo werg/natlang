@@ -19,7 +19,7 @@ import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js
 import { discoverLocalApplications, isApplicationManifest } from '../package/discover.js';
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
-import { argumentUsage, readTargetArguments } from '../runtime/target-arguments.js';
+import { argumentSignature, argumentUsage, readTargetArguments } from '../runtime/target-arguments.js';
 import { LLAMA_FORK_SOURCE } from '../llama-fork-source.js';
 import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
   installManagedLlamaRuntime, buildForkLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites, localSlotPlan, ensureStockModel,
@@ -911,6 +911,9 @@ function inspectTarget(manifest: ReturnType<NatlangPackageStore['manifest']>, ta
   let engineError: string | null = null;
   try { checkEngines(manifest.engines); } catch (error) { engineError = error instanceof Error ? error.message : String(error); }
   return { package: label, target: targetName, entry: target.entry, export: target.export ?? 'main',
+    // The declared arguments as a signature, and the command line that passes them.
+    arguments: target.arguments ? argumentSignature(target.arguments) : '(undeclared: words reach context.args as text)',
+    usage: `natlang run ${label.endsWith('natlang.json') ? relative(process.cwd(), dirname(label)) || '.' : label} --target ${targetName}${target.arguments?.length ? ` -- ${argumentUsage(target.arguments)}` : ' [-- ARGS]'}`,
     authority: target.authority ?? [],
     commands: Object.fromEntries((target.commands ?? []).map(command => [command, commandAvailable(command)])),
     engines: manifest.engines ?? {}, engineError };
@@ -1041,16 +1044,21 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       runtime: { trace: fileTraceSink(join(root, '.natlang', 'test-traces')), ...(progress.live ? { onLive: progress.live } : {}) } });
     let failed = 0;
     try {
-      for (const [index, example] of examples.entries()) {
-        const name = example.name ?? `${example.function} #${index + 1}`;
+      // Examples run together: the runtime's scheduler fills the model's slots, and results print in file order.
+      const started = Date.now();
+      const results = await Promise.all(examples.map(async (example, index) => {
+        const name = example.name ?? `${example.function} #${index + 1}`, began = Date.now();
         try {
           const fn = loadNatlang(resolve(root, example.function), root) as unknown as ((...args: unknown[]) => Promise<unknown>) & Record<symbol, { definition: { params: { name: string }[] } }>;
           const params = fn[Symbol.for('natlang.callable')]!.definition.params;
           const result = await natlang.runtime.run(() => fn(...params.map(param => example.inputs[param.name])));
-          if (!isDeepStrictEqual(result, example.expected)) { failed++; output(`FAIL ${name}\n  expected: ${JSON.stringify(example.expected)}\n  received: ${JSON.stringify(result)}`, false); }
-          else output(`PASS ${name}`, false);
-        } catch (error) { failed++; output(`FAIL ${name}: ${(error as Error).message}`, false); }
-      }
+          const seconds = `${((Date.now() - began) / 1000).toFixed(1)} s`;
+          return isDeepStrictEqual(result, example.expected) ? { ok: true, text: `PASS ${name} (${seconds})` } :
+            { ok: false, text: `FAIL ${name} (${seconds})\n  expected: ${JSON.stringify(example.expected)}\n  received: ${JSON.stringify(result)}` };
+        } catch (error) { return { ok: false, text: `FAIL ${name}: ${(error as Error).message}` }; }
+      }));
+      for (const result of results) { if (!result.ok) failed++; output(result.text, false); }
+      output(`${examples.length} examples in ${((Date.now() - started) / 1000).toFixed(1)} s`, false);
     } finally { progress.close(); await natlang.close(); }
     output(`${examples.length - failed}/${examples.length} passed. Traces: ${join(root, '.natlang', 'test-traces')}`, false);
     return failed ? 1 : 0;

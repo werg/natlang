@@ -38,6 +38,7 @@ import { undeclaredServiceType } from './introspection.js';
 import { NATIVE_TOOL_SCHEMA } from './tool-surface.js';
 import { returnErrorText, returnValueRejection, type ReturnErrorText } from './return-errors.js';
 import { TOOL_MARKUP } from './tool-markup.js';
+import type { Platform } from '../runtime/platform.js';
 
 /** Services the invocation kernel provides to an interpreter run. */
 export type NativeRuntimeHooks = {
@@ -94,7 +95,7 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
    */
   serviceScopes?: Record<string, string[]>;
   sharedEpisodeBudget?: { limit?: number; used: number };
-  /** Wording of return_result's value rejections (native/return-errors.ts); default NATLANG_RETURN_ERROR_TEXT, then the adopted one. */
+  /** Wording of return_result's value rejections (native/return-errors.ts); default the platform's (Node: NATLANG_RETURN_ERROR_TEXT), then the adopted one. */
   returnErrorText?: ReturnErrorText;
   seedPolicy?: { mode: 'derived' | 'backend'; root?: number } };
 
@@ -1432,7 +1433,7 @@ export class NativeSession {
       if (name === 'bash') {
         const folder = this.lam.projectTransaction?.folder;
         if (!folder) throw new Reject([{ path: name, code: 'bad-action', expected: 'a folder call' }]);
-        const { runFolderBash } = await import('./folder-shell.js');
+        const runFolderBash = this.folderTool('runFolderBash', name);
         const { invokeDefinition } = await import('../runtime/kernel.js');
         const value = await runFolderBash(folder, String(args.command ?? ''),
           { network: this.runtime.environment.scopeCapabilities?.allowNetwork !== false,
@@ -1475,7 +1476,7 @@ export class NativeSession {
         const timeout = args.timeout_ms === undefined ? undefined : Number(args.timeout_ms);
         if (timeout !== undefined && (!Number.isSafeInteger(timeout) || timeout < 1))
           throw new Reject([{ path: 'timeout_ms', code: 'bad-action', expected: 'a positive timeout in milliseconds' }]);
-        const { runFolderPython } = await import('./folder-python.js');
+        const runFolderPython = this.folderTool('runFolderPython', name);
         const value = await runFolderPython(folder, String(args.code ?? ''), await this.pythonHost(), timeout);
         return this.record(name, args, { kind: 'ok', text: this.show(JSON.stringify(value)), value: value as unknown as Value });
       }
@@ -1514,6 +1515,12 @@ export class NativeSession {
     return name.split('.').reduce<unknown>((part, key) =>
       part && (typeof part === 'object' || typeof part === 'function') ?
         (part as Record<string, unknown>)[key] : undefined, this.callables());
+  }
+  /** A folder tool the platform provides (Node and browsers do; the workerd core does not), or why the call cannot have it. */
+  private folderTool<K extends 'runFolderBash' | 'runFolderPython'>(tool: K, name: string): NonNullable<Platform[K]> {
+    const run = this.runtime.frame?.task.runtime.platform[tool];
+    if (!run) throw new Reject([{ path: name, code: 'bad-action', expected: `a tool this platform provides (${name} is not available on it)` }]);
+    return run as NonNullable<Platform[K]>;
   }
   private async pythonHost(): Promise<PythonHost> {
     const { invokeDefinition } = await import('../runtime/kernel.js');

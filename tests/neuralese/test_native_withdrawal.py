@@ -253,7 +253,10 @@ def test_real_diloco_full_checkpoint_withdrawal_and_append_keeps_coordinator_ide
         assert result['optimizer'] and result['rng'] and result['options']['diloco_identity_transition_history']
         progress=json.loads((root/'progress.json').read_text());assert len(progress['identity_transitions']['0'])==1
         assert progress['completion_history']['0'][0]['completion']['drained']
+        before=(out/'checkpoint.pt').stat();before_sha=sha(out/'checkpoint.pt')
         assert trainer.main(resumed)==0  # Same checkpoint/source replay keeps the recorded identity transition.
+        after=(out/'checkpoint.pt').stat()
+        assert (after.st_ino,after.st_mtime_ns)==(before.st_ino,before.st_mtime_ns) and sha(out/'checkpoint.pt')==before_sha  # a no-op resume does not rewrite the checkpoint
         retired=list(resumed)
         for flag in ('--withdrawn-native-graphs','--continued-native-graphs'):
             n=retired.index(flag);del retired[n:n+2]

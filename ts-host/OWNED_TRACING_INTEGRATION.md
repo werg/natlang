@@ -5,11 +5,12 @@ selected-model integration, its supported native resources, module lifecycle,
 event ingress and recovery contract are documented in
 [SELECTED_SEMANTIC_INTEGRATION.md](SELECTED_SEMANTIC_INTEGRATION.md).
 
-Natlang's Node entry point now exports `installOwnedTracingEnvironment(factory)`.
-The installer replaces **both** evaluator seams:
+Natlang's Node entry point exports `ownedTracingPlatform(factory)`.
+It returns a `Platform` (the Node platform by default, or the `base` you pass)
+whose evaluators replace **both** seams:
 
 - The fresh per-task factory used by `NatlangTask.environment()`.
-- The retained callable-folder module realm installed through `setModuleRealm`.
+- The retained callable-folder module realm (`Platform.moduleRealm`).
 
 There is **no implicit fallback** to natlang's `TypeScriptEnvironment` when an
 owned factory refuses guest syntax, imports, host callbacks or resources.
@@ -20,15 +21,14 @@ mode. A native `shared-node-host` evaluator is explicitly rejected.
 ## Wiring both evaluation seams
 
 An embedding application that has installed or linked the separately built
-`tracing-js-self` package can opt in before creating natlang tasks or loading
-callable-folder modules:
+`tracing-js-self` package can opt in by creating its runtimes on that platform:
 
 ```ts
-import {installOwnedTracingEnvironment} from '@natlang/node';
+import {createNatlangRuntime, ownedTracingPlatform} from '@natlang/node';
 import {EvalFailure} from '@natlang/node';
 import {createBoundedNatlangEnvironment} from 'tracing-js-self/natlang';
 
-installOwnedTracingEnvironment(mode =>
+const platform = ownedTracingPlatform(mode =>
   createBoundedNatlangEnvironment({
     EvalFailure,
     mode,
@@ -40,9 +40,9 @@ installOwnedTracingEnvironment(mode =>
 );
 ```
 
-`installOwnedTracingEnvironment` is **process-wide** for new tasks and new
-module-realm instances. It is not a per-task toggle, and already-instantiated
-modules are not migrated. The application supplies the implementation, making
+The owned platform applies to the runtimes created with it (`createNatlangRuntime({platform})`);
+nothing is registered process-wide, and module instances belong to the platform value, so
+exports created by another authority are never served. The application supplies the implementation, making
 the tracer/host connection explicit rather than depending on a hidden JS
 runtime fallback. Pass the actual natlang `EvalFailure` constructor to retain
 `instanceof` compatibility.

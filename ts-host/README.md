@@ -17,10 +17,15 @@ npm ci
 npm run build              # Node build, then the browser bundle
 npm test                   # build, applications, type checks, tests, conformance
 npm run test:browser       # real Chromium smoke (needs a Playwright browser)
+npm run test:dashboard-embed   # the dashboard pages mounted into a bare host page (Chromium)
 ```
 
 Node 22.13 or newer is required. `docs/TS_NATIVE_IMPLEMENTATION_STATUS.md` maps
 the source modules.
+
+The dashboard (`dashboard/`) is framework-free ES modules: one `pages/<name>.js` per page, each
+`mount(el, host) => dispose`, plus `app.js`, the standalone shell `natlang dashboard` serves. A host page can mount the
+same pages with its own `DashboardApi` and `RunHost`; see [RUNNING_PROGRAMS.md](../docs/RUNNING_PROGRAMS.md#embedding-the-dashboard-pages).
 
 ## Use
 
@@ -40,6 +45,8 @@ await runtime.run(() => review(observations, criterion));
 - `runtime.run(fn, options)` creates a task; `runtime.bind(fn)` carries it into callbacks from uncompiled code.
 - A failed call rejects with `NatlangCallError`; traces are delivered to the `trace` sink.
 - `defineNatlang(source)` creates a natural-language function from `.nl` text at run time.
+- A runtime runs on a `Platform` (`createNatlangRuntime({ platform })`): `@natlang/node` and `@natlang/browser` pass `nodePlatform()` / `browserPlatform()` when you pass none, and nothing is registered process-wide, so runtimes on different platforms coexist in one process. The kernel reads no environment; the Node platform reads `NATLANG_CALL_STORE`, `NATLANG_SPECIALIZATION` and `NATLANG_RETURN_ERROR_TEXT`.
+- A host that runs natlang elsewhere supplies a `Realm` (run a function body with named parameters in its global scope) and uses the platform-neutral core: `npm run build:core` writes `dist/core/natlang-core.js` for workerd with `nodejs_compat` (`workerdPlatform({ realm })`; npm packages stay external), and `npm run stage:vibestudio -- --out DIR` stages the core, the llama package and the evaluation APIs with a `natlang-pin.json` for vendoring (`--check DIR` verifies a vendored copy against a fresh build of its commit).
 
 Pass the memetic export's `natlang.memetic-program-guidance/1` object as `nativeProgramGuidance` in runtime or task
 options together with the matching program descriptor. Its `program_id` must equal the descriptor's ID; only that

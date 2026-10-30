@@ -11,7 +11,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { cpus, freemem, totalmem } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CallStore, machineStoreRoot } from '../calls/store.js';
+import type { CallStore } from '../calls/store.js';
+import { machineStoreRoot, openMachineStore } from '../machine-store.js';
 import { expandedRecord } from '../cli/calls.js';
 import { programFunctions, readProgramManifest } from '../cli/build-lock.js';
 import { createProgram, readExamples, saveExample, type SavedExample } from '../cli/authoring.js';
@@ -58,7 +59,7 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
   const store = (): CallStore => {
     const path = machineStoreRoot(environment);
     if (!path) throw new HttpError(409, 'the call store is off on this machine (NATLANG_CALL_STORE=off)');
-    return CallStore.open(path);
+    return openMachineStore(path, environment);
   };
   const withStore = <T>(fn: (store: CallStore) => T): T => { const opened = store(); try { return fn(opened); } finally { opened.close(); } };
   const inside = (path: string) => {

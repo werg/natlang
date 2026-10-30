@@ -8,9 +8,10 @@ import type { ProgramDescriptor, AdaptationBinding, ExecutorIdentity } from '../
 import type { MemeticGuidanceBinding, NativeProgramGuidance } from '../adaptation/prompts.js';
 import { declarationNamespace } from '../native/external.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
-import type { ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
+import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { TOOLS_PROMPT } from '../native/prompt.js';
-import { NatlangContextError, SlotContextStore, contextStore, currentFrame, runInFrame, type DecisionReadout, type Frame } from './context.js';
+import { NatlangContextError, SlotContextStore, currentFrame, runInFrame, useContextStore, type DecisionReadout, type Frame } from './context.js';
+import type { Platform } from './platform.js';
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
 import type { CallStoreLike } from '../calls/recorder.js';
 import { CompilationCache } from '../calls/compilations.js';
@@ -23,6 +24,11 @@ export type SpecializationMode = 'off' | 'shadow' | 'on';
 const MODE_RANK: Record<SpecializationMode, number> = { off: 0, shadow: 1, on: 2 };
 
 export type ModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn) & {
+  /**
+   * Optional decision readout (`DecisionScorer`, contracts.ts): score a finite set of replies instead of generating one.
+   * Any driver may carry it; without it, or when it fails with `decision-unsupported`, the call runs the tool loop.
+   */
+  decide?: DecisionScorer;
   /** The backend's complete native store, reader identity and available writer; wrappers retain this binding. */
   neuraleseRuntime?: () => Promise<import('../native/neuralese.js').NeuraleseRuntimeOptions | undefined>;
 };
@@ -47,7 +53,9 @@ export type ModelConfig = { driver: ModelDriver;
 /** One natlang invocation's trace, delivered to the runtime's trace sink when the invocation ends. */
 export type InvocationTrace = { callId: string; parentCallId: string | null; taskId: string;
   adaptation?: Record<string, unknown>; definitionId: string; name: string; outcome: string; detail: string; events: Record<string, unknown>[] };
-export type TraceSink = (trace: InvocationTrace) => void;
+/** Receives each invocation's complete trace when it ends. A sink with `stream` also sees the trace as it grows (`events`
+ * is the whole list so far), so a process that is stopped mid-call still leaves the calls it had in flight. */
+export type TraceSink = ((trace: InvocationTrace) => void) & { stream?(callId: string, events: readonly Record<string, unknown>[]): void };
 /**
  * A live event of a running task (plans/STREAMING.md §1.6), delivered while it happens so a host can show a natlang
  * function at work. `model_delta`: a piece of one of the call's model turns as it streams (`ModelTurnDelta`), tagged
@@ -117,7 +125,12 @@ export type NatlangRuntimeOptions = {
   exactHostTraceCapture?: { definitionSources: string[]; inputArguments: string[]; captureOutput?: boolean; captureAllOutputs?: boolean; maxBytes: number };
   limits?: NatlangLimits;
   seed?: { mode: 'derived' | 'backend'; root?: number };
-  /** Evaluator factory; each platform installs a default. */
+  /**
+   * What this runtime runs on (runtime/platform.ts): context propagation, the evaluator, the call store, platform modules.
+   * Required by the kernel; `@natlang/node` and `@natlang/browser` supply their own when it is omitted.
+   */
+  platform?: Platform;
+  /** Evaluator factory; the platform's evaluator by default. */
   environment?: () => EvalEnvironment;
   /** Directory whose node_modules eval imports resolve from (Node; default: the nearest package.json above cwd). */
   workspace?: string;
@@ -136,7 +149,7 @@ export type NatlangRuntimeOptions = {
   fusion?: import('./fusion.js').FusionOptions;
   /**
    * The call record store (plans/TRACE_SPECIALIZATION.md): every call is recorded there and served from its
-   * compilations. Default: the machine's store on Node (`$NATLANG_CALL_STORE`); `false` records nothing.
+   * compilations. Default: the platform's (Node: the machine's store, `$NATLANG_CALL_STORE`); `false` records nothing.
    */
   calls?: CallStoreLike | false;
   /** The program's directory on this machine, recorded with each call so offline work can reload its definitions. */
@@ -168,18 +181,15 @@ export type TaskOptions = { program?: ProgramDescriptor; adaptation?: Adaptation
   /** Set on an audit run: the call whose inputs it re-runs through the agent. */
   auditOf?: string };
 
-let defaultEnvironment: ((options: NatlangRuntimeOptions) => EvalEnvironment) | undefined;
-let defaultCallStore: (() => CallStoreLike | undefined) | undefined;
-
 /** Host setup failed before a program could execute; this is not a model task outcome. */
 export class NatlangPlatformUnavailableError extends Error {
   readonly code = 'natlang-platform-unavailable';
-  constructor() { super('no natlang evaluator is installed for this platform'); this.name = 'NatlangPlatformUnavailableError'; }
+  constructor() {
+    super('this natlang runtime has no platform: pass `platform` to createNatlangRuntime (nodePlatform() from @natlang/node, ' +
+      'browserPlatform() from @natlang/browser, workerdPlatform({ realm }) from the core)');
+    this.name = 'NatlangPlatformUnavailableError';
+  }
 }
-/** Installed by the Node entry point: the machine's call record store. */
-export function setDefaultCallStoreFactory(factory: () => CallStoreLike | undefined): void { defaultCallStore = factory; }
-/** Installed by the Node and browser entry points. */
-export function setDefaultEnvironmentFactory(factory: (options: NatlangRuntimeOptions) => EvalEnvironment): void { defaultEnvironment = factory; }
 
 // Model drivers read the current invocation's tuned stack from its frame (Node and browser alike). A finished task's
 // frame left in the browser's slot never lends its stack to later model calls.
@@ -369,10 +379,15 @@ export class NatlangTask {
     this.traceSink?.(trace);
     this.runtime.options.trace?.(trace);
   }
+  /** Hands a running invocation's events to the trace sinks that stream (TraceSink.stream). */
+  streamTrace(callId: string, events: readonly Record<string, unknown>[]): void {
+    for (const sink of [this.traceSink, this.runtime.options.trace]) try { sink?.stream?.(callId, events); } catch { /* sinks never affect the task */ }
+  }
+  /** Whether any trace sink streams, so the kernel observes traces only when someone writes them as they grow. */
+  get streamsTraces(): boolean { return !!(this.traceSink?.stream || this.runtime.options.trace?.stream); }
   environment(): EvalEnvironment {
     if (this.runtime.options.environment) return this.runtime.options.environment();
-    if (!defaultEnvironment) throw new NatlangPlatformUnavailableError();
-    return defaultEnvironment(this.runtime.options);
+    return this.runtime.platform.environment(this.runtime.options);
   }
   /** Refinement events with no call to carry them (`refine`/`assume` in host code outside any natlang call). */
   readonly refinementEvents: { kind: string; data: Record<string, unknown> }[] = [];
@@ -442,7 +457,7 @@ export class NatlangRuntime {
       if (this.options.calls === false) this.store = null;
       else if (this.options.calls) this.store = this.options.calls;
       else {
-        try { this.store = defaultCallStore?.() ?? null; }
+        try { this.store = this.platform.callStore?.() ?? null; }
         catch (error) {
           console.warn(`natlang: the call record store could not be opened; calls are not recorded: ${error instanceof Error ? error.message : String(error)}`);
           this.store = null;
@@ -460,9 +475,14 @@ export class NatlangRuntime {
   /** Loaded compilations of this runtime's store. */
   compilations(): CompilationCache | undefined {
     const store = this.callStore();
-    return store ? this.compiled ??= new CompilationCache(store) : undefined;
+    return store ? this.compiled ??= new CompilationCache(store, this.platform) : undefined;
   }
+  /** What this runtime runs on. */
+  readonly platform: Platform;
   constructor(readonly options: NatlangRuntimeOptions = {}) {
+    if (!options.platform) throw new NatlangPlatformUnavailableError();
+    this.platform = options.platform;
+    useContextStore(this.platform.contextStore);
     const capture = options.exactHostTraceCapture;
     if (capture && (!Number.isSafeInteger(capture.maxBytes) || capture.maxBytes < 1 || capture.maxBytes > 8_000_000 ||
         !Array.isArray(capture.definitionSources) || (!capture.definitionSources.length && capture.captureAllOutputs !== true) ||
@@ -485,7 +505,7 @@ export class NatlangRuntime {
     if (this.closed) throw new Error('natlang runtime is closed');
     const task = new NatlangTask(this, options);
     activeTasks.add(task);
-    const caller = currentFrame(), store = contextStore();
+    const caller = currentFrame(), store = this.platform.contextStore;
     try { return await runInFrame(task.frame, fn); }
     finally {
       await task.drain(); task.close();
@@ -515,7 +535,7 @@ export class NatlangRuntime {
   close(): void { this.closed = true; }
 }
 
-export function createNatlangRuntime(options: NatlangRuntimeOptions = {}): NatlangRuntime {
+export function createNatlangRuntime(options: NatlangRuntimeOptions & { platform: Platform }): NatlangRuntime {
   return new NatlangRuntime(options);
 }
 

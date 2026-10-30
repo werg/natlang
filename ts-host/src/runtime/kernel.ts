@@ -681,7 +681,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     seedId: task.definitionSeedId(descriptor?.key ?? (owner ?? '') + ':' + definition.id),
     sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: frame.signal ?? task.signal,
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
-    neuralese: task.runtime.options.neuralese,
+    neuralese: task.runtime.options.neuralese, returnErrorText: task.runtime.platform.returnErrorText,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
       sibling_ordinal:siblingOrdinal,
       ...(parentOccurrence&&typeof parentOccurrence==='object'?{parent_occurrence:structuredClone(parentOccurrence)}:{}),
@@ -701,10 +701,13 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   let hostValue: unknown, hasValue = false;
   registerTrace(callId, runtime.trace, runtime.episodeBudget);
   const liveCall = task.live && { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null, definitionId: definition.id, name: definition.name };
-  if (liveCall) {
-    task.live!({ type: 'call_start', ...liveCall });
-    runtime.trace.observer = event => { if (event.kind !== 'state' && event.kind !== 'reduction') task.live!({ type: 'trace', ...liveCall, event }); };
-  }
+  if (liveCall) task.live!({ type: 'call_start', ...liveCall });
+  const streams = task.streamsTraces, trace = runtime.trace;
+  if (streams) task.streamTrace(callId, trace.events as Record<string, unknown>[]);
+  if (liveCall || streams) trace.observer = event => {
+    if (streams) task.streamTrace(callId, trace.events as Record<string, unknown>[]);
+    if (liveCall && event.kind !== 'state' && event.kind !== 'reduction') task.live!({ type: 'trace', ...liveCall, event });
+  };
   capture?.watch(() => runtime!.trace.events as Record<string, unknown>[]);
   try {
     const normalizedInputs = await runtime.materializeSoftStringArguments(definition, inputs, frame.parentCallId);

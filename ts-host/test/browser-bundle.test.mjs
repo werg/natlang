@@ -7,7 +7,7 @@ import { browserNodeImports } from '../scripts/browser-node-imports.mjs';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const NEURALESE_NAMES = ['neuraleseServerInfo', 'checkNeuraleseReader', 'serverViewer', 'VIEW_TYPE', 'createNeuraleseLibrary',
   'loadStandardLibrary', 'buildStandardLibrary', 'COMBINATORS', 'restoreNativeArtifacts', 'withRestoredNativeArtifacts', 'supportsNeuralese',
-  'textToParts', 'registerBuiltinModule', 'ModuleUnavailableError', 'neuraleseServerModelTurn'];
+  'textToParts', 'browserPlatform', 'ModuleUnavailableError', 'neuraleseServerModelTurn'];
 const bundle = (entry, options = {}) => build({ entryPoints: [entry], bundle: true, platform: 'browser', format: 'esm',
   target: 'es2022', splitting: true, outdir: '/browser-bundle-test', write: false, absWorkingDir: root, external: ['undici'],
   logLevel: 'silent', plugins: [browserNodeImports(options)] });

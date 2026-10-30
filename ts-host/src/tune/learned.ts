@@ -25,7 +25,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readRelease, releaseFile } from '../adaptation/weights/release.js';
 import { WeightBinding } from '../adaptation/weights/binding.js';
-import { createNatlangRuntime } from '../runtime/runtime.js';
+import { createNatlangRuntime } from '../runtime/node.js';
 import { loadNatlang } from '../runtime/node-files.js';
 import { tuneRuntime } from './execution.js';
 import { armSummary } from './evaluate.js';
