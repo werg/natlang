@@ -181,8 +181,7 @@ class SglangEngine(Engine):
         """Why SGLang cannot serve this request (None: it can)."""
         # native_recording (the collector's graph recorder) only asks for the capture, which this path records.
         names = [name for name, value in (('template', request.template), ('guidance', request.guidance),
-                 ('forced_message', request.forced_message), ('adapters', request.adapters),
-                 ('native_state_modes', request.native_state_modes)) if value]
+                 ('forced_message', request.forced_message), ('adapters', request.adapters)) if value]
         names += sorted({f'prompt segment {kind}' for kind, _ in plan
                          if kind not in ('tokens', 'privileged', 'native_state', 'native_state_constant')})
         return ', '.join(names) or None
@@ -355,6 +354,9 @@ class SglangEngine(Engine):
         seq.native_sampling_seed = (int(request.seed) if request.seed is not None else
                                     derive_seed('native-chat', request.request_id))
         plan = list(seq.prompt_plan or ())
+        self._validate_native_state_modes(request.native_state_modes, {
+            value['id'] if isinstance(value, dict) else value for kind, value in plan
+            if kind in ('native_state', 'native_state_constant')})
         if request.privileged_context is not None:
             insert_at, pieces, seq.native_guidance_receipt = self._guidance(request, plan)
             plan = _insert_privileged(plan, insert_at, pieces)
@@ -566,7 +568,20 @@ class SglangEngine(Engine):
         seq.native_own_position += 1
         if capture:
             seq.native_rl_prompt.append({'kind': 'tokens', 'token_ids': [opening], 'producing': [False]})
-        if self._sglang_exact(block):
+        receipt = None
+        if (request_mode := (seq.request.native_state_modes or {}).get(block_id)) is not None:
+            # Same-base adapter state: the raw state of another adapter binding of this base, spliced as stored and
+            # bound by its receipt, as `_native_consume_impl` does.
+            from ..model.native_adapters import adapter_state_input_receipt, SAME_BASE_STATE_MODE, NativeAdapterError
+            if request_mode != SAME_BASE_STATE_MODE:
+                raise RequestError('neuralese-native-state-mode',
+                                   'use same-base-adapter-state only for exact-base raw native state exchange')
+            try:
+                receipt = adapter_state_input_receipt(self, block, block_id, target_position_start=len(ids),
+                                                      layout=self._sglang_layout)
+            except (ValueError, NativeAdapterError) as error:
+                raise RequestError('neuralese-native-state-mode', str(error)) from error
+        if receipt is not None or self._sglang_exact(block):
             count = len(block.token_ids)
             seq.sglang_imports.append({'path': self._sglang_import_file(block_id, block), 'start': len(ids), 'count': count})
             base = 2 * int(self.sglang_export['producer_embedding']['input_id_offset'])
@@ -574,11 +589,13 @@ class SglangEngine(Engine):
             for index in range(count):
                 digest = hashlib.sha256(f'{block_id}:{index}'.encode()).digest()
                 ids.append(base + int.from_bytes(digest[:4], 'little') % (2 ** 31 - 1 - base))
-            mode = 'exact-native-state'
+            mode = 'exact-native-state' if receipt is None else 'same-base-adapter-state'
+            consumption = {'adapter_state_consumption': receipt} if receipt is not None else {}
             if capture:
                 seq.native_rl_prompt.append({'kind': 'native_state', 'id': block_id,
-                                             'native_identity': self._native_block_identity(block), **derivation, **use})
-            observed = {'observed_native_state_id': block_id}
+                                             'native_identity': self._native_block_identity(block),
+                                             **consumption, **derivation, **use})
+            observed = {'observed_native_state_id': block_id, **consumption}
         else:
             fallback = self._tokens(block.text)
             if not fallback and len(block.token_ids):
@@ -594,6 +611,16 @@ class SglangEngine(Engine):
         if capture:
             seq.native_rl_prompt.append({'kind': 'tokens', 'token_ids': [closing], 'producing': [False]})
         seq.native_imports.append({'id': block_id, 'mode': mode, **derivation, **observed, **use})
+
+    def _sglang_layout(self, block):
+        """`validate_native_state_layout` against the export (the fork checks tensor shapes when it loads them)."""
+        block.validate()
+        if block.architecture != self.sglang_export['architecture']:
+            raise ValueError('native state architecture differs from the consumer')
+        if tuple(layer['kind'] for layer in block.layers) != tuple(self.sglang_export['layer_kinds']):
+            raise ValueError('native state layer kinds disagree with the consumer')
+        if bool((block.token_ids >= int(self.sglang_export['producer_embedding']['input_id_offset'])).any()):
+            raise ValueError('native state token IDs are outside the target vocabulary')
 
     def _sglang_exact(self, block):
         """`_native_exact` without the native model: the layer kinds come from the export."""

@@ -26,10 +26,10 @@ def test_decode_record_prefix_of_larger_k():
 def test_routing_sends_neuralese_turns_to_native():
     plain = GenerationRequest(messages=[], temperature=1.0, rl_capture=True, rl_top_k=128, adapters=[])
     assert SglangEngine.sglang_unsupported(plain, [('tokens', [1, 2]), ('privileged', [3])]) is None
-    # Imported native state is served on SGLang; a declared cross-adapter state mode is not.
+    # Imported native state, also with a declared same-base adapter-state mode, is served on SGLang.
     assert SglangEngine.sglang_unsupported(plain, [('tokens', [1]), ('native_state', 'b0')]) is None
     moded = GenerationRequest(messages=[], native_state_modes={'b0': 'same-base-adapter-state'})
-    assert SglangEngine.sglang_unsupported(moded, [('native_state', 'b0')]) == 'native_state_modes'
+    assert SglangEngine.sglang_unsupported(moded, [('native_state', 'b0')]) is None
     templated = GenerationRequest(messages=[], template={'call': 'f', 'value': 'write'})
     assert SglangEngine.sglang_unsupported(templated, [('tokens', [1])]) == 'template'
 
@@ -264,6 +264,38 @@ def test_imported_native_state_is_recorded_like_the_native_engine(tmp_path):
         for name, value in layer.items():
             if name != 'kind':
                 assert torch.equal(saved[f'layers.{index}.{name}'], value.cpu())
+
+
+def test_same_base_adapter_state_mode_imports_with_the_native_receipt(tmp_path):
+    """A declared same-base adapter-state import: the same receipt (source/target identities, target position) in
+    the prompt capture and the imports on both engines, the state spliced through the same placeholders."""
+    from natlang_neuralese.serve.engine import RequestError
+    native, front, roles, word, block, messages = _import_fixture(tmp_path)
+    block_id = messages[0]['content'][1]['id']
+    later = lambda modes: GenerationRequest(messages=messages, temperature=1.0, max_tokens=8, rl_capture=True,
+                                            rl_top_k=2, native_recording=True, request_id='r2', seed=2,
+                                            native_state_modes=modes)
+    reply = word('t8') + [sorted(front.stop_ids)[0]]
+    script = iter(reply)
+    native._native_token = lambda seq: (next(script), -0.5)
+    expected = native.generate(later({block_id: 'same-base-adapter-state'}))
+    records = [record(-0.5, [t, t + 1], [-0.5, -1.5]) for t in reply]
+    sent = []
+    front._sglang_generate = lambda body: (sent.append(body), {'output_ids': reply, 'meta_info': {'natlang_top_k': records}})[1]
+    actual = front.generate(later({block_id: 'same-base-adapter-state'}))
+    mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
+    imports = actual['native_state']['imports']
+    assert imports == expected['native_state']['imports'] and imports[0]['mode'] == 'same-base-adapter-state'
+    assert imports[0]['adapter_state_consumption']['target_position_start'] == sent[0]['sampling_params'][
+        'custom_params']['natlang_import'][0]['start']
+    assert mine['prompt'] == theirs['prompt'] and _protocol_view(mine) == _protocol_view(theirs)
+    for modes in ({'other': 'same-base-adapter-state'}, {block_id: 'semantic'}):
+        try:
+            front.generate(later(modes))
+        except RequestError as error:
+            assert error.code == 'neuralese-native-state-mode'
+        else:
+            raise AssertionError(f'{modes} was accepted')
 
 
 def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):

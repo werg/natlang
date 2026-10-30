@@ -802,18 +802,23 @@ def native_forward_storage_dtype(weight):
 SAME_BASE_STATE_MODE = 'same-base-adapter-state'
 
 
-def adapter_state_input_receipt(engine, block, state_id, *, target_position_start):
+def adapter_state_input_receipt(engine, block, state_id, *, target_position_start, layout=None):
     """Authenticate an explicitly requested raw-state exchange, never relabel it.
 
     Geometry is checked by the existing splice/graph executor before committing
     the new cache. This verifier binds the source coefficient closure and both
     actors to the exact same immutable base, independent of matching widths.
+    `layout(block)` checks the raw profile against the consumer (default: the
+    native model's port; the SGLang actor checks it against its export).
     """
     from .state_block import NativeStateBlock
     if type(block) is not NativeStateBlock:
-        raise NativeAdapterError('same-base adapter-state mode requires raw native state; use the learned semantic consumer for semantic messages')
-    from .shared_state import validate_native_state_layout
-    validate_native_state_layout(engine.shared_model.port, block)
+        raise NativeAdapterError('same-base adapter-state mode requires raw native state')
+    if layout is None:
+        from .shared_state import validate_native_state_layout
+        validate_native_state_layout(engine.shared_model.port, block)
+    else:
+        layout(block)
     fields = ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')
     source = {key: getattr(block, key) for key in fields}
     source_binding = block.adapter_binding
