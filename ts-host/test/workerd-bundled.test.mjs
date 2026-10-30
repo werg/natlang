@@ -12,7 +12,7 @@ import { build } from 'esbuild';
 import { buildTarget } from '../scripts/vendor-build.mjs';
 import { scenarios } from './support/core-scenarios.mjs';
 
-// The self-contained workerd bundle (TypeScript bundled in, scripts/vendor-build.mjs target `workerd`) runs the same
+// The self-contained workerd bundle (with its folder shell) (TypeScript bundled in, scripts/vendor-build.mjs target `workerd`) runs the same
 // scripted-agent scenarios as the core in real workerd with `nodejs_compat`. The consumer here bundles only `yaml` and
 // `@noble/hashes`, which that bundle leaves external, and defines nothing: the bundle carries its own TypeScript setup.
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -31,6 +31,16 @@ export default { async fetch(request, env) {
   for (const [name, run] of Object.entries(scenarios(core, realm))) {
     try { await run(); results[name] = 'ok'; } catch (error) { results[name] = String(error?.stack ?? error); }
   }
+  const attempt = async (name, run) => { try { results[name] = await run() ? 'ok' : 'unexpected'; } catch (error) { results[name] = String(error?.stack ?? error); } };
+  await attempt('the folder shell runs in the isolate', async () => {
+    const folder = core.Folder.fromFiles({ 'a.txt': 'hello\\n' });
+    const shell = await core.runFolderBash(folder, 'cat a.txt | tr a-z A-Z; echo done > b.txt');
+    return shell.exitCode === 0 && shell.stdout === 'HELLO\\n' && shell.changedPaths.includes('b.txt');
+  });
+  await attempt('the folder shell says why Python is unavailable', async () => {
+    const shell = await core.runFolderBash(core.Folder.fromFiles({}), "python3 -c 'print(1)'");
+    return shell.exitCode !== 0 && /Python is unavailable in this isolate/.test(shell.stderr);
+  });
   return Response.json(results);
 } };
 `);
@@ -64,7 +74,7 @@ const worker :Workerd.Worker = (
     const port = await Promise.race([listening, exited]);
     const response = await Promise.race([fetch(`http://127.0.0.1:${port}/`), exited]);
     const results = await response.json();
-    const expected = Object.keys(scenarios({ workerdPlatform() {} }, {}));
+    const expected = [...Object.keys(scenarios({ workerdPlatform() {} }, {})), 'the folder shell runs in the isolate', 'the folder shell says why Python is unavailable'];
     assert.deepEqual(Object.keys(results).sort(), expected.sort());
     for (const name of expected) assert.equal(results[name], 'ok', `${name}: ${results[name]}\n${log}`);
   } finally {

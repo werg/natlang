@@ -61,13 +61,23 @@ function coreNodeImports(entry) {
 /**
  * What a self-contained workerd bundle does with the CommonJS compiler it carries. TypeScript decides at load whether it
  * runs on Node by reading `process.browser` (defined true for this target), so the Node built-ins it can `require` stay
- * unused: they become empty modules (`process` the isolate's own). `undici` is the Node model backend's long-request
+ * unused (and just-bash's Node-only paths are unreachable): they become empty modules (`process` the isolate's own). `undici` is the Node model backend's long-request
  * dispatcher, which the core's model drivers never need in an isolate: its one use is stubbed to a class with no behavior.
  */
 function selfContainedHost() {
   const builtins = /^(?:node:)?(?:fs|path|os|crypto|util|events|buffer|stream|zlib|assert|string_decoder|url|process|inspector|perf_hooks|module|readline|tty|net|vm|child_process|worker_threads)$/;
   return { name: 'self-contained-host', setup(build) {
-    build.onResolve({ filter: builtins }, args => args.importer.includes('/node_modules/typescript/') ? { path: args.path, namespace: 'self-contained-builtin' } : undefined);
+    build.onResolve({ filter: builtins }, args => args.importer.includes('/node_modules/') ? { path: args.path, namespace: 'self-contained-builtin' } : undefined);
+    // The shell's gzip, tar and zip commands need node:zlib, which an eval-linked module cannot import: they report it.
+    build.onResolve({ filter: /^(?:node:)?zlib$/ }, args => args.importer.includes('/node_modules/') ? { path: args.path, namespace: 'self-contained-zlib' } : undefined);
+    build.onLoad({ filter: /.*/, namespace: 'self-contained-zlib' }, () => ({ loader: 'js', contents:
+      `const unavailable = () => { throw new Error('zlib is unavailable in this isolate'); };\n` +
+      `export const gunzipSync = unavailable, gzipSync = unavailable, inflateSync = unavailable, deflateSync = unavailable, constants = {};\n` +
+      `export default { gunzipSync, gzipSync, inflateSync, deflateSync, constants };` }));
+    // The Python runner needs WebAssembly code generation, which an isolate disallows (workerd rejects it even through UNSAFE_EVAL).
+    build.onResolve({ filter: /\/folder-python\.js$/ }, () => ({ path: 'folder-python', namespace: 'self-contained-python' }));
+    build.onLoad({ filter: /.*/, namespace: 'self-contained-python' }, () => ({ loader: 'js', contents:
+      `export async function runFolderPython() { throw new Error('Python is unavailable in this isolate: WebAssembly code generation is disabled'); }` }));
     build.onLoad({ filter: /.*/, namespace: 'self-contained-builtin' }, args => ({ loader: 'js',
       contents: /process$/.test(args.path) ? 'module.exports = globalThis.process ?? {};' : 'module.exports = {};' }));
     build.onResolve({ filter: /^undici$/ }, args => ({ path: args.path, namespace: 'self-contained-undici' }));
@@ -81,8 +91,8 @@ export const TARGETS = {
     plugins: entry => [coreNodeImports(entry)], define: () => ({ __NATLANG_TS_LIBS__: JSON.stringify(embeddedLibs()) }) },
   // Self-contained: TypeScript (the compiler API natlang runs) is bundled, so the host declares no `typescript` package, which
   // a host that ships TypeScript 7 (no JavaScript compiler API) could not satisfy. `yaml` and `@noble/hashes` stay external.
-  workerd: { directory: 'workerd', entries: { 'natlang-workerd': 'src/core/index.ts' }, platform: 'neutral', selfContained: true,
-    plugins: entry => [coreNodeImports(entry), selfContainedHost()],
+  workerd: { directory: 'workerd', entries: { 'natlang-workerd': 'src/core/workerd-bundle.ts' }, platform: 'neutral', selfContained: true,
+    plugins: entry => [selfContainedHost(), coreNodeImports(entry)],
     define: () => ({ __NATLANG_TS_LIBS__: JSON.stringify(embeddedLibs()), 'process.browser': 'true' }) },
   llama: { directory: 'llama', entries: { 'natlang-llama': 'src/llama/index.ts' }, platform: 'node' },
   // The evaluation runner starts `./worker-entry.js` beside its own file (evaluation/worker.ts).
