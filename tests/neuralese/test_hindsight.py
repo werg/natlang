@@ -15,7 +15,7 @@ DECLARATION = hindsight_declaration({'k': 2, 'lambda_len': .1, 'lambda_explore':
 
 def tau(roles):
     """A two-node tau*: a child whose answer the root imports, each with assistant actions after its prompt."""
-    child = [BOS, *turn('system', 'You count.'), *turn('user', 'Count "A1"'), IM_START, *encode('assistant\n'),
+    child = [BOS, *turn('system', 'You count.'), *turn('user', 'You are inside this call: count(name: string): number\nCount "A1"'), IM_START, *encode('assistant\n'),
              roles.produce_open, 5, 6, roles.produce_close]
     root = [BOS, *turn('system', 'You run programs.'), IM_START, *encode('user\nprogram'), roles.consume_open,
             roles.consume_close, IM_END, *encode('\n'), IM_START, *encode('assistant\n'), 11, 13, 2]

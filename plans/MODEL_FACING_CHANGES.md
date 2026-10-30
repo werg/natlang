@@ -11,8 +11,14 @@ token with a digit such as `d81028_evidence_94_0`) occurs in the child's prompt,
 values; several matching children with different answers still give none. Same rule in
 `applications/guidance-writer/visibility.ts`, `rl/privileged_context.child_matches` and `tune/selfteach.ts`.
 Replayed on recorded rounds: jolt r4 57/83, jolt r5 52/93, sd r4 9/24, sd r5 21/32 child invocations matched.
-Teachers see the matched child's verified answer as text; students' twins get it as their OPSD target. A matched
-answer can have a different shape from a student child's own question (e.g. a catalog key for a boolean question).
+Teachers see the matched child's verified answer as text; students' twins get it as their OPSD target.
+Tightened the same day (supervisor): an answer value applies only when it fits the child's declared result type (read
+from "You are inside this call: f(...): T" and its "type X = ..." lines; unknown/any or unread types admit none), so a
+catalog key never guides a yes/no child; a blocked/failed status outcome has no value and still applies. Answer values
+are now rendered as JSON ("c1" in quotes) so the type check reads them exactly. After the type check: jolt r4 43/83
+(14 removed), jolt r5 26/93 (26 removed), sd r4 2/24 (7 removed), sd r5 3/32 (18 removed). TypeScript
+(`visibility.ts` answerFits) and Python (`privileged_context.answer_fits`) agree on all 7,130 recorded
+child-prompt/reference pairs; `tune/selfteach.ts` now uses the package's own visibility rule.
 **Measurement debt:** matched child fraction and child turns per episode on the first round using it, teacher
 child-turn outcomes, and whether students' child calls start answering directly.
 

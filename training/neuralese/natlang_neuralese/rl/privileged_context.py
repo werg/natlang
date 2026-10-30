@@ -54,6 +54,198 @@ def _text(value):
     return value if isinstance(value, str) else json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
+# ---------------------------------------------------------------- child answer types
+# A reference child's verified answer may guide a child call only when it fits that call's declared result type, so a
+# policy's yes/no child is never pulled toward a catalog key. Mirrors applications/guidance-writer/visibility.ts
+# (``answerFits``): a small reader of the TypeScript type text natlang prints in a call's opening ("You are inside this
+# call: f(...): T" and "type X = ..." lines). Anything it does not read, an untyped (unknown/any) result included,
+# admits no answer.
+
+ANSWER_PREFIX = 'The verified answer of this call is '
+_TOKEN = re.compile(r'\s*(?:("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')|(-?\d+(?:\.\d+)?)|([A-Za-z_$][\w$]*)|(\S))')
+
+
+def _tokens(text):
+    out, at = [], 0
+    while at < len(text):
+        if text[at:].strip() == '':
+            break
+        found = _TOKEN.match(text, at)
+        if not found:
+            return None
+        string, number, name, punct = found.groups()
+        out.append(('str', json.loads(string) if string.startswith('"') else string[1:-1]) if string is not None
+                   else ('num', float(number)) if number is not None else ('name', name) if name is not None
+                   else ('p', punct))
+        at = found.end()
+    return out
+
+
+def parse_type(text):
+    """The type expression ``text`` as a small tree, or None when it is not read."""
+    tokens = _tokens(text)
+    if tokens is None:
+        return None
+    position = [0]
+
+    def peek(value=None):
+        token = tokens[position[0]] if position[0] < len(tokens) else None
+        return token if value is None or (token is not None and token[1] == value and token[0] == 'p') else None
+
+    def take(value):
+        if not peek(value):
+            raise ValueError(value)
+        position[0] += 1
+
+    def union():
+        if peek('|'):
+            position[0] += 1
+        options = [postfix()]
+        while peek('|'):
+            position[0] += 1
+            options.append(postfix())
+        return options[0] if len(options) == 1 else ('union', options)
+
+    def postfix():
+        node = primary()
+        while peek('[') and position[0] + 1 < len(tokens) and tokens[position[0] + 1] == ('p', ']'):
+            position[0] += 2
+            node = ('array', node)
+        return node
+
+    def primary():
+        token = peek()
+        if token is None:
+            raise ValueError('end')
+        position[0] += 1
+        kind, value = token
+        if kind in ('str', 'num'):
+            return ('literal', value)
+        if kind == 'p' and value == '(':
+            node = union(); take(')'); return node
+        if kind == 'p' and value == '[':
+            items = []
+            while not peek(']'):
+                items.append(union())
+                if peek(','):
+                    position[0] += 1
+            take(']'); return ('tuple', items)
+        if kind == 'p' and value == '{':
+            fields = {}
+            while not peek('}'):
+                name = peek()
+                if name is None or name[0] not in ('name', 'str'):
+                    raise ValueError('field')
+                position[0] += 1
+                optional = bool(peek('?'))
+                if optional:
+                    position[0] += 1
+                take(':')
+                fields[name[1]] = (union(), optional)
+                if peek(';') or peek(','):
+                    position[0] += 1
+            take('}'); return ('object', fields)
+        if kind == 'name':
+            if value in ('true', 'false'):
+                return ('literal', value == 'true')
+            if value in ('string', 'number', 'boolean', 'null', 'undefined', 'unknown', 'any'):
+                return ('prim', value)
+            if peek('<'):
+                position[0] += 1
+                arguments = [union()]
+                while peek(','):
+                    position[0] += 1
+                    arguments.append(union())
+                take('>')
+                if value == 'Array' and len(arguments) == 1:
+                    return ('array', arguments[0])
+                if value == 'Record' and len(arguments) == 2:
+                    return ('record', arguments[1])
+                if value == 'Neuralese' and len(arguments) == 1:
+                    return arguments[0]
+                raise ValueError(value)
+            return ('alias', value)
+        raise ValueError(value)
+
+    try:
+        node = union()
+    except (ValueError, IndexError):
+        return None
+    return node if position[0] == len(tokens) else None
+
+
+def _fits(value, node, aliases, depth=0):
+    if depth > 32:
+        return False
+    kind = node[0]
+    if kind == 'prim':
+        name = node[1]
+        return (name in ('unknown', 'any') or (name == 'string' and isinstance(value, str))
+                or (name == 'number' and isinstance(value, (int, float)) and not isinstance(value, bool))
+                or (name == 'boolean' and isinstance(value, bool)) or (name in ('null', 'undefined') and value is None))
+    if kind == 'literal':
+        return type(value) is type(node[1]) and value == node[1] if not isinstance(node[1], float) else (
+            isinstance(value, (int, float)) and not isinstance(value, bool) and value == node[1])
+    if kind == 'union':
+        return any(_fits(value, option, aliases, depth + 1) for option in node[1])
+    if kind == 'array':
+        return isinstance(value, list) and all(_fits(item, node[1], aliases, depth + 1) for item in value)
+    if kind == 'tuple':
+        return (isinstance(value, list) and len(value) == len(node[1])
+                and all(_fits(item, part, aliases, depth + 1) for item, part in zip(value, node[1])))
+    if kind == 'record':
+        return isinstance(value, dict) and all(_fits(item, node[1], aliases, depth + 1) for item in value.values())
+    if kind == 'object':
+        if not isinstance(value, dict) or set(value) - set(node[1]):
+            return False
+        return all((name in value and _fits(value[name], field, aliases, depth + 1)) or (name not in value and optional)
+                   for name, (field, optional) in node[1].items())
+    if kind == 'alias':
+        target = aliases.get(node[1])
+        return target is not None and _fits(value, target, aliases, depth + 1)
+    return False
+
+
+def declared_result(text):
+    """(result type tree, aliases) read from a call's opening text, or (None, {}) when it is not stated or not read."""
+    aliases = {}
+    for line in text.splitlines():
+        found = re.match(r'\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=\s*(.+?);?\s*$', line)
+        if found:
+            parsed = parse_type(found.group(2))
+            if parsed is not None:
+                aliases[found.group(1)] = parsed
+    for line in text.splitlines():
+        if not line.startswith('You are inside this call: '):
+            continue
+        signature, depth = line[len('You are inside this call: '):], 0
+        for index, char in enumerate(signature):
+            if char in '([{<':
+                depth += 1
+            elif char in ')]}>':
+                depth -= 1
+                if depth == 0 and char == ')' and signature[index + 1:index + 3] == ': ':
+                    return parse_type(signature[index + 3:].strip()), aliases
+        break
+    return None, {}
+
+
+def answer_fits(fact_text, child_text):
+    """Whether a child_value fact may guide this child: a status outcome (no answer value) always may; an answer value
+    only when the child declares a read result type that is not unknown/any and the value fits it."""
+    first = fact_text.split('\n', 1)[0]
+    if not first.startswith(ANSWER_PREFIX):
+        return True
+    try:
+        value = json.loads(first[len(ANSWER_PREFIX):].removesuffix('.'))
+    except ValueError:
+        return False
+    result, aliases = declared_result(child_text)
+    if result is None or result == ('prim', 'unknown') or result == ('prim', 'any'):
+        return False
+    return _fits(value, result, aliases)
+
+
 _IDENTIFIER = re.compile(r'"[^"\s]+"|[A-Za-z0-9][\w.:-]*')
 
 
@@ -88,14 +280,14 @@ def _child_text(child):
     """The verified answer of a reference child call: its ``value``, or what its verified actions (``calls``/``call``,
     ending in return_result) return. Steps before the return are shown too."""
     if child.get('value') is not None:
-        return f'The verified answer of this call is {_text(child["value"])}.'
+        return ANSWER_PREFIX + json.dumps(child['value'], sort_keys=True, ensure_ascii=False) + '.'
     calls = child.get('calls') or ([child['call']] if child.get('call') is not None else [])
     if not calls or not (isinstance(calls[-1], list) and len(calls[-1]) == 2 and calls[-1][0] == 'return_result'
                          and isinstance(calls[-1][1], dict)):
         raise ValueError('a reference child needs a value or verified calls ending in return_result')
     result = calls[-1][1]
     if result.get('status', 'success') == 'success':
-        text = f'The verified answer of this call is {_text(result.get("value"))}.'
+        text = ANSWER_PREFIX + json.dumps(result.get('value'), sort_keys=True, ensure_ascii=False) + '.'
     else:
         text = (f'The verified outcome of this call is return_result with status {_text(result["status"])}'
                 + (f': {_text(result["reason"])}' if result.get('reason') else '') + '.')
@@ -192,7 +384,8 @@ def applicable(fact, invocation):
     root sees).
     """
     if fact.kind == 'child_value':
-        return invocation['role'] == 'child' and child_matches(fact.match, invocation['text'])
+        return (invocation['role'] == 'child' and child_matches(fact.match, invocation['text'])
+                and answer_fits(fact.text, invocation['text']))
     if fact.kind in ('attempt_feedback', 'fit_hindsight'):
         return fact.invocation is None or fact.invocation == invocation['name']
     return invocation['role'] in ('root', 'binding')

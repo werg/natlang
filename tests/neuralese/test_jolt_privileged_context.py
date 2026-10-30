@@ -28,7 +28,7 @@ from test_shared_state import tiny
 
 BOS, STOP, IM_START, IM_END = 1, 2, 9, 10
 TEMPERATURE = .8
-CONSUMERS = {'root#turn1': ('root', 'program'), 'child#turn1': ('child', 'Count "A1"')}
+CONSUMERS = {'root#turn1': ('root', 'program'), 'child#turn1': ('child', 'You are inside this call: count(name: string): number\nCount "A1"')}
 WRITERS = {'root#turn1': 'guide-root#turn1', 'child#turn1': 'guide-child#turn1'}
 POLICY = {'function': 'writeGuidance', 'sha256': 'a' * 64}
 
@@ -110,7 +110,7 @@ def load(family):
 
 
 def prompts(roles):
-    child = [BOS, *turn('system', 'You count.'), *turn('user', 'Count "A1"'), IM_START, *encode('assistant\n')]
+    child = [BOS, *turn('system', 'You count.'), *turn('user', 'You are inside this call: count(name: string): number\nCount "A1"'), IM_START, *encode('assistant\n')]
     root_before = [BOS, *turn('system', 'You run programs.'), IM_START, *encode('user\nprogram'), roles.consume_open]
     root_after = [roles.consume_close, IM_END, *encode('\n'), IM_START, *encode('assistant\n')]
     return child, root_before, root_after
@@ -228,7 +228,7 @@ def run_episode(model, roles, identity, mode='none', budget_tokens=512, adapter_
     turns = [{'graph_turn': 'root#turn1', 'sampling': root, 'read_bindings': {payload: 'write-0'},
               'messages': [{'role': 'user', 'content': 'program'}]},
              {'graph_turn': 'child#turn1', 'sampling': child, 'written_nodes': {payload: 'write-0'},
-              'messages': [{'role': 'user', 'content': 'Count "A1"'}]}]
+              'messages': [{'role': 'user', 'content': 'You are inside this call: count(name: string): number\nCount "A1"'}]}]
     for consumer, writer in WRITERS.items():
         if writer in captures:
             turns.append({'graph_turn': writer, 'sampling': captures[writer],
@@ -297,12 +297,12 @@ def test_custody_refuses_development_confirmation_and_related_worlds(tmp_path):
 
 def test_guidance_turn_is_placed_after_the_leading_system_turn_and_bound_to_its_receipt():
     spec = rendering()
-    prompt = [BOS, *turn('system', 'You count.'), *turn('user', 'Count "A1"')]
+    prompt = [BOS, *turn('system', 'You count.'), *turn('user', 'You are inside this call: count(name: string): number\nCount "A1"')]
     assert spec.insertion_point(prompt) == (1 + len(turn('system', 'You count.')), 'after_leading_system_turn')
     assert spec.insertion_point([BOS, *turn('user', 'x')]) == (1, 'after_bos')
     assert spec.insertion_point(turn('user', 'x')) == (0, 'start')
     at, pieces, receipt = guidance_plan(spec, request('child#turn1', 'import', 'nzs1_state'), token_ids=prompt,
-                                        text='Count "A1"')
+                                        text='You are inside this call: count(name: string): number\nCount "A1"')
     head, tail = spec.state_parts()
     assert at == 1 + len(turn('system', 'You count.'))
     assert pieces == [('privileged', head), ('privileged_state', {'id': 'nzs1_state'}), ('privileged', tail)]
@@ -311,7 +311,7 @@ def test_guidance_turn_is_placed_after_the_leading_system_turn_and_bound_to_its_
     assert own[offset - 1] == spec.consume_open and own[offset] == spec.consume_close
     assert receipt['mode'] == 'import' and receipt['state'] == {'id': 'nzs1_state'} and receipt['token_count'] == len(own)
     at, pieces, receipt = guidance_plan(spec, request('child#turn1', 'write-only', 'nzs1_state'), token_ids=prompt,
-                                        text='Count "A1"')
+                                        text='You are inside this call: count(name: string): number\nCount "A1"')
     assert pieces == [] and receipt['mode'] == 'write-only'
     at, pieces, receipt = guidance_plan(spec, request('root#turn1', 'text'), token_ids=prompt, text='program')
     assert [fact['kind'] for fact in receipt['facts']] == ['expected_result', 'reference_solution', 'minimum_sequence']
@@ -535,7 +535,7 @@ def test_reverse_kl_opsd_term_from_teacher_logits_has_finite_gradients():
 def test_child_references_with_verified_calls_or_a_bare_match_string_render_their_actual_answer():
     """A child reference given as verified calls (ending in return_result) states what those calls return, not
     'null'; a bare match string is one substring, not a sequence of characters."""
-    children = [{'match': 'Count "A1"', 'calls': [['eval', {'code': 'return 2;'}],
+    children = [{'match': 'You are inside this call: count(name: string): number\nCount "A1"', 'calls': [['eval', {'code': 'return 2;'}],
                                                   ['return_result', {'status': 'success', 'value': 2}]]},
                 {'match': '"B7"', 'call': ['return_result', {'status': 'blocked', 'reason': 'B7 is unreadable'}]}]
     case = train_case()
@@ -544,9 +544,9 @@ def test_child_references_with_verified_calls_or_a_bare_match_string_render_thei
     child = [fact for fact in facts if fact.kind == 'child_value']
     assert child[0].text.startswith('The verified answer of this call is 2.') and 'return 2;' in child[0].text
     assert child[1].text == 'The verified outcome of this call is return_result with status blocked: B7 is unreadable.'
-    assert child[0].match == ('Count "A1"',) and child[1].match == ('"B7"',)
-    assert applicable(child[0], {'name': 'c', 'role': 'child', 'text': 'Count "A1" apples'})
-    assert not applicable(child[0], {'name': 'c', 'role': 'child', 'text': 'Count "B7" apples'})
+    assert child[0].match == ('You are inside this call: count(name: string): number\nCount "A1"',) and child[1].match == ('"B7"',)
+    assert applicable(child[0], {'name': 'c', 'role': 'child', 'text': 'You are inside this call: count(name: string): number\nCount "A1" apples'})
+    assert not applicable(child[0], {'name': 'c', 'role': 'child', 'text': 'You are inside this call: count(name: string): number\nCount "B7" apples'})
 
 
 def test_child_reference_matches_by_its_identifier_inputs_when_the_wording_differs():
@@ -559,3 +559,20 @@ def test_child_reference_matches_by_its_identifier_inputs_when_the_wording_diffe
     assert not child_matches(('d81028_evidence_94_1', 'Primary decision:'), text)
     assert not child_matches(('An iterative process',), text)
     assert child_matches(('An iterative process',), 'An iterative process of x')
+
+
+def test_a_child_answer_guides_only_a_child_whose_declared_result_it_fits():
+    from natlang_neuralese.rl.privileged_context import answer_fits, parse_type
+    decision = ('You are inside this call: decide(item: { id: string }): Decision\n'
+                'type Decision = "c0" | "c1" | "c2";')
+    yes_no = 'You are inside this call: nl@eval:3(item: { id: string }): boolean'
+    untyped = 'You are inside this call: nl@eval:3(item: { id: string }): unknown'
+    key, flag = 'The verified answer of this call is "c1".', 'The verified answer of this call is false.'
+    assert answer_fits(key, decision) and not answer_fits(key, yes_no) and not answer_fits(key, untyped)
+    assert answer_fits(flag, yes_no) and not answer_fits(flag, decision)
+    shaped = 'You are inside this call: f(x: string): { verdict: "continue" | "stop"; reason?: string }'
+    assert answer_fits('The verified answer of this call is {"verdict": "stop"}.', shaped)
+    assert not answer_fits('The verified answer of this call is {"verdict": "stop", "extra": 1}.', shaped)
+    assert answer_fits('The verified outcome of this call is return_result with status "blocked": x.', untyped)
+    assert parse_type('Record<string, Decision>') == ('record', ('alias', 'Decision'))
+    assert parse_type('Array<{ a: number }') is None

@@ -27,6 +27,8 @@ import { join } from 'node:path';
 import type { ModelDriver } from '../runtime/runtime.js';
 import type { DecisionRequest, DecisionScorer, ModelTurnRequest } from '../contracts.js';
 import { currentFrame } from '../runtime/context.js';
+import { loadGuidanceWriter } from '../teacher/guidance-writer.js';
+import type { GuidanceFact } from '../native/training-guidance.js';
 import { canonicalJson } from '../package/archive.js';
 import { tuneDirectory } from '../adaptation/weights/release.js';
 import type { CollectedTurn, RootExample, SplitExample } from './collect.js';
@@ -94,20 +96,13 @@ export function selfTeacherId(student: { readonly name: string; readonly base: {
 }
 export const isSelfTeacher = (teacherId: string) => teacherId.startsWith('self-privileged:');
 
-/** applications/guidance-writer/visibility.ts `childMatches` (and `privileged_context.child_matches`): all match strings,
- * or all identifier match strings (a quoted value or a token with a digit) occur in the child's prompt. */
-function childMatches(match: readonly string[], text: string): boolean {
-  if (!match.length) return false;
-  if (match.every(item => text.includes(item))) return true;
-  const ids = match.filter(item => /^"[^"\s]+"$/.test(item) || (/^[A-Za-z0-9][\w.:-]*$/.test(item) && /\d/.test(item)));
-  return ids.length > 0 && ids.every(item => text.includes(item));
-}
-
 /** `privileged_context.applicable` + `select_crisp`: the facts one invocation sees, in policy order. */
 export function selectFacts(facts: readonly PrivilegedFact[], invocation: { readonly role: 'root' | 'child'; readonly name?: string;
   readonly text: string }): PrivilegedFact[] {
-  const applicable = facts.filter(fact => fact.kind === 'child_value' ? invocation.role === 'child' && childMatches(fact.match ?? [], invocation.text)
-    : fact.kind === 'attempt_feedback' ? !fact.invocation || fact.invocation === invocation.name : invocation.role === 'root');
+  // The guidance-writer package's own visibility rule (applications/guidance-writer/visibility.ts), the one the actor
+  // and the learner's verifier use: one implementation.
+  const consumer = { name: invocation.name ?? '', role: invocation.role, text: invocation.text };
+  const applicable = loadGuidanceWriter().visibleFacts(consumer, facts as GuidanceFact[]) as PrivilegedFact[];
   const order: readonly string[] = CRISP_ORDER[invocation.role];
   let chosen = applicable.filter(fact => order.includes(fact.kind));
   // An ambiguous child match has no verified answer for this call.

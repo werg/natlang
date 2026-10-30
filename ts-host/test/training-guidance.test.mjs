@@ -39,7 +39,7 @@ test('the package loads with its exact .nl hashes and crisp identity', () => {
 
 test('visibility mirrors rl/privileged_context.applicable', () => {
   const root = { name: 'run-1', role: 'root', text: 'opening' };
-  const child = { name: 'run-1/1', role: 'child', text: 'q = "child-question"' };
+  const child = { name: 'run-1/1', role: 'child', text: 'You are inside this call: helper(q: string): string\nq = "child-question"' };
   const other = { name: 'run-1/2', role: 'child', text: 'q = "other"' };
   const binding = { name: 'skill', role: 'binding', text: 'x' };
   const ids = consumer => pkg.visibleFacts(consumer, FACTS).map(fact => fact.id);
@@ -57,10 +57,17 @@ test('a child reference matches the inputs a policy child is called on, not the 
     match: ['d81028_evidence_94_0', 'Primary decision:'] };
   const quoted = { ...fact, id: 'child_value:1', match: ['Is message an unsolicited promotion', '"M1"'] };
   const wording = { ...fact, id: 'child_value:2', match: ['An iterative process'] };
-  const own = { name: 'run-1/1', role: 'child',
-    text: 'Decide whether item meets policy.\nitem = { id: "d81028_evidence_94_0" }\nmessage = { id: "M1" }' };
+  const own = { name: 'run-1/1', role: 'child', text: 'You are inside this call: nl@eval:2(item: Item): Decision\n' +
+    'type Decision = "c0" | "c1";\nDecide whether item meets policy.\nitem = { id: "d81028_evidence_94_0" }\nmessage = { id: "M1" }' };
   assert.deepEqual(pkg.visibleFacts(own, [fact, quoted, wording]).map(f => f.id), ['child_value:0', 'child_value:1']);
   assert.deepEqual(pkg.visibleFacts({ ...own, text: 'item = { id: "d81028_evidence_94_1" }' }, [fact, quoted]), []);
+  // The answer must fit the child's declared result: a catalog key never guides a yes/no or an untyped child.
+  const yesNo = { ...own, text: own.text.replace('): Decision', '): boolean') };
+  const untyped = { ...own, text: own.text.replace('): Decision', '): unknown') };
+  assert.deepEqual(pkg.visibleFacts(yesNo, [fact]), []);
+  assert.deepEqual(pkg.visibleFacts(untyped, [fact]), []);
+  const blocked = { ...fact, id: 'child_value:3', text: 'The verified outcome of this call is return_result with status "blocked": x.' };
+  assert.deepEqual(pkg.visibleFacts(untyped, [blocked]).map(f => f.id), ['child_value:3']);
 });
 
 test('crisp selection orders by kind and drops an ambiguous child match', () => {
