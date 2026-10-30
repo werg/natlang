@@ -83,7 +83,7 @@ def test_capacity_observed_gradient_matches_production_shared_update(family,monk
 def test_capacity_rejects_unscoped_low_precision_gradient_and_closes_scope(monkeypatch):
     from natlang_neuralese.train import native_state_sft
     from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope,active_cotangent_scope
-    model=SharedStateModel(tiny('mellum'),(58,59,60,61),rank=4)
+    model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
     model.port.hf.natlang_precision='bf16'
     optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
     parameter=next(parameter for _,parameter in optimizer._native_named_parameters if parameter.ndim>=2)

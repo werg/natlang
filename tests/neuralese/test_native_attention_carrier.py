@@ -170,7 +170,7 @@ def test_nested_native_actor_precision_selects_the_actual_port(tmp_path):
     from test_native_serving_adapters import engine_fixture
     from natlang_neuralese.model.native_adapters import run_native,native_fp32_state_cotangents
     (tmp_path/'left').mkdir();(tmp_path/'right').mkdir()
-    left=engine_fixture(tmp_path/'left','lfm');right=engine_fixture(tmp_path/'right','mellum')
+    left=engine_fixture(tmp_path/'left','lfm');right=engine_fixture(tmp_path/'right','lfm')
     def nested():
         assert not native_fp32_state_cotangents(left.shared_model.port)
         assert native_fp32_state_cotangents(right.shared_model.port)

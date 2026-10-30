@@ -1,10 +1,8 @@
 """Shared expert-adjoint precision is explicit, durable, and numerically checked."""
-from natlang_neuralese.data.native_graph_schema import NativeGraphExample
 import pytest
 import torch
 from natlang_neuralese.train.fp8_backend import (
-    FP8ExpertAdapter, EXPERT_SCHEMA, EXPERT_BACKEND_VERSION,
-    expert_input_gradient_precision, expert_precision_transition)
+    FP8ExpertAdapter, expert_input_gradient_precision, expert_precision_transition)
 
 
 def adapter(mode='fp8'):
@@ -103,59 +101,3 @@ def test_bf16_input_adjoint_matches_actual_quantized_weight_oracle_and_preserves
         fp8_relative=float((outputs['fp8'][1].float()-oracle).norm()/oracle.norm())
         assert relative<.003 and relative<fp8_relative/4
     finally:DENSE_MOE.clear();DENSE_MOE.update(original)
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(),reason='actual CUDA required')
-@pytest.mark.parametrize('recipe',['current','current-bf16-dx'])
-def test_real_native_muon_updates_and_exact_optimizer_rng_resume(recipe,record_property):
-    import copy
-    from test_shared_state import tiny,graph
-    from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
-    from natlang_neuralese.train.fp8_backend import make_backend
-    def model():
-        port=tiny('mellum');port.hf.to(device='cuda',dtype=torch.bfloat16)
-        port.hf.natlang_precision='bf16'
-        return SharedStateModel(port,(58,59,60,61),rank=4)
-    student=model();backend=make_backend('triton-experts',student.port.hf,device='cuda',recipe=recipe)
-    student.port.activation_checkpoint=backend.checkpoint
-    optimizer,_=make_native_optimizer(student,lr=3e-4,in_backward=True)
-    plan=graph();rows=[NativeGraphExample(id='communication',split='train',
-        source_groups=('communication',),tokenizer_fingerprint='test',
-        plan=plan,target_weights=(1,)*plan.token_count)]
-    before=student.port.layers[0].mlp.experts.gate_up.detach().clone()
-    losses=[]
-    for _ in range(3):
-        loss,_=native_training_update(student,optimizer,rows,backend=backend,chunk_tokens=8)
-        losses.append(float(loss.detach()))
-    record_property('recipe',recipe)
-    record_property('actual_native_update_losses',losses)
-    record_property('expert_changed_coordinates',int((before!=student.port.layers[0].mlp.experts.gate_up).sum()))
-    assert all(torch.isfinite(torch.tensor(losses)))
-    assert not torch.equal(before,student.port.layers[0].mlp.experts.gate_up)
-    assert backend.collect_row_counts()['calls']>0
-    weights=copy.deepcopy(student.port.hf.state_dict());interface=copy.deepcopy(student.state_dict())
-    state=copy.deepcopy(optimizer.state_dict());precision=copy.deepcopy(backend.extra_state())
-    resumed=model();resumed.port.hf.load_state_dict(weights);resumed.load_state_dict(interface)
-    resumed_backend=make_backend('triton-experts',resumed.port.hf,device='cuda',recipe=recipe)
-    resumed_backend.restore_extra_state(precision);resumed.port.activation_checkpoint=resumed_backend.checkpoint
-    resumed_optimizer,_=make_native_optimizer(resumed,lr=3e-4,in_backward=True)
-    resumed_optimizer.load_state_dict(state)
-    for _ in range(2):
-        rng=(torch.get_rng_state(),torch.cuda.get_rng_state_all())
-        expected,_=native_training_update(student,optimizer,rows,backend=backend,chunk_tokens=8)
-        torch.set_rng_state(rng[0]);torch.cuda.set_rng_state_all(rng[1])
-        actual,_=native_training_update(resumed,resumed_optimizer,rows,backend=resumed_backend,chunk_tokens=8)
-        assert torch.equal(actual,expected)
-        for key,value in student.port.hf.state_dict().items():assert torch.equal(value,resumed.port.hf.state_dict()[key]),key
-        for key,value in student.state_dict().items():assert torch.equal(value,resumed.state_dict()[key]),key
-    def compare(a,b):
-        if isinstance(a,torch.Tensor):assert torch.equal(a,b)
-        elif isinstance(a,dict):
-            assert a.keys()==b.keys()
-            for key in a:compare(a[key],b[key])
-        elif isinstance(a,(list,tuple)):
-            assert len(a)==len(b)
-            for x,y in zip(a,b):compare(x,y)
-        else:assert a==b
-    compare(optimizer.state_dict(),resumed_optimizer.state_dict())

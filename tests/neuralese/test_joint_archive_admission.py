@@ -273,7 +273,7 @@ def test_bounded_rejects_forged_gradient_origin_without_publication(tmp_path):
 
 def test_repeat_persist_uses_dependency_metadata_and_repairs_missing_descendant(tmp_path, monkeypatch):
     from test_native_state_batch_import import _history
-    engine, records = _history(tmp_path, 'mellum', 'adam')
+    engine, records = _history(tmp_path, 'lfm', 'adam')
     target = SimpleNamespace(store=TensorStore(tmp_path / 'persist-store', resident_bytes=1))
     try:
         persist_artifacts(engine, [records[-1].id], tmp_path / 'source-artifacts', tmp_path / 'source-states')

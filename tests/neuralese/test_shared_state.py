@@ -22,13 +22,15 @@ def tiny(family):
     elif family == 'lfm3':
         from test_lfm3_port import tiny_lfm3
         port = tiny_lfm3()
-    else:
+    elif family == 'qwen':
         from transformers import Qwen3Config, Qwen3ForCausalLM
         config = Qwen3Config(vocab_size=64, hidden_size=32, intermediate_size=64,
             num_hidden_layers=4, num_attention_heads=4, num_key_value_heads=2,
             head_dim=8, max_position_embeddings=128, sliding_window=3, use_sliding_window=True,
             layer_types=['sliding_attention', 'full_attention'] * 2)
         port = QwenPortBackbone(Qwen3ForCausalLM(config).eval(), ControlTokens(62, 63), fast=False)
+    else:
+        raise ValueError(f'no tiny {family!r} backbone (the Mellum line is retired)')
     return port
 
 

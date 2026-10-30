@@ -138,7 +138,7 @@ def test_composite_full_patch_preserves_declared_norm_promotion(tmp_path,family)
 
 
 def test_profile_rejects_undeclared_storage_and_downgrade(tmp_path):
-    dtype=source(tmp_path/'base','mellum')
+    dtype=source(tmp_path/'base','lfm')
     model,_,_,config=load_native_model(tmp_path/'base',dtype=dtype,rank=4)
     upgrade_norm_precision(model,config)
     gain=next(iter(norm_parameters(model).values()))[1]
@@ -152,7 +152,7 @@ def test_profile_rejects_undeclared_storage_and_downgrade(tmp_path):
 def test_already_upgraded_checkpoint_composite_and_mislabeled_tensor_rejection(tmp_path):
     from natlang_neuralese.model.native_composite import write_native_composite_checkpoint
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
-    dtype=source(tmp_path/'base','mellum')
+    dtype=source(tmp_path/'base','lfm')
     model,_,_,config=load_native_model(tmp_path/'base',dtype=dtype,rank=4)
     upgrade_norm_precision(model,config)
     path=tmp_path/'upgraded.pt'

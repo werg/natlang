@@ -14,7 +14,7 @@ from natlang_neuralese.serve.native_optim import _native_optimizer_step_impl
 from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
 
 
-@pytest.fixture(params=['lfm','mellum'])
+@pytest.fixture(params=['lfm'])
 def source(tmp_path,request):
     from test_native_serving_adapters import engine_fixture
     engine=engine_fixture(tmp_path,request.param)

@@ -138,35 +138,6 @@ def test_adapter_graph_gradients_optimizer_continuation_and_native_state_identit
     engine.store.close()
 
 
-def test_actual_mellum_expert_buffer_adapter_and_coefficient_gradient(tmp_path):
-    engine=engine_fixture(tmp_path,'mellum')
-    names=[name for name,value in target_parameters(engine.shared_model).items() if value.ndim==3]
-    assert names, 'actual Mellum frozen expert banks must be exposed, not omitted from named_parameters'
-    name=names[0]
-    adapter=create_adapter(engine,{'rank':2,'parameter_names':[name]})
-    adapter=engine.store.put_native_tensor_artifact(replace(adapter.artifact,
-        tensors={name:torch.full_like(adapter.artifact.tensors[name],.2)}))
-    leaf=adapter.artifact.tensors[name].clone().requires_grad_(True)
-    ids=[4,5,6,7]
-    plan=compile_graph([Invocation('answer',tuple(ids))])
-    original=dict(engine.shared_model.named_buffers())[name]
-    baseline=engine.shared_model(plan)['h_final'].detach()
-    def execute():
-        hidden=engine.shared_model(plan)['h_final']
-        cache=None
-        for token in ids:
-            result=engine._native_forward([token],cache)
-            cache=result['cache']
-        torch.testing.assert_close(hidden[:,-1],result['h_final'][:,-1],atol=.006,rtol=.006)
-        grad=torch.autograd.grad(hidden.float().square().sum(),leaf)[0]
-        assert grad.norm()>0
-        return hidden.detach()
-    adapted=run_native(engine,execute,[adapter.id],leaves={adapter.id:{name:leaf}})
-    assert not torch.equal(adapted,baseline)
-    assert dict(engine.shared_model.named_buffers())[name] is original
-    engine.store.close()
-
-
 @pytest.mark.parametrize('family',['lfm'])
 def test_actual_http_typed_adapter_learning_scoring_generation_and_portable_restart(tmp_path,monkeypatch,family):
     import json,subprocess,threading
