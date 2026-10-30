@@ -1,6 +1,7 @@
+import { valueSummary, valueView, fieldLabel } from './presentation.js';
 // The run form of a target (natlang.json targets.<name>.arguments; ts-host/src/runtime/target-arguments.ts). Each argument gets
 // an editor generated from its natlang type, expanded through the program's types.ts: text, numbers, switches, choices,
-// records with their field docs, lists, dictionaries, unions, file paths and a JSON editor for anything else. The type
+// records with their field docs, lists, dictionaries, unions, file paths and an explicit value-kind chooser. The type
 // is shown as a hint everywhere; drafts are checked by the same reader `natlang run` uses (POST /api/programs/arguments),
 // whose problems appear at the field they name; the equivalent command line is kept current.
 
@@ -61,10 +62,10 @@ function roughFit(type, value) {
   switch (type.kind) {
     case 'prim': return type.name === 'unknown' || (type.name === 'null' ? value === null : type.name === 'Blob' ? typeof value === 'string' : typeof value === type.name);
     case 'lit': return value === type.value;
-    case 'list': return Array.isArray(value);
-    case 'dict': return isPlain(value);
+    case 'list': return Array.isArray(value) && value.every(item => roughFit(type.element, item));
+    case 'dict': return isPlain(value) && Object.values(value).every(item => roughFit(type.element, item));
     case 'record': return isPlain(value) && Object.keys(value).every(key => type.fields.some(field => field.name === key)) &&
-      type.fields.every(field => field.optional || Object.hasOwn(value, field.name));
+      type.fields.every(field => field.optional && !Object.hasOwn(value, field.name) || Object.hasOwn(value, field.name) && roughFit(field.type, value[field.name]));
     case 'union': return type.members.some(member => roughFit(member, value));
     case 'refined': case 'untrusted': return roughFit(type.base, value);
     default: return true;
@@ -114,9 +115,10 @@ export function argumentForm(ui, { program, target, form, previous, onSubmit }) 
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); onSubmit?.(); }
   } });
   const commandLine = h('code', { class: 'command-line' });
+  let commandToCopy = '';
   const summary = h('span', { class: 'small', role: 'status' });
   const copy = h('button', { type: 'button', class: 'ghost small', title: 'Copy the command', onclick: async () => {
-    try { await navigator.clipboard.writeText(commandLine.textContent); ui.toast('Command copied'); } catch { ui.toast('Copy failed: select the command and copy it', true); }
+    try { await navigator.clipboard.writeText(commandToCopy); ui.toast('Command copied'); } catch { ui.toast('Copy failed: select the command and copy it', true); }
   } }, 'Copy');
   const footer = h('div', { class: 'command-row' }, h('span', { class: 'small muted' }, 'Command'), commandLine, copy);
 
@@ -131,7 +133,7 @@ export function argumentForm(ui, { program, target, form, previous, onSubmit }) 
       catch (error) { summary.textContent = error.message; summary.className = 'small bad-text'; }
       fill(words, args.length ? args.map((word, index) => h('span', { class: 'chip', title: `context.args[${index}]` }, h('span', { class: 'muted' }, `${index}`), word || '""')) :
         h('span', { class: 'small muted' }, 'No arguments: context.args is empty.'));
-      commandLine.textContent = command(args);
+      commandToCopy = command(args); commandLine.textContent = `natlang run ${program} — ${args.length} ${args.length === 1 ? 'input' : 'inputs'}`;
     };
     fill(element, h('label', { class: 'field' }, 'Arguments', input), words,
       h('div', { class: 'small muted' }, 'This target declares no typed arguments, so its words reach context.args as text. Declare "arguments" for this target in natlang.json to get a typed form.'),
@@ -142,7 +144,7 @@ export function argumentForm(ui, { program, target, form, previous, onSubmit }) 
 
   // Declared arguments: a typed editor each, checked by the server as the user types.
   const slots = new Map(); // problem path -> where its message is shown
-  let local = [];          // problems an editor finds itself (broken JSON, a number that is not one)
+  let local = [];          // Problems a typed control finds before the server checks the complete value.
   let timer = 0, revision = 0, lastProblems = [];
   const ctx = {
     ui,
@@ -165,7 +167,7 @@ export function argumentForm(ui, { program, target, form, previous, onSubmit }) 
     return values;
   }
   function command(args) { return `natlang run ${shellQuote(program)} --target ${shellQuote(target)}${args.length ? ` -- ${args.map(shellQuote).join(' ')}` : ''}`; }
-  function renderCommand() { try { commandLine.textContent = command(words()); } catch { /* shown by check */ } }
+  function renderCommand() { try { const args = words(); commandToCopy = command(args); commandLine.textContent = `natlang run ${program} — ${args.length} ${args.length === 1 ? 'input' : 'inputs'}`; } catch { /* shown by check */ } }
   function show(problems) {
     lastProblems = problems;
     for (const slotElement of slots.values()) { slotElement.replaceChildren(); slotElement.hidden = true; }
@@ -183,7 +185,7 @@ export function argumentForm(ui, { program, target, form, previous, onSubmit }) 
   }
   async function check() {
     const current = ++revision, args = words(), found = local.slice();
-    commandLine.textContent = command(args);
+    commandToCopy = command(args); commandLine.textContent = `natlang run ${program} — ${args.length} ${args.length === 1 ? 'input' : 'inputs'}`;
     try {
       const { problems } = await api('POST', '/api/programs/arguments', { path: program, target, args });
       if (current !== revision) return lastProblems;
@@ -229,7 +231,7 @@ function argumentField(ctx, arg, initial) {
   const emptiable = (type.kind === 'prim' && ['string', 'number', 'Blob'].includes(type.name)) || literalsOnly(type);
   const body = h('div', { class: 'field-body' });
   let editor = null, given = initial !== undefined;
-  const placeholder = hasDefault ? `default: ${typeof arg.default === 'string' ? arg.default : JSON.stringify(arg.default)}` : arg.required ? 'required' : 'not given: the program decides';
+  const placeholder = hasDefault ? `Default: ${valueSummary(arg.default)}` : arg.required ? 'required' : 'not given: the program decides';
   const build = value => {
     editor = editorFor(ctx, arg.tree, value, arg.name, { placeholder, pathKind: arg.path, top: true, optional: !arg.required, required: arg.required });
     ctx.ui.fill(body, editor.element, !emptiable && !arg.required ? h('button', { type: 'button', class: 'ghost small', title: 'Leave this argument out',
@@ -238,7 +240,7 @@ function argumentField(ctx, arg, initial) {
   const render = () => {
     if (emptiable || arg.required || given) { if (!editor) build(initial); return; }
     ctx.ui.fill(body, h('div', { class: 'absent' }, h('span', { class: 'muted' }, hasDefault ? 'Uses the default ' : 'Not given; the program decides.'),
-      hasDefault ? h('code', { class: 'default-value' }, short(JSON.stringify(arg.default))) : null,
+      hasDefault ? h('details', { class: 'value-disclosure' }, h('summary', {}, 'Preview default'), valueView(h, arg.default)) : null,
       h('button', { type: 'button', class: 'small', onclick: () => { given = true; initial = hasDefault ? structuredClone(arg.default) : sampleOf(arg.tree); build(initial); editor.focus?.(); ctx.changed(); } },
         hasDefault ? 'Customize' : 'Set value')));
   };
@@ -267,7 +269,6 @@ function argumentField(ctx, arg, initial) {
   };
 }
 const MISSING = Symbol('missing');
-const short = (text, limit = 80) => text.length > limit ? text.slice(0, limit) + '…' : text;
 
 /**
  * An editor for a value of `type`: { element, get(), set(value), focus() }. `get()` returns the value, `undefined`
@@ -294,7 +295,7 @@ function createEditor(ctx, type, value, path, options) {
       if (inner.name === 'number') return numberEditor(ctx, value, path, options);
       if (inner.name === 'boolean') return switchEditor(ctx, value);
       if (inner.name === 'null') return constantEditor(ctx, null);
-      return jsonEditor(ctx, value, path, { type: inner });
+      return dynamicEditor(ctx, value, path);
     case 'lit': return constantEditor(ctx, inner.value);
     case 'union':
       if (literalsOnly(inner)) return choiceEditor(ctx, inner, value, options);
@@ -302,7 +303,7 @@ function createEditor(ctx, type, value, path, options) {
     case 'record': return structured(ctx, inner, value, path, recordEditor);
     case 'list': return structured(ctx, inner, value, path, listEditor);
     case 'dict': return structured(ctx, inner, value, path, dictEditor);
-    default: return jsonEditor(ctx, value, path, { type: inner });
+    default: return dynamicEditor(ctx, value, path);
   }
 }
 
@@ -370,15 +371,15 @@ function switchEditor(ctx, value) {
   const { h } = ctx.ui;
   const box = h('input', { type: 'checkbox', role: 'switch' });
   box.checked = value === true;
-  const label = h('span', { class: 'mono small' }, String(box.checked));
-  box.addEventListener('change', () => { label.textContent = String(box.checked); ctx.changed(); });
+  const label = h('span', { class: 'mono small' }, box.checked ? 'Yes' : 'No');
+  box.addEventListener('change', () => { label.textContent = box.checked ? 'Yes' : 'No'; ctx.changed(); });
   return { element: h('label', { class: 'switch' }, box, h('span', { class: 'track', 'aria-hidden': 'true' }), label),
-    get: () => box.checked, set(next) { box.checked = next === true; label.textContent = String(box.checked); }, focus: () => box.focus() };
+    get: () => box.checked, set(next) { box.checked = next === true; label.textContent = box.checked ? 'Yes' : 'No'; }, focus: () => box.focus() };
 }
 
 function constantEditor(ctx, value) {
   const { h } = ctx.ui;
-  return { element: h('code', { class: 'constant' }, JSON.stringify(value)), get: () => value, set() {} };
+  return { element: h('span', { class: 'constant' }, valueSummary(value)), get: () => value, set() {} };
 }
 
 /** A union of literals: segmented buttons when they are few and short, otherwise a select. */
@@ -389,10 +390,10 @@ function choiceEditor(ctx, type, value, { top } = {}) {
   const allowEmpty = !!top;
   // A value that is none of the choices (from JSON or an older run) shows as unchosen rather than becoming another value.
   let current = values.some(item => item === value) ? value : undefined;
-  const label = item => item === undefined ? '—' : typeof item === 'string' ? item : JSON.stringify(item);
+  const label = item => item === undefined ? '—' : valueSummary(item);
   if (values.length <= 6 && values.reduce((sum, item) => sum + label(item).length, 0) <= 64) {
     const buttons = [...(allowEmpty ? [undefined] : []), ...values].map(item => h('button', { type: 'button', role: 'radio',
-      title: item === undefined ? 'Not given' : JSON.stringify(item), onclick: () => { current = item; paint(); ctx.changed(); } }, label(item)));
+      title: item === undefined ? 'Not given' : valueSummary(item), onclick: () => { current = item; paint(); ctx.changed(); } }, label(item)));
     const group = h('div', { class: 'segmented', role: 'radiogroup' }, buttons);
     const items = [...(allowEmpty ? [undefined] : []), ...values];
     const paint = () => buttons.forEach((button, index) => { const on = items[index] === current; button.classList.toggle('on', on); button.setAttribute('aria-checked', String(on)); });
@@ -441,30 +442,27 @@ function unionEditor(ctx, type, value, path, options) {
     focus: () => editor.focus?.() };
 }
 
-/** A record, list or dictionary editor with a switch to edit the same value as JSON. */
+/** Structured values always use their typed fields; serialized data is never the editing surface. */
 function structured(ctx, type, value, path, build) {
-  const { h, fill } = ctx.ui;
-  const box = h('div', { class: `structured ${type.kind}` });
-  const content = h('div', {});
-  let editor, asJson = false;
-  const toggle = h('button', { type: 'button', class: 'ghost small json-toggle', title: 'Edit this value as JSON' }, '{ } JSON');
-  const header = h('div', { class: 'structured-head' }, type.alias ? h('span', { class: 'alias' }, type.alias) : null,
-    h('span', { class: 'small muted' }, type.kind === 'list' ? 'list' : type.kind === 'dict' ? 'dictionary' : 'record'), toggle);
-  const draw = start => {
-    const inner = { ...ctx, inside: true };
-    editor = asJson ? jsonEditor(inner, start, path, { type }) : build(inner, type, start, path);
-    toggle.textContent = asJson ? '☰ Form' : '{ } JSON';
-    toggle.title = asJson ? 'Edit this value with the form' : 'Edit this value as JSON';
-    fill(content, editor.element);
-  };
-  toggle.onclick = () => {
-    const current = editor.get();
-    if (asJson && current === MISSING) { ctx.ui.toast('Fix the JSON before switching to the form', true); return; }
-    asJson = !asJson; draw(current === MISSING ? undefined : current); ctx.changed();
-  };
-  draw(value);
-  fill(box, header, content);
-  return { element: box, get: () => editor.get(), set(next) { draw(next); }, focus: () => editor.focus?.() };
+  const editor = build({ ...ctx, inside: true }, type, value, path);
+  const { h } = ctx.ui;
+  const file = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'aria-label': `Import ${path}` });
+  file.addEventListener('change', async () => {
+    const selected = file.files?.[0]; if (!selected) return;
+    try {
+      let imported; try { imported = JSON.parse(await selected.text()); } catch { throw new Error('This file could not be read as structured data. Choose a valid data file.'); }
+      if (!roughFit(type, imported)) throw new Error('This file does not match the field’s declared type. Its current values have been kept.');
+      editor.set(imported); ctx.changed(); ctx.ui.toast(`Imported ${selected.name}`);
+    } catch (error) { ctx.ui.toast(error.message, true); }
+    finally { file.value = ''; }
+  });
+  return { ...editor, element: ctx.ui.h('div', { class: `structured ${type.kind}` },
+    h('div', { class: 'structured-head' }, h('span', { class: 'small muted' }, type.alias || (type.kind === 'list' ? 'Items' : 'Fields')),
+      h('button', { type: 'button', class: 'ghost small', onclick: () => file.click() }, 'Import data'),
+      h('button', { type: 'button', class: 'ghost small', onclick: async () => {
+        const value = editor.get(); if (value === MISSING || value === undefined) { ctx.ui.toast('Complete the fields before copying.', true); return; }
+        try { await navigator.clipboard.writeText(JSON.stringify(value, null, 2)); ctx.ui.toast('Value copied'); } catch { ctx.ui.toast('Copy is unavailable in this browser.', true); }
+      } }, 'Copy data'), file), editor.element) };
 }
 
 function recordEditor(ctx, type, value, path) {
@@ -514,7 +512,7 @@ function listEditor(ctx, type, value, path) {
     const chosen = new Set(Array.isArray(value) ? value : []);
     const chips = options.map(item => { const chip = h('button', { type: 'button', class: 'chip toggle', 'aria-pressed': String(chosen.has(item)),
       onclick: () => { chosen.has(item) ? chosen.delete(item) : chosen.add(item); chip.setAttribute('aria-pressed', String(chosen.has(item))); ctx.changed(); } },
-      typeof item === 'string' ? item : JSON.stringify(item)); return chip; });
+      valueSummary(item)); return chip; });
     return { element: h('div', { class: 'chips' }, chips), get: () => options.filter(item => chosen.has(item)), focus: () => chips[0]?.focus(),
       set(next) { chosen.clear(); (next ?? []).forEach(item => chosen.add(item)); chips.forEach((chip, index) => chip.setAttribute('aria-pressed', String(chosen.has(options[index])))); } };
   }
@@ -591,7 +589,7 @@ function dictEditor(ctx, type, value, path) {
       for (const entry of entries) {
         if (!entry.key) { ctx.local(path, `${path}: an entry has no key`); broken = true; continue; }
         if (Object.hasOwn(out, entry.key)) { ctx.local(path, `${path}: the key ${JSON.stringify(entry.key)} appears twice`); broken = true; continue; }
-        const current = entry.editor.get(); if (current === MISSING) broken = true; else out[entry.key] = current;
+        const current = entry.editor.get(); if (current === MISSING) broken = true; else Object.defineProperty(out, entry.key, { value: current, enumerable: true, configurable: true, writable: true });
       }
       return broken ? MISSING : out;
     } };
@@ -637,123 +635,41 @@ function pathEditor(ctx, value, path, { placeholder, pathKind }) {
     get: () => field.value === '' && !ctx.inside ? undefined : field.value, set(next) { field.value = next ?? ''; }, focus: () => field.focus() };
 }
 
-/** A JSON editor: highlighting, line numbers, bracket and quote pairing, indentation, format/compact and a template
- * of the expected type, with parse errors shown at their line. */
-function jsonEditor(ctx, value, path, { type } = {}) {
-  const { h } = ctx.ui;
-  const area = h('textarea', { class: 'json-input', spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off', wrap: 'off', title: `${path} as JSON` });
-  const highlight = h('pre', { class: 'json-highlight', 'aria-hidden': 'true' });
-  const gutter = h('div', { class: 'json-gutter', 'aria-hidden': 'true' });
-  const status = h('div', { class: 'json-status small' });
-  area.value = value === undefined || value === MISSING ? '' : JSON.stringify(value, null, 2);
-  let errorLine = -1;
-  const paint = () => {
-    const text = area.value, lines = text.split('\n');
-    highlight.innerHTML = highlightJson(text) + '\n';
-    gutter.replaceChildren(...lines.map((_, index) => h('div', { class: index === errorLine ? 'error-line' : '' }, String(index + 1))));
-    const rows = Math.min(Math.max(lines.length, 3), 22);
-    area.style.height = `${rows * 18 + 14}px`;
-    highlight.style.height = gutter.style.height = area.style.height;
-    sync();
+
+/** Unknown values still have a real editor: choose a shape, then fill its controls. */
+function dynamicEditor(ctx, initial, path) {
+  const { h, fill } = ctx.ui;
+  const shape = value => value === null ? 'empty' : Array.isArray(value) ? 'list' : typeof value === 'object' && value !== undefined ? 'fields' : typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : 'text';
+  const types = { text: { kind: 'prim', name: 'string' }, number: { kind: 'prim', name: 'number' }, boolean: { kind: 'prim', name: 'boolean' },
+    empty: { kind: 'prim', name: 'null' }, list: { kind: 'list', element: { kind: 'prim', name: 'unknown' } }, fields: { kind: 'dict', element: { kind: 'prim', name: 'unknown' } } };
+  const choices = [['text', 'Text'], ['number', 'Number'], ['boolean', 'Yes / no'], ['fields', 'Fields'], ['list', 'List'], ['empty', 'No value']];
+  const select = h('select', { 'aria-label': `${path} kind` }, choices.map(([value, label]) => h('option', { value }, label)));
+  select.value = shape(initial);
+  const body = h('div', { class: 'dynamic-body' }); let editor;
+  const draw = value => {
+    const type = types[select.value];
+    editor = editorFor({ ...ctx, inside: true }, type, value === undefined ? sampleOf(type) : value, path);
+    fill(body, editor.element);
   };
-  const sync = () => { highlight.scrollTop = area.scrollTop; highlight.scrollLeft = area.scrollLeft; gutter.scrollTop = area.scrollTop; };
-  const parse = () => {
-    const text = area.value;
-    if (!text.trim()) { errorLine = -1; status.className = 'json-status small muted'; status.textContent = 'Empty.'; return { empty: true }; }
-    try {
-      const parsed = JSON.parse(text);
-      errorLine = -1; status.className = 'json-status small ok-text';
-      status.textContent = `✓ ${Array.isArray(parsed) ? `list of ${parsed.length}` : isPlain(parsed) ? `object with ${Object.keys(parsed).length} field${Object.keys(parsed).length === 1 ? '' : 's'}` : typeof parsed}`;
-      return { value: parsed };
-    } catch (error) {
-      const where = errorPosition(error.message, text);
-      errorLine = where ? where.line - 1 : -1;
-      status.className = 'json-status small bad-text';
-      status.replaceChildren(`✗ ${error.message.replace(/^JSON\.parse: /, '')}`);
-      if (where) status.append(' ', h('a', { href: '#', onclick: event => { event.preventDefault(); jump(where); } }, `go to line ${where.line}`));
-      return { error: error.message };
-    }
-  };
-  const jump = ({ line, column }) => {
-    const lines = area.value.split('\n'); let offset = 0;
-    for (let index = 0; index < line - 1 && index < lines.length; index++) offset += lines[index].length + 1;
-    area.focus(); area.setSelectionRange(offset + column - 1, offset + column - 1);
-  };
-  const insert = (text, selectStart, selectEnd) => {
-    // execCommand keeps the browser's undo history; setRangeText is the fallback.
-    if (!document.execCommand?.('insertText', false, text)) { area.setRangeText(text, area.selectionStart, area.selectionEnd, 'end'); area.dispatchEvent(new Event('input')); }
-    if (selectStart !== undefined) area.setSelectionRange(selectStart, selectEnd ?? selectStart);
-  };
-  const PAIRS = { '{': '}', '[': ']', '"': '"' };
-  area.addEventListener('keydown', event => {
-    const { selectionStart: start, selectionEnd: end, value: text } = area;
-    const before = text[start - 1], after = text[start];
-    const lineStart = text.lastIndexOf('\n', start - 1) + 1, indent = /^\s*/.exec(text.slice(lineStart))[0];
-    if (event.key === 'Tab') {
-      event.preventDefault();
-      const blockStart = text.lastIndexOf('\n', start - 1) + 1, blockEnd = end > start && text[end - 1] === '\n' ? end - 1 : end;
-      if (start === end && !event.shiftKey) return insert('  ');
-      const block = text.slice(blockStart, blockEnd);
-      const changed = block.split('\n').map(line => event.shiftKey ? line.replace(/^ {1,2}/, '') : '  ' + line).join('\n');
-      area.setSelectionRange(blockStart, blockEnd); insert(changed, blockStart, blockStart + changed.length);
-    } else if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      event.preventDefault();
-      if ((before === '{' && after === '}') || (before === '[' && after === ']')) {
-        insert(`\n${indent}  \n${indent}`, start + indent.length + 3);
-      } else insert(`\n${indent}${before === '{' || before === '[' ? '  ' : ''}`);
-    } else if (PAIRS[event.key] && !event.ctrlKey && !event.metaKey) {
-      if (event.key === '"' && after === '"' && start === end) { event.preventDefault(); area.setSelectionRange(start + 1, start + 1); return; }
-      if (start !== end) { event.preventDefault(); const inner = text.slice(start, end); insert(event.key + inner + PAIRS[event.key], start + 1, end + 1); return; }
-      if (after === undefined || /[\s}\],:]/.test(after)) { event.preventDefault(); insert(event.key + PAIRS[event.key], start + 1); }
-    } else if ((event.key === '}' || event.key === ']') && after === event.key && start === end) {
-      event.preventDefault(); area.setSelectionRange(start + 1, start + 1);
-    } else if (event.key === 'Backspace' && start === end && PAIRS[before] && PAIRS[before] === after) {
-      event.preventDefault(); area.setSelectionRange(start - 1, start + 1); insert('');
-    }
-  });
-  area.addEventListener('input', () => { parse(); paint(); ctx.changed(); });
-  area.addEventListener('scroll', sync);
-  const reformat = spacing => { const result = parse(); if (result.value === undefined) { if (result.error) ctx.ui.toast('Fix the JSON first', true); return; }
-    area.focus(); area.select(); insert(JSON.stringify(result.value, null, spacing)); };
-  const tools = h('div', { class: 'editor-tools' },
-    h('button', { type: 'button', class: 'ghost small', title: 'Indent the JSON', onclick: () => reformat(2) }, 'Format'),
-    h('button', { type: 'button', class: 'ghost small', title: 'Put the JSON on one line', onclick: () => reformat(0) }, 'Compact'),
-    type ? h('button', { type: 'button', class: 'ghost small', title: `Insert a starting value of type ${formatType(type)}`, onclick: () => {
-      if (area.value.trim() && !confirm('Replace the JSON with a template of the type?')) return;
-      area.focus(); area.select(); insert(JSON.stringify(sampleOf(type), null, 2)); } }, 'Template') : null,
-    status);
-  parse(); paint();
-  return { element: h('div', { class: 'json-editor' }, h('div', { class: 'json-frame' }, gutter, h('div', { class: 'json-code' }, highlight, area)), tools),
-    focus: () => area.focus(),
-    set(next) { area.value = next === undefined ? '' : JSON.stringify(next, null, 2); parse(); paint(); },
+  select.addEventListener('change', () => { draw(undefined); ctx.changed(); });
+  draw(initial);
+  return { element: h('div', { class: 'dynamic-editor' }, h('div', { class: 'dynamic-kind' }, h('span', { class: 'small muted' }, 'Value kind'), select), body),
+    get: () => editor.get(), set(next) { select.value = shape(next); draw(next); }, focus: () => editor.focus?.() };
+}
+
+/** Reuse the typed controls for a function parameter or an expected result. No serialized-data textarea is needed. */
+export function typedValueEditor(ui, { name = 'value', type = { kind: 'prim', name: 'unknown' }, value, required = true, description, onChange } = {}) {
+  const slots = new Map(), problems = []; const errors = ui.h('div', { class: 'field-problems', hidden: true, role: 'alert' });
+  const ctx = { ui, inside: true, slot(path, element) { slots.set(path, element); }, local(path, message) { problems.push({ path, message }); }, changed() { onChange?.(); }, submit() {} };
+  const editor = editorFor(ctx, type, value, name, { top: true, required });
+  const element = ui.h('div', { class: 'argument typed-value-field' }, ui.h('div', { class: 'argument-head' }, ui.h('strong', {}, fieldLabel(name)), typeHint(ui.h, formatType(type))),
+    description ? ui.h('p', { class: 'small muted' }, description) : null, editor.element, errors);
+  return { element, set: next => editor.set(next), focus: () => editor.focus?.(),
     get() {
-      const result = parse();
-      if (result.empty) return undefined;
-      if (result.error) { ctx.local(path, `${path}: not valid JSON: ${result.error.replace(/^JSON\.parse: /, '')}`); return MISSING; }
-      return result.value;
+      problems.length = 0; errors.hidden = true;
+      const value = editor.get();
+      if (required && value === undefined) problems.push({ path: name, message: `Choose a value for ${fieldLabel(name).toLowerCase()}.` });
+      if (problems.length || value === MISSING) { errors.hidden = false; errors.textContent = problems.map(item => item.message).join(' '); throw new Error('Check the highlighted value.'); }
+      return value;
     } };
-}
-
-function errorPosition(message, text) {
-  const lineColumn = /line (\d+) column (\d+)/.exec(message);
-  if (lineColumn) return { line: Number(lineColumn[1]), column: Number(lineColumn[2]) };
-  const position = /position (\d+)/.exec(message);
-  if (!position) return null;
-  const before = text.slice(0, Number(position[1])).split('\n');
-  return { line: before.length, column: before.at(-1).length + 1 };
-}
-
-const escapeHtml = text => text.replace(/[&<>]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char]);
-function highlightJson(text) {
-  let out = '', last = 0;
-  const pattern = /("(?:[^"\\\n]|\\.)*"?)(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|([{}[\],])/g;
-  for (const match of text.matchAll(pattern)) {
-    out += escapeHtml(text.slice(last, match.index));
-    if (match[1]) out += `<span class="${match[2] ? 'j-key' : 'j-str'}">${escapeHtml(match[1])}</span>${match[2] ? `<span class="j-punct">${escapeHtml(match[2])}</span>` : ''}`;
-    else if (match[3]) out += `<span class="j-num">${match[3]}</span>`;
-    else if (match[4]) out += `<span class="j-lit">${match[4]}</span>`;
-    else out += `<span class="j-punct">${escapeHtml(match[5])}</span>`;
-    last = match.index + match[0].length;
-  }
-  return out + escapeHtml(text.slice(last));
 }

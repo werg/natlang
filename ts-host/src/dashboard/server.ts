@@ -350,7 +350,15 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     const lastCalls = jobs.list().filter(job => job.kind === 'call' && job.status === 'done' && job.meta?.program === (relative(root, directory) || '.'));
     let examples = 0, examplesProblem: string | null = null;
     try { examples = readExamples(directory).length; } catch (error) { examplesProblem = (error as Error).message; }
-    return { directory: relative(root, directory) || '.', manifest, problem, functions: programFunctions(directory),
+    const describe = (name: string, type: string, required = true) => {
+      try { return describeArguments([{ name, type, required }], directory)[0]!; }
+      catch (error) { return { name, type, text: type, required, tree: { kind: 'prim', name: 'unknown' }, problem: (error as Error).message }; }
+    };
+    const functions = programFunctions(directory).map(fn => ({ ...fn,
+      fields: fn.params.map(param => { const colon = param.indexOf(':'); const name = param.slice(0, colon).trim();
+        return describe(name.replace(/\?$/, ''), param.slice(colon + 1).trim(), !name.endsWith('?')); }),
+      result: describe('expected result', fn.returns) }));
+    return { directory: relative(root, directory) || '.', manifest, problem, functions,
       lastRuns: Object.fromEntries(lastRuns.slice().reverse().map(job => [String(job.meta?.target ?? ''), job.meta])), examples, examplesProblem,
       lastCalls: Object.fromEntries(lastCalls.slice().reverse().map(job => [String(job.meta?.path), job.meta])),
       lock: readBuildLock(join(directory, '.natlang', 'build')) ?? null,
@@ -477,7 +485,7 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     if (!['good', 'bad', 'fix'].includes(String(verdict))) throw new HttpError(400, 'verdict is good, bad or fix');
     const { recordFeedback } = await import('../calls/feedback.js');
     return { message: withStore(s => recordFeedback(s, { verdict: verdict as 'good' | 'bad' | 'fix', call: decodeURIComponent(params.id!), dryRun: false,
-      ...(expected === undefined || expected === '' ? {} : { expected: typeof expected === 'string' ? expected : JSON.stringify(expected) }) })) };
+      ...(expected === undefined ? {} : { expected: JSON.stringify(expected) }) })) };
   });
   route('POST', '/api/traces/:id/pin', (_request, params, _query, body) => withStore(s => {
     s.pin(decodeURIComponent(params.id!), (body as { pinned?: boolean })?.pinned !== false); return { ok: true };

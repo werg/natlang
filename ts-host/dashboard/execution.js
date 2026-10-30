@@ -1,4 +1,5 @@
 // The execution display consumes the runtime's existing live events. It never invents progress or runs a model.
+import { createOutputView, problemView, codeView, valueView } from './presentation.js';
 const terminal = status => status && status !== 'running';
 const stopped = status => ['stopped', 'quiesced', 'interrupted'].includes(status);
 const failed = status => terminal(status) && status !== 'done' && !stopped(status);
@@ -100,8 +101,23 @@ export function executionSummary(model, job = {}) {
   return { active, complete, problems, total: calls.length, stopped: calls.filter(call => stopped(call.status)).length, unfinished: running.length - active.length };
 }
 
+/** Stream the code itself, never the JSON envelope that happens to carry the tool call. */
+export function toolDraft(tool) {
+  try {
+    const args = JSON.parse(tool.arguments || '{}');
+    if (tool.name === 'eval' && typeof args.code === 'string') return { kind: 'code', code: args.code };
+    return { kind: 'value', value: tool.name === 'return_result' && Object.hasOwn(args, 'value') ? args.value : args };
+  } catch {
+    if (tool.name === 'eval') {
+      const match = /"code"\s*:\s*"((?:[^"\\]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*)/.exec(tool.arguments || '');
+      if (match) { try { return { kind: 'code', code: JSON.parse('"' + match[1] + '"') }; } catch { /* wait for a complete escaped character */ } }
+    }
+    return { kind: 'pending' };
+  }
+}
+
 /** Keyed DOM nodes preserve disclosure, focus and scroll while text and statuses stream into them. */
-export function createExecutionView(h) {
+export function createExecutionView(h, { traceLinks = true } = {}) {
   const title = h('h2', {}, 'Live execution'), status = h('span', { class: 'execution-connection', role: 'status' });
   const headline = h('div', { class: 'execution-headline', role: 'status', 'aria-live': 'polite' });
   const counts = h('div', { class: 'small muted' }), list = h('div', { class: 'lambda-list' });
@@ -121,11 +137,6 @@ export function createExecutionView(h) {
     if (previous && next.startsWith(previous) && node.childNodes.length === 1 && node.firstChild.nodeType === 3) node.firstChild.appendData(next.slice(previous.length));
     else node.textContent = next;
   };
-  const streamText = (node, value) => {
-    const follow = node.scrollHeight - node.scrollTop - node.clientHeight < 28, scroll = node.scrollTop;
-    set(node, value);
-    node.scrollTop = follow ? node.scrollHeight : scroll;
-  };
   const select = calls => {
     if (showAll) return calls;
     const opened = calls.filter(call => views.get(call.id)?.details.open);
@@ -141,19 +152,20 @@ export function createExecutionView(h) {
       h('span', { class: 'lambda-signal', 'aria-hidden': 'true' }), h('span', { class: 'lambda-label' }, name, phase), elapsed),
       h('div', { class: 'lambda-body' }, problem, steps, children,
         h('a', { class: 'small', href: `#traces-call-${encodeURIComponent(call.id)}` }, 'Open recorded trace')));
+    if (!traceLinks) details.querySelector('a')?.remove();
     const view = { details, name, phase, elapsed, steps, children, problem, turns: new Map() }; views.set(call.id, view); return view;
   }
   function turnView(view, turn) {
     if (view.turns.has(turn.number)) return view.turns.get(turn.number);
     const label = h('span'), metrics = h('p', { class: 'small muted' });
-    const reply = h('pre', { class: 'stream-content', tabindex: '0', 'aria-label': `Model output for step ${turn.number}` });
-    const replyGroup = h('div', {}, h('p', { class: 'small muted' }, 'Model output · drafts may change until the call finishes'), reply);
-    const reason = h('pre', { class: 'stream-content', tabindex: '0' });
-    const reasoning = h('details', { class: 'lambda-reasoning' }, h('summary', {}, 'Model reasoning'), reason);
+    const replyReader = createOutputView(h, { label: `Model output for step ${turn.number}`, className: 'stream-content' });
+    const replyGroup = h('div', {}, h('p', { class: 'small muted' }, 'Model output · drafts may change until the call finishes'), replyReader.element);
+    const reasonReader = createOutputView(h, { label: `Reasoning for step ${turn.number}`, className: 'stream-content' });
+    const reasoning = h('details', { class: 'lambda-reasoning' }, h('summary', {}, 'Model reasoning'), reasonReader.element);
     const failures = h('div'), tools = h('div', { class: 'lambda-tools' });
     const details = h('details', { class: 'lambda-step' }, h('summary', {}, label), replyGroup, tools, failures, reasoning, metrics);
     view.steps.append(details);
-    const result = { details, label, metrics, reply, replyGroup, reason, reasoning, failures, tools, actions: new Map() };
+    const result = { details, label, metrics, replyReader, replyGroup, reasonReader, reasoning, failures, tools, actions: new Map() };
     view.turns.set(turn.number, result); return result;
   }
   function updateCall(call, job) {
@@ -161,33 +173,40 @@ export function createExecutionView(h) {
     set(view.name, lambdaName(call)); set(view.phase, lambdaStatus(call, job));
     set(view.elapsed, duration((call.ended ?? (job.drained && job.endedAt ? Date.parse(job.endedAt) : Date.now())) - call.started));
     view.details.dataset.state = active ? 'running' : call.status === 'done' ? 'done' : stopped(call.status) || job.status === 'stopped' ? 'stopped' : 'attention';
-    view.problem.hidden = !call.detail || call.status === 'done'; set(view.problem, call.detail);
+    view.problem.hidden = !call.detail || call.status === 'done';
+    if (view.lastProblem !== call.detail) { view.lastProblem = call.detail; view.problem.replaceChildren(problemView(h, call.detail)); }
     for (const turn of call.turns.values()) {
       const node = turnView(view, turn), pending = active && turn.number === call.lastTurn;
       set(node.label, `Step ${turn.number}${pending ? ' · in progress' : ''}${turn.failures.length ? ` · ${call.status === 'done' ? 'recovered issue' : 'issue recorded'}` : ''}`);
-      node.replyGroup.hidden = !turn.text; streamText(node.reply, turn.text);
-      node.reasoning.hidden = !turn.reasoning; streamText(node.reason, turn.reasoning);
+      node.replyGroup.hidden = !turn.text; node.replyReader.update(turn.text, { running: pending });
+      node.reasoning.hidden = !turn.reasoning; node.reasonReader.update(turn.reasoning, { running: pending });
       const received = turn.text.length + turn.reasoning.length + turn.tools.reduce((sum, tool) => sum + (tool?.arguments?.length ?? 0), 0);
       const usage = turn.working ? (received ? `Streaming · ${received.toLocaleString()} characters received` : 'Waiting for the model response. Some providers return a whole step at once.') :
         turn.tokenUsage ? `${turn.prompt.toLocaleString()} input tokens · ${turn.completion.toLocaleString()} generated tokens` : 'Model usage was not reported for this step.';
       const truncated = turn.text.length >= 100_000 || turn.reasoning.length >= 100_000 || turn.tools.some(tool => tool?.arguments?.length >= 100_000) || turn.results.some(result => result.length >= 100_000);
       set(node.metrics, `${usage}${turn.ms !== undefined ? ` · ${duration(turn.ms)}` : ''}${turn.retries ? ` · ${turn.retries} request ${turn.retries === 1 ? 'retry' : 'retries'}` : ''}${truncated ? ' · Showing the latest part of a long message; open the recorded trace for full details.' : ''}`);
-      set(node.failures, turn.failures.join('\n'));
-      node.failures.className = turn.failures.length ? 'callout warn' : '';
+      const failureText = turn.failures.join('\n');
+      if (node.lastFailure !== failureText) { node.lastFailure = failureText; node.failures.replaceChildren(...turn.failures.map(message => problemView(h, message))); }
       for (const [index, tool] of turn.tools.entries()) {
         if (!tool) continue;
         let action = node.actions.get(index);
         if (!action) {
-          const heading = h('span'), code = h('pre', { class: 'stream-content', tabindex: '0' }), result = h('pre', { class: 'stream-content', tabindex: '0' });
-          const resultGroup = h('div', {}, h('p', { class: 'small muted' }, 'Step result'), result);
+          const heading = h('span'), code = h('div', { class: 'action-content' }), result = createOutputView(h, { label: 'Step result', className: 'stream-content' });
+          const resultGroup = h('div', {}, h('p', { class: 'small muted' }, 'Step result'), result.element);
           const details = h('details', { class: 'lambda-action' }, h('summary', {}, heading), code, resultGroup);
           action = { heading, code, result, resultGroup, details }; node.actions.set(index, action); node.tools.append(details);
         }
-        let code = tool.arguments || 'Waiting for the model to finish writing this step…';
-        try { const args = JSON.parse(tool.arguments); code = tool.name === 'eval' && typeof args.code === 'string' ? args.code : JSON.stringify(args, null, 2); } catch { /* partial arguments are still streaming */ }
+        const draft = toolDraft(tool);
         const label = { eval: 'Execute code', return_result: 'Return an answer', read_code: 'Read a helper', read_page: 'Read more input' }[tool.name] || (tool.name ? `Call ${tool.name}` : 'Preparing a tool call');
         set(action.heading, `${label}${tool.outcome === 'rejected' ? ' · rejected' : tool.outcome ? ' · finished' : pending ? ' · in progress' : ''}`);
-        streamText(action.code, code); action.resultGroup.hidden = !turn.results[index]; streamText(action.result, turn.results[index] || '');
+        const signature = `${draft.kind}:${draft.kind === 'code' ? draft.code : tool.arguments}`;
+        if (action.signature !== signature) {
+          action.signature = signature;
+          const top = action.code.scrollTop;
+          action.code.replaceChildren(draft.kind === 'code' ? codeView(h, draft.code) : draft.kind === 'value' ? valueView(h, draft.value) : h('p', { class: 'small muted' }, 'Receiving the next step…'));
+          action.code.scrollTop = top;
+        }
+        action.resultGroup.hidden = !turn.results[index]; action.result.update(turn.results[index] || '');
       }
       // A transport retry resets this step's draft rather than appending a duplicate execution.
       for (const [index, action] of node.actions) if (!turn.tools[index]) { action.details.remove(); node.actions.delete(index); }
@@ -223,7 +242,8 @@ export function createExecutionView(h) {
     } else if (!stats.total && isRunning) {
       const lastLine = log.trim().split('\n').at(-1) || '';
       set(headline, /download/i.test(lastLine) ? 'Downloading the model' : /starting managed|loading.*model/i.test(lastLine) ? 'Loading the model' : job.kind === 'setup' ? 'Preparing the model runtime' : 'Preparing the program');
-    } else set(headline, isRunning ? 'Model calls finished · the program is continuing' : job.status === 'done' ? 'Program finished' : job.status === 'stopped' ? 'Program stopped' : job.status === 'lost' ? 'Connection to the program was lost' : 'The program needs attention');
+    } else { const noun = ['call', 'ask'].includes(job.kind) ? 'Function' : 'Program';
+      set(headline, isRunning ? 'Model calls finished · the program is continuing' : job.status === 'done' ? `${noun} finished` : job.status === 'stopped' ? `${noun} stopped` : job.status === 'lost' ? 'Connection to the program was lost' : `${noun} needs attention`); }
     set(counts, stats.total ? `${stats.active.length} running · ${stats.complete} finished${stats.problems ? ` · ${stats.problems} ${stats.problems === 1 ? 'needs' : 'need'} attention` : ''}${stats.stopped ? ` · ${stats.stopped} stopped` : ''}${stats.unfinished ? ` · ${stats.unfinished} ${['stopped', 'lost'].includes(job.status) ? 'interrupted' : 'ended without a result'}` : ''}` :
       isRunning ? 'Natural-language functions will appear here as they start. Output streams alongside them.' : 'This run made no natural-language calls. See Output or Log for its result.');
     const shown = select(model.roots); for (const call of shown) updateCall(call, job);

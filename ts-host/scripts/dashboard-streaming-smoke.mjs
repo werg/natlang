@@ -83,6 +83,17 @@ try {
   assert.ok(await output.evaluate(node => node.scrollTop > 0));
   await page.getByRole('button', { name: 'Follow output', exact: true }).waitFor({ state: 'hidden' });
 
+  appendFileSync(join(directory, 'stdout.log'), 'Report {"summary":"A clean streamed record","details":{"nested":{"status":{"ok":true}}}}\nReport {"summary":');
+  await output.getByText('A clean streamed record', { exact: true }).waitFor();
+  await output.getByText('Receiving details…', { exact: true }).waitFor();
+  assert.ok(!(await output.innerText()).includes('"summary":'), 'partial structured records are never displayed as JSON');
+  const expandedValue = output.locator('details[data-value-path]').last();
+  await expandedValue.locator(':scope > summary').click();
+  await output.locator('.value-boolean.yes').waitFor();
+  appendFileSync(join(directory, 'stdout.log'), '"The next clean record"}\n');
+  await output.getByText('The next clean record', { exact: true }).waitFor();
+  assert.equal(await output.locator('details[data-value-path][open]').count(), 1, 'structured record disclosures survive new output');
+
   emit('child', { type: 'model_delta', turn: 1, delta: { type: 'tool_call', index: 0, name: 'eval', arguments: '{"code":"return ' } }, 'parent');
   await child.getByText('Execute code · in progress', { exact: true }).waitFor();
   await child.locator('.lambda-action > summary').click();

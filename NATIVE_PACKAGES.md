@@ -88,10 +88,11 @@ as given.
 The dashboard's Run panel builds a form from the same types: text fields that
 grow to several lines, numbers, switches, choices for literal unions, records
 with the field doc comments of `types.ts`, lists and dictionaries, variants of a
-union, a file browser for paths and a JSON editor for anything else. Every
+union, a file browser for paths and a value-kind chooser for open types. Every
 field shows its type, drafts are checked by the same reader as `natlang run`,
-problems appear at the field they name, and the equivalent command line is shown
-for copying.
+problems appear at the field they name, and the equivalent command line can be
+copied. Structured data can be imported from a file and edited through its
+fields; no serialized-data editor is required.
 
 Build, verify, install, inspect, and run:
 
