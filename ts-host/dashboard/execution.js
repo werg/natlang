@@ -117,7 +117,8 @@ export function toolDraft(tool) {
 }
 
 /** Keyed DOM nodes preserve disclosure, focus and scroll while text and statuses stream into them. */
-export function createExecutionView(h, { traceLinks = true } = {}) {
+/** `traceLinks`: offer each call's recorded trace, at `href('traces-call-ID')` (default `#traces-call-ID`). */
+export function createExecutionView(h, { traceLinks = true, href = route => `#${route}` } = {}) {
   const title = h('h2', {}, 'Live execution'), status = h('span', { class: 'execution-connection', role: 'status' });
   const headline = h('div', { class: 'execution-headline', role: 'status', 'aria-live': 'polite' });
   const counts = h('div', { class: 'small muted' }), list = h('div', { class: 'lambda-list' });
@@ -151,8 +152,7 @@ export function createExecutionView(h, { traceLinks = true } = {}) {
     const details = h('details', { class: 'lambda', 'data-call-id': call.id }, h('summary', {},
       h('span', { class: 'lambda-signal', 'aria-hidden': 'true' }), h('span', { class: 'lambda-label' }, name, phase), elapsed),
       h('div', { class: 'lambda-body' }, problem, steps, children,
-        h('a', { class: 'small', href: `#traces-call-${encodeURIComponent(call.id)}` }, 'Open recorded trace')));
-    if (!traceLinks) details.querySelector('a')?.remove();
+        traceLinks ? h('a', { class: 'small', href: href(`traces-call-${encodeURIComponent(call.id)}`) }, 'Open recorded trace') : null));
     const view = { details, name, phase, elapsed, steps, children, problem, turns: new Map() }; views.set(call.id, view); return view;
   }
   function turnView(view, turn) {

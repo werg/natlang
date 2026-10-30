@@ -28,9 +28,9 @@ const link = (h, href, text) => h('a', { href, target: '_blank', rel: 'noopener'
 
 /** Save (or update) the profile named after the provider on `model`, optionally as the default. */
 export async function useProvider(ui, provider, model, makeDefault) {
-  await ui.api('PUT', `/api/profiles/${encodeURIComponent(provider.id)}`, { profile: { provider: provider.id, model }, makeDefault });
+  await ui.api.models.saveProfile(provider.id, { provider: provider.id, model }, makeDefault);
   ui.toast(makeDefault ? `Every run now uses ${model} through ${provider.name}` : `Saved profile ${provider.id} (${model})`);
-  ui.refreshRail();
+  ui.refreshStatus();
 }
 
 /**
@@ -50,17 +50,17 @@ export function signIn(ui, provider, type) {
   const dialog = h('dialog', { class: 'login', 'aria-label': `Connect ${provider.name}` },
     h('h2', {}, oauth ? `Sign in to ${provider.name}` : `Connect ${provider.name} with an API key`), intro, body,
     h('div', { class: 'row', style: 'justify-content: flex-end' }, h('button', { type: 'button', class: 'dismiss', onclick: () => dialog.close() }, 'Cancel')));
-  document.body.append(dialog); dialog.showModal();
+  ui.modal(dialog);
   let login, timer, shownPrompt = null, next = null;
   return new Promise(resolveSignIn => {
     dialog.addEventListener('close', () => {
       clearInterval(timer);
-      if (login?.state === 'running') ui.api('DELETE', `/api/logins/${login.id}`).catch(() => {});
+      if (login?.state === 'running') ui.api.models.cancelLogin(login.id).catch(() => {});
       dialog.remove(); resolveSignIn(login?.state === 'done' ? next ?? 'connected' : null);
     });
     const then = (action, value) => ui.attempt(async () => { await action?.(); next = value; dialog.close(); });
     const events = h('div', { class: 'stack' }), question = h('div', {}), state = h('div', {});
-    const answer = ui.attempt(async (prompt, value) => { login = await ui.api('POST', `/api/logins/${login.id}/answer`, { prompt: prompt.id, value }); draw(); });
+    const answer = ui.attempt(async (prompt, value) => { login = await ui.api.models.answerLogin(login.id, prompt.id, value); draw(); });
     const draw = () => {
       const opened = login.events.some(event => event.type === 'auth_url' || event.type === 'device_code');
       fill(events, login.events.map(event => {
@@ -116,9 +116,9 @@ export function signIn(ui, provider, type) {
     function start() {
       clearInterval(timer); shownPrompt = null;
       fill(body, h('div', { class: 'small muted' }, 'Starting…'));
-      ui.api('POST', `/api/providers/${encodeURIComponent(provider.id)}/login`, { type }).then(started => {
+      ui.api.models.startLogin(provider.id, type).then(started => {
         login = started; fill(body, events, question, state); draw();
-        timer = setInterval(async () => { try { login = await ui.get(`/api/logins/${login.id}`); draw(); } catch (error) { fill(state, h('div', { class: 'callout warn' }, error.message)); clearInterval(timer); } }, 1000);
+        timer = setInterval(async () => { try { login = await ui.api.models.login(login.id); draw(); } catch (error) { fill(state, h('div', { class: 'callout warn' }, error.message)); clearInterval(timer); } }, 1000);
       }, error => fill(body, h('div', { class: 'callout warn' }, error.message)));
     }
     start();
@@ -135,11 +135,11 @@ function keyDialog(ui, providers, connect) {
     h('h2', {}, 'Which service is the key for?'), h('p', {}, 'Any of these works; OpenRouter is a good choice for one key that reaches many models.'),
     h('label', { class: 'field' }, 'Service', select),
     h('div', { class: 'row' }, h('button', { type: 'submit', class: 'primary' }, 'Continue'), h('button', { type: 'button', onclick: () => dialog.close() }, 'Cancel'))));
-  dialog.addEventListener('close', () => dialog.remove()); document.body.append(dialog); dialog.showModal(); select.focus();
+  ui.modal(dialog); select.focus();
 }
 
 /**
- * The hosted-models panel. `ui` carries the page helpers, `config` is GET /api/config (profiles and the default), and
+ * The hosted-models panel. `ui` carries the page helpers, `config` is api.models.config() (profiles and the default), and
  * `onChange` redraws the page after a connection or the default changes.
  */
 export function providersPanel(ui, providers, config, onChange) {
@@ -151,6 +151,7 @@ export function providersPanel(ui, providers, config, onChange) {
   const defaultProfile = config.defaultProfile ? config.profiles[config.defaultProfile]?.profile : undefined;
   const connect = async (provider, type) => {
     const outcome = await signIn(ui, provider, type);
+    if (ui.scope.disposed) return;
     if (outcome === 'choose') ui.editProfile('', { provider: provider.id, model: provider.recommended.model });
     else if (outcome) onChange();
   };
@@ -175,11 +176,11 @@ export function providersPanel(ui, providers, config, onChange) {
       const slot = h('span', {});
       modelField?.addEventListener('change', swap); swap();
       actions.push(slot,
-        h('button', { title: 'Send one short request with the selected model', onclick: () => ui.startJob({ kind: 'ask', instruction: 'Reply with the single word: ready', input: '', provider: provider.id, model: chosen() }) }, 'Test'),
+        ui.can('run:ask') ? h('button', { title: 'Send one short request with the selected model', onclick: () => ui.startRun({ kind: 'ask', instruction: 'Reply with the single word: ready', input: '', provider: provider.id, model: chosen() }) }, 'Test') : null,
         recommended.model ? h('button', { onclick: () => ui.editProfile('', { provider: provider.id, model: chosen() }) }, 'Other model…') : null,
         provider.stored ? h('button', { class: 'danger', onclick: ui.attempt(async () => {
           if (!confirm(`Disconnect ${provider.name}? natlang deletes its stored ${provider.stored === 'oauth' ? 'sign-in' : 'key'}; profiles that use it stop working until you connect again.`)) return;
-          await ui.api('DELETE', `/api/providers/${encodeURIComponent(provider.id)}/credential`); ui.toast(`Disconnected ${provider.name}`); onChange();
+          await ui.api.models.disconnectProvider(provider.id); ui.toast(`Disconnected ${provider.name}`); onChange();
         }) }, 'Disconnect') : null);
     }
     return h('tr', { class: provider.connected ? 'connected' : '' },
