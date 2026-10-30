@@ -21,8 +21,10 @@ from dataclasses import dataclass
 import torch
 
 SCHEMA = 'hindsight-reconstruction/1'
-DEFAULTS = {'schema': SCHEMA, 'k': 4, 'lambda_len': .05, 'lambda_explore': .002, 'lambda_kl': 1e-3, 'eta': 0.,
+DEFAULTS = {'schema': SCHEMA, 'k': 4, 'lambda_len': .05, 'lambda_explore': .002, 'lambda_kl': 1e-6, 'eta': 0.,
             'channel': {'sigma': .5, 'sigma_prior': 1., 'seed': 0}, 'trainable': 'writer',
+            # lambda_kl: the channel KL sums over every imported dimension (LFM3: about 7e4 nats per hint token at
+            # sigma 0.5, pilot 2026-10-30), so 1e-6 puts it near the length cost per token.
             # A child call with fewer own assistant-action tokens than this is trained by plain SFT on its own
             # trajectory (no hint): a useful hint would be about as long as its content. Chosen from the tau* length
             # distribution and the expected hint length (design doc, "Call trees").

@@ -262,7 +262,9 @@ def write(args):
     environment = {key: value for key, value in os.environ.items() if key != 'NATLANG_SERVER'}
     environment.update(NATLANG_CONFIG_HOME=str(config), NATLANG_PROFILE='pilot', NATLANG_PROGRESS='off')
     jobs = []
-    for path in sorted((out / 'tau').glob('*.json')):
+    paths = sorted((out / 'tau').glob('*.json'))
+    paths.sort(key=lambda path: (json.loads(path.read_text()).get('source') != 'teacher-corpus', path.stem))
+    for path in paths:  # the teacher corpus (the main target) first
         for sample in range(args.k):
             if not (out / 'hints' / f'{path.stem}-{sample}.json').exists():
                 jobs.append((path, sample))
@@ -282,6 +284,11 @@ def write(args):
                       'stderr': process.stderr[-4000:]}
         except subprocess.TimeoutExpired:
             record = {'returncode': None, 'stdout': '', 'stderr': f'timeout after {args.timeout}s'}
+        if any(sign in record['stderr'] for sign in ('could not be reached', 'ECONNREFUSED', 'natlang: terminated', 'fetch failed')):
+            print(path.stem, sample, 'server unreachable; left for a rerun', flush=True)
+            return  # an infrastructure failure is not a writer outcome
+        if record['returncode'] == 0:
+            record['text'] = hint_text(record, args.server)
         _write(out / 'hints' / f'{path.stem}-{sample}.json', {**record, 'seconds': time.time() - started})
         print(path.stem, sample, record['returncode'], round(time.time() - started), flush=True)
     with ThreadPoolExecutor(args.parallel) as pool:

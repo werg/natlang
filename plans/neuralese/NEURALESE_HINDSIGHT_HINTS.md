@@ -137,7 +137,8 @@ as the existing teacher-outcome term does on writer turns.
 
 Recipe declaration `hindsight-reconstruction/1`: `{k, lambda_len, lambda_explore, lambda_kl, eta, channel: {sigma,
 sigma_prior, scales, seed}, trainable: 'writer'}`. Defaults: K = 4, λ_len = 0.05 nat/token, λ_explore = 0.002
-nat/token, λ_kl = 1e-3, σ = 0.5, σ_p = 1, η = 0 (phase 1). The pilot measures these.
+nat/token, λ_kl = 1e-6 (the KL sums over every imported dimension: about 7e4 nats per hint token on
+LFM3 at σ = 0.5, measured in the pilot), σ = 0.5, σ_p = 1, η = 0 (phase 1). The pilot measures these.
 
 ## Phases (owner-confirmed structure)
 
