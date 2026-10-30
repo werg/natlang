@@ -549,9 +549,11 @@ def test_long_graph_deferral_keeps_deferred_episodes_whole(tmp_path, monkeypatch
     class Source:
         def __init__(self, path, *_, **__): self.rows = [json.loads(line) for line in Path(path).read_text().splitlines()]
         def iter_from(self, _):
-            return [SimpleNamespace(id=row['id'], plan=SimpleNamespace(token_count=sizes[row['id']])) for row in self.rows]
+            return [SimpleNamespace(id=row['id'], plan=SimpleNamespace(token_count=sizes[row['id']], slot_sources=()))
+                    for row in self.rows]
     monkeypatch.setattr(sources, 'NativeGraphSource', Source)
-    monkeypatch.setattr(replay, 'NativePolicyObjective', lambda path: SimpleNamespace(identity={'tokenizer_fingerprint': 'f'}))
+    monkeypatch.setattr(replay, 'NativePolicyObjective', lambda path: SimpleNamespace(
+        identity={'tokenizer_fingerprint': 'f'}, shares_causal_prefixes=lambda examples: False))
     graphs = [{'id': 'short', 'nodes': []}, {'id': 'long', 'nodes': [{'token_ids': [1]}]}]
     objective = {'rows': {'short': {'task_id': 't1', 'sample': 0, 'actions': [1]},
                           'long': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]}}}
@@ -562,7 +564,8 @@ def test_long_graph_deferral_keeps_deferred_episodes_whole(tmp_path, monkeypatch
     assert [row['id'] for row in graphs] == ['short'] and set(objective['rows']) == {'short'}
     assert [json.loads(line)['id'] for line in graph_path.read_text().splitlines()] == ['short']
     assert set(json.loads(objective_path.read_text())['rows']) == {'short'}
-    assert record['episodes'] == [{'id': 'long', 'task_id': 't2', 'sample': 1, 'forward_tokens': 500, 'sampled_tokens': 2}]
+    assert record['episodes'] == [{'id': 'long', 'task_id': 't2', 'sample': 1, 'forward_tokens': 500,
+                                   'original_tokens': 500, 'sampled_tokens': 2}]
     kept = [json.loads(line) for line in (tmp_path/'deferred-long-graphs.jsonl').read_text().splitlines()]
     assert kept == [{'graph': {'id': 'long', 'nodes': [{'token_ids': [1]}]},
                      'objective_row': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]}}]

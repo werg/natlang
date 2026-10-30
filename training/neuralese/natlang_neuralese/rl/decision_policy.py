@@ -66,19 +66,16 @@ def validate_decision_sample(capture):
             'temperature': float(temperature), 'behavior_logps': behavior_log_probs(log_probs, temperature)}
 
 
-def _shifted(options, offset, key='query'):
-    return [[{**action, 'query': action[key] + offset} for action in option] for option in options]
-
-
-def decision_log_policy(model, hidden, action, *, offset=0, chunk_tokens=128, queries=None):
-    """log pi_theta over the decision's options (temperature-scaled softmax of the option scores)."""
+def decision_log_policy(model, hidden, action, *, chunk_tokens=128, queries=None):
+    """log pi_theta over the decision's options (temperature-scaled softmax of the option scores); option queries
+    are rows of ``hidden`` (the caller maps original-token coordinates through its packed physical-row map)."""
     from ..train.decision_supervision import option_scores
-    options = _shifted(action['options'], offset) if queries is None else queries
+    options = action['options'] if queries is None else queries
     scores = option_scores(model, hidden, options, chunk_tokens=chunk_tokens)
     return torch.log_softmax(scores.float() / action['temperature'], 0)
 
 
-def decision_policy_terms(model, hidden, actions, *, advantage, mode, policy_loss, offset=0, chunk_tokens=128,
+def decision_policy_terms(model, hidden, actions, *, advantage, mode, policy_loss, chunk_tokens=128,
                           twin=None, beta=0.):
     """Per-decision loss terms [n] (same sign convention as the token terms) and summed KL telemetry.
 
@@ -86,7 +83,7 @@ def decision_policy_terms(model, hidden, actions, *, advantage, mode, policy_los
     from .policy_math import clipped_token_loss, score_centered_surrogate
     terms, kl_sum = [], 0.
     for index, action in enumerate(actions):
-        log_pi = decision_log_policy(model, hidden, action, offset=offset, chunk_tokens=chunk_tokens)
+        log_pi = decision_log_policy(model, hidden, action, chunk_tokens=chunk_tokens)
         chosen = action['chosen']
         behavior = torch.tensor(action['behavior_logps'], dtype=torch.float32, device=hidden.device)
         if mode == 'rft':
@@ -104,7 +101,7 @@ def decision_policy_terms(model, hidden, actions, *, advantage, mode, policy_los
             if policy_loss['schema'] == 'jolt-plus/1' and queries is not None and beta:
                 from .jolt import reverse_kl
                 with torch.no_grad():
-                    twin_log = decision_log_policy(model, hidden.detach(), action, queries=_shifted(queries, offset),
+                    twin_log = decision_log_policy(model, hidden.detach(), action, queries=queries,
                                                    chunk_tokens=chunk_tokens)
                 kl = reverse_kl(log_pi[None], twin_log[None])[0]
                 term = term + beta * kl

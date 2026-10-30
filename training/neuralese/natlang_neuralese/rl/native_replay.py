@@ -937,7 +937,19 @@ class NativePolicyObjective:
         self.semantic_channel=channel
         self.semantic_participant_name=names[0]
 
+    def shares_causal_prefixes(self, examples):
+        """Exact causal-prefix packing applies: plain token readouts at remapped query rows only.
+
+        Per-invocation actors, archived external states and semantic codec dependencies address the original
+        invocation names/layout and retain the unshared plan."""
+        return (self.behavior_policy is None and self.semantic_channel is None
+                and not any(getattr(example, 'external_states', None) for example in examples)
+                and not any(self.rows[example.id].get('semantic_dependencies') for example in examples
+                            if example.id in self.rows))
+
     def forward_graph(self,model,context,inputs):
+        if context.get('shared_causal_prefixes'):
+            return model(context['plan'],retain_states=False,**inputs)
         dependencies=[]
         from dataclasses import replace
         from ..model.native_codec_graph import CodecDependency,execute_codec_graph
@@ -1035,8 +1047,8 @@ class NativePolicyObjective:
             from ..common.hashing import canonical_json_sha256_hex
             if canonical_json_sha256_hex(graph_identity(example)) != row['graph_sha256']:
                 raise ValueError('native policy graph/masks differ from admitted objective coordinates')
-            offset = context['row_offsets'][example.id]['physical_start']
-            actions = [{**action, 'query': action['query'] + offset,
+            rows = _physical_rows(context, example)
+            actions = [{**action, 'query': rows[action['query']],
                         'allowed_token_ids': tuple(action['allowed_token_ids'])
                             if action['allowed_token_ids'] is not None else None}
                        for action in row['actions']]
@@ -1048,7 +1060,7 @@ class NativePolicyObjective:
                 if example.id not in self._top_k_cache:
                     self._top_k_cache[example.id] = behavior_top_k_tensors(row['actions'],
                         self.policy_loss['outcome']['k'], 'cpu')
-                actions = [{**action, **({'twin_query': action['twin_query'] + offset} if 'twin_query' in action else {})}
+                actions = [{**action, **({'twin_query': rows[action['twin_query']]} if 'twin_query' in action else {})}
                            for action in actions]
                 terms, parts = jolt_action_loss(model, hidden, actions, row, self.policy_loss,
                     chunk_tokens=self.spec.get('chunk_tokens', 128), top_k=self._top_k_cache[example.id])
@@ -1072,10 +1084,14 @@ class NativePolicyObjective:
                 info = row.get('jolt') or {}
                 beta = ((self.policy_loss['beta_s'] if info.get('role', 'student') == 'student'
                          else self.policy_loss['beta_t']) if jolt and info.get('privileged') is not None else 0.)
+                remap = lambda options: [[{**item, 'query': rows[item['query']]} for item in option]
+                                         for option in options]
+                decisions = [{**action, 'options': remap(action['options'])} for action in decisions]
                 decided, kl_sum = decision_policy_terms(model, hidden, decisions, advantage=row['advantage'],
-                    mode=self.spec['mode'], policy_loss=self.policy_loss, offset=offset,
+                    mode=self.spec['mode'], policy_loss=self.policy_loss,
                     chunk_tokens=self.spec.get('chunk_tokens', 128),
-                    twin=[action.get('twin_options') for action in decisions], beta=beta)
+                    twin=[remap(action['twin_options']) if action.get('twin_options') is not None else None
+                          for action in decisions], beta=beta)
                 terms = torch.cat([terms, decided]) if len(actions) else decided
                 decision_count += len(decisions)
                 if len(jolt_parts) > parts_before:
@@ -1092,6 +1108,15 @@ class NativePolicyObjective:
             **({'score_centering': summarize_score_centering(diagnostics)} if diagnostics else {}),
             **({'jolt': summarize_jolt(jolt_parts, count)} if jolt_parts else {}),
             **({'codec_execution':result['codec_execution']} if 'codec_execution' in result else {})}
+
+
+def _physical_rows(context, example):
+    """The example's original-token -> packed physical row map (exact causal-prefix sharing or plain offsets)."""
+    rows = context.get('physical_rows', {}).get(example.id)
+    if rows is not None:
+        return rows
+    offset = context['row_offsets'][example.id]['physical_start']
+    return range(offset, offset + example.plan.token_count)
 
 
 def require_policy_loss_actions(actions, policy_loss):

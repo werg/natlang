@@ -600,13 +600,22 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         raise ValueError('native graph has no ordinary CE targets; its declared offline/policy objective is required')
     targeted_graphs = sum(targeted)
     from .native_prefix_packing import pack_causal_prefixes
-    # Physical raw-context aliasing is qualified for FP32 activations only.
-    # BF16 needs per-occurrence adjoint casts; retain its original episode rows.
-    allow_communication = (share_causal_prefixes and objective is None and allow_communication_prefixes
-                           and model.port.embedding_weight.dtype in (torch.float32,torch.float64))
-    shared = (pack_causal_prefixes(examples, allow_communication=allow_communication)
-              if share_causal_prefixes and objective is None
-              and model.port.embedding_weight.dtype != torch.bfloat16 else None)
+    # Ordinary SFT: physical raw-context aliasing is qualified for FP32 activations; BF16 SFT retains its
+    # original episode rows (bitwise readout/adjoint law, plans/neuralese/shared-state/PREFIX_READOUT_REUSE_20261020.md).
+    # A policy objective that declares support (plain token readouts at remapped query rows, no per-invocation
+    # actors, external states or semantic codecs) shares exact causal prefixes in every dtype: each shared row's
+    # cotangent is the fan-in of its original occurrences' cotangents at the KV/convolution slot gathers. In BF16
+    # the shared plan's gradients stay within the unshared BF16 plan's own distance from an FP64 reference
+    # (tests/neuralese/test_native_policy_prefix_sharing.py); FP32 matches the unshared plan to FP32 tolerance.
+    if objective is None:
+        share = share_causal_prefixes and model.port.embedding_weight.dtype != torch.bfloat16
+        allow_communication = (share and allow_communication_prefixes
+                               and model.port.embedding_weight.dtype in (torch.float32, torch.float64))
+    else:
+        supports = getattr(objective, 'shares_causal_prefixes', None)
+        share = bool(share_causal_prefixes and supports is not None and supports(examples))
+        allow_communication = share and allow_communication_prefixes
+    shared = pack_causal_prefixes(examples, allow_communication=allow_communication) if share else None
     if shared is None:
         plan, target_weights, ownership, external_name_maps = pack_native_graphs(examples)
         physical_rows = tuple(tuple(range(plan.offsets[first],
@@ -618,17 +627,22 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
     direct_limit = getattr(model, 'checkpoint_direct_token_limit', 0)
     model.port.checkpoint_layers = checkpoint_layers and not (direct_limit and plan.token_count <= direct_limit)
     if objective is not None:
-        row_offsets = {example.id: {'node_start': first_node, 'node_stop': last_node,
-        'physical_start': plan.offsets[first_node],
-        'physical_stop': plan.offsets[last_node - 1] + len(plan.invocations[last_node - 1].token_ids),
-        'external_names': external_name_maps[index]}
-        for index, (example, (first_node, last_node)) in enumerate(zip(examples, ownership))}
-        context = {'plan': plan, 'examples': examples, 'target_weights': target_weights,
-               'ownership': ownership, 'row_offsets': row_offsets,
-               'external_names': {example.id: external_name_maps[index]
-                                  for index, example in enumerate(examples)},
-               'external_states': {example.id: getattr(example, 'external_states', {})
-                                   for example in examples}}
+        # Every objective reads its original-token coordinates through physical_rows; the node ownership, row
+        # offsets and external-name maps exist only for the unshared layout (shared objectives never use them).
+        context = {'plan': plan, 'examples': examples, 'shared_causal_prefixes': shared is not None,
+                   'physical_rows': {example.id: rows for example, rows in zip(examples, physical_rows)},
+                   'external_states': {example.id: getattr(example, 'external_states', {})
+                                       for example in examples}}
+        if shared is None:
+            context.update(target_weights=target_weights, ownership=ownership,
+                row_offsets={example.id: {'node_start': first_node, 'node_stop': last_node,
+                    'physical_start': plan.offsets[first_node],
+                    'physical_stop': plan.offsets[last_node - 1] + len(plan.invocations[last_node - 1].token_ids),
+                    'external_names': external_name_maps[index]}
+                    for index, (example, (first_node, last_node)) in enumerate(zip(examples, ownership))},
+                external_names={example.id: external_name_maps[index] for index, example in enumerate(examples)})
+        else:
+            context['external_names'] = {example.id: {} for example in examples}
         forward_inputs = objective.forward_inputs(context)
     else:
         forward_inputs = {}
@@ -648,6 +662,9 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         loss, details = objective(model, result, context)
         if not isinstance(loss, torch.Tensor) or loss.ndim != 0 or not torch.isfinite(loss.detach()):
             raise FloatingPointError('native policy objective must return a finite scalar loss')
+        if isinstance(details, dict):
+            details = {**details, 'packed_physical_tokens': plan.token_count,
+                       'original_physical_tokens': sum(example.plan.token_count for example in examples)}
         return loss, details
     hidden = result['h_final'][0]
     if not targeted_graphs:
@@ -1298,7 +1315,8 @@ def build_parser():
              '(default 16, about 64 graphs at 32k tokens per micro-batch; 1 restores one step per batch). A '
              'continuation records the change in accumulate_batches_history')
     parser.add_argument('--share-causal-prefixes', action=argparse.BooleanOptionalAction, default=None,
-        help='reuse exact ordinary token prefixes with unchanged targets, losses and exposure. On by default for new '
+        help='reuse exact causal token prefixes (ordinary SFT; whole-graph policy objectives across turns and '
+             'episodes) with unchanged targets, losses and exposure. On by default for new '
              'runs and continuations (recorded); an omitted flag on a rolling resume keeps the in-flight stage\'s '
              'recorded mode (its capacity identity binds it); --no-share-causal-prefixes opts out')
     parser.add_argument('--dtype', choices=('float32', 'bfloat16', 'float16'), default=None,

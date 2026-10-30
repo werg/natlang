@@ -2,7 +2,9 @@
 
 Each example retains its loss rows, normalization and exposure. Communication
 aliases stop before adaptation/imports; producing suffixes and actual edges stay
-complete. External-state and policy-objective routing retain their prior path.
+complete. External-state graphs retain their prior path. Policy objectives that
+declare support read every action through the returned original-token row maps
+(train/native_state_sft.packed_graph_loss).
 """
 from ..model.native_graph_plan import Invocation, ImportSpan, compile_graph
 
@@ -117,6 +119,13 @@ def _pack_initial_raw_contexts(examples):
                        for old,new in enumerate(mapping))):
             raise AssertionError('communication prefix packing changed own positions/producer flags')
     return plan,tuple(tuple(mapping) for mapping in rows)
+
+
+def causal_prefix_geometry(example, *, share=True):
+    """(forward tokens, KV slots) of one example's own packed plan, under exact prefix sharing when it applies."""
+    shared = pack_causal_prefixes([example]) if share else None
+    plan = example.plan if shared is None else shared[0]
+    return plan.token_count, len(plan.slot_sources)
 
 
 def communication_primal_rows(examples):

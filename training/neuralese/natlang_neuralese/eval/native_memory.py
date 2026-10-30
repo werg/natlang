@@ -876,6 +876,12 @@ def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backe
     # Qualify maximum whole examples AND actual packed pending batches. Packing
     # can use more memory than any individual episode; never split an episode.
     groups=[(i,)for i in expected['max_example_indices']]
+    supports=getattr(objective,'shares_causal_prefixes',None)
+    if getattr(model,'share_causal_prefixes',False) and supports is not None:
+        # The learner forwards each episode's exact causal-prefix packing: also qualify its own maxima.
+        from ..train.native_prefix_packing import causal_prefix_geometry
+        shared=[causal_prefix_geometry(example,share=supports([example]))for example in train.iter_from(0)]
+        groups+=[(max(range(len(shared)),key=lambda i:shared[i][key]),)for key in (0,1)]
     batches=sorted({tuple(batch[1])for batch in pending_batches})
     if batches:
         groups += [max(batches,key=lambda ids:sum(expected['entries'][i][key]for i in ids))

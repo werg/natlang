@@ -355,9 +355,11 @@ def test_sampled_decision_turns_enter_the_whole_episode_policy_objective(tmp_pat
                     token_loss, token_details = super().__call__(model, result, context)
                 finally:
                     self.rows[example.id]['decision_actions'] = saved
-                decided, _ = decision_policy_terms(model, result['h_final'][0], saved, advantage=row['advantage'],
-                    mode='grpo', policy_loss=self.policy_loss,
-                    offset=context['row_offsets'][example.id]['physical_start'])
+                rows = context['physical_rows'][example.id]
+                physical = [{**action, 'options': [[{**item, 'query': rows[item['query']]} for item in option]
+                                                   for option in action['options']]} for action in saved]
+                decided, _ = decision_policy_terms(model, result['h_final'][0], physical, advantage=row['advantage'],
+                    mode='grpo', policy_loss=self.policy_loss)
                 count = token_details['sampled_tokens']
                 return (token_loss * count + decided.sum()) / (count + 1), {}
         reference = WithoutDecision(objective.path)
