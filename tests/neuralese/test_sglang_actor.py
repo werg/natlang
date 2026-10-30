@@ -26,7 +26,10 @@ def test_decode_record_prefix_of_larger_k():
 def test_routing_sends_neuralese_turns_to_native():
     plain = GenerationRequest(messages=[], temperature=1.0, rl_capture=True, rl_top_k=128, adapters=[])
     assert SglangEngine.sglang_unsupported(plain, [('tokens', [1, 2]), ('privileged', [3])]) is None
-    assert 'native_state' in SglangEngine.sglang_unsupported(plain, [('tokens', [1]), ('native_state', 'b0')])
+    # Imported native state is served on SGLang; a declared cross-adapter state mode is not.
+    assert SglangEngine.sglang_unsupported(plain, [('tokens', [1]), ('native_state', 'b0')]) is None
+    moded = GenerationRequest(messages=[], native_state_modes={'b0': 'same-base-adapter-state'})
+    assert SglangEngine.sglang_unsupported(moded, [('native_state', 'b0')]) == 'native_state_modes'
     templated = GenerationRequest(messages=[], template={'call': 'f', 'value': 'write'})
     assert SglangEngine.sglang_unsupported(templated, [('tokens', [1])]) == 'template'
 
@@ -211,3 +214,75 @@ def test_protocol_failures_match_the_native_engine(tmp_path, case):
     mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
     assert mine['protocol_failure'] == theirs['protocol_failure'] and mine['protocol_failure']['code'].startswith('neuralese')
     assert _protocol_view(mine) == _protocol_view(theirs)
+
+
+def _import_fixture(tmp_path):
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    front.sglang_export = {'architecture': front.model_config.get('architecture'),
+                           'layer_kinds': ['attention' if native.backbone.is_attention(i) else 'finite_convolution'
+                                           for i in range(native.backbone.num_layers)],
+                           'producer_embedding': {'input_id_offset': native.backbone.embedding_weight.shape[0]}}
+    tokens = word('t4') + [roles.produce_open] + word('t6 t7') + [roles.produce_close] + [sorted(front.stop_ids)[0]]
+    make = lambda: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0, max_tokens=32,
+                                     rl_capture=True, rl_top_k=2, native_recording=True, request_id='r', seed=1)
+    _scripted(native, front, tokens, make)
+    block = stored['native'][0]
+    block_id = native.store.put_native_state(block).id
+    assert front.store.put_native_state(block).id == block_id
+    messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 't4 '}, {'type': 'native_state', 'id': block_id},
+                                             {'type': 'text', 'text': ' t5'}]}]
+    return native, front, roles, word, block, messages
+
+
+def test_imported_native_state_is_recorded_like_the_native_engine(tmp_path):
+    """A turn that imports a produced block: same prompt receipt and imports on both engines; SGLang gets the block's
+    positions as placeholders plus the import spec, whose file holds the block's exact tensors."""
+    import torch
+    from safetensors.torch import load_file
+    native, front, roles, word, block, messages = _import_fixture(tmp_path)
+    later = lambda: GenerationRequest(messages=messages, temperature=1.0, max_tokens=8, rl_capture=True, rl_top_k=2,
+                                      native_recording=True, request_id='r2', seed=2)
+    reply = word('t8') + [sorted(front.stop_ids)[0]]
+    script = iter(reply)
+    native._native_token = lambda seq: (next(script), -0.5)
+    expected = native.generate(later())
+    records = [record(-0.5, [t, t + 1], [-0.5, -1.5]) for t in reply]
+    sent = []
+    front._sglang_generate = lambda body: (sent.append(body), {'output_ids': reply, 'meta_info': {'natlang_top_k': records}})[1]
+    actual = front.generate(later())
+    mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
+    assert mine['prompt'] == theirs['prompt'] and actual['native_state']['imports'] == expected['native_state']['imports']
+    assert _protocol_view(mine) == _protocol_view(theirs)
+    spec, = sent[0]['sampling_params']['custom_params']['natlang_import']
+    ids, count = sent[0]['input_ids'], len(block.token_ids)
+    assert spec['count'] == count and ids[spec['start'] - 1] == roles.consume_open
+    assert ids[spec['start'] + count] == roles.consume_close
+    assert all(i >= 2 * native.backbone.embedding_weight.shape[0] for i in ids[spec['start']:spec['start'] + count])
+    assert len(ids) == mine['samples'][0]['query_own_position'] + 1 + count  # imported positions are not own positions
+    saved = load_file(spec['path'])
+    for index, layer in enumerate(block.layers):
+        for name, value in layer.items():
+            if name != 'kind':
+                assert torch.equal(saved[f'layers.{index}.{name}'], value.cpu())
+
+
+def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):
+    from natlang_neuralese.serve.native_learning import decide_native
+    native, front, roles, word, block, messages = _import_fixture(tmp_path)
+    import concurrent.futures
+    front._pool = concurrent.futures.ThreadPoolExecutor(4)
+    body = {'messages': messages, 'options': ['t6', 't7 t8'], 'native_recording': True}
+    expected = decide_native(native, body)
+    sent = []
+
+    def generate(request):
+        sent.append(request)
+        cont = request['input_ids'][request['logprob_start_len'] + 1:]
+        return {'meta_info': {'input_token_logprobs': [[None, request['input_ids'][request['logprob_start_len']], None]]
+                              + [[-0.25, t, None] for t in cont]}}
+    front._sglang_generate = generate
+    actual = decide_native(front, body)
+    assert actual['native_decision_capture'] == expected['native_decision_capture']
+    assert actual['tokens'] == expected['tokens'] and actual['native_state_imports'] == expected['native_state_imports']
+    assert actual['log_probs'] == [-0.25 * n for n in expected['tokens']]
+    assert all(r['sampling_params']['custom_params']['natlang_import'] for r in sent) and front.native_fallbacks == 0

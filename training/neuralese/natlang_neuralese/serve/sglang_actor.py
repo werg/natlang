@@ -36,6 +36,7 @@ from .native_protocol import FAILURE_CODES, capture_enabled, failure_descriptor
 
 TOP_K_KEY = 'natlang_top_k'
 CAPTURE_KEY = 'natlang_capture'
+IMPORT_KEY = 'natlang_import'
 BAN_BIAS = -1e30
 
 
@@ -120,8 +121,6 @@ class SglangEngine(Engine):
             self.native_reloads = getattr(self, 'native_reloads', 0) + 1
 
     def bind_sglang(self, url, *, export_manifest, fork, workers=512):
-        if getattr(self, 'semantic_channel', None) is not None:
-            raise ValueError('the SGLang actor does not serve semantic channels')
         self.sglang_url, self.sglang_workers = url.rstrip('/'), workers
         roles = self.role_tokens
         markers = {int(roles.produce_open), int(roles.produce_close), int(roles.consume_open), int(roles.consume_close)}
@@ -170,7 +169,8 @@ class SglangEngine(Engine):
         names = [name for name, value in (('template', request.template), ('guidance', request.guidance),
                  ('forced_message', request.forced_message), ('adapters', request.adapters),
                  ('native_state_modes', request.native_state_modes)) if value]
-        names += sorted({f'prompt segment {kind}' for kind, _ in plan if kind not in ('tokens', 'privileged')})
+        names += sorted({f'prompt segment {kind}' for kind, _ in plan
+                         if kind not in ('tokens', 'privileged', 'native_state', 'native_state_constant')})
         return ', '.join(names) or None
 
     def _routes_native(self, request, plan):
@@ -244,10 +244,15 @@ class SglangEngine(Engine):
         if request.privileged_context is not None:
             insert_at, pieces, seq.native_guidance_receipt = self._guidance(request, plan)
             plan = _insert_privileged(plan, insert_at, pieces)
-        ids = []
+        ids, seq.sglang_imports = [], []
         for kind, value in plan:
             if kind == 'insertion_point':
                 seq.native_guidance_receipt['insert_at'] = seq.native_own_position
+                continue
+            if kind in ('native_state', 'native_state_constant'):
+                self._sglang_import(seq, ids, value['id'] if isinstance(value, dict) else value,
+                                    stop_gradient=kind == 'native_state_constant',
+                                    source_occurrence=value.get('source_occurrence') if isinstance(value, dict) else None)
                 continue
             if kind not in ('tokens', 'privileged'):
                 raise RequestError('sglang-actor-unsupported',
@@ -272,7 +277,8 @@ class SglangEngine(Engine):
         params = {'temperature': float(request.temperature) if sampling else 0.0,
                   'max_new_tokens': min(int(request.max_tokens), self.context - len(ids)),
                   'stop_token_ids': sorted(self.stop_ids), 'skip_special_tokens': False,
-                  'no_stop_trim': True, 'custom_params': {TOP_K_KEY: max(k, 1)}}
+                  'no_stop_trim': True, 'custom_params': {TOP_K_KEY: max(k, 1),
+                                                          **({IMPORT_KEY: seq.sglang_imports} if seq.sglang_imports else {})}}
         if self.sglang_banned:
             params['logit_bias'] = {str(token): BAN_BIAS for token in self.sglang_banned}
         body = {'input_ids': ids, 'sampling_params': params, 'rid': request.request_id}
@@ -364,6 +370,7 @@ class SglangEngine(Engine):
         if token == marker.produce_open:
             seq.native_write_start_own = seq.native_own_position
             seq.native_write_open_sample = index
+            state['open_position'] = len(state['prompt']) + len(state['fed'])  # its cache position (imports count)
         seq.generated_positions += 1
         self._native_record_input(seq, token, producing=producing, sample_index=index)
         state['fed'].append(token)
@@ -380,12 +387,131 @@ class SglangEngine(Engine):
             seq.items.append(token)
             seq.native_item_positions.append(seq.native_own_position - 1)
 
+    def sglang_score(self, item, plan, continuations, bindings):
+        """`decide`/`score` on SGLang (None: the native engine scores it): the native engine's decision capture, each
+        continuation's raw log-probability summed from SGLang input logprobs after the shared prompt (the radix cache
+        holds the prompt once; `logprob_start_len` keeps each continuation's tokens in its own extend)."""
+        from .native_learning import decision_request, decision_response
+        request = decision_request(item, bindings)
+        request.request_id = request.request_id or f"decide-{next(self._ids)}"
+        if self._routes_native(request, plan):
+            return None
+        seq = Sequence(request, None, prompt_plan=plan)
+        ids = self._sglang_prompt(seq)
+        params = {'temperature': 0.0, 'max_new_tokens': 1,
+                  **({'custom_params': {IMPORT_KEY: seq.sglang_imports}} if seq.sglang_imports else {})}
+
+        def score(continuation):
+            if not continuation:
+                return 0.0, 0
+            result = self._sglang_generate({'input_ids': ids + list(continuation), 'sampling_params': params,
+                                            'return_logprob': True, 'logprob_start_len': len(ids) - 1})
+            logps = [lp for lp, _, _ in result['meta_info']['input_token_logprobs']][1:]
+            if len(logps) != len(continuation):
+                raise RequestError('sglang-actor-backend', 'SGLang returned the wrong number of continuation logprobs')
+            return float(sum(logps)), len(continuation)
+        if continuations:
+            score(continuations[0])  # the shared prompt enters the radix cache once
+        results = list(self._pool.map(score, continuations))
+        with self._sglang_lock:
+            self.sglang_requests += 1
+        return decision_response(item, seq, continuations, results)
+
+    def _sglang_import(self, seq, ids, block_id, *, stop_gradient, source_occurrence):
+        """An imported native-state part, as the native engine's `_native_consume_impl` builds it.
+
+        Exact state: consume_open, the block's positions as content-hashed placeholder ids whose KV and conv inputs the
+        fork replaces by the stored ones (`custom_params.natlang_import`), consume_close. Imported positions occupy
+        cache positions but not own positions. State of another model is re-encoded from its text, as natively."""
+        record = self.store.get_native_state(block_id)
+        if record is None:
+            raise RequestError('neuralese-unknown-native-state', f'{block_id} is not in this server\'s store; PUT it first')
+        block = record.block
+        if block.derivation is not None:
+            from ..model.native_state_derivation import verify_state_derivation
+            verify_state_derivation(self.store, block)
+        use = {**({'stop_gradient': True} if stop_gradient else {}),
+               **({'source_occurrence': source_occurrence} if source_occurrence else {})}
+        derivation = {'state_derivation': block.derivation} if block.derivation is not None else {}
+        capture = capture_enabled(seq)
+        opening, closing = int(self.role_tokens.consume_open), int(self.role_tokens.consume_close)
+        ids.append(opening)
+        seq.native_own_position += 1
+        if capture:
+            seq.native_rl_prompt.append({'kind': 'tokens', 'token_ids': [opening], 'producing': [False]})
+        if self._sglang_exact(block):
+            count = len(block.token_ids)
+            seq.sglang_imports.append({'path': self._sglang_import_file(block_id, block), 'start': len(ids), 'count': count})
+            base = 2 * int(self.sglang_export['producer_embedding']['input_id_offset'])
+            import hashlib
+            for index in range(count):
+                digest = hashlib.sha256(f'{block_id}:{index}'.encode()).digest()
+                ids.append(base + int.from_bytes(digest[:4], 'little') % (2 ** 31 - 1 - base))
+            mode = 'exact-native-state'
+            if capture:
+                seq.native_rl_prompt.append({'kind': 'native_state', 'id': block_id,
+                                             'native_identity': self._native_block_identity(block), **derivation, **use})
+            observed = {'observed_native_state_id': block_id}
+        else:
+            fallback = self._tokens(block.text)
+            if not fallback and len(block.token_ids):
+                raise RequestError('neuralese-native-state-empty-text', f'{block_id} has no text for target reencoding')
+            ids.extend(fallback)
+            seq.native_own_position += len(fallback)
+            mode = 'best-effort-text-retokenization'
+            if capture:
+                seq.native_rl_prompt.append({'kind': 'tokens', 'token_ids': list(fallback), 'producing': [False] * len(fallback)})
+            observed = {}
+        ids.append(closing)
+        seq.native_own_position += 1
+        if capture:
+            seq.native_rl_prompt.append({'kind': 'tokens', 'token_ids': [closing], 'producing': [False]})
+        seq.native_imports.append({'id': block_id, 'mode': mode, **derivation, **observed, **use})
+
+    def _sglang_exact(self, block):
+        """`_native_exact` without the native model: the layer kinds come from the export."""
+        try:
+            block.require_native(checkpoint_sha256=self.execution_native_identity['checkpoint_sha256'],
+                                 tokenizer_fingerprint=self.model_config['tokenizer_fingerprint'],
+                                 embedding_weight_sha256=self.embedding_weight_sha256,
+                                 architecture=self.sglang_export['architecture'],
+                                 layer_kinds=tuple(self.sglang_export['layer_kinds']))
+            return True
+        except ValueError:
+            return False
+
+    def _sglang_import_file(self, block_id, block):
+        """The block's tensors in the fork's import format (written once per block, content-addressed by its id)."""
+        from safetensors.torch import save_file
+        path = os.path.join(self._sglang_scratch(), f'import-{block_id}.safetensors')
+        if not os.path.exists(path):
+            tensors = {'token_ids': block.token_ids.detach().cpu().contiguous()}
+            for index, layer in enumerate(block.layers):
+                for name, value in layer.items():
+                    if name != 'kind':
+                        tensors[f'layers.{index}.{name}'] = value.detach().cpu().contiguous()
+            tmp = f'{path}.{uuid.uuid4().hex}.partial'
+            save_file(tensors, tmp)
+            os.replace(tmp, path)
+        return path
+
+    def _sglang_scratch(self):
+        if self.sglang_capture_dir is None:
+            import tempfile
+            directory = getattr(self.store, 'directory', None)
+            if directory is not None:
+                self.sglang_capture_dir = os.path.join(directory, 'sglang-capture')
+                os.makedirs(self.sglang_capture_dir, exist_ok=True)
+            else:
+                self.sglang_capture_dir = tempfile.mkdtemp(prefix='sglang-capture-')
+        return self.sglang_capture_dir
+
     def _sglang_finish_block(self, seq, state):
         """Store the span that just closed: SGLang recomputes it once and exports its native state."""
         if seq.request.on_delta is not None:
             self._sglang_emit(seq, state, final=True)  # text before the block reaches the client first
         ids = state['prompt'] + state['fed'][:-1]  # through the last span token (the close marker is not part)
-        start = seq.native_write_start_own + 1
+        start = state['open_position'] + 1
         end = start + len(seq.native_capture_ids)
         if end != len(ids) or ids[start:end] != seq.native_capture_ids:
             raise RequestError('sglang-actor-capture', 'produce span positions disagree with the generated tokens')
@@ -402,15 +528,7 @@ class SglangEngine(Engine):
         the span runs through the model and the fork writes its pre-RoPE keys, values and conv inputs."""
         import torch
         from safetensors.torch import load_file
-        if self.sglang_capture_dir is None:
-            import tempfile
-            directory = getattr(self.store, 'directory', None)
-            if directory is not None:
-                self.sglang_capture_dir = os.path.join(directory, 'sglang-capture')
-                os.makedirs(self.sglang_capture_dir, exist_ok=True)
-            else:
-                self.sglang_capture_dir = tempfile.mkdtemp(prefix='sglang-capture-')
-        path = os.path.join(self.sglang_capture_dir, f'{uuid.uuid4().hex}.safetensors')
+        path = os.path.join(self._sglang_scratch(), f'{uuid.uuid4().hex}.safetensors')
         body = {'input_ids': ids, 'return_logprob': True, 'logprob_start_len': max(start - 1, 0),
                 'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1,
                                     'custom_params': {CAPTURE_KEY: {'path': path, 'start': start, 'end': end}}}}

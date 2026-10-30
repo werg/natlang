@@ -89,7 +89,10 @@ def native_phase(a):
         decode.append({'prompt': head + span + [closing] + text(' Next:')})  # decode after a closed span
         # Inside the span with a close-marker logit bias: decode crosses produce_close (and later stray closes).
         decode.append({'prompt': head + span[:3], 'logit_bias': {str(closing): CLOSE_BIAS[i % len(CLOSE_BIAS)]}})
-    cases = {'opening': opening, 'closing': closing, 'export': str(export), 'forced': forced, 'decode': decode}
+    cases = {'opening': opening, 'closing': closing, 'export': str(export), 'forced': forced, 'decode': decode,
+             'consume_open': int(roles.consume_open), 'consume_close': int(roles.consume_close),
+             'vocab': int(model.port.embedding_weight.shape[0]), 'work': str(a.work),
+             'after_import': text(' Using the recorded readings above, the north bank is warmer than the south bank.')}
     (Path(a.work) / 'cases.json').write_text(json.dumps(cases))
     for stale in [*Path(a.work).glob('reference-*.json'), *Path(a.work).glob('native-*.safetensors')]:
         stale.unlink()  # reference caches belong to the previous cases
@@ -104,7 +107,8 @@ def sglang_phase(a):
                      max_running_requests=8, max_total_tokens=65536, max_mamba_cache_size=16,
                      cuda_graph_max_bs_decode=8)
     forced = []
-    for case in cases['forced']:
+    earlier = json.loads((Path(a.work) / 'sglang.json').read_text()) if a.import_only else None
+    for case in [] if a.import_only else cases['forced']:
         ids = case['prompt'] + case['continuation']
         out = eng.generate(input_ids=ids, sampling_params={'temperature': 0.0, 'max_new_tokens': 1},
                            return_logprob=True, logprob_start_len=len(case['prompt']) - 1)
@@ -112,7 +116,7 @@ def sglang_phase(a):
     # Native-state export of each forced span (custom_params.natlang_capture, as serve/sglang_actor.py requests it),
     # after the prefill above cached the whole sequence: the logprob_start_len cap makes SGLang recompute the span.
     opening, closing = cases['opening'], cases['closing']
-    for i, case in enumerate(cases['forced']):
+    for i, case in enumerate([] if a.import_only else cases['forced']):
         ids = case['prompt'] + case['continuation']
         start = ids.index(opening, len(case['prompt'])) + 1
         end = ids.index(closing, start)
@@ -126,14 +130,53 @@ def sglang_phase(a):
                                           'custom_params': {'natlang_capture': {'path': path, 'start': lo, 'end': hi}}})
     decode = []
     prompts = [case['prompt'] for case in cases['decode']]
-    outs = eng.generate(input_ids=prompts, sampling_params=[{'temperature': 1.0, 'max_new_tokens': a.gen,
+    outs = [] if a.import_only else eng.generate(input_ids=prompts, sampling_params=[{'temperature': 1.0, 'max_new_tokens': a.gen,
                         'ignore_eos': True, 'sampling_seed': SEED + i, 'custom_params': {'natlang_top_k': 20},
                         **({'logit_bias': case['logit_bias']} if 'logit_bias' in case else {})}
                         for i, case in enumerate(cases['decode'])])
     for out in outs:
         decode.append({'generated': out['output_ids'], 'records': out['meta_info']['natlang_top_k']})
+    # Import: each exported span (capture file, the fork's import format) into another turn's prefix, between consume
+    # markers as content-hashed placeholders, then a text continuation scored by input logprobs. Run twice (the second
+    # reads the placeholders' KV from the radix cache) and once with another span under the same prefix.
+    imported = []
+    for case in import_cases(cases):
+        out = []
+        for path in (case['path'], case['path'], case['other_path']):
+            ids = case['prefix'] + [cases['consume_open']] + placeholders(path, case['count'], cases['vocab']) \
+                + [cases['consume_close']] + case['continuation']
+            spec = {'path': path, 'start': len(case['prefix']) + 1, 'count': case['count']}
+            result = eng.generate(input_ids=ids, return_logprob=True, logprob_start_len=len(ids) - len(case['continuation']) - 1,
+                                  sampling_params={'temperature': 0.0, 'max_new_tokens': 1,
+                                                   'custom_params': {'natlang_import': [spec]}})
+            out.append([lp for lp, _, _ in result['meta_info']['input_token_logprobs']][1:])
+        imported.append(out)
     eng.shutdown()
-    (Path(a.work) / 'sglang.json').write_text(json.dumps({'forced': forced, 'decode': decode}))
+    if earlier is not None:  # --import-only: the earlier forced/decode results stay (their references are cached)
+        forced, decode = earlier['forced'], earlier['decode']
+    (Path(a.work) / 'sglang.json').write_text(json.dumps({'forced': forced, 'decode': decode, 'import': imported}))
+
+
+def placeholders(path, count, vocab):
+    import hashlib
+    base = 2 * vocab
+    return [base + int.from_bytes(hashlib.sha256(f'{path}:{i}'.encode()).digest()[:4], 'little') % (2 ** 31 - 1 - base)
+            for i in range(count)]
+
+
+def import_cases(cases):
+    """Span i (exported from forced case i) imported after a 3000-token prefix of forced case i + 1's prompt."""
+    forced = cases['forced']
+    result = []
+    for i in range(1, len(forced)):
+        ids = forced[i]['prompt'] + forced[i]['continuation']
+        start = ids.index(cases['opening'], len(forced[i]['prompt'])) + 1
+        count = ids.index(cases['closing'], start) - start
+        other = 1 + i % (len(forced) - 1)
+        result.append({'path': str(Path(cases['work']) / f'capture-{i}-0.safetensors'), 'count': count,
+                       'other_path': str(Path(cases['work']) / f'capture-{other}-0.safetensors'),
+                       'prefix': forced[(i + 1) % len(forced)]['prompt'][:3000], 'continuation': cases['after_import']})
+    return result
 
 
 def export_report(a, cases, failures):
@@ -195,6 +238,72 @@ def export_report(a, cases, failures):
     if not empty_ok:
         failures.append('export.empty_span')
     return {'spans': len(cases['forced']), 'layout_ok': shapes_ok, 'empty_span_ok': empty_ok, 'tensors': report}
+
+
+def import_report(a, cases, engine, failures):
+    """SGLang after importing a span against the native engine's splice_block of the same stored tensors."""
+    import numpy as np
+    import torch
+    from safetensors.torch import load_file
+    from natlang_neuralese.model.shared_state import native_step, splice_block
+    from natlang_neuralese.model.state_block import NativeStateBlock
+    cached = Path(a.work) / 'reference-import.json'
+    if cached.exists():
+        ref = json.loads(cached.read_text())
+    else:
+        ref = {}
+        for name, dtype in (('fp32', torch.float32), ('bf16', torch.bfloat16)):
+            model = load(a, dtype)[0]
+            rows = []
+            for case in import_cases(cases):
+                out = []
+                for path in (case['path'], case['other_path']):
+                    stored = load_file(path)
+                    layers = []
+                    for index in range(model.port.num_layers):
+                        if f'layers.{index}.raw_k' in stored:
+                            layers.append({'kind': 'attention', 'raw_k': stored[f'layers.{index}.raw_k'].cuda(),
+                                           'v': stored[f'layers.{index}.v'].cuda()})
+                        else:
+                            layers.append({'kind': 'finite_convolution',
+                                           'gated_inputs': stored[f'layers.{index}.gated_inputs'].cuda()})
+                    identity = dict(checkpoint_sha256='0' * 64, tokenizer_fingerprint='0' * 64, embedding_weight_sha256='0' * 64)
+                    block = NativeStateBlock(text='', token_ids=stored['token_ids'].cuda(), embeddings=stored['embeddings'].cuda().to(dtype),
+                                             positions=stored['positions'].cuda(), layers=tuple(layers),
+                                             architecture=str(model.port.config.model_type), **identity)
+                    with torch.no_grad():
+                        prefix = native_step(model, torch.tensor([case['prefix'] + [cases['consume_open']]], device='cuda'))
+                        cache = splice_block(model, prefix['cache'], block, **identity)
+                        tail = [cases['consume_close']] + case['continuation']
+                        result = native_step(model, torch.tensor([tail], device='cuda'), cache)
+                        logp = torch.log_softmax(model.logits(result['h_final'][:, :-1])[0].float(), -1)
+                    out.append([float(logp[j, case['continuation'][j]]) for j in range(len(case['continuation']))])
+                rows.append(out)
+            ref[name] = rows
+            del model
+            torch.cuda.empty_cache()
+        cached.write_text(json.dumps(ref))
+    engine_d, floor_d, control_d, cached_d, other_d = [], [], [], [], []
+    for theirs, fp32, bf16 in zip(engine['import'], ref['fp32'], ref['bf16']):
+        mine, again, other = theirs
+        engine_d += [abs(x - y) for x, y in zip(mine, fp32[0])]
+        floor_d += [abs(x - y) for x, y in zip(bf16[0], fp32[0])]
+        control_d += [abs(x - y) for x, y in zip(fp32[1], fp32[0])]
+        cached_d += [abs(x - y) for x, y in zip(again, fp32[0])]
+        other_d += [abs(x - y) for x, y in zip(other, fp32[1])]
+    report = {'positions': len(engine_d), 'mean_abs_logprob': float(np.mean(engine_d)), 'max_abs_logprob': float(np.max(engine_d)),
+              'native_bf16_floor_mean': float(np.mean(floor_d)), 'other_span_control_mean': float(np.mean(control_d)),
+              'radix_cached_repeat_mean': float(np.mean(cached_d)), 'other_span_vs_its_reference_mean': float(np.mean(other_d))}
+    if report['mean_abs_logprob'] > 1.25 * report['native_bf16_floor_mean'] + 0.005:
+        failures.append('import.mean_abs_logprob')
+    if report['other_span_vs_its_reference_mean'] > 1.25 * report['native_bf16_floor_mean'] + 0.005:
+        failures.append('import.other_span')
+    if report['other_span_control_mean'] < 4 * report['mean_abs_logprob']:
+        failures.append('import.control_not_separated')
+    # The repeat reads prefix and imported KV from the radix cache (a different BF16 split of the same computation).
+    if report['radix_cached_repeat_mean'] > 1.25 * report['native_bf16_floor_mean'] + 0.005:
+        failures.append('import.radix_cached_repeat')
+    return report
 
 
 def reference_phase(a):
@@ -267,6 +376,7 @@ def reference_phase(a):
     report['decode.sampled_span_closes'] = closes
     failures = []
     report['export'] = export_report(a, cases, failures)
+    report['import'] = import_report(a, cases, engine, failures)
     if not closes:
         failures.append('decode.no_sampled_span_close')
     for key, r in report.items():
@@ -298,6 +408,7 @@ if __name__ == '__main__':
     p.add_argument('--gen', type=int, default=64)
     p.add_argument('--chunk', type=int, default=2048)
     p.add_argument('--update-ratio', type=float, default=0.5)
+    p.add_argument('--import-only', action='store_true', help='SGLang phase: only the import cases, keep earlier results')
     p.add_argument('--sglang-pythonpath', default='', help='PYTHONPATH for the SGLang phase (a fork worktree)')
     a = p.parse_args()
     a.work = a.work or str(Path(a.out).with_suffix('.work'))

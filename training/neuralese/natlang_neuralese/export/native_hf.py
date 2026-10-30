@@ -24,7 +24,7 @@ from pathlib import Path
 
 import torch
 
-SCHEMA = 'natlang.native-hf-export/3'
+SCHEMA = 'natlang.native-hf-export/4'
 PRODUCER_CHUNK = 8192
 
 
@@ -127,6 +127,11 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
                         'token_override_ids': list(config.get('token_override_ids', [])), 'tied': tied},
         'weights_sha256': sha256_file_hex(out_dir / 'model.safetensors'),
         'role_markers': markers,
+        # Native-state layout of this model (`Engine._native_exact`), so a serving front checks imported blocks
+        # without loading the native model.
+        'layer_kinds': ['attention' if model.port.is_attention(index) else 'gated_delta'
+                        if tuple(getattr(model.port, 'layer_types', ()))[index:index + 1] == ('linear_attention',)
+                        else 'finite_convolution' for index in range(model.port.num_layers)],
         'producer_embedding': {'weight': 'model.natlang_producer_embed', 'input_id_offset': hf_config.vocab_size},
         # No marker is banned: produce spans run on the fork (producer table, span export), consume markers and other
         # protocol violations are the native engine's errors, so SGLang samples from the native law.

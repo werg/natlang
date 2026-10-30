@@ -80,22 +80,26 @@ def _score_item(engine, item, adapters=None):
     options = item.get("continuations", item.get("options"))
     plan, continuations = _decision_render(engine, item.get("messages") or [], item.get("tools"), options)
     bindings = item.get('adapters', adapters)
+    serve = getattr(engine, 'sglang_score', None)  # the SGLang actor front scores on SGLang when it can
+    if serve is not None:
+        result = serve(item, plan, continuations, bindings)
+        if result is not None:
+            return result
     return engine._native_run(lambda: _score_rendered(engine, item, plan, continuations, bindings), bindings)
 
 
-def _score_rendered(engine, item, plan, continuations, bindings):
+def decision_request(item, bindings):
     privileged = item.get('x_natlang_privileged_context')
     if privileged is not None and not item.get('native_recording'):
         raise RequestError('bad-request', 'x_natlang_privileged_context renders a captured JOLT+ teacher decision; '
                            'request native_recording')
-    request = GenerationRequest(messages=item.get("messages") or [], tools=item.get("tools"), max_tokens=0,
-                                adapters=bindings, native_state_modes=item.get('native_state_modes'),
-                                rl_capture=bool(item.get('native_recording')),native_recording=bool(item.get('native_recording')),
-                                privileged_context=privileged)
-    sequence = Sequence(request, None, prompt_plan=plan)
-    engine._native_prefill(sequence)
-    base_cache, base_logits = sequence.cache, sequence.logits
-    results = [_score_from_cache(engine, base_cache, base_logits, own) for own in continuations]
+    return GenerationRequest(messages=item.get("messages") or [], tools=item.get("tools"), max_tokens=0,
+                             adapters=bindings, native_state_modes=item.get('native_state_modes'),
+                             rl_capture=bool(item.get('native_recording')),native_recording=bool(item.get('native_recording')),
+                             privileged_context=privileged)
+
+
+def decision_response(item, sequence, continuations, results):
     response={"log_probs": [score for score, _ in results], "tokens": [count for _, count in results],
               "native_state_imports": sequence.native_imports}
     if item.get('native_recording'):
@@ -105,6 +109,15 @@ def _score_rendered(engine, item, plan, continuations, bindings):
             'prompt':sequence.native_rl_prompt,'continuations':continuations,
             'native_state_imports':sequence.native_imports}
     return response
+
+
+def _score_rendered(engine, item, plan, continuations, bindings):
+    request = decision_request(item, bindings)
+    sequence = Sequence(request, None, prompt_plan=plan)
+    engine._native_prefill(sequence)
+    base_cache, base_logits = sequence.cache, sequence.logits
+    results = [_score_from_cache(engine, base_cache, base_logits, own) for own in continuations]
+    return decision_response(item, sequence, continuations, results)
 
 
 def decide_native(engine, body: dict) -> dict:
