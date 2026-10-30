@@ -203,7 +203,7 @@ def _convolution_index(plan, width, rows, device):
     return torch.tensor(predecessor, device=device)
 
 
-def _convolve(layer, gated, c, plan, rows, *, index=None):
+def _convolve(layer, gated, c, plan, rows, *, index=None, noise=None):
     complete=isinstance(rows,range) and rows==range(plan.token_count)
     if not complete:rows=tuple(rows)
     if not complete and (any(type(row) is not int or not 0<=row<plan.token_count for row in rows) or any(a>=b for a,b in zip(rows,rows[1:]))):
@@ -239,6 +239,10 @@ def _convolve(layer, gated, c, plan, rows, *, index=None):
         else:
             gathered = padded[:, index]  # B,Q,W,C; -1 selects the explicit zero row
     if stop_mask is not None:gathered=torch.where(stop_mask[None,:,:,None],gathered.detach(),gathered)
+    if noise is not None:
+        if not complete:
+            raise ValueError('the import channel applies to the complete graph convolution')
+        gathered = gathered + noise[None].to(gathered.dtype)
     return _finite_convolution(kernel, gathered, c)
 
 
@@ -329,6 +333,10 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
     key_positions = plan.tensor(plan.slot_positions, device)
     query_positions = plan.tensor(plan.own_positions, device)
     external = _external_layers(port, plan, external_blocks, external_identity)
+    from .import_channel import active_channel, PlannedChannel
+    channel = active_channel()
+    channel = PlannedChannel(channel, plan, device) if channel is not None else None
+    channel_kl = None
     from .native_actor_graph import invocation_actor_bank
     actor_bank=invocation_actor_bank(port)
     actor_groups=()
@@ -382,6 +390,8 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
         def run_layer(value, *imported, index=i, attention=attention, window=window, convolution_index=convolution_index, attention_workspace=attention_workspace):
             layer = port.layers[index]
             if _is_gated_delta(port, index):
+                if channel is not None:
+                    raise ValueError('the import channel supports attention and finite-convolution layers')
                 from .native_gated_delta import project_inputs, replay
                 module = layer.linear_attn
                 inputs = _actor_delta_inputs(actor_bank,actor_groups,port,layer,value)
@@ -435,6 +445,9 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
                 if stopped_slots is not None:
                     key_slots=torch.where(stopped_slots,key_slots.detach(),key_slots)
                     value_slots=torch.where(stopped_slots,value_slots.detach(),value_slots)
+                layer_kl = None
+                if channel is not None:
+                    key_slots, value_slots, layer_kl = channel.attention(index, k, v, key_slots, value_slots)
                 kr = _rotate(port, key_slots, key_positions, index)
                 if _fp32_kv_cotangents(port, q):
                     kr, value_slots = kr.float(), value_slots.float()
@@ -448,10 +461,15 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
                 if imported and any(value.shape[1] for value in imported):
                     gated = torch.cat([gated, *(value for value in imported if value.shape[1])], dim=1)
                 captured = (gated,)
-                out = _convolve(layer, gated, c, plan, range(plan.token_count), index=convolution_index)
+                layer_kl = noise = None
+                if channel is not None:
+                    noise, layer_kl = channel.convolution(index, gated, layer.conv.conv.weight.shape[-1])
+                out = _convolve(layer, gated, c, plan, range(plan.token_count), index=convolution_index,
+                               **({'noise': noise} if noise is not None else {}))
             updated = _actor_finish(actor_bank,actor_groups,port,layer,value,out,attention,
                                     layer_index=index)
-            return (updated, *captured) if retain_states else (updated,)
+            result = (updated, *captured) if retain_states else (updated,)
+            return (*result, layer_kl) if channel is not None else result
 
         if checkpointed:
             # Dynamic torch.compile fallback must not change saved tensors
@@ -471,10 +489,15 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
                                  preserve_rng_state=getattr(port, 'checkpoint_preserve_rng', True))
         else:
             updated = run_layer(h, *external_i)
+        if channel is not None:
+            channel_kl = updated[-1] if channel_kl is None else channel_kl + updated[-1]
+            updated = updated[:-1]
         h = updated[0]
         if retain_states:
             state.append(updated[1:])
     return {'h_final': h, 'states': tuple(state), 'plan': plan,
+            **({'import_channel': {'sources': channel.sources, 'kl': channel_kl,
+                                   'imported_rows': len(channel.imported)}} if channel is not None else {}),
             'layer_kinds': tuple('attention' if port.is_attention(i) else
                 'gated_delta' if _is_gated_delta(port, i) else 'finite_convolution'
                 for i in range(port.num_layers)),
@@ -490,6 +513,9 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
     attention uses the actual native serving kernel to preserve arithmetic.
     """
     device = port.embedding_weight.device
+    from .import_channel import active_channel
+    if active_channel() is not None:
+        raise ValueError('the import channel is applied by the packed graph forward, not the cached oracle')
     if plan.token_count == 0:
         return forward_graph(port, plan, adapter, embeddings=embeddings, external_blocks=external_blocks, external_identity=external_identity)
     from .native_actor_graph import invocation_actor_bank
