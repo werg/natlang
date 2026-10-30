@@ -528,3 +528,13 @@ def test_backbone_stage_preserves_privileged_facts_without_guidance_authoring(tm
     teachers=teacher_entries(entries,rows,cases=cases,config=config,out=tmp_path,attempts=1,seed_base=1,custody=custody(),selection='crisp',writer='off')
     g=json.loads(open(teachers['entries'][0]['chat_request_config']).read())['x_natlang_guidance']
     assert g['role']=='teacher' and g['writer']=='off' and g['selection']=='crisp' and g['facts']
+
+
+def test_episode_guidance_check_accepts_student_text_twin_and_rejects_imported_guidance():
+    from natlang_neuralese.rl.jolt import check_episode_guidance
+    twin = [{'graph_turn': 't0', 'sampling': {'privileged': {'mode': 'text-twin'}, 'prompt': []}}]
+    assert check_episode_guidance({'jolt_role': 'student'}, twin) == 'student'
+    imported = [{'graph_turn': 't0', 'sampling': {'privileged': {'mode': 'import'}, 'prompt': []}}]
+    with pytest.raises(ValueError, match='mark it as a teacher attempt'):
+        check_episode_guidance({'jolt_role': 'student'}, imported)
+    assert check_episode_guidance({'jolt_role': 'teacher'}, imported) == 'teacher'
