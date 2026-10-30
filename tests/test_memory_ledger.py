@@ -752,6 +752,7 @@ def test_a_backfilled_unit_is_not_preempted_for_the_same_head_within_its_hold():
     assert ledger.preemption_plan(live, 18 * GIB, head, head='other.service', now=now) == ['render.service']  # new head
     later = now + ledger.BACKFILL_HOLD + 1
     assert ledger.preemption_plan(live, 18 * GIB, head, head='bench.service', now=later) == ['render.service']
+    live['train.service'] = running('experiment', 100, 80, priority='high', gpu=True)
     assert ledger.victim(live, True, 1.15)[0] == 'render.service'  # floor pressure ignores the hold
 
 
@@ -1133,3 +1134,18 @@ def test_stopped_unit_survivors_are_killed_only_when_same_process(capsys):
     finally:
         proc.kill()
         proc.wait()
+
+
+def test_floor_does_not_stop_the_sole_unit_within_its_budget():
+    # 2026-10-30: lower units were stopped, freeing nothing; the RL runner within its budget must survive the floor
+    live = {'rl.service': running('experiment', 105, 103, priority='high', age=9000)}
+    assert ledger.victim(live, True, 1.15) == (None, None)
+    assert ledger.victim(live, True, 1.15, emergency=True)[0] == 'rl.service'
+    live['render.service'] = running('collection', 6, 3, priority='low', age=10)
+    assert ledger.victim(live, True, 1.15)[0] == 'render.service'
+    live['rl2.service'] = running('experiment', 8, 4, priority='high', age=10)
+    del live['render.service']
+    assert ledger.victim(live, True, 1.15)[0] is not None  # two units: stopping one protects the other
+    del live['rl2.service']
+    live['rl.service']['used'] = 106 * GIB  # past its budget (not yet the overshoot): the floor may take it again
+    assert ledger.victim(live, True, 1.15)[0] == 'rl.service'

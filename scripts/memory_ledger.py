@@ -937,16 +937,21 @@ def reset_peak(args):
     print(json.dumps({'family': args.family, 'from_gb': None if before is None else round(before / GIB, 1), 'to_gb': args.to_gb}))
 
 
-def victim(live, floor_breached, overshoot, pressure=None, grace=None):
+def victim(live, floor_breached, overshoot, pressure=None, grace=None, emergency=False):
     """The unit to stop, only under memory pressure (available below twice the floor; ``pressure`` defaults to
     ``floor_breached``): first the unit most over its budget by the overshoot factor, then, below the floor, the
     lowest-priority newest. A unit over its budget while memory is plentiful is not stopped (the guard raises its
     budget to what it uses instead): over 3 days, 7 of 9 over-budget stops happened with >20 GB still available,
-    so they protected nothing and cost the work."""
+    so they protected nothing and cost the work. The floor stops units to protect the others: the sole remaining
+    unit within its budget is stopped only in an ``emergency`` (available below the emergency level), 2026-10-30:
+    the floor stopped every low unit, freeing nothing, then the RL runner at 110 of its 112 GB budget with 9.9 GiB
+    still available."""
     pressure = floor_breached if pressure is None else pressure
     over = [(c['used'] / c['budget'], u) for u, c in live.items() if c['used'] > c['budget'] * overshoot]
     if over and (pressure or floor_breached):
         return max(over)[1], 'over budget under memory pressure'
+    if floor_breached and not emergency and len(live) == 1 and all(c['used'] <= c['budget'] for c in live.values()):
+        return None, None
     if floor_breached and live:
         # Class priority first; within a class, the unit freeing the most memory per second of stop grace (small,
         # stateless jobs such as tests and probes before big long-running trainers), then the newest.
@@ -1183,7 +1188,8 @@ def guard(args):
             writes = checkpoint_writes()
             sizes, throughput = family_state_bytes(writes), write_throughput(writes)
             graces = {name: grace_seconds(name, state['claims'].get(name, {}), sizes, throughput) for name in live}
-            unit, reason = victim(live, available < floor, args.overshoot, pressure=available < 2 * floor, grace=graces)
+            unit, reason = victim(live, available < floor, args.overshoot, pressure=available < 2 * floor, grace=graces,
+                                  emergency=available < emergency)
             for name, claim in live.items():  # overshoot without pressure: the budget becomes what it uses
                 if not unit and claim['used'] > claim['budget'] * args.overshoot and name in state['claims']:
                     raised = int(claim['used'] * 1.1)
