@@ -238,7 +238,6 @@ def prepare_seed_command(config,directory,values,state,state_path,*,parameters=N
     # the actor's argument splice can send unsupported serving flags to SFT.
     from ..train.recipe import stage_parameter_args
     selected=config.get('trainer_parameters',{}) if parameters is None else parameters
-    bind_foundation_policy(config, selected)
     values['trainer_args']=stage_parameter_args(selected)
     values['seed_trainer_args']=list(values['trainer_args'])
     command,reused=_resume_source_arguments(config,directory,values,parameters=parameters)

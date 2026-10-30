@@ -140,7 +140,7 @@ def test_cycle_reloads_recipe_after_rl_and_before_each_unreserved_stage(tmp_path
           'supervised_stage_quantum_updates':{'sft':500,'preference':100}}
     config_path.write_text(json.dumps(config));plan_path.write_text(json.dumps(plan));seen=[]
     monkeypatch.setattr(lc,'resolve_recipe_data',lambda p:json.loads(Path(p).read_text()))
-    def continuation(config,stage,*,checkpoint,adapter,out):
+    def continuation(config,stage,*,checkpoint,out):
         seen.append((stage['id'],stage['parameters']['data_revision'],checkpoint))
         return {'out':str(out),'stage_id':stage['id'],'trainer_parameters':{'stage_id':stage['id']}},None
     monkeypatch.setattr(lc,'continuation_config',continuation)
