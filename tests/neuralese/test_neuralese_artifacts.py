@@ -62,7 +62,7 @@ def test_tampered_bytes_and_wrong_dialects_are_refused(tmp_path):
         artifacts.resolve("bank-test-v1", repo=repo)
     with pytest.raises(artifacts.ArtifactError, match="differs from"):
         artifacts.register(repo, item("bank-test-v2"), {"bank.nz": nz(tmp_path / "other.nz", dialect="native-state/other")})
-    with pytest.raises(artifacts.ArtifactError, match="semantic-state"):
+    with pytest.raises(artifacts.ArtifactError, match="native-state"):
         artifacts.register(repo, item("bank-test-v3", dialect="nd:test@1"), {"bank.nz": nz(tmp_path / "old.nz")})
 
 

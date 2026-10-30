@@ -287,7 +287,8 @@ def test_native_policy_objective_receives_one_forward_and_external_bindings():
     loss, detail = packed_graph_loss(model,
         [parse_graph(graph('consumer'), tokenizer_fingerprint='tokenizer-sha')], objective=Objective())
     loss.backward()
-    assert model.calls == 1 and detail == {'kind': 'test-objective'}
+    assert model.calls == 1 and detail == {'kind': 'test-objective', 'packed_physical_tokens': 3,
+                                           'original_physical_tokens': 3}
     assert all(parameter.grad is not None for parameter in model.parameters())
 
 
