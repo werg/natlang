@@ -420,6 +420,25 @@ def test_reverse_kl_from_logits_matches_float64_reference_including_near_agreeme
         reverse_kl(z32.detach(), torch.zeros_like(z32))
 
 
+def test_reverse_kl_stays_finite_for_a_peaked_sample_the_twin_rates_much_lower():
+    """LFM3 jolt-r1 round 2: z_max 35.75 on a token the teacher twin rated 16.25 lower (vocabulary 128000)."""
+    from natlang_neuralese.rl.jolt import reverse_kl
+    generator = torch.Generator().manual_seed(7)
+    logits = torch.randn(3, 128000, generator=generator)
+    twin = logits + 0.1 * torch.randn(3, 128000, generator=generator)
+    logits[:, 532] = 35.75
+    twin[:, 532] = 35.75 - 16.25
+    twin[1, 900] = 20.375  # the twin's own peak elsewhere
+    z = logits.clone().requires_grad_(True)
+    actual = reverse_kl(z, twin)
+    lp, lq = torch.log_softmax(logits.double(), -1), torch.log_softmax(twin.double(), -1)
+    expected = (lp.exp() * (lp - lq)).sum(-1)
+    assert torch.isfinite(actual).all()
+    torch.testing.assert_close(actual.double(), expected, rtol=1e-4, atol=1e-5)
+    actual.sum().backward()
+    assert torch.isfinite(z.grad).all()
+
+
 def test_root_calls_come_from_the_execution_graph_not_turn_order():
     # The child's turn is captured first; the root is the invocation without a caller edge.
     turns = [{'graph_turn': 'child-1#turn1'}, {'graph_turn': 'run-1#turn1'}]

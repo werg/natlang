@@ -81,13 +81,14 @@ class _ReverseKL(torch.autograd.Function):
         p = torch.where(finite, (z - lse).exp(), torch.zeros_like(z))
         difference = torch.where(finite, z - t, torch.zeros_like(z))
         # lse(t) - lse(z) = log E_p exp(-(z - t)), evaluated as log1p(E_p expm1(-(z - t))) so that near agreement
-        # the first-order terms cancel analytically instead of between two rounded log-normalizers. Far from
-        # agreement expm1 overflows (a token with underflowed p but a twin logit ~90 higher gave 0 * inf = NaN on
-        # a 56k-token teacher twin), so rows with any |z - t| > 20 use the log-normalizer difference directly.
-        near = difference.abs().amax(-1, keepdim=True) <= 20.
-        shift = torch.where(near,
-            torch.log1p((p * torch.expm1(-difference.clamp(min=-20.))).sum(-1, keepdim=True)),
-            torch.logsumexp(t, -1, keepdim=True) - lse)
+        # the first-order terms cancel analytically instead of between two rounded log-normalizers. That form is
+        # only accurate while E_p expm1(-(z - t)) is small: far from agreement expm1 overflows (an underflowed p
+        # times inf), and a peaked p on a token the twin rates 16 lower drives the sum to -1 + 1e-7, which FP32
+        # rounds to <= -1 so log1p gives NaN (both seen on a 56k-token LFM3 teacher twin). Elsewhere the
+        # log-normalizer difference is itself well conditioned and is used directly.
+        mean = (p * torch.expm1(-difference.clamp(min=-20., max=20.))).sum(-1, keepdim=True)
+        near = (difference.abs().amax(-1, keepdim=True) <= 20.) & (mean.abs() <= .5)
+        shift = torch.where(near, torch.log1p(mean.clamp(min=-.5)), torch.logsumexp(t, -1, keepdim=True) - lse)
         delta = torch.where(finite, difference + shift, torch.zeros_like(z))
         kl = (p * delta).sum(-1)
         ctx.save_for_backward(p, delta, kl)
