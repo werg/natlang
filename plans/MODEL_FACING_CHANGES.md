@@ -1,5 +1,26 @@
 # Model-facing changes and their measurement
 
+### 2026-10-30 — RL collection context budget 16384 -> the actor's 32768, and child reference guidance (debt: live outcome)
+
+Diagnosis of DGX JOLT round 5 (jolt-r1, 56 episodes): 30 ended in `budget_exhaustion`, every one on the whole-case
+model-request budget (32). The collector ran the agent with `--context-tokens 16384` (run_bonsai_queue.py default for
+external servers) although the SGLang actor serves 32768 per request. With the full explanatory system prompt (about
+6.6k tokens) plus tool schemas (about 1.4k), the agent's compaction rule (three quarters of the budget) forced
+`compact_history` after a few turns: 101 forced compactions in the 30 exhausted episodes (3.4 each). After each, the
+model re-read every input file: 32.1 root read_file calls and 27.4 repeated identical tool calls per exhausted
+episode (successes: 1.6 read_file, 1.2 repeats). Change: production RL `context_tokens` (bound in the collection
+binding) sets each entry's agent budget; DGX configs use 32768, the served window. What the model sees changes: the
+compaction notice comes about twice as late, so it keeps its own earlier tool results.
+
+Second change, privileged JOLT+ child guidance: 281 of 675 cases-v2 child references are verified calls ending in
+return_result rather than a `value`; their fact read "The verified answer of this call is null." They now state what
+the calls return (or the blocked/failed status and reason) and show the verified steps. 117 child match strings were
+bare strings, which the matcher treated as a sequence of characters (matching nearly any child prompt); a bare
+string is now one match.
+**Measurement debt:** compare budget_exhaustion, forced compactions per episode and task success on the next DGX
+JOLT/SD rounds (32768) against rounds 2-5 (16384); the child-guidance text is measured through teacher outcomes on
+the same rounds.
+
 ### 2026-10-30 — self-call advice and input-literal repair (partly measured; debt for is_urgent)
 
 Two runtime changes for a call that reaches for itself instead of judging. Diagnosed on the stock LFM3 1.7B Q8_0

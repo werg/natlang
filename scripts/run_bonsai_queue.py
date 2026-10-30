@@ -650,8 +650,6 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             context_tokens = entry['context_tokens']
             if type(context_tokens) is not int or context_tokens < 1:
                 raise ValueError(f'entry context_tokens must be a positive integer: {entry.get("key")}')
-            if not remote:
-                raise ValueError('entry context_tokens is only supported by provider queues')
     attempted = set()
     failure_streak, next_allowed_at = 0, 0
     if journal.exists():

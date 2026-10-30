@@ -53,6 +53,36 @@ def _text(value):
     return value if isinstance(value, str) else json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
+def _child_match(child):
+    """A reference child's prompt match strings: one string or a list of them (a bare string is one match, not a
+    sequence of characters)."""
+    match = child.get('match')
+    match = (match,) if isinstance(match, str) else tuple(match or ())
+    if not match or any(not isinstance(item, str) or not item for item in match):
+        raise ValueError('reference child values need their exact prompt match strings')
+    return match
+
+
+def _child_text(child):
+    """The verified answer of a reference child call: its ``value``, or what its verified actions (``calls``/``call``,
+    ending in return_result) return. Steps before the return are shown too."""
+    if child.get('value') is not None:
+        return f'The verified answer of this call is {_text(child["value"])}.'
+    calls = child.get('calls') or ([child['call']] if child.get('call') is not None else [])
+    if not calls or not (isinstance(calls[-1], list) and len(calls[-1]) == 2 and calls[-1][0] == 'return_result'
+                         and isinstance(calls[-1][1], dict)):
+        raise ValueError('a reference child needs a value or verified calls ending in return_result')
+    result = calls[-1][1]
+    if result.get('status', 'success') == 'success':
+        text = f'The verified answer of this call is {_text(result.get("value"))}.'
+    else:
+        text = (f'The verified outcome of this call is return_result with status {_text(result["status"])}'
+                + (f': {_text(result["reason"])}' if result.get('reason') else '') + '.')
+    if len(calls) > 1:
+        text += '\nA verified way to reach it:\n' + _action_text(calls)
+    return text
+
+
 # ---------------------------------------------------------------- facts
 
 @dataclass(frozen=True)
@@ -111,10 +141,7 @@ def case_facts(case, *, custody, teacher_trajectories=(), attempt_feedback=()):
     if reference.get('root'):
         add('reference_solution', 'A verified reference solution:\n' + _action_text(reference['root']))
     for child in reference.get('children') or []:
-        match = tuple(child.get('match') or ())
-        if not match or any(not isinstance(item, str) for item in match):
-            raise ValueError('reference child values need their exact prompt match strings')
-        add('child_value', f'The verified answer of this call is {_text(child.get("value"))}.', match=match)
+        add('child_value', _child_text(child), match=_child_match(child))
     if curriculum.get('minimum_sequence'):
         add('minimum_sequence', 'Steps of a correct solution:\n' + '\n'.join(
             f'- {_text(step)}' for step in curriculum['minimum_sequence']))

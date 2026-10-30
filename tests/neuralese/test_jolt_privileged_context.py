@@ -530,3 +530,20 @@ def test_reverse_kl_opsd_term_from_teacher_logits_has_finite_gradients():
     kl.backward()
     assert model.adapter.up.weight.grad.abs().sum() > 0  # producer receives the consumer's OPSD signal
     assert all(torch.isfinite(p.grad).all() for p in model.parameters() if p.grad is not None)
+
+
+def test_child_references_with_verified_calls_or_a_bare_match_string_render_their_actual_answer():
+    """A child reference given as verified calls (ending in return_result) states what those calls return, not
+    'null'; a bare match string is one substring, not a sequence of characters."""
+    children = [{'match': 'Count "A1"', 'calls': [['eval', {'code': 'return 2;'}],
+                                                  ['return_result', {'status': 'success', 'value': 2}]]},
+                {'match': '"B7"', 'call': ['return_result', {'status': 'blocked', 'reason': 'B7 is unreadable'}]}]
+    case = train_case()
+    case['curriculum']['reference']['children'] = children
+    _, facts = case_facts(case, custody=custody())
+    child = [fact for fact in facts if fact.kind == 'child_value']
+    assert child[0].text.startswith('The verified answer of this call is 2.') and 'return 2;' in child[0].text
+    assert child[1].text == 'The verified outcome of this call is return_result with status blocked: B7 is unreadable.'
+    assert child[0].match == ('Count "A1"',) and child[1].match == ('"B7"',)
+    assert applicable(child[0], {'name': 'c', 'role': 'child', 'text': 'Count "A1" apples'})
+    assert not applicable(child[0], {'name': 'c', 'role': 'child', 'text': 'Count "B7" apples'})

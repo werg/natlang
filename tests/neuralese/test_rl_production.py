@@ -519,3 +519,14 @@ def test_resume_preflight_unbound_round_writes_nothing_outside_scratch(tmp_path)
     assert result['ok'] and result['status'] == 'unbound'
     after = sorted(str(p) for p in tmp_path.rglob('*') if 'scratch' not in str(p))
     assert after == before
+
+
+def test_collection_binding_binds_the_agent_context_budget_only_when_set(tmp_path):
+    cases = tmp_path / 'cases.jsonl'
+    cases.write_text('{}\n')
+    (tmp_path / 'ts-host' / 'dist').mkdir(parents=True)
+    common = dict(cases=cases, endpoints=['http://x'], policy_id='p', rows=1, offset=0, group=2, root_mode='student',
+                  runtime=tmp_path / 'ts-host', seed_base=0, neuralese_server=True, case_seconds=60,
+                  max_model_requests=32, max_turns=48)
+    assert 'context_tokens' not in production.collection_binding(**common)
+    assert production.collection_binding(**common, context_tokens=32768)['context_tokens'] == 32768

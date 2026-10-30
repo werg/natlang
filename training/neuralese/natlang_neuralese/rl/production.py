@@ -432,7 +432,7 @@ def bind_collection_prompt(entries, mode):
 def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root_mode, runtime, seed_base,
                        neuralese_server, case_seconds, max_model_requests, max_turns, expected_native=None,
                        behavior_top_k=None, system_prompt=None, prompt_rendering=None, guidance_stage=None,
-                       coefficient_policy=None):
+                       coefficient_policy=None, context_tokens=None):
     """The exact provenance a collection binds (no side effects): cases, policy, sampling, runtime and actor."""
     from ..common.hashing import sha256_file_hex, sha256_hex
     runtime = Path(runtime or root('repo') / 'ts-host')
@@ -444,6 +444,7 @@ def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root
         **({'guidance_stage':guidance_stage} if guidance_stage is not None else {}),
         'endpoints': endpoints, 'neuralese_server': neuralese_server,
         **({'prompt_rendering':prompt_rendering} if prompt_rendering is not None else {}),
+        **({'context_tokens': context_tokens} if context_tokens is not None else {}),
         'runtime': {str(p.relative_to(runtime)): sha256_file_hex(p)
                     for p in sorted((runtime / 'dist').rglob('*.js'))},
         'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py'),
@@ -486,7 +487,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
-            system_prompt=None, prompt_rendering=None, guidance_stage=None):
+            system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -494,7 +495,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     in-run guidance written and imported per invocation (rl.jolt.teacher_entries); rows are tagged
     ``jolt_role: teacher``. Students write guidance without importing it (rl.jolt.student_guidance).
     ``system_prompt`` (text) replaces the collector's default system prompt for every entry (e.g. stored program
-    guidance measured by the memetic learner); it is bound by digest into the collection binding."""
+    guidance measured by the memetic learner); it is bound by digest into the collection binding.
+    ``context_tokens`` is the agent's context budget per request (the actor's served window); None keeps the
+    collector's 16384 default. The agent compacts its history at three quarters of it, so a budget far below the
+    served window forces compaction long before the model needs it."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
     if guidance_stage not in (None,'backbone'):
@@ -513,7 +517,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         group=group, root_mode=root_mode, runtime=runtime, seed_base=seed_base, neuralese_server=neuralese_server,
         case_seconds=case_seconds, max_model_requests=max_model_requests, max_turns=max_turns,
         expected_native=expected_native, behavior_top_k=behavior_top_k, system_prompt=system_prompt,
-        prompt_rendering=prompt_rendering, guidance_stage=guidance_stage, coefficient_policy=coefficient_policy)
+        prompt_rendering=prompt_rendering, guidance_stage=guidance_stage, coefficient_policy=coefficient_policy,
+        context_tokens=context_tokens)
     coefficient_runtime = (binding.get('coefficient_policy') or {}).get('runtime')
     if coefficient_policy is not None:
         coefficient_policy = Path(coefficient_policy).resolve(strict=True)
@@ -562,6 +567,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         policy_checkpoint_sha256=policy_id))
     entries = list(read_jsonl(out / 'queue.jsonl'))
     bind_collection_prompt(entries,prompt_rendering)
+    if context_tokens is not None:
+        if type(context_tokens) is not int or context_tokens < 4096:
+            raise ValueError('context_tokens must be an integer of at least 4096')
+        for entry in entries:
+            entry['context_tokens'] = context_tokens
     if system_prompt is not None:
         system = out / 'system.md'
         system.write_text(system_prompt)
@@ -632,6 +642,9 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                                                                           if teacher_plan == 'nl' else None))
             if teachers['entries']:
                 bind_collection_prompt(teachers['entries'],prompt_rendering)
+                if context_tokens is not None:
+                    for entry in teachers['entries']:
+                        entry['context_tokens'] = context_tokens
                 entries.extend(teachers['entries'])
                 phase.update(entries=teachers['entries'], name='teacher-')
                 with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -1031,7 +1044,8 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
         control=control, expected_native=expected_native,
         **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
         teacher_attempts=teacher_attempts, teacher_plan=config.get('jolt_teacher_plan', 'nl'),
-        guidance_stage=config.get('jolt_guidance_stage'), prompt_rendering=config.get('prompt_rendering'))
+        guidance_stage=config.get('jolt_guidance_stage'), prompt_rendering=config.get('prompt_rendering'),
+        context_tokens=config.get('context_tokens'))
     return config, values, policy, policy_loss, expected_native, kwargs
 
 
@@ -1045,6 +1059,31 @@ def _binding_differences(recorded, current, prefix=''):
         elif a != b:
             out.append(prefix + key)
     return out
+
+
+def _stale_guidance_facts(round_dir, rollouts):
+    """Case facts recorded in the round's captured guidance blocks whose digest this code no longer reproduces
+    (``task_id/fact id``). Group-dependent facts (attempt feedback, teacher trajectories) are left to the learner."""
+    from ..common.custody import ProtectedWorlds
+    from .episode_graph import whole_episode_turns
+    from .privileged_context import captured_block, case_facts
+    cases = {case.get('id'): case for case in read_jsonl(Path(round_dir) / 'selected-cases.jsonl')}
+    custody = ProtectedWorlds.load()
+    current, stale = {}, []
+    for rollout in read_jsonl(rollouts):
+        for turn in whole_episode_turns(rollout) if rollout.get('turns') else ():
+            block = captured_block(turn)
+            if block is None:
+                continue
+            task = rollout.get('task_id')
+            if task not in current:
+                current[task] = {fact.id: fact.digest for fact in case_facts(cases[task], custody=custody)[1]}
+            for item in block.receipt.get('facts') or []:
+                if item.get('kind') in ('attempt_feedback', 'teacher_trajectory', 'fit_hindsight'):
+                    continue
+                if current[task].get(item.get('id')) != item.get('sha256'):
+                    stale.append(f"{task}/{item.get('id')}")
+    return sorted(set(stale))
 
 
 def resume_preflight(config_path, scratch):
@@ -1108,7 +1147,7 @@ def resume_preflight(config_path, scratch):
     binding = collection_binding(**{key: kwargs[key] for key in ('cases', 'endpoints', 'policy_id', 'rows',
         'offset', 'group', 'root_mode', 'runtime', 'seed_base', 'neuralese_server', 'case_seconds',
         'max_model_requests', 'max_turns', 'behavior_top_k', 'prompt_rendering', 'guidance_stage',
-        'coefficient_policy') if key in kwargs}, expected_native=expected_native)
+        'coefficient_policy', 'context_tokens') if key in kwargs}, expected_native=expected_native)
     recorded = json.loads(receipt.read_text())
     binding, _ = resolve_collection_binding(recorded, binding, kwargs['teacher_attempts'], kwargs['teacher_plan'])
     differences = _binding_differences(_legacy_collection_binding(recorded), binding)
@@ -1118,7 +1157,11 @@ def resume_preflight(config_path, scratch):
     if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' and rollouts.exists():
         from .episode_graph import whole_episode_turns
         from .jolt import check_episode_guidance
-        for rollout in read_jsonl(rollouts):
+        stale = _stale_guidance_facts(round_dir, rollouts)
+        if stale:
+            learner = {'ok': False, 'error': 'recorded guidance facts that this code renders differently (the learner '
+                       'would refuse them): ' + ', '.join(stale[:5])}
+        for rollout in read_jsonl(rollouts) if learner['ok'] else ():
             if not rollout.get('turns'):
                 continue
             try:
