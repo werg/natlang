@@ -68,29 +68,26 @@ writer/consumer pairs of a group go into one packed graph.
 Gradients flow from τ*'s action positions through the consumers' attention to the imported KV and convolution
 state of the writer span, then into the writer parameters. That path is exact, with no detach (`ImportSpan.stop_gradient = False`).
 
-## Call trees and nl sub-calls
+## Call trees and nl sub-calls (owner rule, simple)
 
 τ* is a call tree: the root call and the child calls it made (named functions and inline `nl` lambdas), each with its
-own model turns.
+own model turns. The rule is crisp, on one recorded parameter `child_hint_min_tokens` (own assistant-action tokens of a
+call, excluding its children's):
 
-1. **Per-invocation hints.** Each node of τ* gets its own hint, inserted into that node's own prompt by the declared
-   guidance turn. Facts are scoped by the existing per-invocation visibility rule (`privileged_context.applicable`):
-   a child sees only facts matched to its own call, and the root sees world-level facts.
-2. **Reconstruction decomposes over nodes.** NLL_i = Σ_node −log π(node actions | node inputs from τ*, hint_node),
-   teacher-forced in the existing multi-invocation one-pass graph with exact occurrence bindings. A child's returned
-   value reaches its parent through τ*'s recorded inputs, as in any replay.
-3. **The writer is recursive over the tree.** writeHint(node) = f(node's own turns explored through eval,
-   [writeHint(child) for each child]). This is structural recursion on a smaller argument, the natlang termination
-   rule, and it compresses bottom-up. Each recursive call explores only its subtree value. The rate penalty is per
-   node: L_i and KL_i sum over the nodes' hints. The traversal is crisp (`rl/hindsight.py` `write_hints`). Each
-   `writeHint` call receives its children's hints as `Neuralese<string>` inputs (`childHints`).
-4. **Phase-2 matching.** A τ* child hint applies to a self-teacher child call only if the function and arguments
-   match. Equivalence is crisp: the same function identity (named function path, or the exact instruction text of an
-   inline `nl` lambda) and canonical-JSON-equal arguments (`common.hashing.canonical_json_sha256_hex` of the argument
-   values, with Neuralese arguments compared by state id). Otherwise that child gets no hint.
-5. **Later (phase 2+): learned delegation.** Only the root gets a hint, and the root self-teacher passes Neuralese
-   arguments to its children. The children's reconstruction gradients flow back through those producer→consumer
-   edges into the root hint. We start with per-node injection.
+1. **Root:** one writer pass over τ* as a value → hint → self-teacher (the root's guidance turn imports it).
+2. **Short child** (fewer than `child_hint_min_tokens` own action tokens): no hint. Any useful hint would be comparable
+   in size to the child's own content. It is trained by plain SFT on its own trajectory, with its actual inputs
+   including Neuralese inputs. In phase 1 the backbone is frozen, so this SFT belongs to the student's training
+   (the production recipe / phase 2), not to the writer.
+3. **Long child:** an independent additional writer pass over just that child's subtrajectory as the value → a hint for
+   that child call only, imported by that child's own guidance turn.
+
+`rl/hindsight.py` `node_classes` applies the rule; `hinted_graph` takes a hint per hinted node. Reconstruction sums
+over the hinted nodes' actions in the existing multi-invocation one-pass graph with exact occurrence bindings. For
+phase 2, a τ* child hint applies to a self-teacher child call only when its function and arguments match: the same
+function identity, and canonical-JSON-equal arguments with Neuralese arguments compared by state id. Otherwise that
+child gets no hint. The default `child_hint_min_tokens = 256` is about four times the target hint length (≤ 64
+tokens); the pilot reports the τ* length distribution and the class counts and revises it.
 
 ## Objectives (exact)
 
