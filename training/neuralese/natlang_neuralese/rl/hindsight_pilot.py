@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import math
 import os
 import subprocess
@@ -96,6 +97,90 @@ def overview(call):
             'children': []}
 
 
+_CHATML = re.compile(r'<\|im_start\|>(\w+)\n(.*?)<\|im_end\|>', re.S)
+
+
+def teacher_value(text, name, function):
+    """A teacher SFT row's whole call as a ``TrajectoryCall`` value, parsed from its ChatML text."""
+    messages = [(role, body) for role, body in _CHATML.findall(text)]
+    prompt = '\n'.join(body for role, body in messages if role == 'user')[:20000]
+    steps, turn = [], 0
+    for index, (role, body) in enumerate(messages):
+        if role != 'assistant':
+            continue
+        reasoning = re.search(r'<think>(.*?)</think>', body, re.S)
+        tool = re.search(r'<function=([\w.]+)>', body)
+        code = re.search(r'<parameter=code>\n?(.*?)</parameter>', body, re.S)
+        output = messages[index + 1][1] if index + 1 < len(messages) and messages[index + 1][0] == 'tool' else ''
+        output = re.sub(r'</?tool_response>', '', output).strip()
+        step = {'turn': turn, 'tool': tool.group(1) if tool else 'reply', 'arguments': {}, 'output': output,
+                'status': 'error' if re.match(r'(?i)\s*(\w*error)', output) else 'ok'}
+        if code:
+            step['code'] = code.group(1)
+        elif not tool:
+            step['output'] = re.sub(r'<think>.*?</think>', '', body, flags=re.S).strip()
+            step['status'] = 'completed'
+        if reasoning:
+            step['reasoning'] = reasoning.group(1).strip()[:4000]
+        steps.append(step)
+        turn += 1
+    return {'call': name, 'function': function, 'role': 'root', 'prompt': prompt, 'steps': steps,
+            'result': {'status': 'success'}, 'children': []}
+
+
+def teacher_actions(token_ids, tokenizer):
+    """Own-token actions of every assistant turn of a teacher row (the off-policy tau*), ``<|im_end|>`` included."""
+    start = tokenizer.convert_tokens_to_ids('<|im_start|>')
+    end = tokenizer.convert_tokens_to_ids('<|im_end|>')
+    header = tokenizer('assistant\n', add_special_tokens=False)['input_ids']
+    actions, inside = [], False
+    for index, token in enumerate(token_ids):
+        if token == start and list(token_ids[index + 1:index + 1 + len(header)]) == header:
+            inside, first = True, index + 1 + len(header)
+            continue
+        if inside and index >= first:
+            actions.append({'local_query': index - 1, 'token_id': token})
+            if token == end:
+                inside = False
+    return actions
+
+
+def select_teacher(args, tokenizer, custody):
+    """The longest-prefix (final-action) row per teacher source row, custody-checked, up to ``--teacher-limit``."""
+    from ..common.custody import CustodyError
+    best = {}
+    for path in args.teacher_graphs:
+        import subprocess as sp
+        stream = sp.run(['zstd', '-dc', path], capture_output=True, check=True).stdout.decode().splitlines()
+        for line in stream:
+            row = json.loads(line)
+            if row.get('split') != 'train' or len(row['nodes']) != 1:
+                continue
+            found = re.search(r'source-row:([0-9a-f]+):action:(\d+)', row['id'])
+            if not found:
+                continue
+            key = found.group(1)
+            if key not in best or int(found.group(2)) > best[key][0]:
+                best[key] = (int(found.group(2)), row)
+    chosen, refused = [], []
+    for key, (action, row) in sorted(best.items(), key=lambda item: len(item[1][1]['nodes'][0]['token_ids'])):
+        tokens = row['nodes'][0]['token_ids']
+        if action < 1 or len(tokens) > args.teacher_max_tokens:
+            continue
+        source = (row.get('conversion') or {}).get('teacher_source') or {}
+        world = {'id': row['id'], 'split': 'train', 'source_ids': [source.get('source_row_id') or key],
+                 'source_groups': list(row.get('source_groups') or [])}
+        try:
+            custody.check(world)
+        except CustodyError as error:
+            refused.append({'teacher_row': row['id'], 'reason': str(error)})
+            continue
+        chosen.append(row)
+        if len(chosen) >= args.teacher_limit:
+            break
+    return chosen, refused
+
+
 def select(args):
     from ..common.custody import CustodyError, ProtectedWorlds
     from ..rl.privileged_context import applicable, case_facts, fact_request
@@ -142,6 +227,20 @@ def select(args):
                          'inputs': {'consumer': consumer, 'execution': call, 'overview': overview(call),
                                     'facts': [fact_request(fact) for fact in visible]}})
         _write(Path(args.out) / 'tau' / f'{len(selected) - 1:03d}.json', {**selected[-1], 'rollout': rollout})
+    teacher_rows, teacher_refused = select_teacher(args, tokenizer, custody) if args.teacher_graphs else ([], [])
+    refused += teacher_refused
+    for row in teacher_rows:
+        text = tokenizer.decode(row['nodes'][0]['token_ids'])
+        source = (row.get('conversion') or {}).get('teacher_source') or {}
+        call = teacher_value(text, row['id'], source.get('source_program_id') or 'teacher-program')
+        action_tokens = len(teacher_actions(row['nodes'][0]['token_ids'], tokenizer))
+        selected.append({'task_id': row['id'], 'source': 'teacher-corpus', 'size': len(row['nodes'][0]['token_ids']),
+                         'action_tokens': action_tokens,
+                         'classes': node_classes({row['id']: {'role': 'root', 'action_tokens': action_tokens}},
+                                                 declaration),
+                         'inputs': {'consumer': {'name': row['id'], 'role': 'root', 'text': call['prompt'][:4000]},
+                                    'execution': call, 'overview': overview(call), 'facts': []}})
+        _write(Path(args.out) / 'tau' / f'{len(selected) - 1:03d}.json', {**selected[-1], 'graph': row})
     _write(Path(args.out) / 'selection.json', {'selected': [{k: v for k, v in item.items() if k != 'inputs'}
                                                             for item in selected], 'refused': refused,
                                                'protected_sha256': custody.digest,
@@ -200,6 +299,8 @@ def hint_text(record, server):
     """The hint's text: the written native state's own text (fetched from the writer's server) when the result names
     one, else the plain stdout."""
     import re
+    if record.get('text'):
+        return record['text']
     text = record['stdout'].strip()
     found = re.search(r'nzs1_[a-z2-7]{52}', text)
     if found:
@@ -209,6 +310,15 @@ def hint_text(record, server):
     except json.JSONDecodeError:
         return text or None
     return value if isinstance(value, str) else None
+
+
+def texts(args):
+    """Record each written hint's text in its record while the writer's server is up (scoring then needs no server)."""
+    for path in sorted((Path(args.out) / 'hints').glob('*-[0-9].json')):
+        record = json.loads(path.read_text())
+        if 'text' not in record:
+            record['text'] = hint_text(record, args.server)
+            _write(path, record)
 
 
 # ---------------------------------------------------------------- scoring
@@ -232,6 +342,19 @@ def _tau_replay(engine, rollout):
     actions = [{'turn': a['turn'], 'local_query': a['query'] - offsets[a['turn']], 'token_id': a['token_id']}
                for a in replay.actions]
     return list(replay.plan.invocations), actions
+
+
+def _tau(engine, tau):
+    """tau*'s invocations and actions: a replayed RL episode, or a teacher-corpus row (one call, all assistant turns)."""
+    if 'rollout' in tau:
+        return _tau_replay(engine, tau['rollout'])
+    from ..model.native_graph_plan import Invocation
+    node = tau['graph']['nodes'][0]
+    name = 'teacher#turn1'
+    weights = node['target_weights']  # weight 0: the converter's masked runtime-failure history, not tau*
+    actions = [{**action, 'turn': name} for action in teacher_actions(node['token_ids'], engine.tokenizer)
+               if weights[action['local_query'] + 1] > 0]
+    return [Invocation(name, tuple(node['token_ids']))], actions
 
 
 def _text_hinted(invocations, actions, texts, rendering):
@@ -275,7 +398,7 @@ def score(args):
             rows.append(json.loads(done.read_text()))
             continue
         tau = json.loads(path.read_text())
-        invocations, actions = _tau_replay(engine, tau['rollout'])
+        invocations, actions = _tau(engine, tau)
         # tau* is the root call; each of its model turns is a graph invocation and gets the call's hint.
         turns = [n.name for n in invocations if not n.cache_prefix]
         T = len(actions)
@@ -329,7 +452,7 @@ def train(args):
     items = []
     for path in sorted((out / 'tau').glob('*.json')):
         tau = json.loads(path.read_text())
-        invocations, actions = _tau_replay(engine, tau['rollout'])
+        invocations, actions = _tau(engine, tau)
         for hint_path in sorted((out / 'hints').glob(f'{path.stem}-[0-9].json')):
             text = hint_text(json.loads(hint_path.read_text()), args.server)
             if text:
@@ -338,49 +461,69 @@ def train(args):
     dev = set(stems[::4])
     train_items = [item for item in items if item[0] not in dev]
     dev_items = [item for item in items if item[0] in dev]
+    # Phase-1 writer parameters: the producer adapter and a free-LoRA writer adapter bound to the hint invocations
+    # only (the invocation-actor bank); the backbone and every tau* invocation run the frozen base.
+    from ..model.native_adapters import create_adapter, target_parameters
+    from ..model.native_actor_graph import run_invocation_actors
+    writer = create_adapter(engine, {'kind': 'free-lora', 'rank': args.rank, 'seed': 0, 'alpha': float(args.rank),
+                                     'parameter_names': sorted(target_parameters(model))})
+    leaves = {name: value.detach().clone().to(args.device).requires_grad_(True)
+              for name, value in engine.store.get_native_tensor_artifact(writer.id).artifact.tensors.items()}
     parameters = list(model.adapter.parameters())
     for parameter in parameters:
         parameter.requires_grad_(True)
-    optimizer = torch.optim.AdamW(parameters, lr=args.lr, weight_decay=0.)
+    optimizer = torch.optim.AdamW([*parameters, *leaves.values()], lr=args.lr, weight_decay=0.)
 
     def loss_of(item, grad):
         stem, invocations, actions, ids = item
         hints = {n.name: Hint(n.name, ids) for n in invocations if not n.cache_prefix}
-        plan, member_actions, _ = hinted_graph(invocations, actions, [hints], rendering, roles)
-        with torch.set_grad_enabled(grad):
-            result = model(plan, retain_states=False)
-            return reconstruction_nll(model, result['h_final'][0], member_actions[0]) / len(actions)
+        plan, member_actions, hint_names = hinted_graph(invocations, actions, [hints], rendering, roles)
+        names = [node.name for node in plan.invocations]
+        bindings = {name: [{'id': writer.id, 'scale': 1.}] for name in hint_names[0]}
+
+        def body(bank):
+            with torch.set_grad_enabled(grad):
+                result = model(plan, retain_states=False)
+                loss = reconstruction_nll(model, result['h_final'][0], member_actions[0]) / len(actions)
+                if grad:
+                    loss.backward()
+                return float(loss)
+        return run_invocation_actors(engine, names, bindings, body, default=None, leaves={writer.id: leaves},
+                                     gradient_precision='fp32')
 
     history = []
     def evaluate(step):
         with torch.no_grad():
-            value = sum(float(loss_of(item, False)) for item in dev_items) / max(1, len(dev_items))
+            value = sum(loss_of(item, False) for item in dev_items) / max(1, len(dev_items))
         history.append({'step': step, 'dev_nll_per_token': value})
         print(json.dumps(history[-1]), flush=True)
     evaluate(0)
     generator = torch.Generator().manual_seed(0)
     for step in range(1, args.steps + 1):
         item = train_items[int(torch.randint(len(train_items), (1,), generator=generator))]
-        loss = loss_of(item, True)
         optimizer.zero_grad(set_to_none=True)
-        loss.backward()
+        loss = loss_of(item, True)
         optimizer.step()
-        history.append({'step': step, 'train_nll_per_token': float(loss)})
+        history.append({'step': step, 'train_nll_per_token': loss})
         if step % args.eval_every == 0:
             evaluate(step)
-    _write(out / 'train.json', {'trainable': 'producer adapter (phase-1 writer parameters); backbone frozen',
+    _write(out / 'train.json', {'trainable': f'producer adapter + free-LoRA writer (rank {args.rank}) on hint '
+                                             'invocations only; backbone frozen',
                                 'lr': args.lr, 'steps': args.steps, 'train': len(train_items), 'dev': len(dev_items),
                                 'history': history})
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('stage', choices=('select', 'write', 'score', 'train'))
+    parser.add_argument('stage', choices=('select', 'write', 'texts', 'score', 'train'))
     parser.add_argument('--out', required=True)
     parser.add_argument('--rollouts', nargs='*', default=())
     parser.add_argument('--cases', nargs='*', default=())
     parser.add_argument('--tokenizer')
     parser.add_argument('--limit', type=int, default=24)
+    parser.add_argument('--teacher-graphs', nargs='*', default=(), help='teacher-corpus native-graphs.jsonl.zst files')
+    parser.add_argument('--teacher-limit', type=int, default=12)
+    parser.add_argument('--teacher-max-tokens', type=int, default=9000)
     parser.add_argument('--child-hint-min-tokens', type=int, default=256)
     parser.add_argument('--server', default='http://127.0.0.1:18431')
     parser.add_argument('--k', type=int, default=2)
@@ -390,10 +533,11 @@ def main(argv=None):
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--sigma', type=float, default=.5)
     parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--rank', type=int, default=8)
     parser.add_argument('--steps', type=int, default=200)
     parser.add_argument('--eval-every', type=int, default=50)
     args = parser.parse_args(argv)
-    {'select': select, 'write': write, 'score': score, 'train': train}[args.stage](args)
+    {'select': select, 'write': write, 'texts': texts, 'score': score, 'train': train}[args.stage](args)
 
 
 if __name__ == '__main__':

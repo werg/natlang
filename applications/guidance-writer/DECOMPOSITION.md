@@ -17,6 +17,9 @@ context. Its only full appearance is as the self-teacher's teacher-forced target
 | How short, and what not to copy | policy text (step 5), plus training: the rate penalty and the reconstruction reward (crisp math, `rl/hindsight.py`) | The model learns the trade-off from the reward. Instructions only state the intent. |
 | Custody of τ* and facts | crisp verifier (`common.custody.ProtectedWorlds`, `rl/hindsight.py`) | Train worlds only; fails closed. |
 
+`writeHint` runs once per hinted call: the root, and each long child as an independent pass over its own subtree
+value. It takes no children's hints and does not recurse; short children get no hint (plain SFT).
+
 Training: exploration actions and hint tokens are the writer episode's sampled actions and receive the score-function
 term. The hint span state receives the exact reconstruction gradient through the consumer import. One packed graph
 holds the writer episode, its producer span and τ*'s consumer turns.
