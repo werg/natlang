@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import itertools
 import json
 import os
 import threading
@@ -181,7 +182,7 @@ class SglangEngine(Engine):
     def sglang_unsupported(request, plan):
         """Why SGLang cannot serve this request (None: it can)."""
         # native_recording (the collector's graph recorder) only asks for the capture, which this path records.
-        names = [name for name, value in (('guidance', request.guidance), ('adapters', request.adapters)) if value]
+        names = ['adapters'] if request.adapters else []
         names += sorted({f'prompt segment {kind}' for kind, _ in plan
                          if kind not in ('tokens', 'privileged', 'native_state', 'native_state_constant')})
         return ', '.join(names) or None
@@ -413,20 +414,32 @@ class SglangEngine(Engine):
             if request.forced_message is not None:
                 self._sglang_forced_replay(seq, state)
             else:
-                for part in range(request.max_tokens + 1):
+                if request.guidance is not None:
+                    from .native_guidance import initialize
+                    initialize(self, seq)
+                for part in itertools.count():
+                    if seq.native_forced_tokens:
+                        self._sglang_feed_forced(seq, state)
+                        if state['done']:
+                            break
                     room = min(int(request.max_tokens) - seq.generated_positions,
                                self.context - len(ids) - len(state['fed']))
                     if room <= 0:
                         break
                     # A templated write stops at its span's close: the template suffix follows it, not a sample.
                     stops = sorted(set(self.stop_ids) | ({self.role_tokens.produce_close} if seq.native_template_suffix else set()))
+                    sampling_params = {**params, 'max_new_tokens': room, 'stop_token_ids': stops}
+                    # Guidance bans apply at one position (the rewound one): draw that token alone under them.
+                    bans = seq.bans.get(seq.native_own_position) if seq.guide is not None else None
+                    if bans:
+                        sampling_params.update(max_new_tokens=1, logit_bias={
+                            str(token): BAN_BIAS for token in sorted(set(bans) | set(self.sglang_banned))})
                     body = {'input_ids': ids + state['fed'], 'rid': request.request_id + (f'-{part}' if part else ''),
-                            'sampling_params': {**params, 'max_new_tokens': room, 'stop_token_ids': stops}}
+                            'sampling_params': sampling_params}
                     self._sglang_sample(seq, body, k, sampling, state)
-                    if state['done'] or not seq.native_forced_tokens:
-                        break
-                    self._sglang_feed_forced(seq, state)
-                    if state['done']:
+                    if state.pop('rewind', False):
+                        continue
+                    if state['done'] or not (seq.native_forced_tokens or bans):
                         break
             if seq.native_capture_open:
                 # The native engine's check before the next draw: the token allowance ran out inside the span.
@@ -442,7 +455,14 @@ class SglangEngine(Engine):
             with self._sglang_lock:
                 self.sglang_requests += 1
                 self.sglang_tokens += state['index']
-        if request.on_delta is not None:
+        if seq.guide is not None:
+            # Guided replies publish only committed output, as the native engine flushes them at the finish.
+            from .native_guidance import flush
+            flush(self, seq)
+            if request.on_delta is not None and seq.pending:
+                request.on_delta({'text': self.tokenizer.decode(seq.pending, skip_special_tokens=False)})
+                seq.pending = []
+        elif request.on_delta is not None:
             self._sglang_emit(seq, state, final=True)
         seq.finish_reason = state['finish']
         seq.phase = 'done'
@@ -451,20 +471,21 @@ class SglangEngine(Engine):
     def _sglang_sample(self, seq, body, k, sampling, state):
         """One SGLang generation through the decode protocol (streamed when the client streams)."""
         request = seq.request
-        if request.on_delta is None:
+        if request.on_delta is None and seq.guide is None:
             result = self._sglang_generate(body)
             self._sglang_consume(seq, result.get('output_ids'), (result.get('meta_info') or {}).get(TOP_K_KEY),
                                  k, sampling, state)
             return
         # Streamed replies: SGLang sends incremental token chunks (--incremental-streaming-output); the text
         # reaches the client as it is generated, the capture is completed from the same per-token records.
-        # Leaving the stream early (a protocol error) closes the connection, which aborts the SGLang request.
+        # Leaving the stream early (a protocol error, a guidance rewind) closes the connection, which aborts the SGLang
+        # request. Guided replies always stream so that a rejection stops the draw.
         for chunk in self._sglang_stream(body):
             if request.cancelled:
                 raise RequestError('cancelled', 'the client went away')
             self._sglang_consume(seq, chunk.get('output_ids'), (chunk.get('meta_info') or {}).get(TOP_K_KEY),
                                  k, sampling, state)
-            if state['done']:
+            if state['done'] or state.get('rewind'):
                 break
 
     def _sglang_template_prefix(self, seq, ids, prefix, suffix):
@@ -505,7 +526,8 @@ class SglangEngine(Engine):
             state['fed'].append(token)
             seq.items.append(token)
             seq.native_item_positions.append(seq.native_own_position - 1)
-        if seq.request.on_delta is not None:
+            self._native_guide(seq)  # a rejection of forced text raises the native template conflict
+        if seq.request.on_delta is not None and seq.guide is None:
             self._sglang_emit(seq, state)
 
     def _sglang_forced_replay(self, seq, state):
@@ -542,7 +564,9 @@ class SglangEngine(Engine):
             if state['done']:
                 raise RequestError('sglang-actor-capture', 'SGLang returned tokens after the stop token')
             self._sglang_token(seq, int(token), decode_record(record, k), k, sampling, state)
-        if seq.request.on_delta is not None:
+            if self._sglang_rewound(seq, state):
+                return
+        if seq.request.on_delta is not None and seq.guide is None:
             self._sglang_emit(seq, state)
 
     def _sglang_token(self, seq, token, record, k, sampling, state):
@@ -555,10 +579,11 @@ class SglangEngine(Engine):
         marker = self.role_tokens
         terminal = token in self.stop_ids
         producing_input = seq.native_capture_open and token not in (marker.produce_open, marker.produce_close)
-        if capture_enabled(seq):
+        if capture_enabled(seq) or seq.guide is not None:
+            banned = set(self.sglang_banned) | (set(seq.bans.get(seq.native_own_position, ())) if seq.guide is not None else set())
             sample = {'index': index, 'token_id': token, 'logp': logp if sampling else None,
                       **({'forced': True} if seq.native_forced_replay else {}),
-                      **({'banned_token_ids': list(self.sglang_banned)} if self.sglang_banned else {}),
+                      **({'banned_token_ids': sorted(banned)} if banned or seq.guide is not None else {}),
                       'input_role': 'produce' if producing_input else 'ordinary',
                       'terminal': terminal, 'query_own_position': seq.native_own_position - 1}
             if k:
@@ -602,6 +627,29 @@ class SglangEngine(Engine):
         else:
             seq.items.append(token)
             seq.native_item_positions.append(seq.native_own_position - 1)
+            self._native_guide(seq)
+
+    def _guidance_replay(self, seq, ids, producing):
+        """A guidance rewind on SGLang only restores the bookkeeping: the next request resends the retained inputs
+        (radix-cached), and a produce span's state is exported whole when it closes."""
+        return None
+
+    def _native_guide(self, seq):
+        rewound = super()._native_guide(seq)
+        if rewound:
+            seq.sglang_rewound = True
+        return rewound
+
+    def _sglang_rewound(self, seq, state):
+        """After a guidance rewind: keep the retained inputs, continue the sample indices, stop this draw."""
+        if not getattr(seq, 'sglang_rewound', False):
+            return False
+        seq.sglang_rewound = False
+        state['fed'] = state['fed'][:len(seq.native_rl_inputs) - seq.native_guidance_anchor['inputs']]
+        state['index'] = len(seq.rl_samples)
+        state['run'] = len(seq.items)
+        state['rewind'] = True
+        return True
 
     def sglang_score(self, item, plan, continuations, bindings):
         """`decide`/`score` on SGLang (None: the native engine scores it): the native engine's decision capture, each
@@ -753,7 +801,7 @@ class SglangEngine(Engine):
 
     def _sglang_finish_block(self, seq, state):
         """Store the span that just closed: SGLang recomputes it once and exports its native state."""
-        if seq.request.on_delta is not None:
+        if seq.request.on_delta is not None and seq.guide is None:
             self._sglang_emit(seq, state, final=True)  # text before the block reaches the client first
         ids = state['prompt'] + state['fed'][:-1]  # through the last span token (the close marker is not part)
         start = state['open_position'] + 1

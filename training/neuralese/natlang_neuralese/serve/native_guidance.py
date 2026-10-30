@@ -110,8 +110,7 @@ def check(engine,seq):
         if not special:
             while end<len(retained) and (retained[end]['input_role']=='produce')==producing and retained[end]['token_id'] not in (engine.role_tokens.produce_open,engine.role_tokens.produce_close):end+=1
         ids=[entry['token_id'] for entry in retained[cursor:end]]
-        output=engine._native_forward(ids,seq.cache,producing=producing)
-        seq.cache,seq.logits=output['cache'],engine._native_logits(output['h_final'])
+        output=engine._guidance_replay(seq,ids,producing)
         if token==engine.role_tokens.produce_open:
             seq.native_capture_open=True;seq.native_capture_chunks=[];seq.native_capture_ids=[]
             seq.native_write_start_own=seq.native_own_position
@@ -120,7 +119,8 @@ def check(engine,seq):
             seq.native_capture_open=False;seq.native_capture_chunks=[];seq.native_capture_ids=[]
             for key in _CONTROL_FIELDS:setattr(seq,key,None)
         elif producing:
-            seq.native_capture_chunks.append(output);seq.native_capture_ids.extend(ids)
+            if output is not None:seq.native_capture_chunks.append(output)
+            seq.native_capture_ids.extend(ids)
         seq.native_own_position+=len(ids);cursor=end
     seq.generated_positions=anchor['generated']+len(retained)
     seq.native_rl_inputs=seq.native_rl_inputs[:position]

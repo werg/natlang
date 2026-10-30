@@ -399,6 +399,60 @@ def test_templated_replies_follow_the_native_engine(tmp_path, case):
     assert len(stored['front']) == len(stored['native']) == int(write)
 
 
+@pytest.mark.parametrize('streamed', [False, True])
+def test_guidance_rewinds_on_sglang_like_the_native_engine(tmp_path, monkeypatch, streamed):
+    """A guidance rejection on SGLang: the draw stops, the bookkeeping rewinds as natively, the rewound position is
+    drawn alone under its ban, and the capture, rejections and reply match the native engine's."""
+    from types import SimpleNamespace
+    from natlang_neuralese.serve import guidance
+    from natlang_neuralese.serve.guidance import Settings
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    stop = sorted(front.stop_ids)[0]
+
+    class RejectOnce:
+        def __init__(self, settings):
+            self.settings, self.rejections, self.rejected = SimpleNamespace(retries=4), [], False
+        def forced_prefix(self):
+            return ''
+        def check(self, text):
+            if not self.rejected and 't7' in text:
+                self.rejected = True
+                return 'controlled rejection', text.index('t6')
+        def rewind(self, offset):
+            pass
+        def accept(self, offset):
+            pass
+    monkeypatch.setattr(guidance, 'Guide', RejectOnce)
+    t = {name: word(name)[0] for name in ('t4', 't5', 't6', 't7', 't8', 't9')}
+    deltas = {'native': [], 'front': []}
+    make = lambda name: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0,
+                                          max_tokens=32, rl_capture=True, rl_top_k=2, native_recording=True,
+                                          request_id='g', seed=1, guidance=Settings(syntax=False),
+                                          on_delta=deltas[name].append if streamed else None)
+    script = iter([t['t5'], t['t6'], t['t7'], t['t8'], t['t9'], stop])
+    native._native_token = lambda seq: (next(script), -0.5)
+    expected = native.generate(make('native'))
+    replies, sent = [[t['t5'], t['t6'], t['t7'], t['t4']], [t['t8']], [t['t9'], stop]], []
+
+    def stream(body):
+        sent.append(body)
+        for token in replies[len(sent) - 1]:
+            yield {'output_ids': [token], 'meta_info': {'natlang_top_k': [record(-0.5, [token, token + 1], [-0.5, -1.5])]}}
+    front._sglang_stream = stream
+    front._sglang_generate = lambda body: (_ for _ in ()).throw(AssertionError('guided draws stream'))
+    actual = front.generate(make('front'))
+    mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
+    assert actual['x_natlang_guidance'] == expected['x_natlang_guidance'] and expected['x_natlang_guidance']['rejections']
+    assert _protocol_view(mine) == _protocol_view(theirs)
+    assert actual['choices'][0]['message'] == expected['choices'][0]['message']
+    assert len(sent) == 3 and sent[1]['input_ids'] == sent[0]['input_ids'] + [t['t5']]
+    assert sent[1]['sampling_params']['max_new_tokens'] == 1
+    assert set(sent[1]['sampling_params']['logit_bias']) == {str(t['t6'])}
+    assert 'logit_bias' not in sent[2]['sampling_params'] and sent[2]['input_ids'] == sent[1]['input_ids'] + [t['t8']]
+    assert ''.join(d.get('text', '') for d in deltas['front']) == ''.join(d.get('text', '') for d in deltas['native'])
+    assert bool(deltas['native']) == streamed
+
+
 def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):
     from natlang_neuralese.serve.native_learning import decide_native
     native, front, roles, word, block, messages = _import_fixture(tmp_path)

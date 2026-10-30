@@ -685,6 +685,13 @@ class Engine:
             return token, float(log_probs[token])
         return int(log_probs.argmax()), None
 
+    def _guidance_replay(self, seq, ids, producing):
+        """A guidance rewind replays retained reply inputs into the cache; returns the forward output (a producing
+        run's capture chunk)."""
+        output = self._native_forward(ids, seq.cache, producing=producing)
+        seq.cache, seq.logits = output['cache'], self._native_logits(output['h_final'])
+        return output
+
     def _native_guide(self, seq):
         if seq.guide is not None:
             from .native_guidance import check
