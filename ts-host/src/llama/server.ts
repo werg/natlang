@@ -29,7 +29,7 @@ export type LlamaLaunched = { stop(): Promise<void> };
 /** Start a llama-server. `signal` aborts when the server is closed while starting; honor it by stopping what was started. */
 export type LlamaLauncher = (launch: LlamaLaunch, signal: AbortSignal) => Promise<LlamaLaunched>;
 
-/** A server the host already runs, to plan around without starting it. */
+/** A server the host already runs, to plan around without starting it. It is serving: attach only once its load has completed. */
 export type LlamaAttachment = { endpoint: string; slots: number; contextPerSlot: number;
   /** The GGUF it serves and its llama-server build as `runtimeLabel` writes it: a warm state restores only into the same pair. */
   modelSha256: string; runtime: string | null;
@@ -103,13 +103,16 @@ async function stopProcess(child: LlamaProcess): Promise<void> {
   if (!child.hasExited()) child.kill('SIGKILL');
 }
 
-/** Whether no slot of a llama.cpp server is processing (its /slots listing). */
+/**
+ * Whether no slot of a llama.cpp server is processing (its /slots listing). The server answers between its batches, so a
+ * busy server answers late rather than wrongly; a server that cannot answer rejects with why, and the caller reports it.
+ */
 async function serverIdle(host: LlamaHost, endpoint: string, headers: Record<string, string> | undefined): Promise<boolean> {
-  try {
-    const response = await host.fetch(endpoint + '/slots', { signal: AbortSignal.timeout(2000), ...(headers ? { headers } : {}) });
-    const slots = await response.json() as { is_processing?: boolean }[];
-    return response.ok && Array.isArray(slots) && slots.every(slot => !slot.is_processing);
-  } catch { return false; }
+  const response = await host.fetch(endpoint + '/slots', headers ? { headers } : {});
+  if (!response.ok) throw new Error(`the server's /slots listing answered HTTP ${response.status}`);
+  const slots = await response.json() as { is_processing?: boolean }[];
+  if (!Array.isArray(slots)) throw new Error('the server\'s /slots listing is not a list');
+  return slots.every(slot => !slot.is_processing);
 }
 
 /**
@@ -174,7 +177,11 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
         const base = await start();
         if (!warming) return undefined;
         // A server that also serves other processes is warmed only while none of its slots is working.
-        if (contended && !await serverIdle(host, base, headers)) { openings.delete(opening.key); return undefined; }
+        if (contended && !await serverIdle(host, base, headers)) {
+          openings.delete(opening.key);
+          log.write('natlang: prompt warming skipped: the server is serving other requests; a later idle moment retries\n');
+          return undefined;
+        }
         const sha = modelSha256 ?? await managedModelSha256(host, release);
         const state = await warmOpening(host, { endpoint: base, ...(headers ? { headers } : {}) }, host.directories.warmPrefixes, opening,
           warmTag(sha, runtime ?? runtimeLabel(prerequisites.runtime.selected), plan!), plan?.slots ?? 1);

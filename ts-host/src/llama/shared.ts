@@ -46,7 +46,7 @@ export async function findSharedServer(host: LlamaHost, modelSha256: string, run
   const server = readSharedServer(host);
   if (!server || server.pid === process.pid || server.modelSha256 !== modelSha256 || server.runtime !== runtime || !alive(server.pid)) return undefined;
   try {
-    const response = await host.fetch(server.endpoint + '/health', { signal: AbortSignal.timeout(2000) });
+    const response = await host.fetch(server.endpoint + '/health');
     return response.ok ? server : undefined;
   } catch { return undefined; }
 }
