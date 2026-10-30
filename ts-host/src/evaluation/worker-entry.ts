@@ -5,21 +5,22 @@ import { validateMetrics } from './metrics.js';
 import { cloneData } from '../adaptation/identity.js';
 import { FixtureObservationStore } from './fixtures.js';
 import type { EvaluationSuite, EvaluationResult } from './types.js';
-import type { ModelTurnRequest, ModelTurn } from '../contracts.js';
+import type { ModelTurn } from '../contracts.js';
+import { remoteDriver, type DriverCall } from '../runtime/driver.js';
 import type { WorkerInput } from './worker.js';
 const input = workerData as WorkerInput;
 const abort = new AbortController();
 let sequence = 0;
-const pending = new Map<number, { resolve: (turn: ModelTurn) => void; reject: (error: Error) => void }>();
+const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 parentPort!.on('message', message => {
   if (message.type === 'cancel') { abort.abort(new Error('evaluation cancelled')); for (const p of pending.values()) p.reject(abort.signal.reason); pending.clear(); }
-  if (message.type === 'turn') { const p = pending.get(message.id); pending.delete(message.id); if (message.error) p?.reject(new Error(message.error)); else p?.resolve(message.turn); }
+  if (message.type === 'response') { const p = pending.get(message.id); pending.delete(message.id); if (message.error) p?.reject(new Error(message.error)); else p?.resolve(message.value); }
 });
 async function run(): Promise<void> {
   const suite = (await import(input.moduleURL)).default as EvaluationSuite;
   const traces: EvaluationResult['traces'][number][] = [];
-  const requestModel = (role: 'executor' | 'judge', request: ModelTurnRequest) => new Promise<ModelTurn>((resolve, reject) => {
-    const id = ++sequence; pending.set(id, { resolve, reject }); parentPort!.postMessage({ type: 'request', id, role, request });
+  const requestModel = (role: 'executor' | 'judge', call: DriverCall) => new Promise<unknown>((resolve, reject) => {
+    const id = ++sequence; pending.set(id, { resolve, reject }); parentPort!.postMessage({ type: 'request', id, role, call });
   });
   const runtime = createNatlangRuntime({ program: input.program, adaptation: input.artifact ? bindAdaptation(input.artifact, input.program, suite.executorIdentity) : null,
     limits: suite.policy?.limits, systemPrompt: suite.systemPrompt,
@@ -27,14 +28,14 @@ async function run(): Promise<void> {
     executorIdentity: suite.executorIdentity, serviceDeclarations: suite.services?.declarations,
     serviceScopes: suite.services?.scopes as Record<string, string[]> | undefined,
     signal: abort.signal, isolateModules: true, codeEdits: suite.policy?.codeEdits ?? 'deny', trace: trace => traces.push(trace),
-    seed: { mode: 'derived', root: input.seed }, model: { ...suite.policy?.settings, driver: (request: ModelTurnRequest) => requestModel('executor', request) } });
+    seed: { mode: 'derived', root: input.seed }, model: { ...suite.policy?.settings, driver: remoteDriver(call => requestModel('executor', call), input.decisions === true) } });
   let fixture: Awaited<ReturnType<EvaluationSuite['fixture']['create']>> | undefined;
   let outcome: EvaluationResult['outcome'] = { kind: 'returned' };
   let result: unknown; const start = Date.now();
   const observations = new FixtureObservationStore();
   try {
     fixture = await suite.fixture.create(input.testCase, { runtime, program: input.program, seed: input.seed, signal: abort.signal, observations,
-      judge: request => requestModel('judge', request),
+      judge: request => requestModel('judge', { kind: 'turn', request }) as Promise<ModelTurn>,
       loadFreshProgram: () => import(input.compiledEntry) });
     if (input.preflight) {
       if (typeof fixture?.execute !== 'function') throw new Error('fixture must provide execute()');

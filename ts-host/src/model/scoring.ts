@@ -59,11 +59,11 @@ export function coalescingScorer(base: DecisionScorer, options: { windowMs?: num
  * The explicit-batch scoring contract (optional endpoint, capability-gated; plans/BATCHED_EXECUTION.md step 2):
  *
  *   POST {url}  { items: [{ messages, continuations: string[], adapters?, ...itemExtra }], ...extra }
- *   200         { results: [{ log_probs: number[], tokens?: number[] } | { error: string }] }
+ *   200         { results: [{ log_probs: number[], tokens?: number[], prompt_tokens?: number } | { error: string }] }
  *
  * `continuations[k]` is the k-th option written as the closed final assistant message after `messages`. The server
  * prefills each item's prompt once and scores its K continuations from it. `log_probs[k]` and `tokens[k]` mean what
- * they mean in `DecisionScores`. 404, 405 and 501 mean the server has no such endpoint; the caller then falls back to concurrent scoring.
+ * they mean in `DecisionScores`, as does `prompt_tokens` (the tokens the item's continuations evaluate in full). 404, 405 and 501 mean the server has no such endpoint; the caller then falls back to concurrent scoring.
  */
 export type ExplicitBatchOptions = { url: string; headers?: Record<string, string>; extra?: Record<string, unknown>;
   scheduler?: Scheduler; maxItems?: number;
@@ -84,7 +84,7 @@ export async function postExplicitBatch(options: ExplicitBatchOptions, items: De
         ...(item.native_recording ? {native_recording:true}:{}) })) }) });
     if ([404, 405, 501].includes(response.status)) throw new ScoreEndpointMissing(`no scoring endpoint at ${options.url}`);
     if (!response.ok) throw new Error(`batched scoring HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
-    const body = await response.json() as { results?: ({ log_probs?: number[]; tokens?: number[]; error?: string; native_decision_capture?: Record<string,unknown> } | null)[] };
+    const body = await response.json() as { results?: ({ log_probs?: number[]; tokens?: number[]; prompt_tokens?: number; error?: string; native_decision_capture?: Record<string,unknown> } | null)[] };
     if (!Array.isArray(body.results) || body.results.length !== items.length)
       throw new Error('batched scoring returned a different number of results than items');
     return body.results.map((result, index): Settled => {
@@ -92,6 +92,7 @@ export async function postExplicitBatch(options: ExplicitBatchOptions, items: De
           result.log_probs.length !== items[index]!.options.length)
         return { status: 'rejected', reason: new Error(result?.error ?? 'batched scoring returned no scores for an item') };
       return { status: 'fulfilled', value: { log_probs: result.log_probs, ...(result.tokens ? { tokens: result.tokens } : {}),
+        ...(Number.isSafeInteger(result.prompt_tokens) ? { prompt_tokens: result.prompt_tokens } : {}),
         ...(result.native_decision_capture?{native_decision_capture:result.native_decision_capture}:{}) } };
     });
   } finally { release(); }

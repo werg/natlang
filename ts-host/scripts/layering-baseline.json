@@ -29,7 +29,6 @@
     "evaluation -> compiler",
     "evaluation -> native",
     "evaluation -> runtime",
-    "improvement -> (root)",
     "improvement -> adaptation",
     "improvement -> compiler",
     "improvement -> evaluation",

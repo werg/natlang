@@ -17,7 +17,7 @@ import type { ModelDriver } from '../runtime/runtime.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { fingerprint, immutable } from '../adaptation/identity.js';
 import { validateCases } from '../evaluation/suite.js';
-import { UsageGateway } from '../evaluation/usage.js';
+import { UsageGateway, decisionDeclined } from '../evaluation/usage.js';
 import type { CheckReport, EvaluationReport, ImprovementCase, Outcome, ProgramContract, ProgramEvaluator } from './types.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { checkSkillMetadataOnlyEdit } from '../skills/edit-policy.js';
@@ -237,7 +237,8 @@ export class SourceEvaluator implements ProgramEvaluator {
       const entry = new URL('./source-worker.js', import.meta.url).href;
       const bootstrap = new URL('data:text/javascript,' + encodeURIComponent('import ' + JSON.stringify(entry) + ';'));
       const worker = new Worker(bootstrap, { workerData: { files: sourceFiles(folder), contract: this.contract, args: row.args, services: row.services, folder: row.folder, seed,
-        limits: { maxEpisodes: 30, maxActions: 100, ...(this.options.excludeModelWaitFromTimeout ? {} : {timeoutMs: this.options.timeoutMs ?? 120000}) } } });
+        limits: { maxEpisodes: 30, maxActions: 100, ...(this.options.excludeModelWaitFromTimeout ? {} : {timeoutMs: this.options.timeoutMs ?? 120000}) },
+        decisions: typeof this.driver.decide === 'function' } });
       const lifetime = new AbortController();
       const signal = this.options.signal ? AbortSignal.any([lifetime.signal, this.options.signal]) : lifetime.signal;
       let closed = false,modelCalls=0;
@@ -275,12 +276,27 @@ export class SourceEvaluator implements ProgramEvaluator {
           if(pending){pending.entry.skillUse=skillEvents;let last=-1;for(let index=events.length-1;index>=0;index--)if(events[index]!.kind==='model_request'&&events[index]!.phase==='end'&&events[index]!.call_id===message.callId){last=index;break;}if(last>=0){const actions=events.slice(last+1).filter(event=>event.kind==='action'&&event.call_id===message.callId);pending.entry.observation=actions.map(event=>String(event.name)+' ('+String(event.outcome)+'): '+String(event.result_text??'')).join('\n').slice(0,1000);}}
         }
         else if (message.type === 'request') {
-          const pending=pendingTrace.get(message.request.invocation_id);
-          if(pending){const messages=message.request.messages;let last=-1;for(let index=messages.length-1;index>=0;index--)if(messages[index].role==='assistant'&&messages[index].tool_calls?.length){last=index;break;}if(last>=0)pending.entry.observation=messages.slice(last+1).filter((item:{role:string})=>item.role==='tool').map((item:{content:unknown})=>String(item.content)).join('\n').slice(0,1000);}
+          const call = message.call as { kind: 'turn' | 'decision'; request: any };
+          // The case's own request ids, so concurrent cases never share an invocation.
+          const scoped = (id: string) => 'case:'+fingerprint({source:folder.digest,caseId:row.id,seed})+'/'+id;
+          if (call.kind === 'decision') {
+            modelCalls++; pauseTimer();
+            try { const scores = await this.gateway.score(this.driver.decide!, {...call.request,...(call.request.invocation_id?{invocation_id:scoped(call.request.invocation_id)}:{})}, signal, 'executor');
+              if (!closed) worker.postMessage({ id: message.id, value: scores }); }
+            catch (error) {
+              // A driver that declines to score made no request; the worker's call runs its tool loop.
+              if (decisionDeclined(error)) { modelCalls--; if (!closed) worker.postMessage({ id: message.id, error: (error as Error).message }); }
+              else close(error instanceof Error ? error : new Error(String(error)));
+            }
+            finally { resumeTimer(); }
+            return;
+          }
+          const pending=pendingTrace.get(call.request.invocation_id);
+          if(pending){const messages=call.request.messages;let last=-1;for(let index=messages.length-1;index>=0;index--)if(messages[index].role==='assistant'&&messages[index].tool_calls?.length){last=index;break;}if(last>=0)pending.entry.observation=messages.slice(last+1).filter((item:{role:string})=>item.role==='tool').map((item:{content:unknown})=>String(item.content)).join('\n').slice(0,1000);}
           modelCalls++; pauseTimer();
-          try { const turn = await this.gateway.request(this.driver, {...message.request,invocation_id:'case:'+fingerprint({source:folder.digest,caseId:row.id,seed})+'/'+message.request.invocation_id}, signal, 'executor');
-            if(row.split==='train'){const entry={calls:(turn.calls??[]).map(([name,args])=>({name,arguments:Object.fromEntries(Object.entries(args).map(([key,value])=>[key,typeof value==='string'?value.slice(0,1500):value])),truncated:Object.values(args).some(value=>typeof value==='string'&&value.length>1500)})),observation:''};modelTrace.push(entry);pendingTrace.set(message.request.invocation_id,{entry});}
-            if (!closed) worker.postMessage({ id: message.id, turn }); }
+          try { const turn = await this.gateway.request(this.driver, {...call.request,invocation_id:scoped(call.request.invocation_id)}, signal, 'executor');
+            if(row.split==='train'){const entry={calls:(turn.calls??[]).map(([name,args])=>({name,arguments:Object.fromEntries(Object.entries(args).map(([key,value])=>[key,typeof value==='string'?value.slice(0,1500):value])),truncated:Object.values(args).some(value=>typeof value==='string'&&value.length>1500)})),observation:''};modelTrace.push(entry);pendingTrace.set(call.request.invocation_id,{entry});}
+            if (!closed) worker.postMessage({ id: message.id, value: turn }); }
           catch (error) { close(error instanceof Error ? error : new Error(String(error))); }
           finally { resumeTimer(); }
         }

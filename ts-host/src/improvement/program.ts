@@ -76,7 +76,7 @@ export async function improveProgram(options: ImproveProgramOptions) {
     if(request.seed!==undefined&&request.seed!==seed)throw new Error('evaluation seed is pinned by the improvement invocation: '+seed);
     return evaluator.evaluate(folder,{...request,seed});
   };
-  const task = createNatlangRuntime({ model: { driver: (request,signal) => gateway.request(options.improver,request,signal??options.signal,'reflection'), maxTurns: 16, maxTokens: 24000, turnTokens: 2048, maxFailureRepairs: 4 }, signal: options.signal, seed:{mode:'derived',root:options.seed??0},codeEdits: 'deny', network: false,
+  const task = createNatlangRuntime({ model: { driver: gateway.driver(options.improver,'reflection',options.signal), maxTurns: 16, maxTokens: 24000, turnTokens: 2048, maxFailureRepairs: 4 }, signal: options.signal, seed:{mode:'derived',root:options.seed??0},codeEdits: 'deny', network: false,
     exactHostTraceCapture: options.captureExactRewriteIO ? exactStageCapture(authored) : undefined,
     trace: options.trace, onFolderProposal: () => gateway.reserve('proposals', 1, options.signal), limits: { maxEpisodes: options.budget.maxModelCalls, timeoutMs: options.budget.maxElapsedMs } });
   const stepEvaluator = { check: evaluator.check.bind(evaluator), evaluate, page: evaluator.page.bind(evaluator) };

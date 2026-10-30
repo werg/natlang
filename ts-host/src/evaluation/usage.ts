@@ -1,5 +1,6 @@
 import type { ModelDriver } from '../runtime/runtime.js';
-import type { ModelTurn, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, DecisionScorer, DecisionScores, ModelTurn, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
+import { wrapDriver } from '../runtime/driver.js';
 import type { BudgetLimits, Usage } from './types.js';
 export class BudgetExhausted extends Error { constructor(readonly dimension: string) { super('adaptation budget exhausted: ' + dimension); this.name = 'BudgetExhausted'; } }
 export type ModelRole = 'executor' | 'reflection' | 'judge';
@@ -7,6 +8,11 @@ export type RequestReservation = Partial<Record<'modelCalls' | 'inputTokens' | '
 export type BudgetLedger = { rollouts: number; proposals: number; usage: Usage; elapsedMs: number; unknownRequests: number; overrun: readonly string[];
   roles?: Partial<Record<ModelRole, Usage>>;
   reserved?: { modelCalls: number; inputTokens: number; outputTokens: number; cost: number } };
+/** A backend that cannot score replies declines with this error before doing any work; the call runs the tool loop instead. */
+export const decisionDeclined = (error: unknown): boolean => String((error as Error)?.message).startsWith('decision-unsupported');
+/** What a decision readout used: its prompt tokens as the scorer reports them, and no generated tokens. */
+export const decisionUsage = (scores: DecisionScores): { prompt_tokens?: number; completion_tokens: number } =>
+  ({ prompt_tokens: scores.prompt_tokens, completion_tokens: 0 });
 export class UsageGateway {
   readonly ledger: BudgetLedger;
   private readonly started = Date.now();
@@ -47,18 +53,40 @@ export class UsageGateway {
     if (this.ledger[kind] + count > max) throw new BudgetExhausted(kind); this.ledger[kind] += count; this.onUpdate?.(this.snapshot());
   }
   /** One metered request; `options` (the driver's turn options, such as `onDelta`) are passed to the driver. */
-  async request(driver: ModelDriver, request: ModelTurnRequest, signal?: AbortSignal, role: ModelRole = 'executor',
+  request(driver: ModelDriver, request: ModelTurnRequest, signal?: AbortSignal, role: ModelRole = 'executor',
     options?: ModelTurnOptions): Promise<ModelTurn> {
+    const bounds = this.limits.requestBounds;
+    const outputBound = bounds ? Math.min(request.max_tokens ?? bounds.maxOutputTokens, bounds.maxOutputTokens) : 0;
+    return this.meter(role, signal, outputBound, () => {
+      const bounded = bounds ? { ...request, max_tokens: outputBound } : request;
+      return options ? driver(bounded, signal, options) : driver(bounded, signal);
+    });
+  }
+  /**
+   * One metered decision readout (contracts.ts `DecisionRequest`): a model request like a turn, so it counts against
+   * the same limits. It generates nothing, so its output bound is zero; its input is the `prompt_tokens` the scorer
+   * reports (unknown when it does not, as for a turn).
+   */
+  score(scorer: DecisionScorer, request: DecisionRequest, signal?: AbortSignal, role: ModelRole = 'executor'): Promise<DecisionScores> {
+    return this.meter(role, signal, 0, () => scorer(request, signal), { usageOf: decisionUsage, declined: decisionDeclined });
+  }
+  /** `driver` as a driver of this gateway's `role`: its turns and, where it scores replies, its decisions are metered. */
+  driver(driver: ModelDriver, role: ModelRole, signal?: AbortSignal): ModelDriver {
+    return wrapDriver(driver, {
+      turn: (request, callSignal, options) => this.request(driver, request, callSignal ?? signal, role, options),
+      decide: scorer => (request, callSignal) => this.score(scorer, request, callSignal ?? signal, role) });
+  }
+  private async meter<T>(role: ModelRole, signal: AbortSignal | undefined, outputBound: number, run: () => Promise<T> | T, reading: {
+    usageOf?: (result: T) => { prompt_tokens?: number; completion_tokens?: number }; declined?: (error: unknown) => boolean } = {}): Promise<T> {
+    const usageOf = reading.usageOf ?? ((result: T) => result as { prompt_tokens?: number; completion_tokens?: number });
     this.check(signal); if (this.ledger.usage.modelCalls >= this.limits.maxModelCalls - (this.protectedCapacity.modelCalls ?? 0)) throw new BudgetExhausted('modelCalls');
     const bounds = this.limits.requestBounds;
     const inputBound = bounds?.maxInputTokens ?? 0;
-    const outputBound = bounds ? Math.min(request.max_tokens ?? bounds.maxOutputTokens, bounds.maxOutputTokens) : 0;
     const costBound = this.cost(inputBound, outputBound) ?? 0;
     if (bounds) {
       if (this.limits.maxInputTokens !== undefined && this.ledger.usage.inputTokens! + this.reservedInput + inputBound > this.limits.maxInputTokens - (this.protectedCapacity.inputTokens ?? 0)) throw new BudgetExhausted('inputTokens (reserved)');
       if (this.limits.maxOutputTokens !== undefined && this.ledger.usage.outputTokens! + this.reservedOutput + outputBound > this.limits.maxOutputTokens - (this.protectedCapacity.outputTokens ?? 0)) throw new BudgetExhausted('outputTokens (reserved)');
       if (this.limits.maxCost !== undefined && this.ledger.usage.cost! + this.reservedCost + costBound > this.limits.maxCost - (this.protectedCapacity.cost ?? 0)) throw new BudgetExhausted('cost (reserved)');
-      request = { ...request, max_tokens: outputBound };
     }
     const roleUsage = this.ledger.roles![role] ??= { modelCalls: 0, inputTokens: 0, outputTokens: 0, cost: this.limits.pricing ? 0 : null };
     roleUsage.modelCalls++;
@@ -70,27 +98,29 @@ export class UsageGateway {
         stop = () => reject(signal?.reason instanceof Error ? signal.reason : new Error('model request cancelled; billed usage unknown'));
         signal?.addEventListener('abort', stop, { once: true });
       });
-      let result: ModelTurn;
+      let result: T;
       try {
         // Defer invoking the driver until its abort listener is installed. A driver may
         // synchronously trigger cancellation while opening a request.
-        const response = Promise.resolve().then(() => options ? driver(request, signal, options) : driver(request, signal));
+        const response = Promise.resolve().then(run);
         if (signal?.aborted) stop?.();
         result = await Promise.race([response, abort]);
       }
       finally { if (stop) signal?.removeEventListener('abort', stop); }
-      for (const [field, reported] of [['inputTokens', result.prompt_tokens], ['outputTokens', result.completion_tokens]] as const) {
+      const used = usageOf(result);
+      for (const [field, reported] of [['inputTokens', used.prompt_tokens], ['outputTokens', used.completion_tokens]] as const) {
         if (reported === undefined) this.ledger.usage[field] = null;
         else if (!Number.isSafeInteger(reported) || reported < 0) throw new Error('malformed model usage');
         else if (this.ledger.usage[field] !== null) this.ledger.usage[field]! += reported;
         if (reported === undefined) roleUsage[field] = null;
         else if (roleUsage[field] !== null) roleUsage[field]! += reported;
       }
-      const actualCost = result.prompt_tokens === undefined || result.completion_tokens === undefined ? null : this.cost(result.prompt_tokens, result.completion_tokens);
+      const actualCost = used.prompt_tokens === undefined || used.completion_tokens === undefined ? null : this.cost(used.prompt_tokens, used.completion_tokens);
       if (actualCost === null) this.ledger.usage.cost = roleUsage.cost = null;
       else { if (this.ledger.usage.cost !== null) this.ledger.usage.cost += actualCost; if (roleUsage.cost !== null) roleUsage.cost += actualCost; }
       return result;
     } catch (error) {
+      if (reading.declined?.(error)) { this.ledger.usage.modelCalls--; roleUsage.modelCalls--; throw error; }
       this.ledger.unknownRequests++; this.ledger.usage.inputTokens = this.ledger.usage.outputTokens = this.ledger.usage.cost = null;
       roleUsage.inputTokens = roleUsage.outputTokens = roleUsage.cost = null; throw error;
     }
