@@ -66,11 +66,28 @@ eval and data jobs running):
   top-128 overlap 0.981. The capture is the native engine's schema (`natlang.native-rl-sampling/2`, behaviour top-k
   receipt, `banned_token_ids` per sample), so the learner replays it unchanged.
 
+- **Memory (main 7e72b5b82).** SGLang pools are sized from need (`--sglang-max-running` 32, `--sglang-context` 32768,
+  KV pool 4 x context, mamba cache 8 x running; `--sglang-mem-fraction` 0.3 is only a ceiling), and the native fallback
+  model is released after the export and reloaded only for a turn SGLang cannot serve. Two actors running concurrently
+  on the shared GB10 (32 recorded turns each, c=16, 256 tokens): SGLang 7.5–8.1 GiB CUDA each, front 0.19 GiB CUDA /
+  4.4 GiB RSS each, 156 and 146 tok/s. Before: ~50 GB per actor (0.2 x 124 GB pool + resident native model), and a
+  second actor failed at CUDA context creation. A lazily loaded native fallback adds ~5.4 GiB.
+- **Recorded collector turns.** The collector sets `x_natlang_native_recording` on every RL turn; it is served on
+  SGLang (before 7e72b5b82 it routed every turn to the native fallback). Replay of recorded turns vs FP32: mean 0.0133
+  nats, top-1 0.986 (native BF16 floor 0.0138).
+- **Determinism (for the decision gate): not achieved.** 8 cases, 128 greedy tokens, compared with each case served
+  alone: plain mode 4/8 identical in a batch of 8, 3/8 mixed with 8 fillers; `--enable-deterministic-inference` 5/8
+  and 5–6/8 with FlashInfer or Triton attention (so attention is not the only batch-dependent op; early divergence at
+  token 3 points at prefill). Deterministic mode also needs `SGLANG_BATCH_INVARIANT_OPS_ENABLE_MM_DEEPGEMM=0` on
+  sm_120/121: DeepGEMM's sm120 BF16 GEMM fails to compile for LFM3's 16-wide attention output gate
+  ("kNTilesPerWarp must be even"). The gate stays on llama.cpp `-np 1 --no-cache-prompt` until the LFM3 ops are
+  batch-invariant (candidates: CuTe conv prefill, fused QK norm, the compiled head gate).
+
 RL wiring: `rl.production` configs for LFM3 raw policies (no semantic adapter or coefficient policy) add
 `--engine sglang` to `actor_command`. The actor exports the round's checkpoint (cached under
-`<store-dir>/sglang-hf/<sha>`), starts the fork's server on `--port + 1000` (`--sglang-mem-fraction`, default 0.8 for a
-dedicated sandbox GPU; use ~0.2 on the shared DGX) and serves the native API on `--port`. Turns SGLang cannot serve
-yet run on the native engine of the same loaded checkpoint (`/metrics`: `natlang_native_fallback_requests_total`).
+`<store-dir>/sglang-hf/<sha>`), starts the fork's server on `--port + 1000` and serves the native API on `--port`.
+Turns SGLang cannot serve yet run on the native engine of the same checkpoint, loaded on first use (`/metrics`:
+`natlang_native_fallback_requests_total`, `natlang_native_model_resident`).
 
 ## Neuralese feature plan on SGLang
 
