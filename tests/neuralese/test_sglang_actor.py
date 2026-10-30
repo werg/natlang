@@ -32,7 +32,7 @@ def test_routing_sends_neuralese_turns_to_native():
     moded = GenerationRequest(messages=[], native_state_modes={'b0': 'same-base-adapter-state'})
     assert SglangEngine.sglang_unsupported(moded, [('native_state', 'b0')]) is None
     templated = GenerationRequest(messages=[], template={'call': 'f', 'value': 'write'})
-    assert SglangEngine.sglang_unsupported(templated, [('tokens', [1])]) == 'template'
+    assert SglangEngine.sglang_unsupported(templated, [('tokens', [1])]) is None
 
 
 def test_recorded_collector_turns_stay_on_sglang():
@@ -348,6 +348,55 @@ def test_forced_teacher_replay_records_like_the_native_engine(tmp_path, monkeypa
         assert error.code == 'forced-message'
     else:
         raise AssertionError('a forced reply beyond max_tokens was accepted')
+
+
+@pytest.mark.parametrize('case', ['decode', 'write', 'write-continues'])
+def test_templated_replies_follow_the_native_engine(tmp_path, case):
+    """Templated decode/write on SGLang: the prefix (and a write's open marker) fed after the prompt without samples,
+    a write's span stopped at its close and followed by the fed suffix, sampling resumed when the suffix has no stop."""
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    stop = sorted(front.stop_ids)[0]
+    write = case != 'decode'
+    prefix = word('t8 t9')
+    suffix = [] if not write else word('t3') + ([stop] if case == 'write' else [])
+    sampled = {'decode': word('t6') + [stop], 'write': word('t6 t7') + [roles.produce_close],
+               'write-continues': word('t6 t7') + [roles.produce_close] + word('t5') + [stop]}[case]
+
+    def plan(seq):
+        if write:
+            seq.native_template_value_type = 'string'
+        return list(prefix), list(suffix)
+    for engine in (native, front):
+        engine._native_template_plan = plan
+    make = lambda: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0, max_tokens=32,
+                                     rl_capture=True, rl_top_k=2, native_recording=True, request_id='tpl', seed=1,
+                                     template={'call': 'return_result', 'value': 'write' if write else 'decode'})
+    script = iter(sampled)
+    native._native_token = lambda seq: (next(script), -0.5)
+    expected = native.generate(make())
+    remaining, sent = list(sampled), []
+
+    def generate(body):
+        sent.append(body)
+        stops, out = set(body['sampling_params']['stop_token_ids']), []
+        while remaining and len(out) < body['sampling_params']['max_new_tokens']:
+            out.append(remaining.pop(0))
+            if out[-1] in stops:
+                break
+        return {'output_ids': out, 'meta_info': {'natlang_top_k': [record(-0.5, [t, t + 1], [-0.5, -1.5]) for t in out]}}
+    front._sglang_generate = generate
+    actual = front.generate(make())
+    mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
+    assert _protocol_view(mine) == _protocol_view(theirs) and mine['prompt'] == theirs['prompt']
+    assert actual['choices'][0]['message'] == expected['choices'][0]['message']
+    assert len(sent) == (2 if case == 'write-continues' else 1)
+    first = sent[0]['input_ids']
+    assert first[-len(prefix) - write:] == prefix + [roles.produce_open] * write
+    assert (roles.produce_close in sent[0]['sampling_params']['stop_token_ids']) == write
+    if case == 'write-continues':
+        assert sent[1]['input_ids'] == first + word('t6 t7') + [roles.produce_close] + suffix
+        assert roles.produce_close not in sent[1]['sampling_params']['stop_token_ids']
+    assert len(stored['front']) == len(stored['native']) == int(write)
 
 
 def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):

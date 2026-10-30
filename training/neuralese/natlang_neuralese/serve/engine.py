@@ -547,6 +547,36 @@ class Engine:
             raise RequestError('neuralese-native-state-mode',
                 'native_state_modes must map actual native input IDs to same-base-adapter-state')
 
+    def _native_template_plan(self, seq):
+        """(prefix, suffix) token ids of a templated reply, (None, None) without a template. The prefix is fed
+        after the prompt as reply tokens; a write then opens a produce span whose close is followed by the suffix."""
+        if not seq.request.template:
+            return None, None
+        from .chat import call_reply, write_reply
+        template = seq.request.template
+        mode = template.get('value')
+        if not isinstance(template.get('call'), str) or mode not in ('write', 'decode'):
+            raise RequestError('neuralese-template', "a template needs a call name and value 'write' or 'decode'")
+        argument_path = template.get('argument_path')
+        if argument_path is not None and (not isinstance(argument_path, list) or
+                any(not isinstance(part, str) and type(part) is not int for part in argument_path)):
+            raise RequestError('neuralese-template', 'argument_path must contain string or integer keys')
+        apply = lambda messages, generation: self.tokenizer.apply_chat_template(
+            messages, tools=seq.request.tools or None, tokenize=False, add_generation_prompt=generation)
+        arguments = template.get('arguments') or {}
+        argument = template.get('argument') or 'value'
+        if mode == 'decode':
+            prefix, suffix = call_reply(apply, template['call'], arguments, argument,
+                quoted=False, argument_path=argument_path, call_format=getattr(self, "tool_call_format", None))
+            template_prefix, template_suffix = self._tokens(prefix), []
+        else:
+            value_type = template.get('value_type', 'string')
+            prefix, suffix = write_reply(apply, template['call'], arguments, argument, value_type,
+                                         argument_path=argument_path, call_format=getattr(self, "tool_call_format", None))
+            template_prefix, template_suffix = self._tokens(prefix), self._tokens(suffix)
+            seq.native_template_value_type = value_type
+        return template_prefix, template_suffix
+
     def _native_prefill_impl(self, seq):
         seq.native_trace_enabled = seq.request.native_protocol_recovery
         self._validate_native_state_modes(seq.request.native_state_modes,
@@ -563,31 +593,7 @@ class Engine:
         seq.native_sampling_seed = (int(seq.request.seed) if seq.request.seed is not None else
                                     derive_seed("native-chat", seq.request.request_id))
         seq.rng = torch.Generator(device="cpu").manual_seed(seq.native_sampling_seed)
-        template_prefix = template_suffix = None
-        if seq.request.template:
-            from .chat import call_reply, write_reply
-            template = seq.request.template
-            mode = template.get('value')
-            if not isinstance(template.get('call'), str) or mode not in ('write', 'decode'):
-                raise RequestError('neuralese-template', "a template needs a call name and value 'write' or 'decode'")
-            argument_path = template.get('argument_path')
-            if argument_path is not None and (not isinstance(argument_path, list) or
-                    any(not isinstance(part, str) and type(part) is not int for part in argument_path)):
-                raise RequestError('neuralese-template', 'argument_path must contain string or integer keys')
-            apply = lambda messages, generation: self.tokenizer.apply_chat_template(
-                messages, tools=seq.request.tools or None, tokenize=False, add_generation_prompt=generation)
-            arguments = template.get('arguments') or {}
-            argument = template.get('argument') or 'value'
-            if mode == 'decode':
-                prefix, suffix = call_reply(apply, template['call'], arguments, argument,
-                    quoted=False, argument_path=argument_path, call_format=getattr(self, "tool_call_format", None))
-                template_prefix, template_suffix = self._tokens(prefix), []
-            else:
-                value_type = template.get('value_type', 'string')
-                prefix, suffix = write_reply(apply, template['call'], arguments, argument, value_type,
-                                             argument_path=argument_path, call_format=getattr(self, "tool_call_format", None))
-                template_prefix, template_suffix = self._tokens(prefix), self._tokens(suffix)
-                seq.native_template_value_type = value_type
+        template_prefix, template_suffix = self._native_template_plan(seq)
         plan = list(seq.prompt_plan or ())
         if seq.request.privileged_context is not None:
             insert_at, pieces, seq.native_guidance_receipt = self._guidance(seq.request, plan)

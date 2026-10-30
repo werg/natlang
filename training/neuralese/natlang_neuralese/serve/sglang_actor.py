@@ -181,8 +181,7 @@ class SglangEngine(Engine):
     def sglang_unsupported(request, plan):
         """Why SGLang cannot serve this request (None: it can)."""
         # native_recording (the collector's graph recorder) only asks for the capture, which this path records.
-        names = [name for name, value in (('template', request.template), ('guidance', request.guidance),
-                 ('adapters', request.adapters)) if value]
+        names = [name for name, value in (('guidance', request.guidance), ('adapters', request.adapters)) if value]
         names += sorted({f'prompt segment {kind}' for kind, _ in plan
                          if kind not in ('tokens', 'privileged', 'native_state', 'native_state_constant')})
         return ', '.join(names) or None
@@ -396,35 +395,37 @@ class SglangEngine(Engine):
     def _sglang_run_bound(self, seq, adapter):
         request = seq.request
         ids = self._sglang_prompt(seq)
+        template_prefix, template_suffix = self._native_template_plan(seq)
+        open_position = (self._sglang_template_prefix(seq, ids, template_prefix, template_suffix)
+                         if template_prefix is not None else None)
         sampling = request.temperature is not None and request.temperature > 0
         k = request.rl_top_k if sampling and request.rl_top_k is not None else 0
         params = {'temperature': float(request.temperature) if sampling else 0.0,
-                  'max_new_tokens': min(int(request.max_tokens), self.context - len(ids)),
                   'stop_token_ids': sorted(self.stop_ids), 'skip_special_tokens': False,
                   'no_stop_trim': True, 'custom_params': {TOP_K_KEY: max(k, 1),
                                                           **({IMPORT_KEY: seq.sglang_imports} if seq.sglang_imports else {}),
                                                           **({ADAPTER_KEY: adapter} if adapter else {})}}
         if self.sglang_banned:
             params['logit_bias'] = {str(token): BAN_BIAS for token in self.sglang_banned}
-        body = {'input_ids': ids, 'sampling_params': params, 'rid': request.request_id}
-        state = {'index': 0, 'finish': 'length', 'done': False, 'text': '', 'run': 0, 'prompt': ids, 'fed': [],
-                 'adapter': adapter}
+        state = {'index': 0, 'finish': 'length', 'done': False, 'text': '', 'run': len(seq.items), 'prompt': ids,
+                 'fed': [], 'adapter': adapter, **({'open_position': open_position} if open_position is not None else {})}
         try:
             if request.forced_message is not None:
                 self._sglang_forced_replay(seq, state)
-            elif request.on_delta is None:
-                result = self._sglang_generate(body)
-                self._sglang_consume(seq, result.get('output_ids'), (result.get('meta_info') or {}).get(TOP_K_KEY),
-                                     k, sampling, state)
             else:
-                # Streamed replies: SGLang sends incremental token chunks (--incremental-streaming-output); the text
-                # reaches the client as it is generated, the capture is completed from the same per-token records.
-                # Leaving the stream early (a protocol error) closes the connection, which aborts the SGLang request.
-                for chunk in self._sglang_stream(body):
-                    if request.cancelled:
-                        raise RequestError('cancelled', 'the client went away')
-                    self._sglang_consume(seq, chunk.get('output_ids'), (chunk.get('meta_info') or {}).get(TOP_K_KEY),
-                                         k, sampling, state)
+                for part in range(request.max_tokens + 1):
+                    room = min(int(request.max_tokens) - seq.generated_positions,
+                               self.context - len(ids) - len(state['fed']))
+                    if room <= 0:
+                        break
+                    # A templated write stops at its span's close: the template suffix follows it, not a sample.
+                    stops = sorted(set(self.stop_ids) | ({self.role_tokens.produce_close} if seq.native_template_suffix else set()))
+                    body = {'input_ids': ids + state['fed'], 'rid': request.request_id + (f'-{part}' if part else ''),
+                            'sampling_params': {**params, 'max_new_tokens': room, 'stop_token_ids': stops}}
+                    self._sglang_sample(seq, body, k, sampling, state)
+                    if state['done'] or not seq.native_forced_tokens:
+                        break
+                    self._sglang_feed_forced(seq, state)
                     if state['done']:
                         break
             if seq.native_capture_open:
@@ -446,6 +447,66 @@ class SglangEngine(Engine):
         seq.finish_reason = state['finish']
         seq.phase = 'done'
         return self._native_response(seq)
+
+    def _sglang_sample(self, seq, body, k, sampling, state):
+        """One SGLang generation through the decode protocol (streamed when the client streams)."""
+        request = seq.request
+        if request.on_delta is None:
+            result = self._sglang_generate(body)
+            self._sglang_consume(seq, result.get('output_ids'), (result.get('meta_info') or {}).get(TOP_K_KEY),
+                                 k, sampling, state)
+            return
+        # Streamed replies: SGLang sends incremental token chunks (--incremental-streaming-output); the text
+        # reaches the client as it is generated, the capture is completed from the same per-token records.
+        # Leaving the stream early (a protocol error) closes the connection, which aborts the SGLang request.
+        for chunk in self._sglang_stream(body):
+            if request.cancelled:
+                raise RequestError('cancelled', 'the client went away')
+            self._sglang_consume(seq, chunk.get('output_ids'), (chunk.get('meta_info') or {}).get(TOP_K_KEY),
+                                 k, sampling, state)
+            if state['done']:
+                break
+
+    def _sglang_template_prefix(self, seq, ids, prefix, suffix):
+        """A templated reply's fixed prefix (and a write's open marker) after the prompt, recorded as the native engine
+        feeds them: reply tokens without samples. Returns the open marker's cache position for a write."""
+        write = seq.request.template.get('value') == 'write'
+        if seq.prompt_positions + seq.generated_positions + len(prefix) + write >= self.context:
+            raise RequestError('context-length', 'templated native reply prefix exceeds remaining context')
+        for token in prefix:
+            ids.append(token)
+            seq.items.append(token)
+            seq.native_item_positions.append(seq.native_own_position)
+            seq.generated_positions += 1
+            self._native_record_input(seq, token, producing=False)
+        if not write:
+            return None
+        seq.native_write_start_own = seq.native_own_position
+        seq.native_write_open_sample = None
+        position = len(ids)
+        ids.append(self.role_tokens.produce_open)
+        seq.generated_positions += 1
+        seq.native_capture_open = True
+        seq.native_capture_chunks, seq.native_capture_ids = [], []
+        seq.native_template_suffix = suffix
+        self._native_record_input(seq, self.role_tokens.produce_open, producing=False)
+        return position
+
+    def _sglang_feed_forced(self, seq, state):
+        """A write template's suffix after its span closed: fed without samples, as the native engine feeds it."""
+        while seq.native_forced_tokens:
+            token = seq.native_forced_tokens.pop(0)
+            if token in self.stop_ids:
+                seq.native_forced_tokens = []
+                state['finish'], state['done'] = 'stop', True
+                return
+            seq.generated_positions += 1
+            self._native_record_input(seq, token, producing=False)
+            state['fed'].append(token)
+            seq.items.append(token)
+            seq.native_item_positions.append(seq.native_own_position - 1)
+        if seq.request.on_delta is not None:
+            self._sglang_emit(seq, state)
 
     def _sglang_forced_replay(self, seq, state):
         """Forced teacher replay, as the native engine records it: the exact teacher reply's tokens through the decode
