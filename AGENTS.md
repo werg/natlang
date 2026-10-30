@@ -1128,41 +1128,11 @@ afterwards. The rules below are consequences of this one.
 
 # Neuralese training foundation
 
-- LFM fresh-start base (owner, 2026-10-12): any new Pop LFM training lineage
-  started from base weights uses the pinned full-precision LiquidAI
-  LFM2.5-350M QAD source and its QAD clean-head anchor, with a newly measured
-  QAD base task reference. See `plans/neuralese/DECISIONS.md` for revision,
-  paths and hashes. A resume of an existing lineage restores that lineage's
-  exact checkpoint and optimizer state; do not silently substitute QAD weights
-  into a checkpoint resume.
-- New neuralese training lineages use shared declared recipes under
-  `training/neuralese/recipes/`; see `plans/neuralese/TRAINING_RECIPE.md`.
-- Token-aligned identity and qualified causal output-state to raw next-token
-  embedding distillation precede compression/recurrence. Finishing a warm-up's
-  step count is not qualification. Preserve and diagnose failed gates.
-- Runtime transport/gradient replay needs separate qualification against those
-  exact weights. Legacy marker/RMS checkpoints do not inherit the new foundation
-  certificate, and backbone changes require channel requalification.
-- Exception, Neuralese direct v1 (owner decision 2026-10-11,
-  `plans/neuralese/NEURALESE_DIRECT_V1.md`): a lineage made only of
-  `neuralese_direct` stages starts from the base model with no warm-up and needs
-  no identity or embedding-distillation stage. Its stage's step-0 identity check
-  (NeuraleseProjection equals the soft-token mixture, TokenChoiceProjection
-  absent or the identity, logits equal the base) is the identity qualification,
-  declared as the recipe's `identity_qualification` and recorded in
-  `direct-certificate.json`. Older lineages keep the rule above. Direct-stage
-  qualification is the identity check, held CE below base and
-  natlang task success (owner decision 2026-10-12): the in-run task-success
-  evaluation (16 tasks, one per shape, of the registered held packet
-  `natlang-held-task-packet-v3-20261012`, which is v2 with content-preserving
-  edit_stream oracles, executed for real against the
-  training model at every eval and at the end; `eval/task_cadence.py`) is at
-  least the line's base and not below the previous evaluation minus the noise
-  measured by repeat runs. The 48-probe
-  behaviour gate is report-only: it runs at a drift warn and at the end and is
-  recorded, never a stop or a requirement. Response KL warns at 0.5 (which runs
-  the gate); it never stops a run or denies qualification merely for changing
-  the base distribution (owner correction 2026-10-15). Actual task performance
-  remains measured. The Neuralese value is report-only there: its
-  requirement is the end-to-end stage's, consumers reading values against
-  consumers reading tokens (owner decision 2026-10-11).
+The LFM3 line defines the training foundation (owner, 2026-10-30; replaces the
+LFM2.5 QAD base, warm-up/identity-qualification and Neuralese direct v1 rules):
+see `plans/neuralese/LFM3_RECIPE_20261028.md` and
+`plans/neuralese/LFM3_COMMITTED_DECISIONS_20261028.md`. New lineages use the
+shared declared recipes under `training/neuralese/recipes/`. A resume restores
+its lineage's exact checkpoint and optimizer/RNG/exposure state; never substitute
+base weights into a resume. Qualification is actual task behaviour, numerics and
+recoverable state, not similarity to the base.
