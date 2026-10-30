@@ -81,8 +81,13 @@ class _ReverseKL(torch.autograd.Function):
         p = torch.where(finite, (z - lse).exp(), torch.zeros_like(z))
         difference = torch.where(finite, z - t, torch.zeros_like(z))
         # lse(t) - lse(z) = log E_p exp(-(z - t)), evaluated as log1p(E_p expm1(-(z - t))) so that near agreement
-        # the first-order terms cancel analytically instead of between two rounded log-normalizers.
-        shift = torch.log1p((p * torch.expm1(-difference)).sum(-1, keepdim=True))
+        # the first-order terms cancel analytically instead of between two rounded log-normalizers. Far from
+        # agreement expm1 overflows (a token with underflowed p but a twin logit ~90 higher gave 0 * inf = NaN on
+        # a 56k-token teacher twin), so rows with any |z - t| > 20 use the log-normalizer difference directly.
+        near = difference.abs().amax(-1, keepdim=True) <= 20.
+        shift = torch.where(near,
+            torch.log1p((p * torch.expm1(-difference.clamp(min=-20.))).sum(-1, keepdim=True)),
+            torch.logsumexp(t, -1, keepdim=True) - lse)
         delta = torch.where(finite, difference + shift, torch.zeros_like(z))
         kl = (p * delta).sum(-1)
         ctx.save_for_backward(p, delta, kl)

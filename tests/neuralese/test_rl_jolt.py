@@ -392,7 +392,8 @@ def test_guidance_after_an_imported_state_is_captured_where_the_learner_expects(
     assert own[block.insert_at:block.insert_at + len(block.token_ids)] == list(block.token_ids)
 
 
-@pytest.mark.parametrize('scale', [1.0, 1e-4])
+# 200: far from agreement, where expm1(z~ - z) overflowed and an underflowed p gave 0 * inf = NaN.
+@pytest.mark.parametrize('scale', [1.0, 1e-4, 200.0])
 def test_reverse_kl_from_logits_matches_float64_reference_including_near_agreement(scale):
     from natlang_neuralese.rl.jolt import reverse_kl
     generator = torch.Generator().manual_seed(4)
