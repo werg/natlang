@@ -152,50 +152,70 @@ def select(args):
 # ---------------------------------------------------------------- writer episodes
 
 def write(args):
+    """``writeHint`` K times per tau* against a native server profile (``neuraleseServer``: the configured Neuralese
+    writer materializes the returned text as a native state), ``--parallel`` calls at a time."""
+    from concurrent.futures import ThreadPoolExecutor
     out = Path(args.out)
     node = os.environ.get('NATLANG_NODE', 'node')
+    config = out / 'natlang-config'
+    _write(config / 'config.json', {'defaultProfile': 'pilot', 'profiles': {'pilot': {
+        'endpoint': args.server, 'neuraleseServer': True, 'model': 'native'}}})
+    environment = {key: value for key, value in os.environ.items() if key != 'NATLANG_SERVER'}
+    environment.update(NATLANG_CONFIG_HOME=str(config), NATLANG_PROFILE='pilot', NATLANG_PROGRESS='off')
+    jobs = []
     for path in sorted((out / 'tau').glob('*.json')):
-        tau = json.loads(path.read_text())
         for sample in range(args.k):
-            target = out / 'hints' / f'{path.stem}-{sample}.json'
-            if target.exists():
-                continue
-            inputs = out / 'hints' / f'{path.stem}-{sample}.inputs.json'
-            _write(inputs, tau['inputs'])
-            live = out / 'hints' / f'{path.stem}-{sample}.live.jsonl'
-            started = time.time()
+            if not (out / 'hints' / f'{path.stem}-{sample}.json').exists():
+                jobs.append((path, sample))
+
+    def run(job):
+        path, sample = job
+        tau = json.loads(path.read_text())
+        inputs = out / 'hints' / f'{path.stem}-{sample}.inputs.json'
+        _write(inputs, tau['inputs'])
+        live = out / 'hints' / f'{path.stem}-{sample}.live.jsonl'
+        started = time.time()
+        try:
             process = subprocess.run([node, str(REPO / 'ts-host/bin/natlang.mjs'), 'call', str(WRITER), '--inputs',
                                       str(inputs)], capture_output=True, text=True, timeout=args.timeout,
-                                     env={**os.environ, 'NATLANG_SERVER': args.server, 'NATLANG_LIVE_FILE': str(live),
-                                          'NATLANG_PROGRESS': 'off'})
-            _write(target, {'returncode': process.returncode, 'stdout': process.stdout[-20000:],
-                            'stderr': process.stderr[-4000:], 'seconds': time.time() - started})
-            print(path.stem, sample, process.returncode, round(time.time() - started), flush=True)
+                                     env={**environment, 'NATLANG_LIVE_FILE': str(live)})
+            record = {'returncode': process.returncode, 'stdout': process.stdout[-20000:],
+                      'stderr': process.stderr[-4000:]}
+        except subprocess.TimeoutExpired:
+            record = {'returncode': None, 'stdout': '', 'stderr': f'timeout after {args.timeout}s'}
+        _write(out / 'hints' / f'{path.stem}-{sample}.json', {**record, 'seconds': time.time() - started})
+        print(path.stem, sample, record['returncode'], round(time.time() - started), flush=True)
+    with ThreadPoolExecutor(args.parallel) as pool:
+        list(pool.map(run, jobs))
 
 
-def hint_text(record, store):
-    """The hint's text: the written native state's own text when the result names one, else the plain stdout."""
+def _state_text(server, state_id):
+    import urllib.request
+    from ..serve.store import decode_native_state
+    with urllib.request.urlopen(f"{server.rstrip('/')}/v1/neuralese/native-states/{state_id}", timeout=120) as response:
+        return decode_native_state(response.read())[0].text
+
+
+def hint_text(record, server):
+    """The hint's text: the written native state's own text (fetched from the writer's server) when the result names
+    one, else the plain stdout."""
+    import re
     text = record['stdout'].strip()
+    found = re.search(r'nzs1_[a-z2-7]{52}', text)
+    if found:
+        return _state_text(server, found.group(0))
     try:
         value = json.loads(text)
     except json.JSONDecodeError:
         return text or None
-    if isinstance(value, dict) and isinstance(value.get('$neuralese'), dict):
-        state = store.get_native_state(value['$neuralese']['id'])
-        return state.block.text if state is not None else None
-    if isinstance(value, list) and value and isinstance(value[0], dict) and value[0].get('type') == 'native_state':
-        state = store.get_native_state(value[0]['id'])
-        return state.block.text if state is not None else None
-    return value if isinstance(value, str) else json.dumps(value)
+    return value if isinstance(value, str) else None
 
 
 # ---------------------------------------------------------------- scoring
 
 def _engine(args):
     from ..serve import load_native_engine
-    from ..serve.store import TensorStore
-    store = TensorStore(args.store_dir) if args.store_dir else None
-    return load_native_engine(args.checkpoint, device=args.device, dtype=torch.bfloat16, store=store)
+    return load_native_engine(args.checkpoint, device=args.device, dtype=torch.bfloat16)
 
 
 def _tau_replay(engine, rollout):
@@ -224,7 +244,8 @@ def _text_hinted(invocations, actions, texts, rendering):
     if texts:
         tokens = tuple(rendering.turn(texts))
         for node in invocations:
-            edits[node.name] = _Edit(rendering.insertion_point(node.token_ids)[0], 0, tokens)
+            if not node.cache_prefix:
+                edits[node.name] = _Edit(rendering.insertion_point(node.token_ids)[0], 0, tokens)
     rebased, requery = _rebase_plan(plan, edits)
     return rebased, [requery({**a, 'query': offsets[a['turn']] + a['local_query']}) for a in actions]
 
@@ -248,17 +269,21 @@ def score(args):
     scales = None
     rows = []
     for path in sorted((out / 'tau').glob('*.json')):
+        done = out / 'scores' / f'{path.stem}.json'
+        hints_now = sorted((out / 'hints').glob(f'{path.stem}-[0-9].json'))
+        if done.exists() and json.loads(done.read_text()).get('hint_files') == [h.name for h in hints_now]:
+            rows.append(json.loads(done.read_text()))
+            continue
         tau = json.loads(path.read_text())
         invocations, actions = _tau_replay(engine, tau['rollout'])
-        root = [n.name for n in invocations]
-        if len(root) != 1:
-            continue
+        # tau* is the root call; each of its model turns is a graph invocation and gets the call's hint.
+        turns = [n.name for n in invocations if not n.cache_prefix]
         T = len(actions)
         if scales is None:
             from ..model.native_graph_plan import compile_graph
             scales = measure_scales(model, compile_graph(invocations))
             _write(out / 'channel-scales.json', [[layer, name, value] for (layer, name), value in scales.items()])
-        row = {'tau': path.stem, 'task_id': tau['task_id'], 'T': T}
+        row = {'tau': path.stem, 'task_id': tau['task_id'], 'T': T, 'turns': len(turns)}
         plan, acts = _text_hinted(invocations, actions, [], rendering)
         row['nll_none'] = _nll(model, plan, acts)[0] / T
         facts = [fact['text'] for fact in tau['inputs']['facts']]
@@ -270,13 +295,13 @@ def score(args):
         row['nll_verbatim_text'] = _nll(model, plan, acts)[0] / T
         row['hints'] = []
         for hint_path in sorted((out / 'hints').glob(f'{path.stem}-[0-9].json')):
-            text = hint_text(json.loads(hint_path.read_text()), engine.store)
+            text = hint_text(json.loads(hint_path.read_text()), args.server)
             if not text:
                 row['hints'].append({'hint': hint_path.stem, 'failed': True})
                 continue
             ids = tuple(tokenize(text))
             item = {'hint': hint_path.stem, 'tokens': len(ids), 'text': text[:2000]}
-            plan, member_actions, names = hinted_graph(invocations, actions, [{root[0]: Hint(root[0], ids)}],
+            plan, member_actions, names = hinted_graph(invocations, actions, [{t: Hint(t, ids) for t in turns}],
                                                        rendering, roles)
             item['nll_import'] = _nll(model, plan, member_actions[0])[0] / T
             channel = ImportChannel(tuple(names[0]), args.sigma, 1., scales, seed=1)
@@ -286,6 +311,8 @@ def score(args):
             plan, acts = _text_hinted(invocations, actions, [text], rendering)
             item['nll_text'] = _nll(model, plan, acts)[0] / T
             row['hints'].append(item)
+        row['hint_files'] = [h.name for h in hints_now]
+        _write(done, row)
         rows.append(row)
         print(json.dumps({k: v for k, v in row.items() if k != 'hints'}), flush=True)
     _write(out / 'scores.json', rows)
@@ -304,7 +331,7 @@ def train(args):
         tau = json.loads(path.read_text())
         invocations, actions = _tau_replay(engine, tau['rollout'])
         for hint_path in sorted((out / 'hints').glob(f'{path.stem}-[0-9].json')):
-            text = hint_text(json.loads(hint_path.read_text()), engine.store)
+            text = hint_text(json.loads(hint_path.read_text()), args.server)
             if text:
                 items.append((path.stem, invocations, actions, tuple(tokenize(text))))
     stems = sorted({item[0] for item in items})
@@ -318,8 +345,8 @@ def train(args):
 
     def loss_of(item, grad):
         stem, invocations, actions, ids = item
-        root = invocations[0].name
-        plan, member_actions, _ = hinted_graph(invocations, actions, [{root: Hint(root, ids)}], rendering, roles)
+        hints = {n.name: Hint(n.name, ids) for n in invocations if not n.cache_prefix}
+        plan, member_actions, _ = hinted_graph(invocations, actions, [hints], rendering, roles)
         with torch.set_grad_enabled(grad):
             result = model(plan, retain_states=False)
             return reconstruction_nll(model, result['h_final'][0], member_actions[0]) / len(actions)
@@ -358,9 +385,9 @@ def main(argv=None):
     parser.add_argument('--server', default='http://127.0.0.1:18431')
     parser.add_argument('--k', type=int, default=2)
     parser.add_argument('--timeout', type=int, default=1800)
+    parser.add_argument('--parallel', type=int, default=4)
     parser.add_argument('--checkpoint')
     parser.add_argument('--device', default='cuda')
-    parser.add_argument('--store-dir', help="the writer server's durable native store (the hints' written states)")
     parser.add_argument('--sigma', type=float, default=.5)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--steps', type=int, default=200)
