@@ -1,5 +1,21 @@
 # Model-facing changes and their measurement
 
+### 2026-10-30 — JOLT+ child references match the child's inputs, not the reference wording (debt: live outcome)
+
+A reference child fact (`child_value`) applied only when every match string occurred in the child call's prompt.
+Reference children carry the reference program's wording (`Primary decision:`, `Is message an unsolicited
+promotion, pri…`) next to the item identifier, and a policy's own child calls never use that wording: 0 of 93 student
+child invocations in DGX JOLT round 5 got a child fact, so child turns (13.4 per exhausted episode) had no OPSD
+target. A child reference now also applies when every identifier match string (a quoted value such as `"M1"`, or a
+token with a digit such as `d81028_evidence_94_0`) occurs in the child's prompt, which includes its declared input
+values; several matching children with different answers still give none. Same rule in
+`applications/guidance-writer/visibility.ts`, `rl/privileged_context.child_matches` and `tune/selfteach.ts`.
+Replayed on recorded rounds: jolt r4 57/83, jolt r5 52/93, sd r4 9/24, sd r5 21/32 child invocations matched.
+Teachers see the matched child's verified answer as text; students' twins get it as their OPSD target. A matched
+answer can have a different shape from a student child's own question (e.g. a catalog key for a boolean question).
+**Measurement debt:** matched child fraction and child turns per episode on the first round using it, teacher
+child-turn outcomes, and whether students' child calls start answering directly.
+
 ### 2026-10-30 — RL collection context budget 16384 -> the actor's 32768, and child reference guidance (debt: live outcome)
 
 Diagnosis of DGX JOLT round 5 (jolt-r1, 56 episodes): 30 ended in `budget_exhaustion`, every one on the whole-case

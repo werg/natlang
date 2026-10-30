@@ -52,6 +52,17 @@ test('visibility mirrors rl/privileged_context.applicable', () => {
     { ...hindsight, id: 'h2', invocation: 'run-1/3' }]).map(fact => fact.id), ['fit_hindsight:0', 'h1']);
 });
 
+test('a child reference matches the inputs a policy child is called on, not the reference wording', () => {
+  const fact = { id: 'child_value:0', kind: 'child_value', text: 'The verified answer of this call is "c1".', invocation: null,
+    match: ['d81028_evidence_94_0', 'Primary decision:'] };
+  const quoted = { ...fact, id: 'child_value:1', match: ['Is message an unsolicited promotion', '"M1"'] };
+  const wording = { ...fact, id: 'child_value:2', match: ['An iterative process'] };
+  const own = { name: 'run-1/1', role: 'child',
+    text: 'Decide whether item meets policy.\nitem = { id: "d81028_evidence_94_0" }\nmessage = { id: "M1" }' };
+  assert.deepEqual(pkg.visibleFacts(own, [fact, quoted, wording]).map(f => f.id), ['child_value:0', 'child_value:1']);
+  assert.deepEqual(pkg.visibleFacts({ ...own, text: 'item = { id: "d81028_evidence_94_1" }' }, [fact, quoted]), []);
+});
+
 test('crisp selection orders by kind and drops an ambiguous child match', () => {
   const root = { name: 'run-1', role: 'root', text: '' };
   const facts = [...FACTS, { id: 'fit_hindsight:0', kind: 'fit_hindsight', text: 'h' },

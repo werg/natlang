@@ -27,6 +27,7 @@ the same episode graph. This module is the crisp mechanism around it:
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -51,6 +52,26 @@ VERBATIM_MIN_CHARS = 16
 
 def _text(value):
     return value if isinstance(value, str) else json.dumps(value, sort_keys=True, ensure_ascii=False)
+
+
+_IDENTIFIER = re.compile(r'"[^"\s]+"|[A-Za-z0-9][\w.:-]*')
+
+
+def identifier_match(item):
+    """A match string naming an input value rather than wording: a quoted value or a token containing a digit."""
+    return bool(_IDENTIFIER.fullmatch(item)) and (item.startswith('"') or any(c.isdigit() for c in item))
+
+
+def child_matches(match, text):
+    """Whether a child reference's match strings select a child prompt: all of them, or all of its identifier strings
+    (a policy's own child call is matched by the inputs it is called on, not by the reference's wording). The same
+    rule as applications/guidance-writer/visibility.ts ``childMatches``."""
+    if not match:
+        return False
+    if all(item in text for item in match):
+        return True
+    ids = [item for item in match if identifier_match(item)]
+    return bool(ids) and all(item in text for item in ids)
 
 
 def _child_match(child):
@@ -171,7 +192,7 @@ def applicable(fact, invocation):
     root sees).
     """
     if fact.kind == 'child_value':
-        return invocation['role'] == 'child' and all(item in invocation['text'] for item in fact.match)
+        return invocation['role'] == 'child' and child_matches(fact.match, invocation['text'])
     if fact.kind in ('attempt_feedback', 'fit_hindsight'):
         return fact.invocation is None or fact.invocation == invocation['name']
     return invocation['role'] in ('root', 'binding')

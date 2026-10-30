@@ -547,3 +547,15 @@ def test_child_references_with_verified_calls_or_a_bare_match_string_render_thei
     assert child[0].match == ('Count "A1"',) and child[1].match == ('"B7"',)
     assert applicable(child[0], {'name': 'c', 'role': 'child', 'text': 'Count "A1" apples'})
     assert not applicable(child[0], {'name': 'c', 'role': 'child', 'text': 'Count "B7" apples'})
+
+
+def test_child_reference_matches_by_its_identifier_inputs_when_the_wording_differs():
+    from natlang_neuralese.rl.privileged_context import child_matches, identifier_match
+    assert identifier_match('"M1"') and identifier_match('d81028_evidence_94_0')
+    assert not identifier_match('Primary decision:') and not identifier_match('budget: number = 7500')
+    assert not identifier_match('process')
+    text = 'Decide whether item meets policy.\nitem = { id: "d81028_evidence_94_0" }'
+    assert child_matches(('d81028_evidence_94_0', 'Primary decision:'), text)
+    assert not child_matches(('d81028_evidence_94_1', 'Primary decision:'), text)
+    assert not child_matches(('An iterative process',), text)
+    assert child_matches(('An iterative process',), 'An iterative process of x')
