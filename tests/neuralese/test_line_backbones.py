@@ -1,5 +1,4 @@
 """The shared line-backbone declaration: historical LFM2.5 identities still validate, LFM3 identities are accepted."""
-import copy
 import importlib.util
 import json
 import re
@@ -36,7 +35,7 @@ def test_declaration_is_consistent():
         lb.current_key('mellum')
     with pytest.raises(ValueError, match='retired'):
         lb.key_for_role('mellum')
-    assert lb.key_for_role('mellum', model_id=lb.model_id('mellum21')) == 'mellum21'  # historical rows still resolve
+    assert lb.key_for_role('mellum', architecture='mellum') == 'mellum21'  # historical rows still resolve
     assert lb.current_model_keys() == ('lfm3',)
     for key, value in lb.BACKBONES.items():
         assert value['model_key'] == key and lb.line_of(key) in lb.LINES
@@ -108,32 +107,6 @@ def test_lfm3_pinned_files_match_the_declaration():
     assert LFM3_SNAPSHOT.name == declared['revision']
     config = json.loads((LFM3_SNAPSHOT / 'config.json').read_text())
     assert config['model_type'] in declared['architectures']
-
-
-def test_ferry_accepts_lfm25_and_lfm3_native_identities(tmp_path):
-    from natlang_neuralese.common import memetic_teacher_ferry as ferry
-    assert ferry.EVALUATOR_IDS['lfm'] == lb.backbone('lfm25')['evaluator_sandbox_id']
-    assert ferry.EVALUATOR_IDS['mellum'] == lb.backbone('mellum21')['evaluator_sandbox_id']
-    manifest = json.loads(ferry.DEPLOYMENTS_PATH.read_text())
-    assert ferry.load_deployments()['evaluators']['lfm']['native_identity']['architecture'] == 'lfm2'
-    for architecture, ok in (('lfm2', True), ('lfm3', True), ('mellum', False), ('qwen', False)):
-        changed = copy.deepcopy(manifest)
-        changed['evaluators']['lfm']['native_identity']['architecture'] = architecture
-        path = tmp_path / f'{architecture}.json'
-        path.write_text(json.dumps(changed))
-        if ok:
-            ferry.load_deployments(path)
-        else:
-            with pytest.raises(ValueError, match='native identity'):
-                ferry.load_deployments(path)
-    changed = copy.deepcopy(manifest)
-    changed['evaluators']['mellum']['native_identity'] = {
-        'checkpoint_sha256': 'a' * 64, 'tokenizer_fingerprint': 'b' * 64,
-        'embedding_weight_sha256': 'c' * 64, 'architecture': 'lfm3'}
-    path = tmp_path / 'mellum-as-lfm3.json'
-    path.write_text(json.dumps(changed))
-    with pytest.raises(ValueError, match='native identity'):
-        ferry.load_deployments(path)
 
 
 def test_architecture_dispatch_sets_cover_lfm3():

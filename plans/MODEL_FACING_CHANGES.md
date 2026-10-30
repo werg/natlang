@@ -1687,3 +1687,11 @@ an export manifest retain their existing launcher behavior. Measure ordinary
 natlang execution on the development packet with the bound settings; the first
 step4751 diagnostic launch with implicit defaults was stopped and is not the
 declared-policy result. This does not establish Neuralese task capability.
+
+## Memetic guidance author moves to the served student (2026-10-30, live measurement pending)
+
+`rl/memetic_program.py` sent `memetic_task_runner.PROPOSE_GUIDANCE` to the self-hosted Qwen3.6 teacher through the
+memetic teacher ferry. Teacher generation is retired for LFM3, so the ferry is removed and the author defaults to the
+served native student itself (`--author` defaults to `--server`). The prompt text is unchanged; the model reading it
+changed. Before relying on memetic runs, sample about 48 authoring calls on the live LFM3 policy and check that the
+replies contain usable `<guidance>` blocks within the word budget.

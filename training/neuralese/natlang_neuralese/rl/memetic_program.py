@@ -25,7 +25,6 @@ from ..common.jsonio import write_json_durable
 from ..common.runtime_inventory import python_runtime_binding, task_runtime_inventory
 from ..eval.task_packet import read_jsonl
 from . import memetic_task_runner as runner
-from ..common import memetic_teacher_ferry as teacher_ferry
 from .task_rollouts import authored_root_row
 
 STATE_ID = re.compile(r"nzs1_[a-z2-7]{52}\Z")
@@ -102,9 +101,23 @@ def archive_state(server: str, out: Path, written: dict):
     return {'path': str(path), 'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw)}
 
 
+def served_native_identity(info):
+    """Validate the actual HTTP native policy/state contract, without legacy fields."""
+    state = info.get('native_state') or {}
+    binding = info.get('rl_policy_binding') or {}
+    identity = binding.get('native_identity') or {}
+    if (state.get('enabled') is not True or binding.get('schema') != 'natlang.rl-policy-binding/2'
+            or binding.get('communication') not in ('native-state', 'semantic-state')
+            or any(not isinstance(identity.get(key), str) or not identity[key] or
+                   state.get(key) != identity[key] for key in IDENTITY)
+            or binding.get('checkpoint_sha256') != identity.get('checkpoint_sha256')):
+        raise ValueError('memetic guidance requires a consistent native RL policy and state identity')
+    return {key: identity[key] for key in IDENTITY}
+
+
 def actor_identity(server: str, info=None):
     info = info if info is not None else request_json(server, '/v1/neuralese/info')
-    return teacher_ferry.served_native_identity(info)
+    return served_native_identity(info)
 
 
 def local_runtime_binding(runtime_root: Path | None = None) -> dict:
@@ -336,24 +349,14 @@ def evaluator_inputs(out: Path, inputs: dict, actor: dict, previous_runtime: Pat
     return manifest['current_inputs_sha256'], manifest
 
 
-def author_provenance(path: Path, model: str, endpoint: str):
-    """Bind authoring to the existing self-hosted Qwen source and runtime."""
-    value = json.loads(path.read_text())
-    exact_sources = list(teacher_ferry.TEACHER_SOURCE_BINDINGS)
-    if (value.get('schema') != 'natlang.memetic-author-provenance/1'
-            or model != teacher_ferry.TEACHER_SERVE_ALIAS
-            or value.get('model_id') != teacher_ferry.TEACHER_MODEL_ID
-            or value.get('serve_alias') != teacher_ferry.TEACHER_SERVE_ALIAS
-            or value.get('revision') != teacher_ferry.TEACHER_REVISION
-            or value.get('hosting') != 'self-hosted-coreweave'
-            or endpoint.rstrip('/') != teacher_ferry.TEACHER_URL
-            or value.get('endpoint') != teacher_ferry.TEACHER_URL
-            or value.get('sandbox_id') != teacher_ferry.TEACHER_SANDBOX_ID
-            or value.get('source_bindings') != exact_sources
-            or any(not isinstance(value.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', value[key])
-                   for key in ('checkpoint_sha256', 'tokenizer_fingerprint', 'runtime_sha256', 'source_receipt_sha256'))):
-        raise ValueError('memetic author needs the exact pinned self-hosted Qwen teacher checkpoint/tokenizer/runtime/source receipt')
-    return {'path': str(path.resolve()), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'receipt': value}
+def author_provenance(endpoint: str, model: str, info=None):
+    """Bind authoring to the served native model at ``endpoint``: its exact checkpoint/tokenizer/embedding identity
+    and served info. Teacher generation is retired (LFM3 committed decisions): the author is our own served policy,
+    by default the student being improved (``--author`` defaults to ``--server``)."""
+    info = info if info is not None else request_json(endpoint, '/v1/neuralese/info')
+    value = {'schema': 'natlang.memetic-author-provenance/2', 'endpoint': endpoint.rstrip('/'), 'model': model,
+             'identity': served_native_identity(info), 'info_sha256': canonical_json_sha256_hex(info)}
+    return {'sha256': canonical_json_sha256_hex(value), 'receipt': value}
 
 
 def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, base_system: str,
@@ -448,22 +451,11 @@ def _author_attempt(args, teacher: dict, phase: str, generation: int) -> dict:
 def _author_record(authored: dict, attempt: dict) -> dict:
     custody = authored.get('author_call')
     if (not isinstance(custody, dict)
-            or custody.get('schema') != 'natlang.memetic-author-call-custody/1'
-            or not isinstance(custody.get('request_id'), str)
-            or not re.fullmatch(r'mtf1_[a-f0-9]{64}', custody['request_id'])
+            or custody.get('schema') != 'natlang.memetic-author-call-custody/2'
             or any(not isinstance(custody.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', custody[key])
-                   for key in ('request_sha256', 'response_sha256', 'ferry_receipt_sha256'))
-            or not isinstance(custody.get('ferry_receipt'), dict)):
-        raise ValueError('authored guidance lacks exact durable ferry request/response custody')
-    receipt = custody['ferry_receipt']
-    if (receipt.get('request_id') != custody['request_id']
-            or receipt.get('request_sha256') != custody['request_sha256']
-            or receipt.get('response_sha256') != custody['response_sha256']
-            or receipt.get('status') != 'complete'
-            or receipt.get('schema') != teacher_ferry.RECEIPT_SCHEMA):
-        raise ValueError('authored guidance custody differs from its signed ferry receipt')
-    return {'schema': 'natlang.memetic-guidance-author-record/1',
-            'attempt': attempt, **custody}
+                   for key in ('request_sha256', 'response_sha256'))):
+        raise ValueError('authored guidance lacks exact request/response custody')
+    return {'schema': 'natlang.memetic-guidance-author-record/2', 'attempt': attempt, **custody}
 
 
 def guidance_training_graph(rollout: dict, *, program_id: str, written: dict, actor: dict, roles, fetch_block):
@@ -478,7 +470,7 @@ def guidance_training_graph(rollout: dict, *, program_id: str, written: dict, ac
     turns = whole_episode_turns(rollout)
     replay = compile_replay(turns, identity=actor, roles=roles, fetch_block=fetch_block)
     exact = [name for name, block in replay.external_blocks.items() if native_state_id(block) == written['id']]
-    if len(exact) != 1 or len(replay.external_blocks) != 1 or replay.semantic_dependencies:
+    if len(exact) != 1 or len(replay.external_blocks) != 1:
         raise ValueError('guided episode has unresolved external state or lacks its exact guidance import')
     external = exact[0]
     if any(node.name == 'memetic-guidance-producer' for node in replay.plan.invocations):
@@ -650,14 +642,12 @@ def main(argv=None):
         help='future trainer-side path for the exported graph bytes; SHA-256 stays exact')
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--server', required=True)
-    parser.add_argument('--model-id', choices=('lfm', 'mellum'), required=True)
+    parser.add_argument('--model-id', choices=('lfm',), required=True)
     parser.add_argument('--baseline-only', action='store_true')
     parser.add_argument('--runtime-continuation-from', type=Path,
                         help='exact prior frozen evaluator runtime root for a verified coordinator-only continuation')
-    parser.add_argument('--author')
-    parser.add_argument('--author-ferry', help='durable evaluator-local teacher transport on loopback:8766')
-    parser.add_argument('--author-model')
-    parser.add_argument('--author-provenance', type=Path)
+    parser.add_argument('--author', help='served native author endpoint (default: --server, self-authoring)')
+    parser.add_argument('--author-model', default='native', help='chat model name sent to the author endpoint')
     parser.add_argument('--generations', type=int, default=3)
     parser.add_argument('--samples', type=int, default=2)
     parser.add_argument('--shards', type=int, default=2)
@@ -715,13 +705,10 @@ def main(argv=None):
         write_json_durable(out / 'baseline-result.json', result)
         print(json.dumps(result))
         return result
-    if any(value is None for value in (args.author, args.author_model, args.author_provenance)):
-        parser.error('guided iteration requires --author, --author-model and --author-provenance')
-    if args.author_ferry != 'http://127.0.0.1:8766':
-        parser.error('--author-ferry must be the evaluator-local http://127.0.0.1:8766 endpoint')
-    teacher = author_provenance(args.author_provenance, args.author_model, args.author)
-    author_inputs = {'schema': 'natlang.memetic-author-inputs/1', 'author': teacher,
-                     'author_server': args.author, 'author_ferry': args.author_ferry, 'min_gain_fraction': args.min_gain_fraction,
+    args.author = args.author or args.server
+    teacher = author_provenance(args.author, args.author_model, info if args.author == args.server else None)
+    author_inputs = {'schema': 'natlang.memetic-author-inputs/2', 'author': teacher,
+                     'author_server': args.author, 'min_gain_fraction': args.min_gain_fraction,
                      'recipe_base': (hashlib.sha256(args.recipe_base.read_bytes()).hexdigest()
                                      if args.recipe_base else None),
                      'foundation_id': args.foundation_id, 'recipe_graph_path': args.recipe_graph_path}
@@ -748,7 +735,7 @@ def main(argv=None):
             write_json_durable(seed_pending_path, seed)
         seed_text = seed.get('text')
         if not isinstance(seed_text, str) or not seed_text.strip():
-            raise ValueError('teacher initial seed has no authored guidance text')
+            raise ValueError('initial seed has no authored guidance text')
         if 'write' not in seed:
             seed_write = write_state(args.server, seed_text, identity)
             seed.update(write=seed_write, archive=archive_state(args.server, out, seed_write))
