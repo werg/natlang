@@ -105,7 +105,9 @@ eval and data jobs running):
   prompt. Parity (4 real prefixes of 3000 tokens, 49-token spans exported by SGLang, 16-token continuation): mean
   |dlogp| 0.058 vs native BF16 floor 0.056; another span under the same prefix 0.065; a radix-cached repeat 0.060;
   importing the other span instead (control) 0.54. Unit tests: prompt receipts, imports, decision capture equal the
-  native engine's; imported positions occupy cache but not own positions.
+  native engine's; imported positions occupy cache but not own positions. `decide` on GPU
+  (`check_sglang_decide_parity.py`, 5 prompts x 6 options): per-token |dlogp| vs native FP32 0.021 (native BF16 floor
+  0.022), max 0.076 (floor 0.125), same continuation tokens, same best option in 5/5, 0 fallbacks.
 - **Native adapters on SGLang** (fork c98c324989f2e96e377b13b69ce379da169b34ca[:10], actor flag `--sglang-adapter-slots N`, default 0 = adapted turns on
   the native engine). The front turns a request's adapter stack (or the actor's default stack) into one summed
   low-rank pair per fork module (`native_adapters.lowrank_factors`: xs `left@core`/`right^T`, free-lora
