@@ -132,16 +132,30 @@ export default function resolve(schedule: Schedule): Schedule {
   return { slots: schedule.slots, meetings };
 }
 `;
+  const repair = state => {
+    const meetings = state.meetings;
+    outer: for (let i = 0; i < meetings.length; i++) for (let j = i + 1; j < meetings.length; j++)
+      if (meetings[i].slot === meetings[j].slot) { meetings[j].slot = meetings[j].slot % state.slots + 1; break outer; }
+  };
   const simulate = schedule => {
     const clash = s => s.meetings.some((m, i) => s.meetings.some((n, j) => j > i && m.slot === n.slot));
     let state = structuredClone(schedule), steps = 0;
-    while (clash(state) && steps < 200) {
-      const meetings = state.meetings;
-      outer: for (let i = 0; i < meetings.length; i++) for (let j = i + 1; j < meetings.length; j++)
-        if (meetings[i].slot === meetings[j].slot) { meetings[j].slot = meetings[j].slot % state.slots + 1; break outer; }
-      steps++;
-    }
+    while (clash(state) && steps < 200) { repair(state); steps++; }
     return { state, steps, converged: !clash(state) };
+  };
+  // The runtime records each iterateOn step with its state hash (runtime/iterate.ts stableHash: SHA-256 of the
+  // key-sorted JSON, 16 hex digits). A step whose state hash already occurred is the observed cycle.
+  const stateHash = s => createHash('sha256').update(JSON.stringify({
+    meetings: s.meetings.map(({ id, owner, slot }) => ({ id, owner, slot })), slots: s.slots })).digest('hex').slice(0, 16);
+  const firstRepeat = schedule => {
+    const state = structuredClone(schedule), seen = new Set([stateHash(state)]);
+    for (let step = 1; step <= 200; step++) {
+      repair(state);
+      const hash = stateHash(state);
+      if (seen.has(hash)) return { step, hash };
+      seen.add(hash);
+    }
+    throw new Error('the schedule repair neither converges nor cycles within 200 steps');
   };
   const spread = (n, slots) => Array.from({ length: n }, (_, i) => meeting(`m${i + 1}`, (i % slots) + 1));
   const variants = {
@@ -156,12 +170,16 @@ export default function resolve(schedule: Schedule): Schedule {
     const iterate = 'const fixed = await resolve.iterateOn(schedule).withLimit({maxSteps: 64}).until(s => conflicts(s) === 0);\nfixed';
     const reference = run.converged ? [evalCall(iterate), returnCall(expected)] :
       [evalCall(iterate), failedCall('The repair step cannot remove every conflict: there are more meetings than slots, so it keeps moving meetings in a cycle.')];
-    // The schedule is visible, so a model may see an impossible one at once; no observation is required.
+    // An expected stop earns its reward only after the obstacle was observed (collector stop evidence): the bounded
+    // repair must actually run into its cycle, not be skipped because the counts look impossible.
+    const cycle = run.converged ? undefined : firstRepeat(initial);
     return curriculumCase({ family: 'iterate_schedule_repair', shape, variant, splitGroup: `iterate:${shape}`,
       slice: 'iterate', domain: 'other', mode: 'single_call',
       evidence: { world: [`${initial.meetings.length} meetings in ${initial.slots} slots`], retrieved: [`${run.steps} steps`],
         background: ['More meetings than slots cannot be scheduled without a clash.'] },
       assumptions: [],
+      decisive: cycle ? [{ marker: `"phase":"step","step":${cycle.step},"state_hash":"${cycle.hash}"`, source: 'runtime_graph',
+        note: `iterateOn step ${cycle.step} repeats an earlier schedule: the repair cycles instead of removing the last conflict` }] : [],
       plausibleActions: ['return the repaired schedule', 'report that the schedule cannot be repaired'],
       minimumSequence: ['repeat resolve until no conflicts remain', 'return the schedule, or report divergence'],
       reference: { root: reference, children: [{ match: 'An iterative process', value: variant === 'impossible' ?

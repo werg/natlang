@@ -154,6 +154,15 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 export const sha256 = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
+/**
+ * Whether a decisive marker appears in a run's own execution graph (service results, iteration states and other
+ * runtime-recorded observations; never the model's own text). Shared by the collector's stop evidence and curriculum
+ * admission of `runtime_graph` markers. A string marker may appear inside a JSON string, hence the escaped form.
+ */
+export function graphShowsMarker(graph: unknown, marker: string): boolean {
+  const observed = typeof graph === 'string' ? graph : JSON.stringify(graph ?? []);
+  return observed.includes(marker) || observed.includes(JSON.stringify(marker).slice(1, -1));
+}
 export const recordDigest = (record: ProgramRecord): string => sha256(canonical(record));
 
 export function effectiveSystemPrompt(options: Pick<ProvenanceOptions, 'systemPrompt'>): string {
@@ -1643,8 +1652,7 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     const decisive = ((record as { curriculum?: { decisive?: { marker: string }[] } }).curriculum?.decisive ?? [])
       .map(item => item.marker).filter(marker => typeof marker === 'string' && marker.length > 0);
     const observedGraph = expectedKind === 'quiesced' && decisive.length ? JSON.stringify(executionGraph) : '';
-    const stopEvidence = expectedKind !== 'quiesced' || decisive.every(marker =>
-      observedGraph.includes(marker) || observedGraph.includes(JSON.stringify(marker).slice(1, -1)));
+    const stopEvidence = expectedKind !== 'quiesced' || decisive.every(marker => graphShowsMarker(observedGraph, marker));
     const worldScore = world ? await world.request('score') as { score: number; done: boolean } : undefined;
     // Some source-backed worlds are in-process external modules rather than WorldBridge processes. Their
     // certificate is trusted host state: a returned literal alone must not satisfy the world objective.

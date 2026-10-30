@@ -184,6 +184,12 @@ outcome`),
     ] : [evalCall(`${loop}
 const final = await iterateOn(control, { temp: first.temp, certified: null }).withLimit({maxSteps: 128}).until(run => run.certified !== null);
 return final.certified;`), returnCall(certificate)];
+    // The third reading (two control steps with the heater on) still falls, so the heater does not respond. Every
+    // reading falls by 0.4 °C whatever the heater does, so this service result is the same for every controller that
+    // does not vent below the band; the collector finds it in the run's own execution graph.
+    const third = [1, 2, 3].reduce(temp => Math.round((temp + -0.4) * 10) / 10, spec.start);
+    const decisive = spec.broken ? [{ marker: JSON.stringify({ minute: 30, temp: third, sunny: false }), source: 'runtime_graph',
+      note: 'the third greenhouse reading is still falling after two control steps with the heater on' }] : [];
     const judge = spec.broken ?
       { verdict: 'divergent', reason: 'The temperature falls every step although the heater is on; the run is moving away from the band.' } :
       { verdict: 'continue', reason: 'The temperature rises steadily toward the band.' };
@@ -194,6 +200,7 @@ return final.certified;`), returnCall(certificate)];
         'A simple rule is enough: heat below the band and vent above it; there is no need to measure the rates first.',
       evidence: { world: [`start ${spec.start} °C`, spec.sunAt ? `sun from reading ${spec.sunAt}` : 'no sun', spec.broken ? 'heater broken' : 'heater works'],
         retrieved: [], background: [`reference controller: ${run.reached ? `${run.steps} steps` : 'never stabilises'}`] },
+      decisive,
       minimumSequence: ['read the greenhouse', 'step a controller with iterateOn until the certificate appears', spec.broken ? 'report the unreachable goal' : 'return the certificate'],
       reference: { root: reference, children: [{ match: 'An iterative process', value: judge }] },
       root: { name: 'stabilise_greenhouse', args: {}, returns: 'string',

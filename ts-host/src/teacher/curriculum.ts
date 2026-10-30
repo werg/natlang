@@ -8,7 +8,7 @@
  * builder replays through the collector's execution path before the case is admitted as a seed.
  */
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
-import { executeProgram, recordDigest, sha256, type ProgramRun } from './collector.js';
+import { executeProgram, graphShowsMarker, recordDigest, sha256, type ProgramRun } from './collector.js';
 import { PROGRAM_VERSION, type ProgramRecord } from './program.js';
 import { DATA_QUALITY_VERSION, csvRows } from './oracle.js';
 import { trainingQualityReason, runtimeFailureReason, RETIRED_FAMILIES, quarantineReason } from './curriculum-policy.js';
@@ -29,8 +29,12 @@ export const DOMAIN_TARGETS: Record<Domain, number> = { logic: 0.30, relational:
 export type Slice = typeof SLICES[number];
 export type Domain = typeof DOMAINS[number];
 
-/** Where a decisive observation first becomes visible to the model. */
-export type ObservationSource = 'page' | 'eval' | 'function_source' | 'file' | 'child' | 'error';
+/**
+ * Where a decisive observation first becomes visible to the model. `runtime_graph`: the observation has no fixed text
+ * (numeric service results, iteration states), so its marker is the runtime's own record of it in the execution graph
+ * (for example a service result's JSON or an iteration step's state hash), checked there instead of in tool text.
+ */
+export type ObservationSource = 'page' | 'eval' | 'function_source' | 'file' | 'child' | 'error' | 'runtime_graph';
 export type Decisive = { marker: string; source: ObservationSource; note: string };
 export type ReferenceCall = [tool: string, args: Record<string, unknown>];
 
@@ -95,6 +99,9 @@ export function validateCurriculum(record: CurriculumRecord): void {
   }
   for (const item of c.decisive) if (!item.marker.trim() || item.marker.length < 4)
     fail(id, `decisive marker ${JSON.stringify(item.marker)} is too short to be unambiguous`);
+  // A follow-up case orders its decision after the observation in the model's transcript; a graph record has no turn.
+  if (c.mode === 'followup' && c.decisive.some(item => item.source === 'runtime_graph'))
+    fail(id, 'a follow-up case needs transcript-visible decisive observations, not runtime_graph markers');
   if (!c.reference?.root?.length) fail(id, 'a reference solution is required');
 }
 
@@ -284,6 +291,12 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
     if (item.source === 'error' && record.semantics.failure_seed?.kind === 'compile' &&
       replacesPlantedFailure(record) && (outcome.seeded_failure as { replaced_by_handoff?: boolean } | undefined)?.replaced_by_handoff) {
       if (!notes.includes('planted_compile_failure_prevented')) notes.push('planted_compile_failure_prevented');
+      continue;
+    }
+    // A runtime-recorded observation is checked in the run's own execution graph, as the collector's stop evidence is.
+    if (item.source === 'runtime_graph') {
+      if (!Array.isArray(outcome.execution_graph) || !graphShowsMarker(outcome.execution_graph, item.marker))
+        reasons.push(`missing_observation:${item.marker}`);
       continue;
     }
     const at = facts.observedAt[item.marker]!;
