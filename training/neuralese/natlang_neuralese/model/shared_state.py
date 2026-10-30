@@ -1463,7 +1463,10 @@ def _linear(module, x):
         return module(x)
     weight = module.weight
     if 'native_precision_key' in module.__dict__ or module.__dict__.get('native_precision_input') is not None:
-        from ..maple.ternary import linear_precision
+        from ..maple.ternary import linear_precision, linear_precision_output
+        out = linear_precision_output(module, x)
+        if out is not None:
+            return out
         x, weight = linear_precision(module, x)
     out = _linear_weight(x, weight, precision=getattr(module, "native_linear_precision", "ieee"))
     return out if module.bias is None else out + module.bias

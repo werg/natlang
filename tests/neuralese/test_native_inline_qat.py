@@ -312,3 +312,36 @@ def test_policy_round_keeps_inline_qat_state_but_uses_unquantized_actor_law(base
     assert torch.equal(a,b) and qat.state_dict()==before
     policy_qat_update(options,qat,6)
     assert options['policy_qat_refresh_required']['policy_precision']=='bf16'
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='the real NVFP4 GEMM needs a Blackwell GPU')
+def test_nvfp4_pass_at_full_ramp_trains_through_the_real_fp4_gemm(base, monkeypatch):
+    """Plain training at NVFP4 λ = 1 on Blackwell runs every FFN linear through the FP4 GEMM (model/nvfp4_gemm.py),
+    a real update with finite loss and changed latents; NATLANG_NVFP4_GEMM=0 keeps fake quant."""
+    from natlang_neuralese.model import nvfp4_gemm
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer, native_training_update
+    from natlang_neuralese.train.quantization import Quantization, parse_native_component, stage_component
+    if not nvfp4_gemm.supported('cuda'):
+        pytest.skip('no block-scaled FP4 GEMM on this GPU')
+    calls = []
+    original = nvfp4_gemm.nvfp4_linear
+    monkeypatch.setattr(nvfp4_gemm, 'nvfp4_linear', lambda *a, **k: calls.append(1) or original(*a, **k))
+    example = graph()
+    for enabled in ('1', '0'):
+        monkeypatch.setenv('NATLANG_NVFP4_GEMM', enabled)
+        calls.clear()
+        torch.manual_seed(5)
+        model, _, _, _ = load_native_model(base, rank=4, dtype=torch.bfloat16, device='cuda')
+        model.native_cotangent_accumulator_backend = 'plain'
+        spec, bind = parse_native_component({**lfm3_points(), 'bind': {'stage': 'joint_sft', 'start': 0, 'end': 10}})
+        quantization = Quantization(stage_component(spec, bind['stage'], start=bind['start'], end=bind['end']))
+        quantization.install(model, inline=True)
+        quantization.calibrate(lambda batch: loss_of(model, batch[0]), [[example]], 0)
+        optimizer, _ = make_native_optimizer(model, lr=1e-2, weight_decay=0., learned_row_lr=1e-2)
+        w1 = next(p for n, p in model.named_parameters() if n.endswith('feed_forward.w1.weight'))
+        before = w1.detach().clone()
+        loss, _ = native_training_update(model, optimizer, [example], checkpoint_layers=True,
+                                         precision=(quantization, 'nvfp4', 1.0, 1.0))
+        assert torch.isfinite(loss) and not torch.equal(w1.detach(), before)
+        assert bool(calls) == (enabled == '1')

@@ -163,6 +163,31 @@ Batched Newton-Schulz (measured, not adopted): stacking same-shape LFM3 matrices
 on GB10 it is 0.6x the speed of per-matrix NS (2.42 s vs 1.46 s for all 168 matrices). Re-measure on the RTX PRO 6000
 before reconsidering.
 
+Real NVFP4 GEMMs in the QAT forward (adopted 2026-10-30, on by default; `NATLANG_NVFP4_GEMM=0` opts out). An NVFP4
+pass at λ = 1 in plain training (`maple/ternary._resolve_inline`) encodes each FFN weight once on pass entry (packed
+E2M1 codes, swizzled E4M3 group scales, FP32 global scale; w1/w3 share it as deployed) and runs `F.scaled_mm`
+BlockWise1x16 + TensorWise (`model/nvfp4_gemm.py`). That is the deployed arithmetic: the same codes and scales with
+FP32 accumulation, where fake quant multiplies the operands after rounding each to BF16. The backward is unchanged
+straight-through: dX = dY·Q(W) and dW = dYᵀ·x_q with the BF16 dequantized operands. The activation encode (codes,
+packing, swizzled scales, BF16 value for dW) is plain torch code and fuses inside the compiled layer pieces; only
+the GEMM is an opaque `torch.library` custom op, so there is no graph break. λ < 1, eval/calibration passes, the
+carried cotangent backends and non-Blackwell devices keep fake quant. Measured on GB10 (sm_121, torch 2.11+cu130),
+with the GPU shared by live RL (about 96% busy), so the timings are relative:
+
+| Check | Result |
+|---|---|
+| Forward vs the exact deployed product (FP64 of the dequantized codes), w1/w3 and w2 shapes at 8,192 tokens | rel. error 1.66e-3 real vs 2.6-3.0e-3 fake |
+| Straight-through dX, dW vs the fake-quant pass | bit-identical |
+| Compiled LFM3 FFN (w1/w3, SiLU product, w2; `dynamic=True`, full graph), 8,192 tokens | fwd+bwd 61.4 ms real vs 64.7 ms fake; fwd 36.3 vs 36.9 ms |
+| GEMM alone, 8192x2048x7680 | 1.06 ms FP4 vs 5.52 ms BF16 |
+| Whole update, real LFM3-1.7B truncated to 6 layers, 8,192 tokens, fake and real alternated in one process (11 pairs) | median 4.21 s real vs 4.38 s fake (-3.9%); paired median -0.15 s |
+
+The gain is bounded by the activation codec, which costs more than the GEMM it feeds (7.4 ms at K = 2048 and 21 ms
+at K = 7680 for 8,192 tokens, compiled standalone, contended); both passes pay it. The E2M1 rounding now counts
+midpoints with comparisons instead of `bucketize` plus a tie lookup (bit-identical codes on all grid points,
+midpoints, ±0, saturation and 10M random values; 1.3x faster compiled), which helps the fake and the real path and
+the weight ramp. A fused codec kernel is the next lever for NVFP4 QAT.
+
 Real FP8 GEMMs (not adopted): the deployed FP8_BLOCK format has per-128 activation-group scales and 128x128 weight
 block scales. A rowwise `_scaled_mm` (one scale per token and per output row) cannot represent those values, so it
 would train against a different quantizer than the one deployed. Matching exactly would need one K = 128 GEMM per

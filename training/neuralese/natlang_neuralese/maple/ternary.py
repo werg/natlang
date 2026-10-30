@@ -369,7 +369,18 @@ def _resolve_inline(module, mixes):
             scale = nvfp4_global_scale(holder.amax.to(w.device))
     else:
         activation = None
-    return ramped, activation, mixes[key], scale
+    gemm = None
+    if (fmt == "nvfp4" and float(mix) == 1.0 and activation is not None and activation["format"] == "nvfp4"
+            and int(options.get("group", 16)) == 16 and int(activation.get("group", 16)) == 16):
+        from ..model import nvfp4_gemm
+        from ..model.native_weight_carrier import _PLAIN_TRAINING
+        # Pass entry runs under no_grad. cuBLASLt's FP4 GEMM wants 16-byte aligned packed rows (K % 32) and N % 16.
+        if (_PLAIN_TRAINING[0] > 0 and w.shape[1] % 32 == 0 and w.shape[0] % 16 == 0
+                and nvfp4_gemm.supported(w.device)):
+            global_amax = options.get("global_amax")
+            gemm = nvfp4_gemm.weight_operand(w, torch.as_tensor(global_amax if global_amax is not None
+                                                                 else w.abs().amax(), device=w.device))
+    return ramped, activation, mixes[key], scale, gemm
 
 
 _RAMP = {}
@@ -405,8 +416,21 @@ def _ramped_weight(w, fmt, options, mix):
     return _RAMP["kernel"](w, fmt, size, global_amax, mix)
 
 
+def linear_precision_output(module, x):
+    """The output of an inline-quantized linear when its pass runs the real NVFP4 GEMM (λ = 1 on Blackwell,
+    ``model/nvfp4_gemm.py``), else None (the caller applies ``linear_precision``)."""
+    active = module.__dict__.get("native_precision_active")
+    if active is None or active[4] is None:
+        return None
+    holder = module.__dict__.get("native_precision_input")
+    if holder is not None and holder.observe:
+        return None
+    from ..model.nvfp4_gemm import nvfp4_linear
+    return nvfp4_linear(x, module.weight, active[0], active[4], active[3], module.bias)
+
+
 def _inline_operands(module, x, active):
-    ramped, activation, mix, scale = active
+    ramped, activation, mix, scale, _ = active
     holder = module.__dict__.get("native_precision_input")
     if holder is not None and holder.observe:
         current = x.detach().abs().amax().float()
@@ -441,6 +465,9 @@ def linear_precision(module, x):
 def precision_linear_forward(self, x):
     """Instance ``forward`` of an inline-quantized ``nn.Linear`` (marked so native carriers may replace it; they apply
     ``linear_precision`` themselves)."""
+    out = linear_precision_output(self, x)
+    if out is not None:
+        return out
     x, weight = linear_precision(self, x)
     return torch.nn.functional.linear(x, weight, self.bias)
 
