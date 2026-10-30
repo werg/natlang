@@ -481,3 +481,11 @@ def test_learner_parameters_bind_at_update_launch_not_round_start(tmp_path, monk
     assert state['update_learner_parameters']['trainer_parameters'] == {'learning_rate': 5e-6, 'accumulate_batches': 4}
     recorded = json.loads(next(out.glob('round-*/learner-parameters.json')).read_text())
     assert recorded == state['update_learner_parameters']
+
+
+def test_collection_binding_treats_removed_null_semantic_adapter_field_as_absent():
+    from natlang_neuralese.rl.production import _legacy_collection_binding
+    old = {'cases_sha256': 'a', 'expected_native_actor': {'checkpoint': 'c', 'semantic_adapter_sha256': None}}
+    assert _legacy_collection_binding(old) == {'cases_sha256': 'a', 'expected_native_actor': {'checkpoint': 'c'}}
+    bound = {'cases_sha256': 'a', 'expected_native_actor': {'checkpoint': 'c', 'semantic_adapter_sha256': 'x'}}
+    assert _legacy_collection_binding(bound) == bound

@@ -429,6 +429,15 @@ def bind_collection_prompt(entries, mode):
     return entries
 
 
+def _legacy_collection_binding(recorded):
+    """Bindings written before the semantic-adapter route was removed carry its always-null actor field;
+    a null value binds nothing, so it is equal to the field's absence."""
+    actor = recorded.get('expected_native_actor')
+    if isinstance(actor, dict) and 'semantic_adapter_sha256' in actor and actor['semantic_adapter_sha256'] is None:
+        recorded = {**recorded, 'expected_native_actor': {k: v for k, v in actor.items() if k != 'semantic_adapter_sha256'}}
+    return recorded
+
+
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
@@ -489,7 +498,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     elif receipt.exists():
         teacher_attempts = 0
     if receipt.exists():
-        if json.loads(receipt.read_text()) != binding:
+        if _legacy_collection_binding(json.loads(receipt.read_text())) != binding:
             raise ValueError('RL collection resume policy/cases/sampling/runtime changed')
     elif (out / 'score.json').exists():
         raise ValueError('completed RL collection has no provenance binding')
