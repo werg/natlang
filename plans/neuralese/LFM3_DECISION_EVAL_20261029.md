@@ -121,5 +121,16 @@ GPU memory). Job: `scripts/coreweave/jobs/lfm3/decision-eval.job.json` (1 GPU, 8
 
 Quota: every create was refused with `SandboxResourceExhaustedError: Create sandbox resource exhausted: quota exceeded,
 check plan and billing details`: 5 attempts 06:49-07:01 UTC (a CPU-only build sandbox, so this is account-level, not
-GPU capacity) and the eval sandbox at 07:14 UTC. `cwsandbox ls` works and lists no sandboxes. Hourly single retries
-follow.
+GPU capacity) and the eval sandbox at 07:14 and 08:17 UTC. `cwsandbox ls` works and lists no sandboxes. Retries were
+stopped at 08:4x UTC on the owner's word that quota returns only when they say so; nothing is pending.
+
+Launch when quota returns (DGX; the staged deltas and bundle manifest are under
+`/home/werg/data/lfm3-eval/cloud-decision-20261030/`, the bundle pins code `8e2c3c000`):
+
+    cd /home/werg/natlang && NATLANG_CW_UPLOAD_WORKERS=4 /home/werg/.local/share/natlang/cw-venv/bin/python \
+      scripts/coreweave/cwctl.py launch scripts/coreweave/jobs/lfm3/decision-eval.job.json \
+      --bundle-file /home/werg/data/lfm3-eval/cloud-decision-20261030/eval-bundle.json --wait
+
+Then follow `cwctl.py logs ID`; when `runs/lfm3-decision-eval-20261030/gate/decision.json` exists run
+`cwctl.py collect ID`, then `cwctl.py stop ID`. Expect ~2 GB of upload (time depends on the 0.2-4 MB/s uplink),
+~15 min llama.cpp build, then several hours of gating. Results go into this document.
