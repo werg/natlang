@@ -87,6 +87,11 @@ export type InlineAnalysisOptions = {
   codebaseRevision?: string;
   /** Display path used in spans and definition IDs. */
   displayPath?: (file: ts.SourceFile) => string;
+  /**
+   * `nl` is ambient rather than reserved by the source's language (a host's eval cell): declaring one's own `nl` is
+   * ordinary lexical shadowing, not an error. Uses of that local are simply not natlang's.
+   */
+  allowShadowing?: boolean;
 };
 
 const IDENTIFIER_TOKEN = /(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*(?![A-Za-z0-9_$])/g;
@@ -874,7 +879,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         // Importing or re-exporting nl names it, which is how application code gets it.
         if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) {}
         else if (declared && ambientNlDeclaration(parent as ts.Declaration, checker)) {}
-        else if (declared) report(node, 'nl-shadowed', `nl is built in; declaring your own nl hides it. ${TAG_FORM}`);
+        else if (declared) { if (!options.allowShadowing) report(node, 'nl-shadowed', `nl is built in; declaring your own nl hides it. ${TAG_FORM}`); }
         else if (ts.isPropertyAccessExpression(parent) && parent.expression === node && parent.name.text === 'with' &&
           ts.isCallExpression(parent.parent) && parent.parent.expression === parent && ts.isTaggedTemplateExpression(parent.parent.parent) &&
           parent.parent.parent.tag === parent.parent) {}

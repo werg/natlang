@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { chatCompletionModelTurn, requestLimit, limitedTransport } from '../dist/model/chat-completion.js';
 import { createScheduler, prefixKey } from '../dist/model/scheduler.js';
 import { coalescingScorer, explicitBatchScoreMany, concurrentScoreMany } from '../dist/model/scoring.js';
-import { planServerSlots } from '../dist/model/server-slots.js';
+import { planServerSlots } from '../dist/llama/slots.js';
 import { resolveModelChoice } from '../dist/model/config.js';
 import { scoreMany } from '../dist/native/decision.js';
 

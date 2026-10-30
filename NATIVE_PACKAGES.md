@@ -12,8 +12,13 @@ For instruction adaptation APIs and their current implementation status, see
 | Package | Contents |
 |---|---|
 | `@natlang/cli` | The `natlang` executable |
-| `@natlang/node` | Node runtime and compiler, terminal utilities, model session, package APIs |
+| `@natlang/node` | Node runtime and compiler, terminal utilities, model session, package APIs; `@natlang/node/llama` is the managed llama.cpp machinery with injected host dependencies |
 | `@natlang/browser` | Browser runtime and in-page compiler, local model loader, WASM assets |
+
+`@natlang/node` lists `@earendil-works/pi-ai` as a peer dependency: only the Pi backend
+(`@natlang/node/model/pi`) loads it, and a host that passes its own Pi `Models` or
+uses the translation functions in `@natlang/node/model` needs no particular copy.
+`@natlang/cli` depends on it, so `natlang` itself installs it.
 
 The browser package carries the 35 MB inference bundle, so it is separate from
 Node installs. The checkout builds both from one implementation. `npm pack` in
@@ -88,10 +93,11 @@ as given.
 The dashboard's Run panel builds a form from the same types: text fields that
 grow to several lines, numbers, switches, choices for literal unions, records
 with the field doc comments of `types.ts`, lists and dictionaries, variants of a
-union, a file browser for paths and a JSON editor for anything else. Every
+union, a file browser for paths and a value-kind chooser for open types. Every
 field shows its type, drafts are checked by the same reader as `natlang run`,
-problems appear at the field they name, and the equivalent command line is shown
-for copying.
+problems appear at the field they name, and the equivalent command line can be
+copied. Structured data can be imported from a file and edited through its
+fields; no serialized-data editor is required.
 
 Build, verify, install, inspect, and run:
 

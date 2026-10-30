@@ -23,6 +23,7 @@
     "test:playground": "node scripts/browser-build-freshness.mjs --rebuild && node scripts/playground-smoke.mjs",
     "test:dashboard": "npm run build:node && node scripts/dashboard-smoke.mjs",
     "test:dashboard-streaming": "node scripts/dashboard-streaming-smoke.mjs",
+    "test:dashboard-presentation": "node scripts/dashboard-presentation-smoke.mjs",
     "serve:browser": "node scripts/browser-build-freshness.mjs --rebuild && node scripts/serve-browser-local.mjs",
     "playground": "npm run build && node scripts/serve-browser-local.mjs --playground --open-gpu",
     "test": "npm run build && npm run build:applications && npm run check:browser-types && npm run check:layering && node --test test/*.test.mjs && npm run test:conformance",
@@ -67,6 +68,10 @@
     "./model/pi": {
       "types": "./dist/model/pi-provider.d.ts",
       "default": "./dist/model/pi-provider.js"
+    },
+    "./llama": {
+      "types": "./dist/llama/index.d.ts",
+      "default": "./dist/llama/index.js"
     },
     "./package": {
       "types": "./dist/package/index.d.ts",

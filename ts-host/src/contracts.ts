@@ -106,12 +106,20 @@ export type ModelTurnOptions = { onDelta?: (delta: ModelTurnDelta) => void;
 
 
 /**
- * Decision readout (single pass over the prompt): score a finite set of assistant replies after `messages`. A
- * driver that can do this carries a `decide` function. `log_probs[i]` is the total log-probability of `options[i]`
+ * Decision readout (single pass over the prompt): score a finite set of assistant replies after `messages`.
+ *
+ * This is an optional capability of any model driver, not of a particular backend: a driver carries a
+ * `decide: DecisionScorer` property (`Object.assign(driver, { decide })`; wrappers copy it with the driver). The runtime
+ * uses it for `readout: decision` functions, `decisionReadout: 'finite-returns'`, refinement judges and `decide(fn, ...)`
+ * in eval, wherever the call's result type is finite. A driver without it, or whose `decide` fails with
+ * `decision-unsupported`, gets the ordinary tool loop for that call; no other error is swallowed. Endpoint drivers
+ * implement it through `prompt_logprobs` (chat-completion.ts) or the llama.cpp fork's score endpoint (scoring.ts); a
+ * gateway driver implements it by asking whatever service owns the model, and may declare `scoreMany` to batch.
+ * `log_probs[i]` is the total log-probability of `options[i]`
  * as the reply, end of message included, and `tokens[i]` counts the tokens scored. A scorer may leave out the tokens
  * every option shares at the start (the chat-completion scorer does; the native server scores each whole reply):
  * that changes every option's score by the same amount, so normalized scores and the choice agree.
- * A server that cannot score replies fails with an error whose message starts with `decision-unsupported`.
+ * A backend that cannot score replies fails with an error whose message starts with `decision-unsupported`.
  */
 export type DecisionRequest = { messages: unknown[]; options: string[]; adapters?: { id: string; scale: number }[];
   /** Exact native input contracts/capture; transport metadata, never model instructions. */

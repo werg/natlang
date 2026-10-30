@@ -18,8 +18,8 @@ export { executorIdentityForChoice } from './config.js';
 export { createScheduler, schedulerForSettings, prefixKey } from './scheduler.js';
 export type { Scheduler, SchedulerOptions, BatchingMode, BackendCapabilities, ScheduleInfo, OccupancySummary } from './scheduler.js';
 export { coalescingScorer, concurrentScoreMany, explicitBatchScoreMany, postExplicitBatch, ScoreEndpointMissing } from './scoring.js';
-export { planServerSlots } from './server-slots.js';
-export type { SlotPlan } from './server-slots.js';
+export { planServerSlots } from '../llama/slots.js';
+export type { SlotPlan } from '../llama/slots.js';
 export { localSlotPlan } from './local-server.js';
 export type { BatchingSettings } from './config.js';
 export type { ChatRequestMeta } from './chat-completion.js';
@@ -27,3 +27,6 @@ export { neuraleseServerModelTurn, HttpNeuraleseStore, restoreNativeArtifacts, w
 export { neuraleseServerInfo, checkNeuraleseReader, requireNativeReaderIdentity } from './neuralese-info.js';
 export type { NeuraleseServerInfo } from './neuralese-info.js';
 export type { NeuraleseServerOptions } from './neuralese-server.js';
+export { toPiContext, piToolChoiceOptions, piDeltaTranslator, piAssistantContent, piAssistantToTurn, emptyPiUsage } from './pi-translation.js';
+export type { PiContext, PiMessage, PiTool, PiContentBlock, PiTextBlock, PiThinkingBlock, PiToolCallBlock, PiUsage, PiAssistantMessage,
+  PiStreamEvent, PiJsonValue, PiJsonObject } from './pi-translation.js';
