@@ -198,8 +198,14 @@ export function providersPanel(ui, providers, config, onChange) {
         h('strong', {}, label), h('span', { class: 'small muted' }, `Runs ${byId.get(id).recommended.model ?? 'its models'}`)) : null),
       h('button', { class: 'choice', onclick: () => keyDialog(ui, providers, connect) }, h('strong', {}, 'I have an API key'), h('span', { class: 'small muted' }, `${providers.filter(provider => provider.apiKey?.prompts).length} services: Anthropic, OpenAI, OpenRouter, Google…`))));
 
-  const listed = [...featured, ...others.filter(provider => provider.connected)];
-  const tbody = h('tbody', {}, listed.map(row));
+  // Once something is connected, the table shows what is in use; the remaining providers wait behind one disclosure.
+  const connectedFirst = anyConnected ? [...featured, ...others].filter(provider => provider.connected || provider.problem) : [...featured, ...others.filter(provider => provider.connected)];
+  const spare = anyConnected ? featured.filter(provider => !connectedFirst.includes(provider)) : [];
+  const listed = [...connectedFirst, ...spare];
+  const head = () => h('thead', {}, h('tr', {}, h('th', {}, 'Provider'), h('th', {}, 'Connection'), h('th', {}, 'Model'), h('th', {})));
+  const tbody = h('tbody', {}, connectedFirst.map(row));
+  const more = spare.length ? h('details', { class: 'more-providers' }, h('summary', {}, `Connect another provider (${spare.length})`),
+    h('div', { class: 'table-wrap' }, h('table', {}, head(), h('tbody', {}, spare.map(row))))) : null;
   const picker = h('select', { 'aria-label': 'Show another provider', onchange: () => {
     const provider = byId.get(picker.value); picker.value = '';
     if (!provider || listed.includes(provider)) return;
@@ -211,6 +217,6 @@ export function providersPanel(ui, providers, config, onChange) {
     current ? h('div', { class: 'small' }, `Runs use ${defaultProfile.model} through ${current.name} (profile ${config.defaultProfile}).`) :
       h('div', { class: 'small muted' }, 'Runs use the local model. Connect a provider below to run Claude, GPT or another hosted model instead; natlang picks its newest Luna or Haiku model for you.'),
     quickStart,
-    h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Provider'), h('th', {}, 'Connection'), h('th', {}, 'Model'), h('th', {}))), tbody)),
+    h('div', { class: 'table-wrap' }, h('table', {}, head(), tbody)), more,
     h('div', { class: 'small muted' }, 'Keys in the providers\' usual environment variables (ANTHROPIC_API_KEY, OPENAI_API_KEY, …) are picked up too. The same connections work in the CLI: natlang run --provider anthropic.'));
 }

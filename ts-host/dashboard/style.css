@@ -372,3 +372,21 @@ tr.flash { animation: row-flash 1.6s ease-out; }
 .empty .row { margin-top: 12px; }
 a.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
 a.button:hover { border-color: var(--muted); }
+/* Program page: a run bar that stays visible over long argument forms; compact function rows that open to "Try it". */
+.run-bar { position: sticky; bottom: 0; z-index: 2; background: var(--panel); border-top: 1px solid var(--line); margin: 0 -16px -16px; padding: 10px 16px 12px;
+  border-radius: 0 0 var(--r) var(--r); display: flex; flex-direction: column; gap: 6px; }
+.function-list { display: flex; flex-direction: column; gap: 8px; }
+.function-list > .function-card { display: block; padding: 10px 14px; }
+.function-card > summary { list-style: none; flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; }
+.function-card > summary::-webkit-details-marker { display: none; }
+.function-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.function-open { color: var(--accent); white-space: nowrap; }
+.function-open::after { content: " ▸"; }
+.function-card[open] .function-open::after { content: " ▾"; }
+.function-card:hover { border-color: var(--muted); }
+.function-list .function-body { margin-top: 14px; display: flex; }
+/* Models page */
+.jump { display: flex; flex-direction: row; gap: 4px; flex-wrap: wrap; margin: -8px 0 -6px; }
+#profile-editor:empty { display: none; }
+.more-providers > summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.more-providers[open] > summary { margin-bottom: 8px; }

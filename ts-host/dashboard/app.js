@@ -392,6 +392,12 @@ function profileSettings(profile) {
   if (profile.escalate) parts.push(`escalates to ${profile.escalate}`);
   return parts.join(' · ') || '–';
 }
+// Where a run will go, in plain words, with the next step when something still has to happen first.
+const BACKEND = { 'managed-local': 'a local model on this machine', 'pi-provider': 'a hosted provider', external: 'your own model server' };
+function readinessText(model) {
+  if (model.kind === 'managed-local') return [h('span', {}, 'Runs on '), h('strong', {}, model.model), `, ${BACKEND[model.kind]}: ${model.detail}`];
+  return [h('span', {}, 'Runs on '), h('strong', {}, model.model), `, ${BACKEND[model.kind] ?? model.kind}. `, h('a', { href: '#models' }, 'Test the connection on Models'), '.'];
+}
 async function programDetail(path, container) {
   const program = await get(`/api/programs/detail?path=${encodeURIComponent(path)}`);
   const manifest = program.manifest, lock = program.lock;
@@ -412,7 +418,7 @@ async function programDetail(path, container) {
         const refresh = async () => {
           const current = ++revision;
           try { const model = await get(`/api/programs/model?path=${encodeURIComponent(program.directory)}&profile=${encodeURIComponent(select.value)}`);
-            if (revision === current) readiness.textContent = `${model.model} · ${model.kind} · ${model.detail}`;
+            if (revision === current) fill(readiness, readinessText(model));
           } catch (error) { if (revision === current) readiness.textContent = error.message; }
         };
         select.addEventListener('change', refresh); refresh();
@@ -420,11 +426,13 @@ async function programDetail(path, container) {
       return h('div', { class: 'stack run-target' }, h('div', {}, h('strong', { class: 'mono' }, name), target.description ? h('span', { class: 'muted' }, ` · ${target.description}`) : null),
         form.element,
         previous ? h('div', { class: 'small muted' }, 'Inputs restored from the last successful run.') : null,
-        h('div', { class: 'row' }, profile, h('button', { class: 'primary', title: 'Run (Ctrl+Enter)', onclick: run }, 'Run'),
-          h('button', { onclick: () => form.reset() }, 'Reset inputs')), readiness);
+        // The run bar stays in view while a long argument form scrolls.
+        h('div', { class: 'run-bar' }, h('div', { class: 'row' }, h('button', { class: 'primary', title: 'Run (Ctrl+Enter)', onclick: run }, 'Run'), profile,
+          h('button', { class: 'ghost', onclick: () => form.reset() }, 'Reset inputs')), readiness));
     }) : h('div', { class: 'muted' }, 'This package has no targets; call its functions below.'));
   const functions = h('section', { class: 'panel' }, h('h2', {}, 'Natural-language functions'),
-    program.functions.length ? h('div', { class: 'stack' }, program.functions.map(fn => functionCard(program, fn))) : h('div', { class: 'muted' }, 'No .nl files.'));
+    program.functions.length ? h('div', { class: 'small muted' }, 'Call one function on its own with your inputs, edit its instructions, or save its result as a test.') : null,
+    program.functions.length ? h('div', { class: 'function-list' }, program.functions.map(fn => functionCard(program, fn))) : h('div', { class: 'muted' }, 'No .nl files.'));
   const warm = lock?.warm;
   const build = h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Compiled program'),
     h('div', { class: 'row' }, h('button', { onclick: () => startJob({ kind: 'build', path: program.directory }) }, 'Build'),
@@ -466,7 +474,7 @@ function functionCard(program, fn) {
     profile: document.getElementById(`call-profile-${formId}`)?.value || undefined }));
   const expected = typedValueEditor(ui, { name: 'Expected result', type: fn.result?.tree, required: true, description: 'Choose what this function should return for the inputs above.' });
   return h('details', { class: 'panel function-card' },
-    h('summary', {}, h('strong', {}, fn.name), h('span', { class: 'small muted' }, fn.description || fn.source)),
+    h('summary', {}, h('span', { class: 'function-title' }, h('strong', {}, fn.name), h('span', { class: 'small muted' }, fn.description || fn.source)), h('span', { class: 'small function-open' }, 'Try it')),
     h('div', { class: 'stack function-body' }, h('code', { class: 'small muted' }, fn.source), inputs.map(({ editor }) => editor.element),
       h('div', { class: 'row' }, profile, h('button', { class: 'primary', onclick: call }, 'Call function'),
         h('a', { href: `#traces-${encodeURIComponent(fn.name)}` }, 'Recorded calls'),
@@ -603,7 +611,7 @@ async function models(_arg, target) {
   const editor = h('div', { id: 'profile-editor' });
   const providerUi = { h, fill, api, get, toast, attempt, startJob, refreshRail, editProfile };
   const hosted = providersPanel(providerUi, providers, config, route);
-  const profilesPanel = h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Profiles'),
+  const profilesPanel = h('section', { class: 'panel', id: 'profiles' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Profiles'),
       h('label', { class: 'row small muted' }, 'Default', h('select', { id: 'default-profile', onchange: attempt(async event => { await api('POST', '/api/default', { profile: event.target.value || null }); toast('Default profile saved'); refreshRail(); route(); }) },
         h('option', { value: '' }, 'built-in (stock LFM3 1.7B, local)'), profileRows.map(([name]) => h('option', { value: name, selected: name === config.defaultProfile }, name))))),
       profileRows.length ? h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Profile'), h('th', {}, 'Backend'), h('th', {}, 'Model'), h('th', {}, 'Settings'), h('th', {}))),
@@ -617,9 +625,12 @@ async function models(_arg, target) {
   fill(target, header('Models', 'Choose the model natlang runs: a hosted provider or a model on this machine. Every natlang command, program and this dashboard use the same profiles (~/.config/natlang/config.json).',
       h('button', { onclick: () => editProfile('', {}) }, 'New profile')),
     // On a first run the hosted-model choices come first; once profiles exist, the profile list leads.
-    ...(profileRows.length ? [profilesPanel, hosted] : [hosted, profilesPanel]), editor, await keptModelPanel(),
-    h('section', { class: 'panel' }, h('h2', {}, 'Local models'), h('div', { class: 'muted small' }, 'Stock GGUF files natlang serves on its managed llama.cpp server, pinned to one repository revision and checked by SHA-256.'),
-      h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Model'), h('th', { class: 'num' }, 'Size'), h('th', {}, 'State'), h('th', {}))), stockRows))));
+    h('nav', { class: 'jump', 'aria-label': 'Sections on this page' }, [['Hosted models', 'providers'], ['Profiles', 'profiles'], ['Local models', 'local-models']]
+      .map(([label, id]) => h('button', { class: 'ghost', onclick: () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, label))),
+    ...(profileRows.length ? [profilesPanel, hosted] : [hosted, profilesPanel]), editor,
+    h('section', { class: 'panel', id: 'local-models' }, h('h2', {}, 'Local models'), h('div', { class: 'muted small' }, 'Stock GGUF files natlang serves on its managed llama.cpp server, pinned to one repository revision and checked by SHA-256.'),
+      h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Model'), h('th', { class: 'num' }, 'Size'), h('th', {}, 'State'), h('th', {}))), stockRows))),
+    await keptModelPanel());
 
   function editProfile(name, profile) {
     const kind = profile.provider ? 'provider' : profile.endpoint ? 'endpoint' : profile.native ? 'native' : 'local';
