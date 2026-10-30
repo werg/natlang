@@ -1,0 +1,21 @@
+{
+ "schema": "natlang.coreweave-job/1",
+ "id": "lfm3-decision-eval-20261030",
+ "kind": "eval",
+ "placement": {"where": "coreweave", "reason": "LFM3 decision eval (plans/neuralese/LFM3_DECISION_EVAL_20261029.md): 128-case deterministic gate of SFT step142/608 and DGX RL jolt-r1/sd-r1 against the base executed twice. Deterministic single-sequence serving needs a dedicated GPU (days on the shared DGX). One GPU, 8 CPU (inference minimum; llama.cpp build for the assigned arch only), 32Gi RAM (evaluator measurement 2026-10-22: 24Gi sufficed for one arm; six arms of mostly idle harness workers), stopped right after collection."},
+ "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+ "resources": {"gpu": 1, "cpu": "8", "memory": "32Gi"},
+ "lifetime_hours": 14,
+ "scratch": {"path": "/work", "size": "100Gi"},
+ "env": {"NATLANG_CW_COLLECT_WAIT": "7200", "HF_HUB_OFFLINE": "1", "NATLANG_CW_BUILD_TSHOST": "1"},
+ "outputs": ["runs/lfm3-decision-eval-20261030"],
+ "command": ["bash", "scripts/coreweave/lfm3_decision_eval.sh", "runs/lfm3-decision-eval-20261030",
+             "/home/werg/data/coreweave-prebuilt/staging/llama.cpp-neuralese-a6401bbd3.tar.gz",
+             "a6401bbd37529eda6b94e38d8ab63a35647c5204",
+             "/home/werg/data/lfm3-eval/cloud-decision-20261030/stage/step142/gguf",
+             "/home/werg/data/lfm3-eval/cloud-decision-20261030/stage/step608/gguf",
+             "/home/werg/data/lfm3-eval/cloud-decision-20261030/stage/rl-jolt-r1-step3/gguf",
+             "/home/werg/data/lfm3-eval/cloud-decision-20261030/stage/rl-sd-r1-step4/gguf"],
+ "needs": {"gpu_memory_gb": 40, "hours": 8, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": false},
+ "bundle_plan": "bundle.py plan --code-sha SHA --extra runs/natlang-dev-task-packet-v2-20261028 --extra <llama source tar> --extra <stage dir per model: manifest, chat template, hf-config, basis-layout.json, delta.json, model-bf16.gguf.xor.zst> -o BUNDLE.json; cwctl.py launch JOB --bundle-file BUNDLE.json --wait; cwctl.py collect ID; stop."
+}

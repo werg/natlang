@@ -40,6 +40,7 @@ import fcntl
 import hashlib
 import json
 import math
+import os
 import shutil
 import subprocess
 import sys
@@ -53,7 +54,9 @@ from natlang_neuralese.common import paths  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
 
 DATA = paths.root('repo')  # protected packets and the built ts-host collector live in the canonical checkout
-PY = str(DATA / '.venv-neuralese/bin/python')
+# The canonical venv on DGX; a sandbox (no such venv) runs the probe with this interpreter.
+PY = os.environ.get('NATLANG_GATE_PYTHON') or (str(DATA / '.venv-neuralese/bin/python')
+                                               if (DATA / '.venv-neuralese/bin/python').exists() else sys.executable)
 PACKET = 'runs/natlang-dev-task-packet-v2-20261028/cases.jsonl'
 PACKET_SHA256 = '6fa6ca6c2e3a46c4b050da535e1a246c8f34d70f355ea047bcfe19a0653aa560'
 SERVING = {'deterministic': {'flags': ('-np', '1', '-c', '32768', '--no-cache-prompt'), 'workers': 8},
@@ -136,7 +139,7 @@ def serve(binary, gguf, serving, port, log, mode):
     raise RuntimeError('llama-server did not become healthy')
 
 
-def execute(binary, gguf, serving, out, port, cases, runtime, mode):
+def execute(binary, gguf, serving, out, port, cases, runtime, mode, servers=1):
     """Run the cases against one GGUF (once; a completed run in `out` is reused, and a concurrent gate executing the
     same run is waited for). Returns the run record."""
     out.mkdir(parents=True, exist_ok=True)
@@ -144,45 +147,75 @@ def execute(binary, gguf, serving, out, port, cases, runtime, mode):
         fcntl.flock(lock, fcntl.LOCK_EX)
         if (out / 'run.json').exists():
             return json.loads((out / 'run.json').read_text())
-        return _execute(binary, gguf, serving, out, port, cases, runtime, mode)
+        return _execute(binary, gguf, serving, out, port, cases, runtime, mode, servers)
 
 
-def _execute(binary, gguf, serving, out, port, cases, runtime, mode):
-    spec = {'async': True, 'cases': cases, 'min_successes': 0, 'noise_successes': 0, 'reference_successes': None,
-            'workers': SERVING[mode]['workers'], 'runtime': str(runtime), **BUDGETS,
-            'packet': {'path': str(DATA / PACKET), 'sha256': PACKET_SHA256}}
+def _execute(binary, gguf, serving, out, port, cases, runtime, mode, servers=1):
+    """servers > 1 shards the cases (interleaved) over that many servers of the same GGUF, one probe each: a case's
+    actions do not depend on which server or which other cases run (deterministic serving computes every request
+    alone), so this only changes speed. Shard k writes probe-k/ (one server writes probe/)."""
+    shards = [('probe' if servers == 1 else f'probe-{k}', cases[k::servers]) for k in range(servers)]
+    workers = max(1, SERVING[mode]['workers'] // servers)
     started = time.time()
-    with (out / 'server.log').open('w') as log:
-        server = serve(binary, gguf, serving, port, log, mode)
-        try:
-            with (out / 'probe.log').open('w') as probe_log:
+    processes, logs = [], []
+    try:
+        for k, (name, shard) in enumerate(shards):
+            log = (out / ('server.log' if servers == 1 else f'server-{k}.log')).open('w')
+            logs.append(log)
+            processes.append(serve(binary, gguf, serving, port + k, log, mode))
+
+        def probe(k):
+            name, shard = shards[k]
+            spec = {'async': True, 'cases': shard, 'min_successes': 0, 'noise_successes': 0,
+                    'reference_successes': None, 'workers': workers, 'runtime': str(runtime), **BUDGETS,
+                    'packet': {'path': str(DATA / PACKET), 'sha256': PACKET_SHA256}}
+            with (out / f'{name}.log').open('w') as probe_log:
                 subprocess.run([PY, str(DATA / 'scripts/held_task_budget_probe.py'), '--spec', json.dumps(spec),
-                                '--server', f'http://127.0.0.1:{port}', '--out', str(out / 'probe'),
+                                '--server', f'http://127.0.0.1:{port + k}', '--out', str(out / name),
                                 '--case-seconds', str(BUDGETS['case_seconds']),
                                 '--max-model-requests', str(BUDGETS['max_model_requests']),
-                                '--max-turns', str(BUDGETS['max_turns']), '--workers', str(SERVING[mode]['workers']),
+                                '--max-turns', str(BUDGETS['max_turns']), '--workers', str(workers),
                                 '--model-concurrency', str(MODEL_CONCURRENCY)],
                                stdout=probe_log, stderr=subprocess.STDOUT, check=True, cwd=DATA)
-        finally:
-            server.terminate()
-            server.wait(timeout=60)
+        with concurrent.futures.ThreadPoolExecutor(servers) as pool:
+            for future in [pool.submit(probe, k) for k in range(servers)]:
+                future.result()
+    finally:
+        for process in processes:
+            process.terminate()
+            process.wait(timeout=60)
+        for log in logs:
+            log.close()
     record = read_run(out)
+    if sorted(int(case) for case in record['cases']) != sorted(cases):
+        raise RuntimeError(f'shards did not cover exactly the requested cases: {out}')
     record['wall_seconds'] = round(time.time() - started, 1)
     record['serving'] = mode
+    record['servers'] = servers
     (out / 'run.json').write_text(json.dumps(record, indent=1) + '\n')
     return record
 
 
 def read_run(out):
-    """Per-case outcomes of a completed probe in `out`; refuses partial runs and mixed harness identities."""
-    probe = json.loads((out / 'probe' / 'budget-probe.json').read_text())
-    counts = probe.get('outcome_counts') or {}
+    """Per-case outcomes of a completed probe in `out` (probe/ or the shards probe-*/); refuses partial runs and
+    mixed harness identities."""
+    dirs = sorted(path for path in out.glob('probe*') if path.is_dir() and (path.name == 'probe' or
+                                                                            path.name[6:].isdigit()))
+    reports = [json.loads((path / 'budget-probe.json').read_text()) for path in dirs]
+    if not reports:
+        raise RuntimeError(f'no probe report in {out}')
+    counts = collections.Counter()
+    for report in reports:
+        counts.update(report.get('outcome_counts') or {})
+    probe = {'tasks': [task for report in reports for task in report['tasks']],
+             'task_successes': sum(report['task_successes'] for report in reports)}
+    counts = dict(counts)
     broken = counts.get('unresolved', 0) + counts.get('infrastructure_error', 0)
     wall = [task['case_index'] for task in probe['tasks'] if task.get('resource_limit_reason') == 'case_wall_budget']
     if broken or wall or sum(counts.values()) != len(probe['tasks']):
         raise RuntimeError(f'{broken} unresolved/infrastructure cases, wall-budget cases {wall}: not a measurement: {out}')
     identities = collections.Counter()
-    for path in (out / 'probe').glob('task-eval/probe/worker-*/case-*/results.jsonl'):
+    for path in (p for d in dirs for p in d.glob('task-eval/probe/worker-*/case-*/results.jsonl')):
         for line in path.read_text().splitlines():
             if line.strip():
                 provenance = json.loads(line)['provenance']
@@ -277,6 +310,8 @@ def main(argv=None):
         'dgxops/claude-recovery-20261028/data/llama-actor-worktree/build-cuda-121/bin/llama-server'))
     parser.add_argument('--port', type=int, default=8170, help='first server port; each arm uses the next one')
     parser.add_argument('--repeat-base', action='store_true', help='also re-execute the base and report its flips')
+    parser.add_argument('--servers', type=int, default=1, help='llama-servers per arm (deterministic serving: '
+                        'one sequence per server, so several per arm use a large GPU; results are unchanged)')
     args = parser.parse_args(argv)
     cases = decision_cases(DATA / PACKET)
     args.out.mkdir(parents=True, exist_ok=True)
@@ -302,8 +337,8 @@ def main(argv=None):
         labels.append(label)
         jobs[label] = (gguf_dir / manifest['files'][0]['file'], args.out / label / f'eval-{args.serving}')
     with concurrent.futures.ThreadPoolExecutor(len(jobs)) as pool:
-        futures = {name: pool.submit(execute, args.llama_server, model, serving, out, args.port + offset, cases,
-                                     runtime, args.serving)
+        futures = {name: pool.submit(execute, args.llama_server, model, serving, out, args.port + offset * args.servers,
+                                     cases, runtime, args.serving, args.servers)
                    for offset, (name, (model, out)) in enumerate(jobs.items())}
         runs = {name: future.result() for name, future in futures.items()}
     summary = {'schema': SCHEMA, 'serving': args.serving, 'flags': list(SERVING[args.serving]['flags']),

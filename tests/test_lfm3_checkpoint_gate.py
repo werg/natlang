@@ -85,3 +85,55 @@ def test_read_run_refuses_wall_budget_and_mixed_harness(tmp_path):
 
 def test_decision_cases_cover_every_packet_row():
     assert gate.decision_cases(gate.DATA / gate.PACKET) == list(range(128))
+
+
+def test_read_run_merges_server_shards(tmp_path):
+    row = {'provenance': {'system_prompt_sha256': 's', 'tool_surface_sha256': 't', 'runtime_contract_version': 19,
+                          'temperature': 0}}
+    for k, (index, outcome) in enumerate([(0, 'task_success'), (1, 'semantic_mismatch')]):
+        shard = tmp_path / f'probe-{k}'
+        case = shard / 'task-eval/probe/worker-00/case-0000'
+        case.mkdir(parents=True)
+        tasks = [{'case_index': index, 'family': 'a', 'outcome': outcome, 'model_requests': 3,
+                  'completion_tokens': 10, 'resource_limit_reason': None}]
+        (shard / 'budget-probe.json').write_text(json.dumps({'outcome_counts': {outcome: 1},
+                                                            'task_successes': int(outcome == 'task_success'),
+                                                            'tasks': tasks}))
+        (case / 'results.jsonl').write_text(json.dumps(row) + '\n')
+    (tmp_path / 'probe-0.log').write_text('')
+    record = gate.read_run(tmp_path)
+    assert record['successes'] == 1 and set(record['cases']) == {'0', '1'}
+    assert record['outcome_counts'] == {'task_success': 1, 'semantic_mismatch': 1}
+
+
+def test_execute_shards_cases_over_servers(tmp_path, monkeypatch):
+    started, probes = [], []
+
+    class Server:
+        def terminate(self):
+            pass
+
+        def wait(self, timeout=None):
+            return 0
+
+    def serve(binary, gguf, serving, port, log, mode):
+        started.append(port)
+        return Server()
+
+    def fake_run(command, **kwargs):
+        spec = json.loads(command[command.index('--spec') + 1])
+        out = gate.Path(command[command.index('--out') + 1])
+        probes.append((command[command.index('--server') + 1], spec['cases'], spec['workers']))
+        tasks = [{'case_index': i, 'family': 'a', 'outcome': 'task_success', 'model_requests': 1,
+                  'completion_tokens': 1, 'resource_limit_reason': None} for i in spec['cases']]
+        out.mkdir(parents=True)
+        (out / 'budget-probe.json').write_text(json.dumps({'outcome_counts': {'task_success': len(tasks)},
+                                                           'task_successes': len(tasks), 'tasks': tasks}))
+
+    monkeypatch.setattr(gate, 'serve', serve)
+    monkeypatch.setattr(gate.subprocess, 'run', fake_run)
+    record = gate.execute('bin', 'g.gguf', {}, tmp_path / 'run', 9000, list(range(7)), 'rt', 'deterministic', servers=3)
+    assert sorted(started) == [9000, 9001, 9002]
+    assert sorted(cases for _, cases, _ in probes) == [[0, 3, 6], [1, 4], [2, 5]]
+    assert {workers for _, _, workers in probes} == {gate.SERVING['deterministic']['workers'] // 3}
+    assert record['successes'] == 7 and record['servers'] == 3
