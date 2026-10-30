@@ -8,11 +8,22 @@ import ts from 'typescript';
  */
 export function desugarNlCalls(source: string): string {
   if (!/\bnl\s*(?:<[^()]*>)?\s*\(/.test(source)) return source;
-  const file = ts.createSourceFile('snippet.ts', source, ts.ScriptTarget.ES2022, true);
-  const edits: { start: number; end: number; text: string }[] = [];
+  return applyNlCallEdits(source, nlCallEdits(ts.createSourceFile('snippet.ts', source, ts.ScriptTarget.ES2022, true)));
+}
+
+export type NlCallEdit = { start: number; end: number; text: string };
+
+/**
+ * The same-length rewrites `desugarNlCalls` makes in a parsed file. `accept` decides, for each call whose callee is
+ * spelled `nl`, whether that name is the built-in (a host that resolves symbols passes its checker's answer, so a
+ * local `nl` stays an ordinary function); by default every such call is.
+ */
+export function nlCallEdits(file: ts.SourceFile, accept: (callee: ts.Identifier) => boolean = () => true): NlCallEdit[] {
+  const source = file.text;
+  const edits: NlCallEdit[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'nl' &&
-        node.arguments.length === 1) {
+        node.arguments.length === 1 && accept(node.expression)) {
       const argument = node.arguments[0]!;
       let template: string | undefined;
       if (ts.isNoSubstitutionTemplateLiteral(argument) || ts.isTemplateExpression(argument)) template = argument.getText(file);
@@ -26,5 +37,8 @@ export function desugarNlCalls(source: string): string {
     ts.forEachChild(node, visit);
   };
   visit(file);
-  return edits.reverse().reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
+  return edits;
 }
+
+export const applyNlCallEdits = (source: string, edits: readonly NlCallEdit[]): string =>
+  [...edits].reverse().reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
