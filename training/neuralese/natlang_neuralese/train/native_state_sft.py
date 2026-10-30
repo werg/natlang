@@ -408,7 +408,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                 scope.finish = lambda: None
             else:
                 scope = ParameterCotangentScope.for_model(model, mode='vjp')
-            with precision_context, scope as cotangents, context:
+            with scope as cotangents, precision_context, context:
                 with (backend.autocast() if backend is not None else _nullcontext()):
                     loss, details = packed_graph_loss(model, micro,
                         checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
