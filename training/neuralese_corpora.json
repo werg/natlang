@@ -732404,6 +732404,30 @@
           }
         }
       }
+    },
+    {
+      "id": "natlang-rl-train-curriculum-lfm3-20261030-stop-evidence",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-train-curriculum-lfm3-20261030-stop-evidence",
+      "include": [
+        "cases.jsonl",
+        "stop-evidence.json",
+        "verification.json",
+        "receipt.json",
+        "qualification.json"
+      ],
+      "source_class": "immutable-RL-task-source-with-explicit-scheduling-curriculum",
+      "split": "Train-only 20640-row procedural RL curriculum, row order, ids, splits, source bindings and world semantics identical to its parent runs/natlang-rl-train-curriculum-lfm3-20261028 (cases SHA-256 be900b998af8f681b3209add32f668bbeca1216525cca9fdf679ba87e7a23a94, which stays intact in place). 20040 rows are byte-identical; 600 differ only in curriculum.decisive. Current protected-world intersections: 0 (qualification.json).",
+      "admission": "Stop-evidence successor (receipt.json, natlang.rl-curriculum-stop-evidence-successor/1): the 600 expected-stop rows that declared no decisive observation (actor_greenhouse heater_broken 400, iterate_schedule_repair impossible 200), for which the collector accepted an immediate give-up, get one runtime_graph marker each (commit e1eb12229): greenhouse = JSON of the third greenhouse.read() result (still falling after two control steps with the heater on); schedule = the first iterateOn step whose state hash repeats an earlier one (the repair cycle, step 7). Markers were read from each reference's own execution graph and equal the generators' world-only values. Verified through the collector at e1eb12229 (verification.json, stop-evidence.json): all 600 pass verifyCases, the reference is accepted with stop_evidence, and both an immediate give-up and an early stop (two readings; repair limited to 5 steps) are rejected on stop_evidence; the 400 rows with earlier markers keep them and reject the immediate give-up too. No row is quarantined.",
+      "training_admission": true,
+      "training_admission_reason": "Every row is a row of the parent procedural train curriculum (built and reference-replayed by assemble_rl_train_curriculum.py); only the oracle's decisive evidence of 600 expected-stop rows is added, so an RL reward for those stops now requires the observed obstacle (AGENTS.md Task contracts and reward validity). Scoring these markers needs a collector with stop_evidence (a8fa46120 or later); curriculum admission of runtime_graph markers (verifyCases, admitRow) needs e1eb12229 or later.",
+      "derived_from": [
+        "runs/natlang-rl-train-curriculum-lfm3-20261028"
+      ],
+      "snapshot_manifest": "training/corpus-manifests/natlang-rl-train-curriculum-lfm3-20261030-stop-evidence.json",
+      "license": "project-generated",
+      "license_provenance": "Inherited unchanged from the parent rows (project-generated procedural worlds).",
+      "note": "RL task source, not native SFT graph data. Supersedes the parent for RL scoring; the parent remains the exact predecessor of earlier selections (e.g. /home/werg/data/lfm3-rl-dgx-20261029/cases-v1)."
     }
   ],
   "coverage_backlog": [

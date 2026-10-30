@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-train-curriculum-lfm3-20261030-stop-evidence",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-train-curriculum-lfm3-20261030-stop-evidence",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 146041729,
+      "sha256": "a7a6e780539e722529dcdc1fc28b745f0262134aff59774cbeb64ea8223be8d6",
+      "lines": 20640
+    },
+    {
+      "path": "qualification.json",
+      "bytes": 4355958,
+      "sha256": "4322c43481d185227b0132caeeb3c50f5e539404e8f19e1bed8bb5270d9ec0c0"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1281,
+      "sha256": "f51e080388ffdef925dd1cf9c42dcfd7df934772906e56b3a104a74087c26fc3"
+    },
+    {
+      "path": "stop-evidence.json",
+      "bytes": 625437,
+      "sha256": "d49a86f7f34003039fc5d46da5d0549223faf0aa80d2b59db4876e3e862bafd7"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 740,
+      "sha256": "79ea18824fbf57fa55e239b13078d496ab7462294d5793325c4e02dd7aa361ec"
+    }
+  ],
+  "bytes": 151025145
+}
