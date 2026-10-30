@@ -1,18 +1,19 @@
 // natlang dashboard: one page, one view per section (location.hash), all state from the local API (src/dashboard/server.ts).
+import { createExecutionModel as liveModel, createExecutionView } from './execution.js';
 import { argumentForm } from './arguments.js';
 const TOKEN = document.querySelector('meta[name="natlang-token"]').content;
 // Each route renders into its own element: a view still loading when the route changes writes into a detached one.
 const root = document.getElementById('main');
 
 // ---- small helpers -------------------------------------------------------------------------------------------------
-async function api(method, path, body) {
+async function api(method, path, body, signal) {
   const response = await fetch(path, { method, headers: { 'x-natlang-token': TOKEN, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }), ...(signal ? { signal } : {}) });
   const value = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
   return value;
 }
-const get = path => api('GET', path);
+const get = (path, signal) => api('GET', path, undefined, signal);
 function h(tag, attrs = {}, ...children) {
   const element = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs || {})) {
@@ -179,46 +180,6 @@ async function startJob(spec) {
   catch (error) { toast(error.message, true); }
 }
 
-/** The live call tree of a run, folded from its live events (call_start/end, model deltas, trace events). */
-function liveModel() {
-  const calls = new Map(), roots = [];
-  const turnOf = (call, number) => { let turn = call.turns.get(number);
-    if (!turn) call.turns.set(number, turn = { number, reasoning: '', text: '', tools: [], results: [], failures: [], prompt: 0, completion: 0, working: false }); return turn; };
-  return { calls, roots, add(event) {
-    let call = calls.get(event.callId);
-    if (!call && event.callId) {
-      call = { id: event.callId, name: event.name, parent: event.parentCallId, status: 'running', detail: '', turns: new Map(), children: [], started: event.at };
-      calls.set(call.id, call);
-      const parent = event.parentCallId && calls.get(event.parentCallId);
-      (parent ? parent.children : roots).push(call);
-    }
-    if (!call) return;
-    if (event.type === 'call_end') { call.status = event.outcome; call.detail = event.detail; call.ended = event.at; }
-    else if (event.type === 'model_delta') {
-      const turn = turnOf(call, event.turn), delta = event.delta;
-      if (delta.type === 'reasoning') turn.reasoning += delta.text;
-      else if (delta.type === 'text') turn.text += delta.text;
-      else if (delta.type === 'tool_call') { const tool = turn.tools[delta.index] ??= { name: '', arguments: '' };
-        if (delta.name) tool.name = delta.name; if (delta.arguments) tool.arguments += delta.arguments; }
-      else if (delta.type === 'reset') Object.assign(turn, { reasoning: '', text: '', tools: [] });
-    } else if (event.type === 'trace') {
-      const data = event.event;
-      if (data.kind === 'model_request' && data.phase === 'start') { const turn = turnOf(call, data.turn); turn.working = true; turn.since = event.at; call.lastTurn = data.turn; }
-      if (data.kind === 'model_request' && data.phase !== 'start') { const turn = turnOf(call, data.turn); turn.working = false;
-        turn.prompt = data.prompt_tokens ?? 0; turn.cached = data.cached_tokens ?? 0; turn.completion = data.completion_tokens ?? 0; turn.ms = data.duration_ms;
-        turn.prefillMs = data.prefill_ms; turn.generationMs = data.generation_ms; if (data.error) turn.failures.push(data.error); }
-      if (data.kind === 'action' && call.lastTurn) { const turn = turnOf(call, call.lastTurn);
-        if (turn.tools.length <= turn.results.length) turn.tools.push({ name: data.name, arguments: JSON.stringify(data.arguments ?? {}) });
-        if (typeof data.result_text === 'string' && data.result_text) turn.results.push(data.result_text); }
-      // A recorded trace's proposals carry the reply's text and tool calls (stored traces keep no streamed deltas).
-      if (data.kind === 'proposal' && data.phase === 'generated' && data.turn) { const turn = turnOf(call, data.turn);
-        if (!turn.text && data.text) turn.text = data.text;
-        if (!turn.tools.length) for (const [name, args] of data.calls ?? []) turn.tools.push({ name, arguments: JSON.stringify(args ?? {}) }); }
-      if (data.kind === 'scope_failure' && call.lastTurn) turnOf(call, call.lastTurn).failures.push(data.message);
-      if (data.kind === 'model_incomplete') call.detail = `model incomplete: ${data.reason}`;
-    }
-  } };
-}
 // Generation speed as the server measured it, and the prefill time when the prompt took noticeably long.
 const rate = turn => turn.generationMs > 0 ? ` · ${(turn.completion * 1000 / turn.generationMs).toFixed(1)} tokens/s${turn.prefillMs > 1000 ? ` after ${ms(turn.prefillMs)} prefill` : ''}` : '';
 function renderCall(call, all = false) {
@@ -263,55 +224,94 @@ async function runs(id, target) {
 }
 
 async function jobDetail(id, container) {
-  const state = { stdout: 0, stderr: 0, live: 0, out: '', err: '', model: liveModel(), tab: 'output', job: null };
-  const body = h('div', { class: 'stack' });
-  const headLine = h('div', { class: 'row', style: 'justify-content: space-between' });
-  const tabs = h('div', { class: 'tabs' });
-  const summary = h('div', {}), liveSummary = h('div', { class: 'small muted', role: 'status' });
-  fill(container, h('section', { class: 'panel' }, headLine, summary, liveSummary, tabs, body));
+  const controller = new AbortController(); cleanup.push(() => controller.abort());
+  const state = { stdout: 0, stderr: 0, live: 0, out: '', err: '', model: liveModel(), tab: 'output', job: null, drained: false };
+  const body = h('div', { class: 'stack' }), headLine = h('div', { class: 'row', style: 'justify-content: space-between' });
+  const tabs = h('div', { class: 'tabs' }), summary = h('div', {}), execution = createExecutionView(h);
+  const failureTitle = h('strong'), failureMessage = h('pre', { class: 'block run-failure-message' });
+  const failureBox = h('div', { class: 'callout warn', hidden: true }, failureTitle, failureMessage,
+    h('p', {}, 'See Output, expand a lambda that needs attention, or open Log for details.'));
+  summary.append(failureBox);
+  const output = h('pre', { class: 'console program-output', tabindex: '0', 'aria-label': 'Program output' });
+  const log = h('pre', { class: 'console', tabindex: '0', 'aria-label': 'Program log' });
+  const field = h('input', { id: 'job-input', 'aria-label': 'Program input', placeholder: 'Type input for the program and press Enter', style: 'flex: 1' });
+  const input = h('form', { class: 'row', onsubmit: attempt(async event => {
+    event.preventDefault(); await api('POST', `/api/jobs/${id}/input`, { text: field.value }); field.value = '';
+  }) }, field, h('button', { type: 'submit' }, 'Send'));
+  let followOutput = true, outputPending = false, headerKey = '', mountedTab = '', busy = false, failures = 0, nextPoll = 0, lastRail = 0;
+  const follow = h('button', { type: 'button', hidden: true, onclick: () => { followOutput = true; output.scrollTop = output.scrollHeight; follow.hidden = true; } }, 'Follow output');
+  output.addEventListener('scroll', () => {
+    if (outputPending) return;
+    followOutput = output.scrollHeight - output.scrollTop - output.clientHeight < 28;
+    follow.hidden = followOutput;
+  });
+  const outputPane = h('section', { class: 'panel output-panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Program output'), follow), output, input);
+  const workspace = h('div', { class: 'run-workspace' }, execution.element, outputPane);
+  fill(container, h('section', { class: 'panel' }, headLine, summary, tabs), body);
+  const buttons = new Map();
+  for (const [key, label] of [['output', 'Output'], ['live', 'Lambdas'], ['log', 'Log']]) {
+    const button = h('button', { type: 'button', onclick: () => { state.tab = key; draw(); } }, label); buttons.set(key, button); tabs.append(button);
+  }
+  const updateText = (node, value, follow = false) => {
+    if (node.textContent === value) return;
+    const previous = node.scrollTop, old = node.textContent;
+    if (old && value.startsWith(old) && node.childNodes.length === 1 && node.firstChild.nodeType === 3) node.firstChild.appendData(value.slice(old.length));
+    else node.textContent = value;
+    node.scrollTop = follow ? node.scrollHeight : previous;
+  };
   const draw = () => {
-    const job = state.job;
-    fill(headLine, h('div', { class: 'stack', style: 'gap: 2px' }, h('h2', { class: 'mono' }, job.title),
-      h('div', { class: 'small muted' }, `natlang ${job.argv.map(arg => /\s/.test(arg) ? JSON.stringify(arg) : arg).join(' ')}`)),
-      h('div', { class: 'row' }, pill(job.status), job.exitCode !== null ? h('span', { class: 'small muted' }, `exit ${job.exitCode}`) : null,
-        job.meta?.program || job.kind === 'run' ? h('button', { onclick: () => go(`programs-${encodeURIComponent(job.meta?.program ?? job.meta?.path ?? '.')}`) }, 'Program and source') : null,
-        job.status === 'running' ? h('button', { class: 'danger', onclick: attempt(async () => { state.job = await api('POST', `/api/jobs/${id}/stop`); draw(); }) }, 'Stop') :
-          h('button', { onclick: attempt(async () => { await api('DELETE', `/api/jobs/${id}`); go('runs'); }) }, 'Remove'),
-        job.kind === 'run' || job.kind === 'call' || job.kind === 'ask' ? h('button', { onclick: () => rerun(job) }, 'Run again') : null));
-    const calls = state.model.calls.size;
-    fill(summary, job.status === 'failed' || job.status === 'lost' ? h('div', { class: 'callout warn' }, h('strong', {}, job.status === 'lost' ? 'The run was interrupted.' : 'The run failed.'),
-      h('pre', { class: 'block' }, (state.err.trim() || state.out.trim()).split('\n').slice(-8).join('\n') || 'See Log for details.'),
-      h('p', {}, 'Check the input and model profile, then run again. Use Calls to inspect model failures.')) : null);
-    liveSummary.textContent = job.status === 'running' ? (calls ? `${calls} natural-language call${calls === 1 ? '' : 's'} started. Open Calls for live details.` :
-      state.err.trim().split('\n').at(-1) || 'Checking the program and preparing its model…') : `${calls} natural-language call${calls === 1 ? '' : 's'} recorded.`;
-    fill(tabs, ...[['output', 'Output'], ['live', `Calls${calls ? ` (${calls})` : ''}`], ['log', 'Log']].map(([key, label]) =>
-      h('button', { class: state.tab === key ? 'active' : '', onclick: () => { state.tab = key; draw(); } }, label)));
-    if (state.tab === 'live') fill(body, state.model.roots.length ? h('div', { class: 'calltree' }, state.model.roots.map(call => renderCall(call))) :
-      h('div', { class: 'empty' }, job.kind === 'setup' ? 'Setup installs the llama.cpp runtime and downloads the model; it makes no natural-language calls. Its progress is in Log.' :
-        job.status === 'running' ? 'Waiting for the first natural-language call… (starting the model can take a moment)' : 'This run made no natural-language calls.'));
-    else {
-      const text = state.tab === 'output' ? state.out : state.err;
-      const pre = h('pre', { class: 'console' }, text || (state.tab === 'output' ? '(no output yet)' : '(nothing logged)'));
-      const input = job.interactive && job.status === 'running' && state.tab === 'output' ? h('form', { class: 'row', onsubmit: attempt(async event => {
-        event.preventDefault(); const field = event.target.querySelector('input'); await api('POST', `/api/jobs/${id}/input`, { text: field.value }); field.value = ''; }) },
-        h('input', { id: 'job-input', placeholder: 'Type input for the program and press Enter', style: 'flex: 1' }), h('button', { type: 'submit' }, 'Send')) : null;
-      fill(body, pre, input ?? '');
-      pre.scrollTop = pre.scrollHeight;
+    const job = state.job; if (!job) return;
+    const key = `${job.id}:${job.status}:${job.exitCode}`;
+    if (key !== headerKey) {
+      headerKey = key;
+      const commandOpen = headLine.querySelector('.run-command')?.open ?? false;
+      const command = `natlang ${job.argv.map(arg => /\s/.test(arg) ? JSON.stringify(arg) : arg).join(' ')}`;
+      fill(headLine, h('div', { class: 'stack', style: 'gap: 2px' }, h('h2', {}, job.title),
+        h('details', { class: 'run-command', open: commandOpen }, h('summary', { class: 'small muted' }, 'Command'), h('code', {}, command))),
+        h('div', { class: 'row' }, pill(job.status), job.exitCode !== null ? h('span', { class: 'small muted' }, `exit ${job.exitCode}`) : null,
+          job.meta?.program || job.kind === 'run' ? h('button', { onclick: () => go(`programs-${encodeURIComponent(job.meta?.program ?? job.meta?.path ?? '.')}`) }, 'Program and source') : null,
+          job.status === 'running' ? h('button', { class: 'danger', onclick: attempt(async () => { state.job = await api('POST', `/api/jobs/${id}/stop`); draw(); }) }, 'Stop') :
+            h('button', { onclick: attempt(async () => { await api('DELETE', `/api/jobs/${id}`); go('runs'); }) }, 'Remove'),
+          ['run', 'call', 'ask'].includes(job.kind) ? h('button', { onclick: () => rerun(job) }, 'Run again') : null));
     }
+    failureBox.hidden = !['failed', 'lost'].includes(job.status);
+    if (!failureBox.hidden) {
+      updateText(failureTitle, job.status === 'lost' ? 'The run was interrupted.' : 'The run failed.');
+      const message = job.kind === 'test' ? state.out.trim() || state.err.trim() : state.err.trim() || state.out.trim();
+      updateText(failureMessage, message.split('\n').slice(-8).join('\n') || 'See Log for details.');
+    }
+    if (mountedTab !== state.tab) {
+      mountedTab = state.tab;
+      if (state.tab === 'output') { workspace.append(execution.element, outputPane); fill(body, workspace); }
+      else if (state.tab === 'live') fill(body, execution.element);
+      else fill(body, log);
+    }
+    for (const [key, button] of buttons) { button.classList.toggle('active', key === state.tab); button.setAttribute('aria-pressed', String(key === state.tab)); }
+    buttons.get('live').textContent = `Lambdas${state.model.calls.size ? ` (${state.model.calls.size})` : ''}`;
+    input.hidden = !job.interactive || job.status !== 'running';
+    outputPending = true;
+    updateText(output, state.out || (job.status === 'running' ? 'Waiting for program output. Live execution shows what is happening alongside it.' : '(no program output)'), followOutput);
+    requestAnimationFrame(() => { outputPending = false; });
+    updateText(log, state.err || '(nothing logged)', log.scrollHeight - log.scrollTop - log.clientHeight < 28);
+    execution.update(state.model, { ...job, drained: state.drained }, state.err);
   };
   const poll = async () => {
-    const value = await get(`/api/jobs/${id}?stdout=${state.stdout}&stderr=${state.stderr}&live=${state.live}`);
-    const changed = value.stdout.text || value.stderr.text || value.live.text || value.job.status !== state.job?.status;
+    const value = await get(`/api/jobs/${id}?stdout=${state.stdout}&stderr=${state.stderr}&live=${state.live}`, AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]));
     state.job = value.job; state.stdout = value.stdout.offset; state.stderr = value.stderr.offset; state.live = value.live.offset;
     state.out += value.stdout.text; state.err += value.stderr.text;
-    for (const line of value.live.text.split('\n')) if (line) { try { state.model.add(JSON.parse(line)); } catch {} }
-    const typing = document.activeElement?.id === 'job-input';
-    if (changed && !typing) draw();
-    return value.job.status === 'running' || value.stdout.text || value.live.text;
+    for (const line of value.live.text.split('\n')) if (line) { try { state.model.add(JSON.parse(line)); } catch { /* only complete event lines are supplied */ } }
+    state.drained = value.job.status !== 'running' && Boolean(value.job.endedAt) && !value.live.text && !value.stdout.text && !value.stderr.text;
+    failures = 0; execution.connection(true); draw();
+    if (Date.now() - lastRail > 4000) { lastRail = Date.now(); refreshRail(); }
   };
-  await poll(); draw();
-  let busy = false;
-  every(async () => { if (busy) return; busy = true; try { await poll(); refreshRail(); } catch {} finally { busy = false; } }, 900);
+  await poll();
+  every(async () => {
+    if (busy || state.drained || Date.now() < nextPoll) return;
+    busy = true;
+    try { await poll(); }
+    catch { failures++; execution.connection(false); nextPoll = Date.now() + Math.min(4000, 350 * 2 ** Math.min(failures, 4)); }
+    finally { busy = false; }
+  }, 350);
 }
 function rerun(job) {
   const meta = job.meta ?? {};

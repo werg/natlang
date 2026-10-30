@@ -12,9 +12,25 @@ natlang dashboard --root examples --open
 ```
 
 The hello example runs one classifier using its bundled sample input. In the
-dashboard, choose a program and click **Run**. Output opens immediately, with
-live call details under **Calls** and startup messages under **Log**. The run
+dashboard, choose a program and click **Run**. Output opens alongside **Live execution**,
+with startup messages under **Log**. The run
 form explains the selected model and any required download before execution.
+
+Live execution shows the current lambda, what it is doing, elapsed time, and
+counts of running and finished calls. Inline lambdas show their source file and
+line; nested calls appear under their caller. Expand a lambda, then a step to
+inspect incremental model output, generated code, step results, and any retry or
+failure. Model reasoning and token statistics are inside those details. A draft
+is labeled as model output; the program's actual output remains alongside it.
+Providers that return complete responses still show call progress, then their
+complete step when it arrives.
+
+Open sections and typed input stay in place during updates. Scroll back through
+program output without being pulled to the bottom; **Follow output** resumes
+following it. **Pause updates** freezes the execution display while the program
+keeps running and **Resume updates** catches up. **Stop** stops the actual program.
+If the dashboard loses contact, it shows a reconnecting status and resumes from
+its last event offset. Completed runs retain the same expandable execution view.
 
 To create your own:
 

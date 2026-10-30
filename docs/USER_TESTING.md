@@ -8,7 +8,8 @@ natlang dashboard --root examples --open
 
 Choose **hello** under Programs and click **Run**. The first run may need model
 setup; its download and startup appear in Log. Use Models to choose a provider
-instead. Output shows the label; Calls shows how the function arrived at it.
+instead. Output shows the label; Live execution shows the active lambdas.
+Expand a lambda and one of its steps to see how it arrived at the result.
 Try triage next to process the bundled support tickets.
 
 For a usability session, ask a developer unfamiliar with natlang to think aloud.
