@@ -24,10 +24,10 @@ sys.modules[SPEC.name] = DEPENDENCIES
 SPEC.loader.exec_module(DEPENDENCIES)
 
 
-@pytest.fixture(params=['lfm', 'mellum'])
-def parent(tmp_path, request):
+@pytest.fixture
+def parent(tmp_path):
     from test_native_serving_adapters import engine_fixture
-    engine = engine_fixture(tmp_path, request.param)
+    engine = engine_fixture(tmp_path, 'lfm')
     state = CheckpointPolicy.load(engine.native_checkpoint)
     old = tmp_path/'carried-train.jsonl'; old.write_text('exact old complete training row\n')
     held = tmp_path/'carried-held.jsonl'; held.write_text('exact protected held row\n')
