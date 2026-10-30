@@ -4,6 +4,7 @@
  *
  *   core   the platform-neutral runtime for workerd (src/core/index.ts): an ESM bundle that loads with `nodejs_compat`
  *   workerd  the same core with TypeScript bundled in, for hosts that cannot install TypeScript 5 as a package (see below)
+ *   evaluation  the declarations of the eval target, without its code (for type-checking suites)
  *   llama  the managed llama.cpp package (src/llama/index.ts), for Node
  *   eval   the evaluation, adaptation and optimization APIs (src/entry/evaluation.ts), for Node, with the evaluation worker
  *   dashboard  the dashboard's embeddable page modules and styles (scripts/dashboard-assets.mjs): copied files, not a bundle
@@ -94,6 +95,8 @@ export const TARGETS = {
   workerd: { directory: 'workerd', entries: { 'natlang-workerd': 'src/core/workerd-bundle.ts' }, platform: 'neutral', selfContained: true,
     plugins: entry => [selfContainedHost(), coreNodeImports(entry)],
     define: () => ({ __NATLANG_TS_LIBS__: JSON.stringify(embeddedLibs()), 'process.browser': 'true' }) },
+  // Declarations only: what a workspace's suites type-check against (`@workspace/natlang/evaluation`); they run on the `eval` bundle.
+  evaluation: { directory: 'evaluation', entries: { 'natlang-evaluation': 'src/entry/evaluation.ts' }, platform: 'node', typesOnly: true },
   llama: { directory: 'llama', entries: { 'natlang-llama': 'src/llama/index.ts' }, platform: 'node' },
   // The evaluation runner starts `./worker-entry.js` beside its own file (evaluation/worker.ts).
   dashboard: { directory: 'dashboard', assets: true },
@@ -151,7 +154,7 @@ export async function buildTarget(name, outdir) {
   mkdirSync(outdir, { recursive: true });
   rmSync(join(outdir, 'types'), { recursive: true, force: true });
   for (const bundle of [...Object.keys(target.entries)]) rmSync(join(outdir, `${bundle}.js`), { force: true });
-  const bundled = await esbuild({ entryPoints: Object.fromEntries(Object.entries(target.entries).map(([bundle, source]) => [bundle, join(root, source)])),
+  const bundled = target.typesOnly ? { metafile: { inputs: {} } } : await esbuild({ entryPoints: Object.fromEntries(Object.entries(target.entries).map(([bundle, source]) => [bundle, join(root, source)])),
     bundle: true, format: 'esm', platform: target.platform, target: target.platform === 'node' ? 'node22' : 'es2022',
     ...(target.selfContained ? { external: ['yaml', '@noble/hashes', '@noble/hashes/*'], mainFields: ['module', 'main'], conditions: ['workerd', 'worker', 'browser'] }
       : { packages: 'external' }),
@@ -177,7 +180,7 @@ export async function buildTarget(name, outdir) {
     writeFileSync(join(outdir, `${entryName}.d.ts`), `export * from './types/${entryDeclaration.replace(/\.d\.ts$/, '.js')}';\n`);
     const sources = new Set(Object.keys(bundled.metafile.inputs).filter(path => !/^[^/]*:/.test(path) && !path.startsWith('node_modules/') && !path.includes('/node_modules/')));
     for (const file of emitted) sources.add(`src/${file.replace(/\.d\.ts$/, '.ts')}`);
-    const files = [...Object.keys(target.entries).map(bundle => `${bundle}.js`), `${entryName}.d.ts`, ...emitted.map(file => `types/${file}`)];
+    const files = [...(target.typesOnly ? [] : Object.keys(target.entries).map(bundle => `${bundle}.js`)), `${entryName}.d.ts`, ...emitted.map(file => `types/${file}`)];
     return { files: files.sort(), sources: [...sources].sort(), metafile: bundled.metafile };
   } finally { rmSync(declarations, { recursive: true, force: true }); }
 }
