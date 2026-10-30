@@ -15,7 +15,11 @@
   "targets": {
     "triage": {
       "entry": "main.ts",
-      "description": "natlang run examples/triage [-- TICKETS.json [RUBRIC]] (default: the bundled tickets.json)"
+      "description": "Triage the bundled tickets, or supply your own JSON file and rubric.",
+      "arguments": [
+        { "name": "tickets", "type": "string", "description": "Optional JSON file of tickets, relative to the dashboard root or command working directory. Leave blank for the bundled tickets." },
+        { "name": "rubric", "type": "string", "description": "Optional category definitions. Leave blank for billing, technical and spam." }
+      ]
     }
   },
   "model": {

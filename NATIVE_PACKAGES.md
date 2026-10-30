@@ -58,7 +58,16 @@ export async function main(context: TargetContext): Promise<number> {
 
 The context carries `args`, `io`, `workspace`, `stateDirectory`,
 `traceDirectory`, the configured `model`, a `runtime` using it, and the package
-and dependency identities. Build, verify, install, inspect, and run:
+and dependency identities.
+
+A target can declare an ordered `arguments` array for the dashboard's input form:
+`[{ "name": "input", "type": "string", "description": "Text to classify" }]`.
+Types are `string`, `number`, `boolean` and `json`, with optional `required` and
+`default` fields. Values still arrive as strings in `context.args`; the dashboard
+validates numeric/JSON inputs and preserves empty positions. The entry point owns
+its defaults and parsing, including behavior for an empty optional argument.
+
+Build, verify, install, inspect, and run:
 
 ```bash
 natlang package pack natlang.json --out reviewer-1.0.0.nlpkg

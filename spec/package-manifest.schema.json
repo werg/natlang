@@ -97,6 +97,22 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "arguments": {
+            "type": "array",
+            "description": "Ordered positional arguments for the dashboard's run form. Values are passed as strings to context.args.",
+            "items": {
+              "type": "object",
+              "required": ["name", "type"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$" },
+                "type": { "enum": ["string", "number", "boolean", "json"] },
+                "description": { "type": "string" },
+                "required": { "type": "boolean" },
+                "default": {}
+              }
+            }
           }
         }
       }

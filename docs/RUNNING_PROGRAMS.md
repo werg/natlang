@@ -2,6 +2,48 @@
 
 How to run natlang programs and functions, what a compiled program carries, and the dashboard that supervises it all.
 
+## First result and first edit
+
+From the repository root after setup:
+
+```sh
+natlang run examples/hello
+natlang dashboard --root examples --open
+```
+
+The hello example runs one classifier using its bundled sample input. In the
+dashboard, choose a program and click **Run**. Output opens immediately, with
+live call details under **Calls** and startup messages under **Log**. The run
+form explains the selected model and any required download before execution.
+
+To create your own:
+
+```sh
+natlang init my-program
+cd my-program
+natlang run
+natlang dev
+```
+
+Edit `answer.nl` or `sample.json` while `dev` runs; it stops the previous run
+before starting a replacement and ignores generated files. Ctrl+C stops both
+the watcher and its current run. Use **Keep the model loaded** on the dashboard
+to reuse one local server across runs.
+
+`natlang check` checks the source without a model. `natlang test` runs real
+calls for the `{ function, inputs, expected }` cases in `examples.json` and
+compares outputs exactly. A mismatch prints expected and received values and
+returns a nonzero exit code. From a dashboard function form, enter an expected
+JSON result and choose **Save test**, then **Run tests**. Changing an existing
+input's expectation replaces that test. Tests measure the selected model;
+they do not establish correctness on unseen inputs.
+
+Programs use their declared model or the machine default, with command-line
+and environment overrides taking precedence. `natlang doctor` now distinguishes
+configuration from connection checks: an external model catalog must respond
+successfully, while provider credentials and local files are checked without
+an inference request. **Models → Test** executes a real request.
+
 ## The default model
 
 A fresh install runs every natural-language call on the stock instruction model `LiquidAI/LFM3-1.7B` (Q8_0, 1.8 GB)
@@ -112,14 +154,17 @@ It binds to loopback; the printed URL carries a session token that every request
 
 - **Overview**: the selected model, runtime, call store and machine; the kept-loaded model; recent runs; the busiest
   functions.
-- **Programs**: every `natlang.json` under the root. Run a target with arguments and a profile, call any `.nl` function
+- **Programs**: every `natlang.json` under the root. Create or open programs. Run a target with typed inputs when declared,
+  restoring the last successful inputs and profile. Edit `.nl` source (concurrent disk changes are detected), save expected
+  results as tests, and call any `.nl` function
   from a form generated from its signature, build or build warm, and see the lock and warm-up results.
 - **Runs**: every run, call, ask, build, setup, tuning and specializer job, live: the tree of calls, each turn's
   reasoning, code and failures, token counts, the program's output with an input box for interactive programs, and the
   log. Jobs are ordinary CLI processes; their records stay under the state directory (`dashboard/jobs/`).
 - **Traces**: the machine's call records with filters; a call's inputs, output, evals, service calls, child calls,
   annotations and full event trace; mark it good, bad, or fix it with the expected result (adds a tuning example).
-- **Playground**: one `natlang ask` with an instruction, input, result type and profile.
+- **Playground**: one `natlang ask` with an instruction, input, result type and profile; **Save as program** preserves
+  instructions, input and return type in a runnable project.
 - **Models**: profiles (local stock model, API provider with its key, OpenAI-compatible server), the default profile,
   stock model downloads with progress, and a one-click test of each profile.
 - **System**: the llama.cpp runtime (upstream or natlang's fork) and its installation, call-store specialization mode,

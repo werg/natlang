@@ -9,6 +9,12 @@ For current instruction adaptation APIs and implementation status, see the
 
 ```sh
 npm install --global @natlang/cli
+natlang init my-program                 # runnable starter, sample input and saved tests
+cd my-program
+natlang run
+natlang dev                             # edit answer.nl or sample.json to rerun
+natlang test                            # real model calls compared with examples.json
+natlang dashboard --open                 # create, edit, run and inspect results
 natlang setup                           # prepare the managed local model runtime
 natlang doctor
 natlang models anthropic                # list a provider's model IDs

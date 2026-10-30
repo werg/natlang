@@ -43,6 +43,31 @@ const OUTCOME = { done: 'ok', running: 'info', failed: 'bad', quiesced: 'warn', 
 const pill = (text, kind = OUTCOME[text] ?? 'idle') => h('span', { class: `pill ${kind}` }, text);
 const short = (value, limit = 160) => { const text = typeof value === 'string' ? value : JSON.stringify(value); return text === undefined ? '' : text.length > limit ? text.slice(0, limit) + '…' : text; };
 const pretty = value => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+function programDialog(options = {}) {
+  const name = h('input', { placeholder: 'my-program', value: 'my-program', required: true, pattern: '[A-Za-z0-9][A-Za-z0-9._-]{0,63}' });
+  const errorBox = h('div', { class: 'callout warn', hidden: true });
+  const dialog = h('dialog', {}, h('form', { class: 'stack', onsubmit: async event => {
+    event.preventDefault(); const button = event.target.querySelector('button[type=submit]'); button.disabled = true;
+    try { const created = await api('POST', '/api/programs', { name: name.value, ...options }); dialog.close(); go(`programs-${encodeURIComponent(created.directory)}`); }
+    catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; }
+    finally { button.disabled = false; }
+  } }, h('h2', {}, options.instruction ? 'Save as a program' : 'Create a program'),
+  h('p', {}, 'Creates a folder under the dashboard root, with instructions, sample input and a runnable entry point.'),
+  h('label', { class: 'field' }, 'Directory name', name), errorBox,
+  h('div', { class: 'row' }, h('button', { type: 'submit', class: 'primary' }, 'Create program'), h('button', { type: 'button', onclick: () => dialog.close() }, 'Cancel'))));
+  dialog.addEventListener('close', () => dialog.remove()); document.body.append(dialog); dialog.showModal(); name.select();
+}
+function openProgramDialog() {
+  const path = h('input', { placeholder: 'relative/path/to/program', required: true });
+  const errorBox = h('div', { class: 'callout warn', hidden: true });
+  const dialog = h('dialog', {}, h('form', { class: 'stack', onsubmit: async event => {
+    event.preventDefault();
+    try { const program = await get(`/api/programs/detail?path=${encodeURIComponent(path.value)}`); dialog.close(); go(`programs-${encodeURIComponent(program.directory)}`); }
+    catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; }
+  } }, h('h2', {}, 'Open a program'), h('p', {}, 'Enter a directory under this dashboard root. To open another workspace, start natlang dashboard --root PATH --open.'),
+  path, errorBox, h('div', { class: 'row' }, h('button', { type: 'submit' }, 'Open'), h('button', { type: 'button', onclick: () => dialog.close() }, 'Cancel'))));
+  dialog.addEventListener('close', () => dialog.remove()); document.body.append(dialog); dialog.showModal(); path.focus();
+}
 const header = (title, text, ...actions) => h('div', { class: 'head' }, h('div', {}, h('h1', {}, title), text ? h('p', {}, text) : null), h('div', { class: 'row' }, actions));
 const kv = pairs => h('dl', { class: 'kv' }, pairs.filter(Boolean).flatMap(([key, value]) => [h('dt', {}, key), h('dd', {}, value ?? '–')]));
 let profilesCache = null;
@@ -99,7 +124,7 @@ async function overview(_arg, target) {
     attempt(async () => { await api('POST', `/api/stock/${release.id}/download`); toast('Download started'); go('models'); })]);
   fill(target, 
     header('Overview', `Programs under ${status.root}. Everything here is the same machine state the natlang CLI uses.`,
-      h('button', { onclick: () => go('playground') }, 'Ask the model'), h('button', { class: 'primary', onclick: () => go('programs') }, 'Run a program')),
+      h('button', { onclick: () => programDialog() }, 'Create program'), h('button', { onclick: () => go('playground') }, 'Ask the model'), h('button', { class: 'primary', onclick: () => go('programs') }, 'Run a program')),
     ...problems.map(([text, label, action]) => h('div', { class: 'callout warn row' }, h('span', {}, text), h('button', { onclick: action }, label))), progress,
     h('div', { class: 'grid' },
       tile('Model', model.error ? 'Profile problem' : release?.label ?? model.model,
@@ -237,21 +262,28 @@ async function runs(id, target) {
 }
 
 async function jobDetail(id, container) {
-  const state = { stdout: 0, stderr: 0, live: 0, out: '', err: '', model: liveModel(), tab: 'live', job: null };
+  const state = { stdout: 0, stderr: 0, live: 0, out: '', err: '', model: liveModel(), tab: 'output', job: null };
   const body = h('div', { class: 'stack' });
   const headLine = h('div', { class: 'row', style: 'justify-content: space-between' });
   const tabs = h('div', { class: 'tabs' });
-  fill(container, h('section', { class: 'panel' }, headLine, tabs, body));
+  const summary = h('div', {}), liveSummary = h('div', { class: 'small muted', role: 'status' });
+  fill(container, h('section', { class: 'panel' }, headLine, summary, liveSummary, tabs, body));
   const draw = () => {
     const job = state.job;
     fill(headLine, h('div', { class: 'stack', style: 'gap: 2px' }, h('h2', { class: 'mono' }, job.title),
       h('div', { class: 'small muted' }, `natlang ${job.argv.map(arg => /\s/.test(arg) ? JSON.stringify(arg) : arg).join(' ')}`)),
       h('div', { class: 'row' }, pill(job.status), job.exitCode !== null ? h('span', { class: 'small muted' }, `exit ${job.exitCode}`) : null,
+        job.meta?.program || job.kind === 'run' ? h('button', { onclick: () => go(`programs-${encodeURIComponent(job.meta?.program ?? job.meta?.path ?? '.')}`) }, 'Program and source') : null,
         job.status === 'running' ? h('button', { class: 'danger', onclick: attempt(async () => { state.job = await api('POST', `/api/jobs/${id}/stop`); draw(); }) }, 'Stop') :
           h('button', { onclick: attempt(async () => { await api('DELETE', `/api/jobs/${id}`); go('runs'); }) }, 'Remove'),
         job.kind === 'run' || job.kind === 'call' || job.kind === 'ask' ? h('button', { onclick: () => rerun(job) }, 'Run again') : null));
     const calls = state.model.calls.size;
-    fill(tabs, ...[['live', `Calls${calls ? ` (${calls})` : ''}`], ['output', 'Output'], ['log', 'Log']].map(([key, label]) =>
+    fill(summary, job.status === 'failed' || job.status === 'lost' ? h('div', { class: 'callout warn' }, h('strong', {}, job.status === 'lost' ? 'The run was interrupted.' : 'The run failed.'),
+      h('pre', { class: 'block' }, (state.err.trim() || state.out.trim()).split('\n').slice(-8).join('\n') || 'See Log for details.'),
+      h('p', {}, 'Check the input and model profile, then run again. Use Calls to inspect model failures.')) : null);
+    liveSummary.textContent = job.status === 'running' ? (calls ? `${calls} natural-language call${calls === 1 ? '' : 's'} started. Open Calls for live details.` :
+      state.err.trim().split('\n').at(-1) || 'Checking the program and preparing its model…') : `${calls} natural-language call${calls === 1 ? '' : 's'} recorded.`;
+    fill(tabs, ...[['output', 'Output'], ['live', `Calls${calls ? ` (${calls})` : ''}`], ['log', 'Log']].map(([key, label]) =>
       h('button', { class: state.tab === key ? 'active' : '', onclick: () => { state.tab = key; draw(); } }, label)));
     if (state.tab === 'live') fill(body, state.model.roots.length ? h('div', { class: 'calltree' }, state.model.roots.map(call => renderCall(call))) :
       h('div', { class: 'empty' }, job.kind === 'setup' ? 'Setup installs the llama.cpp runtime and downloads the model; it makes no natural-language calls. Its progress is in Log.' :
@@ -282,9 +314,9 @@ async function jobDetail(id, container) {
 }
 function rerun(job) {
   const meta = job.meta ?? {};
-  if (job.kind === 'call') return startJob({ kind: 'call', function: meta.path, inputs: meta.inputs ?? {} });
-  if (job.kind === 'ask') return go('playground');
-  return go(`programs-${encodeURIComponent(meta.path ?? '.')}`);
+  if (job.kind === 'call') return startJob({ kind: 'call', function: meta.path, inputs: meta.inputs ?? {}, profile: meta.profile, program: meta.program });
+  if (job.kind === 'ask') return startJob({ kind: 'ask', instruction: meta.instruction, input: meta.input, returns: meta.returns, profile: meta.profile });
+  return startJob({ kind: 'run', path: meta.path ?? '.', target: meta.target, args: meta.args ?? [], profile: meta.profile });
 }
 
 // ---- programs -------------------------------------------------------------------------------------------------------
@@ -294,7 +326,8 @@ async function programs(path, target) {
   const detail = h('div', { class: 'stack' });
   const search = h('input', { id: 'program-search', type: 'search', placeholder: `Filter ${list.length} programs`, style: 'width: 100%' });
   const listBox = h('div', { class: 'list scroll' });
-  fill(target, header('Programs', 'Applications and examples with a natlang.json manifest. Run a target, call one of its functions, or build it warm.'),
+  fill(target, header('Programs', 'Choose a program and run it with sample input, or create your own.',
+    h('button', { onclick: openProgramDialog }, 'Open program'), h('button', { class: 'primary', onclick: () => programDialog() }, 'Create program')),
     h('div', { class: 'split' }, h('section', { class: 'panel', style: 'padding: 10px' }, search, listBox), detail));
   const draw = () => {
     const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
@@ -302,7 +335,7 @@ async function programs(path, target) {
     fill(listBox, shown.length ? shown.map(item => h('button', { class: `item${item.directory === selected ? ' selected' : ''}`, onclick: () => go(`programs-${encodeURIComponent(item.directory)}`) },
       h('div', { class: 'title' }, h('span', {}, item.name), item.warm ? pill('warm', 'ok') : item.targets.length ? null : pill('functions', 'idle')),
       h('div', { class: 'small muted mono' }, item.directory), h('div', { class: 'desc' }, item.description))) :
-      h('div', { class: 'empty' }, list.length ? 'No program matches.' : 'No natlang.json manifests under this directory. Start the dashboard in a project, or pass --root.'));
+      h('div', { class: 'empty' }, list.length ? 'No program matches.' : 'No programs yet. Create a program above, or open a directory containing natlang.json.'));
   };
   search.addEventListener('input', draw); draw();
   if (selected) await programDetail(selected, detail);
@@ -365,12 +398,47 @@ async function programDetail(path, container) {
   const targets = Object.entries(manifest.targets ?? {});
   const runPanel = h('section', { class: 'panel' }, h('h2', {}, 'Run'),
     targets.length ? targets.map(([name, target]) => {
-      const args = h('input', { id: `args-${name}`, placeholder: 'arguments, as on the command line', style: 'flex: 1; min-width: 200px' });
+      const previous = program.lastRuns?.[name];
+      const args = h('input', { id: `args-${name}`, placeholder: 'arguments, as on the command line', value: (previous?.args ?? []).map(arg => JSON.stringify(arg)).join(' '), style: 'flex: 1; min-width: 200px' });
+      const argumentFields = (target.arguments ?? []).map((arg, index) => {
+        const value = previous?.args?.[index] ?? (arg.default === undefined ? '' : arg.type === 'json' ? JSON.stringify(arg.default) : String(arg.default));
+        const accessible = { 'aria-label': arg.name, 'aria-required': arg.required ? 'true' : undefined, 'aria-description': arg.description };
+        const input = arg.type === 'boolean' ? h('select', accessible, ...['', 'true', 'false'].map(text => h('option', { value: text, selected: text === value }, text || 'Use program default'))) :
+          h(arg.type === 'json' ? 'textarea' : 'input', { ...accessible, value: arg.type === 'json' ? undefined : value, type: arg.type === 'number' ? 'number' : 'text', step: arg.type === 'number' ? 'any' : undefined, placeholder: arg.required ? 'Required' : 'Use program default' }, arg.type === 'json' ? value : null);
+        return { arg, input, element: h('label', { class: 'field' }, `${arg.name}${arg.required ? ' *' : ''}`, input, arg.description ? h('span', { class: 'small muted' }, arg.description) : null) };
+      });
+      const getArgs = () => {
+        if (!argumentFields.length) return splitArgs(args.value);
+        const values = argumentFields.map(({ arg, input }) => {
+          const raw = input.value;
+          if (raw === '' && arg.required) throw new Error(`${arg.name} is required.`);
+          if (raw !== '' && arg.type === 'number' && !Number.isFinite(Number(raw))) throw new Error(`${arg.name} must be a number.`);
+          if (raw !== '' && arg.type === 'json') { try { JSON.parse(raw); } catch { throw new Error(`${arg.name} must be valid JSON.`); } }
+          return raw;
+        });
+        while (values.at(-1) === '') values.pop();
+        // Empty positions are preserved: positional arguments cannot shift past an omitted earlier field.
+        return values;
+      };
       const profile = h('span', {});
-      profileSelect(`profile-${name}`).then(select => fill(profile, select));
+      const readiness = h('div', { class: 'small muted', role: 'status' }, 'Resolving the model…');
+      profileSelect(`profile-${name}`, previous?.profile).then(select => {
+        fill(profile, select);
+        let revision = 0;
+        const refresh = async () => {
+          const current = ++revision;
+          try { const model = await get(`/api/programs/model?path=${encodeURIComponent(program.directory)}&profile=${encodeURIComponent(select.value)}`);
+            if (revision === current) readiness.textContent = `${model.model} · ${model.kind} · ${model.detail}`;
+          } catch (error) { if (revision === current) readiness.textContent = error.message; }
+        };
+        select.addEventListener('change', refresh); refresh();
+      });
       return h('div', { class: 'stack' }, h('div', {}, h('strong', { class: 'mono' }, name), target.description ? h('span', { class: 'muted' }, ` · ${target.description}`) : null),
-        h('div', { class: 'row' }, args, profile, h('button', { class: 'primary', onclick: () => startJob({ kind: 'run', path: program.directory, target: name,
-          args: splitArgs(args.value), profile: document.getElementById(`profile-${name}`)?.value || undefined }) }, 'Run')));
+        argumentFields.length ? argumentFields.map(field => field.element) : args,
+        readiness, previous ? h('div', { class: 'small muted' }, 'Inputs restored from the last successful run.') : null,
+        h('div', { class: 'row' }, profile, h('button', { class: 'primary', onclick: attempt(async () => startJob({ kind: 'run', path: program.directory, target: name,
+          args: getArgs(), profile: document.getElementById(`profile-${name}`)?.value || undefined })) }, 'Run'),
+          h('button', { onclick: () => { args.value = ''; argumentFields.forEach(({ arg, input }) => { input.value = arg.default === undefined ? '' : arg.type === 'json' ? JSON.stringify(arg.default) : String(arg.default); }); } }, 'Reset inputs')));
     }) : h('div', { class: 'muted' }, 'This package has no targets; call its functions below.'));
   const functions = h('section', { class: 'panel' }, h('h2', {}, 'Natural-language functions'),
     program.functions.length ? h('div', { class: 'stack' }, program.functions.map(fn => functionCard(program, fn))) : h('div', { class: 'muted' }, 'No .nl files.'));
@@ -395,35 +463,69 @@ async function programDetail(path, container) {
       manifest.description ? h('div', {}, manifest.description) : null,
       program.problem ? h('div', { class: 'callout warn' }, `natlang.json: ${program.problem}`) : null,
       manifest.model ? h('div', { class: 'small' }, 'Declared model: ', h('code', {}, JSON.stringify(manifest.model))) : h('div', { class: 'small muted' }, 'Runs on the machine default model unless natlang.json declares "model".')),
-    runPanel, functions, build,
+    runPanel, functions,
+    h('section', { class: 'panel' }, h('h2', {}, 'Saved tests'), h('p', {}, program.examplesProblem ?? `${program.examples} saved input/expected-output example${program.examples === 1 ? '' : 's'}. Tests execute real model calls and compare exact results.`),
+      h('button', { onclick: () => startJob({ kind: 'test', path: program.directory }) }, 'Run tests')),
+    h('details', { class: 'panel' }, h('summary', {}, 'Build and warm-up details'), build),
     program.readme ? h('section', { class: 'panel' }, h('h3', { class: 'muted small' }, program.readme.name), h('div', { class: 'prose' }, markdown(program.readme.text))) : null);
 }
 function functionCard(program, fn) {
+  const formId = encodeURIComponent(fn.source);
   const fields = fn.params.map(param => { const [name, ...type] = param.split(':'); return { name: name.replace('?', '').trim(), type: type.join(':').trim() }; });
   const warmCase = (program.manifest.warmup ?? []).find(item => item.function === fn.source);
+  const last = program.lastCalls?.[`${program.directory === '.' ? '' : program.directory + '/'}${fn.source}`];
+  const sample = last?.inputs ?? warmCase?.inputs ?? {};
   const inputs = fields.map(field => h('label', { class: 'field' }, `${field.name}: ${field.type}`,
-    h('textarea', { id: `in-${fn.name}-${field.name}`, rows: 2, placeholder: field.type === 'string' ? 'text' : 'JSON' },
-      warmCase && warmCase.inputs[field.name] !== undefined ? (field.type === 'string' && typeof warmCase.inputs[field.name] === 'string' ? warmCase.inputs[field.name] : JSON.stringify(warmCase.inputs[field.name])) : '')));
-  const sourceBox = h('pre', { class: 'block', hidden: true });
-  const call = attempt(async () => {
+    h('textarea', { id: `in-${formId}-${field.name}`, rows: 2, placeholder: field.type === 'string' ? 'text' : 'JSON' },
+      sample[field.name] !== undefined ? (field.type === 'string' && typeof sample[field.name] === 'string' ? sample[field.name] : JSON.stringify(sample[field.name])) : '')));
+  const sourceBox = h('div', { class: 'stack', hidden: true });
+  const profile = h('span', {});
+  profileSelect(`call-profile-${formId}`, last?.profile).then(select => fill(profile, select)).catch(error => fill(profile, error.message));
+  const valuesFromFields = () => {
     const values = {};
     for (const field of fields) {
-      const raw = document.getElementById(`in-${fn.name}-${field.name}`).value;
-      if (raw === '') continue;
+      const raw = document.getElementById(`in-${formId}-${field.name}`).value;
+      if (raw === '' && field.type !== 'string') continue;
       if (field.type === 'string') values[field.name] = raw;
       else try { values[field.name] = JSON.parse(raw); } catch { throw new Error(`${field.name} must be JSON (${field.type})`); }
     }
-    await startJob({ kind: 'call', function: `${program.directory}/${fn.source}`, inputs: values });
-  });
+    return values;
+  };
+  const call = attempt(async () => startJob({ kind: 'call', function: `${program.directory}/${fn.source}`, inputs: valuesFromFields(), program: program.directory,
+    profile: document.getElementById(`call-profile-${formId}`)?.value || undefined }));
+  const expected = h('textarea', { rows: 2, placeholder: 'Expected JSON result, e.g. "billing" or {"count": 2}' });
   return h('details', { class: 'panel', style: 'padding: 10px 12px; gap: 8px' },
     h('summary', { style: 'cursor: pointer' }, h('strong', { class: 'mono' }, fn.name), h('span', { class: 'muted mono small' }, ` (${fn.params.join(', ')}) → ${fn.returns}`),
       fn.description ? h('div', { class: 'small muted' }, fn.description) : null),
-    h('div', { class: 'stack', style: 'margin-top: 8px' }, inputs, h('div', { class: 'row' }, h('button', { class: 'primary', onclick: call }, 'Call'),
+    h('div', { class: 'stack', style: 'margin-top: 8px' }, h('code', { class: 'small muted' }, fn.source), inputs, h('div', { class: 'row' }, profile, h('button', { class: 'primary', onclick: call }, 'Call'),
       h('a', { href: `#traces-${encodeURIComponent(fn.name)}` }, 'Recorded calls'),
       h('button', { onclick: attempt(async () => { const source = await get(`/api/programs/source?path=${encodeURIComponent(`${program.directory}/${fn.source}`)}`);
-        sourceBox.textContent = source.text; sourceBox.hidden = false; }) }, 'Show source')), sourceBox));
+        const editor = h('textarea', { rows: 14, class: 'source-editor', 'aria-label': `Source of ${fn.name}` }, source.text);
+        let previous = source.text;
+        fill(sourceBox, h('code', {}, source.path), editor, h('button', { onclick: attempt(async () => {
+          await api('PUT', '/api/programs/source', { path: source.path, text: editor.value, previous }); previous = editor.value; toast('Saved. Call the function or run the program to try the change.');
+        }) }, 'Save source'), h('p', { class: 'small muted' }, 'Arguments and returns define the contract. Instructions can use these arguments and helpers in the companion folder. Static checking checks the contract; saved examples check behavior.'));
+        sourceBox.hidden = false; }) }, 'Edit source')), sourceBox,
+      h('details', {}, h('summary', {}, 'Save an expected result as a test'), h('label', { class: 'field' }, 'Expected result (JSON)', expected),
+        h('button', { onclick: attempt(async () => {
+          let result; try { result = JSON.parse(expected.value); } catch { throw new Error('Enter the expected result as JSON. Put quotes around a string.'); }
+          await api('POST', '/api/programs/example', { path: program.directory, example: { function: fn.source, inputs: valuesFromFields(), expected: result } }); toast('Test saved to examples.json. Use Run tests to verify it.');
+        }) }, 'Save test'))));
 }
-const splitArgs = text => (text.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(part => part.replace(/^(["'])(.*)\1$/, '$2'));
+function splitArgs(text) {
+  const args = []; let word = '', quote = '', active = false;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (char === '\\' && quote !== "'") { if (++index >= text.length) throw new Error('An argument ends with an incomplete escape.'); word += text[index]; active = true; }
+    else if (quote) { if (char === quote) quote = ''; else word += char; }
+    else if (char === '"' || char === "'") { quote = char; active = true; }
+    else if (/\s/.test(char)) { if (active) { args.push(word); word = ''; active = false; } }
+    else { word += char; active = true; }
+  }
+  if (quote) throw new Error('Close the quote in the arguments field.');
+  if (active) args.push(word);
+  return args;
+}
 
 // ---- traces ---------------------------------------------------------------------------------------------------------
 async function traces(arg, target) {
@@ -511,7 +613,8 @@ async function playground(_arg, target) {
       h('label', { class: 'field' }, 'Instruction', instruction), h('label', { class: 'field' }, 'Input (passed as the call\'s input)', input),
       h('div', { class: 'row' }, h('label', { class: 'field', style: 'flex: 1' }, 'Result type (TypeScript)', returns), h('label', { class: 'field' }, 'Model profile', profile)),
       h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => startJob({ kind: 'ask', instruction: instruction.value, input: input.value,
-        returns: returns.value.trim() || undefined, profile: profile.value || undefined }) }, 'Run'))));
+        returns: returns.value.trim() || undefined, profile: profile.value || undefined }) }, 'Run'),
+        h('button', { onclick: () => programDialog({ instruction: instruction.value, input: input.value, returns: returns.value.trim() || 'string', profile: profile.value || undefined }) }, 'Save as program'))));
 }
 
 // ---- models ---------------------------------------------------------------------------------------------------------

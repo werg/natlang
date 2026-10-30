@@ -1,0 +1,3 @@
+.natlang/
+node_modules/
+*.d.nl.ts

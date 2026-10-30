@@ -6,7 +6,7 @@
  * printed at startup (a cookie set by the startup URL and a header), so other web pages cannot drive it.
  */
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { cpus, freemem, totalmem } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
@@ -14,10 +14,11 @@ import { fileURLToPath } from 'node:url';
 import { CallStore, machineStoreRoot } from '../calls/store.js';
 import { expandedRecord } from '../cli/calls.js';
 import { programFunctions, readProgramManifest } from '../cli/build-lock.js';
+import { createProgram, readExamples, saveExample, type SavedExample } from '../cli/authoring.js';
 import { currentRelease } from '../adaptation/weights/release.js';
 import { loadModelConfiguration, resolveModelChoice, type ModelProfile } from '../model/config.js';
 import { DEFAULT_LOCAL_MODEL, STOCK_MODELS, stockModel, type LocalModelRelease } from '../model-catalog.js';
-import { createResolvedModelSession, ensureStockModel, managedModelSha256, profileEnvironment, stockModelDownload, stockModelPath, supportsNativeStates, warmTag,
+import { createResolvedModelSession, ensureStockModel, managedModelSha256, profileEnvironment, stockModelDownload, stockModelPath, localModelPrerequisites, supportsNativeStates, warmTag,
   type ManagedModelSession } from '../model/local-server.js';
 import { publishSharedServer, readSharedServer, withdrawSharedServer } from '../model/shared-server.js';
 import { discoverLlamaRuntime, LLAMA_RUNTIME_RELEASE } from '../model/llama-runtime.js';
@@ -40,7 +41,7 @@ type ConfigFile = { defaultProfile?: string; profiles?: Record<string, ModelProf
 
 export async function startDashboard(options: DashboardOptions): Promise<{ url: string; close(): Promise<void> }> {
   const environment = options.environment ?? process.env, log = options.log ?? process.stderr;
-  const root = resolve(options.root ?? '.');
+  const root = realpathSync(resolve(options.root ?? '.'));
   const token = randomBytes(18).toString('base64url');
   const jobs = new JobSupervisor(join(defaultNatlangStateDirectory(environment), 'dashboard', 'jobs'), environment);
   const configPath = join(defaultNatlangConfigDirectory(environment), 'config.json');
@@ -60,6 +61,10 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
   const inside = (path: string) => {
     const absolute = resolve(root, path);
     if (absolute !== root && !absolute.startsWith(root + sep)) throw new HttpError(400, `${path} is outside the dashboard's root ${root}`);
+    let parent = absolute;
+    while (!existsSync(parent)) parent = dirname(parent);
+    const actual = realpathSync(parent);
+    if (actual !== root && !actual.startsWith(root + sep)) throw new HttpError(400, 'The path points outside the dashboard root.');
     return absolute;
   };
   const stock = (release: LocalModelRelease) => {
@@ -232,6 +237,23 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
   });
 
   // Programs.
+  route('POST', '/api/programs', (_request, _params, _query, body) => {
+    const input = (body ?? {}) as Record<string, unknown>, name = string(input.name, 'directory name');
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(name)) throw new HttpError(400, 'Use a directory name made of letters, numbers, dots, dashes or underscores.');
+    for (const key of ['instruction', 'input', 'returns', 'profile']) if (input[key] !== undefined && typeof input[key] !== 'string') throw new HttpError(400, `${key} must be text`);
+    const path = inside(name);
+    if (existsSync(path) && (!statSync(path).isDirectory() || readdirSync(path).length)) throw new HttpError(409, 'That directory already contains files. Choose a new name.');
+    const directory = createProgram(path, { instruction: input.instruction as string | undefined, input: input.input as string | undefined, returns: input.returns as string | undefined, profile: input.profile as string | undefined });
+    return { directory: relative(root, directory) };
+  });
+  route('GET', '/api/programs/model', (_request, _params, query) => {
+    const directory = inside(string(query.get('path'), 'path')), manifest = readProgramManifest(directory);
+    const { choice } = loadModelConfiguration(query.get('profile') || undefined, {}, environment, manifest?.model);
+    const local = choice.kind === 'managed-local' ? localModelPrerequisites(profileEnvironment(choice, environment), choice.release) : null;
+    return { model: choice.model, kind: choice.kind, detail: choice.kind === 'managed-local' ?
+      `${local?.modelPath ? 'model downloaded' : `first run downloads ${Math.ceil((choice.release?.bytes ?? 0) / 1_000_000)} MB`}; ${local?.executable ? 'runtime installed' : 'runtime setup required'}. First runs on a CPU may take several minutes.` :
+      'Uses the selected endpoint or provider. Use Models → Test to verify an actual request.' };
+  });
   route('GET', '/api/programs', () => discoverLocalApplications(root, { libraries: true }).map(item => {
     const directory = dirname(item.path), lock = readBuildLock(join(directory, '.natlang', 'build'));
     return { ...item, directory: relative(root, directory) || '.', functions: programFunctions(directory).length,
@@ -246,7 +268,13 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     const release = currentRelease(directory);
     const readme = ['README.md', 'DECOMPOSITION.md'].map(name => join(directory, name)).find(existsSync);
     const recent = (() => { try { return withStore(s => s.calls({ program: directory, limit: 20, audits: false })); } catch { return []; } })();
+    const lastRuns = jobs.list().filter(job => job.kind === 'run' && job.status === 'done' && job.meta?.path === (relative(root, directory) || '.'));
+    const lastCalls = jobs.list().filter(job => job.kind === 'call' && job.status === 'done' && job.meta?.program === (relative(root, directory) || '.'));
+    let examples = 0, examplesProblem: string | null = null;
+    try { examples = readExamples(directory).length; } catch (error) { examplesProblem = (error as Error).message; }
     return { directory: relative(root, directory) || '.', manifest, problem, functions: programFunctions(directory),
+      lastRuns: Object.fromEntries(lastRuns.slice().reverse().map(job => [String(job.meta?.target ?? ''), job.meta])), examples, examplesProblem,
+      lastCalls: Object.fromEntries(lastCalls.slice().reverse().map(job => [String(job.meta?.path), job.meta])),
       lock: readBuildLock(join(directory, '.natlang', 'build')) ?? null,
       tuning: release ? { release: release.manifest.digest, base: release.manifest.base.checkpoint_sha256 } : null,
       readme: readme ? { name: basename(readme), text: readFileSync(readme, 'utf8').slice(0, 20000) } : null, recent };
@@ -255,6 +283,25 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     const path = inside(string(query.get('path'), 'path'));
     if (!existsSync(path) || !statSync(path).isFile() || statSync(path).size > 512_000) throw new HttpError(404, 'no such source file');
     return { path: relative(root, path), text: readFileSync(path, 'utf8') };
+  });
+  route('PUT', '/api/programs/source', (_request, _params, _query, body) => {
+    const input = (body ?? {}) as Record<string, unknown>, path = inside(string(input.path, 'path'));
+    if (!/\.(nl|ts|json)$/.test(path) || !existsSync(path) || statSync(path).size > 512_000) throw new HttpError(400, 'Choose an existing .nl, .ts or .json source file.');
+    if (typeof input.text !== 'string' || input.text.length > 512_000) throw new HttpError(400, 'Source text must be at most 512 KB.');
+    if (typeof input.previous !== 'string' || readFileSync(path, 'utf8') !== input.previous) throw new HttpError(409, 'This file changed on disk. Reload its source before saving.');
+    const temporary = `${path}.${randomBytes(6).toString('hex')}.tmp`;
+    writeFileSync(temporary, input.text); renameSync(temporary, path);
+    return { path: relative(root, path) };
+  });
+  route('POST', '/api/programs/example', (_request, _params, _query, body) => {
+    const input = (body ?? {}) as Record<string, unknown>, directory = inside(string(input.path, 'program path'));
+    if (!readProgramManifest(directory)) throw new HttpError(400, 'Choose a program with natlang.json first.');
+    const example = input.example as SavedExample;
+    if (typeof example?.function !== 'string') throw new HttpError(400, 'Choose a function.');
+    inside(join(directory, example.function));
+    if (!existsSync(join(directory, example.function))) throw new HttpError(404, 'The function does not exist.');
+    saveExample(directory, example);
+    return { examples: readExamples(directory).length };
   });
 
   // Jobs: the CLI commands the dashboard starts.
@@ -268,18 +315,21 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
       spec = { kind, title: `run ${relative(root, path) || '.'}${input.target ? `#${input.target}` : ''}${args.length ? ' ' + args.join(' ') : ''}`, cwd: root,
         argv: ['run', path, '--plain', ...(typeof input.target === 'string' && input.target ? ['--target', input.target] : []), ...selection(input),
           '--yes', ...(args.length ? ['--', ...args] : [])], interactive: input.interactive !== false,
-        ...(typeof input.stdin === 'string' ? { stdin: input.stdin } : {}), meta: { path: relative(root, path) } };
+        ...(typeof input.stdin === 'string' ? { stdin: input.stdin } : {}), meta: { path: relative(root, path) || '.', target: input.target ?? '', args, profile: input.profile } };
     } else if (kind === 'call') {
       const path = inside(string(input.function, 'function'));
       if (!path.endsWith('.nl')) throw new HttpError(400, 'function must be a .nl file');
       const inputs = input.inputs && typeof input.inputs === 'object' ? input.inputs : {};
       spec = { kind, title: `call ${relative(root, path)}`, cwd: dirname(path), argv: ['call', path, ...selection(input), '--yes', '--json'],
-        stdin: JSON.stringify(inputs), meta: { path: relative(root, path), inputs } };
+        stdin: JSON.stringify(inputs), meta: { path: relative(root, path), inputs, profile: input.profile, program: typeof input.program === 'string' ? relative(root, inside(input.program)) || '.' : undefined } };
     } else if (kind === 'ask') {
       const instruction = string(input.instruction, 'instruction');
       spec = { kind, title: `ask ${instruction.slice(0, 60)}`, cwd: typeof input.cwd === 'string' ? inside(input.cwd) : root,
         argv: ['ask', instruction, ...(typeof input.returns === 'string' && input.returns ? ['--returns', input.returns] : []), ...selection(input), '--yes'],
-        stdin: typeof input.input === 'string' ? input.input : '', meta: { instruction, returns: input.returns ?? null } };
+        stdin: typeof input.input === 'string' ? input.input : '', meta: { instruction, input: input.input ?? '', returns: input.returns ?? null, profile: input.profile } };
+    } else if (kind === 'test') {
+      const path = inside(string(input.path, 'path'));
+      spec = { kind, title: `test ${relative(root, path) || '.'}`, cwd: root, argv: ['test', path, ...selection(input), '--yes'], meta: { path: relative(root, path) || '.' } };
     } else if (kind === 'build') {
       const path = inside(string(input.path, 'path'));
       spec = { kind, title: `build ${relative(root, path) || '.'}${input.warm ? ' --warm' : ''}`, cwd: root,

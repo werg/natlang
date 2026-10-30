@@ -6,18 +6,18 @@ From the repository root, prepare everything with:
 scripts/setup_dev.sh
 ```
 
-Use `scripts/setup_dev.sh --node-only` when the Python training tools are
-unnecessary. Both forms are safe to repeat. Node 22.13 or newer is required;
+Use `scripts/setup_dev.sh --node-only` to install just the CLI and Node runtime;
+this skips model setup, browser, bundled-application and Python builds. Both forms are safe to repeat. Node 22.13 or newer is required;
 full setup also needs `uv` and Python 3.12.
 
-Setup installs the pinned TypeScript dependencies and builds the Node and
-browser outputs, stages the `@natlang/node` package, and builds repository
-applications. Full setup also creates `.venv` with the Python training-data
+Setup installs the pinned TypeScript dependencies and builds the Node output,
+including the CLI and dashboard, and stages the `@natlang/node` package. Full setup
+also builds browser outputs and repository applications and creates `.venv` with the Python training-data
 and fine-tuning tools and their test dependencies. It also installs `natlang` in `~/.local/bin` as a
 symlink to this checkout's source wrapper. If that directory is missing from
 `PATH`, setup prints the exact export to add to your shell profile.
 
-This is the only repository setup command. It also checks an existing
+This is the repository setup command. Full setup also checks an existing
 `llama-server` version. If there is no compatible server, it asks before
 downloading natlang's pinned, verified build into `.natlang/runtime`. The setup
 does not modify a system installation. For unattended setup, `--yes` grants
@@ -26,6 +26,11 @@ permission for that managed download:
 ```bash
 scripts/setup_dev.sh --yes
 ```
+
+Node-only setup installs the CLI and dashboard without downloading a model.
+Choose a profile in Models, run `natlang setup` explicitly, or let the first
+local run prepare it. The CLI command is installed before optional model or
+Python setup so those steps do not prevent opening the dashboard.
 
 The install is safe to repeat and will not replace a `natlang` command owned by
 another checkout or package installation. Use a different directory when you
@@ -43,6 +48,19 @@ from the selected command directory, for example with
 `unlink "$HOME/.local/bin/natlang"` for the default. No shell alias is required.
 
 ## Run from source
+
+The shortest first run and dashboard commands are:
+
+```sh
+natlang run examples/hello
+natlang dashboard --root examples --open
+```
+
+For a new program, run `natlang init my-program`, enter that directory, then
+`natlang dev`. Edit `answer.nl` and `sample.json`; source and input changes rerun
+the program, while generated build files do not. `natlang test` runs the saved
+input/expected-output examples in `examples.json`. These tests contact the
+selected model; `natlang check` does not.
 
 The installed `natlang` command points at `scripts/natlang`. That checkout
 wrapper rebuilds the Node output whenever its TypeScript inputs are newer than

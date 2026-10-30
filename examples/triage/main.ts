@@ -7,7 +7,8 @@ import { triage } from './triage.js';
 const DEFAULT_RUBRIC = 'billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising';
 
 export async function main(context: TargetContext): Promise<number> {
-  const [path, rubric = DEFAULT_RUBRIC] = context.args;
+  const [path, suppliedRubric] = context.args;
+  const rubric = suppliedRubric || DEFAULT_RUBRIC;
   const file = path ? resolve(context.workspace, path) : join(context.package?.root ?? context.workspace, 'tickets.json');
   const tickets = JSON.parse(readFileSync(file, 'utf8')) as string[];
   const report = await context.runtime.run(() => triage(tickets, rubric));

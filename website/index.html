@@ -713,14 +713,14 @@ const choose = pluggable(
   <div class="coda">
     <div style="flex: 1 1 340px">
       <h2>Try it</h2>
-      <p style="margin: 0">Install the runtime and the <code>natlang</code> command, choose a model backend with <code>natlang setup</code> (a managed local model, an OpenAI-compatible endpoint or a Pi provider), then check and run the triage example. The specification is the reference; where it and the code disagree, it says so.</p>
+      <p style="margin: 0">Install the <code>natlang</code> command, then run a one-function example. The first local run prepares its model; the dashboard lets you choose an API provider or another backend before running. Create your own program with <code>natlang init</code> and edit its instructions.</p>
     </div>
-    <div class="copywrap"><button class="btn copy" id="copy-cmds" type="button">Copy</button><pre class="code" data-hl="sh" id="cmds">scripts/setup_dev.sh --node-only
-natlang doctor
-natlang setup
-natlang check examples/triage
-natlang run examples/triage -- tickets.json
-natlang run applications/evidence</pre></div>
+    <div class="copywrap"><button class="btn copy" id="copy-cmds" type="button">Copy</button><pre class="code" data-hl="sh" id="cmds">git clone https://github.com/werg/natlang.git
+cd natlang
+scripts/setup_dev.sh --node-only
+natlang run examples/hello
+natlang dashboard --root examples --open
+natlang init my-program</pre></div>
   </div>
   <div class="links">
     <a href="https://github.com/werg/natlang/blob/main/spec/SPEC.md"><b>spec/SPEC.md</b><span>Functions, contexts, captures, iteration, services and the model's tools</span></a>

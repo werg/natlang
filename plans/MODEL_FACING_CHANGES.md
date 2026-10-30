@@ -1,5 +1,16 @@
 # Model-facing changes and their measurement
 
+### 2026-10-30 — first-program classifier starter (unmeasured debt)
+
+`natlang init` and `examples/hello/answer.nl` introduce a one-call support-ticket
+classifier with a string input and billing/technical/other result. CLI and
+Chromium tests use a deterministic model fixture; these establish creation,
+execution, editing and saved-example mechanics, not live model quality.
+**Measurement debt:** sample about 48 fresh non-held tickets on the actual
+default executor in the next measurement window, recording model identity,
+category correctness, latency and recovery. No runtime system prompt or
+production training recipe changes in this onboarding work.
+
 ### 2026-10-17 — decoded JSON tool arguments are not decoded twice
 
 The serving renderer already converts JSON-text tool arguments to their JSON

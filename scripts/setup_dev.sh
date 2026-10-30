@@ -14,7 +14,7 @@ Usage: scripts/setup_dev.sh [OPTIONS]
 
 Prepare a natlang development checkout and install its `natlang` command.
 
-  --node-only        Skip the Python training-tools environment.
+  --node-only        Install the CLI and Node runtime; skip model setup, browser, application and Python builds.
   --command-only     Only install the command; do not install or build dependencies.
   --no-command       Do not install the command.
   --command-dir DIR  Install the command in DIR (default: ~/.local/bin).
@@ -78,20 +78,36 @@ if [[ "$COMMAND_ONLY" -eq 0 ]]; then
   npm --prefix "$ROOT" ci
   # Applications with their own dependencies (a package.json and lockfile beside their sources, such as pi's vendored
   # pi-durable) install them from that lockfile.
-  for lock in "$ROOT"/applications/*/package-lock.json; do
-    [[ -f "$lock" ]] || continue
-    echo "==> Installing $(basename "$(dirname "$lock")") application dependencies"
-    npm --prefix "$(dirname "$lock")" ci
-  done
+  if [[ "$NODE_ONLY" -eq 0 ]]; then
+    for lock in "$ROOT"/applications/*/package-lock.json; do
+      [[ -f "$lock" ]] || continue
+      echo "==> Installing $(basename "$(dirname "$lock")") application dependencies"
+      npm --prefix "$(dirname "$lock")" ci
+    done
+  fi
 
-  echo "==> Building the TypeScript host, Node package, browser bundle, and applications"
-  npm --prefix "$ROOT" run build
-  npm --prefix "$ROOT" run build:applications
+  if [[ "$NODE_ONLY" -eq 1 ]]; then
+    echo "==> Building the CLI and Node runtime"
+    npm --prefix "$ROOT" run build:node
+  else
+    echo "==> Building the TypeScript host, Node package, browser bundle, and applications"
+    npm --prefix "$ROOT" run build
+    npm --prefix "$ROOT" run build:applications
+  fi
 
-  echo "==> Checking the local model runtime"
-  RUNTIME_ARGS=(setup)
-  if [[ "$RUNTIME_YES" -eq 1 ]]; then RUNTIME_ARGS+=(--yes); fi
-  NATLANG_RUNTIME_HOME="$ROOT/.natlang/runtime" node "$ROOT/ts-host/dist/cli/main.js" "${RUNTIME_ARGS[@]}"
+  # Make the dashboard usable before any optional model download or Python setup.
+  if [[ "$INSTALL_COMMAND" -eq 1 ]]; then install_command; fi
+
+  if [[ "$NODE_ONLY" -eq 0 ]]; then
+    echo "==> Checking the local model runtime"
+    RUNTIME_ARGS=(setup)
+    if [[ "$RUNTIME_YES" -eq 1 ]]; then RUNTIME_ARGS+=(--yes); fi
+    NATLANG_RUNTIME_HOME="${NATLANG_RUNTIME_HOME:-$ROOT/.natlang/runtime}" \
+      NATLANG_CACHE_HOME="${NATLANG_CACHE_HOME:-$ROOT/.natlang/cache}" \
+      node "$ROOT/ts-host/dist/cli/main.js" "${RUNTIME_ARGS[@]}"
+  else
+    echo "==> Model setup deferred: use the dashboard to choose a model, or run natlang setup"
+  fi
 
   if [[ "$NODE_ONLY" -eq 0 ]]; then
     command -v uv >/dev/null || {
@@ -143,17 +159,16 @@ if [[ "$COMMAND_INSTALLED" -eq 1 ]]; then
   cat <<EOF
 
 Check the installation and run code from any directory:
-  natlang doctor --json
-  natlang run applications/evidence
-  natlang call path/to/function.nl --inputs inputs.json
+  natlang run examples/hello
+  natlang dashboard --root examples --open
+  natlang init my-program
 EOF
 else
   cat <<EOF
 
 Run through the checkout wrapper:
-  $COMMAND_TARGET doctor --json
-  $COMMAND_TARGET run applications/evidence
-  $COMMAND_TARGET call path/to/function.nl --inputs inputs.json
+  $COMMAND_TARGET run examples/hello
+  $COMMAND_TARGET dashboard --root examples --open
 EOF
 fi
 

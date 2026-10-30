@@ -4,6 +4,8 @@ import { spawnSync } from 'node:child_process';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline/promises';
+import { isDeepStrictEqual } from 'node:util';
+import { createProgram, readExamples } from './authoring.js';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, defaultNatlangConfigDirectory, satisfiesVersion } from '../package/store.js';
@@ -48,6 +50,9 @@ const RUNTIME_MODULE = { url: new URL('../index.js', import.meta.url).href, path
 function help(): string { return `natlang ${NATLANG_CLI_VERSION}
 
 Usage:
+  natlang init [DIRECTORY]                  Create a runnable program with sample input and tests.
+  natlang dev [SOURCE]                      Run and rerun when source or inputs change.
+  natlang test [DIRECTORY]                  Run saved input/expected-output examples on the selected model.
   natlang run [SOURCE] [OPTIONS] [-- ARGS]   Build and run an application or TS entry module.
   natlang adapt inspect PROJECT              Inspect trainable authored components.
   natlang eval SUITE                         Evaluate independent fixtures.
@@ -78,6 +83,22 @@ Usage:
 Run natlang help COMMAND for focused usage and options.`; }
 
 function topicHelp(topic: string): string {
+  if (topic === 'init') return `Create a program without downloading or starting a model:
+  natlang init [DIRECTORY]                   Default: my-program; existing files are never overwritten.
+
+Then cd into the directory and run natlang run. Edit answer.nl and sample.json;
+natlang dev reruns your program after edits, and natlang test checks examples.json.`;
+  if (topic === 'dev') return `Run and rerun after source or input changes:
+  natlang dev [SOURCE] [RUN_OPTIONS] [-- APPLICATION_ARGS...]
+
+Options are the same as natlang run. Ctrl+C stops the watcher and its current run.
+Generated declarations, .natlang, dist and node_modules do not trigger reruns.`;
+  if (topic === 'test') return `Run saved model examples:
+  natlang test [DIRECTORY] [--profile NAME] [--provider ID] [--model ID] [--yes]
+
+examples.json is an array of { name?, function: "answer.nl", inputs: {...}, expected: VALUE }.
+Expected values are compared exactly, including object fields and array order.
+These are real model calls; run natlang check for a model-free source check.`;
   if (topic === 'run') return `Build and run an application:
   natlang run [SOURCE] [OPTIONS] [-- APPLICATION_ARGS...]
 
@@ -457,6 +478,7 @@ function modelSession(choice: ResolvedModelChoice, assumeYes = false, loraAdapte
 
 function selectTarget(manifest: { name: string; targets?: Record<string, unknown> }, requested?: string): string {
   const targets = Object.keys(manifest.targets ?? {});
+  if (!targets.length) throw new Error(`${manifest.name} has no runnable targets. Use natlang call FUNCTION.nl, or add a main.ts target to natlang.json.`);
   const selected = requested ?? (targets.length === 1 ? targets[0] : undefined);
   if (!selected) throw new Error(`${manifest.name} has multiple targets; use --target ${targets.join('|')}`);
   if (!manifest.targets?.[selected]) throw new Error(`unknown target ${selected} in ${manifest.name}; choose ${targets.join(', ')}`);
@@ -498,12 +520,34 @@ async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise
     } catch { /* doctor reports a provider profile that cannot prepare as unavailable */ }
     finally { await session?.close(); }
   }
-  const modelOkay = choice.kind === 'pi-provider' ? piReady : choice.kind === 'external' || Boolean(local?.available);
+  let connection: { checked: boolean; reachable: boolean | null; detail: string; next?: string } = {
+    checked: false, reachable: null, detail: 'Not contacted; local model files and runtime are checked without starting a server.' };
+  if (choice.kind === 'managed-local' && (!local?.available || !local.modelPath)) connection = {
+    checked: false, reachable: null, detail: 'Local model setup is incomplete.', next: 'Run natlang setup to install the runtime and download the model.' };
+  if (choice.kind === 'pi-provider') connection = { checked: false, reachable: null,
+    detail: piReady ? 'Provider credentials are configured; inference has not been tested.' : 'Provider credentials are unavailable.',
+    ...(!piReady ? { next: 'Configure this provider in Models or run natlang auth login PROVIDER.' } : {}) };
+  if (choice.kind === 'external') {
+    try {
+      const headers: Record<string, string> = { ...choice.headers };
+      const key = process.env[choice.apiKeyEnv];
+      if (key) headers.authorization ??= `Bearer ${key}`;
+      const url = choice.endpoint.replace(/\/$/, '') + (choice.endpoint.replace(/\/$/, '').endsWith('/v1') ? '/models' : '/v1/models');
+      const response = await fetch(url, { headers, signal: AbortSignal.timeout(5000) });
+      connection = { checked: true, reachable: response.ok, detail: response.ok ? 'Model catalog reachable; inference has not been tested.' : `Model catalog returned HTTP ${response.status}.`,
+        ...(!response.ok ? { next: 'Check the endpoint URL and credentials, then test the profile in Models.' } : {}) };
+      await response.body?.cancel();
+    } catch {
+      connection = { checked: true, reachable: false, detail: 'Could not reach the model endpoint.', next: 'Start the server or correct the endpoint URL, then run natlang doctor again.' };
+    }
+  }
+  const modelOkay = choice.kind === 'pi-provider' ? piReady : choice.kind === 'external' ? connection.reachable === true : Boolean(local?.available && local.modelPath);
   const okay = Boolean(modelOkay);
   // Native models, tuning and the program (cli/status.ts): pin, newer checkpoints, server, release base, pending examples.
   const status = await modelStatus(selected, readConfigFile().profiles ?? {}, programForStatus(option(parsed, '--program')));
   return { okay, report: { ok: okay, node: process.version, packageStore: store.root,
-    installedPackages: store.list().length, config: selected.configPath, profile: selected.name,
+    installedPackages: store.list().length, config: selected.configPath, profile: selected.name, configurationValid: true, connection,
+    inferenceTested: false,
     modelSource: choice.kind, endpoint: choice.kind === 'external' ? choice.endpoint : null,
     model: choice.model, provider: choice.kind === 'pi-provider' ? choice.provider : null,
     modelPath: local?.modelPath ?? null, modelServer: local?.executable ?? null,
@@ -582,6 +626,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const artifact = !parsed.options.has('--no-adaptation') && selection ? parseAdaptation(readFileSync(
     option(parsed, '--adaptation') ? resolve(selection) : resolve(spec.root, selection), 'utf8')) : null;
   const buildDirectory = spec.installed ? join(stateDirectory, 'build', spec.package?.digest ?? 'local') : join(spec.root, '.natlang', 'build');
+  process.stderr.write(`natlang: checking and building ${relative(process.cwd(), spec.root) || '.'}\n`);
   const compiled = compileFor(spec.root, entry, buildDirectory, spec.installed === true, artifact?.program.id);
   const inventory = buildProject({ project: spec.root, programId: artifact?.program.id, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
   if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
@@ -598,6 +643,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
     runtime: { trace: fileTraceSink(traceDirectory), programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}),
       ...(progress.live ? { onLive: progress.live } : {}) } });
   const { runtime, driver, executorIdentity, adaptation } = natlang, program = natlang.program!, choice = natlang.selection.choice;
+  process.stderr.write(`natlang: model ${choice.model} via ${choice.kind} (profile ${natlang.selection.name})\n`);
   try {
     // Fused hand-offs (plans/FUSED_PIPELINES.md): off unless natlang.json says otherwise.
     const fusionSetting = spec.package ? fusionSettings(parsed, spec.root) : undefined;
@@ -634,7 +680,7 @@ async function runCommand(parsed: Parsed, value = '.'): Promise<number> {
   }
   if (existsSync(path)) {
     const manifestPath = statSync(path).isDirectory() ? join(path, 'natlang.json') : path;
-    if (!isApplicationManifest(manifestPath)) throw new Error(`${value} has no natlang.package/v2 natlang.json manifest`);
+    if (!isApplicationManifest(manifestPath)) throw new Error(`${value} has no valid natlang.json manifest. Use natlang init DIRECTORY to create a program, or natlang run main.ts for a TypeScript entry.`);
     const root = dirname(manifestPath);
     const archive = createPackageArchive(JSON.parse(readFileSync(manifestPath, 'utf8')), root);
     const store = new NatlangPackageStore(option(parsed, '--store'));
@@ -707,7 +753,7 @@ function describeLock(lock: BuildLock, path: string): string {
 /** The progress display of a command that runs natural-language calls (`--progress`, NATLANG_PROGRESS). */
 const progressFor = (parsed: Parsed) => commandProgress(process.stderr, parseProgressMode(option(parsed, '--progress') ?? process.env.NATLANG_PROGRESS));
 
-async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime) => Promise<T>): Promise<T> {
+async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime) => Promise<T>, sourceRoot = projectRoot(process.cwd())): Promise<T> {
   const trace = option(parsed, '--trace'), weights = !parsed.options.has('--no-weights');
   if (option(parsed, '--adaptation') && parsed.options.has('--no-adaptation')) throw new Error('--adaptation and --no-adaptation are mutually exclusive');
   const artifact = option(parsed, '--adaptation') ? parseAdaptation(readFileSync(resolve(option(parsed, '--adaptation')!), 'utf8')) : null;
@@ -717,7 +763,8 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
     emit: false, write: false, runtimeModule: RUNTIME_MODULE }) : null;
   if (inventory && !inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
   const progress = progressFor(parsed);
-  const natlang = await natlangRuntime({ ...selectionOptions(parsed), ...(inventory ? { programRoot: process.cwd(), program: inventory.manifest.adaptation } : {}),
+  const manifest = readProgramManifest(sourceRoot);
+  const natlang = await natlangRuntime({ ...selectionOptions(parsed), ...(manifest?.model ? { programModel: manifest.model } : {}), ...(inventory ? { programRoot: process.cwd(), program: inventory.manifest.adaptation } : {}),
     weights, escalate: escalateOption(parsed), ...(artifact ? { adaptation: artifact } : {}),
     ensureRuntime: discovery => ensureRuntime(discovery, parsed.options.has('--yes')),
     runtime: { ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}), ...(progress.live ? { onLive: progress.live } : {}) } });
@@ -787,7 +834,7 @@ async function callCommand(parsed: Parsed, name: string): Promise<number> {
   if (parsed.options.has('--lines') && params.length !== 1)
     throw new Error('--lines requires a function with one parameter');
   const result = await withModelRuntime(parsed, runtime => runtime.run(() => executeNatlangCall(name, stdin, mode,
-    (_name, input) => fn(...commandInputArgs(input, params)))));
+    (_name, input) => fn(...commandInputArgs(input, params)))), existsSync(resolve(name)) ? projectRoot(resolve(name)) : projectRoot(process.cwd()));
   process.stdout.write(result);
   return 0;
 }
@@ -798,7 +845,7 @@ async function applyCommand(parsed: Parsed, name: string, directory: string): Pr
   if (definition.subtype !== 'directory-reducer') throw new Error(`${name} is not a directory reducer`);
   if (definition.params.length) throw new Error(`${name} needs parameters; natlang apply accepts a folder-only reducer`);
   const path = resolve(directory), folder = openFolder(path, 'write');
-  const value = await withModelRuntime(parsed, runtime => runtime.run(() => folder.apply(fn)));
+  const value = await withModelRuntime(parsed, runtime => runtime.run(() => folder.apply(fn)), existsSync(resolve(name)) ? projectRoot(resolve(name)) : projectRoot(process.cwd()));
   saveFolder(path, folder);
   process.stdout.write(`${pipelineValue(value)}\n`);
   return 0;
@@ -940,6 +987,46 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (!command || command === 'help' || parsed.options.has('--help') || parsed.options.has('-h')) {
     const topic = command === 'help' ? words[0] : command;
     output(topic ? topicHelp(topic) : help(), false); return 0;
+  }
+  if (command === 'init') {
+    acceptOptions(parsed, []); noTrailingArguments(parsed);
+    if (words.length > 1) throw new Error('usage: natlang init [DIRECTORY]');
+    const root = createProgram(words[0] ?? 'my-program');
+    output(`Created ${root}\n\nNext:\n  cd ${JSON.stringify(root)}\n  natlang run\n  natlang dev\n\nEdit answer.nl to change behavior, sample.json to change input, and examples.json to save expectations.\nRun natlang test to check them, or natlang dashboard --open to inspect results and traces.`, false);
+    return 0;
+  }
+  if (command === 'dev') {
+    acceptOptions(parsed, ['--progress', '--target', '--export', '--profile', '--provider', '--model', '--escalate', '--workspace', '--state', '--traces', '--store', '--plain', '--no-color', '--yes', '--adaptation', '--no-adaptation', '--no-weights']);
+    if (words.length > 1) throw new Error('usage: natlang dev [SOURCE] [OPTIONS] [-- ARGS]');
+    const args = [words[0] ?? '.', ...[...parsed.options].flatMap(([key, value]) => value === true ? [key] : [key, value]), ...(parsed.rest.length ? ['--', ...parsed.rest] : [])];
+    return (await import('./dev.js')).develop(words[0] ?? '.', args);
+  }
+  if (command === 'test') {
+    acceptOptions(parsed, ['--profile', '--provider', '--model', '--yes', '--progress']); noTrailingArguments(parsed);
+    if (words.length > 1) throw new Error('usage: natlang test [DIRECTORY]');
+    const root = resolve(words[0] ?? '.'), examples = readExamples(root);
+    if (!examples.length) throw new Error('No saved examples. Add { function, inputs, expected } cases to examples.json, or save a test in the dashboard function form.');
+    const checked = buildProject({ project: root, emit: false, runtimeModule: RUNTIME_MODULE });
+    if (!checked.ok) throw new Error(formatDiagnostics(checked.diagnostics));
+    const manifest = readProgramManifest(root), progress = progressFor(parsed);
+    const natlang = await natlangRuntime({ ...selectionOptions(parsed), programRoot: root, programModel: manifest?.model,
+      ensureRuntime: discovery => ensureRuntime(discovery, parsed.options.has('--yes')),
+      runtime: { trace: fileTraceSink(join(root, '.natlang', 'test-traces')), ...(progress.live ? { onLive: progress.live } : {}) } });
+    let failed = 0;
+    try {
+      for (const [index, example] of examples.entries()) {
+        const name = example.name ?? `${example.function} #${index + 1}`;
+        try {
+          const fn = loadNatlang(resolve(root, example.function), root) as unknown as ((...args: unknown[]) => Promise<unknown>) & Record<symbol, { definition: { params: { name: string }[] } }>;
+          const params = fn[Symbol.for('natlang.callable')]!.definition.params;
+          const result = await natlang.runtime.run(() => fn(...params.map(param => example.inputs[param.name])));
+          if (!isDeepStrictEqual(result, example.expected)) { failed++; output(`FAIL ${name}\n  expected: ${JSON.stringify(example.expected)}\n  received: ${JSON.stringify(result)}`, false); }
+          else output(`PASS ${name}`, false);
+        } catch (error) { failed++; output(`FAIL ${name}: ${(error as Error).message}`, false); }
+      }
+    } finally { progress.close(); await natlang.close(); }
+    output(`${examples.length - failed}/${examples.length} passed. Traces: ${join(root, '.natlang', 'test-traces')}`, false);
+    return failed ? 1 : 0;
   }
   if (command === 'check' || command === 'build') {
     acceptOptions(parsed, command === 'build' ? ['--out', '--target', '--json', '--warm', '--profile', '--provider', '--model', '--yes', '--progress'] :

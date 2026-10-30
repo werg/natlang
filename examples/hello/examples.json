@@ -1,0 +1,10 @@
+[
+  {
+    "name": "duplicate charge",
+    "function": "answer.nl",
+    "inputs": {
+      "input": "I was charged twice for my subscription."
+    },
+    "expected": "billing"
+  }
+]

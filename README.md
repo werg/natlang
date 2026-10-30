@@ -30,13 +30,32 @@ introduction in nine chapters; its source is in [`website/`](website/).
 ## Get started
 
 ```sh
-scripts/setup_dev.sh --node-only        # install and build ts-host; installs the `natlang` command
-natlang setup --yes                     # the llama.cpp runtime and the default model (stock LFM3 1.7B, 1.8 GB)
-natlang run examples/triage             # triage the bundled support tickets
-natlang dashboard --open                # the local dashboard: models, programs, live runs, traces
-natlang build examples/triage --warm    # compile with its model lock and a pre-warmed, traced warm-up run
-natlang runtime build                   # optional: compile natlang's llama.cpp fork (scoring, guidance, native states)
+scripts/setup_dev.sh --node-only        # install the CLI; no model download required
+natlang run examples/hello              # one input, one natural-language function, one label
+natlang dashboard --root examples --open # browse examples, configure models, run and inspect results
 ```
+
+From a fresh terminal, clone this repository and enter its directory before running setup.
+The first local run prepares the runtime and model once (the default model is a
+1.8 GB download). Run `natlang setup` to prepare it in advance. For a hosted
+model, configure a profile on the dashboard's Models page before your first run.
+The next example is `natlang run examples/triage`, which processes bundled support tickets.
+
+Create your own program:
+
+```sh
+natlang init my-program
+cd my-program
+natlang run                            # uses sample.json
+natlang dev                            # reruns after source or input edits; Ctrl+C stops
+natlang test                           # compares saved examples with real model results
+```
+
+Edit `answer.nl` to change instructions, `sample.json` to change input, and
+`examples.json` to save expected results. `natlang check` checks source without
+contacting a model. The dashboard can create programs, edit function source,
+save tests, and turn a Playground experiment into a program. See the
+[user-testing guide](docs/USER_TESTING.md) for a short walkthrough.
 
 `natlang setup` prepares the selected model backend. The CLI can use its managed
 local model (by default the stock `LiquidAI/LFM3-1.7B`), an OpenAI-compatible endpoint,
