@@ -4,14 +4,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import { cleanupSessionResources, defaultProviderAuthContext } from '@earendil-works/pi-ai';
-import type { Api, AssistantMessage, Context, Credential, CredentialStore, Message,
-  ModelsApiStreamOptions, ModelsSimpleStreamOptions, Tool } from '@earendil-works/pi-ai';
-import { modelTools } from './chat-completion.js';
+import type { Api, Context, Credential, CredentialStore, ModelsApiStreamOptions, ModelsSimpleStreamOptions } from '@earendil-works/pi-ai';
 import { defaultNatlangConfigDirectory } from '../package/store.js';
-import type { ModelStreamProgress, ModelTurn, ModelTurnDelta, ModelTurnRequest, SessionTurnOptions } from '../contracts.js';
-
-const emptyUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+import type { ModelStreamProgress, ModelTurn, ModelTurnRequest, SessionTurnOptions } from '../contracts.js';
+import { piAssistantContent, piAssistantToTurn, piDeltaTranslator, piToolChoiceOptions, toPiContext,
+  type PiAssistantMessage, type PiContentBlock } from './pi-translation.js';
 
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u;
 const REPLY_DIAGNOSTIC_EXCERPT_BYTES = 256;
@@ -86,8 +83,8 @@ function escapedExcerpt(value: string, maxBytes = REPLY_DIAGNOSTIC_EXCERPT_BYTES
   return out;
 }
 
-function piReplyDiagnostic(reply: AssistantMessage, visibleText: string, reasoning: string,
-  calls: AssistantMessage['content']): Record<string, unknown> | undefined {
+function piReplyDiagnostic(reply: PiAssistantMessage, visibleText: string, reasoning: string,
+  calls: readonly PiContentBlock[]): Record<string, unknown> | undefined {
   const emptyWithoutAction = visibleText.length === 0 && calls.length === 0;
   const hasControl = containsControlCharacter(reply.content);
   if (!emptyWithoutAction && !hasControl) return;
@@ -179,77 +176,24 @@ export function piModels(environment: NodeJS.ProcessEnv = process.env, scopedEnv
     }, fileExists: base.fileExists } });
 }
 
-function piContext(request: ModelTurnRequest, model: { api: string; provider: string; id: string }): Context {
-  const messages: Message[] = [];
-  const names = new Map<string, string>();
-  const hostGeneratedCalls = new Set<string>();
-  const googleHistory = model.api === 'google-generative-ai' || model.api === 'google-vertex';
-  for (const raw of request.messages as Record<string, unknown>[]) {
-    const role = raw.role, content = String(raw.content ?? '');
-    const timestamp = Date.now();
-    if (role === 'system') messages.push({ role, content, timestamp });
-    else if (role === 'user') messages.push({ role, content, timestamp });
-    else if (role === 'assistant') {
-      const calls = (raw.tool_calls ?? []) as Array<{ id: string; function: { name: string; arguments: string };
-        thought_signature?: string }>;
-      const hostGenerated = googleHistory && raw.natlang_host_generated === true;
-      if (hostGenerated) {
-        const notes: string[] = [];
-        if (content) notes.push(content);
-        const reasoning = raw.reasoning_content ?? raw.reasoning;
-        if (typeof reasoning === 'string' && reasoning) notes.push(reasoning);
-        for (const call of calls) {
-          names.set(call.id, call.function.name);
-          hostGeneratedCalls.add(call.id);
-          notes.push(`Host-provided operation ${call.function.name} arguments: ${call.function.arguments || '{}'}`);
-        }
-        if (notes.length) messages.push({ role: 'user', content: notes.join('\n'), timestamp });
-        continue;
-      }
-      const blocks: AssistantMessage['content'] = [];
-      const reasoning = raw.reasoning_content ?? raw.reasoning;
-      if (typeof reasoning === 'string' && reasoning) blocks.push({ type: 'thinking', thinking: reasoning });
-      if (content) blocks.push({ type: 'text', text: content });
-      for (const call of calls) {
-        names.set(call.id, call.function.name);
-        blocks.push({ type: 'toolCall', id: call.id, name: call.function.name,
-          arguments: JSON.parse(call.function.arguments || '{}') as Record<string, never>,
-          ...(typeof call.thought_signature === 'string' ? { thoughtSignature: call.thought_signature } : {}) });
-      }
-      messages.push({ role, content: blocks, api: model.api as AssistantMessage['api'], provider: model.provider,
-        model: model.id, usage: emptyUsage, stopReason: calls.length ? 'toolUse' : 'stop', timestamp });
-    } else if (role === 'tool') {
-      const callId = String(raw.tool_call_id);
-      const toolName = names.get(callId) ?? 'unknown';
-      if (googleHistory && hostGeneratedCalls.has(callId))
-        messages.push({ role: 'user', content: `Host-provided result for ${toolName}: ${content}`, timestamp });
-      else messages.push({ role: 'toolResult', toolCallId: callId,
-        toolName, content: [{ type: 'text', text: content }], isError: false, timestamp });
-    }
-  }
-  const tools: Tool[] = modelTools(request.tools).map(tool => ({ name: tool.function.name,
-    description: String(tool.function.description ?? ''), parameters: tool.function.parameters as Tool['parameters'] }));
-  return { messages, tools };
-}
-
 function record(value: unknown, label: string): Record<string, unknown> {
   if (value === undefined) return {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${label} must be an object`);
   return value as Record<string, unknown>;
 }
 
-function requiredToolChoice(api: string): string | undefined {
-  if (['anthropic-messages', 'bedrock-converse-stream', 'google-generative-ai', 'google-vertex'].includes(api))
-    return 'any';
-  if (['openai-completions', 'openai-responses', 'openai-codex-responses', 'azure-openai-responses',
-    'mistral-conversations', 'pi-messages'].includes(api)) return 'required';
-  return undefined;
-}
+/** A Pi models registry (pi-ai's `Models`): the catalog of providers and models, with the credentials to call them. */
+export type PiModels = ReturnType<typeof piModels>;
 
+/**
+ * A model turn backend over Pi. `models` is the Pi registry to call through; a host that holds its own authenticated
+ * models passes them here. Left out, the Node CLI's default is used: Pi's built-in catalog over natlang's credential
+ * store (`natlang auth`) and the given `environment`.
+ */
 export function createPiModelBackend(provider: string, modelId: string, environment: NodeJS.ProcessEnv = process.env,
   apiKeyEnv?: string, headers?: Record<string, string>, piOptions?: Record<string, unknown>,
   modelOptions?: Record<string, unknown>, mode: 'native' | 'simple' = 'native',
-  piPayload?: Record<string, unknown>) {
+  piPayload?: Record<string, unknown>, injectedModels?: PiModels) {
   if (!['native', 'simple'].includes(mode)) throw new Error('Pi mode must be native or simple');
   const modelOverride = record(modelOptions, 'modelOptions');
   const requestOverride = record(piOptions, 'piOptions');
@@ -257,7 +201,7 @@ export function createPiModelBackend(provider: string, modelId: string, environm
   const scopedEnv = record(requestOverride.env, 'piOptions.env');
   for (const [name, value] of Object.entries(scopedEnv)) if (typeof value !== 'string')
     throw new TypeError(`piOptions.env.${name} must be a string`);
-  const models = piModels(environment, scopedEnv);
+  const models = injectedModels ?? piModels(environment, scopedEnv);
   if (!models.getProvider(provider)) throw new Error(`Pi has no provider ${provider}; run natlang models`);
   for (const key of ['id', 'provider', 'api']) if (Object.hasOwn(modelOverride, key))
     throw new Error(`modelOptions cannot override ${key}; select a different provider or model instead`);
@@ -298,8 +242,7 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       const { onProgress, onDelta } = turnOptions;
       signal?.throwIfAborted();
       const model = await selectModel();
-      const context = piContext(request, model);
-      const required = request.tool_choice === 'required' ? requiredToolChoice(model.api) : undefined;
+      const context = toPiContext(request, model) as Context;
       const configuredMax = requestOverride.maxTokens as number | undefined;
       const maxTokens = request.max_tokens === null ? configuredMax :
         configuredMax === undefined ? request.max_tokens : Math.min(request.max_tokens, configuredMax);
@@ -322,7 +265,7 @@ export function createPiModelBackend(provider: string, modelId: string, environm
               ...(model.api === 'openai-codex-responses' && maxTokens !== undefined ?
                 { max_output_tokens: Math.max(maxTokens, 16) } : {}) };
           } } : {}),
-        ...(required ? { toolChoice: required } : {}),
+        ...piToolChoiceOptions(model.api, request),
         ...(apiKeyEnv && environment[apiKeyEnv] ? { apiKey: environment[apiKeyEnv] } : {})
       } as ModelsApiStreamOptions<Api>;
       const stream = mode === 'simple' && request.tool_choice !== 'required' ?
@@ -345,31 +288,13 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       let lastEmitted = 0;
       const finalMessage = stream.result();
       void finalMessage.catch(() => undefined);
-      let reply: AssistantMessage;
-      // The turn's deltas (contracts.ts ModelTurnDelta) from pi-ai's events: text, reasoning (a later thinking part
-      // after a newline, as the turn joins them), and each tool call by its order among the calls.
-      const callOrder = new Map<number, number>();
-      let thinkingParts = 0;
-      const deltaOf = (event: { type: string; contentIndex?: number; delta?: string; partial?: AssistantMessage }): ModelTurnDelta | undefined => {
-        if (event.type === 'text_delta') return { type: 'text', text: event.delta! };
-        if (event.type === 'thinking_start') return thinkingParts++ ? { type: 'reasoning', text: '\n' } : undefined;
-        if (event.type === 'thinking_delta') return { type: 'reasoning', text: event.delta! };
-        if (event.type === 'toolcall_start') {
-          const index = callOrder.size;
-          callOrder.set(event.contentIndex!, index);
-          const block = event.partial?.content[event.contentIndex!];
-          const call = block?.type === 'toolCall' ? block : undefined;
-          return { type: 'tool_call', index, ...(call?.id ? { id: call.id } : {}), ...(call?.name ? { name: call.name } : {}) };
-        }
-        if (event.type === 'toolcall_delta' && callOrder.has(event.contentIndex!))
-          return { type: 'tool_call', index: callOrder.get(event.contentIndex!)!, arguments: event.delta! };
-        return undefined;
-      };
+      let reply: Awaited<typeof finalMessage>, turn: ModelTurn;
+      const deltaOf = piDeltaTranslator();
       try {
         for await (const event of stream) {
           if (onDelta) {
-            const delta = deltaOf(event as Parameters<typeof deltaOf>[0]);
-            if (delta && (delta.type !== 'text' && delta.type !== 'reasoning' || delta.text)) {
+            const delta = deltaOf(event);
+            if (delta) {
               try { onDelta(delta); } catch { /* delta observers must not affect model turns */ }
             }
           }
@@ -401,20 +326,14 @@ export function createPiModelBackend(provider: string, modelId: string, environm
           if (lastEmitted === 0 || now - lastEmitted >= 15_000) { emit('progress'); lastEmitted = now; }
         }
         reply = await finalMessage;
-        if (reply.stopReason === 'error' || reply.stopReason === 'aborted')
-          throw new Error(reply.errorMessage ?? `provider ${provider} failed`);
+        turn = piAssistantToTurn(reply, provider);
         emit('completed');
       } catch (error) {
         emit('failed');
         throw error;
       }
-      const calls = reply.content.filter(block => block.type === 'toolCall');
-      const text = reply.content.filter(block => block.type === 'text').map(block => block.text).join('');
-      const reasoning = reply.content.filter(block => block.type === 'thinking').map(block => block.thinking).join('\n');
+      const { calls, text, reasoning, rawCalls: raw_calls } = piAssistantContent(reply);
       const replyDiagnostic = piReplyDiagnostic(reply, text, reasoning, calls);
-      const raw_calls = calls.map(call => ({ id: call.id, type: 'function', function: { name: call.name,
-        arguments: JSON.stringify(call.arguments) },
-      ...(typeof call.thoughtSignature === 'string' ? { thought_signature: call.thoughtSignature } : {}) }));
       // Delta events describe the streamed path; the completed AssistantMessage is authoritative
       // for what the collector saved. Keep byte counts, hashes and bounded private previews for
       // both so revised argument deltas are not mistaken for an equally large final tool call.
@@ -451,12 +370,9 @@ export function createPiModelBackend(provider: string, modelId: string, environm
         },
         comparison_scope: 'stream delta byte totals vs final parsed sdk call arguments; no delta-to-call identity asserted'
       };
-      return { calls: calls.map(call => [call.name, call.arguments as Record<string, unknown>]), raw_calls, text,
-        ...(reasoning ? { reasoning } : {}), prompt_tokens: reply.usage.input,
-        completion_tokens: reply.usage.output, ...(reply.stopReason === 'length' ? { truncated: true } : {}),
-        raw_response: { provider, model: modelId, stop_reason: reply.stopReason, usage: reply.usage,
-          pi_stream_observation: piStreamObservation,
-          ...(replyDiagnostic ? { pi_reply_diagnostic: replyDiagnostic } : {}) } };
+      return { ...turn, raw_response: { provider, model: modelId, ...turn.raw_response,
+        pi_stream_observation: piStreamObservation,
+        ...(replyDiagnostic ? { pi_reply_diagnostic: replyDiagnostic } : {}) } };
     },
     close() { if (typeof requestOverride.sessionId === 'string') cleanupSessionResources(requestOverride.sessionId); },
   };
