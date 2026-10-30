@@ -15,7 +15,7 @@ Non-secret settings: repository defaults in training/coreweave-placement.json ("
 
     {"accounts": {"acct1": {"cap_usd": null, "cap_gpu_hours": null, "placement": true}},
      "gpu_hour_price_usd": null, "reservation_horizon_hours": 24,
-     "storage_account": "default", "evacuation_root": "/home/werg/data/dgxops/coreweave-accounts"}
+     "storage_account": "default", "evacuation_root": "~/data/dgxops/coreweave-accounts"}
 
 A cap may be unknown (null; the owner expects about 500 USD each). The ledger (STATE/accounts.json) is OUR estimate
 from our records: cwsandbox exposes no usage or billing call, so hours and spend are derived from launch, stop,

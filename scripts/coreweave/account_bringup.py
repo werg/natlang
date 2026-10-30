@@ -4,7 +4,7 @@ reachability matrix (every account's sandbox calls every other account's endpoin
 
 Run only once the owner says the accounts are live (it creates one 1-CPU/2Gi sandbox per account for minutes):
 
-    /home/werg/.local/share/natlang/cw-venv/bin/python scripts/coreweave/account_bringup.py run --accounts A,B,C,D
+    ~/.local/share/natlang/cw-venv/bin/python scripts/coreweave/account_bringup.py run --accounts A,B,C,D
     account_bringup.py plan --accounts A,B,C,D     the exact requests; no API call
 
 Each sandbox is created in its own account (explicit per-call auth from that account's profile) and bound to it, so

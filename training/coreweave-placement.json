@@ -12,7 +12,6 @@
  "accounts": {
   "description": "Multi-account defaults (scripts/coreweave/accounts.py); per-account caps and overrides live in ~/.config/natlang/coreweave-accounts/accounts.json (caps default unknown; owner expects about 500 USD each). No early retirement: accounts are used to their full caps, spend is balanced across them, and only an explicit API quota error freezes an account and triggers the evacuation (account_exports.py).",
   "reservation_horizon_hours": 24,
-  "storage_account": "default",
-  "evacuation_root": "/home/werg/data/dgxops/coreweave-accounts"
+  "storage_account": "default"
  }
 }

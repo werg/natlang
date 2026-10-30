@@ -71,7 +71,7 @@ def evacuate(trigger: str, reason: str, *, ledger=None, config=None, pull=defaul
     config = config or accounts.settings()
     ledger = ledger or cwctl.account_ledger(write=False)
     plan = accounts.evacuation_plan(ledger, trigger, reason=reason)
-    root = Path(root or config.get('evacuation_root') or accounts.DEFAULTS['evacuation_root'])
+    root = Path(root or config.get('evacuation_root') or accounts.DEFAULTS['evacuation_root']).expanduser()
     stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
     journal = cwctl.STATE / 'evacuations' / f'{stamp}-{trigger}.json'
     result = {**plan, 'journal': str(journal), 'root': str(root), 'dry_run': dry_run, 'results': {}}
