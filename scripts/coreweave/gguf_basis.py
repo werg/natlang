@@ -27,14 +27,6 @@ SCHEMA = 'natlang.gguf-basis-layout/1'
 BLOCK = 8 << 20
 
 
-def sha256_file(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as stream:
-        for block in iter(lambda: stream.read(BLOCK), b''):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def write_basis(layout, base, out):
     """Write the basis described by `layout` from `base` into `out`; returns its sha256."""
     digest = hashlib.sha256()
@@ -82,7 +74,7 @@ def make_layout(base, trained):
             missing.append(tensor.name)
             continue
         copies.append([int(match.data_offset), int(tensor.data_offset), int(tensor.n_bytes)])
-    layout = {'schema': SCHEMA, 'base': {'sha256': sha256_file(base), 'bytes': os.path.getsize(base)},
+    layout = {'schema': SCHEMA, 'base': {'sha256': hashlib.file_digest(open(base, 'rb'), 'sha256').hexdigest(), 'bytes': os.path.getsize(base)},
               'copies': copies, 'zero_tensors': missing,
               'basis': {'sha256': None, 'bytes': os.path.getsize(trained)}}
     return layout
@@ -110,7 +102,7 @@ def main(argv=None):
         layout = json.loads(Path(args.layout).read_text())
         if layout.get('schema') != SCHEMA:
             raise SystemExit('not a GGUF basis layout')
-        base = {'sha256': sha256_file(args.base), 'bytes': os.path.getsize(args.base)}
+        base = {'sha256': hashlib.file_digest(open(args.base, 'rb'), 'sha256').hexdigest(), 'bytes': os.path.getsize(args.base)}
         if base != layout['base']:
             raise SystemExit(f'base GGUF identity {base} differs from the layout {layout["base"]}')
         pending = f'{args.out}.partial'
