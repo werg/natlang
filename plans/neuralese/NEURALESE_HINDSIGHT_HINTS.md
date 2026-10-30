@@ -1,6 +1,7 @@
 # Neuralese hindsight hints for self-distillation
 
-Owner-approved design (2026-10-30), with the owner-confirmed two-phase structure. Helper strand `dgx-claude-hints`;
+Owner-approved design (2026-10-30), with the owner-confirmed two-phase structure and the owner refinement that the
+writer is a natlang data-processing program over τ* as an input value. Helper strand `dgx-claude-hints`;
 integration into the live JOLT+ loop belongs to `dgx-rl`.
 
 ## Purpose
@@ -8,9 +9,12 @@ integration into the live JOLT+ loop belongs to `dgx-rl`.
 Teacher text (the LFM3 SFT teacher corpus) is off-policy for the student, and on worlds where every student attempt
 fails JOLT+ has no positive episode. A hindsight hint addresses both:
 
-1. A **writer** turn, the policy model running the existing natlang function `writeGuidance`
-   (`applications/guidance-writer`), reads a known-good trajectory τ* together with the crisp facts that
-   `selectGuidanceFacts` selects, and writes a short hint as a Neuralese producer span.
+1. A **writer** episode, the policy model running the natlang function `writeHint`
+   (`applications/guidance-writer`, `DECOMPOSITION.md` there), gets a known-good trajectory τ* as a proper input
+   value. The value is structured (calls, each with its prompt, steps in the runtime's own transcript shape, and
+   result) and listed truncated like any large value, with `<<cut off …>>` markers. The writer also gets a crisp
+   structural overview and the facts `selectGuidanceFacts` selects. It explores τ* with eval and returns the hint as
+   its `Neuralese<string>` result. The configured Neuralese writer re-encodes the returned text as the producer span.
 2. A **self-teacher**, the same model running the target task, imports that hint (`mode: import`, the declared
    guidance turn after the leading system turn).
 3. The **student** learns from the hint-conditioned self-teacher through the existing JOLT+ OPSD twin.
@@ -26,9 +30,10 @@ the shared mechanism in `rl/privileged_context.py`, `rl/privileged_scoring.py` a
 
 | Part | Form | Where |
 | --- | --- | --- |
-| What the hint says | policy: `writeGuidance.nl` (existing, unchanged). The policy model writes it | `applications/guidance-writer` |
-| Which facts accompany τ* | policy: `selectGuidanceFacts` (existing pluggable, NL default) | same |
-| τ* as writer input | crisp helper: τ* enters as a `teacher_trajectory` fact, which is always passed (it is the reconstruction source) | `rl/hindsight.py` `hindsight_facts` |
+| What the hint says, and which parts of τ* to read for it | policy: `writeHint.nl`, a multi-turn natlang function that explores τ* with eval | `applications/guidance-writer` |
+| Which facts accompany τ* | policy: `selectGuidanceFacts` (existing pluggable, NL default), over the world's facts other than τ* itself | same |
+| τ* as writer input | crisp data: `VerifiedTrajectory` (calls → `TrajectoryStep`, the runtime's `TranscriptEntry` shape), built from the τ* source | `rl/hindsight.py` `trajectory_value` |
+| Cold-start overview | crisp helper `trajectoryOverview` (calls, roles, tools, statuses, sizes, errors) | `applications/guidance-writer` |
 | Custody of τ* | crisp verifier: `common.custody.ProtectedWorlds.check` on the τ* world; only `split == 'train'` | `rl/hindsight.py` |
 | Writer/consumer graph | crisp mechanism: `teacher_form` inserts the import of the writer state into τ*'s consumer turns | `rl/privileged_scoring.py` (existing) |
 | Import channel (noise + KL) | crisp math | `model/import_channel.py`, hooked into `shared_state._forward_graph` |
@@ -36,31 +41,61 @@ the shared mechanism in `rl/privileged_context.py`, `rl/privileged_scoring.py` a
 | Writer parameters | crisp mechanism: free-LoRA writer adapter bound to writer invocations only (`run_invocation_actors`) plus the producer adapter | `model/native_actor_graph.py`, `model/native_adapters.py` (existing) |
 | Whether a hint goes to the self-teacher, and how many | policy: `planTeacherAttempts` (existing) | `applications/guidance-writer` |
 
-No new model-facing text is introduced. The writer prompt is the existing `writeGuidance` rendering with a
-`teacher_trajectory` fact (already one of the fact kinds). Its text stays debt in `plans/MODEL_FACING_CHANGES.md`
-until it is sampled live.
+New model-facing text: `writeHint.nl` and the overview's field names. These are debt in
+`plans/MODEL_FACING_CHANGES.md` until they are sampled live; the pilot is their first live sample.
+
+Rationale for the refinement: the writer's context stays bounded, because τ* appears in full only as the
+self-teacher's teacher-forced target. The writer episode is itself a real data-processing RL task with a dense reward.
 
 ## Graph layout (one packed forward)
 
 For one τ* and a group of K hints (i = 1..K):
 
 ```
-writer_i:   [writeGuidance prompt: consumer text, selected facts, teacher_trajectory(τ*)] <produce> w_i,1..L_i </produce>
-consumer_i: [τ* prompt: leading system turn | guidance turn: header <consume> import(writer_i span) </consume> | rest of τ* prompt]
+writer_i:   writeHint episode turns: [listing: consumer, τ* (cut off), overview, facts] eval ... eval ... return_result(hint text)
+hint_i:     <produce> hint text tokens </produce>      (the configured writer's re-encoding of the returned text)
+consumer_i: [τ* prompt: leading system turn | guidance turn: header <consume> import(hint_i span) </consume> | rest of τ* prompt]
             τ* assistant actions, teacher-forced
 ```
 
-`consumer_i` is `teacher_form(replay(τ*), {turn: PrivilegedBlock(import of writer_i)})`: the same graph edit the
-JOLT+ student twin uses. For a multi-turn τ* (an RL episode), every consumer turn of τ* imports the same
+The writer episode's sampled actions a_i (exploration code and the returned hint tokens) are ordinary captured
+model turns. `hint_i` is the producer invocation the runtime's writer records for the `Neuralese<string>` result.
+`consumer_i` is `teacher_form(replay(τ*), {turn: PrivilegedBlock(import of hint_i)})`: the same graph edit the JOLT+
+student twin uses. For a multi-turn τ* (an RL episode), every consumer turn of τ* imports the same
 writer state at its declared place, exactly as an in-run teacher attempt would. A teacher SFT row is one turn. All K
 writer/consumer pairs of a group go into one packed graph.
 
 Gradients flow from τ*'s action positions through the consumers' attention to the imported KV and convolution
 state of the writer span, then into the writer parameters. That path is exact, with no detach (`ImportSpan.stop_gradient = False`).
 
+## Call trees and nl sub-calls
+
+τ* is a call tree: the root call and the child calls it made (named functions and inline `nl` lambdas), each with its
+own model turns.
+
+1. **Per-invocation hints.** Each node of τ* gets its own hint, inserted into that node's own prompt by the declared
+   guidance turn. Facts are scoped by the existing per-invocation visibility rule (`privileged_context.applicable`):
+   a child sees only facts matched to its own call, and the root sees world-level facts.
+2. **Reconstruction decomposes over nodes.** NLL_i = Σ_node −log π(node actions | node inputs from τ*, hint_node),
+   teacher-forced in the existing multi-invocation one-pass graph with exact occurrence bindings. A child's returned
+   value reaches its parent through τ*'s recorded inputs, as in any replay.
+3. **The writer is recursive over the tree.** writeHint(node) = f(node's own turns explored through eval,
+   [writeHint(child) for each child]). This is structural recursion on a smaller argument, the natlang termination
+   rule, and it compresses bottom-up. Each recursive call explores only its subtree value. The rate penalty is per
+   node: L_i and KL_i sum over the nodes' hints. The traversal is crisp (`rl/hindsight.py` `write_hints`). Each
+   `writeHint` call receives its children's hints as `Neuralese<string>` inputs (`childHints`).
+4. **Phase-2 matching.** A τ* child hint applies to a self-teacher child call only if the function and arguments
+   match. Equivalence is crisp: the same function identity (named function path, or the exact instruction text of an
+   inline `nl` lambda) and canonical-JSON-equal arguments (`common.hashing.canonical_json_sha256_hex` of the argument
+   values, with Neuralese arguments compared by state id). Otherwise that child gets no hint.
+5. **Later (phase 2+): learned delegation.** Only the root gets a hint, and the root self-teacher passes Neuralese
+   arguments to its children. The children's reconstruction gradients flow back through those producer→consumer
+   edges into the root hint. We start with per-node injection.
+
 ## Objectives (exact)
 
-Notation: π is the policy. h_i = (w_i,1..L_i) are the writer's sampled hint tokens. μ_i is the imported state of
+Notation: π is the policy. a_i are all sampled actions of writer episode i (exploration turns and the returned
+hint tokens). L_i is the hint length in tokens, and E_i is the number of sampled exploration tokens. μ_i is the imported state of
 writer_i's span as the consumer receives it. z_i is that state after the channel. T is the number of τ* action
 tokens.
 
@@ -72,7 +107,7 @@ RMS of that field on ordinary tokens of the pinned base, measured once and recor
     KL_i = Σ_{s,ℓ,f,d} [ (μ²/c_ℓf² + σ²) / (2 σ_p²) − ½ + log(σ_p / σ) ]      (KL(N(μ, σ²c²) || N(0, σ_p² c²)))
 
 Keys are perturbed before rotary encoding, which is orthogonal, so the noise stays isotropic. The noise sample for
-one imported span row is shared by every consumer slot that reads that row. Each slot's KL is counted once.
+one imported span row is shared by every consumer slot that reads that row, and that row's KL is counted once.
 
 **Reconstruction.**
 
@@ -82,7 +117,7 @@ one imported span row is shared by every consumer slot that reads that row. Each
 
 **Writer reward and baseline.** Per hint:
 
-    R_i = − NLL_i − λ_len L_i − λ_kl KL_i + η · o_i
+    R_i = − NLL_i − λ_len L_i − λ_explore E_i − λ_kl KL_i + η · o_i
     A_i = R_i − (1/(K−1)) Σ_{j≠i} R_j          (leave-one-out baseline: the other hints for the same τ*)
 
 o_i ∈ [0, 1] is the oracle outcome of a self-teacher run sampled with hint i, where an oracle exists (phase 2).
@@ -90,20 +125,22 @@ It is 0 with η = 0 otherwise.
 
 **Row loss** (normalized per τ* token):
 
-    loss = (1 / (K T)) Σ_i [ NLL_i + λ_kl KL_i − sg(A_i) Σ_{t=1..L_i} log π(w_i,t | writer prompt, w_i,<t) ]
+    loss = (1 / (K T)) Σ_i [ NLL_i + λ_kl KL_i − sg(A_i) Σ_{t ∈ a_i} log π(a_i,t | writer context_t) ]
 
 The first two terms are the pathwise (reparameterized) gradient of the expected cost through the continuous
-writer state. The third is the score-function gradient of the discrete token choice. Together they are an
-unbiased estimator of ∇ E_{h∼π}[NLL + rate − η o]. λ_len L has no pathwise part and enters only through A_i.
+writer state. The third is the score-function gradient of the discrete choices (what to explore, what to write). Together they are
+an unbiased estimator of ∇ E_{a∼π}[NLL + rate + exploration cost − η o]. λ_len L and λ_explore E have no pathwise
+part and enter only through A_i. The hint state is the re-encoding of the returned text, so its information is
+bounded by that text. The channel bounds how much the encoder can add on top of it.
 
 The writer's sampling law is the actor's exact temperature/mask law (`token_action_logps`). Phase-1 writer samples
 are drawn from the current weights each step (on-policy), so the plain log-probability is exact. When stale actors
 appear (phase 2 inside JOLT+), this term uses the shared `score-centered/1` estimator with its importance correction,
 as the existing teacher-outcome term does on writer turns.
 
-Recipe declaration `hindsight-reconstruction/1`: `{k, lambda_len, lambda_kl, eta, channel: {sigma, sigma_prior,
-scales, seed}, trainable: 'writer'}`. Defaults: K = 4, λ_len = 0.05 nat/token, λ_kl = 1e-3, σ = 0.5, σ_p = 1, η = 0
-(phase 1). The pilot measures these.
+Recipe declaration `hindsight-reconstruction/1`: `{k, lambda_len, lambda_explore, lambda_kl, eta, channel: {sigma,
+sigma_prior, scales, seed}, trainable: 'writer'}`. Defaults: K = 4, λ_len = 0.05 nat/token, λ_explore = 0.002
+nat/token, λ_kl = 1e-3, σ = 0.5, σ_p = 1, η = 0 (phase 1). The pilot measures these.
 
 ## Phases (owner-confirmed structure)
 
@@ -119,9 +156,9 @@ self-teacher) plus its outcome term. The writer continues on loss_rec + the self
 rate. λ_len and λ_kl anneal upward so hints shrink. Hints are regenerated from current weights every round. Phases
 may overlap per task.
 
-Phase 2 mechanics in the live loop are the existing JOLT+ path. The hindsight writer is the teacher attempt's
-`writeGuidance` call, whose facts now include the τ* trajectory (`teacher_trajectories` argument of `case_facts`,
-already plumbed through `privileged_source`). Teacher attempts with the hint are the self-teacher. Verified runs
+Phase 2 mechanics in the live loop are the existing JOLT+ path. For a world with a τ*, the teacher attempt's
+guidance comes from `writeHint` over τ* instead of `writeGuidance` over facts; `training-guidance.ts` selects it when
+the run controls carry a trajectory. Teacher attempts with the hint are the self-teacher. Verified runs
 become student targets through the existing OPSD twin. New in phase 2 is a reconstruction row per teacher-attempt
 writer (its τ* consumer pair) packed beside the episode, plus η · o in the writer's advantage.
 
@@ -181,9 +218,10 @@ short successful RL episodes, with oracles where they exist.
 Measurements (eval compute kept minimal):
 
 1. log p(τ*) per token under no hint, a facts-only text hint (selected non-τ* facts, `mode: text`), the
-   cold-start Neuralese hint (`mode: import`), and τ* verbatim as text (a leakage reference). Self-teacher success
+   cold-start `writeHint` hint (eval exploration, its state imported with `mode: import`), and τ* verbatim as text (a leakage reference). Self-teacher success
    with vs without a hint on the oracle subset comes from existing JOLT+ teacher-attempt records (text facts) and,
    if phase 1 works, a small native run.
+   Some τ* have a call tree of depth ≥ 2; Δ log p is reported per depth.
 2. log p(τ*) against hint length under the rate penalty (K samples per τ*, binned by L, with and without channel noise).
 3. A short phase-1 writer-training run: does loss_rec fall, and does the hint stay short? Then one phase-2 step if
    phase 1 works.

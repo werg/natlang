@@ -31,3 +31,31 @@ export type TeacherGroup = {
 };
 /** Privileged teacher attempts planned for one group. */
 export type TeacherAttempts = { group: number, attempts: number };
+
+/**
+ * One tool call of a recorded execution, in the shape the runtime's own transcript gives a call
+ * (`TranscriptEntry`, ts-host/src/native/runtime.ts): the model turn it was made in, the reasoning that led to it, the
+ * tool and its arguments (`code` for eval), its outcome `status` (ok, rejected, error, completed, ...), an eval's
+ * returned `value` as data, what it printed (`console`) and the full text the model was shown (`output`).
+ */
+export type TrajectoryStep = {
+  turn: number, tool: string, code?: Untrusted<string>, arguments: Record<string, unknown>, status: string,
+  value?: unknown, console?: Untrusted<string>, output: Untrusted<string>, reasoning?: Untrusted<string>,
+};
+
+/**
+ * One call of a verified successful execution of a task: its function, its prompt text, its own steps in order, how it
+ * finished, and the executions of the child calls it made (in the order it made them). A trajectory is a call tree.
+ */
+export type TrajectoryCall = {
+  call: string, function: string, role: "root" | "child", prompt: Untrusted<string>, steps: TrajectoryStep[],
+  result: { status: string, value?: unknown, reason?: Untrusted<string> }, children: TrajectoryCall[],
+};
+
+/** A crisp structural overview of one call of a trajectory (trajectoryOverview.ts): its own steps and its children's sizes. */
+export type TrajectoryOverview = {
+  call: string, function: string, role: "root" | "child", promptChars: number, turns: number,
+  steps: { index: number, turn: number, tool: string, status: string, chars: number }[],
+  errors: number, result: string,
+  children: { call: string, function: string, steps: number, descendants: number, result: string }[],
+};

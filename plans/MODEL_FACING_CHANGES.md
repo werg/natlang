@@ -13,6 +13,16 @@ variant in the next teacher window, including JSON scalar and structured
 argument paths. Static render tests establish the parsing contract, not task
 quality or live recovery.
 
+### 2026-10-30 — hindsight hint writer `writeHint` (unmeasured debt)
+
+New natural-language function `applications/guidance-writer/writeHint.nl` (plans/neuralese/NEURALESE_HINDSIGHT_HINTS.md):
+the policy model gets a verified successful trajectory as a structured input value (`VerifiedTrajectory`: calls with
+prompt, steps in the runtime's `TranscriptEntry` shape, result), a crisp `TrajectoryOverview` (field names `calls`,
+`role`, `promptChars`, `turns`, `steps`, `tool`, `status`, `chars`, `errors`, `result`, `totalSteps`, `totalChars`) and
+the selected facts, explores the trajectory with eval and returns a short hint as `Neuralese<string>`. Status:
+**unmeasured**; first live sample is the hindsight pilot on the LFM3 RL lineage parent (self-teacher log p(τ*) with
+the hint versus no hint and the facts-only text hint; hint length; exploration turns).
+
 ### 2026-10-28 — learned optimizer component-token decision (unmeasured debt)
 
 The joint learned optimizer's LoRA mixture is now a component-token distribution (owner decision 2026-10-28;

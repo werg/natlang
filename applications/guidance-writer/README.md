@@ -10,6 +10,8 @@ visibility.ts           crisp: which facts a call may see at all (exact rule; rl
 crispSelection.ts       crisp side of the selection pluggable: a fixed kind order
 selectGuidanceFacts.nl  natural-language side: which visible facts, most useful first
 writeGuidance.nl        the guidance: Neuralese<string>, readout: template (one forced producer write)
+writeHint.nl            hindsight hint for one call from its verified execution (explored with eval), bottom-up over the call tree (DECOMPOSITION.md)
+trajectoryOverview.ts   crisp: one call's structural overview the hint writer opens with
 planTeacherAttempts.nl  how many privileged teacher attempts each scored student group gets (JOLT+ controller)
 ```
 
