@@ -157,7 +157,7 @@ export async function buildTarget(name, outdir) {
       cpSync(join(declarations, file), join(outdir, 'types', file));
     }
     writeFileSync(join(outdir, `${entryName}.d.ts`), `export * from './types/${entryDeclaration.replace(/\.d\.ts$/, '.js')}';\n`);
-    const sources = new Set(Object.keys(bundled.metafile.inputs).filter(path => !/^[^/]*:/.test(path) && !path.startsWith('node_modules/')));
+    const sources = new Set(Object.keys(bundled.metafile.inputs).filter(path => !/^[^/]*:/.test(path) && !path.startsWith('node_modules/') && !path.includes('/node_modules/')));
     for (const file of emitted) sources.add(`src/${file.replace(/\.d\.ts$/, '.ts')}`);
     const files = [...Object.keys(target.entries).map(bundle => `${bundle}.js`), `${entryName}.d.ts`, ...emitted.map(file => `types/${file}`)];
     return { files: files.sort(), sources: [...sources].sort(), metafile: bundled.metafile };
