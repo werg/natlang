@@ -131,3 +131,33 @@ test('decide rejects a non-callable with direct callable guidance', async () => 
       /needs a callable function in scope.*await decide\(verdict, item\).*Pass the function first/);
   });
 });
+
+test('any driver may carry the decision capability: a driver whose scorer is unsupported falls back to the tool loop for that call', async () => {
+  const fn = loadVirtualNatlang({ 'verdict.nl': VERDICT }, 'verdict.nl');
+  // A gateway-style driver: its scorer asks a service that may not serve this model (`decision-unsupported`).
+  let scored = 0, turns = 0;
+  const driver = Object.assign(async () => { turns++; return { calls: [['return_result', { status: 'success', value: 'knight' }]] }; },
+    { decide: async () => { scored++; throw new Error('decision-unsupported: the gateway model has no logprobs'); } });
+  const traces = [];
+  const runtime = createNatlangRuntime({ model: { driver }, seed: { mode: 'backend' }, trace: trace => traces.push(trace) });
+  assert.equal(await runtime.run(() => fn('x')), 'knight');
+  assert.equal(scored, 1); assert.equal(turns, 1);
+  const event = traces.flatMap(trace => trace.events).find(item => item.kind === 'decision_readout');
+  assert.equal(event.phase, 'unavailable'); assert.match(event.reason, /gateway model has no logprobs/);
+  // any other scorer failure is the call's failure, not a reason to generate instead
+  const failing = Object.assign(driver, { decide: async () => { throw new Error('gateway offline'); } });
+  await assert.rejects(createNatlangRuntime({ model: { driver: failing }, seed: { mode: 'backend' } }).run(() => fn('x')), /gateway offline/);
+});
+
+test('a driver\'s scoreMany batches the readouts of concurrent calls', async () => {
+  const fn = loadVirtualNatlang({ 'verdict.nl': VERDICT }, 'verdict.nl');
+  const batches = [];
+  const decide = Object.assign(async () => { throw new Error('single scoring must not run'); }, {
+    scoreMany: async items => { batches.push(items.length); return items.map(() => ({ status: 'fulfilled', value: { log_probs: [-2, -0.1] } })); } });
+  const { coalescingScorer } = await import('../dist/model/scoring.js');
+  const driver = Object.assign(async () => { throw new Error('the tool loop must not run'); }, { decide: coalescingScorer(decide) });
+  const runtime = createNatlangRuntime({ model: { driver }, seed: { mode: 'backend' } });
+  const answers = await runtime.run(() => Promise.all([fn('a'), fn('b'), fn('c')]));
+  assert.deepEqual(answers, ['knave', 'knave', 'knave']);
+  assert.deepEqual(batches, [3]);
+});
