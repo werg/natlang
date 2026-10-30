@@ -27,3 +27,6 @@ export { neuraleseServerModelTurn, HttpNeuraleseStore, restoreNativeArtifacts, w
 export { neuraleseServerInfo, checkNeuraleseReader, requireNativeReaderIdentity } from './neuralese-info.js';
 export type { NeuraleseServerInfo } from './neuralese-info.js';
 export type { NeuraleseServerOptions } from './neuralese-server.js';
+export { toPiContext, piToolChoiceOptions, piDeltaTranslator, piAssistantContent, piAssistantToTurn, emptyPiUsage } from './pi-translation.js';
+export type { PiContext, PiMessage, PiTool, PiContentBlock, PiTextBlock, PiThinkingBlock, PiToolCallBlock, PiUsage, PiAssistantMessage,
+  PiStreamEvent, PiJsonValue, PiJsonObject } from './pi-translation.js';

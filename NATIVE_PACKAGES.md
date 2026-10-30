@@ -15,6 +15,11 @@ For instruction adaptation APIs and their current implementation status, see
 | `@natlang/node` | Node runtime and compiler, terminal utilities, model session, package APIs |
 | `@natlang/browser` | Browser runtime and in-page compiler, local model loader, WASM assets |
 
+`@natlang/node` lists `@earendil-works/pi-ai` as a peer dependency: only the Pi backend
+(`@natlang/node/model/pi`) loads it, and a host that passes its own Pi `Models` or
+uses the translation functions in `@natlang/node/model` needs no particular copy.
+`@natlang/cli` depends on it, so `natlang` itself installs it.
+
 The browser package carries the 35 MB inference bundle, so it is separate from
 Node installs. The checkout builds both from one implementation. `npm pack` in
 each directory under `npm-packages/` stages and packs the build

@@ -5,6 +5,6 @@
   "type": "module",
   "engines": { "node": ">=22.13" },
   "bin": { "natlang": "bin/natlang.mjs" },
-  "dependencies": { "@natlang/node": "0.1.0" },
+  "dependencies": { "@earendil-works/pi-ai": "^1.4.0", "@natlang/node": "0.1.0" },
   "files": ["bin", "README.md"]
 }
