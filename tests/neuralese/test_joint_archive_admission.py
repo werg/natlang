@@ -11,7 +11,7 @@ from test_native_serving_adapters import nonzero_adapter
 from test_native_state_derivation import engine_fixture
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('objective_kind', ['ce', 'query'])
 @pytest.mark.parametrize('bounded', [False, True])
 def test_program_state_archive_cold_restore(tmp_path, family, objective_kind, bounded):
@@ -150,7 +150,7 @@ def test_object_admission_copies_inputs_and_rejects_mutable_payload(tmp_path):
         engine.store.close()
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('algorithm', ['adam', 'sgd'])
 def test_bounded_archive_preserves_history_and_rejects_missing_before_publication(tmp_path, family, algorithm):
     from test_native_state_batch_import import _history

@@ -7,7 +7,7 @@ from test_shared_state import tiny
 from natlang_neuralese.model import shared_state
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum', 'qwen'])
+@pytest.mark.parametrize('family', ['lfm', 'qwen'])
 @pytest.mark.parametrize('dtype', [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_cached_rotary_pair_matches_independent_execution(monkeypatch, family, dtype, device):

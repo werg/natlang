@@ -449,7 +449,7 @@ def test_public_certificate_verifier_checks_measured_evidence_not_just_root(tmp_
             code=code_inventory(old),parent='0'*64 if change=='wrong-parent' else review['old_parent_checkpoint_sha256'])
 
 
-@pytest.mark.parametrize('architecture,dtype',[('lfm2','torch.float32'),('mellum','torch.bfloat16')])
+@pytest.mark.parametrize('architecture,dtype',[('lfm2','torch.float32')])
 def test_metadata_profile_continuation_reverifies_original_capacity_chain(tmp_path,architecture,dtype):
     import shutil
     old,adam,review,proof=fixture(tmp_path)

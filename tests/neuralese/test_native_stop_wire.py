@@ -11,7 +11,7 @@ from natlang_neuralese.model.shared_state import Invocation, compile_graph
 from natlang_neuralese.serve.chat import render_messages, RequestError
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_stopped_capture_replay_retains_forward_and_blocks_only_source_gradient(family):
     model,roles,identity,block_id,block,turns=actor_rollout(family)
     def execute(stopped):
@@ -45,7 +45,7 @@ def test_stop_capture_must_agree_with_actual_event_and_be_true_or_absent():
         capture_occurrences('reader',bad,{'read':event})
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('constant_first',[True,False])
 def test_same_numeric_adapter_live_and_constant_uses_never_share_derivative_cache(tmp_path,family,constant_first):
     engine=engine_fixture(tmp_path,family)
@@ -69,7 +69,7 @@ def test_same_numeric_adapter_live_and_constant_uses_never_share_derivative_cach
         run_invocation_actors(engine,names,bindings,lambda bank:execute(bank,which),leaves={adapter.id:{name:coefficient}},gradient_precision='fp32')
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_engine_generation_and_contextual_capture_retain_constant_import(tmp_path,monkeypatch,family):
     from natlang_neuralese.serve.engine import GenerationRequest
     engine=engine_fixture(tmp_path,family)
@@ -88,7 +88,7 @@ def test_actual_engine_generation_and_contextual_capture_retain_constant_import(
         engine.render_request(invalid,None)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_cached_splice_constant_blocks_kv_and_hybrid_adjoints_without_mutating_archive(family):
     from dataclasses import replace
     from natlang_neuralese.model.shared_state import native_step, splice_block

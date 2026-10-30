@@ -35,7 +35,7 @@ def active_request(tmp_path, monkeypatch, family='lfm'):
     return model, optimizer, train, roles, config, args, request_path
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_prepared_real_backward_reuses_loaded_subtree_and_preserves_full_state(tmp_path, monkeypatch, family):
     model, optimizer, train, roles, config, args, _ = active_request(tmp_path, monkeypatch, family)
     native_training_update(model, optimizer, list(train.iter_indices([0])),

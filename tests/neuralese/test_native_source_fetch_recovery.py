@@ -12,23 +12,10 @@ from test_native_state_sft import graph
 
 
 def source(base, family):
+    assert family == 'lfm', 'the Mellum line is retired'
     base.mkdir()
-    if family == 'lfm':
-        from test_native_serve import _tiny_source
-        _tiny_source(base)
-    else:
-        from test_mellum_port import tiny_mellum
-        from tokenizers import Tokenizer
-        from tokenizers.models import WordLevel
-        from tokenizers.pre_tokenizers import WhitespaceSplit
-        from transformers import PreTrainedTokenizerFast
-        tiny_mellum(base)
-        tokenizer = PreTrainedTokenizerFast(tokenizer_object=Tokenizer(WordLevel(
-            {f't{i}':i for i in range(128)},unk_token='t0')),unk_token='t0',
-            bos_token='t1',eos_token='t2',pad_token='t3')
-        tokenizer.backend_tokenizer.pre_tokenizer=WhitespaceSplit()
-        tokenizer.chat_template="{% for message in messages %}{{ message.get('reasoning_content', '') }}{{ message['content'] }}{% endfor %}assistant:"
-        tokenizer.save_pretrained(base)
+    from test_native_serve import _tiny_source
+    _tiny_source(base)
     _,_,_,config=trainer.load_native_model(base,dtype=torch.bfloat16,rank=4)
     paths={}
     for split in ('train','test'):
@@ -54,14 +41,12 @@ def run(base,paths,out,*,refresh=None,resume=None):
         '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
         '--epochs','4','--eval-every','1','--checkpoint-every','2',
         '--checkpoint-seconds','0','--seed','23','--out',str(out)]
-    if json.loads((base/'config.json').read_text())['model_type']=='mellum':
-        args+=['--fp8-training','triton-experts']
     if refresh is not None:args+=['--refresh-after-updates',str(refresh)]
     if resume is not None:args+=['--continue-from',str(resume)]
     return trainer.main(args)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('save_fails',[False,True])
 def test_fetch_failure_checkpoint_matches_completed_reference_and_resumes(tmp_path,monkeypatch,family,save_fails):
     if family=='mellum':

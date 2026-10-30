@@ -11,7 +11,7 @@ from test_native_graph import row
 from test_shared_state import tiny
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_boundary_sums_match_readout_and_preserve_exact_loss_gradients(family):
     model = SharedStateModel(tiny(family), marker_ids=(58, 59, 60, 61), rank=4)
     other = copy.deepcopy(model)
@@ -44,7 +44,7 @@ def test_boundary_sums_match_readout_and_preserve_exact_loss_gradients(family):
     assert all(value == 0 for value in detail['boundary_sums']['58'].values())
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_evaluator_aggregates_support_without_extra_forward_or_readout(family, monkeypatch):
     model = SharedStateModel(tiny(family), marker_ids=(4, 5, 7, 8), rank=4,
                              token_override_ids=(58, 59))

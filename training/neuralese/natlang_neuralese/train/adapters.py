@@ -46,117 +46,9 @@ def lora_target_names(backbone: PortBackbone, layers: list[int]) -> list[str]:
     return names
 
 
-# Maple (ternary backbone): phase F trains the student's own ternary QAT adapters on attention (codes(W + dW) times
-# learned FP16 block scales, exactly exportable to TQ2_0) instead of PEFT LoRA. Released adapters snapshot themselves
-# first, so "deltas off" (the self-distillation teacher) is the student as it was, not the original Maple.
-MAPLE_ATTENTION = ("q_proj", "k_proj", "v_proj", "o_proj")
-
-
-def _ternary(backbone) -> bool:
-    return bool(getattr(backbone, "ternary", False))
-
-
-def _maple_adapters(backbone, layers=None):
-    """{layer: [(module name, QATTernaryLoRA)]} over attention projections (released ones only if layers is None)."""
-    from ..maple.ternary import QATTernaryLoRA
-
-    found: dict[int, list] = {}
-    for name, module in backbone.hf.named_modules():
-        if not isinstance(module, QATTernaryLoRA):
-            continue
-        layer = int(name.split("model.layers.")[1].split(".")[0])
-        if (layers is None and getattr(module, "released", False)) or (layers is not None and layer in layers):
-            found.setdefault(layer, []).append((name, module))
-    return found
-
-
-def _inject_maple(backbone, layers: list[int], rank: int, alpha: int) -> dict[int, list[torch.nn.Parameter]]:
-    from torch.nn.utils import parametrize
-
-    from ..maple.ternary import add_qat_lora
-
-    for i in layers:
-        attention = backbone.layers[i].self_attn
-        for proj in MAPLE_ATTENTION:
-            module = getattr(attention, proj)
-            if not parametrize.is_parametrized(module, "weight"):
-                adapter = add_qat_lora(module, rank=rank, alpha=float(alpha))
-                adapter.learn_scales(module.parametrizations.weight.original)
-    grouped: dict[int, list[torch.nn.Parameter]] = {}
-    for layer, adapters in _maple_adapters(backbone, layers).items():
-        for _, adapter in adapters:
-            if not getattr(adapter, "released", False):
-                adapter.snapshot_teacher()
-                adapter.released = True
-            params = [adapter.lora_A, adapter.lora_B] + ([adapter.learned_scale] if adapter.learned_scale is not None
-                                                          else [])
-            for p in params:
-                p.requires_grad_(True)
-            grouped.setdefault(layer, []).extend(params)
-    return grouped
-
-
-def install_maple_qat(backbone, rank: int = 8, alpha: int = 16) -> None:
-    """Structure of Maple's full QAT policy (training and serving install it alike, before restoring trained values):
-    on every attention projection a QAT adapter (the student's own where released, else a fresh rank-``rank`` one)
-    with learned TQ2_0 block scales and a dense FP32 latent delta; learned block scales on every expert; FP32 masters
-    for the layer norm gains. Initial forward unchanged: zero deltas, scales initialised at Maple's rule, BF16 gains
-    are exact in FP32."""
-    _inject_maple(backbone, list(range(backbone.num_layers)), rank, alpha)
-    for adapters in _maple_adapters(backbone, list(range(backbone.num_layers))).values():
-        for _, adapter in adapters:
-            if adapter.learned_scale is None:
-                raise ValueError("Maple QAT adapters need learned block scales")
-            adapter.add_dense()
-    for layer in backbone.layers:
-        if getattr(layer.mlp.experts, "gate_up_blocks", None) is None:
-            layer.mlp.experts.learn_scales()
-        for norm in (layer.input_layernorm, layer.post_attention_layernorm, layer.self_attn.q_norm,
-                     layer.self_attn.k_norm):
-            norm.weight.data = norm.weight.data.float()
-
-
-@torch.no_grad()
-def qat_latent_scales(backbone) -> dict[str, float]:
-    """Mean ternary scale α of each dense QAT latent's deployed weight (mean nonzero magnitude), keyed by the latent's
-    name in ``backbone.hf``. A code flips only after its latent moves about half of α (Maple's threshold is
-    0.7 × row absmean), so latent learning rates are set in units of α (2026-10-09: with one Muon rate for every
-    matrix, ~6e-6 per step against flip gaps of 0.013-0.09, codes practically never flipped: 3.6e-6 of them)."""
-    from torch.nn.utils import parametrize
-
-    scales = {}
-    for name, module in backbone.hf.named_modules():
-        if not parametrize.is_parametrized(module, "weight"):
-            continue
-        for index, adapter in enumerate(module.parametrizations.weight):
-            if getattr(adapter, "dense", None) is not None:
-                weight = module.weight.detach().float()
-                nonzero = weight != 0
-                scales[f"{name}.parametrizations.weight.{index}.dense"] = float(
-                    weight.abs().sum() / nonzero.sum().clamp_min(1))
-    return scales
-
-
-def maple_qat_parameters(backbone) -> list[tuple[str, torch.nn.Parameter]]:
-    """Maple's full QAT trainables, named as in ``backbone.hf``: attention dense latents (Muon) and learned block
-    scales, expert block scales, routers and layer norm gains (AdamW). LoRA latents stay frozen at their values (the
-    dense latent subsumes them); embedding, head, final norm and the members' private parts stay frozen."""
-    install_maple_qat(backbone)
-    for parameter in backbone.hf.parameters():
-        parameter.requires_grad_(False)
-    keep = (".dense", ".learned_scale", "experts.gate_up_blocks", "experts.down_blocks", ".mlp.gate.weight",
-            "input_layernorm.weight", "post_attention_layernorm.weight", "q_norm.weight", "k_norm.weight")
-    named = [(n, p) for n, p in backbone.hf.named_parameters() if n.startswith("model.layers.") and n.endswith(keep)]
-    for _, parameter in named:
-        parameter.requires_grad_(True)
-    return named
-
-
 def inject_lora(backbone: PortBackbone, layers: list[int], rank: int = 16, alpha: int = 32,
                 adapter_name: str = "neuralese") -> dict[int, list[torch.nn.Parameter]]:
     """Inject LoRA into `layers` (in place) and return its parameters grouped by layer."""
-    if _ternary(backbone):
-        return _inject_maple(backbone, layers, rank, alpha)
     from peft import LoraConfig, inject_adapter_in_model
 
     existing = {name for name, _ in backbone.hf.named_modules() if name.endswith(f".lora_A.{adapter_name}")}
@@ -187,10 +79,6 @@ def inject_lora(backbone: PortBackbone, layers: list[int], rank: int = 16, alpha
 
 
 def lora_state(backbone: PortBackbone) -> dict[str, torch.Tensor]:
-    if _ternary(backbone):  # the released adapters; the frozen student is identified by the backbone identity
-        return {f"{name}.{attr}": getattr(adapter, attr).detach().cpu()
-                for adapters in _maple_adapters(backbone).values() for name, adapter in adapters
-                for attr in ("lora_A", "lora_B", "learned_scale") if getattr(adapter, attr) is not None}
     return {n: p.detach().cpu() for n, p in backbone.hf.named_parameters() if "lora_" in n}
 
 
@@ -207,8 +95,6 @@ def restore_lora_checkpoint(backbone: PortBackbone, checkpoint: dict, *, alpha: 
         raise ValueError("checkpoint must contain a nonempty LoRA tensor mapping")
     layers = checkpoint.get("lora_layers")
     if layers is None:
-        if _ternary(backbone):
-            raise ValueError("Maple LoRA checkpoints must declare their adapter layer set")
         import re
         matches = [re.search(r"\.layers\.(\d+)\..+\.lora_[AB]\.neuralese\.weight$", name)
                    for name in saved]
@@ -245,8 +131,6 @@ def restore_lora_checkpoint(backbone: PortBackbone, checkpoint: dict, *, alpha: 
 
 
 def adapter_layers(backbone: PortBackbone) -> list[int]:
-    if _ternary(backbone):
-        return sorted(_maple_adapters(backbone))
     return sorted({_layer_index(name) for name, _ in backbone.hf.named_parameters() if 'lora_' in name})
 
 
@@ -269,12 +153,6 @@ def _layer_index(name):
 @contextmanager
 def deltas_off(backbone: PortBackbone):
     """Disable every adapter (the self-distillation teacher and replay reference)."""
-    if _ternary(backbone):
-        from ..maple.ternary import teacher_mode
-
-        with teacher_mode():
-            yield
-        return
     from peft.tuners.tuners_utils import BaseTunerLayer
 
     layers = [m for m in backbone.hf.modules() if isinstance(m, BaseTunerLayer)]

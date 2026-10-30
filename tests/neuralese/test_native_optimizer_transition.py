@@ -37,7 +37,7 @@ def legacy_optimizer(model,monkeypatch):
         return make_native_optimizer(model,lr=3e-6,in_backward=True,interface_row_lr=.003)[0]
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_native_ordinary_contract_routes_rows_and_narrow_adapter_to_adamw(family):
     model=build(family);optimizer,named=make_native_optimizer(model,lr=3e-6,in_backward=True)
     latent,ordinary=optim.latent_split(named,'muonsr');actual={v['name']:v['optimizer'] for v in optimizer.schema}
@@ -49,7 +49,7 @@ def test_native_ordinary_contract_routes_rows_and_narrow_adapter_to_adamw(family
     assert legacy.schema[0]['optimizer']=='muon','legacy generic callers keep their declared classifier'
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_explicit_transition_preserves_numeric_history_rng_weights_and_exact_future_resume(family,monkeypatch):
     model=build(family);old=legacy_optimizer(model,monkeypatch)
     native_training_update(model,old,examples(),checkpoint_layers=True,chunk_tokens=3)
@@ -148,7 +148,7 @@ def test_recipe_and_semantic_declarations_use_one_explicit_migration_policy():
     assert native_optimizer_migration_option({'native_optimizer_migration':POLICY,'models':{'student':{'native_optimizer_migration':None}}},'student') is None
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_corrected_adam_interface_learns_real_native_role_targets(family):
     model=build(family)
     optimizer,_=make_native_optimizer(model,lr=3e-6,interface_row_lr=3e-4,in_backward=True)

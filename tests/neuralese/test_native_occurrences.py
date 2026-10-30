@@ -29,7 +29,7 @@ def repeated_graph(family):
     return model,roles,identity,block_id,block,[first,second,reader],nodes
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_equal_state_ids_two_origins_live_and_constant_are_distinct_gradient_paths(family):
     model,roles,identity,block_id,block,turns,nodes=repeated_graph(family)
     device=os.environ.get('NATLANG_NATIVE_ADAPTER_TEST_DEVICE','cpu')
@@ -57,7 +57,7 @@ def test_equal_state_ids_two_origins_live_and_constant_are_distinct_gradient_pat
         graph_binding('reader',ambiguous,unflagged)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_engine_duplicate_import_capture_scores_and_live_source_gradient(tmp_path,monkeypatch,family):
     from test_native_serving_adapters import engine_fixture
     from natlang_neuralese.serve.engine import GenerationRequest

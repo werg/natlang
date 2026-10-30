@@ -258,7 +258,7 @@ def test_held_rows_get_objective_and_category_measurements_only():
     assert held.evaluation_binding['objective']['name'] == own.NAME
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_trainer_loss_matches_objective_reference_with_category_telemetry_and_skips_empty_graphs(family):
     from natlang_neuralese.model.shared_state import SharedStateModel
     from natlang_neuralese.train.native_state_sft import packed_graph_loss

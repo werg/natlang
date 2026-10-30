@@ -175,7 +175,7 @@ def test_phase_output_failure_does_not_change_checkpoint_call(monkeypatch, tmp_p
     assert state['diagnostic_errors']
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('preference_entry', [False, True])
 def test_real_native_factory_tuple_and_preference_alias_load_phase(monkeypatch, tmp_path, family, preference_entry):
     from test_shared_state import tiny

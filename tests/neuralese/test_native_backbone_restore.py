@@ -23,27 +23,21 @@ def exact(actual, expected):
         assert actual == expected
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
-def test_checkpoint_restore_uses_saved_backbone_and_keeps_exact_buffers_and_logits(tmp_path, monkeypatch, family):
-    engine = engine_fixture(tmp_path, family)
+def test_checkpoint_restore_uses_saved_backbone_and_keeps_exact_buffers_and_logits(tmp_path, monkeypatch):
+    engine = engine_fixture(tmp_path, 'lfm')
     original = engine.shared_model
     plan = compile_graph([Invocation('answer', (4, 5, 6, 7))])
     expected = original.logits(original(plan)['h_final']).detach()
-    if family == 'mellum':
-        from natlang_neuralese.maple import student
-        monkeypatch.setattr(student, 'load_student',
-                            lambda *a, **kw: pytest.fail('base weights loaded during checkpoint restore'))
-    else:
-        from transformers import AutoModelForCausalLM
-        model_type = type(original.port.hf)
-        loader = model_type.from_pretrained
-        def from_saved(path, *args, **options):
-            assert path is None
-            assert options['state_dict']
-            return loader(path, *args, **options)
-        monkeypatch.setattr(AutoModelForCausalLM, 'from_pretrained',
-                            lambda *a, **kw: pytest.fail('Auto loader attempted a base weight source'))
-        monkeypatch.setattr(model_type, 'from_pretrained', from_saved)
+    from transformers import AutoModelForCausalLM
+    model_type = type(original.port.hf)
+    loader = model_type.from_pretrained
+    def from_saved(path, *args, **options):
+        assert path is None
+        assert options['state_dict']
+        return loader(path, *args, **options)
+    monkeypatch.setattr(AutoModelForCausalLM, 'from_pretrained',
+                        lambda *a, **kw: pytest.fail('Auto loader attempted a base weight source'))
+    monkeypatch.setattr(model_type, 'from_pretrained', from_saved)
     restored, _, _, _, state = load_native_checkpoint(
         tmp_path / 'native.pt', device=original.port.embedding_weight.device)
     exact(model_state(restored), model_state(original))

@@ -31,7 +31,7 @@ def training_examples():
         tokenizer_fingerprint='fixture') for i in range(2)]
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_explicit_reasoning_upgrade_preserves_logits_old_moments_and_rng_then_learns_both(family):
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
     if family=='mellum':model.port.hf.natlang_precision='bf16'
@@ -168,7 +168,7 @@ def test_actual_old_checkpoint_upgrade_shared_trainer_resume_and_serve_roundtrip
     assert_exact(resumed['training']['optimizer'],before,'noop resumed optimizer')
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_bf16_backbone_reasoning_master_rows_learn_at_production_lr(family):
     port=tiny(family).to(dtype=torch.bfloat16)
     if family=='mellum':port.hf.natlang_precision='bf16'
@@ -231,7 +231,7 @@ def test_bf16_backbone_reasoning_master_rows_learn_at_production_lr(family):
     for name in names:assert torch.equal(getattr(restored,name),getattr(model,name))
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('malformation',['shape','dtype','declared_dtype'])
 def test_sparse_row_restore_rejects_malformed_tensor_before_mutating_channel(family,malformation):
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4,token_override_ids=(54,55))
@@ -246,7 +246,7 @@ def test_sparse_row_restore_rejects_malformed_tensor_before_mutating_channel(fam
     assert_exact(channel_checkpoint(model),baseline,'unchanged after rejection')
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('existing_reasoning',[False,True])
 def test_sparse_master_upgrade_real_full_and_both_composite_scopes(tmp_path,family,existing_reasoning):
     import json

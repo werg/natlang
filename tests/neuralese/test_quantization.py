@@ -1,6 +1,5 @@
 """The recipe quantization component (train/quantization.py): QAT woven into the training stages (owner 2026-10-10)."""
 import json
-from pathlib import Path
 
 import pytest
 import torch
@@ -10,7 +9,6 @@ from natlang_neuralese.maple import ternary
 from natlang_neuralese.maple.ternary import PRECISION, active_precision, precision_value, q4_0, quantized_value
 from natlang_neuralese.train import quantization as q
 
-RECIPES = Path(__file__).resolve().parents[2] / 'training' / 'neuralese' / 'recipes'
 
 
 def spec(**loss):
@@ -226,182 +224,10 @@ def test_dense_experts_follow_the_precision_point():
     assert torch.equal(gate_up[0], ternary.ternarize(experts.gate_up.detach()).float()[0])
 
 
-# Multi-precision objective and gates --------------------------------------------------------------------------------
-def test_multi_precision_backward_weights_each_point_and_learns_quantization_robustness():
-    torch.manual_seed(5)
-    model = Tiny()
-    run = q.Quantization(component(bf16_weight=1.0))
-    run.install(model, layer_count=2)
-    layer = model.model.layers[0].feed_forward.w1
-    x = torch.randn(8, 32)
-    target = torch.randn(8, 64)
-
-    def passes(_name):
-        yield ((layer(x) - target) ** 2).mean(), {}
-    results, losses = q.multi_precision_backward(run, 60, passes)
-    assert set(losses) == {'bf16', 'q4'}
-    # The gradient is bf16 + 0.5 x q4 (straight-through): recompute it by hand.
-    latent = layer.parametrizations.weight.original
-    expected = torch.zeros_like(latent)
-    for value in (latent.detach(), latent.detach() + 0.5 * (q4_0(latent.detach()) - latent.detach())):
-        w = value.clone().requires_grad_(True)
-        loss = ((x @ w.T - target) ** 2).mean()
-        weight = 1.0 if torch.equal(value, latent.detach()) else 0.5
-        (weight * loss).backward()
-        expected += w.grad
-    assert torch.allclose(latent.grad, expected, atol=1e-6)
-
-
-def test_gate_columns_evaluate_each_gated_point_at_deploy_precision_and_name_what_passed():
-    run = q.Quantization(component('rec'))
-    seen = []
-
-    def evaluate():
-        seen.append((PRECISION['point'], {g: v[1] for g, v in (PRECISION['groups'] or {}).items()}))
-        return {'ok': PRECISION['point'] == 'q4'}
-    columns = q.gate_columns(run, evaluate, lambda report: report['ok'])
-    assert seen == [('q4', {'mlp': 1.0, 'attention': 1.0}), ('tern', {'mlp': 1.0})]
-    verdict = q.precision_verdict(run, columns, bf16_passed=True)
-    assert verdict == {'precisions_passed': ['bf16', 'q4'], 'precisions_required': ['bf16', 'q4'],
-                       'precisions_qualified': True}
-    assert not q.precision_verdict(run, {**columns, 'q4': {'passed': False}}, True)['precisions_qualified']
-    assert not q.precision_verdict(run, columns, bf16_passed=False)['precisions_qualified']
-    # A point not required in this stage whose ramp has not started is skipped (never counted as passed); a required
-    # point is evaluated anyway. Each evaluated column records its wall time.
-    seen.clear()
-    run.mixes = lambda step: {'q4': 0.0, 'tern': 0.0}  # before either ramp starts
-    early = q.gate_columns(run, evaluate, lambda report: report['ok'], step=0)
-    assert 'tern' not in run.required_points()
-    assert early['tern']['skipped'] and early['tern']['passed'] is None and [p for p, _ in seen] == ['q4']
-    assert early['q4']['seconds'] >= 0
-    assert 'tern' not in q.precision_verdict(run, early, True)['precisions_passed']
-    # ``points`` splits the deciding columns from the report-only ones (a trainer runs the latter only at the
-    # decision that ends the stage).
-    seen.clear()
-    run.mixes = lambda step: {'q4': 1.0, 'tern': 0.5}
-    run.required_points = lambda: ['q4']
-    deciding = q.gate_columns(run, evaluate, lambda report: report['ok'], step=10, points='required')
-    report_only = q.gate_columns(run, evaluate, lambda report: report['ok'], step=10, points='report')
-    assert list(deciding) == ['q4'] and list(report_only) == ['tern'] and [p for p, _ in seen] == ['q4', 'tern']
-
-
+# Initial mix ------------------------------------------------------------------------------------------------------
 def test_init_ramp_floor_keeps_a_point_at_least_at_the_latents_lambda():
     run = q.Quantization({**component(), 'init_mix': {'tern': 0.6}})
     assert run.mixes(0) == {'q4': 0.0, 'tern': 0.6}
     assert run.active(0) == [('tern', 0.6)]
     with pytest.raises(ValueError, match='init_mix'):
         q.Quantization({**component(), 'init_mix': {'other': 0.5}})
-
-
-def test_validate_init_requires_a_gate_a_bf16_fallback_and_a_fresh_optimizer():
-    value = {**spec(), 'gate': {'probes': {'path': 'p', 'sha256': '0' * 64}}}
-    init = {'source': {'artifact': 'a', 'file': 'f'}, 'fallback': 'bf16', 'ramp_floor': 'tern', 'optimizer': 'fresh'}
-    assert q.validate_init(init, value) == init
-    assert q.validate_init({'source': 'bf16'}, None)
-    with pytest.raises(ValueError, match='fresh optimizer'):
-        q.validate_init({**init, 'optimizer': 'restore'}, value)
-    with pytest.raises(ValueError, match='gated'):
-        q.validate_init(init, spec())
-    with pytest.raises(ValueError, match='ramp_floor'):
-        q.validate_init({**init, 'ramp_floor': 'nope'}, value)
-
-
-def test_init_mix_follows_the_recorded_decision_and_its_receipt(tmp_path):
-    from natlang_neuralese.common.hashing import sha256_file_hex
-    recipe = {'init': {'source': {'artifact': 'v3', 'file': 'best.pt'}, 'fallback': 'bf16', 'ramp_floor': 'tern'}}
-
-    def heads(passed, source):
-        receipt = tmp_path / f'receipt-{passed}.json'
-        receipt.write_text(json.dumps({'artifact': 'v3', 'file': 'best.pt', 'sha256': 'abc', 'passed': passed}))
-        init = {'source': source, 'receipt': str(receipt), 'receipt_sha256': sha256_file_hex(receipt)}
-        if source == 'artifact':
-            init.update(artifact='v3', file='best.pt', sha256='abc', step=900, mix=0.75)
-        return {'init': init}
-    assert q.init_mix_for(recipe, heads(True, 'artifact')) == {'tern': 0.75}
-    assert q.init_mix_for(recipe, heads(False, 'bf16')) == {}  # the declared fallback
-    with pytest.raises(ValueError, match='did not pass'):
-        q.init_mix_for(recipe, heads(False, 'artifact'))
-    with pytest.raises(ValueError, match='must start from the declared latents'):
-        q.init_mix_for(recipe, heads(True, 'bf16'))
-    with pytest.raises(ValueError, match='--init-receipt'):
-        q.init_mix_for(recipe, {})
-    with pytest.raises(ValueError, match='does not declare'):
-        q.init_mix_for({}, heads(True, 'artifact'))
-
-
-def test_behaviour_gate_compares_with_the_declared_bf16_reference(tmp_path):
-    probes = tmp_path / 'probes.jsonl'
-    probes.write_text('{"id": "p", "messages": []}\n')
-    from natlang_neuralese.common.hashing import sha256_file_hex
-    from types import SimpleNamespace
-    config = {'probes': {'path': str(probes), 'sha256': sha256_file_hex(probes)}, 'max_gate_drop': 0.1,
-              'max_held_kl': 0.25, 'reference': {'gate_pass': 0.75}}
-    gate = q.Behaviour(config, SimpleNamespace(convert_tokens_to_ids=lambda token: 7))
-    assert gate.passed({'gate_pass': 0.66, 'held_kl': 0.2})
-    assert not gate.passed({'gate_pass': 0.6, 'held_kl': 0.2})
-    assert not gate.passed({'gate_pass': 0.9, 'held_kl': 0.3})
-    assert gate.passed({'gate_pass': 0.5, 'held_kl': 0.0}, {'gate_pass': 0.55})  # a live BF16 report instead
-    # held_kl_bound "response" (direct lineages): the KL bound reads the response positions only.
-    response = q.Behaviour({**config, 'held_kl_bound': 'response'}, SimpleNamespace(convert_tokens_to_ids=lambda t: 7))
-    assert response.passed({'gate_pass': 0.75, 'held_kl': 0.68, 'held_response_kl': 0.246})
-    assert not response.passed({'gate_pass': 0.75, 'held_kl': 0.1, 'held_response_kl': 0.3})
-    assert not gate.passed({'gate_pass': 0.75, 'held_kl': 0.68, 'held_response_kl': 0.246})
-    probes.write_text('{}\n')
-    with pytest.raises(ValueError, match='probes changed'):
-        q.Behaviour(config, SimpleNamespace(convert_tokens_to_ids=lambda token: 7))
-
-
-def test_preservation_stream_is_zero_at_bf16_and_trains_the_quantized_model_toward_bf16(tmp_path):
-    test_mellum_port = pytest.importorskip('test_mellum_port')
-    from natlang_neuralese.maple.model import load_maple
-    test_mellum_port.tiny_mellum(tmp_path)
-    model = load_maple(tmp_path, device='cpu', dtype=torch.float32, ternary_attention=False)
-    torch.manual_seed(0)
-    records = {'ids': [], 'top_ids': [], 'top_logp': [], 'prompt_len': []}
-    with torch.no_grad():
-        for _ in range(4):
-            ids = torch.randint(0, 128, (20,))
-            logp = torch.log_softmax(model(ids[None]).logits[0, :-1].float(), -1)
-            top = logp.topk(128, -1)  # the full vocabulary: KL to itself is zero
-            records['ids'].append(ids)
-            records['top_ids'].append(top.indices)
-            records['top_logp'].append(top.values)
-            records['prompt_len'].append(5)
-    preserve = q.Preserve({'teacher': {'artifact': 'unused'}, 'weight': 0.5, 'max_tokens': 16}, 'warm',
-                          shards=(records, records, {}))
-    loss, info = preserve.loss(model, 3)
-    assert info['preserve_record'] == preserve.record(3) and abs(info['preserve_kl']) < 1e-3  # BF16: its own teacher
-    # A frozen-backbone phase (projection first): no gradient path, so the stream is skipped and logged, not run.
-    for parameter in model.parameters():
-        parameter.requires_grad_(False)
-    assert not preserve.applies(model, 0) and not preserve.loss(model, 0)[0].requires_grad
-    run = q.Quantization({'schema': q.SCHEMA, 'points': [
-        {'name': 't', 'ramp': {'start': 0.0, 'end': 0.01}, 'modules': {'experts': {'format': 'ternary'},
-                                                                        'attention': {'format': 'ternary'}}}],
-        'stage': {'id': 'warm', 'progress': [0.0, 1.0], 'start': 0, 'end': 10}})
-    run.install(model, layer_count=4)
-    named = [(n, p) for n, p in model.named_parameters() if 'original' in n or 'experts' in n]
-    for _, parameter in named:
-        parameter.requires_grad_(True)
-    assert preserve.applies(model, 1)
-    optimizer = torch.optim.AdamW([p for _, p in named], lr=3e-3)
-    with run.context('t', 1.0):
-        start = float(preserve.loss(model, 0)[0])
-        for step in range(30):
-            optimizer.zero_grad()
-            preserve.loss(model, step)[0].backward()
-            optimizer.step()
-        end = sum(float(preserve.loss(model, s)[0]) for s in range(4)) / 4
-    assert start > 0.01 and end < start
-
-
-def test_deployed_cache_is_reentrant_so_a_whole_precision_column_quantizes_each_weight_once():
-    from natlang_neuralese.maple.generation_gate import deployed_cache
-    from natlang_neuralese.maple.ternary import QUANT_MIX
-    with deployed_cache():
-        outer = QUANT_MIX['cache']
-        outer['marker'] = 1
-        with deployed_cache():  # the behaviour gate's own block inside a column
-            assert QUANT_MIX['cache'] is outer
-        assert QUANT_MIX['cache'] is outer and outer['marker'] == 1
-    assert QUANT_MIX['cache'] is None

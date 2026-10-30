@@ -170,7 +170,7 @@ def test_writer_rejects_wrong_student_or_missing_producer(monkeypatch):
         memetic.write_state('http://localhost', 'guide', actor)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_guidance_graph_backpropagates_through_local_producer(family):
     import torch
     from natlang_neuralese.data.native_graph import graph_loss, parse_graph

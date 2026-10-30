@@ -91,7 +91,7 @@ def test_native_attention_prefix_cut_keeps_outputs_and_consumer_source_adjoint()
         assert gradient_metrics(actual_gradient,summed,atol=1e-7,rtol=1e-4)['passed']
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_parent_qualification_preserves_all_learned_rows_and_saved_arithmetic(tmp_path,family):
     from types import SimpleNamespace
     from test_native_full_updates import source

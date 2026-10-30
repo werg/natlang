@@ -2,11 +2,9 @@
 import pytest
 import torch
 
-from natlang_neuralese.common.paths import resolve
 from natlang_neuralese.maple import ternary
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason='the fused ramp is CUDA-only')
-MELLUM = resolve('models', 'mellum21-12b-a2.5b-thinking')
 POINTS = [('int4', {'group': 32}), ('int4', {'group': 64}), ('ternary', {})]
 MIXES = (1.0, 0.47, 0.03)
 
@@ -59,17 +57,3 @@ def test_q4_scales_reproduce_the_reference_reduction():
     reference = blocks.gather(-1, blocks.abs().argmax(-1, keepdim=True)) / -8.0
     assert torch.equal(ternary.q4_scales(w, 32), reference)
     assert torch.equal(ternary.q4_scales(w.float(), 32), reference)
-
-
-@pytest.mark.gpu_heavy  # ~8.6 GB of CUDA memory
-@pytest.mark.skipif(not (MELLUM / 'config.json').is_file(), reason='Mellum checkpoint not present')
-def test_fused_ramp_is_bit_identical_on_real_mellum_layers():
-    from natlang_neuralese.maple.model import load_maple
-
-    model = load_maple(MELLUM, device='cuda', layers=2, ternary_attention=False, dense_experts=True)
-    checked = 0
-    for name, tensor in list(model.named_parameters()) + list(model.named_buffers()):
-        if '.layers.' in name and tensor.ndim >= 2 and tensor.dtype == torch.bfloat16 and 'gate.weight' not in name:
-            assert_identical(tensor.detach())
-            checked += 1
-    assert checked >= 2 * 6  # q, k, v, o, experts gate_up and down per layer

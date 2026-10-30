@@ -228,7 +228,7 @@ def test_evidence_addition_leaves_old_mask_identical():
     assert len(evidence)==1 and evidence[0]['feedbacks']
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_both_port_loss_and_every_derivative_equal_explicit_zero_before_mass(tmp_path,family):
     from dataclasses import replace
     from test_shared_state import tiny

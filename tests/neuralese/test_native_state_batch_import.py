@@ -33,7 +33,7 @@ def _artifacts(source, target):
             target.put_native_tensor_artifact(record.artifact)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('algorithm', ['adam', 'sgd'])
 def test_batch_keeps_exact_history_and_checks_each_edge_once(tmp_path, monkeypatch, family, algorithm):
     engine, records = _history(tmp_path, family, algorithm)

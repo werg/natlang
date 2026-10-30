@@ -66,7 +66,7 @@ def test_matching_optional_byte_count_is_distinct_valid_whole_witness(tmp_path,m
     validation([extra]);assert validation.strict_runs==2 and len(validation.completed)==len(values)+1
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_independent_capacity_cases_keep_numerics_and_state_with_one_index_check(tmp_path,monkeypatch,family):
     import torch
     from natlang_neuralese.eval import native_memory as memory

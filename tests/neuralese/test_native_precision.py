@@ -190,7 +190,7 @@ def test_single_expert_linear_elides_index_fill_without_changing_any_matrix_resu
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA native graph precision')
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('mode', ['tf32', 'bf16', 'bf16x6'])
 def test_both_ports_flat_cached_consumer_gradients_under_selected_math(family, mode):
     from test_shared_state import tiny, graph

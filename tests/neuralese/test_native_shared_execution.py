@@ -8,7 +8,7 @@ from natlang_neuralese.eval.native_attention_transition import qualify_ffn_chunk
 from test_native_attention_transition import fixture,Tokenizer,equal
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('checkpointed',[False,True])
 @pytest.mark.parametrize('device',['cpu','cuda'])
 def test_complete_graph_cached_and_chunk_gradients_preserve_actual_state(family,checkpointed,device):
@@ -140,7 +140,7 @@ def test_real_checkpoint_resume_inherits_profile_and_exact_optimizer_rng_exposur
         _same(resumed['training'][key],explicit['training'][key])
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_stable_saved_tensor_identity_preserves_runtime_validation_and_rejects_profile_conflict(tmp_path,monkeypatch,family):
     from test_native_serving_adapters import engine_fixture
     from test_native_raw_policy import parent_training

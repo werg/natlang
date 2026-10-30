@@ -214,7 +214,7 @@ def test_live_raw_owner_blocks_rendezvous_and_exact_released_parents_replace_ori
     with pytest.raises(ValueError,match='artifact changed'):raw.validate_release(state,plan)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_real_rl_sft_rl_bridge_uses_latest_weights_and_retains_full_source_credits(tmp_path,monkeypatch,family):
     """Actual tiny native training throughout; rewards/actions are test fixtures."""
     import torch

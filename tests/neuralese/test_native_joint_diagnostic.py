@@ -21,7 +21,7 @@ def test_diagnostic_rejects_configured_but_unexecuted_fp8_backend():
     assert diagnostic.backend_execution({'lfm':SimpleNamespace(backend=None)}) == {}
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_forced_writer_actual_sampled_reader_trace_replays_and_backpropagates(tmp_path,family):
     dtype=source(tmp_path/'base',family)
     model,tokenizer,roles,config=load_native_model(tmp_path/'base',dtype=dtype)

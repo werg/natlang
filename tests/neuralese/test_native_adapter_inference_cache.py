@@ -23,7 +23,7 @@ def _decode(engine, stack, steps=4):
         return logits
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_cached_inference_is_bitwise_the_uncached_actor_and_resolves_once(tmp_path, family, monkeypatch):
     engine = engine_fixture(tmp_path, family)
     stack = [record.id for record in adapters(engine)]

@@ -7,7 +7,7 @@ from natlang_neuralese.data.native_graph import parse_graph, SCHEMA
 from natlang_neuralese.train.native_state_sft import make_native_optimizer, native_training_update
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('master_dtype',[torch.float32,torch.bfloat16])
 def test_sparse_row_telemetry_matches_actual_committed_parameters(family,master_dtype):
     port=tiny(family).to(dtype=torch.bfloat16)

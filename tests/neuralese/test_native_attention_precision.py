@@ -67,7 +67,7 @@ def test_recipe_declares_and_validates_attention_arithmetic(kind,tmp_path):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='actual native CUDA attention')
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
 def test_real_both_port_graph_cached_adjoints_and_incremental_serving(family,dtype):
     from test_shared_state import tiny, graph

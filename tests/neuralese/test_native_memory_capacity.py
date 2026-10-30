@@ -14,7 +14,7 @@ from test_shared_state import tiny
 from test_native_optimizer_checkpointing import examples,assert_exact
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('offload',[False,True])
 def test_actual_capacity_check_releases_gradients_and_preserves_full_state(family,offload):
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
@@ -43,7 +43,7 @@ def test_actual_capacity_check_releases_gradients_and_preserves_full_state(famil
     assert active_cotangent_scope() is None
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_capacity_observed_gradient_matches_production_shared_update(family,monkeypatch):
     from contextlib import nullcontext
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
@@ -140,7 +140,7 @@ def test_capacity_failure_restores_hooks_backend_rng_and_existing_state(monkeypa
     assert active_cotangent_scope() is None
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('checkpoint_layers',[True,False])
 def test_offload_small_actual_weight_comparison_uses_bitwise_all_gradient_digests(family,checkpoint_layers):
     from natlang_neuralese.eval.native_memory import offload_numerical_parity
@@ -552,7 +552,7 @@ def test_actual_sft_needs_capacity_but_keeps_smaller_pass_after_larger_failure(t
         assert_exact(observed['moments'],observed['optimizer'].state_dict())
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_identical_regular_request_aliases_measure_once_and_recheck_each_declaration(tmp_path,monkeypatch,family):
     import json
     from natlang_neuralese.eval import native_memory as memory

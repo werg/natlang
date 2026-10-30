@@ -56,7 +56,7 @@ def actual_engine_gradient(engine,graph,row,bindings,adapter_id,name):
         leaves={adapter_id:{**engine.store.get_native_tensor_artifact(adapter_id).artifact.tensors,name:coefficient}},gradient_precision='fp32')
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('external',[False,True])
 def test_distinct_policy_two_actual_http_updates_and_restart(tmp_path,monkeypatch,family,external):
     torch.manual_seed(1731)

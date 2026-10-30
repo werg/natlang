@@ -39,7 +39,7 @@ MODEL_KEYS=('lfm25','mellum21')
 def select_lfm_view(lfm_view:str)->tuple[str,...]:
     global MODEL_KEYS
     if lfm_view not in lb.keys('lfm'):raise ValueError(f'unknown lfm view {lfm_view!r}')
-    MODEL_KEYS=(lfm_view,lb.current_key('mellum'))
+    MODEL_KEYS=(lfm_view,'mellum21')  # the retired Mellum line's (historical) view of these tranches
     return MODEL_KEYS
 
 

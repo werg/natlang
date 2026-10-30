@@ -34,7 +34,7 @@ def test_production_size_norm_updates_and_numeric_optimizer_migration():
     torch.testing.assert_close(promoted,ref,atol=0,rtol=0)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_declared_profile_real_graph_restore_and_raw_identity(tmp_path,family):
     from natlang_neuralese.rl.native_raw_policy import prepare_raw_policy
     dtype=source(tmp_path/'base',family)
@@ -113,7 +113,7 @@ def test_upgrade_completed_trainer_preserves_exact_full_history(tmp_path):
     assert len(final['training']['options']['ordinary_precision_history'])==1
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_composite_full_patch_preserves_declared_norm_promotion(tmp_path,family):
     from natlang_neuralese.model.native_composite import write_native_composite_checkpoint
     dtype=source(tmp_path/'base',family)

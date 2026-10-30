@@ -168,7 +168,7 @@ def test_existing_complete_vjp_comparison_observes_all_parameters_without_extra_
     assert all(p.grad is None for _,p in named)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_tiny_both_port_complete_graph_reaches_every_optimizer_parameter(tmp_path,family):
     from test_native_full_updates import source
     from natlang_neuralese.model.native_model import load_native_model

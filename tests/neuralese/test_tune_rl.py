@@ -140,7 +140,7 @@ def parent_fit(engine):
     return JointTrainer(engine, manifest_for(engine), rows_for(engine, 'bx', 2) + rows_for(engine, 'by', 1), Recipe(steps=0))
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_rl_base_producer_stays_in_whole_graph_with_tuned_consumer(tmp_path, monkeypatch, family):
     engine = engine_fixture(tmp_path, family, service_template=True)
     parent = parent_fit(engine)

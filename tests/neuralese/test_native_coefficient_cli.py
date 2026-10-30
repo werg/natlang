@@ -12,7 +12,7 @@ from test_native_coefficient_stage import adapters
 from test_native_serving_adapters import engine_fixture
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_coefficient_stage_cli_sigterm_resume_and_real_held_collector(tmp_path,monkeypatch,family):
     from test_native_adapted_rl import capture_actor
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
@@ -178,7 +178,7 @@ def test_actual_coefficient_stage_cli_sigterm_resume_and_real_held_collector(tmp
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_managed_actor_policy_cli_and_durable_restart(tmp_path,family):
     import subprocess
     import sys

@@ -9,7 +9,7 @@ from natlang_neuralese.model.shared_state import SharedStateModel,Invocation,Imp
 from natlang_neuralese.train.native_state_sft import make_native_optimizer
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('wrong_derivative',[False,True])
 @pytest.mark.parametrize('device',['cpu','cuda'])
 def test_all_production_gradients_connected_rows_and_inputs_preserved(family,wrong_derivative,device):
@@ -110,28 +110,6 @@ def test_inventory_cannot_omit_a_trainable_or_alias_a_parameter():
         compare_complete_gradients(a,b,[('a',x),('b',x)],x,x,atol=1e-5,rtol=1e-4)
 
 
-def test_mellum_production_topology_counts_parameters_separately_from_input_derivative():
-    from natlang_neuralese.maple.model import MapleConfig,MapleForCausalLM
-    from natlang_neuralese.maple.maple_port import MaplePortBackbone
-    from natlang_neuralese.train.backbone_policy import configure_backbone_training
-    config=MapleConfig(vocab_size=64,hidden_size=16,num_hidden_layers=28,
-        num_attention_heads=4,num_key_value_heads=2,head_dim=4,
-        moe_intermediate_size=8,num_experts=2,num_experts_per_tok=1,
-        layer_types=['sliding_attention']*28,model_type='mellum',dense_experts=True)
-    with torch.device('meta'):
-        hf=MapleForCausalLM(config);hf.natlang_precision='bf16'
-        model=SharedStateModel(MaplePortBackbone(hf,markers=False),(58,59,60,61),
-            rank=4,token_override_ids=(23,24))
-        backbone=[('backbone.'+name,p)for name,p in configure_backbone_training(model.port,'latent')]
-        interface=[('interface.'+name,p)for name,p in model.named_parameters()
-            if name.startswith(('input_rows','output_rows','extra_input_rows','extra_output_rows','adapter.'))
-            and p.requires_grad]
-        named,roles=production_inventory(model,backbone+interface)
-    assert len(backbone)==28*11==308 and len(interface)==6
-    assert len(named)==314 and len({'input_embeddings',*(name for name,_ in named)})==315
-    assert all(roles.values())and all(p.device.type=='meta'for _,p in named)
-
-
 def test_complete_gradient_observer_start_failure_closes_flat_cotangent_scope():
     import os
     from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope,active_cotangent_scope
@@ -154,7 +132,7 @@ def test_complete_gradient_observer_start_failure_closes_flat_cotangent_scope():
     assert not os.path.exists(scratch)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('device,backend',[('cpu','cpu_file'),('cuda','cpu_file'),('cuda','device_fp32')])
 def test_actual_runtime_qualifier_labels_complete_inventory_and_legacy_channel(family,device,backend):
     if device=='cuda'and not torch.cuda.is_available():pytest.skip('CUDA unavailable')

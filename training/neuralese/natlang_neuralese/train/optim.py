@@ -913,11 +913,16 @@ def latent_split(named, latent_optimizer: str):
     return [(n, q) for n, q in named if is_latent(n, q)], [(n, q) for n, q in named if not is_latent(n, q)]
 
 
+def row_scale(latent: torch.Tensor) -> torch.Tensor:
+    """Per-row ternary scale (LionSR's lr unit), shape (..., 1), FP32."""
+    from ..maple.ternary import ternary_codes
+    return ternary_codes(latent.detach())[1].float()
+
+
 def latent_entries(latent_named, latent_optimizer: str, lr: float, head_dim: int | None = None):
     """``PortMuonAdamW``'s ``latent`` argument: (name, parameter, lr, fourth) with LionSR's per-row ternary scale,
     AdamMiniSR's ``block_rows`` or MuonSR's ``split_rows`` (Mellum's fused expert gate_up orthogonalized as its two
     matrices, gate and up, as its pretraining Muon saw them)."""
-    from ..maple.qat_convert import row_scale
     return [(n, q, lr, row_scale(q) if latent_optimizer == 'lionsr' else
              latent_block_rows(n, q, head_dim) if latent_optimizer == 'adaminisr' else
              (2 if '.gate_up' in n else 1)) for n, q in latent_named]
@@ -941,7 +946,6 @@ def latent_options(latent_optimizer: str, *, weight_decay: float = 0.0, skip_idl
 def latent_partition(named, lr: float):
     """The latent policy's LionSR partition (conversion v3): every backbone weight matrix as (name, parameter,
     lr, per-row ternary scale). Its ``lr`` is in units of each row's ternary scale."""
-    from ..maple.qat_convert import row_scale
     return [(n, q, lr, row_scale(q)) for n, q in named if n.startswith('backbone.') and q.ndim >= 2]
 
 

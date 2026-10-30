@@ -29,7 +29,7 @@ def program(engine,adapter,algorithm='adam'):
         'outer':{'request':request,'bindings':{'a':'a2'}},'wrt':['a']}
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('algorithm',['sgd','adam'])
 def test_actual_finite_derivative_two_updates_and_numeric_direction(tmp_path,family,algorithm):
     engine=engine_fixture(tmp_path,family)
@@ -68,7 +68,7 @@ def test_actual_finite_derivative_two_updates_and_numeric_direction(tmp_path,fam
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_program_rejects_stale_gradient_and_forward_reference(tmp_path,family):
     engine=engine_fixture(tmp_path,family)
     adapter,_=nonzero_adapter(engine)
@@ -82,7 +82,7 @@ def test_program_rejects_stale_gradient_and_forward_reference(tmp_path,family):
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('algorithm',['sgd','adam'])
 def test_source_dtype_program_matches_explicit_updated_actor_autograd(tmp_path,family,algorithm):
     from natlang_neuralese.common.native_higher_order import reference_arithmetic
@@ -115,7 +115,7 @@ def test_source_dtype_program_matches_explicit_updated_actor_autograd(tmp_path,f
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('target_kind',['model-parameters','native-state'])
 def test_named_backbone_and_hybrid_state_programs_have_real_outer_gradients(tmp_path,family,target_kind):
     engine=engine_fixture(tmp_path,family,service_template=True)
@@ -151,7 +151,7 @@ def test_named_backbone_and_hybrid_state_programs_have_real_outer_gradients(tmp_
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_unused_program_input_has_exact_zero_derivative_and_no_fake_update(tmp_path,family):
     engine=engine_fixture(tmp_path,family)
     adapter,_=nonzero_adapter(engine)
@@ -167,7 +167,7 @@ def test_unused_program_input_has_exact_zero_derivative_and_no_fake_update(tmp_p
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_heterogeneous_meta_gradient_distinguishes_original_from_updated_actors(tmp_path,family):
     engine=engine_fixture(tmp_path,family)
     from natlang_neuralese.model.native_adapters import create_adapter,target_parameters
@@ -210,7 +210,7 @@ def test_heterogeneous_meta_gradient_distinguishes_original_from_updated_actors(
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('algorithm',['sgd','adam'])
 @pytest.mark.parametrize('state_kind',['attention','hybrid'])
 def test_state_optimizer_cpu_transfer_retains_exact_outer_derivative(tmp_path,family,algorithm,state_kind):

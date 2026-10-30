@@ -30,7 +30,7 @@ def _assert_tree_equal(actual, expected):
         assert actual==expected
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_native_optimizer_update_proceeds_while_exact_full_snapshot_is_written(tmp_path,monkeypatch,family):
     from test_shared_state import tiny
     from natlang_neuralese.data.native_graph import SCHEMA,parse_graph

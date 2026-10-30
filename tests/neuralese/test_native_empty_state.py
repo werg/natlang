@@ -8,7 +8,7 @@ from natlang_neuralese.model.state_block import NativeStateBlock
 from natlang_neuralese.serve.store import encode_native_state, decode_native_state
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('dtype', [torch.float32, torch.bfloat16])
 def test_empty_capture_roundtrip_splice_and_graph(family, dtype):
     model = SharedStateModel(tiny(family), (60, 61, 62, 63), rank=4).to(dtype=dtype).eval()

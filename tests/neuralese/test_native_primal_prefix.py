@@ -11,7 +11,7 @@ from natlang_neuralese.train.native_state_sft import pack_native_graphs
 from natlang_neuralese.train.native_prefix_packing import communication_primal_rows
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
 def test_cuda_primal_reuse_retains_every_original_occurrence_gradient(family,dtype,monkeypatch):
     if not torch.cuda.is_available():pytest.skip('CUDA unavailable')
@@ -62,7 +62,7 @@ def test_cuda_primal_reuse_retains_every_original_occurrence_gradient(family,dty
         if p.grad is not None:torch.testing.assert_close(p.grad,q.grad,atol=0,rtol=0,msg=name)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('kind',['communication','ordinary'])
 def test_cuda_two_bf16_updates_preserve_all_optimizer_state_and_rng(family,kind):
     if not torch.cuda.is_available():pytest.skip('CUDA unavailable')

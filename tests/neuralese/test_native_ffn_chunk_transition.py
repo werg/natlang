@@ -6,7 +6,7 @@ from natlang_neuralese.eval import native_attention_transition as transition
 from test_native_attention_transition import fixture,Tokenizer,equal,inherited_cached_gap
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('chunk',[2,32])
 def test_actual_ffn_boundary_complete_graph_cached_derivatives_preserve_real_parent(family,chunk):
     model,optimizer,named,roles,config=fixture(family)

@@ -97,7 +97,7 @@ def test_declarations_default_to_jolt_plus_and_keep_explicit_opt_outs():
 
 
 
-@pytest.mark.parametrize('family,mode', [('lfm', 'write-only'), ('mellum', 'write-only'), ('lfm', 'text-twin')])
+@pytest.mark.parametrize('family,mode', [('lfm', 'write-only'), ('lfm', 'text-twin')])
 def test_packed_twin_rows_equal_shared_teacher_scores(family, mode):
     """The twin appended to the packed graph scores exactly what privileged_scoring.teacher_scores scores.
 

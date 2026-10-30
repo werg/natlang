@@ -84,7 +84,7 @@ def test_real_codec_dependency_matches_explicit_semantic_composition_and_source_
     assert sum(entry.get('tokens',0) for entry in execution)==len(dependency.target_token_ids)+2
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_semantic_constant_import_cuts_only_consumed_codec_path(tmp_path,family):
     participants,channel,plans,dependency=case(tmp_path,family,family,stopped=True)
     results,_=execute_codec_graph(participants,plans,[dependency],channel=channel)
@@ -130,7 +130,7 @@ def test_codec_graph_matches_actual_incremental_producer_and_consumer_adjoints(t
             assert (actual-expected).norm()/expected.norm()<2e-5
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_one_live_and_one_constant_use_share_codec_values_without_coalescing_gradients(tmp_path,family):
     participants,channel,plans,dependency=case(tmp_path,family,family)
     writer,reader=plans[family].invocations

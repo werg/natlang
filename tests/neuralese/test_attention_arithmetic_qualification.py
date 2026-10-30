@@ -13,7 +13,7 @@ from test_native_optimizer_checkpointing import examples,assert_exact
 from scripts.neuralese_data.native_qualification_runtime import restore_qualification_execution
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_real_arithmetic_observer_compares_all_adjoints_without_updates(tmp_path,family):
     model=shared_state.SharedStateModel(tiny(family),(58,59,60,61),rank=4)
     if family=='mellum':model.port.hf.natlang_precision='bf16'
@@ -60,7 +60,7 @@ def test_observer_restores_complete_capacity_execution_identity(monkeypatch, cur
     assert model.port.checkpoint_layers is True
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_actual_observer_uses_restored_direct_backward_and_chunks(tmp_path, family):
     model = shared_state.SharedStateModel(tiny(family), (58,59,60,61), rank=4)
     if family == 'mellum': model.port.hf.natlang_precision = 'bf16'

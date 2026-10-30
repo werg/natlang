@@ -1,8 +1,8 @@
 """The one declaration of which student backbones belong to each training line.
 
-A training line (``lfm``, ``mellum``) is a stable role name; the backbone behind
-it can change (owner, 2026-10-28: the LFM line moves from LFM2.5-350M to
-LFM3-1.7B).  Historical rows, receipts and checkpoints keep validating against
+A training line (``lfm``; the retired ``mellum``) is a stable role name; the
+backbone behind it can change (owner, 2026-10-28: the LFM line moves from
+LFM2.5-350M to LFM3-1.7B). A retired line keeps only historical backbones.  Historical rows, receipts and checkpoints keep validating against
 the backbone that produced them, so every identity constant lives here, keyed by
 backbone, and callers look it up instead of hard-coding ``lfm2``/``lfm25``/a
 tokenizer fingerprint.
@@ -73,8 +73,10 @@ _BACKBONES = {
         'explicit_history_reasoning_policy': None,
         'port': 8097,
     },
+    # Retired with the Mellum line (plans/neuralese/LFM3_COMMITTED_DECISIONS_20261028.md item 16): no current
+    # backbone; its identities stay so historical two-view rows, receipts and checkpoints keep validating.
     'mellum21': {
-        'line': 'mellum', 'status': CURRENT,
+        'line': 'mellum', 'status': HISTORICAL,
         'model_key': 'mellum21',
         'production_dir': 'mellum21',
         'model_id_architecture': 'mellum',
@@ -110,9 +112,16 @@ def keys(line: str | None = None, *, status: str | None = None) -> tuple[str, ..
 def current_key(line: str) -> str:
     """The backbone key new work on ``line`` uses."""
     current = keys(line, status=CURRENT)
+    if not current:
+        raise ValueError(f'line {line!r} is retired: it has no current backbone')
     if len(current) != 1:
         raise ValueError(f'line {line!r} must declare exactly one current backbone')
     return current[0]
+
+
+def active_lines() -> tuple[str, ...]:
+    """Lines with a current backbone (new work), in declaration order."""
+    return tuple(line for line in LINES if keys(line, status=CURRENT))
 
 
 def line_of(key: str) -> str:
@@ -197,12 +206,12 @@ def key_for_role(role: str, *, model_id: str | None = None, architecture: str | 
 
 
 def model_key_pairs() -> tuple[frozenset[str], ...]:
-    """Every admissible (lfm backbone, mellum backbone) pairing of a two-line artifact."""
+    """Every admissible (lfm backbone, mellum backbone) pairing of a historical two-line artifact."""
     return tuple(frozenset(pair) for pair in product(keys('lfm'), keys('mellum')))
 
 
 def current_model_keys() -> tuple[str, ...]:
-    return tuple(current_key(line) for line in LINES)
+    return tuple(current_key(line) for line in active_lines())
 
 
 def tokenizer_contract(key: str) -> dict:

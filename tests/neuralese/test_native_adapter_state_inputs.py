@@ -9,7 +9,7 @@ from natlang_neuralese.model.shared_state import Invocation, ImportSpan, compile
 from natlang_neuralese.serve.engine import GenerationRequest, Sequence
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_explicit_adapter_state_cached_graph_and_source_contract(tmp_path,family):
     engine=engine_fixture(tmp_path,family,service_template=True)
     source,_=nonzero_adapter(engine)
@@ -56,7 +56,7 @@ def test_explicit_adapter_state_cached_graph_and_source_contract(tmp_path,family
     engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_adapter_state_receipt_forgery_and_per_input_identity_inventory(tmp_path,family):
     import copy
     from natlang_neuralese.model.native_adapters import validate_adapter_state_receipt, execution_binding, SCHEMA
@@ -98,7 +98,7 @@ def test_gradient_contract_retains_both_actor_dependencies(tmp_path):
     engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_explicit_mode_contextual_capture_and_score_service_retains_both_actors(tmp_path,family):
     from test_native_adapted_rl import post_service
     engine=engine_fixture(tmp_path,family,service_template=True)
@@ -129,7 +129,7 @@ def test_explicit_mode_contextual_capture_and_score_service_retains_both_actors(
     engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_typed_contextual_adapter_state_client_and_archive(tmp_path,family):
     import json,subprocess,threading
     from pathlib import Path

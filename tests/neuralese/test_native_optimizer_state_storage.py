@@ -34,7 +34,7 @@ def test_state_storage_rejects_unknown_or_armed_transition():
 
 @pytest.mark.gpu_heavy
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='actual GPU/CPU optimizer state transfers')
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_native_whole_graph_paged_history_updates_rng_and_restart_are_exact(family):
     torch.manual_seed(8642)
     port=tiny(family).to(device='cuda',dtype=torch.bfloat16)

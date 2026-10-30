@@ -58,7 +58,7 @@ def captured(tmp_path,family,target=None,return_participants=False,loaded=None):
     return participants if return_participants else participant,channel,roles,blocks,turns
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_semantic_sample_capture_compiles_to_live_codec_not_external_observation(tmp_path,family):
     participant,channel,roles,blocks,turns=captured(tmp_path,family)
     replay=compile_replay(turns,identity=participant.identity,roles=roles,fetch_block=blocks.__getitem__,semantic_channel=channel)
@@ -86,7 +86,7 @@ def test_semantic_replay_rejects_changed_actual_codec_receipt(tmp_path,field,val
         compile_replay(forged,identity=participant.identity,roles=roles,fetch_block=blocks.__getitem__,semantic_channel=channel)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_semantic_episode_admission_archive_and_shared_trainer_objective(tmp_path,family):
     import json
     from natlang_neuralese.rl.native_replay import prepare_objective,NativePolicyObjective

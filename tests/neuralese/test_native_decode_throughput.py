@@ -37,7 +37,7 @@ def _old_geometry(plan,device,window=None):
 _ORIGINAL_MASK=shared.graph_block_mask
 
 
-@pytest.mark.parametrize('family',['lfm','mellum','qwen','mellum-bf16'])
+@pytest.mark.parametrize('family',['lfm','qwen'])
 @pytest.mark.parametrize('device',['cpu','cuda'])
 def test_decode_imported_native_state_and_producer_capture_match_prior_path(family,device,monkeypatch):
     if device=='cuda' and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
@@ -82,7 +82,7 @@ def test_decode_imported_native_state_and_producer_capture_match_prior_path(fami
                 assert torch.equal(l.v,r.v)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_ordinary_training_keeps_explicit_zero_adapter_gradients(family):
     model=shared.SharedStateModel(tiny(family),(58,59,60,61),rank=4)
     result=shared.native_step(model,torch.tensor([[3,4]]),producing=False)
@@ -93,7 +93,7 @@ def test_ordinary_training_keeps_explicit_zero_adapter_gradients(family):
 
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_unadapted_inference_skips_parameter_discovery_but_gradient_execution_keeps_it(family,monkeypatch):
     import threading
     from natlang_neuralese.model import native_adapters

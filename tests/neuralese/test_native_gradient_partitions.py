@@ -499,7 +499,7 @@ def test_shared_expert_actor_groups_keep_frame_and_invocation_order(monkeypatch,
 
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('checkpointed', [False, True])
 @pytest.mark.parametrize('ffn_chunk', [0, 2])
@@ -551,7 +551,7 @@ def test_branched_graph_complete_bf16_derivatives_against_cached_execution(
     assert all(parameter.grad is None for _, parameter in named)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_graph_still_visits_each_physical_row_once_per_layer(monkeypatch, family):
     from test_shared_state import tiny, graph
     from natlang_neuralese.model import shared_state

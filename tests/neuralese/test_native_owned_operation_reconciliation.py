@@ -289,7 +289,7 @@ def test_cli_rejects_missing_operation_controls_before_checkpoint_decode(owned,t
             '--owned-operations',str(manifest),'--out',str(tmp_path/'not-written.json')])
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('rate',[None,1e-6,6e-6])
 def test_verified_stopped_owner_tuning_keeps_earned_old_contracts(tmp_path,monkeypatch,family,rate):
     from types import SimpleNamespace

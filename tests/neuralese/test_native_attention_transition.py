@@ -46,7 +46,7 @@ def fixture(family,device="cpu",inactive=False,bf16=False):
     return model,optimizer,named,roles,config
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('device',['cpu','cuda'])
 def test_attention_transition_complete_vjps_use_bf16_parameter_cotangent_scopes(family,device):
     if device=='cuda'and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
@@ -82,7 +82,7 @@ def call(model,optimizer,roles,config,**kwargs):
         forward_atol=1e-4,gradient_atol=1e-5,**kwargs)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_complete_both_port_derivatives_preserve_real_inherited_optimizer_and_original_parameters(family):
     model,optimizer,named,roles,config=fixture(family)
     original=dict(model.named_parameters());weights={name:p.detach().clone()for name,p in original.items()};versions={name:p._version for name,p in original.items()}
@@ -197,7 +197,7 @@ def test_actual_sft_caller_provisions_complete_optimizer_and_restores_candidate_
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='actual CUDA attention transition')
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_cuda_real_complete_transition_preserves_inherited_optimizer(family):
     model,opt,named,roles,config=fixture(family,device='cuda')
     state=copy.deepcopy(opt.state_dict());rng=torch.cuda.get_rng_state().clone()
@@ -254,7 +254,7 @@ def inherited_cached_gap(model):
     return model.register_forward_hook(alter,with_kwargs=True)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_real_inherited_cached_gap_does_not_hide_cross_mode_equivalence(family):
     model,opt,named,roles,config=fixture(family);hook=inherited_cached_gap(model)
     try:report=call(model,opt,roles,config)
@@ -314,7 +314,7 @@ def test_simultaneous_other_change_retains_strict_cached_gate(monkeypatch,other_
         qualify_precision_transition(model,Tokenizer(),roles,config,previous_precision='bf16x6'if other_change=='linear-backout'else'tf32x3'if other_change=='linear-tf32-backout'else'ieee',previous_attention_precision='ieee',previous_norm_execution='stock'if other_change=='norm'else None,checkpoint_sha256='a'*64,forward_atol=1e-4,gradient_atol=1e-5,device='cpu',optimizer=opt)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_real_inactive_expert_derivative_remains_covered_and_equivalent(family):
     model,opt,named,roles,config=fixture(family,inactive=True);state=copy.deepcopy(opt.state_dict());hook=inherited_cached_gap(model)
     try:report=call(model,opt,roles,config)

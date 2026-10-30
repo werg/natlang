@@ -8,7 +8,7 @@ from test_native_serving_adapters import engine_fixture
 from natlang_neuralese.serve.engine import GenerationRequest, Sequence
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('chunk', [1, 3, 8])
 def test_chunked_prefill_preserves_imports_hybrid_state_and_next_token(tmp_path, monkeypatch, family, chunk):
     engine = engine_fixture(tmp_path, family)

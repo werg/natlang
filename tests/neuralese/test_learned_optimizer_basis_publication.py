@@ -9,7 +9,7 @@ from natlang_neuralese.tune.learned.trainer import OuterRecipe, OuterTrainer, _b
 from natlang_neuralese.tune.learned.bank import component_id
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('train_bank', [False, True])
 def test_publication_reexpresses_components_without_changing_updates(tmp_path, family, train_bank):
     engine = engine_fixture(tmp_path, family)

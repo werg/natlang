@@ -51,7 +51,7 @@ def test_real_mellum_expert_geometry_and_default_training_plan():
         assert fused._invariant_row_block(24)==64
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_expert_tile_keeps_native_adapted_producer_reader_captures(tmp_path,family,monkeypatch):
     from test_native_serving_adapters import engine_fixture,nonzero_adapter
     from test_native_adapted_rl import capture_actor

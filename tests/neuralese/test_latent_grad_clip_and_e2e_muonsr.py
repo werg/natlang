@@ -1,7 +1,5 @@
 """The spike-only gradient clip, exact and in backward (train/optim.py), the layer staging of every layer loop, the shared latent split used by the direct and the end-to-end
-stage, the E2E stage's MuonSR optimizer and its resume refusal (train/trajectory_state.py), and the shared drift
-monitor's guard (train/drift_monitor.py), on small CPU tensors."""
-import argparse
+stage, and the E2E stage's MuonSR optimizer and its resume refusal (train/trajectory_state.py), on small CPU tensors."""
 import math
 
 import pytest
@@ -204,34 +202,3 @@ def test_the_named_restore_also_refuses_a_lionsr_latent_state_under_muonsr():
                                    fresh=True)['mode'] == 'fresh'
 
 
-def _options(**changes):
-    parser = argparse.ArgumentParser()
-    from natlang_neuralese.train.drift_monitor import add_drift_arguments
-    add_drift_arguments(parser)
-    return parser.parse_args(['--drift-warn', '0.5', '--drift-stop', '1.5', *changes.get('argv', [])])
-
-
-class _Behaviour:
-    def __init__(self, gate_pass):
-        self.config = {'reference': {'gate_pass': 0.6}, 'max_gate_drop': 0.1}
-        self.gate_pass = gate_pass
-
-
-# Owner decision 2026-10-12: the behaviour gate is report-only. A gate below its floor at a warn is reported
-# (gate_below_floor); owner20261015 makes all base drift report-only.
-@pytest.mark.parametrize('kl,gate_pass,guard', [(0.3, 0.5, 'ok'), (0.8, 0.55, 'warn'), (0.8, 0.45, 'warn'),
-                                                (1.6, 0.6, 'warn')])
-def test_drift_warns_and_reports_behaviour_even_past_legacy_stop(monkeypatch, kl, gate_pass, guard):
-    from natlang_neuralese.maple import generation_gate
-    from natlang_neuralese.train.drift_monitor import DriftMonitor
-    monkeypatch.setattr(generation_gate, 'held_kl', lambda *a, **k: {'held_response_kl': kl,
-                                                                    'held_response_agreement': 0.99})
-    monitor = DriftMonitor(None, None, {'rows': 1}, _Behaviour(gate_pass), _options())
-    monitor.gate = lambda: {'gate_pass': gate_pass, 'gate_checks': 1, 'gate_kinds': {}, 'gate_results': [],
-                            'passed': gate_pass >= 0.5}
-    drift = monitor.check(10, 100)
-    assert drift['guard'] == guard
-    assert ('gate_at_warn' in drift) == (0.5 < kl)
-    assert drift.get('gate_below_floor', False) == (0.5 < kl and gate_pass < 0.5)
-    assert monitor.state() == ({'last_gate': 10, 'last_gate_kl': kl} if 0.5 < kl
-                               else {'last_gate': None, 'last_gate_kl': None})

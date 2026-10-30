@@ -812,7 +812,7 @@ def test_geometry_identity_accepts_only_implicit_ieee_default(tmp_path,explicit_
         resident.geometry_capacity(resident.binding(certificate),identity=wrong,code={'module':'bound'})
 
 
-@pytest.mark.parametrize('architecture,dtype',[('lfm2','torch.float32'),('mellum','torch.bfloat16')])
+@pytest.mark.parametrize('architecture,dtype',[('lfm2','torch.float32')])
 @pytest.mark.parametrize('explicit_side',['certificate','actual'])
 def test_geometry_capacity_ignores_only_explicit_keep_rendering_metadata(tmp_path,architecture,dtype,explicit_side):
     import copy

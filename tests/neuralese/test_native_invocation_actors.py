@@ -18,7 +18,7 @@ def adapters(engine):
     return values
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('checkpoint',[False,True])
 def test_layer_major_distinct_actor_graph_matches_cached_and_source_adjoints(tmp_path,monkeypatch,family,checkpoint,backend_recipe=None):
     torch.manual_seed(1711)
@@ -204,7 +204,7 @@ def test_invocation_gradient_receipt_binds_all_actor_dependencies_and_rejects_fo
     engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_typed_invocation_gradient_optimizer_service_and_durable_restart(tmp_path,family):
     import json,subprocess,threading
     from pathlib import Path
@@ -250,7 +250,7 @@ def test_actual_typed_invocation_gradient_optimizer_service_and_durable_restart(
         server.shutdown();server.server_close();engine.stop();engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_model_parameter_vjp_uses_one_scope_across_distinct_invocation_actors(tmp_path,family):
     """The public parameter VJP crosses actor replacements without nesting scopes."""
     from natlang_neuralese.serve.native_grad import native_graph_gradient
@@ -288,7 +288,7 @@ def test_executed_fp8_distinct_actor_graph_matches_actual_cached_adjoints(tmp_pa
     return test_layer_major_distinct_actor_graph_matches_cached_and_source_adjoints(tmp_path,monkeypatch,'mellum',True,backend_recipe=recipe)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_distinct_actor_sampling_receipts_replay_behavior_and_source_gradient(tmp_path,monkeypatch,family):
     import copy
     from test_native_adapted_rl import capture_actor

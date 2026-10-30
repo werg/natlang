@@ -256,7 +256,7 @@ def test_ordered_dense_dwd_fusion_preserves_mixed_invocation_dtype_laws(backend,
     assert torch.equal(run(True), run(False))
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_ordered_dense_dwd_fusion_matches_shared_graph_training_update(family, monkeypatch):
     """Exercise the production VJP scope inside the real shared-graph trainer."""
     if not torch.cuda.is_available():

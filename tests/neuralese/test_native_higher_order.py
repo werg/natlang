@@ -45,7 +45,7 @@ def test_reference_linear_uses_live_named_values_with_real_double_backward():
         assert torch.autograd.gradgradcheck(reference_linear,(x,w),atol=1e-5,rtol=1e-4)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('checkpointed',[False,True])
 @pytest.mark.parametrize('execution',['source-v1','stable-v1'])
 @pytest.mark.parametrize('device',['cpu','cuda'])
@@ -167,7 +167,7 @@ def test_actual_native_adapter_coefficient_second_derivative_and_object_isolatio
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_distinct_producer_consumer_actors_have_cross_actor_second_derivative(tmp_path,family):
     from dataclasses import replace
     from test_native_serving_adapters import engine_fixture
@@ -198,7 +198,7 @@ def test_actual_distinct_producer_consumer_actors_have_cross_actor_second_deriva
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_native_external_kv_and_hybrid_leaf_second_derivatives(tmp_path,family):
     from test_native_serving_adapters import engine_fixture
     from natlang_neuralese.serve.native_grad import _leaf_block
@@ -237,7 +237,7 @@ def test_functional_update_rejects_missing_or_forged_history_without_reset(state
         functional_named_service_step({'p':p},{'p':p*2},state,name='adam',learning_rate=.01)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('algorithm',['sgd','adam'])
 @pytest.mark.parametrize('heterogeneous',[False,True])
 @pytest.mark.parametrize('file_offload',[False,True])
@@ -303,7 +303,7 @@ def test_repeated_real_native_updates_recompute_exact_earlier_actor_bindings(tmp
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_engine_cached_reference_forward_and_coefficient_hvp_matches_graph(tmp_path,family):
     from dataclasses import replace
     from test_native_serving_adapters import engine_fixture,nonzero_adapter

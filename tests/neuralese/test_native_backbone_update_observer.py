@@ -11,7 +11,7 @@ from scripts.neuralese_data.native_update_observer import observe_backbone_updat
 from test_native_training_profile import assert_tree_equal
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_actual_both_ports_preserve_parameters_optimizer_rng_and_report_updates(tmp_path, family):
     from natlang_neuralese.data.native_graph import parse_graph
     from natlang_neuralese.model.shared_state import SharedStateModel

@@ -61,7 +61,7 @@ def capture_actor(engine, entries, monkeypatch, *, explicit_state_mode=False, re
     return block_id, turns
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_fp32_actual_adapted_actor_capture_replay_and_consumer_producer_coefficient_gradients(tmp_path,monkeypatch,family):
     torch.manual_seed(1701)
     engine=engine_fixture(tmp_path,family,service_template=True)
@@ -139,7 +139,7 @@ def test_fp32_actual_adapted_actor_capture_replay_and_consumer_producer_coeffici
     engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('external_observation',[False,True,'explicit'])
 def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,monkeypatch,family,external_observation):
     torch.manual_seed(1701)

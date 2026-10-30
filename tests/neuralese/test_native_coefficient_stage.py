@@ -6,7 +6,7 @@ from test_native_invocation_actors import adapters
 from natlang_neuralese.serve.native_grad import native_graph_gradient,native_coefficient_gradients
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_all_selected_actor_gradients_share_one_preupdate_forward(tmp_path,family):
     torch.manual_seed(1741)
     engine=engine_fixture(tmp_path,family,service_template=True)
@@ -40,7 +40,7 @@ def test_all_selected_actor_gradients_share_one_preupdate_forward(tmp_path,famil
     engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_whole_policy_stop_restart_preserves_all_moments_rng_and_exposure(tmp_path,monkeypatch,family):
     import copy,json
     from test_native_adapted_rl import capture_actor
@@ -153,7 +153,7 @@ def test_whole_policy_stop_restart_preserves_all_moments_rng_and_exposure(tmp_pa
     engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_runtime_policy_binds_generation_decision_and_actual_default_coefficients(tmp_path,family):
     import json,threading,subprocess
     from pathlib import Path
@@ -185,7 +185,7 @@ def test_runtime_policy_binds_generation_decision_and_actual_default_coefficient
 
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_explicit_new_base_migration_preserves_basis_coefficients_and_all_moments(tmp_path,family):
     import json
     from pathlib import Path
@@ -308,7 +308,7 @@ def test_explicit_new_base_migration_preserves_basis_coefficients_and_all_moment
     finally:newer.store.close();engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_real_task_collector_receives_current_coefficient_policy(tmp_path,monkeypatch,family):
     import json
     from pathlib import Path

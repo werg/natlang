@@ -1,15 +1,12 @@
-"""Qwen/Maple ``isolated_sequence`` against literal per-position replacement branches (the LFM checks of
+"""Qwen/LFM3 ``isolated_sequence`` against literal per-position replacement branches (the LFM checks of
 test_isolated_sequence.py on the Qwen-family port): primal, adjoints, isolation, checkpointing, cache and padding."""
 import pytest
 import torch
 
-from natlang_neuralese.maple.maple_port import MaplePortBackbone
-from natlang_neuralese.maple.model import load_maple
 from natlang_neuralese.model.hf_port import QwenPortBackbone
 from natlang_neuralese.model.lfm2_port import ControlTokens, PortCache
 
 from test_isolated_sequence import _compare_caches, _compare_outputs, _literal_position_branches, _weighted_loss
-from test_maple_model import _reference, _save
 
 
 def _qwen(sliding):
@@ -26,20 +23,12 @@ def _qwen(sliding):
     return QwenPortBackbone(Qwen3ForCausalLM(config).eval(), ControlTokens(open_id=62, close_id=63), fast=False)
 
 
-def _maple(tmp_path):
-    reference, config = _reference()
-    model = load_maple(_save(reference, config, tmp_path / "ckpt"), dtype=torch.float32)
-    return MaplePortBackbone(model, ControlTokens(open_id=94, close_id=95))
-
-
-@pytest.fixture(params=["qwen", "qwen-sliding", "maple", "lfm3"])
+@pytest.fixture(params=["qwen", "qwen-sliding", "lfm3"])
 def backbone(request, tmp_path):
     torch.set_num_threads(1)
     if request.param == "lfm3":
         from test_lfm3_port import tiny_lfm3
         port = tiny_lfm3(window=3)
-    elif request.param == "maple":
-        port = _maple(tmp_path)
     else:
         port = _qwen(3 if request.param == "qwen-sliding" else None)
     for parameter in port.hf.parameters():

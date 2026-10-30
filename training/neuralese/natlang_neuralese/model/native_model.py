@@ -193,15 +193,7 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     sparse_row_dtype = row_default if sparse_row_dtype is None else sparse_row_dtype
     if history_reasoning_policy not in (None, 'keep'):
         raise ValueError('native history_reasoning_policy must be omitted or explicitly keep')
-    if architecture in {'mellum', 'maple'}:
-        from ..maple.student import load_student
-        from ..maple.maple_port import MaplePortBackbone
-        if dtype != torch.bfloat16:
-            raise ValueError('native Mellum/Maple loader requires its declared BF16 source precision')
-        if backbone_state is None:
-            hf, tokenizer = load_student(str(base), device=device, precision='bf16')
-        port_type = MaplePortBackbone
-    elif architecture in {'lfm2', 'lfm2_moe'}:
+    if architecture in {'lfm2', 'lfm2_moe'}:
         from .lfm2_port import load_backbone, PortBackbone
         if backbone_state is None:
             hf, tokenizer = load_backbone(str(base), dtype=dtype, device=device)

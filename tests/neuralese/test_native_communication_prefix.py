@@ -68,7 +68,7 @@ def test_all_original_histories_positions_flags_and_occurrences_are_preserved(st
         assert len(relay)==2 and all(not node.token_ids and len(node.imports)==2 for node in relay)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('stop',[False,True])
 def test_outputs_kv_hybrid_and_complete_ce_gradients_match_explicit_cached_execution(family,stop):
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
@@ -99,7 +99,7 @@ def test_outputs_kv_hybrid_and_complete_ce_gradients_match_explicit_cached_execu
     assert model.adapter.up.weight.grad.norm()>0
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
 def test_cuda_native_stateful_prefixes_against_cached_reference(family,dtype):
     if not torch.cuda.is_available():pytest.skip('CUDA unavailable')
@@ -130,7 +130,7 @@ def test_cuda_native_stateful_prefixes_against_cached_reference(family,dtype):
             atol=0 if dtype==torch.bfloat16 else 3e-6,rtol=0 if dtype==torch.bfloat16 else 2e-4,msg=name)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_two_actual_shared_updates_preserve_complete_optimizer_history(family,monkeypatch):
     import test_native_prefix_packing as checks
     # Reuse the established per-parameter SR draw and exact BF16 momentum-cast
@@ -139,7 +139,7 @@ def test_two_actual_shared_updates_preserve_complete_optimizer_history(family,mo
     checks.test_two_actual_muon_updates_and_optimizer_histories_match_disjoint_reference(family)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_cuda_two_fp32_production_profile_updates_preserve_optimizer_law(family,monkeypatch):
     if not torch.cuda.is_available():pytest.skip('CUDA unavailable')
     import test_native_prefix_packing as checks

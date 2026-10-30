@@ -425,7 +425,7 @@ def test_graph_edit_refuses_ambiguous_boundaries_and_moves_guidance_imports():
 
 # ------------------------------------------------------------------ teacher scoring on the whole graph
 
-@pytest.mark.parametrize('family,mode', [('lfm', 'import'), ('mellum', 'import'), ('lfm3', 'import'), ('lfm', 'text')])
+@pytest.mark.parametrize('family,mode', [('lfm', 'import'), ('lfm3', 'import'), ('lfm', 'text')])
 def test_teacher_scores_equal_explicit_cached_execution_with_imports(family, mode):
     model, roles, identity = load(family)
     student = run_episode(model, roles, identity, 'write-only' if mode == 'import' else 'none')

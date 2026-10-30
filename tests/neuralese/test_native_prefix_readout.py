@@ -11,7 +11,7 @@ from test_native_prefix_packing import examples
 from test_shared_state import tiny
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('chunk_tokens', [1, 3, 128])
 def test_reused_readout_preserves_every_parameter_gradient_and_each_graph_weight(family, chunk_tokens):
     model = SharedStateModel(tiny(family), (58, 59, 60, 61), rank=4)
@@ -63,7 +63,7 @@ def test_readout_reuse_remains_disabled_without_actual_shared_physical_rows():
     assert details[0]['readout_forward_rows'] == details[0]['readout_original_rows']
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('dtype', [torch.float32, torch.bfloat16])
 def test_cuda_production_precision_preserves_each_derivative_and_bf16_rounding(family, dtype):
     if not torch.cuda.is_available():

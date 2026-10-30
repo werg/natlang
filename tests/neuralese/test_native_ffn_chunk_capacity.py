@@ -9,7 +9,7 @@ from natlang_neuralese.model.shared_state import forward_graph
 from test_shared_state import tiny,graph
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('chunk',[1,5,11,12,13])
 @pytest.mark.parametrize('checkpointed',[False,True])
 def test_whole_shared_graph_ffn_chunks_preserve_outputs_and_all_named_derivatives(family,chunk,checkpointed):

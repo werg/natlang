@@ -73,7 +73,7 @@ def test_gb10_profile_changes_nothing():
     assert merged == {'checkpoint_layers': True} and env == {} and record['applied'] == {}
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_native_checkpointed_graph_ce_and_gradients_match(family):
     """Operational activation checkpointing preserves the actual native graph objective."""
     import copy

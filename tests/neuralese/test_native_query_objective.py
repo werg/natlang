@@ -22,7 +22,7 @@ def query_nll(graph):
         {'query':7,'token_id':8},{'query':8,'token_id':9}]}])
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_inline_native_loss_and_all_selected_adjoints_equal_existing_ce_one_forward(tmp_path,family,monkeypatch):
     engine=engine_fixture(tmp_path,family)
     adapter,name=nonzero_adapter(engine)
@@ -56,7 +56,7 @@ def test_inline_native_loss_and_all_selected_adjoints_equal_existing_ce_one_forw
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('algorithm',['sgd','adam'])
 def test_inline_query_two_updated_actors_preserve_hypergradient(tmp_path,family,algorithm):
     engine=engine_fixture(tmp_path,family)
@@ -204,7 +204,7 @@ def test_distinct_teacher_readout_has_exact_analytic_student_adjoint_and_no_teac
     assert (goal-wrong_goal).norm()>.1, 'different teacher head must materially change the target'
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_complete_readout_snapshot_is_distinct_and_restores_every_tensor(tmp_path,family):
     from natlang_neuralese.model.native_readout import snapshot_readout,bind_readout,readout_layout
     engine=engine_fixture(tmp_path,family)
@@ -235,7 +235,7 @@ def test_actual_complete_readout_snapshot_is_distinct_and_restores_every_tensor(
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_real_service_distillation_uses_explicit_teacher_head(tmp_path,family):
     from natlang_neuralese.model.native_readout import snapshot_readout,readout_layout
     engine=engine_fixture(tmp_path,family)
@@ -272,7 +272,7 @@ def test_real_service_distillation_uses_explicit_teacher_head(tmp_path,family):
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_program_origin_rejects_jointly_rehashed_objective_and_other_root_rebinding(tmp_path,family):
     import json
     from natlang_neuralese.common.jsonio import canonical_json_str

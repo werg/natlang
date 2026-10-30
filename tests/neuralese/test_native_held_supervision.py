@@ -29,7 +29,7 @@ def policy():
     return value
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_dual_held_ce_matches_exact_oracle_one_forward_readout_and_no_grad(family):
     row = held_row()
     raw = parse_graph(row, tokenizer_fingerprint='f' * 64)
@@ -148,7 +148,7 @@ def test_declared_held_loss_is_mean_of_original_graphs_not_prompt_mass():
     assert result['additional_ce']['declared']['measured_examples'] == 2
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_extra_held_annotations_leave_raw_loss_and_every_derivative_exact(family):
     row = held_row()
     row['nodes'][0]['target_weights'][4] = 0.

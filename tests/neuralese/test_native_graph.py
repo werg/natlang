@@ -30,7 +30,7 @@ def row():
              'target_weights': [0, 0, 1]}]}
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_graph_loss_matches_manual_own_predecessors_and_keeps_source_gradient(family):
     from torch.nn import functional as F
     port = tiny(family)

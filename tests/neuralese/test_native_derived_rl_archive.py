@@ -18,7 +18,7 @@ from natlang_neuralese.train.native_state_sft import packed_graph_loss
 from natlang_neuralese.data.native_graph import parse_graph
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_rl_external_optimized_state_archive_restore_and_objective(tmp_path,monkeypatch,family):
     engine=engine_fixture(tmp_path,family,service_template=True)
     original=engine.native_write_text('t5 t6')['id'];ident=original;history=None

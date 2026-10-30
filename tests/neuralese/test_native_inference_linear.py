@@ -49,7 +49,7 @@ def test_inference_cast_and_autograd_dispatch_contracts(monkeypatch):
     assert weight.grad is not None and torch.isfinite(weight.grad).all()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_adapted_native_producer_reader_receipts_match_autograd_forward(tmp_path,family,monkeypatch):
     from test_native_serving_adapters import engine_fixture,nonzero_adapter
     from test_native_adapted_rl import capture_actor

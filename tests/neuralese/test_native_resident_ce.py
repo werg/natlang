@@ -116,7 +116,7 @@ def cpu_backend(monkeypatch):
     monkeypatch.setattr(fp8_backend,'make_backend',lambda *a,**k:CPUBackend())
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_trainer_live_append_matches_explicit_complete_source_updates(tmp_path,monkeypatch,family):
     if family=='mellum':cpu_backend(monkeypatch)
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))

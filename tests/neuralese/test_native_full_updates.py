@@ -14,24 +14,15 @@ from natlang_neuralese.train.loop import capture_training_rng_state
 
 
 def source(path,family):
+    if family != 'lfm':
+        raise ValueError('the tiny native source fixture is LFM only (the Mellum line is retired)')
     path.mkdir()
-    if family == 'lfm':
-        from test_native_serve import _tiny_source
-        _tiny_source(path)
-        return torch.float32
-    from test_mellum_port import tiny_mellum
-    from transformers import PreTrainedTokenizerFast
-    from tokenizers import Tokenizer
-    from tokenizers.models import WordLevel
-    tiny_mellum(path)
-    tokenizer = PreTrainedTokenizerFast(tokenizer_object=Tokenizer(WordLevel(
-        {f't{i}':i for i in range(128)},unk_token='t0')),unk_token='t0',eos_token='t2')
-    tokenizer.chat_template = "{% for message in messages %}{{ message.get('reasoning_content','') }}{{ message['content'] }}{% endfor %}assistant:"
-    tokenizer.save_pretrained(path)
-    return torch.bfloat16
+    from test_native_serve import _tiny_source
+    _tiny_source(path)
+    return torch.float32
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('algorithm',['adam','sgd'])
 def test_actual_backbone_update_reload_and_sparse_target_resume(tmp_path,family,algorithm):
     dtype = source(tmp_path/'base',family)

@@ -58,7 +58,7 @@ def actor_rollout(family,*,loaded=None,text='payload'):
     return model, roles, identity, block_id, block, turns
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_graph_replay_matches_incremental_actor_including_write_and_terminal_actions(family):
     model, roles, identity, block_id, block, turns = actor_rollout(family)
     replay = compile_replay(turns, identity=identity, roles=roles, fetch_block=lambda key: block)

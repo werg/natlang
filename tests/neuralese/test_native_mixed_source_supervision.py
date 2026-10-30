@@ -37,7 +37,7 @@ def pair():
 
 
 @pytest.mark.parametrize('reverse', [False, True])
-@pytest.mark.parametrize('family', ['lfm','mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('kind', ['ordinary','pair'])
 def test_mixed_wt_and_raw_loss_every_gradient_same_as_separate_row_contracts(family, reverse, kind):
     from natlang_neuralese.model.shared_state import SharedStateModel

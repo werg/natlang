@@ -48,7 +48,7 @@ def nonzero_adapter(engine, kind='xs', seed=0):
     return engine.store.put_native_tensor_artifact(replace(artifact,tensors=values)), name
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('kind',['xs'])
 def test_native_adapter_cached_graph_gradient_and_exact_restoration(tmp_path,family,kind):
     engine = engine_fixture(tmp_path,family)
@@ -93,7 +93,7 @@ def test_native_adapter_cached_graph_gradient_and_exact_restoration(tmp_path,fam
     engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('algorithm',['sgd','adam'])
 def test_adapter_graph_gradients_optimizer_continuation_and_native_state_identity(tmp_path,family,algorithm):
     engine=engine_fixture(tmp_path,family)
@@ -167,7 +167,7 @@ def test_actual_mellum_expert_buffer_adapter_and_coefficient_gradient(tmp_path):
     engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_http_typed_adapter_learning_scoring_generation_and_portable_restart(tmp_path,monkeypatch,family):
     import json,subprocess,threading
     from pathlib import Path
@@ -195,7 +195,7 @@ def test_actual_http_typed_adapter_learning_scoring_generation_and_portable_rest
         server.shutdown();server.server_close();engine.stop();engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_adapted_real_dag_all_hidden_logits_and_coefficient_adjoints_match_reference(tmp_path,family):
     from test_shared_state import tiny,graph
     from natlang_neuralese.model.shared_state import SharedStateModel
@@ -295,30 +295,6 @@ def test_native_adapter_preserves_tied_parameters_and_rejects_incomplete_optimiz
     engine.store.close()
 
 
-def test_mellum_warm_deployed_cache_never_ignores_or_leaks_expert_adapter(tmp_path):
-    from natlang_neuralese.maple.generation_gate import deployed_cache
-    from natlang_neuralese.maple.ternary import QUANT_MIX
-    engine=engine_fixture(tmp_path,'mellum')
-    available=target_parameters(engine.shared_model)
-    name=next(name for name,value in available.items() if value.ndim==3)
-    original=available[name]
-    adapter=create_adapter(engine,{'rank':2,'parameter_names':[name]})
-    adapter=engine.store.put_native_tensor_artifact(replace(adapter.artifact,
-        tensors={name:torch.full_like(adapter.artifact.tensors[name],.2)}))
-    with torch.no_grad(),deployed_cache():
-        base=engine._native_forward([4,5,6],None)['h_final'].clone()
-        cache=QUANT_MIX['cache']
-        saved={key:tuple(value.data_ptr() for value in values) for key,values in cache.items()}
-        adapted=run_native(engine,lambda:engine._native_forward([4,5,6],None)['h_final'].clone(),[adapter.id])
-        assert not torch.equal(adapted,base)
-        assert QUANT_MIX['cache'] is cache
-        assert saved=={key:tuple(value.data_ptr() for value in values) for key,values in cache.items()}
-        assert torch.equal(engine._native_forward([4,5,6],None)['h_final'],base)
-        assert target_parameters(engine.shared_model)[name] is original
-    assert QUANT_MIX['cache'] is None
-    engine.store.close()
-
-
 def test_native_model_lora_basis_is_sign_canonical_for_matrix_and_batched_weights():
     from natlang_neuralese.model.native_adapter_math import singular_bases
     torch.manual_seed(20261016)
@@ -330,7 +306,7 @@ def test_native_model_lora_basis_is_sign_canonical_for_matrix_and_batched_weight
         actual=singular_bases(weight,3)
         assert torch.equal(actual[0],left*signs)
         assert torch.equal(actual[1],right*signs)
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_adapted_stored_state_import_gradients_require_the_exact_effective_model(tmp_path,family):
     from natlang_neuralese.serve.chat import RequestError
     engine=engine_fixture(tmp_path,family,service_template=True)

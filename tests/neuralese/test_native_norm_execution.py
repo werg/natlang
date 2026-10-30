@@ -8,7 +8,7 @@ from natlang_neuralese.model.native_model import load_native_model, load_native_
 from natlang_neuralese.model.shared_state import SharedStateModel, channel_checkpoint, restore_channel_checkpoint
 
 
-@pytest.mark.parametrize('family', ['lfm','mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_execution_is_explicit_and_preserves_parameters_rng(family):
     from test_shared_state import tiny
     model = SharedStateModel(tiny(family), (60,61,62,63), rank=4)
@@ -29,7 +29,7 @@ def test_execution_is_explicit_and_preserves_parameters_rng(family):
     with pytest.raises(ValueError): configure_norm_execution(model, 'invented')
 
 
-@pytest.mark.parametrize('family', ['lfm','mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('profile', [None,'source-v1','stable-v1'])
 def test_full_restore_raw_identity_and_composite(tmp_path,family,profile):
     from test_native_full_updates import source
@@ -113,7 +113,7 @@ def test_completed_trainer_transition_preserves_optimizer_rng_and_credits(tmp_pa
     assert final['training']['options']['native_norm_execution_history']==after['training']['options']['native_norm_execution_history']
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('profile',['source-v1','stable-v1'])
 def test_profiles_graph_cached_execution_and_adjoints(family,profile):
     from test_shared_state import tiny
@@ -136,7 +136,7 @@ def test_profiles_graph_cached_execution_and_adjoints(family,profile):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='actual CUDA norm dispatch')
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
 def test_transition_reference_gate_only_when_dispatch_changes(monkeypatch,family,dtype):
     from test_shared_state import tiny

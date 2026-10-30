@@ -174,7 +174,7 @@ def test_resume_enables_basis_by_default_and_keeps_bank_moments(tmp_path):
         torch.testing.assert_close(tensor, before[name])
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_bank_and_optimizer_resume_matches_uninterrupted_updates(tmp_path, family):
     from natlang_neuralese.tune.learned.trainer import _bank_tensor_map
     engine, bank, target = setup(tmp_path, family)

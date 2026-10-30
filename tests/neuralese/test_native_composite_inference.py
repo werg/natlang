@@ -14,7 +14,7 @@ from natlang_neuralese.serve.native_optim import _native_optimizer_step_impl
 from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_public_readonly_composite_chain_preserves_exact_actor_and_rejects_training(tmp_path,family):
     from test_native_serving_adapters import engine_fixture
     initial=engine_fixture(tmp_path,family)

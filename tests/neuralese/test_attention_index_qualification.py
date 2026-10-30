@@ -30,7 +30,7 @@ def test_gradient_names_accept_optimizer_and_legacy_aliases_but_reject_ambiguity
         gradient_name_aliases(model, optimizer)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_real_paired_backward_preserves_weights_optimizer_rng_and_dispatch(family):
     model = shared_state.SharedStateModel(tiny(family), (58, 59, 60, 61), rank=4)
     if family == 'mellum':

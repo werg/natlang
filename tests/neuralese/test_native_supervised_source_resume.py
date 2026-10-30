@@ -32,7 +32,7 @@ def fixture(tmp_path,architecture='lfm2'):
     return config,values,directory,state,targets
 
 
-@pytest.mark.parametrize('architecture',['lfm2','mellum'])
+@pytest.mark.parametrize('architecture',['lfm2'])
 def test_exact_current_sources_omit_only_obsolete_flags_without_touching_config_or_checkpoint(tmp_path,architecture):
     config,values,directory,state,_=fixture(tmp_path,architecture)
     before=copy.deepcopy(config);raw=(directory/'checkpoint.pt').read_bytes()

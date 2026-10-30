@@ -84,7 +84,7 @@ def test_native_loader_rejects_legacy_checkpoint(tmp_path):
         load_native_checkpoint(checkpoint)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_native_weights_only_child_export_keeps_exact_model_and_refuses_resume(tmp_path, family):
     from test_native_serving_adapters import engine_fixture
     from natlang_neuralese.train.checkpoint_offload import child_copy, load_state

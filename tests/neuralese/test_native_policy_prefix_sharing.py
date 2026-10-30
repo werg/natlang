@@ -112,7 +112,7 @@ def _relative(a, b):
 
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
-@pytest.mark.parametrize('family', ['lfm3', 'lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm3', 'lfm'])
 @pytest.mark.parametrize('mode,policy_loss', [('rft', None), ('grpo', JOLT)])
 def test_fp32_shared_policy_plan_equals_unshared_episode_rows(tmp_path, family, mode, policy_loss, device):
     model = _model(family, _device(device))

@@ -21,7 +21,7 @@ def population(family='lfm'):
     return rows,options,prior
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_real_whole_episode_reuse_preserves_graphs_and_occurrences(family):
     rows,options,prior=population(family)
     selected=[digest(row)for row in rows[:2]]

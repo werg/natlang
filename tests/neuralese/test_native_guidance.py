@@ -58,7 +58,7 @@ def chosen(engine,seq,token):
     return token,float(law[token])
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('reject_block',[False,True])
 def test_actual_hybrid_cache_rollback_discards_rejected_effects_and_replays_law(tmp_path,monkeypatch,family,reject_block):
     engine=actor(tmp_path,family)
@@ -135,7 +135,7 @@ def test_sparse_and_allowed_masks_are_one_full_vocabulary_gradient_law():
     assert torch.equal(ga,gb) and ga[:,[1,3,5,7,9]].count_nonzero()==0
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_real_stochastic_rejection_keeps_rng_and_records_only_accepted_action(tmp_path,family):
     engine=actor(tmp_path,family)
     seq=Sequence(GenerationRequest(messages=[],temperature=.8,seed=417,rl_capture=True,

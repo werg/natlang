@@ -9,7 +9,7 @@ from natlang_neuralese.model.shared_state import SharedStateModel
 from natlang_neuralese.train.native_state_sft import packed_graph_loss, sparse_row_updates
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_actual_targets_include_prompt_weight_but_not_forced_or_masked_boundaries(family):
     model = SharedStateModel(tiny(family), (58, 59, 60, 61), rank=4)
     model.add_token_overrides((7, 8))
@@ -34,7 +34,7 @@ def test_actual_targets_include_prompt_weight_but_not_forced_or_masked_boundarie
     assert details[1]['boundary_targets']['8'] == {'count': 1, 'weight': 1.}
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_training_loss_omits_unused_accuracy_without_changing_loss_or_gradients(family):
     """The update path may skip diagnostic argmax/sync work; its loss is identical."""
     from natlang_neuralese.train.native_state_sft import packed_graph_loss
@@ -58,7 +58,7 @@ def test_training_loss_omits_unused_accuracy_without_changing_loss_or_gradients(
     assert all(torch.equal(a, b) for a, b in zip(full_gradients, fast_gradients))
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('shared_prefixes', [False, True])
 def test_loss_chunk_gather_once_matches_legacy_all_parameter_gradients(family, shared_prefixes, monkeypatch):
     from natlang_neuralese.train import native_state_sft as trainer
@@ -88,7 +88,7 @@ def test_loss_chunk_gather_once_matches_legacy_all_parameter_gradients(family, s
     assert all(torch.equal(a, b) for a, b in zip(optimized_gradients, legacy_gradients))
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_directions_distinguish_descent_ascent_momentum_and_missing_gradient(family):
     model = SharedStateModel(tiny(family), (58,59,60,61), rank=4)
     parameter = model.input_rows

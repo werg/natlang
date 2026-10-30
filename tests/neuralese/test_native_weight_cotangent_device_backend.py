@@ -149,7 +149,7 @@ def test_device_backend_keeps_explicit_higher_order_reference_arithmetic(tmp_pat
     assert scope.allocation_report()['allocated_accumulator_bytes'] == 0
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA device backend needs a CUDA device')
 def test_native_shared_graph_update_selects_backend_from_checkpoint_option(family):
     from test_shared_state import tiny

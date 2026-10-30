@@ -47,7 +47,7 @@ def actual(tmp_path,family,*,device='cpu',fp8=False,recipe='current'):
     return engine,model,optimizer,objective,train,args,config,backend,batches
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_policy_max_backward_restores_optimizer_rng_all_parameters_and_reuses_proof(tmp_path,family):
     values=actual(tmp_path,family,device=os.environ.get('NATLANG_POLICY_CAPACITY_DEVICE','cpu'))
     engine,model,opt,objective,train,args,config,backend,batches=values
@@ -128,7 +128,7 @@ def test_mellum_actual_policy_capacity_executes_fp8_without_optimizer_update(tmp
     finally:engine.stop();engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_cotangent_storage_transition_uses_actual_policy_capacity_before_update(tmp_path,family):
     from natlang_neuralese.train.native_state_sft import _cotangent_transition_capacity_request
     from natlang_neuralese.train.native_resident import binding

@@ -31,7 +31,7 @@ def test_prefix_layout_retains_duplicates_and_internal_terminal_queries_without_
             assert plan.history(physical) == mapping[:logical+1]
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('checkpoint_layers',[False,True])
 def test_prefix_logits_loss_and_all_gradients_match_disjoint_packing(family,checkpoint_layers):
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
@@ -98,7 +98,7 @@ def test_raw_cache_export_never_activates_adapter_or_accepts_external_or_neurale
                       external_sizes={'external':3})
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_two_actual_muon_updates_and_optimizer_histories_match_disjoint_reference(family):
     from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)

@@ -68,7 +68,7 @@ def test_native_parallel_round_merges_both_updates_before_refresh(tmp_path, monk
         assert state['round'] == int(pending_updates) and state['checkpoint'] == 'refreshed-shared'
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('mode', ['rft', 'grpo'])
 def test_actual_shared_optimizer_updates_native_policy_graph_for_both_ports(tmp_path, family, mode):
     from test_native_rl_replay import actor_rollout

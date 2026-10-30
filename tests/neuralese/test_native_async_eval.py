@@ -364,7 +364,7 @@ def test_external_fetch_rejects_root_on_same_filesystem(tmp_path,monkeypatch):
         module.fetch(receipt,tmp_path/'logical.pt',payload_root=payload_root)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_native_inference_view_seals_restores_and_keeps_distinct_parent(tmp_path,family):
     from test_native_serving_adapters import engine_fixture
     from natlang_neuralese.train.checkpoint_offload import load_state,pruned_copy

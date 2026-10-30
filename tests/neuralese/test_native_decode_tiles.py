@@ -33,7 +33,7 @@ def test_inference_linear_row_tile_preserves_forward_and_input_adjoint(dtype,pre
         assert fused._invariant_forward_plan(17).block==64
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_decode_tile_preserves_whole_fanout_graph_and_every_parameter_gradient(family,monkeypatch):
     from test_shared_state import tiny,graph
     from natlang_neuralese.model.shared_state import SharedStateModel

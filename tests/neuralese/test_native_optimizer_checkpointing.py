@@ -86,7 +86,7 @@ def qualify_updates(hook_model,batch,*,checkpoint_layers,chunk_tokens,objective=
         assert_exact(hook_optimizer.state_dict(),reference_optimizer.state_dict(),'optimizer')
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('checkpoint_layers',[False,True])
 @pytest.mark.parametrize('chunk_tokens',[1,3])
 def test_in_backward_matches_deferred_gradients_weights_and_optimizer(family,checkpoint_layers,chunk_tokens):
@@ -96,7 +96,7 @@ def test_in_backward_matches_deferred_gradients_weights_and_optimizer(family,che
     qualify_updates(model,examples(),checkpoint_layers=checkpoint_layers,chunk_tokens=chunk_tokens)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('mode',['rft','grpo'])
 @pytest.mark.parametrize('chunk_tokens',[1,3])
 def test_native_policy_in_backward_matches_deferred_exactly(tmp_path,family,mode,chunk_tokens):
@@ -123,7 +123,7 @@ def test_native_policy_in_backward_matches_deferred_exactly(tmp_path,family,mode
     qualify_updates(model,batch,checkpoint_layers=True,chunk_tokens=chunk_tokens,objective=NativePolicyObjective(path))
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_bfloat16_in_backward_matches_deferred_with_identical_rounding_draws(family):
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4).to(dtype=torch.bfloat16)
     if family=='mellum':model.port.hf.natlang_precision='bf16'

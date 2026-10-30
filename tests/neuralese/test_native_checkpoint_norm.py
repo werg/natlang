@@ -23,7 +23,7 @@ def test_native_checkpoint_survives_compiled_norm_fallback(monkeypatch):
     torch.autograd.grad(output.square().sum(),(inputs,*(p for p in port.parameters() if p.requires_grad)),allow_unused=True)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA unavailable')
 def test_checkpoint_stable_norm_exact_outputs_all_adjoints_and_fused_dispatch(monkeypatch,family,dtype):

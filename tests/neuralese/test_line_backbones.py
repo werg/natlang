@@ -30,8 +30,14 @@ def _load(relative):
 def test_declaration_is_consistent():
     assert lb.LINES == ('lfm', 'mellum')
     assert set(lb.keys('lfm')) == {'lfm25', 'lfm3'} and lb.keys('mellum') == ('mellum21',)
-    assert lb.current_key('lfm') == 'lfm3' and lb.current_key('mellum') == 'mellum21'
-    assert lb.current_model_keys() == ('lfm3', 'mellum21')
+    assert lb.current_key('lfm') == 'lfm3' and lb.active_lines() == ('lfm',)
+    assert lb.backbone('mellum21')['status'] == lb.HISTORICAL  # the retired Mellum line
+    with pytest.raises(ValueError, match='retired'):
+        lb.current_key('mellum')
+    with pytest.raises(ValueError, match='retired'):
+        lb.key_for_role('mellum')
+    assert lb.key_for_role('mellum', model_id=lb.model_id('mellum21')) == 'mellum21'  # historical rows still resolve
+    assert lb.current_model_keys() == ('lfm3',)
     for key, value in lb.BACKBONES.items():
         assert value['model_key'] == key and lb.line_of(key) in lb.LINES
         for field in ('source_fingerprint', 'expanded_fingerprint'):

@@ -7,7 +7,7 @@ from test_shared_state import tiny
 from test_native_communication_prefix import episodes
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('limit,expected',[(0,True),(10000,False),(1,True)])
 def test_physical_graph_checkpoint_choice_preserves_entire_graph_gradients(family,limit,expected):
     torch.manual_seed(20)

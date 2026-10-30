@@ -13,7 +13,7 @@ from test_native_memory_capacity import prepared_fixture, assert_exact
 from test_native_state_sft import graph
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_seven_actual_cases_share_only_the_two_reference_backwards(tmp_path, monkeypatch, family):
     model, optimizer, train, roles, config, args = prepared_fixture(tmp_path, monkeypatch, family=family)
     source_path = tmp_path/'seven-capacity-cases.jsonl'

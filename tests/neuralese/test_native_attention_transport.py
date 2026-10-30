@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_attention_mode_survives_real_three_step_service_updates_and_relocation(tmp_path,monkeypatch,family):
     import test_native_full_updates as updates
     original=updates.load_native_model

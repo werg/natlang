@@ -19,7 +19,7 @@ def _envelope(root,kind,ident,graph,objective):
         'terms':terms,'targets':[{'root':root,'kind':kind,'id':ident}]}
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_recorded_envelopes_run_through_two_true_native_updates(tmp_path,family,monkeypatch):
     """The lowerer stub isolates wiring; graph/query execution and nested derivatives are real."""
     from natlang_neuralese.serve import native_recorded_objective
@@ -58,7 +58,7 @@ def test_recorded_envelopes_run_through_two_true_native_updates(tmp_path,family,
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_recorded_joint_targets_share_one_graph_backward_and_keep_state_id(tmp_path,family,monkeypatch):
     from natlang_neuralese.serve import native_recorded_objective
     from natlang_neuralese.serve.native_grad import native_recorded_gradient

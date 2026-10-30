@@ -119,7 +119,7 @@ def graph_loss(model, row):
     return decision_terms(model, hidden, example)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum', 'lfm3'])
+@pytest.mark.parametrize('family', ['lfm', 'lfm3'])
 def test_decision_scores_and_gradients_equal_explicit_cached_execution(family):
     model = model_for(family)
     parameters = tuple(parameter for parameter in model.parameters() if parameter.requires_grad)
@@ -213,7 +213,7 @@ def test_invalid_decisions_are_rejected(change, message):
         parse_graph(row, tokenizer_fingerprint=FINGERPRINT)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_converted_rows_and_served_decisions_share_rendering_scores_and_imported_state(tmp_path, family):
     """CPU conversion renders the served prompt/continuations; a served decision with an imported native state
     scores exactly as its graph row with the archived state as an external input."""
@@ -256,7 +256,7 @@ def test_converted_rows_and_served_decisions_share_rendering_scores_and_imported
         engine.store.close()
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum', 'lfm3'])
+@pytest.mark.parametrize('family', ['lfm', 'lfm3'])
 @pytest.mark.parametrize('mode', ['score-centered', 'clipped', 'rft'])
 def test_sampled_decision_policy_gradient_through_imported_producer_equals_cached_execution(family, mode):
     """RL over a sampled decision: the option-set policy loss through the one graph forward equals the explicit

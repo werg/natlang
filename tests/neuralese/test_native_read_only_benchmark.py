@@ -8,7 +8,7 @@ from natlang_neuralese.model.shared_state import SharedStateModel
 from natlang_neuralese.train.native_state_sft import make_native_optimizer
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('checkpoint_setting',['inherited',True])
 def test_actual_backbone_read_only_comparison_preserves_weights_and_rng(tmp_path,family,checkpoint_setting):
     from test_native_full_updates import source
