@@ -198,6 +198,16 @@ class SglangEngine(Engine):
             return super().generate(request)
         return self._sglang_run(Sequence(request, Future(), prompt_plan=plan))
 
+    def _sglang_generate(self, body):
+        """One SGLang /generate call."""
+        try:
+            with urllib.request.urlopen(urllib.request.Request(self.sglang_url + '/generate',
+                    data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'}),
+                    timeout=3600) as response:
+                return json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            raise RequestError('sglang-actor-backend', f'SGLang HTTP {error.code}: {error.read()[:400]!r}') from error
+
     def _sglang_prompt(self, seq):
         """The prompt ids and capture segments, as `_native_prefill_impl` records them for ordinary tokens."""
         request = seq.request
@@ -245,13 +255,7 @@ class SglangEngine(Engine):
                   'stop_token_ids': sorted(self.stop_ids), 'skip_special_tokens': False,
                   'no_stop_trim': True, 'logit_bias': {str(token): BAN_BIAS for token in self.sglang_banned},
                   'custom_params': {TOP_K_KEY: max(k, 1)}}
-        body = json.dumps({'input_ids': ids, 'sampling_params': params, 'rid': request.request_id}).encode()
-        try:
-            with urllib.request.urlopen(urllib.request.Request(self.sglang_url + '/generate', data=body,
-                    headers={'Content-Type': 'application/json'}), timeout=3600) as response:
-                result = json.loads(response.read())
-        except urllib.error.HTTPError as error:
-            raise RequestError('sglang-actor-backend', f'SGLang HTTP {error.code}: {error.read()[:400]!r}') from error
+        result = self._sglang_generate({'input_ids': ids, 'sampling_params': params, 'rid': request.request_id})
         output = result.get('output_ids')
         records = (result.get('meta_info') or {}).get(TOP_K_KEY)
         if not isinstance(output, list) or not isinstance(records, list) or len(records) != len(output):
