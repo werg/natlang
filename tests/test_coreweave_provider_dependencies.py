@@ -139,11 +139,6 @@ def test_shared_checkpoint_custodies_current_source_task_baseline_and_runtime(tm
     with pytest.raises(ValueError,match='hash changed'):
         deps.dependency_closure({'parent_checkpoint':checkpoint_ref},namespace=str(tmp_path))
 
-def test_config_cycle_and_external_payloads_fail_before_launch(tmp_path):
-    path=tmp_path/'config.json';config=write(path,{'semantic_refresh_config':str(path)})
-    with pytest.raises(ValueError,match='cycle'):
-        deps.dependency_closure({'config':config},namespace=str(tmp_path))
-
 
 def test_new_outer_transition_publishes_all_exact_recovery_dependencies(tmp_path):
     import torch
@@ -185,83 +180,6 @@ def test_composite_optimizer_and_rng_sidecars_are_not_lost(tmp_path):
     Path(rng['path']).unlink()
     with pytest.raises((ValueError,FileNotFoundError)):
         deps.dependency_closure({'parent_checkpoint':composite},namespace=str(tmp_path))
-
-def test_prior_qualified_semantic_sources_and_block_bundles_survive_refresh(tmp_path):
-    checkpoint=write(tmp_path/'parent.pt','immutable-semantic-parent')
-    token=write(tmp_path/'tokenizer/tokenizer.json','tokenizer-bytes')
-    pairs=write(tmp_path/'old-pairs.jsonl','old-qualified-pair')
-    held=write(tmp_path/'old-held-pairs.jsonl','old-qualified-held-pair')
-    block=write(tmp_path/'native-block.safetensors','encoded-native-state')
-    bundle=write(tmp_path/'blocks.json',{'schema':'natlang.rl-block-bundle/1','blocks':{'actual-block-id':{**block,'path':'native-block.safetensors'}}})
-    config={'pairs':pairs,'held_pairs':held,'external_bundles':{'actual-model-id':bundle}}
-    value={'schema':'natlang.native-semantic-adapter/1','checkpoint':checkpoint,
-        'models':{'actual-model-id':{'native_identity':{'checkpoint_sha256':checkpoint['sha256']}}},
-        'tokenizers':{'actual-model-id':{'path':'tokenizer','files':{'tokenizer.json':token['sha256']}}},
-        'qualified_curriculum':{'config':config,'sha256':deps.canonical_json_sha256_hex(config)}}
-    adapter=write(tmp_path/'adapter.json',value)
-    closure=deps.dependency_closure({'semantic_adapter':adapter},namespace=str(tmp_path))
-    assert {row['path'] for row in closure['files']}=={row['path'] for row in [checkpoint,token,pairs,held,block,bundle,adapter]}
-    value['qualified_curriculum']['config']['pairs']=held
-    adapter=write(tmp_path/'adapter.json',value)
-    with pytest.raises(ValueError,match='qualified semantic curriculum hash'):
-        deps.dependency_closure({'semantic_adapter':adapter},namespace=str(tmp_path))
-
-
-@pytest.mark.parametrize('location', ['curriculum', 'pending', 'checkpoint-history', 'relocated-curriculum'])
-def test_live_policy_source_closure_preserves_behavior_semantics_and_every_archive_member(tmp_path, location, monkeypatch):
-    checkpoint=write(tmp_path/'behavior.pt','immutable-semantic-parent')
-    base_files=[]
-    if location=='relocated-curriculum':
-        import torch
-        from natlang_neuralese.model.native_model import base_inventory
-        base=tmp_path/'current-base'
-        base_files=[write(base/'config.json',{'model_type':'lfm2'}),write(base/'model.safetensors','same-base')]
-        path=Path(checkpoint['path'])
-        torch.save({'participant':'student','model_config':{'base':str(tmp_path/'old-absent-base'),
-            'base_inventory':base_inventory(base)}},path)
-        checkpoint={'path':str(path),'sha256':deps.sha256_file_hex_cached(path)}
-    token=write(tmp_path/'tokenizer/tokenizer.json','behavior-tokenizer-bytes')
-    adapter=write(tmp_path/'adapter.json',{'schema':'natlang.native-semantic-adapter/1',
-        'checkpoint':checkpoint,'models':{'student':{'native_identity':{'checkpoint_sha256':checkpoint['sha256']}}},
-        'tokenizers':{'student':{'path':'tokenizer','files':{'tokenizer.json':token['sha256']}}}})
-    rollout=write(tmp_path/'rollouts.jsonl','whole-episode')
-    raw=write(tmp_path/'producer.state','exact-state-and-derivation')
-    dependency=write(tmp_path/'adapter.tensor','exact-recursive-artifact')
-    original_read=Path.read_bytes
-    def no_payload_read(path):
-        if str(path) in (raw['path'],dependency['path']):
-            raise AssertionError('metadata closure materialized raw KV bytes')
-        return original_read(path)
-    monkeypatch.setattr(Path,'read_bytes',no_payload_read)
-    archive=write(tmp_path/'blocks.json',{'schema':'natlang.rl-block-bundle/1',
-        'policy_id':checkpoint['sha256'],'blocks':{'producer':{**raw,'path':'producer.state'},
-            'dependency':{**dependency,'path':'adapter.tensor'}}})
-    source={'rollouts':rollout,'block_bundle':archive,'adapter':adapter,'mode':'rft','collector_participant':'student'}
-    calls=[];original=deps.composite_dependencies
-    def observed(path, **kwargs):
-        calls.append((str(path),kwargs.get('semantic_only',False)))
-        return original(path,**kwargs)
-    monkeypatch.setattr(deps,'composite_dependencies',observed)
-    if location in ('curriculum','relocated-curriculum'):
-        value={'policy_training':{'sources':[source]}}
-        if location=='relocated-curriculum':value['models']={'student':{'base':str(base)}}
-        control=write(tmp_path/'control.json',value)
-        request={'config':control}
-    elif location=='pending':
-        control=write(tmp_path/'state.json',{'pending_semantic_source':source})
-        request={'state':control}
-    else:
-        import torch
-        path=tmp_path/'current.pt';torch.save({'training':{'policy_source_history':[source]}},path)
-        control={'path':str(path),'sha256':deps.sha256_file_hex_cached(path)}
-        request={'parent_checkpoint':control}
-    closure=deps.dependency_closure(request,namespace=str(tmp_path))
-    assert {row['path'] for row in closure['files']}=={row['path'] for row in
-        [control,checkpoint,token,adapter,rollout,raw,dependency,archive,*base_files]}
-    assert (checkpoint['path'],True) in calls
-    Path(dependency['path']).write_text('changed recursive artifact')
-    with pytest.raises(ValueError,match='hash changed'):
-        deps.dependency_closure(request,namespace=str(tmp_path))
 
 
 def test_archive_metadata_verifier_rejects_invalid_member_size(tmp_path):
@@ -326,22 +244,13 @@ def test_explicit_participant_base_relocation_verifies_saved_inventory_not_old_p
     torch.save({'participants':{'student':{'model_config':{'base':str(tmp_path/'old-absent-base'),
         'base_inventory':expected}}}},checkpoint)
     binding={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint),'bytes':checkpoint.stat().st_size}
-    config=write(tmp_path/'semantic.json',{'models':{'student':{'base':str(base)}}})
-    closure=deps.dependency_closure({'semantic_config':config,'parent_checkpoint':binding},namespace=str(tmp_path))
+    config=write(tmp_path/'config.json',{'models':{'student':{'base':str(base)}}})
+    closure=deps.dependency_closure({'config':config,'parent_checkpoint':binding},namespace=str(tmp_path))
     assert [item['path'] for item in closure['assets']]==[str(base)]
     (base/'model.safetensors').write_text('wrong-alias-weights')
     with pytest.raises(ValueError,match='pinned base inventory changed'):
-        deps.dependency_closure({'semantic_config':config,'parent_checkpoint':binding},namespace=str(tmp_path))
+        deps.dependency_closure({'config':config,'parent_checkpoint':binding},namespace=str(tmp_path))
 
-def test_refresh_update_includes_consumed_readiness_and_report(tmp_path):
-    checkpoint=write(tmp_path/'update/checkpoint.pt','closed-updated-state')
-    report=write(tmp_path/'update/report.json',{'completed':True,'numerics_ok':True})
-    receipt=write(tmp_path/'update/native-training-receipt.json',{'training_receipt':report})
-    closure=deps.dependency_closure({'updates':{'student':checkpoint}},namespace=str(tmp_path))
-    assert {row['path'] for row in closure['files']}=={row['path'] for row in [checkpoint,report,receipt]}
-    Path(receipt['path']).unlink()
-    with pytest.raises(FileNotFoundError):
-        deps.dependency_closure({'updates':{'student':checkpoint}},namespace=str(tmp_path))
 
 def test_carried_remaining_ce_frames_include_complete_old_sources(tmp_path):
     import torch
@@ -635,36 +544,6 @@ def test_separately_bound_operational_inputs_are_in_actual_file_closure(tmp_path
         deps.dependency_closure({'config':config},namespace=str(tmp_path))
 
 
-def test_declared_semantic_participants_use_actual_complete_checkpoint_closure(tmp_path,monkeypatch):
-    checkpoint=write(tmp_path/'checkpoint.pt','test-binary-input')
-    calls=[]
-    def dependencies(path,**kwargs):
-        calls.append((path,kwargs));return {checkpoint['sha256']:Path(checkpoint['path'])}
-    monkeypatch.setattr(deps,'composite_dependencies',dependencies)
-    closure=deps.dependency_closure({'semantic_participants':[checkpoint]},namespace=str(tmp_path))
-    assert closure['files']==[checkpoint] and not closure['assets']
-    assert len(calls)==1 and calls[0][1]['semantic_only']is True
-    Path(checkpoint['path']).write_text('changed')
-    with pytest.raises(ValueError):
-        deps.dependency_closure({'semantic_participants':[checkpoint]},namespace=str(tmp_path))
-
-
-def test_foundation_request_is_an_exact_optional_worker_input(tmp_path):
-    request=write(tmp_path/'request.json',{'schema':'natlang.native-foundation-qualification-request/1'})
-    config=write(tmp_path/'config.json',{'foundation_qualification_request':request,
-        'trainer_parameters':{'foundation_qualification_request':request['path']}})
-    closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
-    assert {row['path'] for row in closure['files']}=={config['path'],request['path']}
-    config=write(tmp_path/'config.json',{'trainer_parameters':{'foundation_qualification_request':request['path']}})
-    with pytest.raises(ValueError,match='lacks its exact bound input'):
-        deps.dependency_closure({'config':config},namespace=str(tmp_path))
-    config=write(tmp_path/'config.json',{'foundation_qualification_request':{**request,'bytes':request['bytes']+1}})
-    with pytest.raises(ValueError,match='size changed'):
-        deps.dependency_closure({'config':config},namespace=str(tmp_path))
-    config=write(tmp_path/'config.json',{})
-    assert deps.dependency_closure({'config':config},namespace=str(tmp_path))['files']==[config]
-
-
 def test_snapshot_ferry_restores_only_declared_closure_with_original_host_unavailable(tmp_path):
     """Actual Torch decode + same-namespace receiver, with no source files left.
 
@@ -688,7 +567,7 @@ def test_snapshot_ferry_restores_only_declared_closure_with_original_host_unavai
         'optimizer':{'actual-buffer':torch.arange(8.)},'rng':{'torch':torch.get_rng_state()}}}
     path=source/'checkpoint.pt';torch.save(state,path)
     binding={'path':str(path),'sha256':deps.sha256_file_hex_cached(path),'bytes':path.stat().st_size}
-    closure=deps.dependency_closure({'semantic_participants':[binding]},namespace=str(source))
+    closure=deps.dependency_closure({'parent_checkpoint':binding},namespace=str(source))
     expected={str(path),nested['path'],ordinary['path'],pairs['path']}
     assert {row['path'] for row in closure['files']}==expected
     transport=tmp_path/'transport';transport.mkdir()
@@ -703,7 +582,7 @@ def test_snapshot_ferry_restores_only_declared_closure_with_original_host_unavai
         assert destination.stat().st_size==row['bytes']
         assert deps.sha256_file_hex_cached(destination)==row['sha256']
     assert not Path(old_recipe['path']).exists() and not Path(completed['path']).exists()
-    checked=deps.dependency_closure({'semantic_participants':[binding]},namespace=str(source))
+    checked=deps.dependency_closure({'parent_checkpoint':binding},namespace=str(source))
     assert checked==closure
     loaded=CheckpointPolicy.load(path)
     assert collect_sft_progress(loaded['training'])['mandatory']==frame
@@ -991,4 +870,3 @@ def test_first_outer_transition_publishes_exact_recovery_dependencies(tmp_path):
     config=write(path,{'seed_native_graphs':str(tmp_path.parent/'external.jsonl')})
     with pytest.raises(ValueError,match='escaped'):
         deps.dependency_closure({'config':config},namespace=str(tmp_path))
-

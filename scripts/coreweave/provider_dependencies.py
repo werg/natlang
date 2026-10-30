@@ -590,7 +590,6 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
                     packed_geometry_input(command[index+1])
                 elif argument.startswith('--sft-packed-geometry='):
                     packed_geometry_input(argument.split('=',1)[1])
-        qualification=value.get('foundation_qualification_request')
         supervision=value.get('ce_supervision_policy')
         if supervision is not None:
             ce_policy_input(supervision)
@@ -598,18 +597,6 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             selected = parameters.get('ce_supervision_policy')
             if selected is not None and (supervision is None or selected != supervision['path']):
                 raise ValueError('provider CE policy needs the exact bound supervision declaration')
-        if qualification is not None:
-            if not isinstance(qualification,dict):
-                raise ValueError('provider foundation qualification request needs its exact binding')
-            declared=json.loads(bound(qualification).read_text())
-            if declared.get('schema')!='natlang.native-foundation-qualification-request/1':
-                raise ValueError('provider foundation qualification request schema differs')
-            for parameters in (value.get('trainer_parameters') or {},value.get('seed_trainer_parameters') or {}):
-                if parameters.get('foundation_qualification_request') not in (None,qualification['path']):
-                    raise ValueError('provider trainer qualification request differs from its bound input')
-        elif any(parameters.get('foundation_qualification_request') for parameters in
-                (value.get('trainer_parameters') or {},value.get('seed_trainer_parameters') or {})):
-            raise ValueError('provider trainer qualification request lacks its exact bound input')
         if value.get('snapshot_adoption') is not None:
             raise ValueError('provider snapshot adoption belonged to the removed cross-model role exchange')
         if value.get('native_actor_view'):

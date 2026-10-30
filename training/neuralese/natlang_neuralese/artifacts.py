@@ -37,9 +37,9 @@ KINDS = {"prompt-bank", "standard-library", "operator", "soft-skill", "data-bloc
 INIT_METHODS = {"text", "trained", "converted", "written"}
 QUALIFICATION = {"unqualified", "qualified", "failed", "superseded"}
 ID = re.compile(r"[a-z0-9][a-z0-9.-]{2,127}")
-# Native dialects (spec/NEURALESE_DIALECTS.md): raw native state of an architecture, a semantic adapter's codes, or
+# Native dialects (spec/NEURALESE_DIALECTS.md): raw native state of an architecture or
 # named tensor artifacts of one kind (a file of adapters or optimizer state only).
-DIALECT = re.compile(r"native-state/[A-Za-z0-9._-]+|native-tensor/[a-z-]+|semantic-state/[0-9a-f]{64}")
+DIALECT = re.compile(r"native-state/[A-Za-z0-9._-]+|native-tensor/[a-z-]+")
 NZ_FORMAT = "natlang.neuralese-file/1"
 
 
@@ -128,7 +128,7 @@ def validate_entry(item: dict, registry: dict, corpora_ids: set[str] | None = No
     if item.get("kind") not in KINDS:
         raise ArtifactError(f"artifact kind must be one of {sorted(KINDS)}")
     if not DIALECT.fullmatch(item.get("dialect", "")):
-        raise ArtifactError("artifact dialect must be native-state/<architecture>, native-tensor/<kind> or semantic-state/<adapter sha256>")
+        raise ArtifactError("artifact dialect must be native-state/<architecture> or native-tensor/<kind>")
     backbone = item.get("backbone")
     if not isinstance(backbone, dict) or not backbone.get("model") or not backbone.get("revision"):
         raise ArtifactError("artifact backbone needs model and revision (the space the blocks live in)")

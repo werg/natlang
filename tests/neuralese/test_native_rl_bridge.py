@@ -14,10 +14,9 @@ from natlang_neuralese.common.jsonio import write_json_durable
 
 def request_fixture(tmp_path):
     parent = tmp_path/'parent.pt'; parent.write_bytes(b'control fixture parent')
-    adapter = tmp_path/'adapter.json'; adapter.write_text('{}')
     config = tmp_path/'config.json'; out = tmp_path/'round'
-    config.write_text(json.dumps({'native_state': True, 'native_participant': 'lfm',
-        'checkpoint': str(parent), 'semantic_adapter': str(adapter), 'out': str(out)}))
+    config.write_text(json.dumps({'native_state': True, 'native_actor_mode': 'raw-state',
+        'checkpoint': str(parent), 'out': str(out)}))
     request = bridge.write_request(tmp_path/'requests', kind='round', out=out, config=config)
     return request, out
 
@@ -26,7 +25,7 @@ def test_worker_result_carries_exact_request_and_all_pending_bytes(tmp_path, mon
     request, out = request_fixture(tmp_path)
     parent = json.loads(request.read_text())['parent_checkpoint']['path']
     def run(config, **kwargs):
-        assert kwargs['defer_native_refresh'] is True and kwargs['stop'].requested is False
+        assert kwargs['stop'].requested is False
         checkpoint = out/'learner/checkpoint.pt'; checkpoint.parent.mkdir()
         checkpoint.write_bytes(b'completed control fixture update')
         state = {'checkpoint': parent, 'pending_native_checkpoint': str(checkpoint),
@@ -144,7 +143,7 @@ def test_raw_worker_round_preserves_exact_parent_and_returns_actual_full_continu
     request=bridge.write_request(tmp_path/'requests',kind='round',out=out,config=config)
     value=bridge.read_request(request)
     assert value['native_actor_mode']=='raw-state'
-    assert 'semantic_adapter' not in value and 'native_participant' not in value
+    assert 'native_participant' not in value
     checkpoint=out/'learner/checkpoint.pt'
     def run(path,**kwargs):
         checkpoint.parent.mkdir()
@@ -177,7 +176,7 @@ def test_raw_worker_round_preserves_exact_parent_and_returns_actual_full_continu
             bridge.verify_result(request,result_path)
 
 
-def test_raw_bridge_cannot_inherit_a_semantic_participant(tmp_path):
+def test_raw_bridge_cannot_inherit_a_shared_participant(tmp_path):
     parent=tmp_path/'parent.pt';parent.write_bytes(b'parent')
     config=tmp_path/'config.json'
     write_json_durable(config,{'native_state':True,'native_participant':'lfm','checkpoint':str(parent)})

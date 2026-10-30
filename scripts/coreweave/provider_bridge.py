@@ -49,7 +49,7 @@ def validate_envelope(envelope, request_data, allowed):
     request = decode_bound(request_data, envelope['request'])
     identity = request.get('request_id')
     content = {k: v for k, v in request.items() if k != 'request_id'}
-    if (request.get('schema') != REQUEST_SCHEMA or request.get('kind') not in {'round', 'refresh'}
+    if (request.get('schema') != REQUEST_SCHEMA or request.get('kind') != 'round'
             or canonical_json_sha256_hex(content) != identity
             or identity != envelope.get('request_id')):
         raise ValueError('provider request identity/schema changed')
