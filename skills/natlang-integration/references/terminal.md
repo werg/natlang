@@ -28,7 +28,13 @@ export default async function main(context: TargetContext): Promise<number> {
 
 ## Packages and `natlang run`
 
-A `natlang.json` (`natlang.package/v2`) names the package, its included files, and targets: `{ entry, export?, description, authority, commands }`. The entry module's function (default `main`) receives a `TargetContext`: `args`, `io`, `workspace`, `stateDirectory`, `traceDirectory`, `model`, a configured `runtime`, and package identity. A subdirectory with its own `natlang.json` inside another package is a nested package: the enclosing build skips its `.nl` files. A workspace root without `natlang.json` builds its member packages.
+A `natlang.json` (`natlang.package/v2`) names the package, its included files, and targets: `{ entry, export?, description, authority, commands, arguments? }`. The entry module's function (default `main`) receives a `TargetContext`: `args`, `arguments`, `io`, `workspace`, `stateDirectory`, `traceDirectory`, `model`, a configured `runtime`, and package identity.
+
+Declare a target's command-line `arguments` in order, each `{ name, type, description?, required?, default?, path? }` with a natlang `type` (the `.nl` signature grammar; `types.ts` aliases are in scope). `natlang run` checks the words after `--` against them before building and passes the values by name in `context.arguments`, with defaults applied and absent optional ones left out: read `context.arguments.tickets as Ticket[]` instead of parsing `context.args`. A text type is written as is, any other type as JSON; an empty word skips an optional argument. `path: "file" | "folder"` (type `string`) must exist in the workspace and arrives absolute. The dashboard builds the target's run form from the same declaration. Errors and their fixes:
+- `count: expected number, got "x"`: write the value of the declared type; JSON for non-text types (`3`, `'["a","b"]'`).
+- `tickets/0/priority: expected 1 | 2 | 3, got 5`: the path names the field inside the JSON value to correct.
+- `json is not a natlang type; use unknown…`: declare `unknown`, or better the precise type the program reads.
+- `an argument with a default is optional; remove required`: keep one of the two. A subdirectory with its own `natlang.json` inside another package is a nested package: the enclosing build skips its `.nl` files. A workspace root without `natlang.json` builds its member packages.
 
 ```sh
 natlang run applications/evidence -- --documents notes/   # build and run a package in place

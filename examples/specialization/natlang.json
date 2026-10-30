@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "description": "A support function whose recorded calls the specializer compiles into guarded crisp cases.",
   "include": ["main.ts", "support.nl", "tsconfig.json"],
-  "targets": { "demo": { "entry": "main.ts", "description": "natlang run examples/specialization -- workload N | ask REQUEST" } },
+  "targets": { "demo": { "entry": "main.ts", "description": "Run a generated workload of N support requests, or ask one request.",
+    "arguments": [
+      { "name": "mode", "type": "\"workload\" | \"ask\"", "default": "workload", "description": "workload: generated requests; ask: one request of your own." },
+      { "name": "value", "type": "string", "description": "workload: how many requests (default 20). ask: the request." }
+    ] } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
 }

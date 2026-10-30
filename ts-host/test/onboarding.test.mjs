@@ -73,7 +73,7 @@ test('Playground instructions and typed return values survive scaffold serializa
     assert.equal(manifest.model.profile, 'chosen-profile');
     assert.equal(parsePackageManifest(manifest).targets.main.arguments[0].type, 'string');
     manifest.targets.main.arguments[0].type = 'not-a-type';
-    assert.throws(() => parsePackageManifest(manifest), /argument type/);
+    assert.throws(() => parsePackageManifest(manifest), /argument input: bad character/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

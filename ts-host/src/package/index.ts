@@ -1,5 +1,6 @@
 export { PACKAGE_SCHEMA, packagePath, parsePackageManifest } from './manifest.js';
 export type { NatlangPackageManifest, NatlangTarget } from './manifest.js';
+export type { TargetArgument } from '../runtime/target-arguments.js';
 export { ARCHIVE_SCHEMA, canonicalJson, createPackageArchive, parsePackageArchive,
   readPackageArchive, writePackageArchive } from './archive.js';
 export type { NatlangPackageArchive, PackageFile } from './archive.js';

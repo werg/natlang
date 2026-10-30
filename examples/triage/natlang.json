@@ -15,10 +15,25 @@
   "targets": {
     "triage": {
       "entry": "main.ts",
-      "description": "Triage the bundled tickets, or supply your own JSON file and rubric.",
+      "description": "Triage support tickets into a report: your own list, a JSON file of tickets, or the bundled ones.",
       "arguments": [
-        { "name": "tickets", "type": "string", "description": "Optional JSON file of tickets, relative to the dashboard root or command working directory. Leave blank for the bundled tickets." },
-        { "name": "rubric", "type": "string", "description": "Optional category definitions. Leave blank for billing, technical and spam." }
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "A JSON file with a list of tickets, relative to the working directory. Leave it out for the bundled tickets.json."
+        },
+        {
+          "name": "rubric",
+          "type": "string",
+          "default": "billing: charges, invoices and payments; technical: outages, errors and bugs; spam: advertising",
+          "description": "The categories and what belongs in each."
+        },
+        {
+          "name": "tickets",
+          "type": "string[]",
+          "description": "Tickets to triage instead of a file."
+        }
       ]
     }
   },

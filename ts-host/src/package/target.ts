@@ -17,7 +17,11 @@ export type TargetContext = {
   workspace: string;
   stateDirectory: string;
   traceDirectory: string;
+  /** The command-line arguments as given (after `--`). */
   args: string[];
+  /** The target's declared `arguments` by name, read from `args` and checked against their natlang types, with
+   * defaults applied; an absent optional argument is left out. Empty when the target declares none. */
+  arguments: Record<string, unknown>;
   io: TargetIO;
   /** Model driver configured by the launcher (managed local model or a profile endpoint). */
   model: ModelDriver;

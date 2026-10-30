@@ -100,17 +100,18 @@
           },
           "arguments": {
             "type": "array",
-            "description": "Ordered positional arguments for the dashboard's run form. Values are passed as strings to context.args.",
+            "description": "Ordered command-line arguments with natlang types (NATIVE_PACKAGES.md). natlang run checks them into context.arguments; the dashboard renders its run form from them.",
             "items": {
               "type": "object",
               "required": ["name", "type"],
               "additionalProperties": false,
               "properties": {
                 "name": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$" },
-                "type": { "enum": ["string", "number", "boolean", "json"] },
+                "type": { "type": "string", "minLength": 1, "description": "natlang type text, as in .nl signatures; aliases of the program's types.ts are in scope." },
                 "description": { "type": "string" },
                 "required": { "type": "boolean" },
-                "default": {}
+                "default": { "description": "A value of the argument's type, used when the argument is empty or absent." },
+                "path": { "enum": ["file", "folder"], "description": "A string argument naming an existing file or folder in the workspace; passed as an absolute path." }
               }
             }
           }

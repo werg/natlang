@@ -1,4 +1,5 @@
 // natlang dashboard: one page, one view per section (location.hash), all state from the local API (src/dashboard/server.ts).
+import { argumentForm } from './arguments.js';
 const TOKEN = document.querySelector('meta[name="natlang-token"]').content;
 // Each route renders into its own element: a view still loading when the route changes writes into a detached one.
 const root = document.getElementById('main');
@@ -399,27 +400,11 @@ async function programDetail(path, container) {
   const runPanel = h('section', { class: 'panel' }, h('h2', {}, 'Run'),
     targets.length ? targets.map(([name, target]) => {
       const previous = program.lastRuns?.[name];
-      const args = h('input', { id: `args-${name}`, placeholder: 'arguments, as on the command line', value: (previous?.args ?? []).map(arg => JSON.stringify(arg)).join(' '), style: 'flex: 1; min-width: 200px' });
-      const argumentFields = (target.arguments ?? []).map((arg, index) => {
-        const value = previous?.args?.[index] ?? (arg.default === undefined ? '' : arg.type === 'json' ? JSON.stringify(arg.default) : String(arg.default));
-        const accessible = { 'aria-label': arg.name, 'aria-required': arg.required ? 'true' : undefined, 'aria-description': arg.description };
-        const input = arg.type === 'boolean' ? h('select', accessible, ...['', 'true', 'false'].map(text => h('option', { value: text, selected: text === value }, text || 'Use program default'))) :
-          h(arg.type === 'json' ? 'textarea' : 'input', { ...accessible, value: arg.type === 'json' ? undefined : value, type: arg.type === 'number' ? 'number' : 'text', step: arg.type === 'number' ? 'any' : undefined, placeholder: arg.required ? 'Required' : 'Use program default' }, arg.type === 'json' ? value : null);
-        return { arg, input, element: h('label', { class: 'field' }, `${arg.name}${arg.required ? ' *' : ''}`, input, arg.description ? h('span', { class: 'small muted' }, arg.description) : null) };
-      });
-      const getArgs = () => {
-        if (!argumentFields.length) return splitArgs(args.value);
-        const values = argumentFields.map(({ arg, input }) => {
-          const raw = input.value;
-          if (raw === '' && arg.required) throw new Error(`${arg.name} is required.`);
-          if (raw !== '' && arg.type === 'number' && !Number.isFinite(Number(raw))) throw new Error(`${arg.name} must be a number.`);
-          if (raw !== '' && arg.type === 'json') { try { JSON.parse(raw); } catch { throw new Error(`${arg.name} must be valid JSON.`); } }
-          return raw;
-        });
-        while (values.at(-1) === '') values.pop();
-        // Empty positions are preserved: positional arguments cannot shift past an omitted earlier field.
-        return values;
-      };
+      const run = attempt(async () => startJob({ kind: 'run', path: program.directory, target: name,
+        args: await form.args(), profile: document.getElementById(`profile-${name}`)?.value || undefined }));
+      // The typed form of the target's declared arguments (dashboard/arguments.js); free-form words otherwise.
+      const form = argumentForm({ h, fill, get, api, toast }, { program: program.directory, target: name, form: program.forms?.[name],
+        previous: previous?.args, onSubmit: run });
       const profile = h('span', {});
       const readiness = h('div', { class: 'small muted', role: 'status' }, 'Resolving the model…');
       profileSelect(`profile-${name}`, previous?.profile).then(select => {
@@ -433,12 +418,11 @@ async function programDetail(path, container) {
         };
         select.addEventListener('change', refresh); refresh();
       });
-      return h('div', { class: 'stack' }, h('div', {}, h('strong', { class: 'mono' }, name), target.description ? h('span', { class: 'muted' }, ` · ${target.description}`) : null),
-        argumentFields.length ? argumentFields.map(field => field.element) : args,
-        readiness, previous ? h('div', { class: 'small muted' }, 'Inputs restored from the last successful run.') : null,
-        h('div', { class: 'row' }, profile, h('button', { class: 'primary', onclick: attempt(async () => startJob({ kind: 'run', path: program.directory, target: name,
-          args: getArgs(), profile: document.getElementById(`profile-${name}`)?.value || undefined })) }, 'Run'),
-          h('button', { onclick: () => { args.value = ''; argumentFields.forEach(({ arg, input }) => { input.value = arg.default === undefined ? '' : arg.type === 'json' ? JSON.stringify(arg.default) : String(arg.default); }); } }, 'Reset inputs')));
+      return h('div', { class: 'stack run-target' }, h('div', {}, h('strong', { class: 'mono' }, name), target.description ? h('span', { class: 'muted' }, ` · ${target.description}`) : null),
+        form.element,
+        previous ? h('div', { class: 'small muted' }, 'Inputs restored from the last successful run.') : null,
+        h('div', { class: 'row' }, profile, h('button', { class: 'primary', title: 'Run (Ctrl+Enter)', onclick: run }, 'Run'),
+          h('button', { onclick: () => form.reset() }, 'Reset inputs')), readiness);
     }) : h('div', { class: 'muted' }, 'This package has no targets; call its functions below.'));
   const functions = h('section', { class: 'panel' }, h('h2', {}, 'Natural-language functions'),
     program.functions.length ? h('div', { class: 'stack' }, program.functions.map(fn => functionCard(program, fn))) : h('div', { class: 'muted' }, 'No .nl files.'));
@@ -511,20 +495,6 @@ function functionCard(program, fn) {
           let result; try { result = JSON.parse(expected.value); } catch { throw new Error('Enter the expected result as JSON. Put quotes around a string.'); }
           await api('POST', '/api/programs/example', { path: program.directory, example: { function: fn.source, inputs: valuesFromFields(), expected: result } }); toast('Test saved to examples.json. Use Run tests to verify it.');
         }) }, 'Save test'))));
-}
-function splitArgs(text) {
-  const args = []; let word = '', quote = '', active = false;
-  for (let index = 0; index < text.length; index++) {
-    const char = text[index];
-    if (char === '\\' && quote !== "'") { if (++index >= text.length) throw new Error('An argument ends with an incomplete escape.'); word += text[index]; active = true; }
-    else if (quote) { if (char === quote) quote = ''; else word += char; }
-    else if (char === '"' || char === "'") { quote = char; active = true; }
-    else if (/\s/.test(char)) { if (active) { args.push(word); word = ''; active = false; } }
-    else { word += char; active = true; }
-  }
-  if (quote) throw new Error('Close the quote in the arguments field.');
-  if (active) args.push(word);
-  return args;
 }
 
 // ---- traces ---------------------------------------------------------------------------------------------------------

@@ -26,6 +26,8 @@ import { LLAMA_FORK_SOURCE } from '../llama-fork-source.js';
 import { discoverLocalApplications } from '../package/discover.js';
 import { defaultNatlangCacheDirectory, defaultNatlangConfigDirectory, defaultNatlangStateDirectory } from '../package/store.js';
 import { readBuildLock } from '../package/warm.js';
+import { describeArguments, readTargetArguments } from '../runtime/target-arguments.js';
+import type { NatlangPackageManifest } from '../package/manifest.js';
 import { JobSupervisor, type JobSpec } from './jobs.js';
 
 export type DashboardOptions = { host?: string; port?: number; root?: string; version: string; environment?: NodeJS.ProcessEnv;
@@ -277,7 +279,28 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
       lastCalls: Object.fromEntries(lastCalls.slice().reverse().map(job => [String(job.meta?.path), job.meta])),
       lock: readBuildLock(join(directory, '.natlang', 'build')) ?? null,
       tuning: release ? { release: release.manifest.digest, base: release.manifest.base.checkpoint_sha256 } : null,
-      readme: readme ? { name: basename(readme), text: readFileSync(readme, 'utf8').slice(0, 20000) } : null, recent };
+      readme: readme ? { name: basename(readme), text: readFileSync(readme, 'utf8').slice(0, 20000) } : null, recent,
+      // Each target's run form: its declared arguments with their types expanded through the program's types.ts.
+      forms: problem ? {} : Object.fromEntries(Object.entries((manifest as NatlangPackageManifest).targets ?? {}).map(([name, target]) =>
+        [name, { arguments: describeArguments(target.arguments, directory), declared: target.arguments !== undefined }])) };
+  });
+  // A draft of a target's arguments, read exactly as `natlang run` will (the job's workspace is the dashboard root).
+  route('POST', '/api/programs/arguments', (_request, _params, _query, body) => {
+    const input = (body ?? {}) as Record<string, unknown>, directory = inside(string(input.path, 'program path'));
+    const manifest = readProgramManifest(directory), target = manifest?.targets?.[string(input.target, 'target')];
+    if (!target) throw new HttpError(404, `no target ${String(input.target)}`);
+    if (!Array.isArray(input.args) || input.args.some(arg => typeof arg !== 'string')) throw new HttpError(400, 'args must be a list of strings');
+    const { problems } = readTargetArguments(target.arguments, input.args as string[], directory, root);
+    return { problems };
+  });
+  // The entries of a folder under the root, for path arguments.
+  route('GET', '/api/files', (_request, _params, query) => {
+    const directory = inside(query.get('dir') || '.');
+    if (!existsSync(directory) || !statSync(directory).isDirectory()) return { dir: relative(root, directory), entries: [], missing: true };
+    const entries = readdirSync(directory, { withFileTypes: true }).filter(entry => !entry.name.startsWith('.') && entry.name !== 'node_modules')
+      .map(entry => ({ name: entry.name, kind: entry.isDirectory() ? 'folder' : 'file' }))
+      .sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'folder' ? -1 : 1).slice(0, 500);
+    return { dir: relative(root, directory), entries };
   });
   route('GET', '/api/programs/source', (_request, _params, query) => {
     const path = inside(string(query.get('path'), 'path'));

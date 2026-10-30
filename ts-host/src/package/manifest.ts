@@ -1,4 +1,5 @@
 import { isAbsolute, posix } from 'node:path';
+import { parseTargetArguments, type TargetArgument } from '../runtime/target-arguments.js';
 
 export const PACKAGE_SCHEMA = 'natlang.package/v2' as const;
 
@@ -12,8 +13,9 @@ export type NatlangTarget = {
   description?: string;
   authority?: string[];
   commands?: string[];
-  /** Ordered positional arguments, used by the dashboard to render an input form. */
-  arguments?: { name: string; type: 'string' | 'number' | 'boolean' | 'json'; description?: string; required?: boolean; default?: unknown }[];
+  /** Ordered positional arguments with natlang types (runtime/target-arguments.ts): `natlang run` checks them into
+   * `context.arguments`, and the dashboard renders its run form from them. */
+  arguments?: TargetArgument[];
 };
 export type NatlangPackageManifest = {
   schema: typeof PACKAGE_SCHEMA;
@@ -89,23 +91,7 @@ export function parsePackageManifest(value: unknown): NatlangPackageManifest {
       for (const key of Object.keys(target)) if (!targetKnown.has(key)) throw new TypeError(`unknown field in target ${name}: ${key}`);
       const authority = target.authority === undefined ? undefined : requireStrings(target.authority, `target ${name} authority`);
       const commands = target.commands === undefined ? undefined : requireStrings(target.commands, `target ${name} commands`);
-      let args: NatlangTarget['arguments'];
-      if (target.arguments !== undefined) {
-        if (!Array.isArray(target.arguments)) throw new TypeError(`target ${name} arguments must be an array`);
-        const names = new Set<string>();
-        args = target.arguments.map((value: unknown) => {
-          if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('each argument must be an object');
-          const arg = value as Record<string, unknown>;
-          for (const key of Object.keys(arg)) if (!['name', 'type', 'description', 'required', 'default'].includes(key)) throw new TypeError(`unknown argument field ${key}`);
-          if (typeof arg.name !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(arg.name) || names.has(arg.name)) throw new TypeError('argument names must be unique identifiers');
-          names.add(arg.name);
-          if (!['string', 'number', 'boolean', 'json'].includes(String(arg.type))) throw new TypeError(`invalid argument type ${arg.type}`);
-          if (arg.required !== undefined && typeof arg.required !== 'boolean') throw new TypeError('argument required must be boolean');
-          if (arg.description !== undefined && typeof arg.description !== 'string') throw new TypeError('argument description must be text');
-          if (arg.default !== undefined && arg.type !== 'json' && typeof arg.default !== arg.type) throw new TypeError(`argument ${arg.name} default must be ${arg.type}`);
-          return arg as NonNullable<NatlangTarget['arguments']>[number];
-        });
-      }
+      const args = target.arguments === undefined ? undefined : parseTargetArguments(target.arguments, name);
       targets[name] = { entry: packagePath(target.entry, `target ${name} entry`),
         ...(target.adaptation === undefined ? {} : { adaptation: packagePath(target.adaptation, `target ${name} adaptation`) }),
         ...(target.export === undefined ? {} : { export: requireString(target.export, `target ${name} export`) }),

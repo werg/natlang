@@ -56,16 +56,42 @@ export async function main(context: TargetContext): Promise<number> {
 }
 ```
 
-The context carries `args`, `io`, `workspace`, `stateDirectory`,
+The context carries `args`, `arguments`, `io`, `workspace`, `stateDirectory`,
 `traceDirectory`, the configured `model`, a `runtime` using it, and the package
 and dependency identities.
 
-A target can declare an ordered `arguments` array for the dashboard's input form:
-`[{ "name": "input", "type": "string", "description": "Text to classify" }]`.
-Types are `string`, `number`, `boolean` and `json`, with optional `required` and
-`default` fields. Values still arrive as strings in `context.args`; the dashboard
-validates numeric/JSON inputs and preserves empty positions. The entry point owns
-its defaults and parsing, including behavior for an empty optional argument.
+A target declares its command-line arguments in order, each with a natlang type:
+the same type text `.nl` signatures use, with the program's `types.ts` aliases
+in scope:
+
+```json
+"arguments": [
+  { "name": "file", "type": "string", "path": "file", "description": "A JSON file of tickets" },
+  { "name": "rubric", "type": "string", "default": "billing; technical; spam" },
+  { "name": "tickets", "type": "Ticket[]", "description": "Tickets to triage instead of a file" },
+  { "name": "mode", "type": "\"fast\" | \"careful\"", "required": true }
+]
+```
+
+`natlang run` reads the words after `--` into `context.arguments` by name,
+checked against their types before anything is built or a model starts. An
+argument whose type is text (`string`, string literals, `Is<string, "…">`) is
+written as is; any other type is written as JSON (`3`, `true`,
+`'[{"title": "Refund"}]'`). An empty or absent optional argument takes its
+`default`, or is left out of `context.arguments`. A `path` argument (`"file"` or
+`"folder"`, type `string`) must name an existing file or folder in the workspace
+and arrives as an absolute path. A wrong argument stops the run with its problem
+and the usage line, for example
+`tickets/0/priority: expected 1 | 2 | 3, got 5`. `context.args` keeps the words
+as given.
+
+The dashboard's Run panel builds a form from the same types: text fields that
+grow to several lines, numbers, switches, choices for literal unions, records
+with the field doc comments of `types.ts`, lists and dictionaries, variants of a
+union, a file browser for paths and a JSON editor for anything else. Every
+field shows its type, drafts are checked by the same reader as `natlang run`,
+problems appear at the field they name, and the equivalent command line is shown
+for copying.
 
 Build, verify, install, inspect, and run:
 

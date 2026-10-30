@@ -19,6 +19,7 @@ import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js
 import { discoverLocalApplications, isApplicationManifest } from '../package/discover.js';
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
+import { argumentUsage, readTargetArguments } from '../runtime/target-arguments.js';
 import { LLAMA_FORK_SOURCE } from '../llama-fork-source.js';
 import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
   installManagedLlamaRuntime, buildForkLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites, localSlotPlan, ensureStockModel,
@@ -625,6 +626,10 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   if (option(parsed, '--adaptation') && parsed.options.has('--no-adaptation')) throw new Error('--adaptation and --no-adaptation are mutually exclusive');
   const artifact = !parsed.options.has('--no-adaptation') && selection ? parseAdaptation(readFileSync(
     option(parsed, '--adaptation') ? resolve(selection) : resolve(spec.root, selection), 'utf8')) : null;
+  // Declared arguments are checked before building or starting a model, so a wrong one fails at once.
+  const declaredArguments = readTargetArguments(spec.target.arguments, parsed.rest, spec.root, workspace);
+  if (declaredArguments.problems.length) throw new Error(`${declaredArguments.problems.map(problem => problem.message).join('\n')}\n` +
+    `usage: natlang run ${relative(process.cwd(), spec.root) || '.'} --target ${spec.targetName} -- ${argumentUsage(spec.target.arguments!)}`);
   const buildDirectory = spec.installed ? join(stateDirectory, 'build', spec.package?.digest ?? 'local') : join(spec.root, '.natlang', 'build');
   process.stderr.write(`natlang: checking and building ${relative(process.cwd(), spec.root) || '.'}\n`);
   const compiled = compileFor(spec.root, entry, buildDirectory, spec.installed === true, artifact?.program.id);
@@ -655,7 +660,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
     const name = spec.target.export ?? 'main', main = module[name];
     if (typeof main !== 'function') throw new Error(`${spec.target.entry} does not export ${name}()`);
     const context: TargetContext = { package: spec.package, dependencies: spec.dependencies, targetName: spec.targetName,
-      target: spec.target, workspace, stateDirectory, traceDirectory, args: parsed.rest,
+      target: spec.target, workspace, stateDirectory, traceDirectory, args: parsed.rest, arguments: declaredArguments.values,
       io: { input: process.stdin, output: process.stdout, error: process.stderr,
         color: !parsed.options.has('--plain') && !parsed.options.has('--no-color') && Boolean(process.stdout.isTTY) },
       model: driver, runtime, program, adaptation, executorIdentity,

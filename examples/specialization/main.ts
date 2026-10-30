@@ -33,12 +33,13 @@ const TEMPLATES = [
 ];
 
 export async function main(context: TargetContext): Promise<number> {
-  const [command = 'workload', value = '20'] = context.args;
+  const { mode, value } = context.arguments as { mode: 'workload' | 'ask'; value?: string };
   const service = orderService();
   const runtime = createNatlangRuntime({ model: context.model, services: { orders: service.orders }, serviceDeclarations: ORDERS,
     executorIdentity: context.executorIdentity, programRoot: context.package?.root ?? context.workspace });
-  const requests = command === 'ask' ? [context.args.slice(1).join(' ')] :
-    Array.from({ length: Number(value) }, (_, index) => TEMPLATES[index % TEMPLATES.length]!(100 + index));
+  if (mode === 'ask' && !value) throw new Error('ask needs a request: natlang run examples/specialization -- ask "Where is order 104?"');
+  const requests = mode === 'ask' ? [value!] :
+    Array.from({ length: Number(value ?? 20) }, (_, index) => TEMPLATES[index % TEMPLATES.length]!(100 + index));
   for (const request of requests) {
     const started = Date.now();
     const answer = await runtime.run(() => support(request)).catch(error => `error: ${error instanceof Error ? error.message : String(error)}`);
