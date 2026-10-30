@@ -139,7 +139,7 @@ def serve(binary, gguf, serving, port, log, mode):
     raise RuntimeError('llama-server did not become healthy')
 
 
-def execute(binary, gguf, serving, out, port, cases, runtime, mode, servers=1):
+def execute(binary, gguf, serving, out, port, cases, runtime, mode, servers=1, prompt_rendering='full'):
     """Run the cases against one GGUF (once; a completed run in `out` is reused, and a concurrent gate executing the
     same run is waited for). Returns the run record."""
     out.mkdir(parents=True, exist_ok=True)
@@ -147,10 +147,10 @@ def execute(binary, gguf, serving, out, port, cases, runtime, mode, servers=1):
         fcntl.flock(lock, fcntl.LOCK_EX)
         if (out / 'run.json').exists():
             return json.loads((out / 'run.json').read_text())
-        return _execute(binary, gguf, serving, out, port, cases, runtime, mode, servers)
+        return _execute(binary, gguf, serving, out, port, cases, runtime, mode, servers, prompt_rendering)
 
 
-def _execute(binary, gguf, serving, out, port, cases, runtime, mode, servers=1):
+def _execute(binary, gguf, serving, out, port, cases, runtime, mode, servers=1, prompt_rendering='full'):
     """servers > 1 shards the cases (interleaved) over that many servers of the same GGUF, one probe each: a case's
     actions do not depend on which server or which other cases run (deterministic serving computes every request
     alone), so this only changes speed. Shard k writes probe-k/ (one server writes probe/)."""
@@ -168,6 +168,7 @@ def _execute(binary, gguf, serving, out, port, cases, runtime, mode, servers=1):
             name, shard = shards[k]
             spec = {'async': True, 'cases': shard, 'min_successes': 0, 'noise_successes': 0,
                     'reference_successes': None, 'workers': workers, 'runtime': str(runtime), **BUDGETS,
+                    'prompt_rendering': prompt_rendering,
                     'packet': {'path': str(DATA / PACKET), 'sha256': PACKET_SHA256}}
             with (out / f'{name}.log').open('w') as probe_log:
                 subprocess.run([PY, str(DATA / 'scripts/held_task_budget_probe.py'), '--spec', json.dumps(spec),
@@ -192,6 +193,7 @@ def _execute(binary, gguf, serving, out, port, cases, runtime, mode, servers=1):
     record['wall_seconds'] = round(time.time() - started, 1)
     record['serving'] = mode
     record['servers'] = servers
+    record['prompt_rendering'] = prompt_rendering
     (out / 'run.json').write_text(json.dumps(record, indent=1) + '\n')
     return record
 
@@ -276,11 +278,13 @@ def compare(trained, base):
             'shape_regressions': shape_regressions, 'verdict': verdict, 'shapes': dict(sorted(shapes.items()))}
 
 
-def base_key(binary, base_gguf, serving, runtime_sha, cases, mode):
+def base_key(binary, base_gguf, serving, runtime_sha, cases, mode, prompt_rendering='full'):
     """Everything that determines a base run's actions; a cached base run is reused only under the same key."""
     material = {'binary': sha256_file_hex(binary), 'gguf': sha256_file_hex(base_gguf), 'serving': serving,
                 'mode': SERVING[mode], 'budgets': BUDGETS, 'model_concurrency': MODEL_CONCURRENCY,
                 'runtime': runtime_sha, 'packet': PACKET_SHA256, 'cases': cases}
+    if prompt_rendering != 'full':  # full keeps its historical key, so existing full base runs stay reusable
+        material['prompt_rendering'] = prompt_rendering
     return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -309,6 +313,9 @@ def main(argv=None):
     parser.add_argument('--llama-server', type=Path, default=paths.resolve('data_nvme',
         'dgxops/claude-recovery-20261028/data/llama-actor-worktree/build-cuda-121/bin/llama-server'))
     parser.add_argument('--port', type=int, default=8170, help='first server port; each arm uses the next one')
+    parser.add_argument('--prompt-rendering', choices=('full', 'program-header'), default='full',
+                        help='native prompt the cases run with: full (serving default) or program-header, the short '
+                             'header without tool schemas that the SFT rows were rendered with')
     parser.add_argument('--repeat-base', action='store_true', help='also re-execute the base and report its flips')
     parser.add_argument('--servers', type=int, default=1, help='llama-servers per arm (deterministic serving: '
                         'one sequence per server, so several per arm use a large GPU; results are unchanged)')
@@ -327,7 +334,7 @@ def main(argv=None):
         runtime_sha = runtime_digest(runtime_files(runtime))
     else:
         runtime, runtime_sha = snapshot_runtime(args.eval_root / 'runtimes')
-    base_dir = args.eval_root / f'base-{base_key(args.llama_server, args.base_gguf, serving, runtime_sha, cases, args.serving)}'
+    base_dir = args.eval_root / f'base-{base_key(args.llama_server, args.base_gguf, serving, runtime_sha, cases, args.serving, args.prompt_rendering)}'
     jobs = {'base': (args.base_gguf, base_dir / 'run-1')}
     if args.repeat_base:
         jobs['base_repeat'] = (args.base_gguf, base_dir / 'run-2')
@@ -335,13 +342,14 @@ def main(argv=None):
     for index, (gguf_dir, manifest) in enumerate(exports):
         label = f"step{manifest.get('step')}" if manifest.get('step') is not None else f'model-{index}'
         labels.append(label)
-        jobs[label] = (gguf_dir / manifest['files'][0]['file'], args.out / label / f'eval-{args.serving}')
+        suffix = '' if args.prompt_rendering == 'full' else f'-{args.prompt_rendering}'
+        jobs[label] = (gguf_dir / manifest['files'][0]['file'], args.out / label / f'eval-{args.serving}{suffix}')
     with concurrent.futures.ThreadPoolExecutor(len(jobs)) as pool:
         futures = {name: pool.submit(execute, args.llama_server, model, serving, out, args.port + offset * args.servers,
-                                     cases, runtime, args.serving, args.servers)
+                                     cases, runtime, args.serving, args.servers, args.prompt_rendering)
                    for offset, (name, (model, out)) in enumerate(jobs.items())}
         runs = {name: future.result() for name, future in futures.items()}
-    summary = {'schema': SCHEMA, 'serving': args.serving, 'flags': list(SERVING[args.serving]['flags']),
+    summary = {'schema': SCHEMA, 'serving': args.serving, 'prompt_rendering': args.prompt_rendering, 'flags': list(SERVING[args.serving]['flags']),
                'budgets': BUDGETS, 'runtime_sha256': runtime_sha, 'base_dir': str(base_dir), 'serving_settings': serving,
                'wall_seconds': {name: run.get('wall_seconds') for name, run in runs.items()}, 'models': {}}
     if 'base_repeat' in runs:
@@ -354,13 +362,14 @@ def main(argv=None):
         if 'base_repeat' in runs:
             report['against_base_repeat'] = {key: value for key, value in compare(runs[label], runs['base_repeat']).items()
                                              if key != 'shapes'}
-        (args.out / label / 'decision.json').write_text(json.dumps(report, indent=1) + '\n')
+        (args.out / label / ('decision.json' if args.prompt_rendering == 'full' else f'decision-{args.prompt_rendering}.json')).write_text(json.dumps(report, indent=1) + '\n')
         summary['models'][label] = {key: report[key] for key in ('successes', 'base_successes', 'gained', 'lost',
                                                                  'mcnemar_p', 'shape_regressions', 'verdict')}
         if 'against_base_repeat' in report:
             summary['models'][label]['verdict_against_base_repeat'] = report['against_base_repeat']['verdict']
         regressed |= report['verdict'] == 'regressed'
-    (args.out / 'decision.json').write_text(json.dumps(summary, indent=1) + '\n')
+    name = 'decision.json' if args.prompt_rendering == 'full' else f'decision-{args.prompt_rendering}.json'
+    (args.out / name).write_text(json.dumps(summary, indent=1) + '\n')
     print(json.dumps(summary))
     return 1 if regressed else 0
 
