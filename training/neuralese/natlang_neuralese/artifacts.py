@@ -1,4 +1,4 @@
-"""Registry of directly trained Neuralese artifacts (plans/neuralese/S8_TARGET.md §6, IMPLEMENTATION_BACKLOG.md).
+"""Registry of directly trained Neuralese artifacts (plans/neuralese/S8_TARGET.md §6).
 
 An artifact is a `.nz` file (or a small set of files) a run produces or consumes as a value rather than as model
 weights: system-prompt banks, the standard library of combinator soft bodies, operators, soft skills, data blocks,

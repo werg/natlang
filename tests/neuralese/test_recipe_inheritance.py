@@ -11,7 +11,6 @@ from natlang_neuralese.train.recipe import (deep_merge, load_recipe, recipe_iden
                                             resolve_recipe_data)
 
 ROOT = Path(__file__).parents[2]
-RECIPES = ROOT / 'training/neuralese/recipes'
 
 
 def base_recipe():
@@ -121,16 +120,18 @@ def test_hash_is_canonical_over_resolved_content_and_stable(tmp_path):
 
 
 def test_resolve_cli_prints_recipe_and_hash(tmp_path):
-    out = subprocess.run([sys.executable, '-m', 'natlang_neuralese.train.recipe', 'resolve',
-                          'native-state-production-lfm-20261015-v1'],
+    write(tmp_path, 'base', base_recipe())
+    write(tmp_path, 'child', child(description='resolved child'))
+    out = subprocess.run([sys.executable, '-m', 'natlang_neuralese.train.recipe', 'resolve', 'child-r',
+                          '--dir', str(tmp_path)],
                          capture_output=True, text=True, check=True, cwd=ROOT,
                          env={**__import__('os').environ, 'PYTHONPATH': str(ROOT / 'training/neuralese')}).stdout
     lines = out.strip().splitlines()
     summary = json.loads(lines[-1])
     recipe = json.loads('\n'.join(lines[:-1]))
     assert summary['recipe_sha256'] == canonical_json_sha256_hex(recipe) and summary['inherits'] is True
-    assert recipe['id'] == 'native-state-production-lfm-20261015-v1'
-    assert recipe['stages'] == load_recipe(RECIPES / 'native-state-production-lfm-20261015-v1.json')['stages']
+    assert recipe['id'] == 'child-r'
+    assert recipe['stages'] == load_recipe(tmp_path / 'child.json')['stages']
 
 
 def test_stages_added_insert_after_a_named_stage(tmp_path):
