@@ -2,7 +2,8 @@
 # usage: check_sglang_decide_parity.py CHECKPOINT BASE OUT.json PORT
 import json, subprocess, sys, time, urllib.request
 from pathlib import Path
-sys.path.insert(0, '/home/werg/natlang/training/neuralese')
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'training/neuralese'))
 import torch
 from natlang_neuralese.common.hashing import sha256_file_hex_cached
 from natlang_neuralese.serve import load_native_engine
@@ -12,7 +13,7 @@ ck, base, out, port = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3]), int(sys
 sha = sha256_file_hex_cached(ck)
 cached = out.with_suffix('.sglang.json')
 log = open(out.with_suffix('.actor.log'), 'w')
-actor = None if cached.exists() else subprocess.Popen([sys.executable, '/home/werg/natlang/scripts/neuralese_data/serve_native_checkpoint.py',
+actor = None if cached.exists() else subprocess.Popen([sys.executable, str(ROOT / 'scripts/neuralese_data/serve_native_checkpoint.py'),
     '--checkpoint', str(ck), '--checkpoint-sha256', sha, '--base', base, '--port', str(port),
     '--store-dir', str(out.parent / 'decide-store'), '--prompt-rendering', 'full', '--engine', 'sglang'],
     stdout=log, stderr=subprocess.STDOUT)

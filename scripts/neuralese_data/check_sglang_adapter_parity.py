@@ -10,7 +10,8 @@ import json, sys, types
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
-sys.path.insert(0, '/home/werg/natlang/training/neuralese'); sys.path.insert(0, '/home/werg/natlang/scripts/neuralese_data')
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'training/neuralese')); sys.path.insert(0, str(ROOT / 'scripts/neuralese_data'))
 import torch
 from natlang_neuralese.common.hashing import sha256_file_hex_cached
 from natlang_neuralese.serve import load_native_engine
