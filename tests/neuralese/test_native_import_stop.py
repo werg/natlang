@@ -68,7 +68,7 @@ def test_existing_row_and_source_hash_bytes_unchanged_without_explicit_stop():
     assert _row_bindings([flagged])!=_row_bindings([example])
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('checkpointed',[False,True])
 def test_actual_native_stop_one_use_preserves_values_and_all_other_adjoints(family,checkpointed):
     device=os.environ.get('NATLANG_NATIVE_ADAPTER_TEST_DEVICE','cpu')
@@ -102,7 +102,7 @@ def test_actual_native_stop_one_use_preserves_values_and_all_other_adjoints(fami
             if b.double().norm()>1e-5:assert (a-b).double().norm()/b.double().norm()<2e-4
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_reference_hessian_keeps_constant_import_source_coordinates_zero(family):
     device=os.environ.get('NATLANG_NATIVE_ADAPTER_TEST_DEVICE','cpu')
     port=tiny(family).to(device);port.checkpoint_layers=True

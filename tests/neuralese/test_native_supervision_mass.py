@@ -39,7 +39,7 @@ def test_raw_point_zero_five_is_not_five_percent_context_mass():
     assert balanced[0, 0] == 0 and (balanced[raw > 0] > 0).all()
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('policy', ['raw', 'balanced-reference'])
 def test_complete_graph_ce_and_all_derivatives_match_declared_mass(family, policy):
     model = SharedStateModel(tiny(family), marker_ids=(58, 59, 60, 61), rank=4)

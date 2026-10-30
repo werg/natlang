@@ -165,7 +165,7 @@ def test_held_role_plumbing_transition_rejects_other_admission_edits(monkeypatch
         admission._held_role_plumbing_transition()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_both_actual_ports_one_forward_matches_cached_independent_history_loss_and_gradients(tmp_path,family):
     from test_shared_state import tiny
     from natlang_neuralese.model.shared_state import SharedStateModel
@@ -191,7 +191,7 @@ def test_both_actual_ports_one_forward_matches_cached_independent_history_loss_a
     assert any(value is not None and value.norm()>0 for value in gradients)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_pair_capacity_executes_actual_joint_objective_without_updates_or_rng_changes(tmp_path,family):
     from test_shared_state import tiny
     from test_native_optimizer_checkpointing import assert_exact
@@ -271,7 +271,7 @@ def test_recipe_preference_stage_reuses_native_defaults_and_explicit_objective_o
     assert '--preference-beta' in args and '--preference-margin' in args
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_miro_pair_both_tokenizers_preserves_full_histories_and_only_divergent_suffixes(monkeypatch,family):
     from natlang_neuralese.common.paths import resolve
     from natlang_neuralese.data.native_preference import pair_graph

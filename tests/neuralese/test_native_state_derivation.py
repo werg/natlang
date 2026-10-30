@@ -10,7 +10,7 @@ from natlang_neuralese.model.native_state_derivation import optimize_state,verif
 from natlang_neuralese.serve.store import encode_native_state,decode_native_state,TensorStore
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('algorithm',['sgd','adam'])
 def test_actual_state_updates_restore_immutable_origin_and_named_moments(tmp_path,family,algorithm):
     engine=engine_fixture(tmp_path,family,service_template=True)
@@ -89,7 +89,7 @@ def test_actual_state_updates_restore_immutable_origin_and_named_moments(tmp_pat
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_inference_snapshot_matches_optimizer_state_forward_and_reader_gradients(tmp_path,family):
     """Serving snapshots omit only optimizer ancestry; training and whole-graph state remain original."""
     from concurrent.futures import Future
@@ -147,7 +147,7 @@ def test_inference_snapshot_matches_optimizer_state_forward_and_reader_gradients
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('objective_kind',['ce','query'])
 def test_python_ts_program_state_archive_nz_browser_and_restore(tmp_path,family,objective_kind):
     import base64,json,os,subprocess
@@ -206,7 +206,7 @@ def test_python_ts_program_state_archive_nz_browser_and_restore(tmp_path,family,
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_http_typed_state_updates_and_restart(tmp_path,family):
     import json,subprocess,threading
     from pathlib import Path

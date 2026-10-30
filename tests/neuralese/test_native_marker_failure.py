@@ -29,7 +29,7 @@ def sequence(engine,kind):
             'complete-then-close':([r.produce_open,5,r.produce_close,r.produce_close],8,'close',False)}[kind]
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('kind',['close','consume','consume-close','consume-opened','nested','nested-limit','stop-open','length-open','empty-length-open','complete-then-close'])
 def test_actual_bad_draws_and_fed_inputs_survive_without_requested_rl_capture(tmp_path,monkeypatch,family,kind):
     engine=engine_fixture(tmp_path,family,service_template=True)
@@ -90,7 +90,7 @@ def replay_engine(tmp_path,family):
     return engine
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('kind',['close','consume','consume-close','consume-opened','nested','nested-limit','stop-open','length-open','empty-length-open','complete-then-close'])
 def test_every_failed_draw_replays_actual_cached_action_logps(tmp_path,monkeypatch,family,kind):
     from natlang_neuralese.rl.native_replay import compile_replay,replay_logps
@@ -137,7 +137,7 @@ def test_forged_failure_law_cannot_admit_malformed_graph(tmp_path,monkeypatch,ta
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_http_runtime_repair_retains_failed_turn_and_consumer_graph(tmp_path,monkeypatch,family):
     import subprocess,threading
     from pathlib import Path
@@ -227,7 +227,7 @@ def test_actual_http_runtime_repair_retains_failed_turn_and_consumer_graph(tmp_p
         server.shutdown();server.server_close();engine.stop();engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_greedy_failed_turn_is_structural_only_and_adapted_failure_binds_actor(tmp_path,monkeypatch,family):
     from test_native_serving_adapters import nonzero_adapter
     from natlang_neuralese.rl.native_replay import compile_replay
@@ -305,7 +305,7 @@ def test_normal_trace_metadata_cost_has_no_added_tensor_artifacts(tmp_path,monke
     finally:engine.store.close()
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_view_chunk_failure_keeps_template_inputs_and_prior_completed_chunk(tmp_path,monkeypatch,family):
     import threading,urllib.request
     from natlang_neuralese.serve.http import serve

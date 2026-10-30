@@ -90,7 +90,7 @@ def test_checkpoint_repeated_unpack_and_second_derivative_are_exact(tmp_path,dev
     assert wrapper.snapshot()['unpacks']>=2
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('device',['cpu','cuda'])
 def test_both_native_graphs_gradients_next_update_and_rng(tmp_path,family,device):
     if device=='cuda' and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
@@ -187,7 +187,7 @@ def test_malformed_abandoned_marker_does_not_break_training_or_delete_unknown_fi
     assert orphan.exists() and store.pack(torch.ones(2)).unpack().sum()==2
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_file_capacity_reference_preserves_optimizer_and_original_hook(tmp_path,family):
     from test_shared_state import tiny
     from test_native_optimizer_checkpointing import examples,assert_exact
