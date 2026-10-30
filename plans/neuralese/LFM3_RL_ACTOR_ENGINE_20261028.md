@@ -75,6 +75,12 @@ eval and data jobs running):
 - **Recorded collector turns.** The collector sets `x_natlang_native_recording` on every RL turn; it is served on
   SGLang (before 7e72b5b82 it routed every turn to the native fallback). Replay of recorded turns vs FP32: mean 0.0133
   nats, top-1 0.986 (native BF16 floor 0.0138).
+- **Streamed collector turns.** The collector streams every turn (`on_delta`); before b80a25954 this routed every RL
+  turn to the native fallback. Streamed turns now use SGLang incremental streaming (`--incremental-streaming-output
+  --stream-interval 8`), with compact top-k assembled per chunk. A real `rl.production.collect()` (jolt-r1 config, full
+  prompt, top-k 128, 4 rows x group 2 + teacher, jolt-r1 round-1 checkpoint): 98 turns, 79,002 tokens, 0
+  fallbacks, collection complete (8 task successes of 12 rollouts); every token has a sorted top-128 record, the
+  sampled token is inside it for 99.84% of tokens, and its recorded logp matches the sample's within 0.004 (FP16).
 - **Determinism (for the decision gate): not achieved.** 8 cases, 128 greedy tokens, compared with each case served
   alone: plain mode 4/8 identical in a batch of 8, 3/8 mixed with 8 fillers; `--enable-deterministic-inference` 5/8
   and 5–6/8 with FlashInfer or Triton attention (so attention is not the only batch-dependent op; early divergence at
@@ -87,7 +93,8 @@ RL wiring: `rl.production` configs for LFM3 raw policies (no semantic adapter or
 `--engine sglang` to `actor_command`. The actor exports the round's checkpoint (cached under
 `<store-dir>/sglang-hf/<sha>`), starts the fork's server on `--port + 1000` and serves the native API on `--port`.
 Turns SGLang cannot serve yet run on the native engine of the same checkpoint, loaded on first use (`/metrics`:
-`natlang_native_fallback_requests_total`, `natlang_native_model_resident`).
+`natlang_native_fallback_requests_total`, `natlang_native_fallback_reason_total{reason=...}`,
+`natlang_native_model_resident`).
 
 ## Neuralese feature plan on SGLang
 
