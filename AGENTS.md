@@ -753,6 +753,15 @@ producer/consumer dependencies. Never turn an in-episode producer into a detache
 external input or train a selected consumer/turn in place of the whole graph.
 Missing or unsupported graph capture is repaired before that episode is used.
 
+Owner amendment (2026-10-31): actively instill Neuralese use. Mine broad task
+sources (with outcome oracles) for RL and self-distillation, prompt for Neuralese
+where it helps (tasks and prompt variants declaring `Neuralese<...>` child results,
+per-document/per-item views, fan-in to a parent), and reward its use: the task
+outcome stays the primary reward, plus a bonus only for correct episodes whose
+graph actually passes Neuralese state between calls (never on failures).
+Self-distillation prefers successful Neuralese-using rollouts. Correct episodes
+without Neuralese remain rewarded and eligible.
+
 Prepare an executable LFM RL task curriculum, starting with tractable verified
 natlang execution and growing into tool use, multi-step work and communication.
 Use actual task outcomes to adapt difficulty; keep protected evaluation separate.
