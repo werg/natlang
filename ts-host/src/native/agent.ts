@@ -8,7 +8,7 @@ import { MISSING, Reject, coerce, isLive, liveId, liveLabel, problems } from './
 import type { Value } from './values.js';
 import { COMPACTION_NOTE_CHARS, runSeedKey, type NativeResult, type NativeSession } from './runtime.js';
 import { undeclaredServiceType } from './introspection.js';
-import type { ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
+import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
   LAST_TURN_NOTICE, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
@@ -110,7 +110,9 @@ export function modelTurnsSoFar(messages: readonly Record<string, unknown>[]): n
 
 export type NativeModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn) & {
   /** Scripted host drivers may ask to route fixed answers by the actual native return contract. */
-  readonly requiresResultContract?: boolean };
+  readonly requiresResultContract?: boolean;
+  /** Optional decision readout (contracts.ts `DecisionRequest`); without it the call runs the tool loop. */
+  decide?: DecisionScorer };
 
 const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[]) => ({
   type: 'function', function: { name, description, parameters: { type: 'object', properties,
