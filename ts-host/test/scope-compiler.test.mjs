@@ -171,6 +171,20 @@ test('scope compiler removes a redundant injected self-alias and records the rep
     { result: 2, returned: false, bindings: {} });
 });
 
+test('scope compiler removes an input written out again as a literal of its exact value, and only that', async () => {
+  const ticket = 'The checkout page shows a 500 error for everyone';
+  const options = { inputBindings: ['ticket', 'limit'], inputValues: { ticket, limit: -3 } };
+  const compiled = compileScopeSnippet(`const ticket = ${JSON.stringify(ticket)};\nconst limit = -3;\nticket.length + limit`, options);
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  assert.deepEqual(compiled.repairs.map(repair => repair.message), ['Removed a declaration of input "ticket": it already holds that value.',
+    'Removed a declaration of input "limit": it already holds that value.']);
+  assert.deepEqual(await load(compiled)({ ticket, limit: -3 }, {}, {}), { result: ticket.length - 3, returned: false, bindings: {} });
+  // A different value replaces the caller's input: still refused, with the existing advice.
+  const changed = compileScopeSnippet('const ticket = "test data";\nticket', options);
+  assert.equal(changed.ok, false);
+  assert.match(changed.diagnostics[0].message, /ticket is this call's input and already holds the caller's value/);
+});
+
 test('scope compiler transactionally captures existing locals and rejects immutable writes', async () => {
   const compiled = compileScopeSnippet('count += step;\nconst doubled = count * 2;\ndoubled', {
     inputBindings: ['step'], localBindings: [{ name: 'count', mutable: true }],

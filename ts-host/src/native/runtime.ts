@@ -40,6 +40,11 @@ import { returnErrorText, returnValueRejection, type ReturnErrorText } from './r
 import { TOOL_MARKUP } from './tool-markup.js';
 import type { Platform } from '../runtime/platform.js';
 
+/** What the model is told when it reaches for the call it is executing (calling it, or reading its code): a judgment is
+ * made here and returned, and eval serves the exact work the instructions need, not as a stand-in for the judgment. */
+const SELF_CALL_ADVICE = 'Do what its instructions ask here. For a judgment, decide it yourself from the inputs and return the answer with ' +
+  'return_result; use eval only for exact work the instructions need.';
+
 /** Services the invocation kernel provides to an interpreter run. */
 export type NativeRuntimeHooks = {
   /** Callable tree for a codebase record tree (functions with child attributes and `iterateOn`). */
@@ -1208,7 +1213,7 @@ export class NativeSession {
       `\n${tool} is one of your tools: call it as a tool, not from eval code.` : '';
     // The call's own name is not a function in its scope: the model is executing it (it tries to call itself).
     const bindingNote = tool && tool === this.lam.functionName ?
-      `\n${tool} is the call you are executing, not a function in its scope: carry out its instructions here with eval and return the result.` :
+      `\n${tool} is the call you are executing, not a function in its scope: ${SELF_CALL_ADVICE}` :
       tool && !NATIVE_TOOLS.includes(tool) ?
       `\n${tool} must be bound in this eval's scope before you use it. Mentioning it in instructions does not declare it.` +
       // Only an interpolated template can be the cause of the template advice.
@@ -1765,7 +1770,7 @@ export class NativeSession {
         `${requested} is one of your currently offered tools, not a function of this program; call it directly` :
         `${requested} is a native tool name but is not offered in this call` :
         requested === this.lam.functionName ? `${requested} is the call you are executing: the opening message has all of its ` +
-          'signature and instructions. Carry them out here with eval and return the result' :
+          `signature and instructions. ${SELF_CALL_ADVICE.replace(/\.$/, '')}` :
         inScope.includes(requested) ? `${requested} is a value in this call's eval scope: inspect it with eval, for example console.log(${requested})` :
         undefined;
       throw new Reject([{ path: requested, code: 'no-such-function', expected: what ? `${readable}. ${what}` : readable }]);
@@ -2008,7 +2013,9 @@ export class NativeSession {
     const currentTypes = evalTypeDeclarations(code);
     const persistentTypeNames = [...new Set([...Object.keys(visibleTypes), ...Object.keys(currentTypes)])];
     const hooks = this.runtime.hooks;
-    const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: callableNames,
+    const inputValues = Object.fromEntries(inputNames.map(name => [name, this.lam.args[name]])
+      .filter((entry): entry is [string, string | number | boolean] => ['string', 'number', 'boolean'].includes(typeof entry[1])));
+    const compiled = compileScopeSnippet(code, { inputBindings: inputNames, inputValues, localBindings, helperBindings: callableNames,
       persistentHelpers: savedHelpers, persistentHelperNames: savedHelperNames, persistentTypeNames,
       opaqueBindings: opaqueNames,
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),

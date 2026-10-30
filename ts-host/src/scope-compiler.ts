@@ -36,6 +36,9 @@ export type ScopeCompileDiagnostic = ScopeSourceSpan & {
 export type ScopeCompileOptions = {
   /** Lambda parameters exposed as ordinary mutable lexical bindings. */
   inputBindings?: readonly string[];
+  /** The current values of text, number and boolean inputs: a declaration that re-binds an input to a literal of its
+   * exact value (`const ticket = "…the ticket…"`) is removed as a repair, like `const ticket = ticket`. */
+  inputValues?: Readonly<Record<string, string | number | boolean>>;
   /** Existing persistent locals copied into the transaction before execution. */
   localBindings?: readonly ScopeExistingBinding[];
   /** Checked async callables generated over the runtime's host dispatcher. */
@@ -429,6 +432,17 @@ function uncalledInlineFunctions(file: ts.SourceFile): number[] {
   return ends;
 }
 
+/** The value of a string, number or boolean literal expression; undefined for anything else. */
+function literalValue(node: ts.Expression): string | number | boolean | undefined {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  if (ts.isNumericLiteral(node)) return Number(node.text);
+  if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(node.operand)) return -Number(node.operand.text);
+  if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
+  if (ts.isParenthesizedExpression(node)) return literalValue(node.expression);
+  return undefined;
+}
+
 export function compileScopeSnippet(source: string, options: ScopeCompileOptions = {}): ScopeCompileResult {
   if (typeof source !== 'string') throw new TypeError('scope source must be a string');
   if (options.allowModules) {
@@ -541,6 +555,16 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
           repairs.push({ code: 'invalid-binding',
             message: `Removed redundant self-alias for injected binding ${JSON.stringify(declaration.name.text)}.`,
             ...location });
+          continue;
+        }
+        // An input written out again as a literal of its exact value changes nothing; dropping it keeps the eval going.
+        if (ts.isIdentifier(declaration.name) && declaration.initializer && options.inputValues &&
+            Object.hasOwn(options.inputValues, declaration.name.text) && options.inputBindings?.includes(declaration.name.text) &&
+            literalValue(declaration.initializer) === options.inputValues[declaration.name.text]) {
+          const location = span(statement);
+          redundantAliases.push(location);
+          repairs.push({ code: 'invalid-binding',
+            message: `Removed a declaration of input ${JSON.stringify(declaration.name.text)}: it already holds that value.`, ...location });
           continue;
         }
       }

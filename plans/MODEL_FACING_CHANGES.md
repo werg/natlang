@@ -1,5 +1,27 @@
 # Model-facing changes and their measurement
 
+### 2026-10-30 — self-call advice and input-literal repair (partly measured; debt for is_urgent)
+
+Two runtime changes for a call that reaches for itself instead of judging. Diagnosed on the stock LFM3 1.7B Q8_0
+(managed llama.cpp, CPU): `examples/triage/is_urgent.nl` spent six turns redeclaring its input
+(`const ticket = "…"`, invalid-binding), calling `is_urgent(ticket)` and `read_code("is_urgent")`, and then answered
+with a keyword regex. The self-call and self-read_code errors said "carry out its instructions here **with eval**";
+they now say to make the judgment from the inputs and return it with return_result, using eval only for exact work
+the instructions need (`SELF_CALL_ADVICE`, `native/runtime.ts`). A declaration that re-binds an input to a literal of
+its exact current value is removed as a repair, like `const x = x` (`scope-compiler.ts` `inputValues`); any other
+value keeps the existing invalid-binding advice.
+
+Partial measurement, `natlang test examples/triage` (28 labelled cases), same model, greedy, unlimited thinking, on a
+CPU shared with other suites (wall times not comparable). Baseline (90 min, timed out): classify 15/16 finished,
+13 correct, 1.60 turns/call, 4 multi-turn calls, 9 rejected actions (6 invalid-binding, 2 no-such-function),
+1,341 generated tokens/call; is_urgent 1/12 finished (5 turns). With the changes (46 min, stopped by host memory
+pressure): classify 10/16 finished, 8 correct, 1.10 turns/call, 1 multi-turn call, 0 rejected actions, 858 tokens/call;
+is_urgent 0/12 finished (no turn completed). The same two classify cases fail in both: the model returns blocked
+because "search returns no results" and "password reset emails never arrive" are not literally in the rubric
+(classify.nl's no-rule clause), not because of these changes.
+**Measurement debt:** run the 12 is_urgent cases alone per variant on an idle machine (both changes off/on), and
+the thinking-budget variants (unlimited, 256, 0) on the full suite, before choosing a default thinking budget.
+
 ### 2026-10-30 — first-program classifier starter (unmeasured debt)
 
 `natlang init` and `examples/hello/answer.nl` introduce a one-call support-ticket
