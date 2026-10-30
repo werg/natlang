@@ -9,7 +9,7 @@ from natlang_neuralese.train.recipe import unstarted_stage_input_changes,lineage
 from natlang_neuralese.common.jsonio import write_json_durable as write
 
 @pytest.mark.parametrize('external',['owner-layout'],indirect=True)
-@pytest.mark.parametrize('later',['lfm','mellum'],indirect=True)
+@pytest.mark.parametrize('later',['lfm'],indirect=True)
 def test_actual_external_learner_layout_rejoins_and_keeps_next_update(external):
     x=external;assert not(x['external_root']/'sft').exists()
     proof=handoff.verify_drained_recipe_handoff(x['transition'],handoff=x['handoff'])

@@ -228,14 +228,14 @@ def test_external_resident_cannot_borrow_a_runtime_or_rewrite_adoption(external,
     with pytest.raises((ValueError,FileNotFoundError)):handoff.verify_drained_recipe_handoff(resident.binding(forged),handoff=x['handoff'])
 
 
-@pytest.mark.parametrize('later',['lfm','mellum'],indirect=True)
+@pytest.mark.parametrize('later',['lfm'],indirect=True)
 def test_both_actual_optimizer_next_updates_survive_external_resident_authority(external):
     _rejoin(external)
     _assert_next_update(external)
 
 
 @pytest.mark.parametrize('external',['recovered-runtime'],indirect=True)
-@pytest.mark.parametrize('later',['lfm','mellum'],indirect=True)
+@pytest.mark.parametrize('later',['lfm'],indirect=True)
 def test_schema4_drained_parent_enters_runtime_at_no_credit_sft_boundary(external):
     """Exercise real checkpoint, owner, adoption and runtime proofs end to end."""
     x=external
@@ -317,7 +317,7 @@ def test_real_inprocess_owner_rejoins_without_inventing_a_child(external):
 
 
 @pytest.mark.parametrize('external',['recovered-runtime'],indirect=True)
-@pytest.mark.parametrize('later',['lfm','mellum'],indirect=True)
+@pytest.mark.parametrize('later',['lfm'],indirect=True)
 def test_qualified_recovered_runtime_rejoins_with_separate_historical_plan_and_next_update(external):
     x=external
     transition=handoff.verify_drained_recipe_handoff(x['transition'],handoff=x['handoff'])

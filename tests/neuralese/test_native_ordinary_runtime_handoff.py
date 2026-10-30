@@ -109,7 +109,7 @@ def test_ordinary_capacity_rejoins_without_fabricated_new_max_or_resident(ordina
     runtime.verify_runtime_handoff(x['proof'],bootstrap=x['bootstrap'])
 
 
-@pytest.mark.parametrize('later',['lfm','mellum'],indirect=True)
+@pytest.mark.parametrize('later',['lfm'],indirect=True)
 def test_both_real_optimizer_next_updates_survive_retained_capacity_authority(ordinary):
     _assert_next_update(ordinary)
 

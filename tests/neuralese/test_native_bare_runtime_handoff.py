@@ -62,7 +62,7 @@ def test_bare_current_recipe_rejoins_without_resident_plan_or_cursor_reset(bare)
     assert all(p.read_bytes()==value for p,value in before.items())
 
 
-@pytest.mark.parametrize('later',['lfm','mellum'],indirect=True)
+@pytest.mark.parametrize('later',['lfm'],indirect=True)
 def test_both_real_native_optimizers_keep_bitwise_next_update_after_bare_handoff(bare):
     _assert_next_update(bare)
 

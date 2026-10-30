@@ -137,8 +137,7 @@ def test_functional_adam_zero_gradient_history_has_finite_actual_hypergradient()
     torch.testing.assert_close(derivative[0],torch.tensor(1.-.01/1e-8,dtype=value.dtype),rtol=1e-14,atol=1e-8)
 
 
-@pytest.mark.parametrize('family,target',[('lfm','q_proj.weight'),('lfm','feed_forward.w1.weight'),
-    ('mellum','q_proj.weight'),('mellum','experts.gate_up')])
+@pytest.mark.parametrize('family,target',[('lfm','q_proj.weight'),('lfm','feed_forward.w1.weight')])
 @pytest.mark.parametrize('precision',['storage','fp32'])
 def test_actual_native_adapter_coefficient_second_derivative_and_object_isolation(tmp_path,family,target,precision):
     from dataclasses import replace

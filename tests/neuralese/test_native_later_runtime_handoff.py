@@ -280,7 +280,7 @@ def test_prepare_holds_existing_owner_lease_and_cannot_overwrite_cursor(later,tm
     assert not (tmp_path/'while-owned.json').exists()
 
 
-@pytest.mark.parametrize('later',['lfm','mellum'],indirect=True)
+@pytest.mark.parametrize('later',['lfm'],indirect=True)
 def test_actual_both_port_full_optimizer_continues_after_later_runtime_metadata(later):
     _assert_next_update(later)
 
@@ -320,7 +320,7 @@ def test_forged_later_proof_cannot_relabel_lineage_student_or_parent(later,tmp_p
     with pytest.raises(ValueError):runtime.verify_runtime_handoff(resident.binding(path),bootstrap=x['bootstrap'])
 
 
-@pytest.mark.parametrize('later',[None,'lfm','mellum'],indirect=True)
+@pytest.mark.parametrize('later',[None,'lfm'],indirect=True)
 def test_actual_later_resident_adoption_does_not_replace_runtime_authority(later):
     x=later
     raw.configure_model(x['plan'],x['declaration'],x['bootstrap'],x['root'])

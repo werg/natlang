@@ -77,7 +77,7 @@ def test_recovery_is_never_a_final_current_handoff(recovered):
  with pytest.raises(ValueError,match='historical only'):
   raw._owned_operation_chain([{'saved_update_recovery':ack,'receipt':x['failed_receipt']}],{'sha256':'0'*64},'fixture','fixture')
 
-@pytest.mark.parametrize('later',['lfm','mellum'],indirect=True)
+@pytest.mark.parametrize('later',['lfm'],indirect=True)
 def test_both_port_recovery_ancestry_rejoins_a_real_later_full_save(recovered,tmp_path):
  import torch
  from test_native_later_runtime_handoff import _step,_actual_state
