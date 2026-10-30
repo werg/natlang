@@ -439,3 +439,45 @@ def test_llama_actor_collects_no_unprivileged_teacher_attempts(tmp_path, monkeyp
     with pytest.raises(Stop):
         production.run(config, rounds=1)
     assert seen['teacher_attempts'] == 0
+
+
+def test_learner_parameters_bind_at_update_launch_not_round_start(tmp_path, monkeypatch):
+    """A config edit made during collection (e.g. a learning-rate transition) reaches the same round's update."""
+    from natlang_neuralese.rl.policy_math import default_policy_loss
+    from natlang_neuralese.rl import native_raw_policy
+    monkeypatch.setattr(native_raw_policy, 'prepare_raw_policy', lambda *a, **kw: {'tokenizer': 'bound-parent'})
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps({'id': f't{i}', 'split': 'train'}) + '\n' for i in range(2)))
+    checkpoint = tmp_path / 'parent.pt'; checkpoint.write_bytes(b'full state')
+    out = tmp_path / 'production'; config = tmp_path / 'config.json'
+    declared = {'out': str(out), 'checkpoint': str(checkpoint), 'cases': str(source),
+        'endpoints': ['http://unused'], 'rows_per_round': 2, 'group': 2,
+        'learner_command': ['learn', '{trainer_args}', '--rl-policy-loss', '{rl_policy_loss}', '--jolt-cases', '{cases}'],
+        'trainer_parameters': {'learning_rate': 1e-6, 'accumulate_batches': 16},
+        'after_update': ['publish'], 'native_state': True, 'base': 'unused',
+        'update_objective': 'self-distillation', 'policy_loss': default_policy_loss()}
+    config.write_text(json.dumps(declared))
+    def collect(**kwargs):
+        edited = {**declared, 'trainer_parameters': {'learning_rate': 5e-6, 'accumulate_batches': 4},
+                  'learner_command': [*declared['learner_command'], '--max-graph-forward-tokens', '180000']}
+        config.write_text(json.dumps(edited))  # the transition lands while this round collects
+        kwargs['out'].mkdir(parents=True, exist_ok=True)
+        (kwargs['out'] / 'rollouts.jsonl').write_text(''.join(json.dumps({'task_id': 't0', 'split': 'train',
+            'reward': {'quality': 1}, 'turns': [{}]}) + '\n' for _ in range(2)))
+        return {'groups_with_spread': 0, 'rollouts': 2, 'scored': 2, 'successes': 2, 'groups': []}
+    monkeypatch.setattr(production, 'collect', collect)
+    seen = {}
+    class Stop(Exception):
+        pass
+    def command(argv, values):
+        seen['argv'], seen['trainer_args'] = list(argv), values['trainer_args']
+        raise Stop
+    monkeypatch.setattr(production, 'run_command', command)
+    with pytest.raises(Stop):
+        production.run(config, rounds=1)
+    assert '--max-graph-forward-tokens' in seen['argv']
+    assert seen['trainer_args'] == ['--learning-rate', '5e-06', '--accumulate-batches', '4']
+    state = json.loads((out / 'state.json').read_text())
+    assert state['update_learner_parameters']['trainer_parameters'] == {'learning_rate': 5e-6, 'accumulate_batches': 4}
+    recorded = json.loads(next(out.glob('round-*/learner-parameters.json')).read_text())
+    assert recorded == state['update_learner_parameters']

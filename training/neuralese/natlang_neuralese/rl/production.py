@@ -275,6 +275,10 @@ def normalize_legacy_completed_update(state, state_path):
     return True
 
 
+# Config keys read again when each update launches (learner side only; see run()).
+LEARNER_SIDE_KEYS = ('trainer_parameters', 'learner_command', 'seed_trainer_parameters', 'seed_command')
+
+
 def native_policy_trainer_args(parameters, expected_native):
     """Bind sampled-policy admission independently of future ordinary rendering."""
     from ..train.recipe import stage_parameter_args
@@ -1250,7 +1254,21 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 state['update_policy_loss'] = policy_loss
             else:
                 state.pop('update_policy_loss', None)
+            # Learner-side parameters bind at update launch, not round start: an edited learning rate, accumulation,
+            # loss weight or graph cap applies to the next update. The collection binding keeps pinning what affects
+            # sampling (policy, sampling parameters, actor runtime, cases).
+            fresh = resolve_recipe_data(config_path)
+            for key in LEARNER_SIDE_KEYS:
+                if key in fresh:
+                    config[key] = fresh[key]
+                else:
+                    config.pop(key, None)
+            values['trainer_args'] = (native_policy_trainer_args(config.get('trainer_parameters', {}), expected_native)
+                if expected_native is not None else stage_parameter_args(config.get('trainer_parameters', {})))
+            values['seed_trainer_args'] = stage_parameter_args(config.get('seed_trainer_parameters', config.get('trainer_parameters', {})))
+            state['update_learner_parameters'] = {key: config.get(key) for key in LEARNER_SIDE_KEYS}
             write_json_durable(state_path, state)
+            write_json_durable(round_dir / 'learner-parameters.json', state['update_learner_parameters'])
             base_learner_out = Path(values['learner_out'])
             pending = False
             for kind in rft_stages:
