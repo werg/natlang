@@ -94,3 +94,32 @@ datacenter GPU each should decode far faster than the GB10's 60 tok/s. With `--r
 must be 0, which checks determinism on the full packet. Use `--serving batched` only when GPU time is short. Record the
 llama-server build and converter revision with the result. Rebuilding with the `a6401bbd3` pin changes the
 numerics, so it needs its own base run; the base key includes the binary hash, so this happens automatically.
+
+## Cloud run (2026-10-30, `lfm3-decision-eval-20261030`)
+
+Arms (all BF16 GGUF, served by the fork at `a6401bbd3` built in the sandbox for the assigned GPU), deterministic
+serving, base executed twice:
+
+| arm | checkpoint (sha256) | GGUF sha256 | converter |
+|---|---|---|---|
+| base | official `LFM3-1.7B-BF16.gguf` (hub rev `b3f2ae5d`) | `39158a79…5e9f68` | — |
+| step142 (SFT) | `peer1-step142/checkpoint.pt` `bf13a50b…` | `844707d2ae70…` | `85a2e716` |
+| step608 (SFT) | `peer1-step608/checkpoint.pt` `b48d4d9c…` | `e17b5c89fcad…` | `85a2e716` |
+| step3 (RL jolt-r1 round 2) | `lfm3-rl-dgx-20261029/jolt-r1/round-000002/learner/checkpoint.pt` `af770d6e…` | `8079aa8183e1…` | `a6401bbd` |
+| step4 (RL sd-r1 round 3) | `lfm3-rl-dgx-20261029/sd-r1/round-000003/learner/checkpoint.pt` `4b204731…` | `e647ff655cac…` | `a6401bbd` |
+
+The RL GGUFs are the exports of the local `lfm3-rl-gate-3` run (reused, not redone). The two converters produce
+identical tensors and metadata for the base (llama-cpp-fork.json verification).
+
+Transport: DGX uploads run at 0.2-4 MB/s, so the trained GGUFs travel as XOR-zstd deltas against a base basis laid out
+like the trained file (`scripts/coreweave/gguf_basis.py` + `lossless_file_transfer.py`; basis `7da15d12…`, the 287
+shared tensors, zeros for the 2 producer-adapter tensors and the header). Delta sizes: step142 418 MB, step608
+1385 MB, RL step3 18 MB, RL step4 31 MB (versus 3467 MB each). The restore path (basis build + decode + sha256) was
+verified on DGX for step3. Bundle `942ac699…` (1.96 GB, code `8e2c3c000`). Runner: `scripts/coreweave/lfm3_decision_eval.sh`
+(build, base download, restore, CUDA MPS when available, `--servers` single-sequence servers per arm sized from free
+GPU memory). Job: `scripts/coreweave/jobs/lfm3/decision-eval.job.json` (1 GPU, 8 CPU, 32Gi, no GPU filters).
+
+Quota: every create was refused with `SandboxResourceExhaustedError: Create sandbox resource exhausted: quota exceeded,
+check plan and billing details`: 5 attempts 06:49-07:01 UTC (a CPU-only build sandbox, so this is account-level, not
+GPU capacity) and the eval sandbox at 07:14 UTC. `cwsandbox ls` works and lists no sandboxes. Hourly single retries
+follow.
