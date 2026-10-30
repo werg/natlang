@@ -219,29 +219,13 @@ def test_exported_stack_equals_the_native_effective_weights(tmp_path):
 
 
 def test_student_target_tables_cover_the_real_port_inventories(tmp_path):
-    from natlang_neuralese.tune.export import _modules
-    from natlang_neuralese.tune.stack import TargetFactors
     from natlang_neuralese.tune.targets import module_map, student_family
-    for family, student, classes in (('lfm', 'lfm2', {'attention', 'conv-projection', 'mlp'}),
-                                     ('mellum', 'mellum', {'attention', 'experts'})):
-        (tmp_path / family).mkdir()
-        engine = engine_fixture(tmp_path / family, family)
-        names = sorted(target_parameters(engine.shared_model))
-        assert student_family(names) == student
-        targets, kinds = module_map(names)
-        assert set(kinds.values()) == classes
-        if student == 'mellum':
-            # The router is mapped but trained only on explicit request.
-            assert any(name.endswith('mlp.gate.weight') for name in names) and not any(name.endswith('mlp.gate.weight') for name in targets)
-            name = next(name for name in names if name.endswith('experts.gate_up'))
-            assert targets[name].hf_module[1].endswith('.mlp.experts.{expert}.up_proj')
-            experts, rows, cols = target_parameters(engine.shared_model)[name].shape
-            B, A = torch.randn(experts, rows, 3), torch.randn(experts, 3, cols)
-            parts = {module: (a, b) for module, a, b in _modules(name, TargetFactors(B, A, 3, 'concatenated', ()), targets[name])}
-            for expert in range(experts):
-                gate, up = (parts[template.format(expert=expert)] for template in targets[name].hf_module)
-                assert torch.equal(torch.cat([gate[1] @ gate[0], up[1] @ up[0]]), B[expert] @ A[expert])
-        engine.store.close()
+    engine = engine_fixture(tmp_path, 'lfm')
+    names = sorted(target_parameters(engine.shared_model))
+    assert student_family(names) == 'lfm2'
+    _targets, kinds = module_map(names)
+    assert set(kinds.values()) == {'attention', 'conv-projection', 'mlp'}
+    engine.store.close()
 
 
 def test_supervised_row_loss_reaches_the_producer_through_its_neuralese_edge(tmp_path):

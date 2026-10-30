@@ -5,7 +5,7 @@ runtime's canonical stack identity. The sum is exact: members slicing one canoni
 most the largest member's), everything else concatenates (`stack.stack_factors`). No engine is loaded; coefficients
 and bases come from the release's `artifacts/*.nnt`.
 
-`python -m natlang_neuralese.tune.stack_export --release DIR --stacks stacks.json --module-map lfm2|lfm3|mellum
+`python -m natlang_neuralese.tune.stack_export --release DIR --stacks stacks.json --module-map lfm2|lfm3
 --hf-config DIR --out DIR` (the student's `targets.TABLES` family) where stacks.json is ``[{"identity", "entries": [{"id", "scale", "node"}]}]`` (the runtime's resolved
 effective stacks). Writes ``<out>/<identity>/`` PEFT directories and ``<out>/stack-exports.json``.
 """

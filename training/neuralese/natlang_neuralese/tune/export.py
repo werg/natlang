@@ -27,7 +27,7 @@ LLAMA_CPP = Path(__file__).resolve().parents[4] / 'vendor' / 'llama.cpp'
 @dataclass(frozen=True)
 class ModuleTarget:
     # May contain '{expert}' for a batched expert bank. A tuple names the HF modules of a fused native matrix whose
-    # output rows are their equal-size concatenation (Mellum gate_up = [gate_proj; up_proj]); each part keeps the
+    # output rows are their equal-size concatenation (e.g. a fused gate_up = [gate_proj; up_proj]); each part keeps the
     # shared A, so the split is exact.
     hf_module: str | tuple[str, ...]
     orientation: str = 'out_in'  # native weight layout: 'out_in' (nn.Linear) or 'in_out'
@@ -122,8 +122,8 @@ def export_gguf(peft_dir, base_config_dir, outfile, *, outtype='f32'):
     """Convert a PEFT export with the vendored llama.cpp ``convert_lora_to_gguf.py``.
 
     ``base_config_dir`` holds the base model's HF config/tokenizer. Architecture
-    coverage of this repository's native targets (all LFM projections, Mellum
-    expert layouts) is backend work verified by parity tests, not implied here.
+    coverage of this repository's native targets (all LFM projections) is backend
+    work verified by parity tests, not implied here.
     """
     script = LLAMA_CPP / 'convert_lora_to_gguf.py'
     if not script.is_file():
