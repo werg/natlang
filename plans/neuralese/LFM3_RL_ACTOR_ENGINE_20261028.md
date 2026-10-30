@@ -105,7 +105,19 @@ eval and data jobs running):
   prompt. Parity (4 real prefixes of 3000 tokens, 49-token spans exported by SGLang, 16-token continuation): mean
   |dlogp| 0.058 vs native BF16 floor 0.056; another span under the same prefix 0.065; a radix-cached repeat 0.060;
   importing the other span instead (control) 0.54. Unit tests: prompt receipts, imports, decision capture equal the
-  native engine's; imported positions occupy cache but not own positions.
+  native engine's; imported positions occupy cache but not own positions. `decide` on GPU
+  (`check_sglang_decide_parity.py`, 5 prompts x 6 options): per-token |dlogp| vs native FP32 0.021 (native BF16 floor
+  0.022), max 0.076 (floor 0.125), same continuation tokens, same best option in 5/5, 0 fallbacks.
+- **Native adapters on SGLang** (fork c98c324989f2e96e377b13b69ce379da169b34ca[:10], actor flag `--sglang-adapter-slots N`, default 0 = adapted turns on
+  the native engine). The front turns a request's adapter stack (or the actor's default stack) into one summed
+  low-rank pair per fork module (`native_adapters.lowrank_factors`: xs `left@core`/`right^T`, free-lora
+  `alpha/r*scale*B`/`A`; q|k|v and w1|w3 packed at their row offsets, export schema 5 `adapter_targets`), assigns
+  one of N resident slots (never reassigned while a request uses it) and records the native effective identity and
+  adapter binding. The fork adds `((x A^T) * slot mask) B^T` after every adaptable projection, CUDA-graph safe.
+  Stacks whose summed rank per module exceeds `--sglang-adapter-rank` run natively ('adapter rank'). Parity: three
+  random stacks (xs + free-lora, rank 4 each, attention/conv/MLP matrices of 4 layers) and unadapted requests
+  concurrently through 2 slots, T=1 decode: sampled logp vs the native adapted forward 0.0135 (unadapted engine noise
+  0.0159), no-adapter control 0.21, 0 fallbacks.
 - **Determinism (for the decision gate): not achieved.** 8 cases, 128 greedy tokens, compared with each case served
   alone: plain mode 4/8 identical in a batch of 8, 3/8 mixed with 8 fillers; `--enable-deterministic-inference` 5/8
   and 5–6/8 with FlashInfer or Triton attention (so attention is not the only batch-dependent op; early divergence at
@@ -138,7 +150,7 @@ images are cached in the same PR). `input_embeds` (which forces `--disable-radix
 | 4 | KV span import | done | `Lfm3Attention.forward` after the K norm | see status | none |
 | 5 | Conv-state import | done | `Lfm3ShortConv.forward`: `B_gate = 1`, `x` = stored conv input | see status | none |
 | 6 | `decide` with imported state | done | `SglangEngine.sglang_score` | input logprobs after the shared prompt | none |
-| 7 | LoRA on LFM3 | S (declare) / M (mixtures) | `lora/utils.py` known modules; `models/lfm3.py` | Declare `qkv_proj`, `o_proj`, `gate_up_proj`, `w2` (named `down_proj` in PEFT; needs a name map), `in_proj`/`out_proj` of the conv layers, not the conv weight; hybrid models (qwen3_5, nemotron_h) already run LoRA. Mixtures: register a bank as one rank-ΣR adapter and scale the shrink output by a per-request coefficient row (kernel change in the LoRA backend) | per-request coefficient rows in the csgmv/triton backend |
+| 7 | Native adapters (LoRA/xs, mixtures as stacks) | done | fork `NatlangAdapters` slots; front `_with_adapters` | summed low-rank delta per slot; see status | none |
 | 8 | CUDA graphs | — | decode graphs | Imports and exports happen in extend (prefill) batches, which run eager; decode only needs the producing flag and the adapter as static buffers | piecewise prefill graphs if enabled |
 | — | Guidance rewind | M–L | not in SGLang | Re-submit a truncated request (prefix cache makes it cheap), or keep guidance off for SGLang actors | conv-state checkpoint at the rewind point |
 

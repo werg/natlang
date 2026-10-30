@@ -131,7 +131,7 @@ def test_supervised_dispatch_keeps_finite_partial_work_unqualified(tmp_path, mon
             'mandatory_sft': {'complete': False, 'remaining_graph_visits': 19}}
         (out / 'report.json').write_text(json.dumps(report))
     monkeypatch.setattr(production, 'run_command', trainer)
-    result = production.run(config_path, rounds=1, defer_native_refresh=True)
+    result = production.run(config_path, rounds=1)
     assert result['phase'] == 'awaiting_semantic_refresh'
     assert result['mandatory_sft']['complete'] is False
     assert result['checkpoint'] == str(parent)

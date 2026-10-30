@@ -62,6 +62,27 @@ Named functions can also be loaded directly: `loadNatlang('review.nl')` (Node), 
 
 Inline `nl<T>` result annotations written in eval are checked against the eval scope's declared type names. A type alias shown only in an earlier natural-language instruction is not in that scope; `nl-undeclared-type` identifies it before the child silently becomes `unknown`. Declare the alias in scope or write the required structure in the annotation. A program alias named like a platform class (`Request`, `Response`, `URL`, `Date`, `Map`, ...) shadows the class in that program's scope, as in TypeScript; a host that wants the live built-in passes it under a type that is not redeclared. Before 2026-10-12 such an alias silently resolved to the platform class and every call mismatched (`type-mismatch, expected Request`); on an older runtime, rename the alias.
 
+## Host eval cells
+
+A host whose agents run source cells (TSX, top-level `await`, `import`, a top-level `return`) can make `nl` ambient in every cell, with no import. Natlang plans and lowers the cell before the host's own transform (sucrase, esbuild) runs:
+
+```ts
+import { lowerHostCell, declarationsForValues } from '@natlang/core';   // compiler/host-cell.ts
+
+const ambientDeclarations = declarationsForValues({ scope: scope.snapshot(), threshold });   // `.d.ts` text; add the host's own API declarations
+const { code, plans, diagnostics, usesNl } = lowerHostCell(cellSource, { ambientDeclarations, jsx: true, services, context });
+if (diagnostics.length) return reportToAgent(diagnostics);   // 1-based line and column in the cell as written
+// run `code` through the host transform; `nl` is the runtime's nl, which provides `nl.__inline`
+```
+
+- **Fast path.** A cell that never writes the name `nl` returns at once, unchanged, with `usesNl: false`; no TypeScript program is built, so ordinary cells never pay for the checker. A cell that writes it but only as a property, a string, or a local declaration (a parameter, a `const nl = ...`) also returns `usesNl: false` and is not lowered. `nl` resolves by symbol: a local declaration shadows the ambient one, and is not an error here (it is in a project).
+- **One implementation.** Inference is the project compiler's (`analyzeInlineLambdas`): explicit `nl<T>`, contextual type, immediate call arguments, result context, typed holes; conflicting evidence, `nl<T>` annotations the code needs, tags nobody calls and run-time-built instructions are reported with the teaching messages and the natlang codes. The lowered form is the one project builds emit: `nl.__inline(plan, values, accessors, context)`, with live getter/setter accessors for captured `let`s, so a `let` the child assigns is written back to the cell. ``await nl(`...`)`` and `nl<T>("...")` are the one-shot call, as in eval.
+- **Output is still the host's language.** Types and JSX are untouched, each lowered site keeps the newlines of the code it replaces (later lines stay on their line), and a cell with an error diagnostic is returned as written. Lowering rewrites only `nl` sites; `iterateOn` call sites keep their runtime default identity, and Neuralese readouts are not lowered in cells.
+- **Ambient names are explicit authority.** `ambientDeclarations` is a global `.d.ts` (no top-level `import`/`export`) that types the host's free variables; a name nothing declares, and every imported module, is open (`unknown`/`any`). Declared names are not captured when an instruction merely mentions them: pass them as an argument or list them in `nl.with({ scope })`. Captures of the cell's own variables work as in any natlang file (mention captures live; `nl.with` snapshots, `live(x)` for write-back). A snapshot expression in `nl.with({ rows: await db.q() })` is evaluated in the cell, where `await` is legal.
+- **`declarationsForValues(values, limits?)`** writes `declare const name: Type;` from the current values, by the types natlang gives scope values (records by field, lists by item union, large keyed objects as `Record<string, T>`), read to bounded items, fields and depth, cycle-safe. Functions are `(...args: any[]) => any`, built-ins (`Date`, `Map`) are named, other live objects are `any`, and a record that holds some keeps the types of its other fields.
+- **`services`** declares typed host services (the declarations of a program descriptor) in the same ambient scope; `context` is the callable folder (`natlang.d`) every `nl` in the cell is bound to, embedded in each site as in project builds; `libs` supplies TypeScript library declarations where TypeScript has no install on disk (workerd).
+- **Execution.** Lowered code needs only an `nl` whose `__inline` is the runtime's (`import { nl } from '@natlang/node'`, or the host's provider); run it inside `runtime.run(...)`. The plans in the result are the ones embedded in the code, for hosts that list or index sites.
+
 ## Crisp and natural-language implementations of one part
 
 A hot part with a crisp and a natural-language implementation (validation, settlement, a scheduler's policy, an entry function the host selects) is one `pluggable` call behind a setting, not a hand-written `if`:

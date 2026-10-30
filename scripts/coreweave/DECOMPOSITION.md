@@ -53,9 +53,10 @@ provide the remote worker's bytes and parent-membership evidence.
 
 ## Native participant bridge (2026-10-15)
 
-The existing native recipe and `rl/native_rounds.py` decide which participant
-trains and when the joint semantic refresh runs. They publish exact requests;
-this service does not decide training policy or allocate resources.
+The existing native recipe and `rl/native_rounds.py` decide which raw-state round
+runs. They publish exact requests; this service does not decide training policy or
+allocate resources. (The joint semantic refresh request kind was removed with the
+cross-model semantic VAE family, 2026-10-30.)
 
 | Unit | Representation | Reason |
 | --- | --- | --- |
@@ -169,9 +170,8 @@ training protocol.
    contains its participant, global continuation state, VAE and tokenizers.
    Composite parents already carry a participant selector. Keep all saved base
    inventory, optimizer, row-credit and semantic identity checks.
-5. Preserve `native_refresh`'s exact global-parent continuation check. Return
-   updated participant artifacts to the joint owner before any next publication;
-   drain workers before another stage can update their optimizer stream.
+5. Return updated participant artifacts to the joint owner before any next
+   publication; drain workers before another stage can update their optimizer stream.
 6. Qualify with actual two-port restored weights, all optimizer tensors, RNG,
    exposure frames, semantic outputs and a subsequent update. Delete an unused
    peer payload on the selected worker to prove that it is not opened; complete

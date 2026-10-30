@@ -4,7 +4,8 @@
 training-data bridge for one program. It replaces the old decision-readout
 memetic experiment and its flat soft-skill/weight-adapter individuals in this
 workflow. The policy that rewrites guidance is a natural-language function run
-by the self-hosted author model; the rest is exact collection and verification.
+by a served native author, by default the student being improved (self-authoring; teacher
+generation is retired for LFM3); the rest is exact collection and verification.
 
 Prepare two disjoint JSONL packets with at least two invocations apiece. Every
 row must have `split: "train"`, the same `program_id`, a distinct `id`, and the
@@ -51,23 +52,20 @@ PYTHONPATH=training/neuralese .venv-neuralese/bin/python -m natlang_neuralese.rl
 PYTHONPATH=training/neuralese .venv-neuralese/bin/python -m natlang_neuralese.rl.memetic_batch \
   --source /path/to/train-cases.jsonl --out /work/memetic-batch \
   --server http://STUDENT:PORT --model-id lfm \
-  --author http://SELF-HOSTED-QWEN:PORT --author-model Qwen/Qwen3.6-35B-A3B \
-  --author-provenance verified-qwen36-author.json \
   --recipe-base /work/current-native-production-recipe.json --generations 3
 ```
 
-`--baseline-only` uses the evaluator while the author endpoint is unavailable.
-It runs unguided development and confirmation task-oracle samples without any
-author credentials or generation. Each program saves `baseline-result.json`,
+`--baseline-only` runs unguided development and confirmation task-oracle samples
+without authoring. Each program saves `baseline-result.json`,
 `state.json`, and exact `inputs.json`; the batch writes `progress.json`. The
 inputs bind the program, packet bytes, student checkpoint/tokenizer/embeddings,
 server info, system prompt, built TypeScript and Python evaluator runtime,
 queue worker, Node/Python versions, sampler, seeds, concurrency, and budgets.
 Each cached fit also binds its packet, guidance and input receipt, and each
 scored rollout must carry the actual student actor capture. Reissue the normal
-batch command with the same output directory and sampling options when the
-self-hosted author is reachable. It validates that earned baseline before
-continuing, then writes separate exact author provenance.
+batch command with the same output directory and sampling options to continue
+with authoring. It validates that earned baseline before continuing, then writes
+separate exact author provenance.
 
 The current 36-case failed-training packet has five ready programs spanning
 30 invocations: one 8-case program, three 6-case programs and one 4-case
@@ -77,21 +75,18 @@ independent cases for two training and two confirmation invocations.
 ```sh
 PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python -m natlang_neuralese.rl.memetic_program \
   --program-id my-program --development dev.jsonl --confirmation confirm.jsonl --custody custody.json \
-  --recipe-base training/neuralese/recipes/native-state-production-base-20261015-v1.json \
+  --recipe-base training/neuralese/recipes/lfm3-joint-sft-20261028-v3.json \
   --foundation-id native_full_sft \
   --recipe-graph-path /work/memetic/native-guidance-graphs.jsonl \
   --server http://STUDENT:PORT --model-id lfm \
-  --author http://SELF-HOSTED-QWEN:PORT --author-model Qwen/Qwen3.6-35B-A3B \
-  --author-provenance verified-qwen36-author.json \
   --out RUN-DIR --generations 3
 ```
 
-The author receipt has schema `natlang.memetic-author-provenance/1`, the exact
-`model_id`, `hosting: "self-hosted-coreweave"`, the exact `endpoint` and
-`sandbox_id`, and SHA-256 fields `checkpoint_sha256`,
-`tokenizer_fingerprint`, `runtime_sha256`, and `source_receipt_sha256`. Prepare it
-from the sandbox's verified teacher serving records. The loop binds its bytes
-and never treats a model-card name or an endpoint as checkpoint proof.
+`--author` names another served native endpoint (default: `--server`). The author
+provenance has schema `natlang.memetic-author-provenance/2`: the endpoint, the
+chat model name, the served native identity (checkpoint, tokenizer, embedding
+weights, architecture from `/v1/neuralese/info`) and the hash of that info. Each
+authoring call records the SHA-256 of its exact request and response bytes.
 
 Use the same command and output directory to resume with a larger generation
 count. Its input receipt binds the program, split file hashes, exact student

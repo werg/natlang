@@ -72,7 +72,7 @@ def test_latent_backward_hooks_follow_actual_parameter_after_group_reorder():
     for group in opt.latent.param_groups:assert group['qat_latent_lr']==group['lr']
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_actual_native_updates_preserve_distinct_rows_through_resume_and_rate_changes(family):
     from test_shared_state import tiny
     from test_native_optimizer_checkpointing import examples
@@ -163,7 +163,7 @@ def test_serialized_names_cannot_alias_two_parameters_to_one_saved_slot():
         optimizer.load_state_dict(saved)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_role_only_rate_override_preserves_reasoning_moments_rng_and_resume(family):
     from test_shared_state import tiny
     from test_native_optimizer_checkpointing import examples,assert_exact

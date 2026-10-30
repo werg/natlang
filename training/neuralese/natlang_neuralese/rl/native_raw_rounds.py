@@ -2162,16 +2162,6 @@ def _publish_supervised_result(continuation,jobdir,config,cursor,result):
             raise ValueError('raw supervised readiness belongs to another checkpoint')
         if (report.get('communication_foundation') or {}).get('complete') is True:
             cursor['foundation_candidate']=binding(report_path)
-        request=continuation.get('foundation_qualification_request')
-        if request:
-            previous=cursor.get('foundation_qualification_attempt')
-            if previous:
-                cursor.setdefault('foundation_qualification_history',{})[previous['request']['sha256']]=previous
-            cursor['foundation_qualification_attempt']={'request':request,
-                'generation':json.loads(_bound(request).read_text())['generation'],
-                'status':'passed' if report.get('foundation_ready') else 'failed',
-                'checkpoint':checkpoint,'report':binding(report_path)}
-            cursor.setdefault('foundation_qualification_history',{})[request['sha256']]=cursor['foundation_qualification_attempt']
         if continuation.get('raw_foundation_qualification') and (report.get('foundation_ready') or report.get('completed')):
             cursor.update(readiness=binding(report_path),foundation_qualified=True)
             cursor.pop('foundation_readiness_repair',None)

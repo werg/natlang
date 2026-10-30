@@ -183,7 +183,7 @@ def pin_shared_checkpoint(checkpoint, *, participant=None, consumer=None):
         # The same verifier and resolver as portable bundles prove the closure.
         receipt = {'schema': 'natlang.native-checkpoint-bundle/1', 'participant': participant,
                    'checkpoint': {'path': 'checkpoint.pt', 'sha256': digest}, 'files': files,
-                   'semantic_adapter': None, 'semantic_files': [], 'identity_rewritten': False}
+                   'identity_rewritten': False}
         write_json_durable(target/'bundle.json', receipt)
         return verify_bundle(target)
 

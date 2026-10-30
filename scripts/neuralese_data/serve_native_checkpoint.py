@@ -51,6 +51,10 @@ def main() -> None:
     parser.add_argument('--sglang-max-total-tokens', type=int,
                         help='KV pool tokens shared by all sequences (default: 4 x --sglang-context; prompts share prefixes)')
     parser.add_argument('--sglang-mem-fraction', type=float, default=0.3, help='ceiling, not the allocation')
+    parser.add_argument('--sglang-adapter-slots', type=int, default=0,
+                        help='resident native adapter stacks on SGLang (0: adapted turns run on the native engine)')
+    parser.add_argument('--sglang-adapter-rank', type=int, default=32,
+                        help='largest summed adapter rank per SGLang module and slot')
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
     args = parser.parse_args()
@@ -178,7 +182,11 @@ def launch_sglang(engine, args, checkpoint):
     # FlashInfer JIT-compiles kernels: the fork venv's ninja and the CUDA toolkit's nvcc on PATH.
     cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
     path = os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')])
-    process = subprocess.Popen(command, env={**os.environ, 'PYTHONPATH': '', 'PATH': path, 'CUDA_HOME': cuda},
+    # NATLANG_SGLANG_PYTHONPATH: a fork worktree under test instead of the pinned checkout's editable install.
+    process = subprocess.Popen(command, env={**os.environ, 'PYTHONPATH': os.environ.get('NATLANG_SGLANG_PYTHONPATH', ''),
+                                             'PATH': path, 'CUDA_HOME': cuda,
+                                             'NATLANG_ADAPTER_SLOTS': str(args.sglang_adapter_slots),
+                                             'NATLANG_ADAPTER_RANK': str(args.sglang_adapter_rank)},
                                start_new_session=True)
     # The SGLang server (and its scheduler/detokenizer children) ends with this actor, including on SIGTERM.
     import atexit
@@ -208,7 +216,8 @@ def launch_sglang(engine, args, checkpoint):
             process.kill()
             raise RuntimeError('SGLang server did not become healthy within 30 min')
         time.sleep(5)
-    engine.bind_sglang(url, export_manifest=manifest, fork={key: fork[key] for key in ('repository', 'branch', 'commit')})
+    engine.bind_sglang(url, export_manifest=manifest, fork={key: fork[key] for key in ('repository', 'branch', 'commit')},
+                       adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank)
     return process
 
 

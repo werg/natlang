@@ -104,7 +104,7 @@ def test_quality_held_rows_are_skipped_and_full_held_qualification_stays_incompl
     monkeypatch.setattr(trainer,'_evaluate',lambda model, graphs, **kwargs:
         {'examples':sum(1 for _ in graphs),'loss':0.25,'correct':1})
     args=SimpleNamespace(held_eval_tokens=0,held_eval_graphs=0,held_final_policy='full',
-        foundation_qualification_request=None,checkpoint_layers=False,chunk_tokens=8,ce_supervision_policy=None)
+        checkpoint_layers=False,chunk_tokens=8,ce_supervision_policy=None)
     result,after=trainer._evaluate_cadence(object(),source,args=args,coverage=coverage,final=True)
     assert result['examples']==2 and source.used==[0,2]
     assert result['scope']=='cadence-subset' and result['source_graphs']==3
@@ -551,7 +551,7 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     stable_softmax.set_numerics_policy(None)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure(tmp_path, family, monkeypatch):
     """Run the correction through source parsing, checkpoint restore, SGD and save."""
     import copy
@@ -996,7 +996,7 @@ def test_pair_source_rejects_plaintext_bypass_split_or_witness_tampering(tmp_pat
             NativeGraphSource(manifest, '1'*64, required_split='train', role_ids=(58,59,60,61))
 
 
-@pytest.mark.parametrize('family', ['lfm','mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 def test_each_paired_model_trains_consumer_to_producer_through_one_flat_forward(tmp_path, family):
     import torch
     from test_shared_state import tiny
@@ -1049,7 +1049,7 @@ def test_each_paired_model_trains_consumer_to_producer_through_one_flat_forward(
     torch.testing.assert_close(cached_gradient,gradient,atol=3e-6,rtol=2e-5)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_real_bf16_native_training_update_uses_shared_parameter_cotangent_scope(family):
     """Exercise the production native SFT backward/optimizer seam on both ports."""
     import torch

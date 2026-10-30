@@ -14,7 +14,7 @@ def parent_training():
             'optimizer':{'state':{'exact-parent':'retained'}}}
 
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('attention',['ieee','tf32x3'])
 @pytest.mark.parametrize('shared',[None,'source-v1','stable-v1'])
 def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_construction(tmp_path,monkeypatch,family,attention,shared):
@@ -217,7 +217,7 @@ def test_synthetic_learner_result_cannot_complete_raw_policy_round(tmp_path,monk
     assert state['round']==0 and state['trained_rounds']==0
     assert 'last_completed_update' not in state and state['active_update_round'].endswith('round-000000')
 
-@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('family',['lfm'])
 def test_sampled_actor_profile_overrides_future_seed_profile_in_actual_stage_cli(tmp_path,monkeypatch,family):
     import json
     from transformers import AutoTokenizer

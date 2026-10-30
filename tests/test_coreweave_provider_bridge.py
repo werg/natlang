@@ -68,21 +68,21 @@ class IO:
 def fixture():
     io = IO()
     prefix = '/work/native-production/shared'
-    adapter = bound(prefix + '/adapter.pt', b'adapter')
+    parent = bound(prefix + '/parent.pt', b'parent')
     request = {'schema': bridge.REQUEST_SCHEMA, 'kind': 'round', 'attempt_id': 'x',
                'out': prefix + '/round', 'device': 'cuda', 'provider': {'sandbox_id': 'lfm'},
-               'semantic_adapter': adapter}
+               'parent_checkpoint': parent}
     request['request_id'] = bridge.canonical_json_sha256_hex(request)
     raw = payload(request)
     req = bound(prefix + '/request.json', raw)
     io.files['mellum', req['path']] = raw
-    io.files['mellum', adapter['path']] = b'adapter'
+    io.files['mellum', parent['path']] = b'parent'
     envelope = {'schema': bridge.ENVELOPE_SCHEMA, 'request': req, 'request_id': request['request_id'],
                 'provider': request['provider'], 'result': prefix + '/result.json', 'stop_file': prefix + '/stop.json'}
     return io, request, envelope
 
 
-def test_refresh_checkpoint_reference_uses_exact_sized_inventory_without_invented_bytes():
+def test_round_checkpoint_reference_uses_exact_sized_inventory_without_invented_bytes():
     io, request, envelope = fixture()
     artifact=bound(request['out']+'/checkpoint.pt',b'actual-closed-state')
     result={'schema':bridge.RESULT_SCHEMA,'request_id':request['request_id'],

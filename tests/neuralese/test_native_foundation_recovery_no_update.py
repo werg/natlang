@@ -24,7 +24,7 @@ def test_completed_in_place_recovery_persists_declaration_with_zero_optimizer_up
     out=tmp_path/'learner'
     args=['--base',str(base),'--device','cpu','--dtype','float32','--rank','4',
           '--native-graphs',str(source),'--foundation-native-graphs',str(source),
-          '--communication-foundation','--foundation-readiness-policy','on-shared-request',
+          '--communication-foundation',
           '--held-native-graphs',str(held),'--stage-id','full','--epochs','1',
           '--eval-every','100','--out',str(out),'--forward-atol','1e-4','--gradient-atol','1e-5']
     assert trainer.main(args)==0

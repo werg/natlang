@@ -37,7 +37,7 @@ def cpu_harness_threads():
         torch.set_num_threads(previous)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('mode', ['handoff', 'recorded', 'forced'])
 def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypatch, family, mode, cpu_harness_threads):
     repo = Path(__file__).resolve().parents[2]

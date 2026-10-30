@@ -24,7 +24,7 @@ from pathlib import Path
 
 import torch
 
-SCHEMA = 'natlang.native-hf-export/4'
+SCHEMA = 'natlang.native-hf-export/5'
 PRODUCER_CHUNK = 8192
 
 
@@ -58,6 +58,33 @@ def merged_state(model):
     else:
         state[output_name] = merged_output
     return state, tied
+
+
+ADAPTER_MODULES = {'self_attn.q_proj': ('qkv_proj', 'q'), 'self_attn.k_proj': ('qkv_proj', 'k'),
+                   'self_attn.v_proj': ('qkv_proj', 'v'), 'self_attn.gate_proj': ('gate_proj', None),
+                   'self_attn.o_proj': ('o_proj', None), 'conv.in_proj': ('in_proj', None),
+                   'conv.out_proj': ('out_proj', None), 'feed_forward.w1': ('gate_up_proj', 'gate'),
+                   'feed_forward.w3': ('gate_up_proj', 'up'), 'feed_forward.w2': ('w2', None)}
+
+
+def adapter_targets(model):
+    """Every adaptable native matrix (`native_adapters.target_parameters`) -> the fork's LFM3 module (natlang
+    adapter slots, `NatlangAdapters`) and the row offset of its output inside a packed module (q|k|v, w1|w3)."""
+    import re
+    from ..model.native_adapters import target_parameters
+    shapes = {name: tuple(value.shape) for name, value in target_parameters(model).items()}
+    targets = {}
+    for name, shape in shapes.items():
+        match = re.fullmatch(r'port\.hf\.model\.layers\.(\d+)\.(.+)\.weight', name)
+        if match is None or match.group(2) not in ADAPTER_MODULES or len(shape) != 2:
+            raise ValueError(f'no SGLang adapter module for native matrix {name}')
+        layer, (module, part) = match.group(1), ADAPTER_MODULES[match.group(2)]
+        sibling = lambda sub: shapes[f'port.hf.model.layers.{layer}.{sub}.weight'][0]
+        offset = {None: 0, 'q': 0, 'gate': 0, 'k': sibling('self_attn.q_proj') if part == 'k' else 0,
+                  'v': (sibling('self_attn.q_proj') + sibling('self_attn.k_proj')) if part == 'v' else 0,
+                  'up': sibling('feed_forward.w1') if part == 'up' else 0}[part]
+        targets[name] = {'module': f'layers.{layer}.{module}', 'offset': offset, 'shape': list(shape)}
+    return targets
 
 
 @torch.no_grad()
@@ -132,6 +159,7 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
         'layer_kinds': ['attention' if model.port.is_attention(index) else 'gated_delta'
                         if tuple(getattr(model.port, 'layer_types', ()))[index:index + 1] == ('linear_attention',)
                         else 'finite_convolution' for index in range(model.port.num_layers)],
+        'adapter_targets': adapter_targets(model),
         'producer_embedding': {'weight': 'model.natlang_producer_embed', 'input_id_offset': hf_config.vocab_size},
         # No marker is banned: produce spans run on the fork (producer table, span export), consume markers and other
         # protocol violations are the native engine's errors, so SGLang samples from the native law.

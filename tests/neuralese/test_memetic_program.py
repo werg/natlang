@@ -113,32 +113,25 @@ def test_binding_requires_actual_native_id_and_oracle_gain(tmp_path):
     assert not memetic.rollouts_reached(tmp_path, {**actor, 'checkpoint_sha256': 'other'})
 
 
-def test_author_requires_exact_self_hosted_source_receipt(tmp_path):
-    from natlang_neuralese.common import memetic_teacher_ferry as ferry
-    path = tmp_path / 'teacher.json'
-    receipt = {'schema': 'natlang.memetic-author-provenance/1',
-        'model_id': ferry.TEACHER_MODEL_ID, 'serve_alias': ferry.TEACHER_SERVE_ALIAS,
-        'revision': ferry.TEACHER_REVISION,
-        'hosting': 'self-hosted-coreweave', 'endpoint': ferry.TEACHER_URL,
-        'sandbox_id': ferry.TEACHER_SANDBOX_ID,
-        'source_bindings': list(ferry.TEACHER_SOURCE_BINDINGS),
-        'checkpoint_sha256': 'a' * 64, 'tokenizer_fingerprint': 'b' * 64,
-        'runtime_sha256': 'c' * 64, 'source_receipt_sha256': 'd' * 64}
-    path.write_text(json.dumps(receipt))
-    assert memetic.author_provenance(path, receipt['serve_alias'], receipt['endpoint'])['receipt'] == receipt
-    receipt['sandbox_id'] = 'unbound-teacher'
-    path.write_text(json.dumps(receipt))
-    with pytest.raises(ValueError, match='pinned self-hosted'):
-        memetic.author_provenance(path, receipt['serve_alias'], receipt['endpoint'])
+def test_author_provenance_binds_the_served_native_author():
+    actor = {'checkpoint_sha256': 'a' * 64, 'tokenizer_fingerprint': 'b' * 64,
+             'embedding_weight_sha256': 'c' * 64, 'architecture': 'lfm3'}
+    info = {'native_state': {'enabled': True, **actor},
+            'rl_policy_binding': {'schema': 'natlang.rl-policy-binding/2', 'communication': 'native-state',
+                                  'checkpoint_sha256': actor['checkpoint_sha256'], 'native_identity': dict(actor)}}
+    bound = memetic.author_provenance('http://student/', 'native', info)
+    assert bound['receipt']['identity'] == actor and bound['receipt']['endpoint'] == 'http://student'
+    assert memetic.author_provenance('http://student', 'native', info) == bound
+    other = {**info, 'native_state': {**info['native_state'], 'checkpoint_sha256': 'd' * 64}}
+    with pytest.raises(ValueError, match='consistent native RL policy'):
+        memetic.author_provenance('http://student', 'native', other)
 
 
 def test_author_attempt_context_is_retry_stable_and_generation_distinct(monkeypatch):
-    ferry = memetic.teacher_ferry
     prompts = []
     monkeypatch.setattr(memetic.runner, 'author_call', lambda url, model, prompt: (
         prompts.append(prompt) or {'text': '<guidance>Use the typed contract.</guidance>', 'custody': {}}))
-    args = Namespace(author='http://127.0.0.1:8766', author_ferry='http://127.0.0.1:8766',
-                     author_model=ferry.TEACHER_SERVE_ALIAS, program_id='exact-program')
+    args = Namespace(author='http://student', author_model='native', program_id='exact-program')
     context0 = {'schema': 'natlang.memetic-guidance-author-attempt/1', 'program_id': 'exact-program',
                 'phase': 'candidate', 'generation': 0, 'author_provenance_sha256': 'a' * 64}
     parent = {'guidance': 'Check the typed result.'}
@@ -146,10 +139,9 @@ def test_author_attempt_context_is_retry_stable_and_generation_distinct(monkeypa
     memetic.runner.propose_guidance(args, parent, '- development failure', attempt_context=context0)
     context1 = {**context0, 'generation': 1}
     memetic.runner.propose_guidance(args, parent, '- development failure', attempt_context=context1)
-    bodies = [memetic.runner.author_request_body(ferry.TEACHER_SERVE_ALIAS, prompt) for prompt in prompts]
-    request_ids = [ferry.request_id(ferry.TEACHER_SERVE_ALIAS, body) for body in bodies]
-    assert request_ids[0] == request_ids[1], 'same attempt body must retain the ferry idempotency key across retries'
-    assert request_ids[2] != request_ids[0], 'a distinct generation must produce a distinct exact-body request ID'
+    bodies = [memetic.runner.author_request_body('native', prompt) for prompt in prompts]
+    assert bodies[0] == bodies[1], 'retries of one attempt resend the same exact body'
+    assert bodies[2] != bodies[0], 'a distinct generation produces a distinct exact body'
     assert 'exact-program' in prompts[0] and 'generation":0' in prompts[0]
     assert 'generation":1' in prompts[2]
 
@@ -217,7 +209,7 @@ def test_guidance_graph_backpropagates_through_local_producer(family):
 
 
 def test_recipe_continuation_uses_native_earned_parent(tmp_path):
-    base = Path(__file__).resolve().parents[2] / 'training/neuralese/recipes/native-state-production-base-20261015-v1.json'
+    base = Path(__file__).resolve().parents[2] / 'training/neuralese/recipes/lfm3-joint-sft-20261028-v3.json'
     output = tmp_path / 'recipe.json'
     binding = {'path': '/work/memetic/train.jsonl', 'sha256': 'a' * 64}
     receipt = memetic.emit_recipe(base, output, binding, foundation_id='native_full_sft')
@@ -232,7 +224,7 @@ def test_recipe_continuation_uses_native_earned_parent(tmp_path):
 
 def test_recipe_keeps_downstream_stages_and_foundation_dependencies(tmp_path):
     from natlang_neuralese.rl.native_raw_rounds import _supervised_stage_inventory
-    base = Path(__file__).resolve().parents[2] / 'training/neuralese/recipes/native-state-production-base-20261015-v1.json'
+    base = Path(__file__).resolve().parents[2] / 'training/neuralese/recipes/lfm3-joint-sft-20261028-v3.json'
     recipe = json.loads(base.read_text())
     recipe['stages'].insert(0, {**recipe['stages'][0], 'id': 'prelude', 'requires': []})
     recipe['stages'][1]['requires'] = ['prelude']
@@ -377,18 +369,13 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     monkeypatch.setattr(memetic, 'evaluate', fake_evaluate)
     written = {'id': 'nzs1_' + 'e' * 52, 'source_capture': {'policy': actor},
                'source_text_sha256': hashlib.sha256(b'guide').hexdigest()}
-    receipt_id = 'mtf1_' + '7' * 64
-    receipt = {'schema': memetic.teacher_ferry.RECEIPT_SCHEMA, 'request_id': receipt_id,
-        'request_sha256': '8' * 64, 'response_sha256': '9' * 64, 'response_bytes': 1,
-        'status': 'complete', 'hmac_sha256': 'a' * 64}
-    custody = {'schema': 'natlang.memetic-author-call-custody/1', 'request_id': receipt_id,
-        'request_sha256': '8' * 64, 'response_sha256': '9' * 64,
-        'ferry_receipt_sha256': 'b' * 64, 'ferry_receipt': receipt}
+    custody = {'schema': 'natlang.memetic-author-call-custody/2',
+        'request_sha256': '8' * 64, 'response_sha256': '9' * 64}
     authored_calls = []
     def fake_propose(args, parent, digest, *, attempt_context, prior_rejection=None):
         authored_calls.append({'prompt_input': digest, 'attempt': attempt_context, 'parent': parent,
             'prior_rejection': prior_rejection})
-        return {'text': 'Teacher-authored: check the contract and verify the result.', 'author_call': custody}
+        return {'text': 'Authored: check the contract and verify the result.', 'author_call': custody}
     monkeypatch.setattr(memetic.runner, 'propose_guidance', fake_propose)
     monkeypatch.setattr(memetic.runner, 'failure_digest', lambda fit: 'DEV failure evidence')
     fail_candidate_write = {'enabled': True}
@@ -412,23 +399,14 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     assert [name for name, _, _ in calls] == ['unguided-dev', 'unguided-confirm']
     assert not (tmp_path / 'run/author.json').exists()
     assert not (tmp_path / 'run/binding.json').exists()
-    ferry = memetic.teacher_ferry
-    receipt = {'schema': 'natlang.memetic-author-provenance/1', 'model_id': ferry.TEACHER_MODEL_ID,
-        'serve_alias': ferry.TEACHER_SERVE_ALIAS, 'revision': ferry.TEACHER_REVISION,
-        'hosting': 'self-hosted-coreweave', 'endpoint': ferry.TEACHER_URL,
-        'sandbox_id': ferry.TEACHER_SANDBOX_ID, 'source_bindings': list(ferry.TEACHER_SOURCE_BINDINGS),
-        'checkpoint_sha256': '1'*64, 'tokenizer_fingerprint': '2'*64,
-        'runtime_sha256': '3'*64, 'source_receipt_sha256': '4'*64}
-    path = tmp_path / 'teacher.json'; path.write_text(json.dumps(receipt))
-    author = ['--author', ferry.TEACHER_URL, '--author-model', ferry.TEACHER_SERVE_ALIAS,
-              '--author-ferry', 'http://127.0.0.1:8766', '--author-provenance', str(path)]
+    author = ['--author-model', 'native']  # --author defaults to the student server (self-authoring)
     with pytest.raises(RuntimeError, match='candidate write interruption'):
         memetic.main([*common, *author])
     assert [item['attempt']['phase'] for item in authored_calls] == ['initial-seed', 'candidate']
     assert all(item['prompt_input'] == 'DEV failure evidence' for item in authored_calls)
     assert 'confirmation' not in json.dumps(authored_calls)
     candidate_pending = json.loads((tmp_path / 'run/candidate-000-pending.json').read_text())
-    assert candidate_pending['author_call']['request_id'] == receipt_id
+    assert candidate_pending['author_call']['request_sha256'] == '8' * 64
     fail_candidate_write['enabled'] = False
     result = memetic.main([*common, *author])
     assert result['status'] == 'qualified'
@@ -440,10 +418,10 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     ledger = json.loads((tmp_path / 'confirmation-ledger.json').read_text())
     assert [item['artifact'] for item in ledger['spent'].values()] == [written['id']]
     assert [name for name, _, _ in calls].count('write') == 3
-    assert len(authored_calls) == 2, 'resuming the candidate must retain its pending teacher answer and request ID'
+    assert len(authored_calls) == 2, 'resuming the candidate must retain its pending authored answer'
     state = json.loads((tmp_path / 'run/state.json').read_text())
-    assert state['best']['author_call']['request_id'] == receipt_id
-    assert state['history'][0]['candidate']['author_call']['request_id'] == receipt_id
+    assert state['best']['author_call']['request_sha256'] == '8' * 64
+    assert state['history'][0]['candidate']['author_call']['request_sha256'] == '8' * 64
     assert json.loads((tmp_path / 'run/binding.json').read_text())['unguided_baseline']['development']['successes'] == 0
     new_actor = {**actor, 'checkpoint_sha256': '9'*64}
     student['rl_policy_binding']['native_identity'] = new_actor

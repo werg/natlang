@@ -3155,7 +3155,6 @@ def _main(argv=None, *, requested_refresh):
         return communication_foundation(foundation_source, exposure_counts, epochs=args.epochs,
                                         trained_bindings=source_row_bindings)
     foundation_template = foundation_exposure() if args.communication_foundation else None
-    metadata_dirty = metadata_dirty or qualification_history != previous_qualification_history
     foundation_missing = {key for key,row in (foundation_template or {}).get('rows',{}).items()
         if not row['admitted_to_training'] or row['required_visits']<=0 or row['graph_visits']<row['required_visits']}
     # An explicitly owned refresh continues an already exposed cohort through

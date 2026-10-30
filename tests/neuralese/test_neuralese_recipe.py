@@ -12,7 +12,6 @@ import pytest
 from natlang_neuralese.train.recipe import load_recipe, require_gate, stage_parameter_args
 
 
-
 def test_started_native_append_adds_bound_finite_foundation_and_keeps_predecessor_guards(tmp_path):
     from natlang_neuralese.train import recipe
     from copy import deepcopy
@@ -102,76 +101,6 @@ def test_guarded_native_arithmetic_is_operational_tuning_not_a_new_lineage(tmp_p
     after['stages'][0]['parameters']['base']='/different-base'
     _,left,right=recipe.native_stage_parameter_handoffs(before,after,tmp_path)
     assert left!=right  # Arithmetic permission never licenses a backbone replacement.
-
-
-def test_native_shared_controller_is_a_headless_recipe_stage(tmp_path):
-    from natlang_neuralese.train.recipe import (HANDLERS, HEADLESS_NATIVE_KINDS,
-        NATIVE_IDENTITY_QUALIFICATION, SHARED_NATIVE_KINDS, stage_input_args,
-        validate_shared_controller_output)
-    assert 'native_shared_stage_controller' in HEADLESS_NATIVE_KINDS
-    assert 'native_shared_stage_controller' in SHARED_NATIVE_KINDS
-    assert HANDLERS['native_shared_stage_controller']['required_inputs'] == {'controller_config'}
-    assert HANDLERS['native_shared_stage_controller']['module'] == 'natlang_neuralese.train.native_readiness'
-    assert NATIVE_IDENTITY_QUALIFICATION == 'native_state_runtime_qualified'
-    assert stage_input_args({'controller_config': {'path': '/bound/controller.json',
-        'sha256': 'a' * 64}}, 'native_shared_stage_controller') == [
-            '--config', '/bound/controller.json']
-    path = tmp_path/'controller.json'
-    output = tmp_path/'shared-stage'
-    path.write_text(json.dumps({'schema':'natlang.native-shared-stage-controller/1', 'out':str(output)}))
-    validate_shared_controller_output(path, output)
-    with pytest.raises(ValueError, match='output must equal'):
-        validate_shared_controller_output(path, tmp_path/'other-stage')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def test_child_signal_forwarder_delivers_sigterm_and_restores_parent_handler(tmp_path):
@@ -311,8 +240,6 @@ def test_child_signal_forwarder_tolerates_exit_between_poll_and_signal():
     forwarder._handle(signal.SIGTERM, None)
     assert forwarder.stopped == [True]
     forwarder.attach(ExitsDuringSignal())
-
-
 
 
 def test_relative_binding_paths_resolve_against_the_repository_root_not_the_working_directory(tmp_path, monkeypatch):
@@ -526,29 +453,6 @@ def test_native_input_binding_relocation_keeps_content_identity(tmp_path):
         resolve_stage_inputs(recipe,stage,{}, {'graphs.train':str(mismatch)})
     with pytest.raises(ValueError,match='undeclared input binding'):
         resolve_stage_inputs(recipe,stage,{}, {'other':str(relocated)})
-
-
-def test_native_recipe_runner_routes_only_declared_controller_input(tmp_path,monkeypatch):
-    from natlang_neuralese.train import recipe as runner
-    from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha
-    out=tmp_path/'run';directory=out/'readiness';config=tmp_path/'controller.json'
-    config.write_text(json.dumps({'schema':'natlang.native-shared-stage-controller/1','out':str(directory)}))
-    recipe={'schema':'natlang.neuralese-training-recipe/1','id':'native-controller-fixture',
-        'identity_qualification':'native_state_runtime_qualified',
-        'input_bindings':{'controller':{'path':str(config),'sha256':sha(config)}},
-        'stages':[{'id':'readiness','kind':'native_shared_stage_controller','requires':[],
-                   'inputs':{'controller_config':'controller'},'parameters':{}}]}
-    recipe_path=tmp_path/'recipe.json';recipe_path.write_text(json.dumps(recipe));commands=[]
-    class CompletedStage:
-        def __init__(self,command,env):
-            commands.append(command);directory.mkdir(parents=True,exist_ok=True)
-            (directory/'shared-stage-completion.json').write_text(json.dumps({
-                'schema':'natlang.native-shared-stage-completion/1','completed':True,'production_ready':True}))
-        def wait(self,timeout=None):return 0
-    monkeypatch.setattr(runner.subprocess,'Popen',CompletedStage)
-    runner.main(['--recipe',str(recipe_path),'--out',str(out),'--device','cpu','--until','readiness'])
-    assert commands and commands[0][commands[0].index('--config')+1]==str(config.resolve())
-    assert json.loads((out/'recipe-plan.json').read_text())['stage_inputs']['readiness']['controller_config']['sha256']==sha(config)
 
 
 def test_native_incomplete_stage_roles_and_unused_catalog_are_rejected(tmp_path):

@@ -30,7 +30,7 @@ SOURCE_ARGUMENTS = {
     **{role: ('--'+role.replace('_','-'), role) for role in
        ('foundation_native_graphs', 'foundation_declaration_recovery', 'pending_native_sources', 'continued_native_graphs',
         'continued_held_native_graphs', 'withdrawn_native_graphs', 'unavailable_native_sources',
-        'ce_supervision_policy', 'source_classification_migration', 'source_correction', 'foundation_qualification_request')},
+        'ce_supervision_policy', 'source_classification_migration', 'source_correction')},
 }
 
 
@@ -238,7 +238,6 @@ def prepare_seed_command(config,directory,values,state,state_path,*,parameters=N
     # the actor's argument splice can send unsupported serving flags to SFT.
     from ..train.recipe import stage_parameter_args
     selected=config.get('trainer_parameters',{}) if parameters is None else parameters
-    bind_foundation_policy(config, selected)
     values['trainer_args']=stage_parameter_args(selected)
     values['seed_trainer_args']=list(values['trainer_args'])
     command,reused=_resume_source_arguments(config,directory,values,parameters=parameters)

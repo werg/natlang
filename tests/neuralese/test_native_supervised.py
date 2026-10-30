@@ -25,12 +25,12 @@ def test_mandatory_worker_uses_existing_seed_command_and_retains_partial_pending
             'continuation_boundary':{'kind':'semantic-refresh','reached':True,'new_optimizer_updates':7},
             'mandatory_sft':{'complete':False,'remaining_graph_visits':10000}}))
     monkeypatch.setattr(production,'run_command',trainer)
-    result=production.run(config_path,rounds=1,defer_native_refresh=True)
+    result=production.run(config_path,rounds=1)
     assert len(calls)==1 and result['phase']=='awaiting_semantic_refresh'
     assert result['checkpoint']==str(parent) and result['pending_update_kind']=='mandatory_sft'
     assert result['mandatory_sft']['remaining_graph_visits']==10000
     # Restart before refresh never repeats completed optimizer work.
-    again=production.run(config_path,rounds=1,defer_native_refresh=True)
+    again=production.run(config_path,rounds=1)
     assert again==result and len(calls)==1
 
 
@@ -64,10 +64,10 @@ def test_pending_metadata_admission_is_not_claimed_as_optimizer_work_and_is_resu
                 'new_optimizer_updates':0,'declarations':[digest]}}
         (directory/'report.json').write_text(json.dumps(report))
     monkeypatch.setattr(production,'run_command',trainer)
-    state=production.run(path,rounds=1,defer_native_refresh=True)
+    state=production.run(path,rounds=1)
     assert state['phase']=='awaiting_semantic_refresh' and not state['mandatory_sft']['complete']
     assert state['last_learner_progress']['pending_source_admission']['new_optimizer_updates']==0
-    assert production.run(path,rounds=1,defer_native_refresh=True)==state and len(calls)==1
+    assert production.run(path,rounds=1)==state and len(calls)==1
 
 
 def test_offline_continuation_binds_actual_objective_and_effective_revision(tmp_path):
@@ -236,7 +236,7 @@ def test_custom_seed_contract_retains_implicit_core_sources_and_current_optional
 
 
 @pytest.mark.parametrize('role',['ce_supervision_policy','source_classification_migration',
-                                'foundation_qualification_request','foundation_declaration_recovery','unavailable_native_sources'])
+                                'foundation_declaration_recovery','unavailable_native_sources'])
 def test_source_contract_flags_follow_declared_stage_and_clear_obsolete_seed_bindings(role):
     from natlang_neuralese.rl.production import expand_command
     flag='--'+role.replace('_','-')
@@ -357,11 +357,11 @@ def test_genuine_zero_update_foundation_is_published_without_fulfilling_sft_debt
             'mandatory_sft':{'complete':False,'remaining_graph_visits':9000}}))
     monkeypatch.setattr(production,'run_command',trainer)
     path=tmp_path/'config.json';path.write_text(json.dumps(config))
-    state=production.run(path,defer_native_refresh=True)
+    state=production.run(path)
     assert state['phase']=='awaiting_semantic_refresh'and state['mandatory_sft']['remaining_graph_visits']==9000
     assert state['checkpoint']==str(parent)and state['pending_native_checkpoint'].endswith('/learner/checkpoint.pt')
     assert len(qualifications)==1
-    assert production.run(path,defer_native_refresh=True)==state and len(calls)==1
+    assert production.run(path)==state and len(calls)==1
 
 
 def test_foundation_flag_cannot_replace_actual_current_weight_qualification(tmp_path,monkeypatch):

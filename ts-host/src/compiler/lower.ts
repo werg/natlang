@@ -83,6 +83,72 @@ function enclosingSymbolName(node: ts.Node): string {
   return 'module';
 }
 
+/** What lowering one inline `nl` site needs: its plan, the callable context expression, and how nested expressions lower. */
+export type InlineSite = { plan: InlineLambdaPlan; context?: string; lower(expression: ts.Expression): ts.Expression };
+
+const interpolationValues = (site: InlineSite, template: ts.TemplateLiteral): ts.Expression[] =>
+  !site.plan.softBody && ts.isTemplateExpression(template) ? template.templateSpans.map(span => site.lower(span.expression)) : [];
+
+const contextArgument = (f: ts.NodeFactory, site: InlineSite): ts.Expression =>
+  site.context ? f.createIdentifier(site.context) : f.createIdentifier('undefined');
+
+/**
+ * `nl`...`` with captures by mention: `tag.__inline(plan, values, { name: [get, set?] }, context)`. `tag` is the file's own
+ * (already lowered) `nl` reference, so module transforms rebind it correctly.
+ */
+export function plainInlineCall(f: ts.NodeFactory, site: InlineSite, tag: ts.Expression, template: ts.TemplateLiteral): ts.Expression {
+  const accessors = site.plan.captures.map(capture => {
+    const getter = f.createArrowFunction(undefined, undefined, [], undefined, undefined, f.createIdentifier(capture.name));
+    const setter = capture.mutable ? [f.createArrowFunction(undefined, undefined,
+      [f.createParameterDeclaration(undefined, undefined, '__natlang_value')], undefined, undefined,
+      f.createBlock([f.createExpressionStatement(f.createAssignment(f.createIdentifier(capture.name),
+        f.createIdentifier('__natlang_value')))]))] : [];
+    return f.createPropertyAssignment(capture.name, f.createArrayLiteralExpression([getter, ...setter]));
+  });
+  return f.createCallExpression(f.createPropertyAccessExpression(tag, '__inline'), undefined, [literal(site.plan),
+    f.createArrayLiteralExpression(interpolationValues(site, template)), f.createObjectLiteralExpression(accessors),
+    contextArgument(f, site)]);
+}
+
+/**
+ * `nl.with({ a, b: expr, n: live(n) })`...``: getters for snapshots (read once, when the function is created) and
+ * getter/setter pairs for live lets. `receiver` is the (lowered) `nl` the call is made on; `listing` the record argument
+ * of `.with(...)` as written. A snapshot that is an expression is evaluated where the call is written, in listing order
+ * (after the interpolated values), and the getter returns its value: the expression may `await`, which a getter could not.
+ */
+export function explicitInlineCall(f: ts.NodeFactory, site: InlineSite, receiver: ts.Expression, listing: ts.Expression | undefined,
+  template: ts.TemplateLiteral): ts.Expression {
+  const properties = listing && ts.isObjectLiteralExpression(listing) ? listing.properties : f.createNodeArray<ts.ObjectLiteralElementLike>();
+  const recordTemp = listing && !ts.isObjectLiteralExpression(listing) ? f.createUniqueName('__natlang_capture_record') : undefined;
+  const evaluated: { name: ts.Identifier; value: ts.Expression }[] = [];
+  const accessors = site.plan.captures.map(capture => {
+    const property = properties.find(item => (ts.isShorthandPropertyAssignment(item) || ts.isPropertyAssignment(item)) &&
+      (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
+    const valueOf = (item: ts.ObjectLiteralElementLike | undefined): ts.Expression => {
+      if (recordTemp) return f.createPropertyAccessExpression(recordTemp, capture.name);
+      if (!item) return f.createIdentifier('undefined');
+      if (ts.isShorthandPropertyAssignment(item)) return f.createIdentifier(item.name.text);
+      const name = f.createUniqueName('__natlang_snapshot');
+      evaluated.push({ name, value: site.lower((item as ts.PropertyAssignment).initializer) });
+      return name;
+    };
+    const getter = f.createArrowFunction(undefined, undefined, [], undefined, undefined,
+      capture.mode === 'live' ? f.createIdentifier(capture.name) : valueOf(property));
+    const setter = capture.mode === 'live' ? [f.createArrowFunction(undefined, undefined,
+      [f.createParameterDeclaration(undefined, undefined, '__natlang_value')], undefined, undefined,
+      f.createBlock([f.createExpressionStatement(f.createAssignment(f.createIdentifier(capture.name),
+        f.createIdentifier('__natlang_value')))]))] : [];
+    return f.createPropertyAssignment(capture.name, f.createArrayLiteralExpression([getter, ...setter]));
+  });
+  const accessorObject = f.createObjectLiteralExpression(accessors);
+  const bound = recordTemp && listing ? [{ name: recordTemp, value: site.lower(listing) }] : evaluated;
+  const accessorExpression = bound.length ? f.createCallExpression(f.createParenthesizedExpression(
+    f.createArrowFunction(undefined, undefined, bound.map(item => f.createParameterDeclaration(undefined, undefined, item.name)),
+      undefined, undefined, f.createParenthesizedExpression(accessorObject))), undefined, bound.map(item => item.value)) : accessorObject;
+  return f.createCallExpression(f.createPropertyAccessExpression(receiver, '__inline'), undefined, [literal(site.plan),
+    f.createArrayLiteralExpression(interpolationValues(site, template)), accessorExpression, contextArgument(f, site)]);
+}
+
 export function natlangTransformer(options: LowerOptions): ts.TransformerFactory<ts.SourceFile> {
   return context => file => {
     const f = context.factory;
@@ -97,6 +163,8 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       return count === 1 ? base : `${base}@${count}`;
     };
     const original = (node: ts.Node) => ts.getOriginalNode(node);
+    const inlineSite = (plan: InlineLambdaPlan): InlineSite => ({ plan, context: options.context,
+      lower: expression => ts.visitNode(expression, visit) as ts.Expression });
     const readNeuraleseValue = (value: ts.Expression, conditional: boolean | undefined): ts.Expression => {
       const result = f.createCallExpression(runtime(conditional ? 'readNeuraleseIfReference' : 'readNeuralese'), undefined, [value]);
       if (options.browser) {
@@ -351,74 +419,25 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
         return f.createCallExpression(runtime('fuseSite'), undefined,
           [f.createStringLiteral(options.fusionSites.get(`${source.getStart(file)}:${source.getEnd()}`)!), call, ...visited.arguments]);
       }
-      // `nl<Result>`instructions`.with({ ... })` is equivalent to the explicit-capture tag form.
-      // Revisit it with the existing explicitInline lowering, which evaluates interpolation expressions before
-      // reading snapshot captures and builds live capture accessors.
+      // `nl<Result>`instructions`.with({ ... })` is equivalent to the explicit-capture tag form: the tag is the `nl` the
+      // call is made on, and the record argument is the one given to `.with`.
       if (ts.isCallExpression(node) && ts.isCallExpression(source) && ts.isPropertyAccessExpression(source.expression) &&
           source.expression.name.text === 'with' && ts.isTaggedTemplateExpression(source.expression.expression)) {
         const tagged = source.expression.expression;
-        const span = `${tagged.getStart(file)}:${tagged.getEnd()}`;
-        const plan = options.plans.get(span);
-        if (plan?.explicitCaptures && suffixWithCallOf(tagged) === source) {
-          const tag = f.createCallExpression(f.createPropertyAccessExpression(ts.visitNode(tagged.tag, visit) as ts.Expression,
-            'with'), undefined, source.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression));
-          return visit(f.updateTaggedTemplateExpression(tagged, tag, tagged.typeArguments, tagged.template));
-        }
+        const plan = options.plans.get(`${tagged.getStart(file)}:${tagged.getEnd()}`);
+        if (plan?.explicitCaptures && suffixWithCallOf(tagged) === source)
+          return explicitInlineCall(f, inlineSite(plan), ts.visitNode(tagged.tag, visit) as ts.Expression, source.arguments[0], tagged.template);
       }
       // Inline natlang lambdas.
       if (ts.isTaggedTemplateExpression(node) && ts.isTaggedTemplateExpression(source)) {
         const plan = options.plans.get(`${source.getStart(file)}:${source.getEnd()}`);
         if (plan?.explicitCaptures) {
-          // `nl.with({ a, b: expr, n: live(n) })`...``: getters for snapshots (read once, when the function is created)
-          // and getter/setter pairs for live lets; the receiver is the `nl` the call is made on.
-          const withCall = ts.isCallExpression(node.tag) ? node.tag : undefined;
+          const withCall = ts.isCallExpression(source.tag) ? source.tag : undefined;
           const receiver = withCall && ts.isPropertyAccessExpression(withCall.expression) ?
             ts.visitNode(withCall.expression.expression, visit) as ts.Expression : f.createIdentifier('nl');
-          const listing = withCall?.arguments[0];
-          const properties = listing && ts.isObjectLiteralExpression(listing) ? listing.properties : f.createNodeArray<ts.ObjectLiteralElementLike>();
-          const recordTemp = listing && !ts.isObjectLiteralExpression(listing) ? f.createUniqueName('__natlang_capture_record') : undefined;
-          const accessors = plan.captures.map(capture => {
-            const property = properties.find(item => (ts.isShorthandPropertyAssignment(item) || ts.isPropertyAssignment(item)) &&
-              (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
-            const valueOf = (item: ts.ObjectLiteralElementLike | undefined): ts.Expression => recordTemp ?
-              f.createPropertyAccessExpression(recordTemp, capture.name) : !item ? f.createIdentifier('undefined') :
-              ts.isShorthandPropertyAssignment(item) ? f.createIdentifier(item.name.text) :
-              ts.visitNode((item as ts.PropertyAssignment).initializer, visit) as ts.Expression;
-            const getter = f.createArrowFunction(undefined, undefined, [], undefined, undefined,
-              capture.mode === 'live' ? f.createIdentifier(capture.name) : valueOf(property));
-            const setter = capture.mode === 'live' ? [f.createArrowFunction(undefined, undefined,
-              [f.createParameterDeclaration(undefined, undefined, '__natlang_value')], undefined, undefined,
-              f.createBlock([f.createExpressionStatement(f.createAssignment(f.createIdentifier(capture.name),
-                f.createIdentifier('__natlang_value')))]))] : [];
-            return f.createPropertyAssignment(capture.name, f.createArrayLiteralExpression([getter, ...setter]));
-          });
-          const accessorObject = f.createObjectLiteralExpression(accessors);
-          const accessorExpression = recordTemp && listing ? f.createCallExpression(f.createParenthesizedExpression(
-            f.createArrowFunction(undefined, undefined, [f.createParameterDeclaration(undefined, undefined, recordTemp)], undefined, undefined,
-              accessorObject)), undefined, [ts.visitNode(listing, visit) as ts.Expression]) : accessorObject;
-          const values = !plan.softBody && ts.isTemplateExpression(node.template) ?
-            node.template.templateSpans.map(span => ts.visitNode(span.expression, visit) as ts.Expression) : [];
-          return f.createCallExpression(f.createPropertyAccessExpression(receiver, '__inline'), undefined, [literal(plan),
-            f.createArrayLiteralExpression(values), accessorExpression,
-            options.context ? f.createIdentifier(options.context) : f.createIdentifier('undefined')]);
+          return explicitInlineCall(f, inlineSite(plan), receiver, withCall?.arguments[0], source.template);
         }
-        if (plan) {
-          const values = ts.isTemplateExpression(node.template) ?
-            node.template.templateSpans.map(span => ts.visitNode(span.expression, visit) as ts.Expression) : [];
-          const accessors = plan.captures.map(capture => {
-            const getter = f.createArrowFunction(undefined, undefined, [], undefined, undefined, f.createIdentifier(capture.name));
-            const setter = capture.mutable ? [f.createArrowFunction(undefined, undefined,
-              [f.createParameterDeclaration(undefined, undefined, '__natlang_value')], undefined, undefined,
-              f.createBlock([f.createExpressionStatement(f.createAssignment(f.createIdentifier(capture.name),
-                f.createIdentifier('__natlang_value')))]))] : [];
-            return f.createPropertyAssignment(capture.name, f.createArrayLiteralExpression([getter, ...setter]));
-          });
-          // Reach the runtime through the file's own `nl` reference, so module transforms rebind it correctly.
-          const tag = ts.visitNode(node.tag, visit) as ts.Expression;
-          return f.createCallExpression(f.createPropertyAccessExpression(tag, '__inline'), undefined, [literal(plan),
-            f.createArrayLiteralExpression(values), f.createObjectLiteralExpression(accessors),
-            options.context ? f.createIdentifier(options.context) : f.createIdentifier('undefined')]);
-        }
+        if (plan) return plainInlineCall(f, inlineSite(plan), ts.visitNode(node.tag, visit) as ts.Expression, source.template);
       }
       // iterateOn call sites.
       if (ts.isCallExpression(node) && ts.isCallExpression(source)) {

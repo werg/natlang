@@ -189,7 +189,7 @@ def test_actual_attention_transition_keeps_optimizer_rng_and_completed_exposure(
     import json
     from test_native_model import tiny_source
     from test_native_state_sft import graph
-    from test_native_shared_checkpoint import equal_tree
+    from test_native_optimizer_updates import equal_tree
     from natlang_neuralese.model.native_model import load_native_model
     from natlang_neuralese.train import native_state_sft as trainer
     base=tmp_path/'base';tiny_source(base)

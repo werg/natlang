@@ -197,10 +197,12 @@ label-only refits after publications instead of full corpus refits (item 4).
 
 ## Not yet done (next work, in rough priority)
 
-1. **Run the LFM3 lane** on the trained LFM3 checkpoint once the LFM3 backbone port is on main (native loader and
-   server for `lfm3`): first one program to measure per-root time, row yield of self-teaching and the RL/development
-   outcomes, then the full lane (`run-lfm3-lane.sh`), sharded across sandboxes for the tunes. The first real
-   bank-init validates BF16 numerics of the lane engine (the shared paths were tested in FP32 fixtures).
+1. **Run the LFM3 lane** on a trained LFM3 checkpoint. The precondition is met: the LFM3 backbone port (native loader
+   and server for `lfm3`) is on main. Per the owner's 2026-10-28 ordering, select the executing base from actual later
+   SFT/RL progress and development task outcomes, not the early step-750 checkpoint. Start with one program to
+   measure per-root time, row yield of self-teaching and the RL/development outcomes, then the full lane
+   (`run-lfm3-lane.sh`), sharded across sandboxes for the tunes. The first real bank-init validates BF16 numerics of
+   the lane engine (the shared paths were tested in FP32 fixtures).
 2. **Dense JOLT+ term in the tune trainer**: reuse the shared `rl/privileged_scoring.teacher_scores` (stop-gradient
    privileged-context targets aligned to the replay's actions) as an objective of program-tune RL rounds; no second
    teacher-scoring path. The supply and custody it needs (privileged references for training roots only) exist.
@@ -214,10 +216,11 @@ label-only refits after publications instead of full corpus refits (item 4).
 8. **Registry/recipe admission** of target manifests under `training/corpus-manifests/`.
 9. **Live measurement** of the model-facing request, writer template, NL stages and the privileged block
    (`plans/MODEL_FACING_CHANGES.md`).
-10. **llama.cpp soft-state export for LFM3** (`tune/soft_export.py` writes LFM2 spans only); the lane serves through
-    the native backend meanwhile.
-11. Mixture-head readout (decision hidden state) on the native HTTP server (the Python engine path has it; serving
+10. Mixture-head readout (decision hidden state) on the native HTTP server (the Python engine path has it; serving
     the executor never needs it).
+
+Done since the last revision: llama.cpp soft-state export for LFM3 (`tune/soft_export.py` `STATE_ARCHITECTURES`
+covers `lfm2` and `lfm3`; 89627912f).
 
 ## Notes from implementation
 

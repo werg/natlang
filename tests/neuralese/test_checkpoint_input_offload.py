@@ -59,7 +59,7 @@ def test_wrapper_configuration_is_reversible_and_preserves_backend_identity():
         first(torch.sin, torch.ones(1), use_reentrant=True)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm'])
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_native_graph_outputs_all_gradients_and_rng_are_unchanged(family, device):
     if device == 'cuda' and not torch.cuda.is_available():

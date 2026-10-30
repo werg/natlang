@@ -1,8 +1,8 @@
 {
-  "description": "SGLang fork serving natlang's LFM3 RL actors (owner decision 2026-10-29: upstream-maintained Liquid LFM3 implementation, sgl-project/sglang PR #46858, for dependability). The PR branch (with the upstream main it contains) plus natlang commits: exact post-temperature sampled-token logprob and top-k returned compactly per token (custom_params.natlang_top_k); LFM3 producer spans (the export's producing embedding table, span state mapped in extend and decode) and the native-state export of a closed span (custom_params.natlang_capture) and native-state import through content-hashed placeholders (custom_params.natlang_import). The natlang serving front is serve/sglang_actor.py (scripts/neuralese_data/serve_native_checkpoint.py --engine sglang); the checkpoint is served through export/native_hf.py. NATLANG_FORK.md in the fork documents the base, our commits and the rebase procedure. A separate git checkout, not vendored.",
+  "description": "SGLang fork serving natlang's LFM3 RL actors (owner decision 2026-10-29: upstream-maintained Liquid LFM3 implementation, sgl-project/sglang PR #46858, for dependability). The PR branch (with the upstream main it contains) plus natlang commits: exact post-temperature sampled-token logprob and top-k returned compactly per token (custom_params.natlang_top_k); LFM3 producer spans (the export's producing embedding table, span state mapped in extend and decode) and the native-state export of a closed span (custom_params.natlang_capture) and native-state import through content-hashed placeholders (custom_params.natlang_import), and per-request native adapters in resident low-rank slots (custom_params.natlang_adapter). The natlang serving front is serve/sglang_actor.py (scripts/neuralese_data/serve_native_checkpoint.py --engine sglang); the checkpoint is served through export/native_hf.py. NATLANG_FORK.md in the fork documents the base, our commits and the rebase procedure. A separate git checkout, not vendored.",
   "path": "../sglang-natlang",
   "branch": "natlang",
-  "commit": "d7c7a01ce3d1a410248227f6376c38df00342034",
+  "commit": "c98c324989f2e96e377b13b69ce379da169b34ca",
   "repository": "https://github.com/werg/sglang-natlang",
   "upstream": "https://github.com/sgl-project/sglang",
   "upstream_base": "cb55d77d37c5f982e75edfd7f4a016f6a6ad35a1",
@@ -14,6 +14,8 @@
   "install": "uv venv -p 3.12 VENV && uv pip install -p VENV/bin/python -e ../sglang-natlang/python --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match",
   "parity": [
     "scripts/neuralese_data/check_sglang_lfm3_parity.py (LFM3 logits: chunked prefill and cached decode against the vendored HF reference)",
-    "scripts/neuralese_data/check_sglang_producer_parity.py (producer spans and span export against native_step: perturbed adapter, forced and decoded spans, BF16 noise floor)"
+    "scripts/neuralese_data/check_sglang_producer_parity.py (producer spans and span export against native_step: perturbed adapter, forced and decoded spans, BF16 noise floor)",
+    "scripts/neuralese_data/check_sglang_adapter_parity.py (native adapter stacks through resident slots against run_native)",
+    "scripts/neuralese_data/check_sglang_decide_parity.py (decide/score against the native engine)"
   ]
 }

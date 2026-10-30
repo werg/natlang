@@ -106,15 +106,13 @@ def test_actual_coefficient_stage_cli_sigterm_resume_and_real_held_collector(tmp
         from natlang_neuralese.rl.native_coefficient_stage import bind_policy
         controlled=tmp_path/'controller';cases=tmp_path/'train-cases.jsonl'
         cases.write_text(json.dumps({'id':'coefficient-cli-train','split':'train'})+'\n')
-        export=tmp_path/'fixture-semantic-identity.json'
-        export.write_text(json.dumps({'schema':'natlang.native-semantic-adapter/1',
-            'checkpoint':{'path':str(base),'sha256':base_sha},
-            'models':{family:{'native_identity':engine.native_identity,
-                'checkpoint':{'path':str(base),'sha256':base_sha,'participant':family}}},
-            'tokenizers':{family:{'path':'tokenizer'}}}))
+        from natlang_neuralese.rl import native_raw_policy
+        # The actor identity comes from the real engine; only the raw-policy tokenizer export is a fixture.
+        monkeypatch.setattr(native_raw_policy,'prepare_raw_policy',lambda *a,**kw:{
+            'native_identity':engine.native_identity,'native_participant':None,'tokenizer':str(tmp_path/'tokenizer')})
         config=tmp_path/'controller.json'
         config.write_text(json.dumps({'out':str(controlled),'checkpoint':str(base),
-            'native_state':True,'native_participant':family,'semantic_adapter':str(export),
+            'native_state':True,'base':str(base),
             'coefficient_policy':result['policy']['path'],'cases':str(cases),
             'endpoints':['fixture-actual-engine'],'rows_per_round':1,
             'learner_command':['fixture-real-native-cli'],'after_update':['fixture-publication']}))

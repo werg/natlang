@@ -8,66 +8,15 @@ adapter or flat soft-block path is exposed by this module.
 from __future__ import annotations
 import json
 import hashlib
-import base64
 import re
 import subprocess
 import time
 import urllib.request
-from urllib.parse import urlsplit
 from pathlib import Path
 from ..eval.task_packet import read_jsonl
-from ..common import memetic_teacher_ferry as teacher_ferry
 ROOT = Path(__file__).resolve().parents[4]
 GUIDANCE_WORDS = 120
 PROPOSE_GUIDANCE = "You write guidance for a small language model that runs natural-language programs: it reads a call's\ninputs, uses tools (eval for exact computation, return_result to finish) and returns a typed result. The guidance is\nadded to its system prompt for every call of these tasks.\n\nAuthoring attempt context (stable across retries of this exact attempt):\n{attempt_context}\n\nCurrent guidance:\n{guidance}\n\nDevelopment task rows it ran and how they ended (outcome class, checks that failed, value returned, errors):\n{digest}\n\n{prior_rejection}\n\nUse only the development evidence above; no confirmation cases or outcomes are available to you. Write revised\nguidance that fixes these failures without naming tasks or their answers:\n1. Find the most common failure class above and what the model did wrong in it.\n2. State, as short numbered steps, what the model should do instead.\n3. Keep anything from current guidance that is not contradicted by failures.\n4. Use at most {words} words.\nReply with the guidance inside <guidance>...</guidance>."
-
-
-def _header(response, name: str):
-    getter = getattr(response, 'getheader', None)
-    if getter:
-        return getter(name)
-    headers = getattr(response, 'headers', None)
-    return headers.get(name) if headers is not None else None
-
-
-def _author_custody(response, raw_request: bytes, raw_response: bytes) -> dict:
-    request_sha = hashlib.sha256(raw_request).hexdigest()
-    response_sha = hashlib.sha256(raw_response).hexdigest()
-    request_id = _header(response, 'X-Natlang-Memetic-Request-Id')
-    request_receipt_sha = _header(response, 'X-Natlang-Memetic-Request-Sha256')
-    response_receipt_sha = _header(response, 'X-Natlang-Memetic-Response-Sha256')
-    receipt_sha = _header(response, 'X-Natlang-Memetic-Ferry-Receipt-Sha256')
-    receipt_encoded = _header(response, 'X-Natlang-Memetic-Ferry-Receipt')
-    if (not isinstance(request_id, str) or not teacher_ferry.ID_RE.fullmatch(request_id)
-            or request_receipt_sha != request_sha or response_receipt_sha != response_sha
-            or not isinstance(receipt_encoded, str) or not isinstance(receipt_sha, str)
-            or not re.fullmatch(r'[0-9a-f]{64}', receipt_sha)):
-        raise ValueError('teacher ferry response lacks exact request/response custody headers')
-    try:
-        receipt_raw = base64.urlsafe_b64decode(receipt_encoded + '=' * (-len(receipt_encoded) % 4))
-        receipt = json.loads(receipt_raw)
-    except (ValueError, json.JSONDecodeError) as error:
-        raise ValueError('teacher ferry receipt header is not valid base64 JSON') from error
-    if (hashlib.sha256(receipt_raw).hexdigest() != receipt_sha
-            or receipt.get('schema') != teacher_ferry.RECEIPT_SCHEMA
-            or receipt.get('request_id') != request_id
-            or receipt.get('request_sha256') != request_sha
-            or receipt.get('response_sha256') != response_sha
-            or receipt.get('response_bytes') != len(raw_response)
-            or receipt.get('status') != 'complete'
-            or not isinstance(receipt.get('hmac_sha256'), str)
-            or not re.fullmatch(r'[0-9a-f]{64}', receipt['hmac_sha256'])):
-        raise ValueError('teacher ferry signed receipt does not bind the exact request and response bytes')
-    teacher = receipt.get('teacher') or {}
-    if (teacher.get('sandbox_id') != teacher_ferry.TEACHER_SANDBOX_ID
-            or teacher.get('model_id') != teacher_ferry.TEACHER_MODEL_ID
-            or teacher.get('serve_alias') != teacher_ferry.TEACHER_SERVE_ALIAS
-            or teacher.get('revision') != teacher_ferry.TEACHER_REVISION
-            or teacher.get('source_bindings') != list(teacher_ferry.TEACHER_SOURCE_BINDINGS)):
-        raise ValueError('teacher ferry receipt is not linked to the pinned self-hosted teacher source')
-    return {'schema': 'natlang.memetic-author-call-custody/1', 'request_id': request_id,
-        'request_sha256': request_sha, 'response_sha256': response_sha,
-        'ferry_receipt_sha256': receipt_sha, 'ferry_receipt': receipt}
 
 
 def author_request_body(model: str, prompt: str, max_tokens: int = 4096) -> bytes:
@@ -77,9 +26,7 @@ def author_request_body(model: str, prompt: str, max_tokens: int = 4096) -> byte
 
 
 def author_call(url: str, model: str, prompt: str, max_tokens: int = 4096) -> dict:
-    endpoint = urlsplit(url)
-    if model == teacher_ferry.TEACHER_SERVE_ALIAS and (endpoint.scheme != 'http' or endpoint.hostname != '127.0.0.1'):
-        raise ValueError('the pinned self-hosted teacher must be reached through the durable evaluator-local ferry')
+    """One chat call to the served native author, with exact request/response byte custody."""
     raw = author_request_body(model, prompt, max_tokens)
     request_sha = hashlib.sha256(raw).hexdigest()
     headers = {"content-type": "application/json"}
@@ -89,17 +36,11 @@ def author_call(url: str, model: str, prompt: str, max_tokens: int = 4096) -> di
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             with opener.open(request, timeout=900) as response:
                 raw_response = response.read()
-                value = json.loads(raw_response)
-                text = value["choices"][0]["message"].get("content") or ""
-                if model == teacher_ferry.TEACHER_SERVE_ALIAS:
-                    custody = _author_custody(response, raw, raw_response)
-                else:
-                    custody = {'schema': 'natlang.memetic-author-call-custody/1', 'request_id': None,
-                        'request_sha256': request_sha, 'response_sha256': hashlib.sha256(raw_response).hexdigest(),
-                        'ferry_receipt_sha256': None, 'ferry_receipt': None}
+            text = json.loads(raw_response)["choices"][0]["message"].get("content") or ""
             if text.strip():
-                return {'text': text, 'custody': custody}
-        except Exception as error:  # retries resend the same exact body and retain one ferry idempotency key
+                return {'text': text, 'custody': {'schema': 'natlang.memetic-author-call-custody/2',
+                        'request_sha256': request_sha, 'response_sha256': hashlib.sha256(raw_response).hexdigest()}}
+        except Exception as error:  # retries resend the same exact body
             if attempt == 4:
                 raise
             print(json.dumps({"event": "author_retry", "error": str(error)[:200]}), flush=True)
@@ -116,7 +57,7 @@ def propose_guidance(args, parent: dict, digest: str, *, attempt_context: dict,
             + prior_rejection['development_failures'])
     else:
         prior_text = 'There is no earlier rejected development proposal for this program.'
-    authored = author_call(getattr(args, "author_ferry", None) or args.author, args.author_model, PROPOSE_GUIDANCE.format(
+    authored = author_call(args.author, args.author_model, PROPOSE_GUIDANCE.format(
         attempt_context=context_text, guidance=parent["guidance"] or "(none)", digest=digest,
         prior_rejection=prior_text, words=GUIDANCE_WORDS))
     text = authored['text']

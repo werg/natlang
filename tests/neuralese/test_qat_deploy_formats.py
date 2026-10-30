@@ -328,10 +328,10 @@ def test_ramp_mixes_activations_and_weights_and_bf16_is_untouched():
     assert PRECISION['groups'] is None
 
 
-def test_calibration_state_round_trips_and_gates_require_it():
+def test_calibration_state_round_trips_and_evaluation_requires_it():
     run, model, _ = lfm3()
     with pytest.raises(ValueError, match='calibrate'):
-        q.gate_columns(run, lambda: {}, lambda report: True)
+        run.check_calibrated('nvfp4')
     run.calibrate(model, [torch.randn(1, 4, 128, dtype=torch.bfloat16)], step=7, source={'cursor': 3})
     state = json.loads(json.dumps(run.state_dict()))
     assert state['step'] == 7 and state['source'] == {'cursor': 3} and len(state['amax']) == 12
@@ -344,14 +344,7 @@ def test_calibration_state_round_trips_and_gates_require_it():
     with other.context('nvfp4', 1.0):
         b = model2(x)
     assert torch.equal(a, b)
-    seen = []
-
-    def evaluate():
-        seen.append((PRECISION['point'], {g: v[1] for g, v in PRECISION['groups'].items()}))
-        return {}
-    columns = q.gate_columns(run, evaluate, lambda report: True)
-    assert set(columns) == {'fp8', 'nvfp4'} and all(c['passed'] for c in columns.values())
-    assert seen == [('fp8', {'attention': 1.0, 'mlp': 1.0}), ('nvfp4', {'mlp': 1.0})]
+    run.check_calibrated('nvfp4')
     assert q.Quantization(X.lfm3_component()).required_points() == ['fp8', 'nvfp4']
     with pytest.raises(ValueError):
         other.load_state_dict({**state, 'amax': {'model.layers.0.feed_forward.w1': 1.0}})
