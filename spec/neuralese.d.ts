@@ -14,8 +14,7 @@
 
 declare module 'natlang:neuralese' {
   /**
-   * A dialect tag: `native-state/<architecture>` for a native model's state, or `semantic-state/<adapter SHA-256>` for a
-   * state written through a configured learned semantic adapter (spec/NEURALESE_DIALECTS.md).
+   * A dialect tag: `native-state/<architecture>` for a native model's state (spec/NEURALESE_DIALECTS.md).
    */
   export type Dialect = string;
 

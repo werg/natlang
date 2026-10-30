@@ -17,7 +17,7 @@ export type NativeSourceCapture = { policy: { checkpoint_sha256: string; tokeniz
     { kind: 'native_state'; id: string; native_identity: Record<string, string>; adapter_state_consumption?: NativeAdapterStateConsumption;state_derivation?:NativeStateDerivation;stop_gradient?:true;source_occurrence?:string })[];
   payload_start: number; payload_stop: number; imports?: { id: string; mode: string; stop_gradient?:true;source_occurrence?:string; observed_native_state_id?: string;
     adapter_state_consumption?: NativeAdapterStateConsumption;state_derivation?:NativeStateDerivation;
-    semantic_adaptation?: { adapter_sha256: string; source_native_identity: Record<string, string>; target_native_identity: Record<string, string> } }[] };
+  }[] };
 export type NativeTextResult = { id: string; native_state: Record<string, unknown>; source_capture: NativeSourceCapture;
   source_text_sha256: string; init?: Record<string, unknown>; gate?: null };
 export type NativeClientOptions = { endpoint: string; headers?: Record<string, string>; store: NeuraleseStore;
@@ -144,7 +144,7 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
       const receipt = imported.adapter_state_consumption;
       const index = explicitSegments.findIndex(segment => segment.id === imported.id &&
         nativeCanonicalJson(segment.receipt) === nativeCanonicalJson(receipt));
-      if (index < 0 || imported.observed_native_state_id !== imported.id || imported.semantic_adaptation || !receipt)
+      if (index < 0 || imported.observed_native_state_id !== imported.id || !receipt)
         return failure('neuralese-native-source-integrity', 'adapter-state import must bind its original artifact and exact source-stream receipt');
       validateNativeAdapterStateConsumption(receipt, original, artifact.metadata);
       explicitSegments.splice(index, 1);
@@ -153,11 +153,11 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
     if (imported.adapter_state_consumption)
       return failure('neuralese-native-source-integrity', 'adapter-state receipt requires its explicit consumption mode');
     if (imported.mode === 'best-effort-text-retokenization') {
-      if (imported.observed_native_state_id || imported.semantic_adaptation)
+      if (imported.observed_native_state_id)
         return failure('neuralese-native-source-integrity', 'text fallback cannot attest an imported native KV artifact');
       continue;
     }
-    if (!['exact-native-state', 'learned-semantic-state-deltas'].includes(imported.mode) || !imported.observed_native_state_id)
+    if (imported.mode !== 'exact-native-state' || !imported.observed_native_state_id)
       return failure('neuralese-native-source-integrity', 'native import must retain its exact observed state and actual consumption mode');
     const observed = await archiveNativeState(options, imported.observed_native_state_id);
     if (observed.metadata.schema !== 'neuralese.native-state/1' ||
@@ -166,19 +166,8 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
     for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
       if (observed.metadata[key] !== result.source_capture.policy[key])
         return failure('neuralese-native-source-integrity', 'native import observation differs from the source policy');
-    if (imported.mode === 'exact-native-state') {
-      if (imported.id !== imported.observed_native_state_id || imported.semantic_adaptation)
-        return failure('neuralese-native-source-integrity', 'exact native import must preserve its original artifact');
-    } else {
-      const adaptation = imported.semantic_adaptation;
-      const adapter = (info.native_state as { semantic_adapter_sha256?: string }).semantic_adapter_sha256;
-      if (!adapter || adaptation?.adapter_sha256 !== adapter || original.metadata.schema === 'neuralese.semantic-state/1' && original.metadata.adapter_sha256 !== adapter)
-        return failure('neuralese-native-source-integrity', 'learned native import must bind the configured adapter and original message');
-      for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
-        if (adaptation.source_native_identity[key] !== original.metadata[key] ||
-            adaptation.target_native_identity[key] !== observed.metadata[key])
-          return failure('neuralese-native-source-integrity', 'learned native import source/target identities differ from their artifacts');
-    }
+    if (imported.id !== imported.observed_native_state_id)
+      return failure('neuralese-native-source-integrity', 'exact native import must preserve its original artifact');
   }
   if (explicitSegments.length)
     return failure('neuralese-native-source-integrity', 'adapter-state source-stream receipt is missing its import observation');
@@ -190,10 +179,10 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
 /** The existing write-port interface, backed by actual native producer execution. */
 export async function nativeStateWritePort(options: NativeClientOptions): Promise<NeuralesePort> {
   const info = options.info ?? await neuraleseServerInfo(options.endpoint, { headers: options.headers });
-  const native = info.native_state as { enabled?: boolean; architecture?: string; semantic_adapter_sha256?: string } | undefined;
+  const native = info.native_state as { enabled?: boolean; architecture?: string } | undefined;
   if (!native?.enabled || !native.architecture || !serves(info, 'native.text-write'))
     return failure('neuralese-native-text-write-unavailable', 'configure a native server with forced text producer support');
-  const dialect = native.semantic_adapter_sha256 ? `semantic-state/${native.semantic_adapter_sha256}` : `native-state/${native.architecture}`;
+  const dialect = `native-state/${native.architecture}`;
   return { dialect, async write(text, extra = {}) {
     return (await nativeTextOperation({ ...options, info }, 'write-text', { text, ...extra })).meta;
   } };

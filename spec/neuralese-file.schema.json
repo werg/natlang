@@ -58,7 +58,7 @@
     "provenance": { "type": "object" }
   },
   "$defs": {
-    "dialect": { "type": "string", "pattern": "^(?:native-state/[A-Za-z0-9_.-]+|native-tensor/[a-z-]+|semantic-state/[0-9a-f]{64})$" },
+    "dialect": { "type": "string", "pattern": "^(?:native-state/[A-Za-z0-9_.-]+|native-tensor/[a-z-]+)$" },
     "nativeStateId": { "type": "string", "pattern": "^nzs1_[a-z2-7]{52}$" },
     "nativeTensorId": { "type": "string", "pattern": "^nnt1_[a-z2-7]{52}$" },
     "artifactEntry": {

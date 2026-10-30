@@ -317,31 +317,16 @@ When a body placeholder shares its content ID with another imported value,
 zero-based matching native-part occurrence of the intended body; other matching
 parts retain their actual imported state. Never replace all equal content IDs.
 
-Shared semantic serving loads the complete joint checkpoint with an explicit
-participant and its identity-bound semantic adapter receipt. Retain the small
-exported source tokenizers; do not load an unrelated shape-compatible adapter.
-The `learned-semantic-state-deltas` receipt records the exact adapter and token
-alignment. `neuralese-semantic-adapter-mismatch` requires the matching native
-model/adapter export or a fresh write through the target's native text writer.
-
-Compact messages use `neuralese.semantic-state/1` within the existing `nzs1_`
-artifact/archive protocol. Their dialect is bound to the semantic adapter SHA,
-and their token-first tensors retain text, source embeddings and semantic code.
-Even same-model consumers decode them. RL captures retain the actual decoded
-observation and an additional exact raw producer archive for gradient replay.
-
-For compact semantic RL turns, archive every `raw_state_id` in write receipts
-and every actual native observation in the sampling prompt, in addition to the
-compact outputs. Contextual `source_capture.imports` binds original references,
-`observed_native_state_id` and semantic adaptation identities; preserve and
-archive both sides when publishing a `.nz` body. Never reinterpret code tensors
-as raw KV or relabel a named semantic dialect to another adapter.
+Native state from another checkpoint is consumed through
+`best-effort-text-retokenization`; only the exact identity splices raw state.
+Contextual `source_capture.imports` binds original references and
+`observed_native_state_id`; preserve and archive both when publishing a `.nz`
+body.
 
 Native graph learning preserves named tensor artifacts through the normal store.
 `nativeOptimizerStep` accepts actual backbone or interface gradient names and
 publishes a new immutable checkpoint; reload it and restore the returned
 optimizer-state artifact for continuation. SGD supports explicit momentum.
-Refresh semantic adapters for changed participant identities before promotion.
 Graph gradient requests are first order: `neuralese-native-grad-order` means a
 derived or second-order computation was sent as a graph request; send it as a
 derivative program (`grad(f, a, { order: 2 })` does). `neuralese-native-adapters-unavailable`
@@ -352,9 +337,8 @@ For `neuralese-native-gradient-binding` or `neuralese-native-update-binding`,
 restore the exact current checkpoint's gradient/update/optimizer artifacts and
 retry; never change identity metadata to make unrelated tensors appear compatible.
 Move native learned actors with `python -m natlang_neuralese.model.native_bundle
-export --checkpoint CHECKPOINT --out BUNDLE` and optional `--semantic-adapter` for
-its exact shared export; verify with the same module's `verify --bundle BUNDLE`.
-Use the returned checkpoint/semantic-adapter paths and an explicit identical HF
+export --checkpoint CHECKPOINT --out BUNDLE`; verify with the same module's
+`verify --bundle BUNDLE`. Use the returned checkpoint path and an explicit identical HF
 base location when relocated. Missing/changed/escaped dependency errors require
 restoring the complete verified bundle, never changing its identity declarations.
 
@@ -373,10 +357,7 @@ A missing cohort row requires training that row through the shared native
 trainer; an old tiny shard cannot qualify the larger cohort. Preserve all
 `sft_progress` frames and the current optimizer/RNG across objective boundaries.
 `refresh_at_checkpoint` uses the declared checkpoint cadence for an incomplete,
-qualified continuation; retain remaining quotas and refresh the semantic adapter
-before serving changed weights. If a new communication cohort is still pending,
-keep the previous qualified semantic source membership and its required files
-until the new cohort has actual raw exposure in every participating model.
+qualified continuation; retain remaining quotas.
 
 An adaptive shared `refresh_ready` publication has executed every declared phase
 quantum and actual current task/runtime/compact-wire checks. It is not full

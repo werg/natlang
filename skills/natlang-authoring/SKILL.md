@@ -292,28 +292,16 @@ alone cannot produce model-native state. If setup reports
 native text writer. Do not replace it with hash embeddings or projected token
 values.
 
-A configured learned semantic adapter may consume another trained model's
-native value by decoding shared per-token codes into target-state deltas.
-Keep the value reference and its actual consumption receipt. On
-`neuralese-semantic-adapter-mismatch`, rewrite the payload with the target
-model's native writer or restore the matching checkpoint and adapter export.
-
-After shared adaptation, native writes may contain a compact semantic message
-with text, source embeddings and learned codes. Keep its typed reference through
-storage and calls. Its codes require the matching adapter before KV splicing;
-`neuralese-semantic-adapter-mismatch` has the same recovery described above.
-
-A learned compact value uses `semantic-state/<adapter SHA>` as its dialect.
-Keep its reference intact. DefaultDialect may use a consumer's explicitly
-advertised native adaptation/reencoding; a named semantic dialect still requires
-that exact adapter. A consumer-unavailable error requires configuring the
-matching adapter or an explicitly supported text reencoding path.
+A native value from another checkpoint is read through its text
+(`best-effort-text-retokenization`); keep the value reference intact. A
+`neuralese-native-consumer-unavailable` error means the reader does not declare
+text re-encoding: use a reader that does, or rewrite the value with the target
+model's native writer.
 
 Native graph learning targets explicitly named model parameters or consumed raw
 KV/hybrid-state tensors. Native optimizer updates can publish backbone and
 interface changes as a new checkpoint; reload that checkpoint and restore its
-archived optimizer state before continuing. A prior semantic adapter needs
-refresh against changed weights. `neuralese-native-grad-order` means a graph
+archived optimizer state before continuing. `neuralese-native-grad-order` means a graph
 gradient request carried a derived or second-order computation; graph requests are
 first order, so take a second-order gradient with `grad(f, a, { order: 2 })`, which
 sends a derivative program. `neuralese-native-adapters-unavailable` means the call

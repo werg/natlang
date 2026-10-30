@@ -14,7 +14,6 @@ export async function verifyNativeStateDerivation(store:Pick<NeuraleseStore,'get
   const parent=await store.getNativeState?.(value.parent_state_id);
   if(!parent)throw new RangeError('optimized native state needs its exact archived parent');
   await verifyNativeStateDerivation(store,parent,nested);
-  if(value.kind!=='optimizer'){verifyNativeStateDerivationRecords(artifact,parent,undefined,undefined);return;}
   const gradient=await store.getNativeTensorArtifact?.(value.gradient_id),update=await store.getNativeTensorArtifact?.(value.update_artifact_id);
   const prior=value.optimizer_state_parent_id===null?undefined:await store.getNativeTensorArtifact?.(value.optimizer_state_parent_id);
   const program=value.program_id===null?undefined:await store.getNativeTensorArtifact?.(value.program_id);
@@ -29,20 +28,6 @@ export function verifyNativeStateDerivationRecords(artifact:Omit<NativeStateArti
   if(parent.id!==value.parent_state_id)throw new RangeError('optimized native state parent binding changed');
   const origin=parent.metadata.derivation?.origin_state_ids??[parent.id];
   if(nativeCanonicalJson(origin)!==nativeCanonicalJson(value.origin_state_ids))throw new RangeError('optimized native state changed its original producer provenance');
-  if(value.kind!=='optimizer'){
-    const identity=(metadata:NativeStateArtifact['metadata'])=>({checkpoint_sha256:metadata.checkpoint_sha256,tokenizer_fingerprint:metadata.tokenizer_fingerprint,
-      embedding_weight_sha256:metadata.embedding_weight_sha256,architecture:metadata.architecture});
-    if(artifact.metadata.text!==parent.metadata.text||nativeCanonicalJson(value.source_native_identity)!==nativeCanonicalJson(identity(parent.metadata))||
-      nativeCanonicalJson(value.target_native_identity)!==nativeCanonicalJson(identity(artifact.metadata)))throw new RangeError('derived semantic state changed source/target provenance');
-    if(value.kind==='semantic-encode'){
-      if(artifact.metadata.schema!=='neuralese.semantic-state/1'||artifact.metadata.adapter_sha256!==value.adapter_sha256||
-        nativeCanonicalJson(identity(artifact.metadata))!==nativeCanonicalJson(identity(parent.metadata))||
-        ['token_ids','positions','embeddings'].some(name=>!equalTensor(artifact.tensors[name],parent.tensors[name])))
-        throw new RangeError('derived semantic encoding changed tokens, embeddings or adapter');
-    }else if(artifact.metadata.schema!=='neuralese.native-state/1'||parent.metadata.schema==='neuralese.semantic-state/1'&&parent.metadata.adapter_sha256!==(value.source_adapter_sha256??value.adapter_sha256))
-      throw new RangeError('derived semantic decode changed trained adapter or target format');
-    return;
-  }
   const {derivation:_,...before}=parent.metadata,{derivation:__,...after}=artifact.metadata;
   if(nativeCanonicalJson(before)!==nativeCanonicalJson(after))throw new RangeError('optimized native state changed text, native basis or adapter provenance');
   const expectedBase=parent.metadata.adapter_binding?.base_native_identity??{

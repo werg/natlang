@@ -78,7 +78,6 @@ state, in this order:
 | --- | --- | --- |
 | `same-base-adapter-state` | The request declares this mode for the state's ID (`x_natlang_native_state_modes`). | Splices the raw state, validated against its own source identity on the same base checkpoint. The state is not relabelled. |
 | `exact-native-state` | The state's checkpoint (as executed, including active adapters), tokenizer fingerprint, embedding-weight digest, architecture and layer layout equal the consumer's. | Splices the stored state at the consumer's positions. |
-| `learned-semantic-state-deltas` | The server runs with a semantic adapter whose bindings include both the state's identity and the consumer's. | Adapts the state through the adapter, then splices the result. |
 | `best-effort-text-retokenization` | Otherwise. | Discards the stored tensors, tokenizes the state's text with the consumer's tokenizer, and prefills those tokens between the markers. |
 
 Attention keys are stored before rotary embedding, so the consumer rotates them at
@@ -86,14 +85,13 @@ its own logical positions. An exactly imported state occupies its token count pl
 the two markers in the consumer's positions.
 
 Each import is reported in the response's `native_state.imports`:
-`{"id", "mode", "observed_native_state_id"?, "semantic_adaptation"?,
+`{"id", "mode", "observed_native_state_id"?,
 "adapter_state_consumption"?, "state_derivation"?, "stop_gradient"?,
 "source_occurrence"?}`. `observed_native_state_id` names the state actually spliced
 (absent for text retokenization).
 
 Errors: `neuralese-unknown-native-state` (the store lacks the state),
 `neuralese-native-state-mode` (an invalid mode declaration),
-`neuralese-semantic-adapter-mismatch` (semantic adaptation failed),
 `neuralese-native-state-empty-text` (text retokenization of a state with tokens but
 no text).
 
@@ -111,12 +109,9 @@ A native state (`schema: "neuralese.native-state/1"`) holds:
 - optional `adapter_binding` (the actor adapters active when it was produced) and
   `derivation` (a state produced by an optimizer step).
 
-A server with a semantic adapter stores produced spans as semantic messages
-(`schema: "neuralese.semantic-state/1"`) carrying `adapter_sha256` and a code tensor.
-
 Reuse of raw state requires the exact identity above. Moving a state to another
-checkpoint, tokenizer or architecture goes through text retokenization or a learned
-semantic adapter; equal tensor shapes do not make states interchangeable.
+checkpoint, tokenizer or architecture goes through text retokenization; equal tensor
+shapes do not make states interchangeable.
 
 **ID.** `nzs1_` followed by the lowercase, unpadded base32 SHA-256 (52 characters) of:
 the bytes `natlang.native-state/1`, a NUL byte, the metadata length as a
@@ -337,15 +332,15 @@ state without changing weights.
 
 | Field | Meaning |
 | --- | --- |
-| `dialects` | One dialect: `native-state/<architecture>`, or `semantic-state/<adapter_sha256>` with a semantic adapter ([NEURALESE_DIALECTS.md](NEURALESE_DIALECTS.md)). |
+| `dialects` | One dialect: `native-state/<architecture>` ([NEURALESE_DIALECTS.md](NEURALESE_DIALECTS.md)). |
 | `width`, `dtype` | Hidden width; the embedding weight dtype (`float32`, `bfloat16`). |
 | `max_block_length` | The producer-span token budget a view write reserves (64). Chat spans are bounded only by `max_tokens`. |
 | `context` | Served context in tokens: `min(max_position_embeddings, -c)`. `view` plans against it. |
 | `grad`, `grad_order`, `stream` | `true`, `2`, `true`. |
 | `store` | `{"owners": true, "persistent": bool}`. |
-| `native_state` | `{"enabled": true, "format": "neuralese.native-state/1" \| "neuralese.semantic-state/1", "semantic_adapter_sha256"?, "consumption_modes", "architecture", "checkpoint_sha256", "tokenizer_fingerprint", "embedding_weight_sha256", "role_marker_ids"}`. `consumption_modes` lists the modes of Consuming that this server can use. |
+| `native_state` | `{"enabled": true, "format": "neuralese.native-state/1", "consumption_modes", "architecture", "checkpoint_sha256", "tokenizer_fingerprint", "embedding_weight_sha256", "role_marker_ids"}`. `consumption_modes` lists the modes of Consuming that this server can use. |
 | `server` | `"reference"`. |
-| `rl_policy_binding` | `natlang.rl-policy-binding/2`: the served actor's checkpoint and native identity, history-reasoning policy, Python runtime, and participant, actor view and semantic adapter when present. |
+| `rl_policy_binding` | `natlang.rl-policy-binding/2`: the served actor's checkpoint and native identity, history-reasoning policy, Python runtime, and actor view when present. |
 | `prompt_rendering`, `prompt_rendering_identity_sha256` | Serving prompt policy (`full` or `program-header`) and its identity. |
 | `capabilities` | The sorted list of capabilities served. |
 

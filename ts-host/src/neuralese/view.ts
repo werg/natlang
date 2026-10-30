@@ -89,21 +89,6 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
             producerScopeForTrace(trace))));
         for (const write of receipt.writes) {
           const artifact = await archiveNativeState(client, write.state_id);
-          if (artifact.metadata.schema === 'neuralese.semantic-state/1') {
-            if (!write.raw_state_id) throw new Error('neuralese-view-source-integrity: compact RL view requires its actual raw producer capture');
-            const raw = await archiveNativeState(client, write.raw_state_id);
-            if (raw.metadata.schema !== 'neuralese.native-state/1' || raw.metadata.text !== artifact.metadata.text)
-              throw new Error('neuralese-view-source-integrity: compact view lacks matching raw producer state');
-            for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
-              if (raw.metadata[key] !== artifact.metadata[key])
-                throw new Error('neuralese-view-source-integrity: compact and raw producer identities differ');
-            for (const name of ['token_ids', 'positions', 'embeddings']) {
-              const one = raw.tensors[name]!, two = artifact.tensors[name]!;
-              if (one.dtype !== two.dtype || JSON.stringify(one.shape) !== JSON.stringify(two.shape) ||
-                  one.data.length !== two.data.length || one.data.some((value, index) => value !== two.data[index]))
-                throw new Error('neuralese-view-source-integrity: compact and raw producer token/embedding captures differ');
-            }
-          }
           for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
             if (artifact.metadata[key] !== write.native_identity[key] || artifact.metadata[key] !== receipt.policy[key])
               throw new Error('neuralese-view-source-integrity: view output identity differs from its actual producer');

@@ -7,9 +7,7 @@ of state, not one checkpoint: whether a reader may splice a state unchanged is
 decided by the state's exact model identity, which every native state carries.
 
 - **Tag.** A native state written by a model is in `native-state/<architecture>`,
-  e.g. `native-state/lfm2` or `native-state/lfm3`. A state written through a configured learned
-  semantic adapter (a compact `neuralese.semantic-state/1` message) is in
-  `semantic-state/<adapter SHA-256>`. A server declares its tag first in the
+  e.g. `native-state/lfm2` or `native-state/lfm3`. A server declares its tag first in the
   `dialects` of `/v1/neuralese/info`. Named tensor artifacts carry
   `native-tensor/<kind>` in store metadata; they are not soft values. The
   retired projected-vector tags (`nd:<name>@<version>`) name no current
@@ -25,25 +23,20 @@ decided by the state's exact model identity, which every native state carries.
   server's `/v1/neuralese/info`.
 - **Compatibility check.** Loading, passing or sending a soft value whose tag does
   not match an explicitly named dialect is rejected (`neuralese-dialect-mismatch`).
-  At a `DefaultDialect` slot, a native or semantic state of another tag is
-  accepted only when the reader declares a consumption mode that can take it
-  (`best-effort-text-retokenization`, or `learned-semantic-state-deltas` with
-  the matching adapter); otherwise it is rejected with
+  At a `DefaultDialect` slot, a native state of another tag is
+  accepted only when the reader declares `best-effort-text-retokenization`;
+  otherwise it is rejected with
   `neuralese-native-consumer-unavailable`. The value is then written again from
   its exact source with the reader's native writer, or converted with
   `convert(v, to)`. Values are never silently relabelled across dialects or
   identities.
 - **Changing models.** A changed checkpoint writes states with a new identity.
   States written by the old checkpoint stay valid for readers with that exact
-  identity; another reader needs explicit text re-encoding or a configured
-  learned semantic adapter.
-- **Adapters.** A model reads another model's state either by text
-  re-encoding (the reader discards the foreign tensors and tokenizes the stored
-  text itself; matching across tokenizers is best effort) or through a
-  configured learned semantic adapter that decodes shared per-token codes into
-  deltas for its own state (`learned-semantic-state-deltas`; a mismatch is
-  `neuralese-semantic-adapter-mismatch`). The shared-space semantic adapter is
-  a later training stage; none is trained yet.
+  identity; another reader needs explicit text re-encoding.
+- **Other models.** A model reads another model's state by text re-encoding:
+  the reader discards the foreign tensors and tokenizes the stored text itself
+  (matching across tokenizers is best effort). There is no cross-model learned
+  adapter (owner, 2026-10-28: no cross-model work for LFM3).
 - **Default.** `DefaultDialect` is bound by runtime configuration. In the
   TypeScript host it is the runtime's reader dialect: `neuralese.dialect` in the
   runtime options, else the write port's dialect (the two must agree), exposed

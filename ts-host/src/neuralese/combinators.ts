@@ -174,7 +174,7 @@ export async function loadStandardLibrary(bytes: Uint8Array, store?: NeuraleseSt
   }
   const emptyValue = exports.empty?.value as { $neuralese?: { id?: string } } | undefined;
   const emptyState = emptyValue?.$neuralese?.id;
-  if (!/^(native|semantic)-state\//.test(dialect) || !emptyState ||
+  if (!dialect.startsWith('native-state/') || !emptyState ||
       nativeStates.get(emptyState)?.tensors.token_ids?.shape[0] !== 0)
     throw new Error('neuralese-native-empty-unavailable: native libraries must archive their model-bound zero-token identity');
   return { dialect, width, bodies, ...(emptyState ? { emptyState } : {}), ...(textReadSource ? { textReadSource } : {}) };
@@ -287,7 +287,7 @@ export async function readNeuraleseForCurrentTask(value: unknown): Promise<unkno
 
 /** The content ID of the zero-length block of a library's dialect and width (the identity of `combine`). */
 function emptyId(library: StandardLibrary): string {
-  if (/^(native|semantic)-state\//.test(library.dialect)) {
+  if (library.dialect.startsWith('native-state/')) {
     if (!library.emptyState) throw new Error('neuralese-native-empty-unavailable: load the native library with its zero-token state');
     return library.emptyState;
   }

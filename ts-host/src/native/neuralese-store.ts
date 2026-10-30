@@ -44,9 +44,7 @@ export type NativeInvocationActorReceipt = { schema: 'natlang.native-invocation-
 export type NativeStateMetadata = { text: string; architecture: string;
   tokenizer_fingerprint: string; checkpoint_sha256: string; embedding_weight_sha256: string; layer_kinds: string[];
   adapter_binding?: NativeAdapterBinding; derivation?: NativeStateDerivation } &
-  ({ schema: 'neuralese.native-state/1' } | { schema: 'neuralese.semantic-state/1';
-    source_model: string; adapter_sha256: string; offsets: number[][]; posterior: 'mean';
-    offset_policy: 'exact-tokenizer-offsets' | 'actual-token-decoder-alignment' | 'actual-token-decoder-text-alignment' });
+  { schema: 'neuralese.native-state/1' };
 export type NativeStateArtifact = { id: string; metadata: NativeStateMetadata; tensors: Record<string, NativeStateTensor> };
 export type NativeTensorDtype = 'F16' | 'BF16' | 'F32' | 'F64';
 export type NativeTensorValue = { dtype: NativeTensorDtype; shape: number[]; data: Uint8Array };
@@ -71,8 +69,7 @@ export type NativeTensorArtifact = { id: string; metadata: NativeTensorArtifactM
 export function nativeStateBlockMeta(artifact: Pick<NativeStateArtifact, 'id' | 'metadata'> &
     { tensors: Record<string, Pick<NativeStateTensor, 'dtype' | 'shape'>> }): NeuraleseBlockMeta {
   const embeddings = artifact.tensors.embeddings!;
-  const dialect = artifact.metadata.schema === 'neuralese.semantic-state/1'
-    ? `semantic-state/${artifact.metadata.adapter_sha256}` : `native-state/${artifact.metadata.architecture}`;
+  const dialect = `native-state/${artifact.metadata.architecture}`;
   return { id: artifact.id, dialect,
     length: artifact.tensors.token_ids!.shape[0]!, width: embeddings.shape[1]!,
     native_state: { ...structuredClone(artifact.metadata), embedding_dtype: embeddings.dtype },
@@ -382,11 +379,10 @@ function validateNativeInvocationSourceNames(metadata: NativeTensorArtifactMetad
 }
 
 function validateNativeState(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): void {
-  if (!metadata || !['neuralese.native-state/1', 'neuralese.semantic-state/1'].includes(metadata.schema) || typeof metadata.text !== 'string' ||
+  if (!metadata || metadata.schema !== 'neuralese.native-state/1' || typeof metadata.text !== 'string' ||
       typeof metadata.architecture !== 'string' || !metadata.architecture ||
       !SHA256.test(metadata.tokenizer_fingerprint) || !SHA256.test(metadata.checkpoint_sha256) ||
-      !SHA256.test(metadata.embedding_weight_sha256) || !Array.isArray(metadata.layer_kinds) ||
-      (metadata.schema === 'neuralese.native-state/1' && !metadata.layer_kinds.length))
+      !SHA256.test(metadata.embedding_weight_sha256) || !Array.isArray(metadata.layer_kinds) || !metadata.layer_kinds.length)
     throw new RangeError('invalid native-state metadata');
   if (metadata.adapter_binding !== undefined) validateNativeAdapterBinding(metadata.adapter_binding, metadata);
   validateNativeStateDerivation(metadata.derivation);
@@ -429,18 +425,6 @@ function validateNativeState(metadata: NativeStateMetadata, tensors: Record<stri
     }
   };
   finite('embeddings', tensors.embeddings!);
-  if (metadata.schema === 'neuralese.semantic-state/1') {
-    if (metadata.layer_kinds.length || typeof metadata.source_model !== 'string' || !metadata.source_model ||
-        !SHA256.test(metadata.adapter_sha256) || metadata.posterior !== 'mean' ||
-        !['exact-tokenizer-offsets', 'actual-token-decoder-alignment', 'actual-token-decoder-text-alignment'].includes(metadata.offset_policy) ||
-        !Array.isArray(metadata.offsets) || metadata.offsets.length !== tokenShape[0] ||
-        metadata.offsets.some(pair => !Array.isArray(pair) || pair.length !== 2 ||
-          pair.some(value => !Number.isSafeInteger(value)) || pair[0]! < 0 || pair[1]! < pair[0]! || pair[1]! > [...metadata.text].length))
-      throw new RangeError('invalid semantic message metadata or source token offsets');
-    const codeShape = count('code', 2);
-    if (codeShape[0] !== tokenShape[0]) throw new RangeError('semantic message code token count differs');
-    expected.add('code'); finite('code', tensors.code!);
-  }
   for (let index = 0; index < metadata.layer_kinds.length; index++) {
     const kind = metadata.layer_kinds[index], prefix = `layers.${index}.`;
     if (kind === 'attention') {
@@ -656,7 +640,7 @@ export function decodeNativeState(bytes: Uint8Array): NativeStateArtifact {
   if (typeof metadataText !== 'string' || metaField !== undefined) throw new RangeError('missing canonical native-state metadata');
   const stored = JSON.parse(metadataText) as NativeStateMetadata & { id?: string };
   const { id, ...metadata } = stored;
-  if (!['neuralese.native-state/1', 'neuralese.semantic-state/1'].includes(metadata.schema) || typeof metadata.text !== 'string' ||
+  if (metadata.schema !== 'neuralese.native-state/1' || typeof metadata.text !== 'string' ||
       typeof metadata.architecture !== 'string' || !Array.isArray(metadata.layer_kinds))
     throw new RangeError('unsupported native state metadata');
   const payload = bytes.subarray(8 + headerSize);

@@ -48,19 +48,17 @@ declarations in [neuralese.d.ts](../neuralese.d.ts).
   `convert` writes a value again. `DefaultDialect` is bound by configuration: it
   is the runtime's reader dialect (`neuralese.dialect`, else the write port's;
   `NatlangRuntime.readerDialect()`). For a native server that is the first
-  dialect its `/v1/neuralese/info` declares: `native-state/<architecture>`, or
-  `semantic-state/<adapter SHA-256>` for a server with a configured semantic
-  adapter. `Neuralese<T>` and `Neuralese<T, "native-state/lfm3">` are one type in
+  dialect its `/v1/neuralese/info` declares: `native-state/<architecture>`.
+  `Neuralese<T>` and `Neuralese<T, "native-state/lfm3">` are one type in
   a runtime that reads `native-state/lfm3` (likewise `native-state/lfm2` for an
   LFM2 checkpoint). A text-only runtime leaves it unbound.
 - A block's stored dialect is checked wherever a value is coerced to a
   `Neuralese` type (call arguments, results, `let` variables, `read`). A block
   written in another dialect is rejected with `neuralese-dialect-mismatch`,
   naming both dialects, when the slot names an explicit dialect. At a
-  `DefaultDialect` slot, a native state from another native or semantic dialect
+  `DefaultDialect` slot, a native state from another native dialect
   is accepted only when the reader's `/v1/neuralese/info` declares a consumption
-  mode that can take it (`best-effort-text-retokenization`, or
-  `learned-semantic-state-deltas` with the matching adapter); otherwise the
+  mode that can take it (`best-effort-text-retokenization`); otherwise the
   value is rejected with `neuralese-native-consumer-unavailable`. A block whose
   dialect the runtime's store cannot tell without I/O (one it does not hold) is
   checked by its reference type only. Text at a `Neuralese<string, D>` slot
@@ -219,10 +217,6 @@ consumes a stored state in one of the modes its `/v1/neuralese/info` declares:
 - `same-base-adapter-state`: requested explicitly per state; raw state from
   another adapter actor on the exact same base is spliced with its source
   identity kept.
-- `learned-semantic-state-deltas`: a server configured with a learned semantic
-  adapter decodes the state's shared per-token codes into deltas for its own
-  state. A mismatch fails with `neuralese-semantic-adapter-mismatch`. No such
-  adapter is trained yet; the shared-space adapter is a later training stage.
 - `best-effort-text-retokenization`: the reader discards the foreign tensors
   and re-encodes the stored text with its own tokenizer. Matching across
   tokenizers is best effort, not exact state interchange.

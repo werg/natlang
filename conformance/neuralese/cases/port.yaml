@@ -48,7 +48,7 @@ cases:
     status: implemented
     implemented_by: tests/neuralese/test_native_serve.py
     spec: NEURALESE_PORT.md#consuming
-    given: 'A request naming a state whose checkpoint differs from the serving one, with no semantic adapter.'
+    given: 'A request naming a state whose checkpoint differs from the serving one.'
     expect: 'The import receipt has mode `best-effort-text-retokenization` and no `observed_native_state_id`; the stored tensors are not used.'
 
   - id: retired-request-fields

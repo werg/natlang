@@ -778,7 +778,7 @@ export class NativeToolAgent {
       for (const [promptIndex, raw] of capturedPrompt.prompt.entries()) {
         if (!raw || typeof raw !== 'object' || (raw as { kind?: unknown }).kind !== 'native_state') continue;
         const segment = raw as { id?: unknown; source_state_id?: unknown; source_occurrence?: unknown;
-          stop_gradient?: unknown; semantic_adaptation?: unknown };
+          stop_gradient?: unknown };
         if (typeof segment.id !== 'string' || !/^nzs1_[a-z2-7]{52}$/.test(segment.id) ||
             segment.source_state_id !== undefined && (typeof segment.source_state_id !== 'string' ||
               !/^nzs1_[a-z2-7]{52}$/.test(segment.source_state_id)) ||
@@ -786,8 +786,8 @@ export class NativeToolAgent {
             segment.stop_gradient !== undefined && segment.stop_gradient !== true)
           throw new Error('neuralese-native-grad-invalid: captured prompt has an invalid native-state occurrence');
         const sourceBlock = segment.source_state_id ?? segment.id;
-        if (sourceBlock !== segment.id && !segment.semantic_adaptation)
-          throw new Error('neuralese-native-grad-invalid: decoded native prompt lacks its differentiable adaptation receipt');
+        if (sourceBlock !== segment.id)
+          throw new Error('neuralese-native-grad-invalid: captured native input differs from its source state');
         const candidates = remaining.filter(read => read.block === sourceBlock && read.stop === (segment.stop_gradient === true) &&
           (segment.source_occurrence === undefined || read.source === segment.source_occurrence));
         if (candidates.length) {

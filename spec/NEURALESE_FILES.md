@@ -61,8 +61,7 @@ saved (`neuralese-live-capture-save`).
 - Loading checks every export against its declared type, as call boundaries do
   (`neuralese-file-type`), and the dialect of every referenced state against the
   export type's dialect when the type names one (`neuralese-dialect-mismatch`).
-  A native state's dialect is `native-state/<architecture>`, or
-  `semantic-state/<adapter SHA-256>` for a semantic state.
+  A native state's dialect is `native-state/<architecture>`.
 - An artifact whose ID does not match its content is rejected
   (`neuralese-block-integrity`).
 - Every dependency of a stored artifact (its adapter coefficients, the parent,
