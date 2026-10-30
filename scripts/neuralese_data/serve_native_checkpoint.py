@@ -178,6 +178,7 @@ def launch_sglang(engine, args, checkpoint):
                '--max-running-requests', str(args.sglang_max_running),
                '--max-mamba-cache-size', str(8 * args.sglang_max_running),
                '--cuda-graph-max-bs-decode', str(args.sglang_max_running),
+               '--incremental-streaming-output', '--stream-interval', '8',
                '--skip-tokenizer-init', '--trust-remote-code', *args.sglang_arg]
     print(json.dumps({'event': 'sglang_launch', 'command': command, 'export': manifest}), flush=True)
     # FlashInfer JIT-compiles kernels: the fork venv's ninja and the CUDA toolkit's nvcc on PATH.

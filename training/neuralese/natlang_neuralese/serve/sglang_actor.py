@@ -9,8 +9,8 @@ record per token, `<f4 sampled logp | <i4 ids[k] | <f2 logps[k]`; the fork's sam
 SGLang serves ordinary-token turns (rendered text, privileged text guidance), sampling or greedy, RL capture with
 behaviour top-k. The four role markers are banned there (logit bias -1e30) because the producer adapter and
 native-state import are not in the fork yet; the ban is recorded in every sample (`banned_token_ids`), so replay uses
-the same law. Every other request (imported native state, templated writes/decodes, guided generation, forced teacher
-replay, native adapters, streaming) runs on the native engine of the same checkpoint, exactly as
+the same law. Streamed requests stream SGLang's tokens as text deltas. Every other request (imported native state, templated
+writes/decodes, guided generation, forced teacher replay, native adapters) runs on the native engine of the same checkpoint, exactly as
 `serve_native_checkpoint.py` serves it without `--engine sglang`; that model is loaded only when such a turn first
 arrives. `/metrics` counts both paths.
 """
@@ -126,6 +126,7 @@ class SglangEngine(Engine):
             raise ValueError('HF export was made from another checkpoint')
         self.sglang_export = export_manifest
         self.sglang_requests = self.sglang_tokens = self.native_fallbacks = 0
+        self.native_fallback_reasons = {}
         self._sglang_lock = threading.Lock()
         binding = getattr(self, 'rl_policy_binding', None)
         if binding is not None:
@@ -138,7 +139,8 @@ class SglangEngine(Engine):
         return {**super().progress_metrics(), 'natlang_sglang_requests_total': self.sglang_requests,
                 'natlang_sglang_generated_tokens_total': self.sglang_tokens,
                 'natlang_native_fallback_requests_total': self.native_fallbacks,
-                'natlang_native_model_resident': int(self.__dict__.get('_native_model') is not None)}
+                'natlang_native_model_resident': int(self.__dict__.get('_native_model') is not None),
+                **self.native_fallback_reasons}
 
     def start(self):
         super().start()
@@ -156,17 +158,23 @@ class SglangEngine(Engine):
         # native_recording (the collector's graph recorder) only asks for the capture, which this path records.
         names = [name for name, value in (('template', request.template), ('guidance', request.guidance),
                  ('forced_message', request.forced_message), ('adapters', request.adapters),
-                 ('native_state_modes', request.native_state_modes), ('streaming', request.on_delta)) if value]
+                 ('native_state_modes', request.native_state_modes)) if value]
         names += sorted({f'prompt segment {kind}' for kind, _ in plan if kind not in ('tokens', 'privileged')})
         return ', '.join(names) or None
 
     def _routes_native(self, request, plan):
-        """Whether this request runs on the native engine (counted in /metrics)."""
-        native = bool(self.sglang_unsupported(request, plan)) or (request.privileged_context is not None and any(
-            kind == 'privileged_state' for kind, _ in self._guidance(request, plan)[1] or ()))
+        """Whether this request runs on the native engine (counted per reason in /metrics)."""
+        reason = self.sglang_unsupported(request, plan)
+        if reason is None and request.privileged_context is not None and any(
+                kind == 'privileged_state' for kind, _ in self._guidance(request, plan)[1] or ()):
+            reason = 'privileged state'
+        native = reason is not None
         if native:
             with self._sglang_lock:
                 self.native_fallbacks += 1
+                for name in reason.split(', '):
+                    key = 'natlang_native_fallback_reason_total{reason="%s"}' % name.replace(' ', '_')
+                    self.native_fallback_reasons[key] = self.native_fallback_reasons.get(key, 0) + 1
             if self.__dict__.get('_native_loader') is not None:
                 self._ensure_native()  # on the request thread, before the scheduler needs it
         return native
@@ -255,14 +263,40 @@ class SglangEngine(Engine):
                   'stop_token_ids': sorted(self.stop_ids), 'skip_special_tokens': False,
                   'no_stop_trim': True, 'logit_bias': {str(token): BAN_BIAS for token in self.sglang_banned},
                   'custom_params': {TOP_K_KEY: max(k, 1)}}
-        result = self._sglang_generate({'input_ids': ids, 'sampling_params': params, 'rid': request.request_id})
-        output = result.get('output_ids')
-        records = (result.get('meta_info') or {}).get(TOP_K_KEY)
+        body = {'input_ids': ids, 'sampling_params': params, 'rid': request.request_id}
+        state = {'index': 0, 'finish': 'length', 'done': False, 'text': ''}
+        if request.on_delta is None:
+            result = self._sglang_generate(body)
+            self._sglang_consume(seq, result.get('output_ids'), (result.get('meta_info') or {}).get(TOP_K_KEY),
+                                 k, sampling, state)
+        else:
+            # Streamed replies: SGLang sends incremental token chunks (--incremental-streaming-output); the text
+            # reaches the client as it is generated, the capture is completed from the same per-token records.
+            for chunk in self._sglang_stream(body):
+                if request.cancelled:
+                    raise RequestError('cancelled', 'the client went away')
+                self._sglang_consume(seq, chunk.get('output_ids'), (chunk.get('meta_info') or {}).get(TOP_K_KEY),
+                                     k, sampling, state)
+                if state['done']:
+                    break
+        with self._sglang_lock:
+            self.sglang_requests += 1
+            self.sglang_tokens += state['index']
+        if request.on_delta is not None:
+            self._sglang_emit(seq, state, final=True)
+        seq.finish_reason = state['finish']
+        seq.phase = 'done'
+        return self._native_response(seq)
+
+    def _sglang_consume(self, seq, output, records, k, sampling, state):
+        """Record SGLang's tokens and their per-token law records, exactly as the native engine records samples."""
         if not isinstance(output, list) or not isinstance(records, list) or len(records) != len(output):
             raise RequestError('sglang-actor-capture', 'SGLang returned no per-token natlang_top_k records')
-        finish = 'length'
-        for index, (token, record) in enumerate(zip(output, records)):
-            token = int(token)
+        for token, record in zip(output, records):
+            if state['done']:
+                raise RequestError('sglang-actor-capture', 'SGLang returned tokens after the stop token')
+            token, index = int(token), state['index']
+            state['index'] += 1
             if token in self.sglang_banned:
                 raise RequestError('sglang-actor-capture', f'SGLang sampled banned role marker {token}')
             logp, top_ids, top_logps = decode_record(record, k)
@@ -276,15 +310,40 @@ class SglangEngine(Engine):
                                        'logps': base64.b64encode(top_logps.astype('<f2').tobytes()).decode('ascii')}
                 seq.rl_samples.append(sample)
             if terminal:
-                finish = 'stop'
-                break
+                state['finish'], state['done'] = 'stop', True
+                continue
             seq.generated_positions += 1
             self._native_record_input(seq, token, producing=False, sample_index=index)
             seq.items.append(token)
             seq.native_item_positions.append(seq.native_own_position - 1)
-        with self._sglang_lock:
-            self.sglang_requests += 1
-            self.sglang_tokens += len(output)
-        seq.finish_reason = finish
-        seq.phase = 'done'
-        return self._native_response(seq)
+        if seq.request.on_delta is not None:
+            self._sglang_emit(seq, state)
+
+    def _sglang_emit(self, seq, state, final=False):
+        """Send the reply text decoded so far, holding back an incomplete UTF-8 tail until it completes."""
+        text = self.tokenizer.decode(seq.items, skip_special_tokens=False)
+        if not final:
+            text = text.rstrip('\ufffd')
+        if len(text) > len(state['text']) and text.startswith(state['text']):
+            seq.request.on_delta({'text': text[len(state['text']):]})
+            state['text'] = text
+
+    def _sglang_stream(self, body):
+        """SGLang /generate as a stream of incremental chunks."""
+        request = urllib.request.Request(self.sglang_url + '/generate', data=json.dumps({**body, 'stream': True}).encode(),
+                                         headers={'Content-Type': 'application/json'})
+        try:
+            with urllib.request.urlopen(request, timeout=3600) as response:
+                for line in response:
+                    line = line.strip()
+                    if not line.startswith(b'data:'):
+                        continue
+                    payload = line[5:].strip()
+                    if payload == b'[DONE]':
+                        return
+                    chunk = json.loads(payload)
+                    if 'error' in chunk:
+                        raise RequestError('sglang-actor-backend', f"SGLang stream error: {str(chunk['error'])[:400]}")
+                    yield chunk
+        except urllib.error.HTTPError as error:
+            raise RequestError('sglang-actor-backend', f'SGLang HTTP {error.code}: {error.read()[:400]!r}') from error

@@ -48,6 +48,7 @@ def test_privileged_text_guidance_is_captured_like_the_native_engine(tmp_path):
                                engine_class=SglangEngine)
     front.sglang_banned = sorted(front.role_tokens.ids)
     front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
+    front.native_fallback_reasons = {}
     request = {'schema': REQUEST_SCHEMA, 'invocation': {'name': 'run-1', 'role': 'root'}, 'mode': 'text',
                'custody': {'schema': 'natlang.jolt-privileged-custody/1', 'case_id': 'c', 'split': 'train',
                            'world_sha256': 'd' * 64, 'protected_sha256': 'c' * 64},
@@ -65,3 +66,31 @@ def test_privileged_text_guidance_is_captured_like_the_native_engine(tmp_path):
     assert actual['prompt'] == expected['prompt'] and actual['privileged'] == expected['privileged']
     assert captured_block({'graph_turn': 'run-1#turn1', 'sampling': actual}).insert_at == expected['privileged']['insert_at']
     assert [s['token_id'] for s in actual['samples']] == sampled and actual['finish_reason'] == expected['finish_reason']
+
+
+def test_streamed_reply_matches_whole_reply(tmp_path):
+    """The collector streams: deltas concatenate to the reply text, and the capture equals the non-streamed one."""
+    import threading
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.serve import load_native_engine
+    native = engine_fixture(tmp_path, 'lfm')
+    front = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', dtype=native.backbone.embedding_weight.dtype,
+                               engine_class=SglangEngine)
+    front.sglang_banned = sorted(front.role_tokens.ids)
+    front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
+    front.native_fallback_reasons = {}
+    words = front.tokenizer('t4 t5 t6 t7 t8', add_special_tokens=False)['input_ids']
+    tokens = list(words) + [sorted(front.stop_ids)[0]]
+    records = [record(-0.5, [t, t + 1], [-0.5, -1.5]) for t in tokens]
+    front._sglang_generate = lambda body: {'output_ids': tokens, 'meta_info': {'natlang_top_k': records}}
+    front._sglang_stream = lambda body: iter([{'output_ids': tokens[i:i + 2], 'meta_info': {'natlang_top_k': records[i:i + 2]}}
+                                              for i in range(0, len(tokens), 2)])
+    messages = [{'role': 'user', 'content': 't4 t5'}]
+    make = lambda **extra: GenerationRequest(messages=messages, temperature=1.0, max_tokens=16, rl_capture=True,
+                                             rl_top_k=2, native_recording=True, request_id='r', seed=1, **extra)
+    whole = front.generate(make())
+    deltas = []
+    streamed = front.generate(make(on_delta=deltas.append))
+    assert ''.join(d['text'] for d in deltas) == front.tokenizer.decode(words, skip_special_tokens=False)
+    assert streamed['x_natlang_rl_capture'] == whole['x_natlang_rl_capture']
+    assert front.sglang_requests == 2 and front.native_fallbacks == 0
