@@ -51,7 +51,7 @@ one repository revision and checked by size and SHA-256 (Q4_K_M, Q5_K_M, Q6_K, Q
 with `"local": { "stock": "lfm3-1.7b-q4_k_m" }`, and `natlang setup` downloads the selected one. Their chat template is
 the GGUF's own, extracted verbatim to `models/templates/LFM3-1.7B.jinja`, and they are served greedily with reasoning
 kept in the history (the settings of the base evaluation). LFM3 needs llama.cpp build 11938 or later; the managed
-runtime is natlang's fork release natlang-b12068 (llama.cpp 0.8.0). An explicitly chosen older build
+runtime is natlang's fork release natlang-b12069 (llama.cpp 0.8.0). An explicitly chosen older build
 (`NATLANG_LLAMA_SERVER`, `local.server`) still runs, with a warning.
 
 The browser default (`ts-host/src/model-default.ts`, `BROWSER_MODEL_RELEASE`) stays the published LFM2.5 export:

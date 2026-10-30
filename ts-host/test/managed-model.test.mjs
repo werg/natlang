@@ -25,7 +25,7 @@ test('managed model startup can be prepared eagerly and its child is closed with
   const template = join(root, 'template.jinja');
   writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12068, commit 089699831)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12069, commit a0c92ce36)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
 fs.appendFileSync(${JSON.stringify(marker)}, 'started\\n');
@@ -67,7 +67,7 @@ test('a host can grant managed runtime installation at the first semantic turn',
   const template = join(root, 'template.jinja');
   writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12068, commit 089699831)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12069, commit a0c92ce36)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
 fs.appendFileSync(${JSON.stringify(marker)}, 'started\\n');
@@ -104,7 +104,7 @@ test('tuned soft states load as native state spans and requests carry them as na
     const executable = join(root, 'fake-llama-server'), log = join(root, 'log'), model = join(root, 'model.gguf'), template = join(root, 'template.jinja');
     writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
     writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12068, commit 089699831)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12069, commit a0c92ce36)'); process.exit(0); }
 if (process.argv.includes('--help')) { console.log(${JSON.stringify(supports ? '--lora-per-sequence\n--native-state FNAME' : '--lora')}); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
@@ -146,7 +146,7 @@ test('a managed session uses a server another process keeps loaded for the same 
   const executable = join(root, 'fake-llama-server'), model = join(root, 'model.gguf'), started = join(root, 'started');
   writeFileSync(model, 'fixture weights');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12068, commit 089699831)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12069, commit a0c92ce36)'); process.exit(0); }
 require('node:fs').writeFileSync(${JSON.stringify(started)}, 'spawned');
 `);
   chmodSync(executable, 0o755);
@@ -159,12 +159,12 @@ require('node:fs').writeFileSync(${JSON.stringify(started)}, 'spawned');
     const environment = { ...process.env, NATLANG_LLAMA_SERVER: executable, NATLANG_MODEL_PATH: model, NATLANG_STATE_HOME: join(root, 'state'),
       NATLANG_CACHE_HOME: join(root, 'cache'), NATLANG_MODEL_START_TIMEOUT_MS: '3000' };
     publishSharedServer({ pid: kept.pid, endpoint: `http://127.0.0.1:${port}`, modelSha256: createHash('sha256').update('fixture weights').digest('hex'),
-      runtimeBuild: 12068, runtime: 'b12068g0896998', slots: 3, contextPerSlot: 8192, model: 'fixture', profile: 'default', startedAt: new Date().toISOString(), warm: false }, environment);
+      runtimeBuild: 12069, runtime: 'b12069ga0c92ce', slots: 3, contextPerSlot: 8192, model: 'fixture', profile: 'default', startedAt: new Date().toISOString(), warm: false }, environment);
     // a binary of the same build number from another commit (every fork build reports build 1) does not match
     const { findSharedServer } = await import('../dist/model/shared-server.js');
     const sha = createHash('sha256').update('fixture weights').digest('hex');
-    assert.equal(await findSharedServer(sha, 'b12068g0000000', environment), undefined);
-    assert.equal((await findSharedServer(sha, 'b12068g0896998', environment))?.endpoint, `http://127.0.0.1:${port}`);
+    assert.equal(await findSharedServer(sha, 'b12069g0000000', environment), undefined);
+    assert.equal((await findSharedServer(sha, 'b12069ga0c92ce', environment))?.endpoint, `http://127.0.0.1:${port}`);
     const session = createManagedModelSession({}, environment, { write: () => true });
     const result = await session.turn({ messages: [], tools: [], temperature: 0, seed: 1, max_tokens: 4 });
     assert.equal(result.text, 'shared');
