@@ -12,7 +12,7 @@ async function api(method, path, body, signal) {
   const response = await fetch(path, { method, headers: { 'x-natlang-token': TOKEN, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), ...(signal ? { signal } : {}) });
   const value = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(messageSummary(value.error) || `The request failed (${response.status}).`);
+  if (!response.ok) throw Object.assign(new Error(messageSummary(value.error) || `The request failed (${response.status}).`), { status: response.status });
   return value;
 }
 const get = (path, signal) => api('GET', path, undefined, signal);
@@ -37,6 +37,9 @@ function toast(text, error = false) {
   element.textContent = messageSummary(text); element.className = error ? 'error' : ''; element.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { element.hidden = true; }, error ? 7000 : 3500);
 }
+/** An empty state that says what is missing and offers the next step as links. */
+const emptyState = (text, ...actions) => h('div', { class: 'empty' }, h('p', {}, text),
+  actions.length ? h('div', { class: 'row' }, actions.map(([label, href, primary]) => h('a', { class: `button${primary ? ' primary' : ''}`, href }, label))) : null);
 const attempt = fn => async (...args) => { try { return await fn(...args); } catch (error) { toast(error.message, true); } };
 const bytes = n => n == null ? '–' : n >= 2 ** 30 ? `${(n / 2 ** 30).toFixed(1)} GB` : n >= 2 ** 20 ? `${(n / 2 ** 20).toFixed(0)} MB` : `${Math.round(n / 1024)} KB`;
 const ms = n => n == null ? '–' : n >= 60000 ? `${Math.floor(n / 60000)}m ${Math.round(n / 1000) % 60}s` : n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${n} ms`;
@@ -144,13 +147,13 @@ async function overview(_arg, target) {
     await keptModelPanel(),
     h('div', { class: 'grid', style: 'grid-template-columns: repeat(auto-fit, minmax(360px, 1fr))' },
       h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Recent runs'), h('a', { href: '#runs' }, 'All runs')),
-        jobs.length ? jobTable(jobs.slice(0, 8)) : h('div', { class: 'empty' }, 'No runs yet. Start one from Programs or the Playground.')),
+        jobs.length ? jobTable(jobs.slice(0, 8)) : emptyState('No runs yet. Run a program, or try an instruction in the Playground.', ['Open Programs', '#programs', true], ['Open Playground', '#playground'])),
       h('section', { class: 'panel' }, h('h2', {}, 'Busiest functions'),
         hot.length ? h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Function'), h('th', { class: 'num' }, 'Calls'), h('th', { class: 'num' }, 'Crisp'), h('th', { class: 'num' }, 'Tokens'))),
           h('tbody', {}, hot.slice(0, 8).map(row => h('tr', { class: 'click', onclick: () => go(`traces-${encodeURIComponent(row.definition_name)}`) },
             h('td', {}, row.definition_name, h('div', { class: 'small muted' }, row.definition_source ?? '')), h('td', { class: 'num' }, row.calls),
             h('td', { class: 'num' }, row.crisp_calls), h('td', { class: 'num' }, tokens(row.tokens))))))) :
-          h('div', { class: 'empty' }, 'No recorded calls yet.'))));
+          emptyState(status.calls ? 'No recorded calls yet. Every run records its function calls here.' : 'Call recording is off on this machine, so there is nothing to rank.'))));
 }
 /** The model the dashboard keeps loaded for every natlang command on this machine (one server, warm slots, no load time). */
 async function keptModelPanel() {
@@ -199,7 +202,7 @@ async function runs(id, target) {
   const list = h('div', { class: 'list scroll' });
   const drawList = rows => fill(list, rows.length ? rows.map(job => h('button', { class: `item${job.id === selected ? ' selected' : ''}`, onclick: () => go(`runs-${job.id}`) },
     h('div', { class: 'title' }, h('span', { class: 'mono' }, jobLabel(job)), pill(job.status)),
-    h('div', { class: 'desc' }, `${job.kind} · ${ago(job.startedAt)}`))) : h('div', { class: 'empty' }, 'No runs yet. Start one from Programs or the Playground.'));
+    h('div', { class: 'desc' }, `${job.kind} · ${ago(job.startedAt)}`))) : emptyState('No runs yet. Run a program, or try an instruction in the Playground.', ['Open Programs', '#programs', true], ['Open Playground', '#playground']));
   drawList(jobs);
   const updateJob = event => { const index = jobs.findIndex(job => job.id === event.detail.id); if (index >= 0) { jobs[index] = event.detail; drawList(jobs); } };
   document.addEventListener('natlang-job-update', updateJob); cleanup.push(() => document.removeEventListener('natlang-job-update', updateJob));
@@ -317,7 +320,7 @@ async function programs(path, target) {
   const list = await get('/api/programs');
   const selected = path ? decodeURIComponent(path) : list[0]?.directory;
   const detail = h('div', { class: 'stack' });
-  const search = h('input', { id: 'program-search', type: 'search', placeholder: `Filter ${list.length} programs`, style: 'width: 100%' });
+  const search = h('input', { id: 'program-search', type: 'search', placeholder: list.length === 1 ? 'Filter programs' : `Filter ${list.length} programs`, 'aria-label': 'Filter programs', style: 'width: 100%' });
   const listBox = h('div', { class: 'list scroll' });
   fill(target, header('Programs', 'Choose a program and run it with sample input, or create your own.',
     h('button', { onclick: openProgramDialog }, 'Open program'), h('button', { class: 'primary', onclick: () => programDialog() }, 'Create program')),
@@ -328,7 +331,7 @@ async function programs(path, target) {
     fill(listBox, shown.length ? shown.map(item => h('button', { class: `item${item.directory === selected ? ' selected' : ''}`, onclick: () => go(`programs-${encodeURIComponent(item.directory)}`) },
       h('div', { class: 'title' }, h('span', {}, item.name), item.warm ? pill('warm', 'ok') : item.targets.length ? null : pill('functions', 'idle')),
       h('div', { class: 'small muted mono' }, item.directory), h('div', { class: 'desc' }, item.description))) :
-      h('div', { class: 'empty' }, list.length ? 'No program matches.' : 'No programs yet. Create a program above, or open a directory containing natlang.json.'));
+      list.length ? h('div', { class: 'empty' }, 'No program matches.') : emptyState('No programs yet. Create one, or open a directory containing natlang.json.'));
   };
   search.addEventListener('input', draw); draw();
   if (selected) await programDetail(selected, detail);
@@ -486,26 +489,29 @@ async function traces(arg, target) {
   if (arg.startsWith('call-')) callId = decodeURIComponent(arg.slice(5));
   else if (arg.startsWith('program-')) program = decodeURIComponent(arg.slice(8));
   else if (arg) definition = decodeURIComponent(arg);
-  const filters = { definition: h('input', { id: 'f-definition', placeholder: 'function', value: definition }),
-    outcome: h('select', { id: 'f-outcome' }, ['', 'done', 'failed', 'quiesced', 'running', 'interrupted'].map(value => h('option', { value }, value || 'any outcome'))),
-    program: h('input', { id: 'f-program', placeholder: 'program directory', value: program }) };
+  const filters = { definition: h('input', { id: 'f-definition', placeholder: 'Function name', 'aria-label': 'Function name', type: 'search', value: definition }),
+    outcome: h('select', { id: 'f-outcome', 'aria-label': 'Outcome' }, ['', 'done', 'failed', 'quiesced', 'running', 'interrupted'].map(value => h('option', { value }, value || 'any outcome'))),
+    program: h('input', { id: 'f-program', placeholder: 'Program directory', 'aria-label': 'Program directory', type: 'search', value: program }) };
   const table = h('div', { class: 'table-wrap' }), detail = h('div', { class: 'stack' });
+  let recordingOff = false;
   const load = attempt(async () => {
     const query = new URLSearchParams(Object.entries({ definition: filters.definition.value, outcome: filters.outcome.value, program: filters.program.value, limit: '150' }).filter(([, v]) => v));
-    const rows = await get(`/api/traces?${query}`);
+    const rows = await get(`/api/traces?${query}`).catch(error => { if (error.status !== 409) throw error; recordingOff = true; return null; });
+    if (!rows) { fill(table, emptyState('Call recording is off on this machine (NATLANG_CALL_STORE=off), so there are no traces to show. Unset it and restart the dashboard to record every call.')); return; }
+    const filtered = Object.values(filters).some(field => field.value);
     fill(table, rows.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Function'), h('th', {}, 'Outcome'), h('th', {}, 'Executor'), h('th', {}, 'Started'), h('th', { class: 'num' }, 'Time'), h('th', { class: 'num' }, 'Tokens'))),
       h('tbody', {}, rows.map(row => h('tr', { class: `click${row.call_id === callId ? ' selected' : ''}`, onclick: () => { callId = row.call_id; traceDetail(row.call_id, detail); } },
         h('td', {}, row.definition_name, row.parent_call_id ? h('span', { class: 'small muted' }, ' · child') : null, h('div', { class: 'small muted' }, row.definition_source ?? '')),
         h('td', {}, pill(row.outcome)), h('td', {}, row.executor), h('td', {}, ago(row.started_at)), h('td', { class: 'num' }, ms(row.wall_ms)),
-        h('td', { class: 'num' }, `${tokens(row.tokens_in)} + ${tokens(row.tokens_out)}`))))) : h('div', { class: 'empty' }, 'No recorded calls match.'));
+        h('td', { class: 'num' }, `${tokens(row.tokens_in)} + ${tokens(row.tokens_out)}`))))) : filtered ? h('div', { class: 'empty' }, 'No recorded calls match these filters.') : emptyState('No recorded calls yet. Run a program and its calls appear here.', ['Open Programs', '#programs', true]));
   });
   for (const field of Object.values(filters)) field.addEventListener('change', load);
   fill(target, header('Traces', 'Understand a call: its inputs, result, steps, and corrections.'),
-    h('div', { class: 'row' }, filters.definition, filters.outcome, filters.program, h('button', { onclick: load }, 'Filter')),
+    h('div', { class: 'row' }, filters.definition, filters.outcome, filters.program, h('button', { onclick: load }, 'Apply filters'), h('button', { class: 'ghost', onclick: () => { for (const field of Object.values(filters)) field.value = ''; load(); } }, 'Clear')),
     h('div', { class: 'split', style: 'grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr)' }, h('section', { class: 'panel' }, table), detail));
   await load();
   if (callId) await traceDetail(callId, detail);
-  else fill(detail, h('div', { class: 'panel empty' }, 'Select a call to see its execution.'));
+  else if (!recordingOff) fill(detail, h('div', { class: 'panel empty' }, 'Select a call on the left to see its inputs, steps and result.'));
 }
 
 async function traceDetail(id, container) {
@@ -566,13 +572,15 @@ async function playground(_arg, target) {
   const input = h('textarea', { id: 'pg-input', rows: 7 }, 'Hi team, the March invoice run failed for 14 customers because the payment provider rotated its API key. Ops rotated our copy at 10:40. Please re-run billing for those accounts today and email them an apology.');
   const returns = h('input', { id: 'pg-returns', placeholder: 'string', value: '{ summary: string; actions: string[] }' });
   const profile = await profileSelect('pg-profile');
+  const run = h('button', { class: 'primary', title: 'Ctrl+Enter', onclick: () => startJob({ kind: 'ask', instruction: instruction.value, input: input.value,
+    returns: returns.value.trim() || undefined, profile: profile.value || undefined }) }, 'Run');
+  for (const field of [instruction, input, returns]) field.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); run.click(); } });
   fill(target, header('Playground', 'Try an instruction with example input, follow its execution, and save it as a program.'),
     h('section', { class: 'panel' },
       h('label', { class: 'field' }, 'Instruction', instruction), h('label', { class: 'field' }, 'Input (passed as the call\'s input)', input),
       h('div', { class: 'row' }, h('label', { class: 'field', style: 'flex: 1' }, 'Result type (TypeScript)', returns), h('label', { class: 'field' }, 'Model profile', profile)),
-      h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => startJob({ kind: 'ask', instruction: instruction.value, input: input.value,
-        returns: returns.value.trim() || undefined, profile: profile.value || undefined }) }, 'Run'),
-        h('button', { onclick: () => programDialog({ instruction: instruction.value, input: input.value, returns: returns.value.trim() || 'string', profile: profile.value || undefined }) }, 'Save as program'))));
+      h('div', { class: 'row' }, run,
+        h('button', { onclick: () => programDialog({ instruction: instruction.value, input: input.value, returns: returns.value.trim() || 'string', profile: profile.value || undefined }) }, 'Save as program'), h('span', { class: 'small muted' }, 'Ctrl+Enter runs from any field.'))));
 }
 
 // ---- models ---------------------------------------------------------------------------------------------------------

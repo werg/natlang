@@ -367,3 +367,8 @@ button.choice.primary .small { color: inherit; opacity: 0.85; }
 tr.connected td:first-child strong { color: var(--accent); }
 tr.flash { animation: row-flash 1.6s ease-out; }
 @keyframes row-flash { from { background: var(--info-soft); } }
+/* Empty states: say what is missing, then offer the next step. */
+.empty p { margin: 0; max-width: 64ch; }
+.empty .row { margin-top: 12px; }
+a.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+a.button:hover { border-color: var(--muted); }
