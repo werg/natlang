@@ -58,13 +58,29 @@ Every role-exchange function short-circuits when a plan has no `role_exchange`. 
 - `train/native_semantic_stage.py`: source-host role snapshots and snapshot adoption raise.
 - `scripts/coreweave/provider_dependencies.py`: `snapshot_adoption` raises.
 
+## Removed on main, 2026-10-30
+
+| Family | Commit | What | Kept, and why |
+|---|---|---|---|
+| Mellum/Maple model line | e1d402987, 8c6e14a39 | `maple/{student,nested_train,maple_port,distill_data,generation_gate,qat_export,qat_convert}.py`, `train/{joint,joint_kd,drift_monitor}.py`, the Maple causal LM and loaders in `maple/model.py`, the Maple QAT-LoRA family (`maple/ternary.py`, `train/adapters.py`, the `qat` backbone policy, `shared_parametrized_weights`), Mellum dispatch in `native_model`/`native_backbone_restore`, quantization's Preserve/Behaviour gate, init gate, `gate_columns`, `precision_verdict`, `multi_precision_backward`, `layer_sensitivity` and the retired `STAGE_KINDS`; Mellum tests, `maple_reference/` and `mellum` test parametrizations | `mellum21` stays in `line_backbones` as HISTORICAL (two-view rows, receipts and tranche admission still validate; `current_key('mellum')` reports the line retired). Shared primitives stay in `maple/`: config, RMS norm, MoE experts and kernels, precision points. Moving them out of `maple/` is a rename for later. |
+| Memetic teacher ferry | a29d453ab | `common/memetic_teacher_ferry.py` with its deployments JSON, `scripts/coreweave/memetic_teacher_ferry.py`, its tests and `MEMETIC_TEACHER_FERRY_20261023.md` | Guidance authoring migrated: the author is a served native endpoint, by default the student itself (`--author` defaults to `--server`), with provenance schema /2 and request/response hashes. Model-facing debt recorded in `plans/MODEL_FACING_CHANGES.md`. |
+| Old foundation leftovers | 6992f4216 | `model/causal_feedback.py` and 2 tests; the four `native-state-production-*-20261015-v1` LFM2.5 recipes; QAD probes `scripts/neuralese_data/{admit_qad_recovery_s52052,qad_hf_port_parity,qad_sampled_control_probe}.py`; `plans/neuralese/IMPLEMENTATION_BACKLOG.md` | The LFM2.5 local recovery binds its own `continuation-v1/recipe.json`, not these recipes. |
+
+Still kept after this pass:
+
+- `luna-neuralese-direct-lfm-base-20261011-v8.json`: registered as held corpus
+  `luna-neuralese-direct-lfm-base-v8-recipe-source-held-20261011-v1` (protected identity).
+- The pre-Neuralese LoRA pipeline (`scripts/train_lora.py`, `to_gguf.sh`, `train_and_publish_browser.sh`, ...):
+  `ts-host/scripts/playground-jobs.mjs` still runs its `train` and `gguf` jobs for the browser playground.
+- `eval/task_cadence.py`: live in production RL, native SFT and the async evaluator.
+- Dead `family == 'mellum'` branches inside tests whose parametrizations no longer include Mellum; remove them when
+  those tests are next edited.
+
 ## Deferred: inside an active area (inventory only)
 
 | Item | Callers | Decision |
 |---|---|---|
 | Cross-model semantic VAE family: `model/semantic_vae.py`, `semantic_channel.py`, `semantic_message.py`, `train/native_semantic*.py`, `eval/native_semantic_runtime.py`, `rl/native_semantic_{replay,route}.py`, the `train/native_readiness.py` shared-stage controller loop (it launches only when two or more participants are ready), recipe `HANDLERS` `native_shared_stage_controller` and `native_semantic_training`, recipe `native-state-semantic-curriculum-rest27-foundation-20261015-v1.json`, `scripts/neuralese_data/{qualify_native_joint_cuda,assemble_native_semantic_pair_union}.py`, about 15 `tests/neuralese/*semantic*` files. About 5.9k package lines. | `rl/native_rounds.py` refresh_job, `rl/production.py`, `serve/engine.py`, `serve/http.py`, `serve/native_guidance.py`, `train/recipe.py`, `train/native_capacity_continuation.py`, `train/native_state_sft.py` (`foundation_qualification_request`, `on-shared-request` policy), `rl/local_cycles.py` (`semantic_adapter`, `bind_state_semantic_route`, `publish_semantic_supervised`), and the converters' `semantic-pairs` sources | Remove after the RL, serving, LFM3-port and defaults-audit work lands. Next family to take. |
-| `common/memetic_teacher_ferry.py` and `scripts/coreweave/memetic_teacher_ferry.py` (Qwen teacher relay for guidance authoring) | `rl/memetic_program.py`, `rl/memetic_task_runner.py` | Teacher generation is retired. Move guidance authoring to the LFM3 policy (JOLT+ privileged teacher), then remove. RL area. |
-| `model/causal_feedback.py` (raw next-token embedding bootstrap from the old foundation) and its 2 tests | Tests only | Remove after the LFM3 port lands (model area) |
 | `train/quantization.py` `STAGE_KINDS` (`core_text_warmup`, `raw_recurrence_training`, `neuralese_direct`) and `maple/family.py` `neuralese_direct` check | QAT component | Remove when QAT is wired to the LFM3 joint stage (stable-softmax and QAT area) |
 | LFM2.5-only paths: `model/lfm2_port.py`, LFM2 branches in `isolated_sequence`, `native_decode_batch`, `serve/batch.py`, `data/render.py`, `lfm25` keys in scripts (see `plans/neuralese/LFM3_PORT_INVENTORY_20261028.md`) | Port in progress; the LFM2.5 step-41022 recovery checkpoint reader | Decide after the port. Keep the minimal reader only if a current consumer needs step 41022. |
 | `scripts/build_neuralese_gold_text_delta.py`, `assemble_admitted_neuralese_cohort.py`, `audit_neuralese_recurrence.py`, `audit_observed_neuralese_outputs.py`, `assemble_neuralese_recurrence.py` | `scripts/neuralese_data/render_native_turn_corpus.py`, `build_native_turn_union.py` (live render units) | Data-conversion area. Fold the reader helpers into `neuralese_data`, then remove. |
