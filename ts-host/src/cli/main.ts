@@ -116,7 +116,7 @@ Options:
   --state DIRECTORY   Override durable application state.
   --traces DIRECTORY  Override application trace storage.
   --profile NAME      Select a model profile.
-  --provider ID       Override the profile's Pi provider.
+  --provider ID       Override the profile's Pi provider (its newest Luna or Haiku model unless --model).
   --model ID          Override the profile's model ID.
   --store DIR         Package store for installed applications.
   --plain             Disable interactive terminal formatting.
@@ -254,7 +254,8 @@ it ahead of time. See docs/NATIVE_MODELS.md.`;
   natlang auth status [--json]
   natlang auth logout PROVIDER
 
-API-key providers can also use their documented environment variables.`;
+API-key providers can also use their documented environment variables.
+natlang dashboard → Models connects providers (subscription sign-in or API key) from the browser.`;
   if (topic === 'doctor') return `Check the natlang installation and model configuration:
   natlang doctor [--profile NAME] [--provider ID] [--model ID] [--program DIR] [--store DIR] [--json]
 Reports the profile's native checkpoint (step, newer checkpoints, actor view, whether its server is running), the
@@ -956,6 +957,23 @@ async function authCommand(parsed: Parsed, words: string[]): Promise<number> {
   return 0;
 }
 
+/**
+ * `--provider ID` without `--model` runs the provider's recommended model (the newest Luna or Haiku it serves,
+ * model/provider-recommendations.ts) unless the selected profile already names a model of that provider.
+ */
+async function defaultProviderModel(parsed: Parsed): Promise<void> {
+  const provider = option(parsed, '--provider');
+  if (!provider || parsed.options.has('--model') || process.env.NATLANG_MODEL) return;
+  const config = readConfigFile();
+  const profile = config.profiles?.[option(parsed, '--profile') ?? process.env.NATLANG_PROFILE ?? config.defaultProfile ?? 'default'];
+  if (profile?.provider === provider && profile.model) return;
+  const { piModels } = await import('../model/pi-provider.js');
+  const { recommendedProviderModel } = await import('../model/provider-recommendations.js');
+  const ids = piModels().getModels(provider).map(item => item.id);
+  const model = recommendedProviderModel(provider, ids).model ?? ids[0];
+  if (model) parsed.options.set('--model', model);
+}
+
 async function modelsCommand(parsed: Parsed, provider?: string): Promise<number> {
   acceptOptions(parsed, ['--json', '--refresh']); noTrailingArguments(parsed);
   const { piModels } = await import('../model/pi-provider.js');
@@ -973,7 +991,10 @@ async function modelsCommand(parsed: Parsed, provider?: string): Promise<number>
     return 0;
   }
   const rows = models.getModels(provider);
-  output(parsed.options.has('--json') ? rows : rows.map(row => `${row.id}\t${row.name}`).join('\n'),
+  const { recommendedProviderModel } = await import('../model/provider-recommendations.js');
+  const recommended = recommendedProviderModel(provider, rows.map(row => row.id)).model;
+  output(parsed.options.has('--json') ? rows.map(row => ({ ...row, recommended: row.id === recommended })) :
+    rows.map(row => `${row.id}\t${row.name}${row.id === recommended ? '\t(default for --provider)' : ''}`).join('\n'),
     parsed.options.has('--json'));
   return 0;
 }
@@ -986,6 +1007,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv[0] === 'compilations') return (await import('./calls.js')).compilationsCommand(argv.slice(1));
   if (argv[0] === 'specialize') return main((await import('./calls.js')).specializeArguments(argv.slice(1)));
   const parsed = parseArgs(argv);
+  await defaultProviderModel(parsed);
   const json = parsed.options.has('--json');
   const [command, ...words] = parsed.words;
   if (parsed.options.has('--version')) { output(NATLANG_CLI_VERSION, false); return 0; }

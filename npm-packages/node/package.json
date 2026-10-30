@@ -10,7 +10,7 @@
     "prepack": "npm --prefix ../../ts-host run build && node ../../scripts/check-staged-package.mjs dist"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.87.1",
+    "@earendil-works/pi-ai": "^1.4.0",
     "@noble/hashes": "^2.4.0",
     "@types/node": "^24.0.0",
     "fflate": "^0.8.3",

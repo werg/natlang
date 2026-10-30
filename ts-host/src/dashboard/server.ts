@@ -17,6 +17,7 @@ import { programFunctions, readProgramManifest } from '../cli/build-lock.js';
 import { createProgram, readExamples, saveExample, type SavedExample } from '../cli/authoring.js';
 import { currentRelease } from '../adaptation/weights/release.js';
 import { loadModelConfiguration, resolveModelChoice, type ModelProfile } from '../model/config.js';
+import { recommendedProviderModel } from '../model/provider-recommendations.js';
 import { DEFAULT_LOCAL_MODEL, STOCK_MODELS, stockModel, type LocalModelRelease } from '../model-catalog.js';
 import { createResolvedModelSession, ensureStockModel, managedModelSha256, profileEnvironment, stockModelDownload, stockModelPath, localModelPrerequisites, supportsNativeStates, warmTag,
   type ManagedModelSession } from '../model/local-server.js';
@@ -218,15 +219,90 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     }).then(() => { state.done = true; state.received = state.total; }, error => { state.error = (error as Error).message; });
     return { started: true, download: state };
   });
+  // Providers come from Pi's catalog. Connection status is what a request would use (a stored key or subscription, or
+  // the provider's documented environment variables); the recommended model is the newest Luna or Haiku it serves.
   route('GET', '/api/providers', async () => {
-    const module = await pi(), models = module.piModels(environment), stored = new Set((await module.piCredentials(environment).list()).map(item => item.providerId));
-    return models.getProviders().map(item => ({ id: item.id, name: item.name, credential: stored.has(item.id) }));
+    const module = await pi(), models = module.piModels(environment), stored = new Map((await module.piCredentials(environment).list()).map(item => [item.providerId, item.type]));
+    return Promise.all(models.getProviders().map(async item => {
+      let connected: { type: string; source: string | null } | null = null, problem: string | null = null;
+      try { const check = await models.checkAuth(item.id); if (check) connected = { type: check.type, source: check.source ?? null }; }
+      catch (error) { problem = (error as Error).message; }
+      const oauth = item.auth.oauth;
+      return { id: item.id, name: item.name, stored: stored.get(item.id) ?? null, connected, problem,
+        apiKey: item.auth.apiKey ? { name: item.auth.apiKey.name, prompts: Boolean(item.auth.apiKey.login) } : null,
+        oauth: oauth ? { name: oauth.name, subscription: oauth.isSubscription ?? false, label: oauth.loginLabel ?? null } : null,
+        models: item.getModels().length, recommended: recommendedProviderModel(item.id, item.getModels().map(model => model.id)) };
+    }));
   });
-  route('GET', '/api/providers/:id/models', async (_request, params) => {
+  route('GET', '/api/providers/:id/models', async (_request, params, query) => {
     const models = (await pi()).piModels(environment), id = decodeURIComponent(params.id!);
     if (!models.getProvider(id)) throw new HttpError(404, `unknown provider ${id}`);
-    return models.getModels(id).map(item => ({ id: item.id, name: item.name, reasoning: (item as { reasoning?: boolean }).reasoning ?? null,
-      contextWindow: (item as { contextWindow?: number }).contextWindow ?? null }));
+    if (query.get('refresh')) {
+      const refreshed = await models.refresh({ force: true, providers: [id] }), failure = refreshed.errors.get(id);
+      if (failure) throw new HttpError(502, `could not refresh ${id} models: ${failure.message}`);
+    }
+    const list = models.getModels(id), recommended = recommendedProviderModel(id, list.map(item => item.id));
+    const rank = (model: string) => model === recommended.model ? 0 : model === recommended.luna || model === recommended.haiku ? 1 : 2;
+    return list.map(item => ({ id: item.id, name: item.name, reasoning: (item as { reasoning?: boolean }).reasoning ?? null,
+      contextWindow: (item as { contextWindow?: number }).contextWindow ?? null,
+      recommended: item.id === recommended.model, family: item.id === recommended.luna ? 'luna' : item.id === recommended.haiku ? 'haiku' : null }))
+      .sort((a, b) => rank(a.id) - rank(b.id));
+  });
+  // A provider's own login flow (Pi's ProviderAuth): a subscription sign-in (OAuth, with its browser URL or device code)
+  // or the provider's API-key prompts (a key and any account settings it needs). The flow runs in this process, so
+  // OAuth callbacks to localhost reach it; its prompts are answered from the page. Secret answers are never kept.
+  type LoginPrompt = { id: number; type: string; message: string; placeholder?: string; options?: readonly { id: string; label: string; description?: string }[] };
+  type Login = { id: string; provider: string; type: 'oauth' | 'api_key'; state: 'running' | 'done' | 'failed' | 'cancelled'; events: unknown[];
+    prompt: LoginPrompt | null; error: string | null; answer?: (value: string) => void; reject?: (error: Error) => void; abort: AbortController; startedAt: string };
+  const logins = new Map<string, Login>();
+  let promptCounter = 0;
+  route('POST', '/api/providers/:id/login', async (_request, params, _query, body) => {
+    const provider = decodeURIComponent(params.id!), type = (body as { type?: string } | undefined)?.type ?? 'oauth';
+    if (type !== 'oauth' && type !== 'api_key') throw new HttpError(400, 'type is oauth or api_key');
+    const models = (await pi()).piModels(environment), item = models.getProvider(provider);
+    if (!item) throw new HttpError(404, `unknown provider ${provider}`);
+    if (type === 'oauth' && !item.auth.oauth) throw new HttpError(400, `${item.name} has no subscription sign-in; add an API key instead`);
+    if (type === 'api_key' && !item.auth.apiKey?.login) throw new HttpError(400, `${item.name} reads its credentials from the environment (${item.auth.apiKey?.name ?? 'ambient'}); set them before starting the dashboard`);
+    for (const other of logins.values()) if (other.provider === provider && other.state === 'running') { other.abort.abort(); other.state = 'cancelled'; }
+    const login: Login = { id: randomBytes(8).toString('hex'), provider, type, state: 'running', events: [], prompt: null, error: null,
+      abort: new AbortController(), startedAt: new Date().toISOString() };
+    logins.set(login.id, login);
+    void models.login(provider, type, {
+      signal: login.abort.signal,
+      prompt: prompt => new Promise<string>((resolveAnswer, rejectAnswer) => {
+        const { signal: promptSignal, ...shown } = prompt as typeof prompt & { signal?: AbortSignal };
+        const current = { id: ++promptCounter, ...shown } as LoginPrompt;
+        const clear = () => { if (login.prompt?.id === current.id) { login.prompt = null; login.answer = undefined; login.reject = undefined; } };
+        login.prompt = current;
+        login.answer = value => { clear(); resolveAnswer(value); };
+        login.reject = error => { clear(); rejectAnswer(error); };
+        promptSignal?.addEventListener('abort', () => login.reject?.(new Error('prompt no longer needed')), { once: true });
+      }),
+      notify: event => { login.events.push({ ...event, at: new Date().toISOString() }); },
+    }).then(() => { login.state = 'done'; login.prompt = null; },
+      error => { if (login.state === 'running') { login.state = login.abort.signal.aborted ? 'cancelled' : 'failed'; login.error = (error as Error).message; } login.prompt = null; });
+    return loginView(login);
+  });
+  const loginView = (login: Login) => ({ id: login.id, provider: login.provider, type: login.type, state: login.state, events: login.events,
+    prompt: login.prompt, error: login.error, startedAt: login.startedAt });
+  const findLogin = (id: string) => { const login = logins.get(id); if (!login) throw new HttpError(404, 'no such sign-in; start it again'); return login; };
+  route('GET', '/api/logins/:id', (_request, params) => loginView(findLogin(params.id!)));
+  route('POST', '/api/logins/:id/answer', (_request, params, _query, body) => {
+    const login = findLogin(params.id!), { prompt, value } = (body ?? {}) as { prompt?: number; value?: unknown };
+    if (!login.prompt || login.prompt.id !== prompt) throw new HttpError(409, 'that question is no longer open');
+    if (typeof value !== 'string') throw new HttpError(400, 'value must be text');
+    login.answer!(value.trim());
+    return loginView(login);
+  });
+  route('DELETE', '/api/logins/:id', (_request, params) => {
+    const login = findLogin(params.id!);
+    if (login.state === 'running') { login.state = 'cancelled'; login.abort.abort(); login.reject?.(new Error('cancelled')); }
+    return loginView(login);
+  });
+  route('DELETE', '/api/providers/:id/credential', async (_request, params) => {
+    const models = (await pi()).piModels(environment), provider = decodeURIComponent(params.id!);
+    if (!models.getProvider(provider)) throw new HttpError(404, `unknown provider ${provider}`);
+    await models.logout(provider); return { ok: true };
   });
   route('PUT', '/api/credentials/:id', async (_request, params, _query, body) => {
     const id = decodeURIComponent(params.id!), key = string((body as { key?: unknown })?.key, 'key');

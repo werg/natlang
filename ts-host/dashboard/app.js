@@ -1,6 +1,7 @@
 // natlang dashboard: one page, one view per section (location.hash), all state from the local API (src/dashboard/server.ts).
 import { createExecutionModel as liveModel, createExecutionView } from './execution.js';
 import { argumentForm } from './arguments.js';
+import { connection, providersPanel, signIn } from './providers.js';
 const TOKEN = document.querySelector('meta[name="natlang-token"]').content;
 // Each route renders into its own element: a view still loading when the route changes writes into a detached one.
 const root = document.getElementById('main');
@@ -605,6 +606,7 @@ async function models(_arg, target) {
   every(attempt(async () => { if (config.stock.some(model => model.download && !model.download.done)) drawStock(config.stock = await get('/api/stock')); }), 1500);
   const profileRows = Object.entries(config.profiles);
   const editor = h('div', { id: 'profile-editor' });
+  const providerUi = { h, fill, api, get, toast, attempt, startJob, refreshRail, editProfile };
   fill(target, header('Models', 'Model profiles live in ~/.config/natlang/config.json; every natlang command, program and this dashboard use them. API keys are stored in natlang\'s credential store (one private file per provider).',
       h('button', { class: 'primary', onclick: () => editProfile('', {}) }, 'New profile')),
     h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Profiles'),
@@ -618,7 +620,7 @@ async function models(_arg, target) {
             h('button', { onclick: () => startJob({ kind: 'ask', instruction: 'Reply with the single word: ready', input: '', profile: name }) }, 'Test'),
             h('button', { class: 'danger', onclick: attempt(async () => { await api('DELETE', `/api/profiles/${encodeURIComponent(name)}`); toast(`Deleted ${name}`); route(); }) }, 'Delete')))))))) :
         h('div', { class: 'muted' }, 'No profiles yet: every command runs the built-in default, the stock LFM3 1.7B on the managed local llama.cpp server.')),
-    editor, await keptModelPanel(),
+    providersPanel(providerUi, providers, route), editor, await keptModelPanel(),
     h('section', { class: 'panel' }, h('h2', {}, 'Local models'), h('div', { class: 'muted small' }, 'Stock GGUF files natlang serves on its managed llama.cpp server, pinned to one repository revision and checked by SHA-256.'),
       h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Model'), h('th', { class: 'num' }, 'Size'), h('th', {}, 'State'), h('th', {}))), stockRows))));
 
@@ -639,18 +641,27 @@ async function models(_arg, target) {
           h('label', { class: 'field' }, 'GPU layers', h('input', { id: 'p-gpu', type: 'number', min: 0, value: profile.local?.gpuLayers ?? '', placeholder: '99 (all)' }))),
           h('label', { class: 'field' }, 'llama-server binary (optional, e.g. a CUDA build)', h('input', { id: 'p-server', value: profile.local?.server ?? '', placeholder: 'managed CPU/Metal build' })));
       } else if (value === 'provider') {
-        const providerField = h('select', { id: 'p-provider' }, providers.map(item => h('option', { value: item.id, selected: item.id === profile.provider }, `${item.name}${item.credential ? ' · key saved' : ''}`)));
+        // A new provider profile starts on a connected provider (else Anthropic) and its recommended model, listed first.
+        const initial = profile.provider ?? providers.find(item => item.connected)?.id ?? 'anthropic';
+        const providerField = h('select', { id: 'p-provider' }, providers.map(item => h('option', { value: item.id, selected: item.id === initial }, `${item.name}${item.connected ? ` · ${connection(item)}` : ''}`)));
         const modelField = h('select', { id: 'p-model' });
         const keyField = h('input', { id: 'p-key', type: 'password', placeholder: 'leave empty to keep the saved key or use the environment' });
-        const loadModels = attempt(async () => {
-          const list = await get(`/api/providers/${encodeURIComponent(providerField.value)}/models`);
-          fill(modelField, ...list.map(item => h('option', { value: item.id, selected: item.id === profile.model }, `${item.name}${item.contextWindow ? ` · ${tokens(item.contextWindow)} context` : ''}`)));
+        const signInRow = h('div', { class: 'row small' });
+        const loadModels = attempt(async (refresh = false) => {
+          const provider = providers.find(item => item.id === providerField.value);
+          const list = await get(`/api/providers/${encodeURIComponent(providerField.value)}/models${refresh === true ? '?refresh=1' : ''}`);
+          const keep = provider?.id === profile.provider ? profile.model : undefined;
+          fill(modelField, ...list.map(item => h('option', { value: item.id, selected: item.id === keep }, `${item.name}${item.family ? ` · newest ${item.family === 'luna' ? 'Luna' : 'Haiku'}` : ''}${item.recommended ? ' (recommended)' : ''}${item.contextWindow ? ` · ${tokens(item.contextWindow)} context` : ''}`)));
+          fill(signInRow, h('span', { class: 'muted' }, provider?.connected ? `Connected: ${connection(provider)}.` : 'Not connected yet.'),
+            provider?.oauth ? h('button', { type: 'button', onclick: async () => { if (await signIn(providerUi, provider, 'oauth')) loadModels(); } }, provider.oauth.label ?? 'Sign in with subscription') : null,
+            h('button', { type: 'button', title: 'Fetch the provider\'s current model list', onclick: () => loadModels(true) }, 'Refresh models'));
         });
-        providerField.addEventListener('change', loadModels);
+        providerField.addEventListener('change', () => loadModels());
         fill(fields, h('div', { class: 'row' }, h('label', { class: 'field' }, 'Provider', providerField), h('label', { class: 'field', style: 'flex: 1' }, 'Model', modelField)),
           h('label', { class: 'field' }, 'API key (saved to natlang\'s credential store for this provider)', keyField),
-          h('div', { class: 'small muted' }, 'Subscription logins: run natlang auth login PROVIDER in a terminal.'));
+          signInRow);
         if (providers.length) await loadModels();
+        if (profile.provider && !name) nameField.value = profile.provider;
       } else if (value === 'endpoint') {
         fill(fields, h('div', { class: 'row' },
           h('label', { class: 'field', style: 'flex: 2' }, 'Server URL', h('input', { id: 'p-endpoint', value: profile.endpoint ?? '', placeholder: 'http://127.0.0.1:8080' })),

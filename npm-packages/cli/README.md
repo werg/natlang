@@ -19,7 +19,7 @@ natlang setup                           # prepare the managed local model runtim
 natlang doctor
 natlang models anthropic                # list a provider's model IDs
 natlang auth login anthropic            # sign in when the provider offers OAuth
-natlang run path/to/application --provider anthropic --model MODEL_ID
+natlang run path/to/application --provider anthropic   # newest Haiku; --model MODEL_ID for another
 natlang run path/to/application         # a directory with natlang.json, or a TS entry module
 natlang check path/to/project
 natlang call path/to/function.nl --inputs inputs.json
@@ -39,7 +39,8 @@ server only for commands that need one and stops it when the command exits.
 `--profile`, `--provider`, and `--model`. A profile can select a managed local
 model, an OpenAI-compatible endpoint, or a Pi provider. `natlang models` lists
 providers and model IDs; `natlang auth login|status|logout` manages supported
-OAuth credentials. See [model configuration](https://github.com/werg/natlang/blob/main/NATIVE_PACKAGES.md#authority-and-the-model-runtime)
+OAuth credentials; the dashboard's Models page connects providers (subscription
+sign-in or API key) and saves a profile on the newest Luna or Haiku model. See [model configuration](https://github.com/werg/natlang/blob/main/NATIVE_PACKAGES.md#authority-and-the-model-runtime)
 for profile fields, precedence, provider options, and runtime controls.
 # Adaptation status
 

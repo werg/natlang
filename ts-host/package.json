@@ -30,7 +30,7 @@
     "build:applications": "node scripts/build-applications.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.87.1",
+    "@earendil-works/pi-ai": "^1.4.0",
     "@noble/hashes": "^2.4.0",
     "@sqlite.org/sqlite-wasm": "3.53.4-build1",
     "@types/node": "^24.0.0",

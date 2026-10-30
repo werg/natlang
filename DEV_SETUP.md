@@ -181,7 +181,14 @@ supported subscription, run `natlang auth login PROVIDER`; credentials are kept
 in natlang's config directory and refreshed by Pi. `natlang auth status` lists
 configured providers, and `natlang auth logout PROVIDER` removes a credential.
 `run`, `call`, `ask`, `setup`, and `doctor` resolve the same profile and accept
-`--profile`, `--provider`, and `--model` overrides.
+`--profile`, `--provider`, and `--model` overrides. `--provider` alone runs the
+provider's newest Luna or Haiku model (`claude-haiku-5-5` on Anthropic,
+`gpt-6-luna` on OpenAI, Copilot and OpenRouter; `natlang models PROVIDER` marks it).
+
+`natlang dashboard` → Models → Providers does the same from the browser: subscription
+sign-in (Claude Pro/Max, ChatGPT, GitHub Copilot, xAI, …, with the provider's sign-in
+page or device code) or the provider's API-key prompts, connection status including
+environment keys, and one click to save a profile on the recommended model as default.
 
 The Pi path handles provider protocol and authentication; natlang's local and
 OpenAI-compatible endpoint paths remain available for raw request controls.
