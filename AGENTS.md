@@ -32,9 +32,13 @@ Owner: don't leave potentially valuable work untouched, problems undiagnosed, or
 they already started when the facts have changed or something better exists. Concretely:
 
 - **A finding is not done until it is acted on.** Whoever finds a defect or a better setup affecting live work
-  implements the fix and drives the cutover at the next safe update boundary. A recommendation alone is an
-  unfinished task. "Already running", "after the next milestone/merge" and "the other agent owns it" are not
-  reasons to keep spending compute on a known-worse setup. Fresh runs start on the corrected setup.
+  implements the fix and cuts over immediately: the change applies to the very next optimizer step, update,
+  request or job that can take it, and running work is interrupted (preserving its state) when the change
+  matters more than finishing the in-flight unit. A recommendation alone is an unfinished task. "Already
+  running", "from the next round", "after the next milestone/merge/boundary" and "the other agent owns it" are
+  not reasons to keep spending compute on a known-worse setup. Settings are read when they are used (e.g.
+  learner parameters at each update start, not at round start), so an edit takes effect without waiting.
+  Fresh runs start on the corrected setup (owner, 2026-10-30).
 - **Re-justify running work every monitoring cycle.** For each running learner, job, conversion or eval, check
   that it is still the best use of its resources given today's facts: objective, data, code, newer findings.
   If not, stop or cut over, and record why.
@@ -204,7 +208,8 @@ source roles together and preserve protected held inputs. A publication
 acknowledgement alone is not adoption or training. Reconcile a partial
 publication before publishing another revision. Useful training continues
 while the next revision is prepared; a necessary code/runtime change uses a
-recorded checkpoint-preserving continuation at a safe update boundary.
+recorded checkpoint-preserving continuation right away, interrupting the
+in-flight unit when the change matters more than finishing it.
 
 ## LFM3 focus: one joint SFT stage, no cross-model dependence, metalearner (owner, 2026-10-28)
 
@@ -773,8 +778,8 @@ comprehensive training on the entire evolving production recipe.
   stages or data from being used. Do not claim that downloaded or registered
   data has been trained on.
 - **Adapt live.** Add newly usable data promptly rather than waiting for a
-  distant clean run or an unrelated conversion batch. Stop/reload/resume at a
-  safe update boundary when needed; retain optimizer/RNG state when continuing
+  distant clean run or an unrelated conversion batch. Stop/reload/resume
+  immediately when needed; retain optimizer/RNG state when continuing
   is appropriate. The supervisor may stop and tweak any run at any time for a
   potential improvement and judges whether to continue or redo it. Preserve
   useful checkpoints and record the practical reason; do not require a new
