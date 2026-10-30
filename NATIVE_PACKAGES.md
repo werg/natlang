@@ -79,7 +79,9 @@ in scope:
 ```
 
 `natlang run` reads the words after `--` into `context.arguments` by name,
-checked against their types before anything is built or a model starts. An
+checked against their types before anything is built or a model starts. Words
+fill the arguments in order, or name one: `-- --rubric "billing; spam"` or
+`--count=3`; `natlang inspect` prints a target's signature and usage. An
 argument whose type is text (`string`, string literals, `Is<string, "…">`) is
 written as is; any other type is written as JSON (`3`, `true`,
 `'[{"title": "Refund"}]'`). An empty or absent optional argument takes its

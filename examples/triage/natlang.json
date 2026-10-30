@@ -5,6 +5,7 @@
   "description": "Triage a JSON list of support tickets into a report.",
   "include": [
     "classify.nl",
+    "examples.json",
     "is_urgent.nl",
     "main.ts",
     "tickets.json",

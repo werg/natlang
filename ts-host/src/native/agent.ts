@@ -1527,8 +1527,9 @@ export class NativeToolAgent {
       const calls = response.calls ?? [];
       const exactEmptyEos = immediateEmptyEos(response);
       if (!exactEmptyEos || calls.length || response.truncated) consecutiveEmptyEosWithoutResult = 0;
+      // The turn's reasoning too, so a long or misdirected thought can be read after the fact (traces show, the dashboard).
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
-        phase: 'generated', turn: turns, calls, text: response.text ?? '' });
+        phase: 'generated', turn: turns, calls, text: response.text ?? '', ...(response.reasoning ? { reasoning: response.reasoning } : {}) });
       tokens += response.completion_tokens === undefined ? limit ?? 0 : Math.max(1, response.completion_tokens);
       if (timedOut() || (maxTokens !== undefined && tokens > maxTokens))
         return 'episode token or wall-clock budget exhausted';
