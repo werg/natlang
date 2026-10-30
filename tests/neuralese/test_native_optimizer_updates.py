@@ -5,7 +5,20 @@ import torch
 from natlang_neuralese.train.optim import PortMuonAdamW,MuonSR
 from natlang_neuralese.eval.native_optimizer_updates import CompleteOptimizerComparison
 from natlang_neuralese.eval.native_gradients import compare_complete_gradients
-from test_native_shared_checkpoint import equal_tree
+
+
+def equal_tree(left, right):
+    """Exact recursive equality of tensors, mappings and sequences (dtype included)."""
+    if isinstance(left, torch.Tensor):
+        assert left.dtype == right.dtype and torch.equal(left, right)
+    elif isinstance(left, dict):
+        assert left.keys() == right.keys()
+        for key in left: equal_tree(left[key], right[key])
+    elif isinstance(left, (list, tuple)):
+        assert type(left) is type(right) and len(left) == len(right)
+        for a, b in zip(left, right): equal_tree(a, b)
+    else:
+        assert left == right
 
 
 def fixture(dtype=torch.float32,device='cpu',matrix_shape=(16,12)):

@@ -83,7 +83,7 @@ def test_recipe_and_cli_accept_only_declared_modes():
 def test_completed_trainer_transition_preserves_optimizer_rng_and_credits(tmp_path):
     import json
     from test_native_full_updates import source
-    from test_native_shared_checkpoint import equal_tree
+    from test_native_optimizer_updates import equal_tree
     from natlang_neuralese.train import native_state_sft as trainer
     source(tmp_path/'base','lfm')
     _,_,_,config=load_native_model(tmp_path/'base',dtype=torch.bfloat16,rank=4)
