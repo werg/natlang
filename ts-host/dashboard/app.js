@@ -76,8 +76,12 @@ const kv = pairs => h('dl', { class: 'kv' }, pairs.filter(Boolean).flatMap(([key
 let profilesCache = null;
 async function profileSelect(id, value = '') {
   profilesCache ??= await get('/api/config');
-  return h('select', { id }, h('option', { value: '' }, `automatic (the program's model, else ${profilesCache.defaultProfile ?? 'built-in LFM3 1.7B'})`),
-    Object.keys(profilesCache.profiles).map(name => h('option', { value: name, selected: name === value }, name)));
+  // The last entry leads to Models to connect a hosted provider; choosing it does not change the selection.
+  const select = h('select', { id, onchange: () => { if (select.value === '+connect') { select.value = value; go('models'); } } },
+    h('option', { value: '' }, `automatic (the program's model, else ${profilesCache.defaultProfile ?? 'built-in LFM3 1.7B'})`),
+    Object.keys(profilesCache.profiles).map(name => h('option', { value: name, selected: name === value }, name)),
+    h('option', { value: '+connect' }, 'Connect a hosted model (Claude, GPT, …)…'));
+  return select;
 }
 
 // ---- routing --------------------------------------------------------------------------------------------------------
@@ -128,7 +132,8 @@ async function overview(_arg, target) {
   fill(target, 
     header('Overview', `Programs under ${status.root}. Everything here is the same machine state the natlang CLI uses.`,
       h('button', { onclick: () => programDialog() }, 'Create program'), h('button', { onclick: () => go('playground') }, 'Ask the model'), h('button', { class: 'primary', onclick: () => go('programs') }, 'Run a program')),
-    ...problems.map(([text, label, action]) => h('div', { class: 'callout warn row' }, h('span', {}, text), h('button', { onclick: action }, label))), progress,
+    ...problems.map(([text, label, action]) => h('div', { class: 'callout warn row' }, h('span', {}, text), h('button', { onclick: action }, label),
+      model.kind === 'managed-local' ? h('button', { onclick: () => go('models') }, 'Use a hosted model instead') : null)), progress,
     h('div', { class: 'grid' },
       tile('Model', model.error ? 'Profile problem' : release?.label ?? model.model,
         model.error ?? `profile ${model.profile} · ${model.kind === 'managed-local' ? 'managed llama.cpp' : model.kind}${release ? (release.installed ? ' · downloaded' : downloading ? ' · downloading' : ' · not downloaded') : ''}`),
@@ -607,10 +612,9 @@ async function models(_arg, target) {
   const profileRows = Object.entries(config.profiles);
   const editor = h('div', { id: 'profile-editor' });
   const providerUi = { h, fill, api, get, toast, attempt, startJob, refreshRail, editProfile };
-  fill(target, header('Models', 'Model profiles live in ~/.config/natlang/config.json; every natlang command, program and this dashboard use them. API keys are stored in natlang\'s credential store (one private file per provider).',
-      h('button', { class: 'primary', onclick: () => editProfile('', {}) }, 'New profile')),
-    h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Profiles'),
-      h('label', { class: 'row small muted' }, 'Default', h('select', { id: 'default-profile', onchange: attempt(async event => { await api('POST', '/api/default', { profile: event.target.value || null }); toast('Default profile saved'); refreshRail(); }) },
+  const hosted = providersPanel(providerUi, providers, config, route);
+  const profilesPanel = h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Profiles'),
+      h('label', { class: 'row small muted' }, 'Default', h('select', { id: 'default-profile', onchange: attempt(async event => { await api('POST', '/api/default', { profile: event.target.value || null }); toast('Default profile saved'); refreshRail(); route(); }) },
         h('option', { value: '' }, 'built-in (stock LFM3 1.7B, local)'), profileRows.map(([name]) => h('option', { value: name, selected: name === config.defaultProfile }, name))))),
       profileRows.length ? h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Profile'), h('th', {}, 'Backend'), h('th', {}, 'Model'), h('th', {}, 'Settings'), h('th', {}))),
         h('tbody', {}, profileRows.map(([name, entry]) => h('tr', {}, h('td', {}, h('strong', {}, name), name === config.defaultProfile ? h('span', { class: 'small muted' }, ' · default') : null),
@@ -619,8 +623,11 @@ async function models(_arg, target) {
           h('td', {}, h('div', { class: 'row' }, h('button', { onclick: () => editProfile(name, entry.profile) }, 'Edit'),
             h('button', { onclick: () => startJob({ kind: 'ask', instruction: 'Reply with the single word: ready', input: '', profile: name }) }, 'Test'),
             h('button', { class: 'danger', onclick: attempt(async () => { await api('DELETE', `/api/profiles/${encodeURIComponent(name)}`); toast(`Deleted ${name}`); route(); }) }, 'Delete')))))))) :
-        h('div', { class: 'muted' }, 'No profiles yet: every command runs the built-in default, the stock LFM3 1.7B on the managed local llama.cpp server.')),
-    providersPanel(providerUi, providers, route), editor, await keptModelPanel(),
+        h('div', { class: 'muted' }, 'No profiles yet, so every command runs the built-in local model (stock LFM3 1.7B on the managed llama.cpp server). Connecting a hosted model above creates one; New profile sets up anything else.'));
+  fill(target, header('Models', 'Choose the model natlang runs: a hosted provider or a model on this machine. Every natlang command, program and this dashboard use the same profiles (~/.config/natlang/config.json).',
+      h('button', { onclick: () => editProfile('', {}) }, 'New profile')),
+    // On a first run the hosted-model choices come first; once profiles exist, the profile list leads.
+    ...(profileRows.length ? [profilesPanel, hosted] : [hosted, profilesPanel]), editor, await keptModelPanel(),
     h('section', { class: 'panel' }, h('h2', {}, 'Local models'), h('div', { class: 'muted small' }, 'Stock GGUF files natlang serves on its managed llama.cpp server, pinned to one repository revision and checked by SHA-256.'),
       h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Model'), h('th', { class: 'num' }, 'Size'), h('th', {}, 'State'), h('th', {}))), stockRows))));
 
