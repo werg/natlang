@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { authoredTextGuidance, nativeProgramGuidance } from '../dist/adaptation/index.js';
 import { NatlangRuntime, NatlangTask } from '../dist/runtime/runtime.js';
+import { nodePlatform } from '../dist/runtime/node.js';
 import { interpreter, lambda } from './support/natlang.mjs';
 
 const identity = checkpoint => ({ architecture: 'fixture-native', checkpoint_sha256: checkpoint.repeat(64),
@@ -140,8 +141,8 @@ test('native writer output must exist as an actual stored artifact before prompt
 test('native task binding requires its exact program descriptor', () => {
   const student = identity('a'), id = 'nzs1_' + 'h'.repeat(52);
   const guidance = binding(student, 'Use the approved procedure.', id);
-  assert.throws(() => new NatlangTask(new NatlangRuntime({ nativeProgramGuidance: guidance })), /exact program descriptor/);
-  assert.throws(() => new NatlangTask(new NatlangRuntime({ nativeProgramGuidance: guidance,
+  assert.throws(() => new NatlangTask(new NatlangRuntime({ platform: nodePlatform(), nativeProgramGuidance: guidance })), /exact program descriptor/);
+  assert.throws(() => new NatlangTask(new NatlangRuntime({ platform: nodePlatform(), nativeProgramGuidance: guidance,
     program: { id: 'different-program' } })), /belongs to a different program/);
 });
 
