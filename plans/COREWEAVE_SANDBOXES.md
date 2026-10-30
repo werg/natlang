@@ -760,3 +760,69 @@ concurrency and lifetime, monitor available usage and state clearly that this
 does not establish a dollar cap. An unavailable quote must not indefinitely
 block useful authorized work. Snapshot access never counts as independent backup
 access at quota exhaustion.
+
+## Multiple accounts (owner decision 2026-10-30)
+
+Four new trial accounts, each a separate W&B org with its own API key and an overall lifetime cap (unknown until the
+owner sets it; about 500 USD each is expected). All keys stay on the DGX. Work is spread across the accounts; the DGX
+is the data hub. Not yet whitelisted: nothing below has created a sandbox.
+
+**Layout.** `default` is `~/.config/natlang/coreweave.env` (unchanged; it is also the W&B storage account that holds the
+private exports in `werg/natlang`). Every other account NAME is `~/.config/natlang/coreweave-accounts/NAME.env`,
+mode 600, same format (`WANDB_API_KEY=...`, optional `WANDB_ENTITY=<org>`, optional `NATLANG_CW_BUCKET` if that
+org has its own bucket). Caps and placement switches are non-secret settings in
+`~/.config/natlang/coreweave-accounts/accounts.json`, over the repository defaults in
+`training/coreweave-placement.json` ("accounts"):
+
+    {"accounts": {"acct1": {"cap_usd": 500}, "acct2": {"cap_usd": 500}, "acct3": {"cap_usd": null},
+                  "acct4": {"cap_gpu_hours": null}},
+     "gpu_hour_price_usd": null}
+
+`default` is not a placement candidate once other profiles exist unless that file sets `"placement": true` for it.
+
+**Mechanism** (`scripts/coreweave/accounts.py`). `cwctl.py --account NAME ...`, `NATLANG_CW_ACCOUNT`, a job's
+`"account"` field, or a DiLoCo run's `"accounts"` (`"auto"` or pinned roles) selects the account of a new sandbox. A
+non-default key is never loaded into the process environment: it becomes explicit per-call SDK auth headers, or the
+environment of one cwsandbox CLI child. Every launch records `account` and binds the sandbox
+(`STATE/account-bindings.json`); exec, files, logs, stop, snapshots, collect, recovery pulls and the snapshot
+operator then use the bound account, never the default. Snapshots and buckets are account-scoped: a restore or bucket
+from another account is refused, and a replacement in another account is seeded from the DGX-verified state. Secret
+files delivered into a sandbox are checked to contain no account key. Cross-account traffic is the coordinator's
+public HTTPS URL with its share token (a per-sandbox capability) plus our bearer token; parent reads use a scoped
+URL issued with the storage account's key on the DGX (`diloco.parent_read_secret`).
+
+**Accounting.** `cwctl.py accounts` (and `accounts json`) writes `STATE/accounts.json`: per account GPU-, CPU- and
+memory-hours, estimated spend (CPU/memory price card plus the configured GPU rate; unknown while CoreWeave has not
+quoted it), the next 24 h reserved by running sandboxes, cap, headroom, and per running sandbox the hours of earned
+work not yet verified on the DGX (from `export_verified` records written by `recovery_pull.py`). This is our estimate
+from our own records: cwsandbox has no usage or billing API. `accounts refresh` polls each account with a read-only
+list call; `accounts ended ID... --reason` records an end we observed elsewhere (the pre-2026-10-30 default records
+still list sandboxes ended by the 2026-10-29 cutoff as running until reconciled).
+
+**Placement and caps.** No early retirement: every account is used to its full cap. `accounts.choose_account` ranks
+eligible accounts by the largest remaining fraction of their cap (or the least use when caps are unknown), so spend
+evens out and the accounts reach their caps at about the same time; `diloco.py plan-accounts RUN.json` spreads the
+learners one per account and keeps a coordinator replica out of the primary's account. `cwctl.py place --write`
+records the chosen account in the job.
+
+**Freeze and evacuation (insurance).** An account is frozen only on an explicit quota error from the API: a create
+refused with it, or a terminal status reason carrying it. The one string seen so far (2026-10-23 and 2026-10-29,
+reason empty): `SandboxResourceExhaustedError: Create sandbox resource exhausted: quota exceeded, check plan and
+billing details`. Capacity, occupancy, throttling and other refusals keep the normal retry path; a quota refusal is
+no longer retried. On the first frozen account, `account_exports.py watch` (records every minute, a read-only list
+every 10 minutes; the first start takes existing quota errors as its baseline) marks it frozen and pulls every
+running sandbox of every account to the DGX with that account's own key: accounts in parallel, most unexported work
+first, each pull through `recovery_pull.py` (immutable intent, sandbox-side sha256, verified parts), the newest
+verified state per role in `<evacuation_root>/newest-verified.json`. What a sandbox exports is its job's `"exports"`
+(else its output trees). Exports otherwise keep their normal cadence. `account_exports.py evacuate --trigger NAME
+--dry-run` shows the plan.
+
+**Bring-up test** (run only once the owner says the accounts are live; one 1-CPU/2Gi sandbox per account for a few
+minutes, all stopped at the end):
+
+    /home/werg/.local/share/natlang/cw-venv/bin/python scripts/coreweave/account_bringup.py plan --accounts A,B,C,D
+    /home/werg/.local/share/natlang/cw-venv/bin/python scripts/coreweave/account_bringup.py run --accounts A,B,C,D
+
+Each sandbox serves an HTTPS echo behind its share token and a bearer token; every sandbox calls every other
+account's endpoint and the DGX calls all of them, with the negative checks (no share token, no bearer) refused. The
+matrix is in `~/.local/state/natlang/coreweave/bringup/<stamp>.json`; exit status 0 means cross-account traffic works.
