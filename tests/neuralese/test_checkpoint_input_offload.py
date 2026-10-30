@@ -158,26 +158,3 @@ def test_native_sft_explicit_offload_inherits_resume_mode_without_reset(tmp_path
     disabled=torch.load(out/'checkpoint.pt',weights_only=False)['training']
     assert disabled['options']['checkpoint_input_offload'] is False
     assert disabled['exposure_counts']=={'train':3}
-
-
-def test_semantic_checkpoint_persists_actual_per_participant_offload_mode(tmp_path,monkeypatch):
-    import json
-    from test_native_semantic_stage import _fixture
-    from natlang_neuralese.train import native_semantic_stage as stage
-    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-    path,manifest,config,_=_fixture(tmp_path,monkeypatch)
-    config['checkpoint_input_offload']=True;path.write_text(json.dumps(config))
-    result=stage.run(path,manifest,tmp_path/'shared',device='cpu')
-    assert result['completed']
-    checkpoint=CheckpointPolicy.load(tmp_path/'shared/checkpoint.pt')
-    assert all(item['training_options']['checkpoint_input_offload'] is True
-               for item in checkpoint['participants'].values())
-
-
-@pytest.mark.parametrize('value',['false',1,None])
-def test_semantic_offload_declaration_is_a_real_boolean(tmp_path,monkeypatch,value):
-    from test_native_semantic_stage import _fixture
-    from natlang_neuralese.train.native_semantic_stage import validate_config
-    _,_,config,_=_fixture(tmp_path,monkeypatch)
-    config['checkpoint_input_offload']=value
-    with pytest.raises(ValueError,match='must be a boolean'):validate_config(config)

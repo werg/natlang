@@ -67,9 +67,8 @@ def validate_envelope(envelope, request_data, allowed):
 
 
 def input_bindings(request):
-    names = ('config', 'state', 'parent_checkpoint', 'semantic_adapter', 'semantic_config')
+    names = ('config', 'state', 'parent_checkpoint')
     result = [request[name] for name in names if request.get(name)]
-    result.extend(request.get('updates', {}).values())
     return result
 
 

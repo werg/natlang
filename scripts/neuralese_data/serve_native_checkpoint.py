@@ -30,8 +30,6 @@ def main() -> None:
     parser.add_argument('--transport-recovery-receipt-sha256')
     parser.add_argument('--training-source-sha256')
     parser.add_argument('--transport-scope',choices=('independent-recovery','diagnostic-local-pin'))
-    parser.add_argument('--semantic-adapter', type=Path, help='checkpoint-bound shared semantic adapter receipt')
-    parser.add_argument('--semantic-adapter-sha256')
     parser.add_argument('--coefficient-policy', type=Path)
     parser.add_argument('--coefficient-policy-sha256')
     parser.add_argument('--coefficient-rebase-out', type=Path)
@@ -56,8 +54,8 @@ def main() -> None:
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
     args = parser.parse_args()
-    if args.engine == 'sglang' and (args.semantic_adapter or args.coefficient_policy or args.transport_receipt):
-        parser.error('the SGLang actor serves ordinary checkpoints only (no semantic adapter, coefficient policy or transport view)')
+    if args.engine == 'sglang' and (args.coefficient_policy or args.transport_receipt):
+        parser.error('the SGLang actor serves ordinary checkpoints only (no coefficient policy or transport view)')
     if bool(args.native_actor_view) != bool(args.native_actor_view_sha256):
         parser.error('native actor view requires its exact receipt SHA-256')
     transport_values=(args.transport_receipt,args.transport_receipt_sha256,args.transport_view_receipt,
@@ -67,8 +65,6 @@ def main() -> None:
             or (args.transport_scope=='independent-recovery' and not all(recovery_values))
             or (args.transport_scope=='diagnostic-local-pin' and any(recovery_values))):
         parser.error('transported actor requires all exact receipt bindings and no full-source actor view or participant')
-    if bool(args.semantic_adapter) != bool(args.semantic_adapter_sha256):
-        parser.error('semantic adapter requires its exact SHA-256')
     if bool(args.coefficient_policy) != bool(args.coefficient_policy_sha256):
         parser.error('coefficient policy requires its exact SHA-256')
 
@@ -79,8 +75,6 @@ def main() -> None:
     configure_sdpa_backend(args.sdpa_backend)
     checkpoint = args.checkpoint.resolve(strict=True)
     bindings = [('checkpoint', checkpoint, args.checkpoint_sha256)]
-    if args.semantic_adapter:
-        bindings.append(('semantic adapter', args.semantic_adapter.resolve(strict=True), args.semantic_adapter_sha256))
     if args.coefficient_policy:
         bindings.append(('coefficient policy', args.coefficient_policy.resolve(strict=True), args.coefficient_policy_sha256))
     if args.native_actor_view:
@@ -109,7 +103,7 @@ def main() -> None:
         view_options['engine_class'] = SglangEngine
     engine = load_native_engine(str(checkpoint), base=str(args.base) if args.base else None,
         prompt_rendering=args.prompt_rendering, participant=args.native_participant,
-        semantic_adapter=str(args.semantic_adapter) if args.semantic_adapter else None, device=args.device,
+        device=args.device,
         **view_options)
     if args.engine == 'sglang':
         launch_sglang(engine, args, checkpoint)

@@ -351,36 +351,3 @@ def test_actual_view_chunk_failure_keeps_template_inputs_and_prior_completed_chu
         ident=first['response']['x_natlang_rl_capture']['writes'][0]['state_id']
         assert engine.store.holders(ident)=={'view-owner'}
     finally:server.shutdown();server.server_close();engine.stop();engine.store.close()
-
-
-@pytest.mark.parametrize('family',['lfm','mellum'])
-def test_compact_failure_archives_one_real_raw_capture_not_per_decode_step(tmp_path,monkeypatch,family):
-    from natlang_neuralese.model.semantic_vae import SemanticStateVAE,StateLayout
-    from natlang_neuralese.model.semantic_channel import SemanticChannel
-    first=tmp_path/'first';first.mkdir();second=tmp_path/'second';second.mkdir()
-    engine=replay_engine(first,family);other='mellum' if family=='lfm' else 'lfm'
-    peer=replay_engine(second,other)
-    try:
-        source=engine.store.get_native_state(engine.native_write_text('t5')['id']).block
-        target=peer.store.get_native_state(peer.native_write_text('t5')['id']).block
-        # Actual two-port codec plumbing; random fixture weights make no semantic-quality claim.
-        vae=SemanticStateVAE({family:StateLayout.from_block(source),other:StateLayout.from_block(target)},
-            latent_width=4,hidden_width=16)
-        engine.semantic_channel=SemanticChannel(vae,{family:engine.native_identity,other:peer.native_identity},
-            {family:engine.tokenizer,other:peer.tokenizer},adapter_sha256='a'*64)
-        stored=[];original=engine.store.put_native_state
-        def put(block,owner=None):
-            stored.append((block.metadata()['schema'],sum(value.numel()*value.element_size() for value in block.tensors().values())))
-            return original(block,owner=owner)
-        monkeypatch.setattr(engine.store,'put_native_state',put)
-        choose(engine,monkeypatch,[engine.role_tokens.produce_open,5,engine.role_tokens.produce_close,engine.role_tokens.produce_close])
-        reply=engine.generate(GenerationRequest(messages=[{'role':'user','content':'t4'}],temperature=.8,max_tokens=8,
-            native_protocol_recovery=True,native_store_owner='compact-owner'))
-        write=reply['x_natlang_rl_capture']['writes'][0]
-        assert write['raw_state_id']!=write['state_id']
-        assert [schema for schema,_ in stored]==['neuralese.semantic-state/1','neuralese.native-state/1']
-        assert all(engine.store.holders(write[key])=={'compact-owner'} for key in ('state_id','raw_state_id'))
-        assert engine.store.get_native_state(write['raw_state_id']).block.token_ids.tolist()==[5]
-        print(json.dumps({'family':family,'compact_trace_stored_tensor_bytes':stored,
-            'scope':'one completed one-token producer followed by unfed malformed close; no per-decode tensor copies'}))
-    finally:engine.store.close();peer.store.close()

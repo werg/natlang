@@ -354,55 +354,6 @@ def test_completed_objective_tweak_adds_honest_full_pair_pass_without_reset(tmp_
     assert appended['step']==3 and appended['exposure_counts']=={example.id:2,extra.id:1}
 
 
-def test_actual_preference_deficits_survive_three_phase_semantic_training_and_next_real_update(tmp_path,monkeypatch):
-    from test_native_semantic_stage import _fixture
-    from test_native_semantic import setup_pair
-    from natlang_neuralese.train import native_semantic_stage as semantic
-    from natlang_neuralese.train.native_continuation import collect_sft_progress,restore_sft_progress,progress_obligations
-    from natlang_neuralese.train.native_state_sft import native_training_update,make_native_optimizer,pending_exposure_batches
-    from natlang_neuralese.model.native_model import restore_model_state
-    path,manifest,_,_=_fixture(tmp_path,monkeypatch)
-    original_load=semantic.load_participant;frames={}
-    def load(name,*args,**kwargs):
-        participant=original_load(name,*args,**kwargs)
-        directory=tmp_path/name;directory.mkdir(exist_ok=True)
-        example,objective=example_spec(directory,fingerprint=participant.config['tokenizer_fingerprint'])
-        participant.optimizer.zero_grad(set_to_none=True)
-        loss,_=packed_graph_loss(participant.model,[example],objective=objective,checkpoint_layers=False)
-        loss.backward();participant.optimizer.step();participant.optimizer.zero_grad(set_to_none=True)
-        assert torch.isfinite(loss)
-        frame={'schema':'natlang.neuralese-native-sft-training/1','identity':{'objective_kind':KIND,'objective':objective.binding()},
-            'step':1,'global_step':1,'epoch':1,'cursor':1,'source_row_bindings':{example.id:'exact-binding'},
-            'source_row_order':[example.id],'exposure_counts':{example.id:1},'source_receipts':[{'sha256':'train'},{'sha256':'held'}],
-            'options':{'stage_id':'offline-pairs','epochs':2},'optimizer':participant.optimizer.state_dict()}
-        participant.sft_progress=collect_sft_progress(frame);participant.global_step=1
-        frames[name]=(example,objective,copy.deepcopy(participant.sft_progress))
-        return participant
-    monkeypatch.setattr(semantic,'load_participant',load)
-    report=semantic.run(path,manifest,tmp_path/'semantic',device='cpu')
-    assert report['completed']
-    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-    saved=CheckpointPolicy.load(tmp_path/'semantic/checkpoint.pt')
-    for name,entry in saved['participants'].items():
-        example,objective,original=frames[name]
-        assert entry['sft_progress']==original and entry['global_step']==3
-        assert progress_obligations(entry['sft_progress'])['remaining_graph_visits']==1
-        participant=setup_pair()[0][name]
-        if name=='mellum':participant.model.port.hf.natlang_precision='bf16'
-        restore_model_state(participant.model,entry['model_state'])
-        optimizer,_=make_native_optimizer(participant.model,lr=1e-4,in_backward=False)
-        optimizer.load_state_dict(entry['optimizer'])
-        restored=restore_sft_progress({**entry,'rng':saved['training']['rng']},'offline-pairs')
-        quotas,batches=pending_exposure_batches([{'id':example.id,'forward_tokens':9}],restored['exposure_counts'],epochs=2)
-        assert quotas=={example.id:2} and len(batches)==1
-        optimizer.zero_grad(set_to_none=True)
-        loss,_=packed_graph_loss(participant.model,[example],objective=objective,checkpoint_layers=False)
-        loss.backward();optimizer.step()
-        restored['exposure_counts'][example.id]+=1
-        restored['step']+=1;restored['global_step']+=1
-        assert progress_obligations(collect_sft_progress(restored))['complete']
-
-
 @pytest.mark.parametrize('role', ['lfm'])
 def test_actual_preference_prefix_recipe_parser_keeps_parameters_command_and_identity(tmp_path, role):
     from pathlib import Path

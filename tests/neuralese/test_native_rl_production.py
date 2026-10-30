@@ -5,67 +5,8 @@ from pathlib import Path
 import pytest
 import torch
 
-from natlang_neuralese.rl import native_rounds, production
+from natlang_neuralese.rl import production
 from natlang_neuralese.common.hashing import sha256_file_hex
-
-
-def test_joint_publication_finalizes_each_pending_update_once(tmp_path):
-    checkpoint = tmp_path/'updated.pt'; checkpoint.write_bytes(b'updated')
-    out = tmp_path/'model'; out.mkdir()
-    state = {'checkpoint': 'old-joint', 'round': 3, 'trained_rounds': 2,
-             'pending_native_checkpoint': str(checkpoint), 'pending_native_round_dir': 'round-dir',
-             'group_stats': [{'task_id': 'easy', 'mean': 1.}]}
-    path = out/'state.json'; path.write_text(json.dumps(state))
-    deployment = {'checkpoint': {'path': 'new-joint'}, 'semantic_adapter': {'path': 'new-adapter'},
-                  'updated_participants': {'lfm': {'sha256': sha256_file_hex(checkpoint)}}}
-    config = {'out': str(out), 'native_participant': 'lfm'}
-    native_rounds.apply_deployment(config, deployment)
-    native_rounds.apply_deployment(config, deployment)
-    result = json.loads(path.read_text())
-    assert result['round'] == 4 and result['trained_rounds'] == 3
-    assert result['checkpoint'] == 'new-joint' and result['semantic_adapter'] == 'new-adapter'
-    assert 'pending_native_checkpoint' not in result and result['group_stats'] == []
-
-
-@pytest.mark.parametrize('pending_updates',[True,False])
-def test_native_parallel_round_merges_both_updates_before_refresh(tmp_path, monkeypatch,pending_updates):
-    import threading
-    from natlang_neuralese.rl import native_refresh
-    parent = tmp_path/'parent.pt'; parent.write_bytes(b'joint-parent')
-    adapter = tmp_path/'adapter.json'; adapter.write_text(json.dumps({'semantic_obligations':{'complete':False}}))
-    configs = []
-    updates = {}
-    for name in ('lfm', 'mellum'):
-        config = {'native_state': True, 'native_participant': name, 'checkpoint': str(parent),
-            'semantic_adapter': str(adapter), 'semantic_refresh_config': str(tmp_path/'curriculum.json'),
-            'out': str(tmp_path/name)}
-        path = tmp_path/(name+'.json'); path.write_text(json.dumps(config)); configs.append(path)
-        update = tmp_path/(name+'.pt'); update.write_bytes(name.encode()); updates[name] = str(update)
-    barrier = threading.Barrier(2)
-    def learner(path, **kwargs):
-        config = json.loads(path.read_text())
-        assert kwargs['rounds'] == 1 and kwargs['defer_native_refresh'] is True
-        assert kwargs['stop'].requested is False
-        barrier.wait(timeout=10)  # proves independent learner jobs overlap
-        directory = Path(config['out']); directory.mkdir()
-        state = {'checkpoint': str(parent), 'round': 0, 'trained_rounds': 0}
-        if pending_updates:state['pending_native_checkpoint']=updates[config['native_participant']]
-        (directory/'state.json').write_text(json.dumps(state))
-        return state
-    monkeypatch.setattr(native_rounds, 'run', learner)
-    calls = []
-    def refresh(**kwargs):
-        assert kwargs['updates'] == (updates if pending_updates else {})
-        calls.append(kwargs)
-        return {'checkpoint': {'path': 'refreshed-shared', 'sha256': 'new'},
-            'semantic_adapter': {'path': 'refreshed-adapter', 'sha256': 'adapter'},
-            'updated_participants': {name: {'sha256': sha256_file_hex(path)} for name, path in updates.items()} if pending_updates else {}}
-    monkeypatch.setattr(native_refresh, 'refresh', refresh)
-    result = native_rounds.run_rounds(configs, tmp_path/'joint', rounds=1, device='cpu')
-    assert len(calls) == 1 and result['deployment']['checkpoint']['path'] == 'refreshed-shared'
-    for name in updates:
-        state = json.loads((tmp_path/name/'state.json').read_text())
-        assert state['round'] == int(pending_updates) and state['checkpoint'] == 'refreshed-shared'
 
 
 @pytest.mark.parametrize('family', ['lfm'])
@@ -171,8 +112,7 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
         '--learning-rate', '1e-3', '--weight-decay', '0', '--eval-every', '1',
         '--communication-foundation', '--foundation-native-graphs', str(tmp_path/'parent-only-source'),
         '--foundation-communication-batches','4',
-        '--refresh-foundation-readiness', '--foundation-readiness-policy', 'on-shared-request',
-        '--foundation-qualification-request', str(tmp_path/'parent-only-qualification.json'),
+        '--refresh-foundation-readiness',
         '--resident-data-directory',str(tmp_path/'parent-only-resident'),
         '--resident-geometry-qualification',str(tmp_path/'parent-only-capacity.json'),
         '--memory-qualification',json.dumps({'path':str(tmp_path/'parent-only-sft-memory.json'),
@@ -195,8 +135,6 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
     assert state['training']['options']['resident_data_directory'] is None
     assert state['training']['options']['foundation_communication_batches'] is None
     assert state['training']['options']['refresh_foundation_readiness'] is False
-    assert state['training']['options']['foundation_readiness_policy'] == 'on-shared-request'
-    assert state['training']['options']['foundation_qualification_request'] is None
     assert state['training']['options']['resident_geometry_qualification'] is None
     assert state['training']['options']['memory_qualification'] is None
     capacity=json.loads((tmp_path/'learner/rl-policy-capacity-request.json').read_text())
@@ -220,24 +158,6 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
         # idempotence run has zero new updates and is not an RL credit source.
         (tmp_path/'learner/report.json').write_bytes(first_report)
         (tmp_path/'learner/native-training-receipt.json').write_bytes(first_receipt)
-
-
-def test_completed_raw_round_defers_full_runtime_until_shared_request(tmp_path, monkeypatch):
-    from natlang_neuralese.eval import native_backend
-
-    calls = []
-    def forbidden(*args, **kwargs):
-        calls.append(True)
-        raise AssertionError('ordinary completed policy round requested a full runtime comparison')
-    monkeypatch.setattr(native_backend, 'qualify_complete_runtime', forbidden)
-    test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path, False)
-    report = json.loads((tmp_path/'learner/report.json').read_text())
-    certificate = json.loads((tmp_path/'learner/native-runtime-certificate.json').read_text())
-    assert report['completed'] is True
-    assert report['progress_numerics']['passed'] is True
-    assert certificate['deferred'] is True and certificate['passed'] is False
-    assert certificate['reason'] == 'shared qualification request pending'
-    assert not calls
 
 
 def test_policy_completion_uses_bounded_rotating_numeric_held_graphs(tmp_path,monkeypatch):
@@ -304,183 +224,6 @@ def test_policy_completion_uses_bounded_rotating_numeric_held_graphs(tmp_path,mo
     assert result['round']==1 and result['trained_rounds']==1
     assert result['phase']!='learner_pending'
     assert result['last_learner_progress']['mandatory_sft']['remaining_graph_visits']==1
-
-
-@pytest.mark.parametrize('foundation',[False,True])
-@pytest.mark.parametrize('separate_actor',[False,True])
-def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_path, monkeypatch,foundation,separate_actor):
-    from types import SimpleNamespace
-    from natlang_neuralese.train import recipe
-    parent = tmp_path/'shared.pt'; parent.write_bytes(b'actual-bound-parent')
-    policy=tmp_path/'production_recipe';policy.write_text('{}')
-    reference=recipe.native_recipe_binding(policy,'a'*64)
-    monkeypatch.setattr(recipe,'checkpoint_recipe_binding',lambda *a,**kw:reference)
-    adapter = tmp_path/'semantic-adapter.json'
-    adapter.write_text(json.dumps({'schema': 'natlang.native-semantic-adapter/1',
-        'checkpoint': {'path':str(parent),'sha256': sha256_file_hex(parent)},
-        'models': {'lfm': {'recipe_binding':reference,
-            'native_identity':{'architecture':'lfm2','checkpoint_sha256':sha256_file_hex(parent)},
-            'checkpoint':{'participant':'lfm','sha256':sha256_file_hex(parent)}}}}))
-    monkeypatch.setattr(recipe, 'resolve_recipe_data', lambda path: {'stages': [
-        {'id': 'native_full', 'kind': 'native_state_sft', 'parameters': {
-            'epochs': 3, 'dtype': 'float32', 'batch_tokens': 8192,'communication_foundation':foundation,
-            'task_eval': {'cases': 'registered-held'}, 'task_eval_every': 5000}}]})
-    args = SimpleNamespace(model='lfm', native_participant='lfm', checkpoint=parent, semantic_adapter=adapter,
-        production_stage='native_full', port=8097, **{key: tmp_path/key for key in (
-            'semantic_refresh_config', 'seed_native_graphs', 'held_native_graphs', 'production_recipe',
-            'base', 'out', 'config', 'cases', 'runtime')})
-    args.actor_runtime = Path(__file__).resolve().parents[2]
-    monkeypatch.setattr(recipe,'resolve_stage_inputs',lambda *args:{'foundation_native_graphs':{'path':str(tmp_path/'exact-foundation')}})
-    if separate_actor:
-        actor = tmp_path/'actor-snapshot'
-        entry = actor/'scripts/neuralese_data/serve_native_checkpoint.py'
-        entry.parent.mkdir(parents=True); entry.write_text('# exact actor entry\n')
-        package = actor/'training/neuralese/natlang_neuralese'
-        package.mkdir(parents=True); (package/'__init__.py').write_text('# exact package\n')
-        assets=actor/'training/prompt-pieces';assets.mkdir(parents=True)
-        for name in ('pieces.json','rendering-contract-fixtures.json'):(assets/name).write_text('{}')
-        args.actor_runtime = actor
-    production.configure_native(args)
-    saved = json.loads(args.config.read_text())
-    if separate_actor:
-        assert saved['actor_command'][1] == str(entry)
-        assert saved['actor_environment'] == {'NATLANG_REPO': str(actor),
-            'PYTHONPATH': str(actor/'training/neuralese') + ':' + str(actor)}
-        assert saved['learner_command'][1:3] == ['-m', 'natlang_neuralese.rl.native_stage']
-        assert saved['trainer_parameters']['dtype'] == 'float32'
-    if foundation:
-        assert saved['foundation_native_graphs']==str(tmp_path/'exact-foundation')
-        assert saved['seed_command'][-2:]==['--foundation-native-graphs','{foundation_native_graphs}']
-    from natlang_neuralese.common.runtime_inventory import python_runtime_binding
-    assert saved['native_actor_python_runtime'] == python_runtime_binding(
-        Path(saved['actor_environment']['NATLANG_REPO'])/'training/neuralese/natlang_neuralese')
-    assert saved['trainer_parameters']['epochs'] == 3
-    assert saved['recipe_lineage_sha256']=='a'*64
-    assert saved['trainer_parameters']['recipe_binding']==reference
-    assert saved['seed_trainer_parameters']['recipe_binding']==reference
-    assert saved['trainer_parameters']['dtype'] == 'float32'
-    assert '--checkpoint' in saved['actor_command'] and '--heads' not in saved['actor_command']
-    assert 'natlang_neuralese.rl.native_stage' in saved['learner_command']
-    handler = recipe.HANDLERS['native_state_rl']
-    assert handler['required_inputs'].isdisjoint(handler['optional_inputs'])
-    assert 'rl_block_bundle' in handler['optional_inputs']
-    # Fixture custody is real; a wrong participant identity remains rejected.
-    exported=json.loads(adapter.read_text());exported['models']['lfm']['native_identity']['checkpoint_sha256']='0'*64
-    adapter.write_text(json.dumps(exported))
-    with pytest.raises(ValueError,match='participant differ'):
-        production.expected_native_actor(adapter,'lfm',sha256_file_hex(parent))
-
-
-def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_configs(tmp_path, monkeypatch):
-    import shutil
-    from natlang_neuralese.train import native_readiness, recipe
-    parent = tmp_path/'joint.pt'; parent.write_bytes(b'fixture-parent')
-    def artifact(name, value):
-        path = tmp_path/name; path.write_text(json.dumps(value))
-        return {'path': str(path), 'sha256': sha256_file_hex(path)}
-    curriculum = artifact('curriculum.json', {})
-    adapter = artifact('adapter.json', {'schema': 'natlang.native-semantic-adapter/1',
-        'checkpoint': {'path': str(parent), 'sha256': sha256_file_hex(parent)},
-        'models': {name: {'native_identity': {'architecture': architecture,'checkpoint_sha256':sha256_file_hex(parent)},
-                          'checkpoint':{'participant':name,'sha256':sha256_file_hex(parent)}}
-                   for name, architecture in [('actual-lfm-id', 'lfm2'), ('actual-mellum-id', 'mellum')]}})
-    proof = {'adapter': adapter, 'curriculum': curriculum}
-    completion = tmp_path/'shared-stage-completion.json'; completion.write_text(json.dumps(proof))
-    monkeypatch.setattr(native_readiness, 'validate_completion', lambda *args: (proof, 'verified-fixture'))
-    def production_recipe(path):
-        model=Path(path).name.removesuffix('-recipe.json')
-        # Pending-obligation inheritance resolves the complete parent stage;
-        # retain its real required source inputs in this bootstrap fixture.
-        sources={'native_graphs': tmp_path/(model+'-train.jsonl'),
-                 'held_native_graphs': tmp_path/(model+'-held.jsonl')}
-        return {'input_bindings': {role: {'path': str(source), 'sha256': sha256_file_hex(source)}
-                                  for role,source in sources.items()},
-            'stages': [{'id': 'native_full_sft', 'kind': 'native_state_sft',
-            'inputs': {role: role for role in sources},
-            'parameters': {'epochs': 1, 'task_eval': {'packet': 'held'}, 'task_eval_every': 5000}}]}
-    monkeypatch.setattr(recipe, 'resolve_recipe_data', production_recipe)
-    runtime = tmp_path/'runtime/dist/teacher'; runtime.mkdir(parents=True)
-    (runtime/'cli.js').write_text('// fixture build')
-    published = Path(__file__).resolve().parents[2] / 'runs'
-    for name in ('decision-rich-train-20261016-v2-curriculum', 'decision-rich-train-20261016-v2-curriculum-corrected'):
-        shutil.copytree(published/name, tmp_path/'published-rl-task-source'/name)
-    source_dir = tmp_path/'published-rl-task-source/decision-rich-train-20261016-v2-curriculum-corrected'
-    from natlang_neuralese.rl.task_source import resolve_task_source
-    task_source = resolve_task_source(source_dir/'task-source-manifest.json')
-    task_source_binding = {'manifest': str(task_source['manifest']),
-        'manifest_sha256': task_source['manifest_sha256'], 'cases_sha256': task_source['cases_sha256'],
-        'rows': task_source['rows'], 'audit_sha256': task_source['audit_sha256'],
-        'selection_proof_sha256': task_source['selection_proof_sha256']}
-    models = []
-    for model in ('lfm', 'mellum'):
-        models.append({'model': model, 'production_recipe': artifact(model+'-recipe.json', {}),
-            'production_stage': 'native_full_sft', 'base': str(tmp_path/'base'),
-            'seed_native_graphs': artifact(model+'-train.jsonl', {'fixture': 'train'}),
-            'held_native_graphs': artifact(model+'-held.jsonl', {'fixture': 'held'}),
-            'cases': {'path': str(task_source['cases']), 'sha256': task_source['cases_sha256']},
-            'task_source': task_source_binding,
-            'runtime': str(runtime.parent.parent), 'port': 8097 if model == 'lfm' else 8098})
-    references={name:recipe.native_recipe_binding(tmp_path/(model+'-recipe.json'),letter*64)
-        for name,model,letter in [('actual-lfm-id','lfm','a'),('actual-mellum-id','mellum','b')]}
-    exported=json.loads(Path(adapter['path']).read_text())
-    for name,reference in references.items():exported['models'][name]['recipe_binding']=reference
-    Path(adapter['path']).write_text(json.dumps(exported))
-    adapter['sha256']=sha256_file_hex(adapter['path'])
-    completion.write_text(json.dumps(proof))
-    monkeypatch.setattr(recipe,'checkpoint_recipe_binding',lambda path,*,participant:references[participant])
-    from natlang_neuralese.rl import production as rl_production
-    actor_repo = Path(__file__).resolve().parents[2]
-    from natlang_neuralese.common.runtime_inventory import python_runtime_binding
-    monkeypatch.setattr(rl_production, 'actor_runtime_configuration', lambda _repository: {
-        'native_actor_python_runtime': python_runtime_binding(actor_repo/'training/neuralese/natlang_neuralese'),
-        'actor_environment': {'NATLANG_REPO': str(actor_repo),
-            'PYTHONPATH': str(actor_repo/'training/neuralese')+':'+str(actor_repo)}})
-    plan = tmp_path/'bootstrap-plan.json'
-    plan.write_text(json.dumps({'schema': 'natlang.native-rl-bootstrap/1', 'models': models}))
-    configs = native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')
-    assert len(configs) == 2
-    first = json.loads(configs[0].read_text())
-    assert first['native_participant'] == 'actual-lfm-id'
-    assert first['checkpoint'] == str(parent)
-    assert first['recipe_lineage_sha256']=='a'*64
-    assert first['trainer_parameters']['recipe_binding']==references['actual-lfm-id']
-    assert first['bootstrap_binding']['adapter_sha256'] == adapter['sha256']
-    assert first['task_source'] == task_source_binding
-    assert all(json.loads(path.read_text())['cases'] == models[0]['cases']['path'] for path in configs)
-    first['workers'] = 7; configs[0].write_text(json.dumps(first))
-    native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')
-    assert json.loads(configs[0].read_text())['workers'] == 7
-    Path(models[0]['cases']['path']).write_text('{}')
-    # Even an unchanged plan rechecks admitted artifacts before reuse.
-    with pytest.raises(ValueError, match='changed from its manifest binding'):
-        native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')
-
-
-def test_joint_stop_waits_for_both_learners_without_refresh_or_publication(tmp_path, monkeypatch):
-    import threading
-    from natlang_neuralese.rl import native_refresh
-    from natlang_neuralese.train.loop import StopSignal
-    parent = tmp_path/'parent'; parent.write_bytes(b'joint')
-    adapter = tmp_path/'adapter'; adapter.write_text('{}')
-    paths = []
-    for name in ('lfm', 'mellum'):
-        path = tmp_path/(name+'.json')
-        path.write_text(json.dumps({'native_state': True, 'native_participant': name,
-            'out': str(tmp_path/name), 'checkpoint': str(parent), 'semantic_adapter': str(adapter),
-            'semantic_refresh_config': str(tmp_path/'semantic')}))
-        paths.append(path)
-    barrier = threading.Barrier(2); stop = StopSignal(); drained = []
-    def learner(path, **kwargs):
-        assert kwargs['stop'] is stop
-        barrier.wait(timeout=10)
-        stop.request()
-        drained.append(path)
-        return {'phase': 'learner_pending', 'partial_checkpoint': 'actual-owned-worker-output'}
-    monkeypatch.setattr(native_rounds, 'run', learner)
-    monkeypatch.setattr(native_refresh, 'refresh', lambda **kw: pytest.fail('stop cannot publish new adapter'))
-    result = native_rounds.run_rounds(paths, tmp_path/'joint', rounds=1, stop=stop)
-    assert result['phase'] == 'requested_stop' and len(drained) == 2
-    assert len(result['states']) == 2
 
 
 def test_explicit_task_eval_for_recipe_without_cadence_is_exact_and_bound(tmp_path):

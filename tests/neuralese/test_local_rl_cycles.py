@@ -212,15 +212,9 @@ def test_reload_rejects_owner_runtime_and_pending_stage_replacement(tmp_path,mon
         lc.reload_schedule(plan_path,plan,config,stages,cursor={'cycle':0,'stage_index':1})
 
 
-def test_returned_shared_route_bootstraps_a_bare_cycle_config(tmp_path):
-    from natlang_neuralese.rl.local_cycles import bind_state_semantic_route
-    from natlang_neuralese.common.hashing import sha256_file_hex
-
-    curriculum=tmp_path/'curriculum.json';curriculum.write_text('{"schema":"fixture"}\n')
-    state={'native_participant':'lfm','semantic_refresh_config':{
-        'path':str(curriculum.resolve()),'sha256':sha256_file_hex(curriculum)}}
-    resolved=bind_state_semantic_route({'native_participant':None,'semantic_refresh_config':None},state)
-    assert resolved['native_participant']=='lfm'
-    assert resolved['semantic_refresh_config']==str(curriculum.resolve())
-    with pytest.raises(ValueError,match='changed its adopted semantic refresh curriculum'):
-        bind_state_semantic_route({'native_participant':None,'semantic_refresh_config':'/tmp/other.json'},state)
+def test_state_participant_binds_a_bare_cycle_config():
+    from natlang_neuralese.rl.local_cycles import bind_state_participant
+    state={'native_participant':'lfm'}
+    assert bind_state_participant({'native_participant':None},state)['native_participant']=='lfm'
+    with pytest.raises(ValueError,match='changed the native participant'):
+        bind_state_participant({'native_participant':'other'},state)

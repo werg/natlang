@@ -73,13 +73,12 @@ def test_latent_backward_hooks_follow_actual_parameter_after_group_reorder():
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
-def test_actual_native_updates_preserve_distinct_rows_through_resume_and_semantic_rate_changes(family):
+def test_actual_native_updates_preserve_distinct_rows_through_resume_and_rate_changes(family):
     from test_shared_state import tiny
     from test_native_optimizer_checkpointing import examples
     from natlang_neuralese.model.shared_state import SharedStateModel
     from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
     from natlang_neuralese.train.native_learning_rates import apply_native_learning_rates,LEARNED_ROWS
-    from natlang_neuralese.train.native_semantic_stage import _adjust_lr
     def build():
         result=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
         if family=='mellum':result.port.hf.natlang_precision='bf16'
@@ -94,7 +93,7 @@ def test_actual_native_updates_preserve_distinct_rows_through_resume_and_semanti
     old=named_history(target)
     moments={name:copy.deepcopy(history) for name,(_,history) in old.items()}
     apply_native_learning_rates(target,backbone_lr=1e-5)
-    _adjust_lr(target,2e-5)
+    apply_native_learning_rates(target,backbone_lr=2e-5)
     for name,(group,history) in named_history(target).items():
         assert group['lr']==(.003 if name in LEARNED_ROWS else 2e-5),name
         for key,value in moments[name].items():
@@ -108,7 +107,7 @@ def test_actual_native_updates_preserve_distinct_rows_through_resume_and_semanti
     assert torch.equal(expected,actual)
     for key,value in model.state_dict().items():assert torch.equal(value,resumed.state_dict()[key]),key
     for key,value in model.port.hf.state_dict().items():assert torch.equal(value,resumed.port.hf.state_dict()[key]),key
-    _adjust_lr(target,2e-5,learned_row_lr=.001)
+    apply_native_learning_rates(target,backbone_lr=2e-5,learned_row_lr=.001)
     assert all(group['lr']==(.001 if name in LEARNED_ROWS else 2e-5)
                for name,(group,_) in named_history(target).items())
 
@@ -155,29 +154,6 @@ def test_actual_sft_cli_inherits_row_rate_on_resume_and_retains_exposure(tmp_pat
         assert histories[name] and any(torch.is_tensor(value) and value.count_nonzero() for value in histories[name].values())
 
 
-def test_actual_three_phase_shared_checkpoint_retains_row_rates_and_named_slots(tmp_path,monkeypatch):
-    import json
-    from test_native_semantic_stage import _fixture
-    from natlang_neuralese.train import native_semantic_stage as stage
-    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-    path,manifest,config,_=_fixture(tmp_path,monkeypatch)
-    config['learned_row_learning_rate']=.003;path.write_text(json.dumps(config))
-    report=stage.run(path,manifest,tmp_path/'shared',device='cpu')
-    assert report['completed'] and report['step']==3
-    checkpoint=CheckpointPolicy.load(tmp_path/'shared'/'checkpoint.pt')
-    for participant in checkpoint['participants'].values():
-        saved=participant['optimizer'];found=set()
-        for kind,names in saved['param_names'].items():
-            groups=saved[kind]['param_groups'];slots=[slot for group in groups for slot in group['params']]
-            for name,slot in zip(names,slots):
-                rate=next(group['lr'] for group in groups if slot in group['params'])
-                if name in {'interface.input_rows','interface.output_rows'}:
-                    assert rate==.003;found.add(name)
-        expected={entry['name'] for entry in saved['schema']
-                  if entry['name'] in {'interface.input_rows','interface.output_rows'}}
-        assert 'interface.input_rows' in found and found==expected
-
-
 def test_serialized_names_cannot_alias_two_parameters_to_one_saved_slot():
     _,optimizer=mixed();saved=optimizer.state_dict()
     group=saved['adamw']['param_groups'][0]
@@ -187,28 +163,14 @@ def test_serialized_names_cannot_alias_two_parameters_to_one_saved_slot():
         optimizer.load_state_dict(saved)
 
 
-@pytest.mark.parametrize('rate',[0,-1,float('nan'),True,'0.003'])
-def test_rate_declarations_reject_invalid_native_recipe_and_phase_values(tmp_path,monkeypatch,rate):
-    from test_native_semantic_stage import _fixture
-    from natlang_neuralese.train import native_semantic_stage as stage
-    from natlang_neuralese.train.recipe import validate_stage_parameters
-    for kind in ('native_state_sft','native_state_rl'):
-        with pytest.raises(ValueError,match='learned_row_learning_rate'):
-            validate_stage_parameters(kind,{'learned_row_learning_rate':rate})
-    _,_,config,_=_fixture(tmp_path,monkeypatch)
-    config['phases'][1]['options']={'learned_row_learning_rate':rate}
-    with pytest.raises(ValueError,match='learned_row_learning_rate'):stage.validate_config(config)
-
-
 @pytest.mark.parametrize('family',['lfm','mellum'])
-def test_role_only_rate_override_preserves_reasoning_moments_rng_and_semantic_resume(family):
+def test_role_only_rate_override_preserves_reasoning_moments_rng_and_resume(family):
     from test_shared_state import tiny
     from test_native_optimizer_checkpointing import examples,assert_exact
     from test_native_reasoning_rows import training_examples
     from natlang_neuralese.model.shared_state import SharedStateModel
     from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
     from natlang_neuralese.train.native_learning_rates import apply_native_learning_rates,INTERFACE_ROWS,LEARNED_ROWS
-    from natlang_neuralese.train.native_semantic_stage import _adjust_lr
     def build():
         model=SharedStateModel(tiny(family),(58,59,60,61),rank=4,token_override_ids=(54,55),
             sparse_row_dtype=torch.float32,token_override_dtype=torch.float32)
@@ -230,7 +192,7 @@ def test_role_only_rate_override_preserves_reasoning_moments_rng_and_semantic_re
     saved=copy.deepcopy(optimizer.state_dict())
     resumed=build();resumed.load_state_dict(model.state_dict());resumed.port.hf.load_state_dict(model.port.hf.state_dict())
     target,_=make_native_optimizer(resumed,lr=3e-6,in_backward=True);target.load_state_dict(saved)
-    _adjust_lr(target,3e-6)  # Subsequent shared phases inherit the actual two row rates.
+    apply_native_learning_rates(target,backbone_lr=3e-6)  # A later backbone-rate change keeps the actual row rates.
     for name,(group,history) in named_history(target).items():
         assert group['lr']==(.003 if name in INTERFACE_ROWS else 3e-6),name
         assert_exact(prior[name],history,name)

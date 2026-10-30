@@ -163,8 +163,7 @@ def test_seed_emitted_stage_initializes_actual_resident_and_mandatory_keeps_own_
     assert config['trainer_parameters']=={'learning_rate':3e-6,'checkpoint_layers':True}
     recipe=json.loads(Path(config['production_recipe']).read_text())
     other={**recipe['stages'][0],'id':'other-mandatory-stage'}
-    mandatory,_=continuation_config(config,other,checkpoint='same-current-parent',adapter=None,
-        out=tmp_path/'mandatory')
+    mandatory,_=continuation_config(config,other,checkpoint='same-current-parent',out=tmp_path/'mandatory')
     # Mandatory execution expands trainer_parameters into BOTH placeholders;
     # the ordinary seed's stage must not override the selected mandatory stage.
     mandatory_args=build_parser().parse_args(['--native-graphs',str(paths['old']),

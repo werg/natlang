@@ -407,32 +407,3 @@ def raw_communication_rows(progress):
             row['required_visits']+=required;row['graph_visits']+=actual
             row['qualified']=row['qualified'] and required>0 and actual>=required
     return rows
-
-def qualified_refresh_config(source,requested,models):
-    """Use the previous semantic cohort until the whole new raw cohort is ready."""
-    from ..data.native_sources import NativeGraphSource
-    from ..common.hashing import canonical_json_sha256_hex
-    proposed=json.loads(Path(requested).read_text())
-    pending=[]
-    pairs=proposed['pairs']
-    if sha256_file_hex_cached(pairs['path'])!=pairs['sha256']:
-        raise ValueError('requested semantic communication source changed')
-    for name,model in models.items():
-        source_index=NativeGraphSource(pairs['path'],model['native_identity']['tokenizer_fingerprint'],
-            required_split='train',pair_model=name,role_ids=model['marker_ids'])
-        raw=model.get('raw_communication_rows') or {}
-        for entry in source_index.entries:
-            if not entry.get('communication'):continue
-            actual=raw.get(entry['id']) or {}
-            if actual.get('binding')!=entry['binding'] or actual.get('qualified') is not True:
-                pending.append({'model_id':name,'graph_id':entry['id'],'binding':entry['binding']})
-    if not pending:return proposed,[]
-    qualified=source.get('qualified_curriculum') or {}
-    previous=qualified.get('config')
-    if not isinstance(previous,dict) or canonical_json_sha256_hex(previous)!=qualified.get('sha256'):
-        raise ValueError('new communication cohort is not raw-trained and no exact previous semantic cohort is available')
-    # Keep useful operational tuning, while source membership remains the
-    # explicit previously qualified cohort. Pending membership is never lost.
-    selected={**proposed,**{key:previous[key] for key in ('pairs','held_pairs','external_bundles') if key in previous}}
-    if 'external_bundles' not in previous:selected.pop('external_bundles',None)
-    return selected,pending

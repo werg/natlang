@@ -144,10 +144,6 @@ def _dependency_order(nodes):
 
 
 def _edited(replay, edits):
-    if replay.semantic_dependencies:
-        # Codec sources bind source-local spans of their own graph; their
-        # rebase needs the codec executor's support (tracked open item).
-        raise ValueError('privileged scoring of semantic-codec graphs is not supported yet')
     plan, requery = _rebase_plan(replay.plan, edits)
     written = tuple({**item, **dict(zip(('start', 'stop'), _shift_written(replay.plan, edits, item)))}
                     for item in replay.written_sources)

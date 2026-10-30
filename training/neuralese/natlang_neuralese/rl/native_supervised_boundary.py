@@ -220,7 +220,7 @@ def apply(plan_path,declaration,handoff,config,cursor,directory):
     from .native_supervised import bind_recipe_lineage,continuation_config
     bind_recipe_lineage(new_config,old_plan['recipe_sha256'])
     stage=next(row for row in new['stages']if row['id']==config['production_stage'])
-    refreshed,_=continuation_config(new_config,stage,checkpoint=config['checkpoint'],adapter=None,out=config['out'])
+    refreshed,_=continuation_config(new_config,stage,checkpoint=config['checkpoint'],out=config['out'])
     for key in ('seed_command','seed_native_graphs','held_native_graphs','pending_native_sources','continued_native_graphs','continued_held_native_graphs','objective_spec'):
         if key in refreshed:new_config[key]=refreshed[key]
         else:new_config.pop(key,None)
@@ -237,7 +237,7 @@ def apply(plan_path,declaration,handoff,config,cursor,directory):
         if not checked:raise ValueError('supervised publication needs its complete owner contract')
         new_config.update(checked)
     if publication is not None:
-        refreshed,_=continuation_config(new_config,stage,checkpoint=config['checkpoint'],adapter=None,out=config['out'])
+        refreshed,_=continuation_config(new_config,stage,checkpoint=config['checkpoint'],out=config['out'])
         new_config['seed_trainer_parameters']={**refreshed['trainer_parameters'],'resident_data_directory':new_config['resident_data_directory']}
     new_config['runtime_binding']={'plan_sha256':binding(plan_path)['sha256'],'handoff':handoff}
     intent_path=root/'intent.json'

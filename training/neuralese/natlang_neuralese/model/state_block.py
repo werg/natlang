@@ -136,9 +136,6 @@ class NativeStateBlock:
 
     @classmethod
     def from_tensors(cls, metadata, tensors):
-        if metadata.get('schema') == 'neuralese.semantic-state/1':
-            from .semantic_message import SemanticStateMessage
-            return SemanticStateMessage.from_tensors(metadata, tensors)
         if metadata.get('schema') != SCHEMA:
             raise ValueError('unsupported native state schema')
         kinds = metadata.get('layer_kinds')

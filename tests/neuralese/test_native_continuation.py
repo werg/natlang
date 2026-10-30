@@ -236,30 +236,6 @@ def test_actual_sft_foundation_stops_before_ordinary_and_shared_resume_consumes_
     assert json.loads((resumed/'report.json').read_text())['completed']
 
 
-def test_actual_joint_curriculum_preserves_ce_deficits_and_monotonic_model_steps(tmp_path,monkeypatch):
-    from test_native_semantic_stage import _fixture
-    from natlang_neuralese.train import native_semantic_stage as stage
-    path,manifest,_,_=_fixture(tmp_path,monkeypatch)
-    load=stage.load_participant
-    frames=collect_sft_progress(progress())
-    def with_progress(*args,**kwargs):
-        participant=load(*args,**kwargs)
-        participant.sft_progress=copy.deepcopy(frames)
-        participant.global_step=10
-        return participant
-    monkeypatch.setattr(stage,'load_participant',with_progress)
-    report=stage.run(path,manifest,tmp_path/'joint',max_updates=1,device='cpu')
-    assert not report['completed']
-    checkpoint=tmp_path/'joint/checkpoint.pt'
-    stage.run(path,manifest,tmp_path/'joint',resume=checkpoint,device='cpu')
-    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-    saved=CheckpointPolicy.load(checkpoint)
-    for entry in saved['participants'].values():
-        assert entry['sft_progress']==frames
-        assert progress_obligations(entry['sft_progress'])['remaining_graph_visits']==1
-        assert entry['global_step']==12  # VAE freezes model, joint+distill update it
-
-
 def test_readiness_foundation_is_explicit_and_checks_full_admitted_cohort(tmp_path):
     from test_native_readiness import ready
     from natlang_neuralese.train.native_readiness import validate_ready
@@ -299,35 +275,6 @@ def test_readiness_foundation_is_explicit_and_checks_full_admitted_cohort(tmp_pa
     requirement['foundation_sources']={'path':str(full),'sha256':sha256_file_hex(full)}
     with pytest.raises(ValueError,match='entire declared admitted'):
         validate_ready(path,requirement)
-
-
-def test_new_raw_cohort_deficits_keep_previous_semantic_membership_without_losing_pending_rows(tmp_path):
-    from natlang_neuralese.train.native_continuation import qualified_refresh_config
-    from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_file_hex
-    old=tmp_path/'old.jsonl';new=tmp_path/'new.jsonl'
-    a,b=authenticated_pair('a'),authenticated_pair('b')
-    old.write_text(json.dumps(a)+'\n');new.write_text(json.dumps(a)+'\n'+json.dumps(b)+'\n')
-    previous={'pairs':{'path':str(old),'sha256':sha256_file_hex(old)},'held_pairs':{'path':'prior-held','sha256':'held'},'vae_lr':.01}
-    proposed={**previous,'pairs':{'path':str(new),'sha256':sha256_file_hex(new)},'vae_lr':.02}
-    config=tmp_path/'config.json';config.write_text(json.dumps(proposed))
-    models={}
-    indexes={}
-    for name,fp in [('lfm','1'*64),('mellum','2'*64)]:
-        index=NativeGraphSource(new,fp,required_split='train',pair_model=name,role_ids=(58,59,60,61))
-        indexes[name]=index
-        first=index.entries[0]
-        models[name]={'native_identity':{'tokenizer_fingerprint':fp},'marker_ids':[58,59,60,61],
-            'raw_communication_rows':{first['id']:{'binding':first['binding'],'qualified':True}}}
-    source={'qualified_curriculum':{'config':previous,'sha256':canonical_json_sha256_hex(previous)}}
-    selected,pending=qualified_refresh_config(source,config,models)
-    assert selected['pairs']==previous['pairs'] and selected['vae_lr']==.02
-    assert {entry['graph_id'] for entry in pending}=={'lfm:b','mellum:b'}
-    with pytest.raises(ValueError,match='no exact previous'):
-        qualified_refresh_config({},config,models)
-    for name,index in indexes.items():
-        models[name]['raw_communication_rows'].update({entry['id']:{'binding':entry['binding'],'qualified':True} for entry in index.entries})
-    selected,pending=qualified_refresh_config(source,config,models)
-    assert selected==proposed and pending==[]
 
 
 @pytest.mark.parametrize('objective_continuation', [False, True])

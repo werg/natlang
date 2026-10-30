@@ -108,8 +108,7 @@ def _raw_operation(config,cursor,request_ref,result_ref,operation_state=None):
             or type(cursor.get('pending_rl_round'))is not int
             or Path(request['out']).resolve()!=Path(config['out']).resolve()
             or Path(request_ref['path']).resolve().parent!=cycle_work_directory(root,cursor)/'rl-bridge'
-            or invocation.get('mandatory_sft_only')is True or invocation.get('semantic_adapter')
-            or invocation.get('coefficient_policy') or request.get('semantic_adapter')
+            or invocation.get('mandatory_sft_only')is True or invocation.get('coefficient_policy')
             or binding(invocation['production_recipe'])!=binding(config['production_recipe'])
             or invocation.get('raw_model_id')!=config.get('raw_model_id')
             or any(request['parent_checkpoint'].get(k)!=cursor.get('current_checkpoint',{}).get(k)
@@ -456,7 +455,7 @@ def _future_config(config,recipe_reference,recipe,checkpoint,lineage,*,declarati
     from .native_raw_rounds import _supervised_quantum
     foundation=next(stage for stage in recipe['stages']if stage['id']==config['production_stage'])
     future=copy.deepcopy(config);future['production_recipe']=str(_bound(recipe_reference))
-    configured,_=continuation_config(future,foundation,checkpoint=checkpoint['path'],adapter=None,out=config['out'])
+    configured,_=continuation_config(future,foundation,checkpoint=checkpoint['path'],out=config['out'])
     for key in ('trainer_parameters','seed_command','seed_native_graphs','held_native_graphs',
                 'foundation_native_graphs','foundation_declaration_recovery','continued_native_graphs','continued_held_native_graphs',
                 'pending_native_sources','withdrawn_native_graphs','objective_spec'):

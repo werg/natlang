@@ -22,10 +22,9 @@ def main(argv=None):
     parser.add_argument("--native-checkpoint", required=True,
                         help="complete native shared-state model checkpoint")
     parser.add_argument("--base", default=None, help="exact source model snapshot for native restoration")
-    parser.add_argument('--native-participant', help='model identity selected from a complete shared semantic checkpoint')
+    parser.add_argument('--native-participant', help='model identity selected from a complete shared checkpoint')
     parser.add_argument('--native-actor-view', help='optional source-bound compact inference receipt')
     parser.add_argument('--native-actor-view-sha256', help='exact independently bound inference receipt SHA-256')
-    parser.add_argument('--semantic-adapter', help='identity-bound shared semantic adapter export receipt')
     parser.add_argument("--prompt-rendering", choices=("full", "program-header"), default=None,
                         help="serving prompt policy (direct artifacts bind this in their manifest; base default: full)")
     parser.add_argument("--threads", type=int, default=8)
@@ -67,7 +66,7 @@ def main(argv=None):
     cap_cuda_memory(args.device, args.memory_gb)
     engine = load_native_engine(args.native_checkpoint, base=args.base, device=args.device, dtype=model_dtype,
                                 prompt_rendering=args.prompt_rendering or "full", participant=args.native_participant,
-                                semantic_adapter=args.semantic_adapter, actor_view=actor_view)
+                                actor_view=actor_view)
     if args.ctx_size:
         engine.context = min(engine.context, args.ctx_size)
     if args.store_dir is not None:

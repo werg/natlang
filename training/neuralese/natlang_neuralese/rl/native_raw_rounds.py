@@ -81,15 +81,9 @@ def _inputs(declaration):
 
 def _seed_quantum(config,record):
     """Bind the complete supervised settings to the finite seed operation."""
-    from .native_supervised import bind_foundation_policy
     config['seed_trainer_parameters']={**config.get('trainer_parameters',{}),
         **config.get('seed_trainer_parameters',{}),'refresh_at_checkpoint':True,
         'stage_id':config['production_stage']}
-    for key in ('trainer_parameters', 'seed_trainer_parameters'):
-        bind_foundation_policy(config, config.setdefault(key, {}))
-    if config.get('foundation_readiness_policy'):
-        for key in ('trainer_parameters','seed_trainer_parameters'):
-            config.setdefault(key,{})['foundation_readiness_policy']=config['foundation_readiness_policy']
     if record.get('resident'):
         directory=record['resident']['directory']
         config['resident_data_directory']=directory
@@ -145,14 +139,8 @@ def _scheduling_controls(config,declaration,plan_path,record,*,pending=False):
         if set(mapping)-ids:raise ValueError('supervised stage quantum names an undeclared recipe stage')
         config['supervised_stage_quantum_updates']=mapping
         config['supervised_stage_quantum_control']={'plan':binding(plan_path),'updates':mapping}
-    if 'foundation_readiness_policy' in declaration:
-        policy=declaration['foundation_readiness_policy']
-        if policy not in ('at-boundary','on-shared-request'):
-            raise ValueError('unknown foundation readiness scheduling policy')
-        config['foundation_readiness_policy']=policy
-        config['foundation_qualification_generation']=declaration.get('foundation_qualification_generation','initial')
-        if not isinstance(config['foundation_qualification_generation'],str) or not config['foundation_qualification_generation']:
-            raise ValueError('foundation qualification generation must name its explicit repair attempt')
+    if 'foundation_readiness_policy' in declaration or 'foundation_qualification_generation' in declaration:
+        raise ValueError('foundation readiness scheduling served the removed cross-model shared-stage rendezvous')
     if 'rl_scheduling_policy' in declaration:
         policy=declaration['rl_scheduling_policy']
         if policy not in ('foundation-qualified-only','independent-local-cycles-v1'):
@@ -284,8 +272,8 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None,ow
             _scheduling_controls(prior,declaration,plan_path,record,pending=True)
             write_json_durable(path,prior)
             return path  # Retain sealed cases/source/bootstrap identity; repair stop cadence only.
-    args=SimpleNamespace(**inputs,model=declaration['model'],native_participant=None,semantic_adapter=None,
-        semantic_refresh_config=None,checkpoint=_bound(record['checkpoint']),base=Path(declaration['base']),
+    args=SimpleNamespace(**inputs,model=declaration['model'],native_participant=None,
+        checkpoint=_bound(record['checkpoint']),base=Path(declaration['base']),
         production_stage=declaration['production_stage'],runtime=runtime,out=out/'production',config=path,
             actor_runtime=declaration.get('actor_runtime'),
         port=declaration['port'],coefficient_policy=None,coefficient_optimizer=None,coefficient_task_eval=None,
@@ -2001,8 +1989,6 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
             raise StudentConfigurationError('owned completed work requires its actual current runtime configuration')
         reconciliation['runtime_configuration_required']=False;write_json_durable(cursor_path,cursor)
     cycle=cursor['cycle'];work=cycle_work_directory(directory,cursor)
-    if config.get('foundation_readiness_policy')=='on-shared-request':
-        raise StudentConfigurationError('on-shared-request RAW qualification served the removed cross-model role exchange')
     if cursor['phase']=='rl':
         if stop.requested:return cursor
         production_state=Path(config['out'])/'state.json'
@@ -2030,15 +2016,14 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
         if index>=len(stages):break
         stage=stages[index];checkpoint=_current_checkpoint(config)
         jobdir=work/'supervised'/f'{index:03d}'
-        continuation,sources=continuation_config(config,stage,checkpoint=str(_bound(checkpoint)),adapter=None,out=jobdir)
+        continuation,sources=continuation_config(config,stage,checkpoint=str(_bound(checkpoint)),out=jobdir)
         parameters=continuation['trainer_parameters']
         _supervised_quantum(config,parameters)
         is_foundation=stage['id']==config['production_stage']
         # Once the cohort is ready, ordinary mandatory deficits still receive
         # useful finite quanta; a final existing foundation qualification below
         # binds the resulting actual weights before rendezvous.
-        parameters['communication_foundation']=bool(is_foundation and
-            (not cursor.get('foundation_qualified') or config.get('foundation_readiness_policy')=='on-shared-request'))
+        parameters['communication_foundation']=bool(is_foundation and not cursor.get('foundation_qualified'))
         if is_foundation and config.get('resident_data_directory'):
             parameters['resident_data_directory']=config['resident_data_directory']
         if is_foundation and cursor.get('foundation_readiness_repair'):
@@ -2068,12 +2053,12 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
             write_json_durable(config_path,config)
             from .native_bootstrap_metadata import save
             save(directory/'bootstrap-verification.json',plan_path,declaration,handoff,config)
-    if cursor.get('foundation_qualified') and config.get('foundation_readiness_policy')!='on-shared-request':
+    if cursor.get('foundation_qualified'):
         # This is the same shared trainer, not a fabricated copy of an old
         # certificate. It may do zero updates when the exact cohort is complete,
         # but rechecks runtime/task behavior against current post-RL weights.
         checkpoint=_current_checkpoint(config);jobdir=work/'foundation-current'
-        continuation,_=continuation_config(config,foundation[0],checkpoint=str(_bound(checkpoint)),adapter=None,out=jobdir)
+        continuation,_=continuation_config(config,foundation[0],checkpoint=str(_bound(checkpoint)),out=jobdir)
         _supervised_quantum(config,continuation['trainer_parameters'])
         continuation['trainer_parameters']['communication_foundation']=True
         continuation['trainer_parameters']['refresh_foundation_readiness']=True
@@ -2170,8 +2155,6 @@ def _publish_supervised_result(continuation,jobdir,config,cursor,result):
     checkpoint=binding(pending);report_path=Path(pending).parent/'native-training-receipt.json'
     _publish_checkpoint(config,checkpoint)
     cursor.pop('readiness',None)
-    if config.get('foundation_readiness_policy')=='on-shared-request':
-        cursor.pop('foundation_qualified',None)
     cursor.pop('foundation_candidate',None)
     if report_path.is_file():
         report=json.loads(report_path.read_text())
@@ -2230,7 +2213,7 @@ def _resident_configuration(config,state,source,checkpoint):
     recipe=resolve_recipe_data(config['production_recipe'])
     stage=next(stage for stage in recipe['stages'] if stage['id']==config['production_stage'])
     from .native_supervised import continuation_config
-    refreshed,_=continuation_config(config,stage,checkpoint=checkpoint['path'],adapter=None,out=config['out'])
+    refreshed,_=continuation_config(config,stage,checkpoint=checkpoint['path'],out=config['out'])
     for key in ('seed_command','seed_native_graphs','held_native_graphs','pending_native_sources',
                 'continued_native_graphs','continued_held_native_graphs','objective_spec'):
         if key in refreshed:config[key]=refreshed[key]

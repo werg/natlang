@@ -135,15 +135,10 @@ def make_handler(engine: Engine):
                                         "store": {"owners": True, "persistent": engine.store.directory is not None},
                                         "max_block_length": engine.max_block, "context": engine.context,
                                         "grad": True, "grad_order": 2, "stream": True,
-                                        "native_state": {"enabled": True, "format":
-                                                              ('neuralese.semantic-state/1' if getattr(engine, 'semantic_channel', None)
-                                                               else 'neuralese.native-state/1'),
-                                                              **({'semantic_adapter_sha256': engine.semantic_channel.adapter_sha256}
-                                                                 if getattr(engine, 'semantic_channel', None) else {}),
+                                        "native_state": {"enabled": True, "format": 'neuralese.native-state/1',
                                                               "consumption_modes": ["exact-native-state",
                                                                                      "same-base-adapter-state",
-                                                                                     "best-effort-text-retokenization"] +
-                                                              (['learned-semantic-state-deltas'] if getattr(engine, 'semantic_channel', None) else []),
+                                                                                     "best-effort-text-retokenization"],
                                                               "architecture": engine.model_config.get("architecture"),
                                                               "checkpoint_sha256": engine.checkpoint_sha256,
                                                               "tokenizer_fingerprint": engine.model_config.get("tokenizer_fingerprint"),

@@ -26,7 +26,6 @@ class NativeReplay:
     external_receipts: dict | None = None
     invocation_actors: dict | None = None
     external_invocations: dict | None = None
-    semantic_dependencies: tuple = ()
     written_sources: tuple = ()
     protocol_failures: dict | None = None
     input_actions: tuple[dict, ...] = ()
@@ -134,8 +133,7 @@ def capture_invocation_actors(turns,base):
         'base_native_identity':dict(base),'invocations':actors},base)
 
 
-def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=None, structural=False,semantic_channel=None,
-                   actors=None):
+def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=None, structural=False, actors=None):
     """Compile real turn captures, preserving exact producer occurrence bindings.
 
     ``turns`` use graph_replay.producer_turns' graph_turn/written_nodes/read_bindings
@@ -218,7 +216,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             validate_behavior_top_k_declaration(top_k_law)
             if greedy or decision or forced_capture or law.get('probabilities') != top_k_law['distribution']:
                 raise ValueError('native RL behavior top-k requires its actual sampled post-processing law')
-        own, mask, reads, read_stops, read_sources, read_semantics = [], [], [], [], [], []
+        own, mask, reads, read_stops, read_sources = [], [], [], [], []
         for segment in capture.get('prompt') or []:
             if segment.get('kind') == 'tokens':
                 ids = _tokens(segment.get('token_ids'))
@@ -231,13 +229,8 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 if segment.get('state_derivation')!=observed.derivation:
                     raise ValueError('native RL input changed its actual state derivation receipt')
                 receipt = segment.get('adapter_state_consumption')
-                semantic=None
                 if 'semantic_adaptation' in segment or 'source_state_id' in segment:
-                    if receipt is not None:
-                        raise ValueError('semantic decoding and raw adapter-state splice are different transport contracts')
-                    from .native_semantic_replay import authenticate_semantic_input
-                    semantic=authenticate_semantic_input(segment,observed,identity=actor_identity,
-                        channel=semantic_channel,fetch_block=fetch_block)
+                    raise ValueError('native RL input uses the removed cross-model semantic adaptation')
                 if receipt is not None:
                     from ..model.native_adapters import validate_adapter_state_receipt
                     block = observed
@@ -253,7 +246,6 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     raise ValueError('native input stop_gradient must be explicitly true or absent')
                 read_stops.append(segment.get('stop_gradient', False))
                 read_sources.append(segment.get('source_occurrence'))
-                read_semantics.append(semantic)
                 reads.append((len(own), segment['id'], receipt))
             else:
                 raise ValueError('unknown native RL prompt segment')
@@ -343,23 +335,12 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     or mask[prompt_length+begin] or mask[prompt_length+end-1]):
                 raise ValueError('native RL write boundaries/embedding roles differ from the captured payload')
             block_id = write['state_id']
-            block = fetch_block(write.get('raw_state_id', block_id))
+            if write.get('raw_state_id', block_id) != block_id:
+                raise ValueError('native RL write uses the removed cross-model semantic message')
+            block = fetch_block(block_id)
             block.require_native(**actor_identity)
             if getattr(block, 'adapter_binding', None) != binding:
                 raise ValueError('native RL producer state adapter binding differs from its actor')
-            if write.get('raw_state_id', block_id) != block_id:
-                from ..model.semantic_message import SemanticStateMessage
-                message = fetch_block(block_id)
-                if not isinstance(message, SemanticStateMessage):
-                    raise ValueError('native RL semantic write must reference its actual compact message')
-                message.validate()
-                if (any(getattr(message, key) != value for key, value in actor_identity.items())
-                        or message.text != block.text
-                        or not torch.equal(message.token_ids, block.token_ids)
-                        or not torch.equal(message.embeddings, block.embeddings)
-                        or not torch.equal(message.positions, block.positions)
-                        or message.adapter_binding!=block.adapter_binding):
-                    raise ValueError('native RL semantic message differs from its archived producer state')
             if block.token_ids.tolist() != [sample['token_id'] for sample in samples[lo:hi]]:
                 raise ValueError('native RL archived write tokens differ from its sampled payload')
             span = (prompt_length+lo, prompt_length+hi)
@@ -375,22 +356,20 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     raise ValueError('native write occurrence differs from its actual capture')
                 occurrence=item['node']
             writers.setdefault(block_id, []).append((name, *span, occurrence))
-        prepared[name] = {'decision_sample':decision_sample,'protocol_failure':failure,'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops, 'read_sources': read_sources, 'read_semantics':read_semantics,
+        prepared[name] = {'decision_sample':decision_sample,'protocol_failure':failure,'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops, 'read_sources': read_sources,
                           'events': events,'input_actions':input_actions, 'spans': spans, 'actor_identity':actor_identity,'adapter_binding':binding}
     if not prepared:
         raise ValueError('native RL graph has no captured turns')
     externals, nodes, ordered, external_receipts, external_invocations = {}, [], [], {}, {}
     turn_nodes = {}
-    semantic_dependencies=[]
     pending = dict(prepared)
     while pending:
         progress = False
         for name, item in list(pending.items()):
             actor_identity,binding=item['actor_identity'],item['adapter_binding']
-            imports, dependencies, resolved_codecs = [], set(), []
+            imports, dependencies = [], set()
             for read_index, (at, block_id, receipt) in enumerate(item['reads']):
-                semantic=item['read_semantics'][read_index]
-                source_id=semantic['source_state_id'] if semantic is not None else block_id
+                source_id=block_id
                 choices = writers.get(source_id, [])
                 occurrence_binding = (item['turn'].get('read_bindings') or {}).get(source_id)
                 outside = (item['turn'].get('external_read_bindings') or {}).get(source_id)
@@ -443,36 +422,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                         if getattr(block, 'adapter_binding', None) != binding:
                             raise ValueError('native RL external state adapter binding differs from its actor')
                     start, stop = 0, len(block.token_ids)
-                if semantic is not None:
-                    from ..model.native_codec_graph import CodecDependency
-                    source_node=source if choices else None
-                    external_source=None
-                    if not choices:
-                        # The real external input is its immutable compact code,
-                        # never the observed decoded target state.
-                        external_source='semantic-source-'+source_id
-                        externals[external_source]=fetch_block(source_id)
-                        del externals[source]
-                        external_invocations.pop(source,None);external_receipts.pop(source,None)
-                    key=f'semantic-input:{name}:{read_index}'
-                    dependency=CodecDependency(key,'policy',**semantic,source_node=source_node,
-                        source_start=start if choices else 0,source_stop=stop if choices else 0,
-                        external_source=external_source,source_occurrence=outside or occurrence_binding or (choices[0][3] if choices else None))
-                    resolved_codecs.append(dependency.validate())
-                    # Pending turns are revisited; append once only after all
-                    # source dependencies have become executable.
-                    imports.append(ImportSpan(at,key,0,len(semantic['target_token_ids']),
-                        **({'stop_gradient':True} if item['read_stops'][read_index] else {})))
-                    # This immutable observation binds source graph geometry and
-                    # archive provenance only. The codec executor replaces it
-                    # with the differentiable current decode before execution.
-                    externals[key]=fetch_block(block_id)
-                    continue
                 imports.append(ImportSpan(at, source, start, stop,
                     **({'stop_gradient':True} if item['read_stops'][read_index] else {})))
             if any(dependency in pending for dependency in dependencies):
                 continue
-            semantic_dependencies.extend(resolved_codecs)
             # All exact roles, including STOP and delimiter inputs, come from
             # the receipt. Only payload ranges export native state to readers.
             spans, start = [], None
@@ -521,12 +474,12 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                           'token_id': token, 'temperature': 1., 'allowed_token_ids': None, 'banned_token_ids': None}
                          for index, token in enumerate(continuation)]
                         for option, continuation in zip(turn_nodes[name], sample['continuations'])]})
-    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,tuple(semantic_dependencies),written_sources,
+    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,written_sources,
         {name:value['protocol_failure'] for name,value in prepared.items() if value['protocol_failure']},
         input_actions, tuple(decision_actions), turn_nodes)
 
 
-def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128,semantic_channel=None):
+def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128):
     """Score every actual sample, including markers and terminal tokens, once."""
     from ..model.native_adapters import require_model_execution_actor
     if replay.invocation_actors is None:
@@ -537,21 +490,9 @@ def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128,sema
         if bank is None or bank.receipt()!=replay.invocation_actors:
             raise ValueError('native heterogeneous replay needs its exact per-invocation actor scope')
     model.port.checkpoint_layers = checkpoint_layers
-    if replay.semantic_dependencies:
-        if semantic_channel is None:
-            raise ValueError('native semantic replay needs its exact differentiable semantic channel')
-        from types import SimpleNamespace
-        from ..model.native_codec_graph import execute_codec_graph
-        names=[name for name,binding in semantic_channel.bindings.items() if binding==replay.identity]
-        if len(names)!=1:raise ValueError('native semantic replay target is not an exactly trained participant')
-        participant=SimpleNamespace(model=model,tokenizer=semantic_channel.tokenizers[names[0]],identity=replay.identity)
-        results,_=execute_codec_graph({'policy':participant},{'policy':replay.plan},replay.semantic_dependencies,
-            channel=semantic_channel,external_blocks=replay.external_blocks)
-        result=results['policy']
-    else:
-        result = model(replay.plan, external_blocks=replay.external_blocks,
-                       external_identity={name: {key: getattr(block, key) for key in replay.identity}
-                           for name, block in replay.external_blocks.items()}, retain_states=False)
+    result = model(replay.plan, external_blocks=replay.external_blocks,
+                   external_identity={name: {key: getattr(block, key) for key in replay.identity}
+                       for name, block in replay.external_blocks.items()}, retain_states=False)
     return action_logps(model, result['h_final'][0], replay.actions, chunk_tokens=chunk_tokens)
 
 
@@ -795,7 +736,6 @@ class NativePolicyObjective:
         self.engine = None
         self.native_state_modes = {}
         self.evaluation_external_contracts = {}
-        self.semantic_channel=None
         if self.spec.get('block_bundle'):
             bundle_path = Path(self.spec['block_bundle']).resolve()
             self.bundle = (bundle_path, json.loads(bundle_path.read_text()))
@@ -928,53 +868,13 @@ class NativePolicyObjective:
                 if block.adapter_binding!=after['adapter_binding']:
                     raise ValueError('native invocation strict current observation changed its adapter binding')
 
-    def bind_semantic_channel(self,channel):
-        dependencies=[value for row in self.rows.values() for value in row.get('semantic_dependencies',[])]
-        if (not dependencies or any(value.get('adapter_sha256')!=channel.adapter_sha256 for value in dependencies)):
-            raise ValueError('native policy semantic channel differs from its exact admitted codec')
-        names=[name for name,binding in channel.bindings.items() if binding==self.identity]
-        if len(names)!=1:raise ValueError('native policy target is not one exactly trained semantic participant')
-        self.semantic_channel=channel
-        self.semantic_participant_name=names[0]
-
     def shares_causal_prefixes(self, examples):
         """Exact causal-prefix packing applies: plain token readouts at remapped query rows only.
 
-        Per-invocation actors, archived external states and semantic codec dependencies address the original
-        invocation names/layout and retain the unshared plan."""
-        return (self.behavior_policy is None and self.semantic_channel is None
-                and not any(getattr(example, 'external_states', None) for example in examples)
-                and not any(self.rows[example.id].get('semantic_dependencies') for example in examples
-                            if example.id in self.rows))
-
-    def forward_graph(self,model,context,inputs):
-        if context.get('shared_causal_prefixes'):
-            return model(context['plan'],retain_states=False,**inputs)
-        dependencies=[]
-        from dataclasses import replace
-        from ..model.native_codec_graph import CodecDependency,execute_codec_graph
-        for example in context['examples']:
-            row=self.rows[example.id]
-            bounds=context['row_offsets'][example.id]
-            selected=context['plan'].invocations[bounds['node_start']:bounds['node_stop']]
-            names={before.name:after.name for before,after in zip(example.plan.invocations,selected)}
-            external=context['external_names'][example.id]
-            for value in row.get('semantic_dependencies',[]):
-                dependency=CodecDependency(**{**value,'source_token_ids':tuple(value['source_token_ids']),
-                    'target_token_ids':tuple(value['target_token_ids'])}).validate()
-                dependencies.append(replace(dependency,input_name=external[dependency.input_name],
-                    source_node=names[dependency.source_node] if dependency.source_node is not None else None,
-                    external_source=external[dependency.external_source] if dependency.external_source is not None else None))
-        if not dependencies:
-            return model(context['plan'],retain_states=False,**inputs)
-        if self.semantic_channel is None:
-            raise ValueError('semantic policy objective requires its exact differentiable channel before forward')
-        from types import SimpleNamespace
-        participant=SimpleNamespace(model=model,identity=self.evaluation_identity,
-            tokenizer=self.semantic_channel.tokenizers[self.semantic_participant_name])
-        result,_=execute_codec_graph({'policy':participant},{'policy':context['plan']},dependencies,
-            channel=self.semantic_channel,external_blocks=inputs.get('external_blocks',{}))
-        return result['policy']
+        Per-invocation actors and archived external states address the original invocation names/layout and retain
+        the unshared plan."""
+        return (self.behavior_policy is None
+                and not any(getattr(example, 'external_states', None) for example in examples))
 
     def forward_inputs(self, context):
         blocks, identities = {}, {}
@@ -1143,7 +1043,7 @@ def graph_identity(example):
 from ..model.native_actor_graph import validate_invocation_behavior_policy
 
 
-def _require_scored_training_episode(rollout, identity,*,semantic=False,actors=None):
+def _require_scored_training_episode(rollout, identity,*,actors=None):
     quality = rollout.get('reward', {}).get('quality') if isinstance(rollout.get('reward'), dict) else None
     actor = (rollout.get('policy') or {}).get('checkpoint_sha256')
     if (rollout.get('split') != 'train' or rollout.get('training_admission') not in (None, 'grpo')
@@ -1154,7 +1054,7 @@ def _require_scored_training_episode(rollout, identity,*,semantic=False,actors=N
             not (turn.get('replay') or {}).get('raw_calls_retained') for turn in rollout['turns']):
         raise ValueError('native RL episode lacks task identity or exact raw-call replay')
     from .episode_graph import validate_rollout_graph
-    validate_rollout_graph(rollout,semantic=semantic)
+    validate_rollout_graph(rollout)
 
 
 def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
@@ -1174,7 +1074,7 @@ def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
         'base_native_identity':dict(identity),'collector_policy_role':'base-runtime-metadata','episodes':episodes},identity)
 
 
-def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,semantic_channel=None,
+def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,
                       min_quality=1., policy_loss=None, privileged=None, actors=None):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
     [0, 1] (an exact oracle gives 0 or 1). ``grpo`` keeps groups whose qualities differ; ``rft`` (teacher-forced
@@ -1214,7 +1114,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     for rollout in rollouts:
         if rollout.get('reward') is None:
             continue
-        _require_scored_training_episode(rollout,identity,semantic=semantic_channel is not None,actors=actors)
+        _require_scored_training_episode(rollout,identity,actors=actors)
         key = (rollout['task_id'], rollout.get('group'))
         if jolt is not None:
             role = rollout.get('jolt_role', 'student')
@@ -1240,8 +1140,8 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             invocation_actors=behavior_policy['episodes'].get(episode_key) if behavior_policy is not None else None
             if behavior_policy is not None and invocation_actors is None:
                 raise ValueError('native invocation behavior descriptor omits an admitted source episode')
-            replay = compile_replay(whole_episode_turns(rollout,semantic=semantic_channel is not None), identity=identity, roles=roles, fetch_block=fetch_block,
-                                    invocation_actors=invocation_actors,semantic_channel=semantic_channel,actors=actors)
+            replay = compile_replay(whole_episode_turns(rollout), identity=identity, roles=roles, fetch_block=fetch_block,
+                                    invocation_actors=invocation_actors,actors=actors)
             from .episode_graph import rollout_turn_names
             episode_turns = rollout_turn_names(rollout['turns'])
             if (set(episode_turns) != set(replay.turn_nodes) or
@@ -1297,9 +1197,6 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 **({'actor_checkpoint_sha256': actor} if (actor := rollout['policy']['checkpoint_sha256'])
                    != identity['checkpoint_sha256'] or actor in (actors or {}).get('actors', {}) else {}),
                 **({'invocation_actors':replay.invocation_actors} if replay.invocation_actors is not None else {})}
-            if replay.semantic_dependencies:
-                from dataclasses import asdict
-                objective_rows[identifier]['semantic_dependencies']=[asdict(value) for value in replay.semantic_dependencies]
             graphs.append(graph)
     stale = any('actor_checkpoint_sha256' in row for row in objective_rows.values())
     if stale and policy_loss is not None and policy_loss['schema'] != 'clipped-ratio/1' and (

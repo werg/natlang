@@ -47,8 +47,7 @@ def verify_state_derivation(store,block,seen=None):
             expected_history=prior.artifact.tensors if prior else None
             current=parent
         else:
-            if expected_history is not None:raise ValueError('native optimizer history lacks an actual optimizer parent')
-            current=_verify_semantic_derivation(store,current)
+            raise ValueError('unknown native state derivation kind')
     if expected_history is not None:raise ValueError('native optimizer history cannot originate from an uncaptured update')
 
 
@@ -120,38 +119,6 @@ def _verify_optimizer_derivation(store,block):
     if any(not torch.equal(update.tensors[name].cpu(),expected[name].to(before[name].dtype)) for name in names):
         raise ValueError('optimized native state differs from exact shared optimizer arithmetic')
     return parent.block,moments,prior
-
-
-def semantic_derivation(block,parent_id,adapter_sha256,source_identity,target_identity,kind,*,training_execution=None):
-    from .native_derivative_contract import validate_derivation
-    validate_derivation(block.derivation)
-    result={'schema':DERIVATION,'kind':kind,'parent_state_id':parent_id,'adapter_sha256':adapter_sha256,
-        'origin_state_ids':block.derivation['origin_state_ids'] if block.derivation else [parent_id],
-        'source_native_identity':dict(source_identity),'target_native_identity':dict(target_identity)}
-    if training_execution is not None:
-        result.update(source_adapter_sha256=block.adapter_sha256,training_execution=dict(training_execution))
-    validate_derivation(result)
-    return result
-
-
-def _verify_semantic_derivation(store,block):
-    from .native_derivative_contract import validate_derivation
-    value=block.derivation;validate_derivation(value)
-    parent=store.get_native_state(value['parent_state_id'])
-    if parent is None:raise ValueError('derived semantic state needs its exact archived source')
-    identity=lambda item:{key:getattr(item,key) for key in ('checkpoint_sha256','tokenizer_fingerprint','embedding_weight_sha256','architecture')}
-    if (value['origin_state_ids']!=sorted(origins(store,parent.id)) or value['source_native_identity']!=identity(parent.block)
-            or value['target_native_identity']!=identity(block) or block.text!=parent.block.text):
-        raise ValueError('derived semantic state changed its source, target or original producer provenance')
-    if value['kind']=='semantic-encode':
-        if (block.metadata()['schema']!='neuralese.semantic-state/1' or block.adapter_sha256!=value['adapter_sha256']
-                or identity(block)!=identity(parent.block) or any(not torch.equal(block.tensors()[name].detach().cpu(),
-                    parent.block.tensors()[name].detach().cpu()) for name in ('token_ids','positions','embeddings'))):
-            raise ValueError('derived semantic encoding changed source text, tokens, embeddings or adapter')
-    elif (block.metadata()['schema']!='neuralese.native-state/1' or parent.block.metadata()['schema']=='neuralese.semantic-state/1'
-            and parent.block.adapter_sha256!=value.get('source_adapter_sha256',value['adapter_sha256'])):
-        raise ValueError('derived semantic decode changed its trained adapter or native target format')
-    return parent.block
 
 
 def optimize_state(engine,gradient_record,options,state_id,owner=None,*,values=None,gradients=None,moments=None,program_id=None):

@@ -148,7 +148,6 @@ def test_actual_raw_bridge_worker_runs_real_shared_native_learner_and_exact_resu
         write_json_durable(config,{'native_state':True,'native_actor_mode':'raw-state',
             'checkpoint':str(parent),'out':str(out)})
         def worker(path,**kwargs):
-            assert kwargs['defer_native_refresh'] is True
             assert original(argv)==0
             prior=json.loads(state_path.read_text()) if state_path.exists() else {'round':0}
             value={**prior,'phase':'collect','checkpoint':str(out/'checkpoint.pt'),'round':prior['round']+1}
@@ -168,10 +167,9 @@ def test_actual_raw_bridge_worker_runs_real_shared_native_learner_and_exact_resu
     assert 'checkpoint' not in observed[1]  # exact already-current no-op publication
 
 
-def test_live_raw_owner_blocks_rendezvous_and_exact_released_parents_replace_originals(tmp_path,monkeypatch):
+def test_live_raw_owner_blocks_release_and_exact_released_parents_replace_originals(tmp_path,monkeypatch):
     from test_native_readiness import ready
     from natlang_neuralese.train.native_resident import process_owner
-    from natlang_neuralese.train.native_readiness import ready_participants
     models=[];values={};requirements=[];directory=tmp_path/'raw';directory.mkdir()
     for name in ('lfm','mellum'):
         path,receipt,requirement=ready(tmp_path,name+':'+'a'*64)
@@ -198,17 +196,13 @@ def test_live_raw_owner_blocks_rendezvous_and_exact_released_parents_replace_ori
     record={'schema':raw.SCHEMA,'released':True,'owner':process_owner(),
             'plan_sha256':sha256_file_hex(plan),'models':values}
     write_json_durable(state,record)
-    config={'out':str(tmp_path/'shared'),'raw_rl_out':str(directory),
-            'raw_rl_bootstrap':raw.binding(plan),'participants':requirements}
-    selected,pending=ready_participants(config)
-    assert not selected and len(pending)==2
-    # The same currently owned process may inspect eligibility, but the public
-    # controller cannot use it until the optimizer coordinator actually exits.
+    assert raw.validate_release(state,plan) is None
+    # The same currently owned process may inspect eligibility, but no consumer
+    # can use it until the optimizer coordinator actually exits.
     assert set(raw.validate_release(state,plan,allow_live=True))=={item['model_id'] for item in requirements}
     record['owner']={**record['owner'],'start_ticks':'0'}
     write_json_durable(state,record)
-    selected,pending=ready_participants(config)
-    assert {value['model_id'] for value in selected}=={item['model_id'] for item in requirements} and not pending
+    assert set(raw.validate_release(state,plan))=={item['model_id'] for item in requirements}
     changed=Path(values['lfm']['production_state']['path'])
     write_json_durable(changed,{'checkpoint':'substituted-current-parent'})
     with pytest.raises(ValueError,match='artifact changed'):raw.validate_release(state,plan)

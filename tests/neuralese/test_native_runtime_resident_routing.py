@@ -18,7 +18,7 @@ def test_actual_drained_directory_reaches_config_seed_and_next_continuation(late
  assert config['trainer_parameters']['resident_data_directory']==directory
  assert config['seed_trainer_parameters']['resident_data_directory']==directory
  recipe=json.loads(Path(config['production_recipe']).read_bytes());stage=next(s for s in recipe['stages']if s['id']==config['production_stage'])
- continuation,_=supervised.continuation_config(config,stage,checkpoint=loaded[0]['checkpoint']['path'],adapter=None,out=x['root']/'next-job')
+ continuation,_=supervised.continuation_config(config,stage,checkpoint=loaded[0]['checkpoint']['path'],out=x['root']/'next-job')
  assert continuation['resident_data_directory']==directory
  # student_cycle routes its foundation trainer through the controller directory.
  assert raw.configure_model(x['plan'],x['declaration'],x['bootstrap'],x['root'],verified_handoff=loaded)==path

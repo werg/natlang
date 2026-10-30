@@ -23,25 +23,16 @@ from ..common.hashing import sha256_file_hex_cached as sha  # cached by (realpat
 
 
 HANDLERS = {
-    # One recipe-owned rendezvous launches the shared curriculum after both
-    # native SFT receipts become ready. Participant state belongs to the
-    # controller because readiness arrives asynchronously.
-    'native_shared_stage_controller': {'module': 'natlang_neuralese.train.native_readiness',
-        'required_inputs': {'controller_config'}, 'optional_inputs': set(),
-        'parameters': set(), 'result': 'shared-stage-completion.json'},
-    'native_semantic_training': {'module': 'natlang_neuralese.train.native_semantic_stage',
-        'required_inputs': {'semantic_config', 'native_participants'}, 'optional_inputs': {'resume'},
-        'parameters': set(), 'result': 'checkpoint.pt'},
     # Native positional-KV/hybrid-state training (shared-state migration,
     # plans/neuralese/NATIVE_STATE_SFT_DECOMPOSITION_20261015.md). The input
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'source_predecessor_retirement', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request', 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'pending_focus', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'source_predecessor_retirement', 'foundation_native_graphs', 'foundation_declaration_recovery', 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'pending_focus', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'accumulate_batches', 'learning_rate', 'weight_decay',
                              'latent_ns', 'muon_rounding', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
-                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'ordinary_cohort_fairness', 'communication_cohort_fairness', 'pending_rotation_anchor', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend', 'optimizer_state_storage', 'diloco', 'lr_warmup', 'weight_ema', 'matrix_telemetry'}, 'result': 'checkpoint.pt'},
+                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'ordinary_cohort_fairness', 'communication_cohort_fairness', 'pending_rotation_anchor', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend', 'optimizer_state_storage', 'diloco', 'lr_warmup', 'weight_ema', 'matrix_telemetry'}, 'result': 'checkpoint.pt'},
 
 }
 
@@ -229,8 +220,7 @@ HANDLERS['native_coefficient_rl'] = {
                   'checkpoint_layers','fp8_training','fp8_recipe'},
     'result':'checkpoint.pt'}
 COEFFICIENT_NATIVE_KINDS=frozenset({'native_coefficient_rl'})
-SHARED_NATIVE_KINDS = frozenset({'native_semantic_training', 'native_shared_stage_controller'})
-HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | SHARED_NATIVE_KINDS | COEFFICIENT_NATIVE_KINDS
+HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | COEFFICIENT_NATIVE_KINDS
 NATIVE_IDENTITY_QUALIFICATION = 'native_state_runtime_qualified'
 
 
@@ -428,29 +418,13 @@ def stage_input_args(resolved, kind, *, target='portable'):
         raise ValueError('stage input argv target must be local or portable')
     if target == 'local':
         resolved = _staged_inputs(resolved)
-    for role, flag in (('semantic_config', '--config'), ('controller_config', '--config'),
-                       ('native_participants', '--participants'), ('resume', '--resume')):
-        if role in resolved and role in supported:
-            args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'native_graphs', 'held_native_graphs', 'continued_native_graphs', 'source_predecessor_retirement',
-                 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request',
+                 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery',
                  'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'pending_focus', 'unavailable_native_sources', 'source_classification_migration', 'source_correction',
                  'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
     return args
-
-
-def validate_shared_controller_output(config_path, stage_directory):
-    """Bind controller-owned durable state to this exact recipe stage output."""
-    config = json.loads(Path(config_path).read_text())
-    if config.get('schema') != 'natlang.native-shared-stage-controller/1':
-        raise ValueError('native shared controller input has the wrong schema')
-    if Path(config.get('out', '')).resolve() != Path(stage_directory).resolve():
-        raise ValueError('native shared controller output must equal its declared recipe stage directory')
-    return config
-
-
 
 
 def effective_stage_parameters(stage, reports, recipe=None):
@@ -764,11 +738,6 @@ def require_gate(report, kind, *, training_progress=False):
         if report.get('numerics_ok') is not True:
             raise ValueError('native-state training reported a numerical failure')
         return
-    if kind in SHARED_NATIVE_KINDS:
-        if (report.get('schema') != 'natlang.native-shared-stage-completion/1'
-                or report.get('completed') is not True or report.get('production_ready') is not True):
-            raise ValueError('shared native curriculum has not completed actual exposure/runtime/task checks')
-        return
     raise ValueError('no native gate adapter for stage: ' + str(kind))
 
 
@@ -781,15 +750,15 @@ def write_json(path, value):
 
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
-OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'sdpa_backend', 'deterministic_training', 'fp8_training', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'task_eval', 'task_eval_every', 'qualify_training_backend', 'memory_qualification', 'refresh_at_checkpoint', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'diloco'})
+OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_foundation_readiness', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'sdpa_backend', 'deterministic_training', 'fp8_training', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'task_eval', 'task_eval_every', 'qualify_training_backend', 'memory_qualification', 'refresh_at_checkpoint', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'diloco'})
 OPERATIONAL_STAGE_PARAMETERS |= {'held_final_policy','optimizer_state_storage','weight_ema','pending_rotation_anchor'}
 
 def native_stage_parameter_handoffs(old_recipe, new_recipe, out):
     """Allow only current native trainers' explicit resume-safe parameter changes."""
     tuning = {
-              'native_state_sft': ('pending_rotation_anchor', 'weight_ema', 'epochs', 'batch_graphs', 'batch_tokens', 'accumulate_batches', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'muon_rounding', 'held_eval_tokens', 'held_eval_graphs', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'ordinary_cohort_fairness', 'communication_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'task_eval', 'task_eval_every', 'qualify_training_backend'),
+              'native_state_sft': ('pending_rotation_anchor', 'weight_ema', 'epochs', 'batch_graphs', 'batch_tokens', 'accumulate_batches', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'muon_rounding', 'held_eval_tokens', 'held_eval_graphs', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'ordinary_cohort_fairness', 'communication_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend', 'refresh_foundation_readiness', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'task_eval', 'task_eval_every', 'qualify_training_backend'),
               'native_offline_preference': ('preference_beta', 'preference_margin', 'epochs', 'batch_graphs', 'batch_tokens', 'accumulate_batches', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'muon_rounding', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'ordinary_cohort_fairness', 'communication_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend'),
-              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'accumulate_batches', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'muon_rounding', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision', 'native_attention_precision', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'task_eval', 'task_eval_every', 'qualify_training_backend')}
+              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'accumulate_batches', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'muon_rounding', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision', 'native_attention_precision', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend', 'refresh_foundation_readiness', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'task_eval', 'task_eval_every', 'qualify_training_backend')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
         merged.update(stage.get('parameters', {}))
@@ -1979,10 +1948,7 @@ def main(argv=None):
                 command = [sys.executable, '-m', HANDLERS[kind]['module']]
                 resolved = stage_inputs[stage['id']]
                 command += stage_input_args(resolved, kind, target='local')
-                if kind == 'native_shared_stage_controller':
-                    validate_shared_controller_output(resolved['controller_config']['path'], directory)
-                else:
-                    command += ['--out', str(directory), '--device', args.device]
+                command += ['--out', str(directory), '--device', args.device]
                 native_predecessors = [name for name in stage['requires']
                     if next((item['kind'] for item in recipe['stages'] if item['id'] == name), None)
                        in NATIVE_TRAINING_KINDS]
@@ -2043,10 +2009,7 @@ def main(argv=None):
                     return result.returncode or (128 + signal.SIGTERM)
                 if result.returncode:
                     raise RuntimeError('native stage failed: ' + stage['id'])
-                if kind in NATIVE_TRAINING_KINDS | COEFFICIENT_NATIVE_KINDS:
-                    gate = json.loads((directory / 'report.json').read_text())
-                else:
-                    gate = json.loads((directory / 'shared-stage-completion.json').read_text())
+                gate = json.loads((directory / 'report.json').read_text())
                 report = {'id': stage['id'], 'kind': kind, 'recipe_sha256': plan['recipe_sha256'],
                           'inputs': inputs, 'gate': gate, 'artifact': str(output), 'artifact_sha256': sha(output)}
                 write_json(args.out / (stage['id'] + '-attempt.json'), report)

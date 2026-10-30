@@ -21,26 +21,13 @@ from .native_supervised import continuation_config, MANDATORY_STAGE_KINDS
 from ..train.recipe import resolve_recipe_data
 
 
-def bind_state_semantic_route(config,state):
-    """Use the exact returned semantic inference/control route after VAE adoption."""
-    from ..common.hashing import sha256_file_hex_cached
+def bind_state_participant(config,state):
+    """Use the exact native participant recorded in the controller state."""
     participant=state.get('native_participant')
     if participant is not None:
         if config.get('native_participant') not in (None,participant):
             raise ValueError('local-cycle state and recipe changed the native participant')
         config={**config,'native_participant':participant}
-    reference=state.get('semantic_refresh_config')
-    if reference is not None:
-        if (not isinstance(reference,dict)or not {'path','sha256'}<=set(reference)
-                or set(reference)-{'path','sha256','bytes'}):
-            raise ValueError('local-cycle returned semantic refresh config has no exact binding')
-        path=Path(reference['path']).resolve(strict=True)
-        if sha256_file_hex_cached(path)!=reference['sha256']:
-            raise ValueError('local-cycle semantic refresh curriculum changed after adoption')
-        declared=config.get('semantic_refresh_config')
-        if declared is not None and Path(declared).resolve()!=path:
-            raise ValueError('local-cycle recipe changed its adopted semantic refresh curriculum')
-        config={**config,'semantic_refresh_config':str(path)}
     return config
 
 
@@ -59,57 +46,6 @@ def publish_supervised(config, parent, checkpoint):
         raise ValueError('supervised publication found an unknown policy successor')
     if actual != checkpoint:
         _publish_checkpoint(config, checkpoint)
-
-
-def publish_semantic_supervised(config,parent,child,deployment):
-    """Publish a real CE/DPO descendant only after the existing shared refresh qualifies it."""
-    from ..common.hashing import sha256_file_hex_cached
-    from ..train.native_readiness import _bound
-    state_path=Path(config['out'])/'state.json'
-    state=json.loads(state_path.read_text())
-    current=binding(state['checkpoint'])
-    checkpoint=deployment.get('checkpoint')or{}
-    adapter=deployment.get('semantic_adapter')or{}
-    if (deployment.get('schema')!='natlang.native-rl-deployment/1'
-            or not checkpoint.get('path')or not checkpoint.get('sha256')
-            or not adapter.get('path')or not adapter.get('sha256')):
-        raise ValueError('local semantic supervised refresh returned no exact current deployment')
-    completion=deployment.get('shared_stage_completion')or{}
-    completion_path=_bound(completion)
-    report=json.loads(completion_path.read_text())
-    if (report.get('completed')is not True or report.get('production_ready')is not True
-            or report.get('checkpoint',{}).get('sha256')!=checkpoint['sha256']
-            or report.get('adapter',{}).get('sha256')!=adapter['sha256']):
-        raise ValueError('local supervised semantic refresh lacks complete held/runtime/task qualification')
-    if sha256_file_hex_cached(adapter['path'])!=adapter['sha256']:
-        raise ValueError('local supervised semantic adapter bytes changed')
-    semantic=json.loads(Path(adapter['path']).read_text())
-    participant=config.get('native_participant')
-    updated=(deployment.get('updated_participants')or{}).get(participant)
-    if (semantic.get('schema')!='natlang.native-semantic-adapter/1'
-            or semantic.get('checkpoint',{}).get('sha256')!=checkpoint['sha256']
-            or participant not in semantic.get('models',{})
-            or not isinstance(updated,dict)
-            or updated.get('sha256')!=binding(child)['sha256']):
-        raise ValueError('local supervised deployment lost its exact refreshed participant update')
-    expected_adapter=state.get('semantic_adapter',config.get('semantic_adapter'))
-    same_parent=all(current.get(key)==parent.get(key)for key in('path','sha256'))
-    same_child=all(current.get(key)==checkpoint.get(key)for key in('path','sha256'))
-    if (not (same_parent or same_child)
-            or (expected_adapter and deployment.get('parent_adapter_sha256')!=sha256_file_hex_cached(expected_adapter))):
-        raise ValueError('local supervised refresh changed its actual current parent or semantic route')
-    if current!=checkpoint:
-        deployment_path=Path(completion_path).parent/'deployment.json'
-        if not deployment_path.is_file() or json.loads(deployment_path.read_text())!=deployment:
-            raise ValueError('local supervised refresh did not durably publish this exact deployment')
-        next_state={**state,'checkpoint':checkpoint['path'],'semantic_adapter':adapter['path'],
-            'semantic_deployment':binding(deployment_path),
-            'semantic_deployment_parent_adapter_sha256':deployment.get('parent_adapter_sha256'),
-            'last_supervised_semantic_refresh':{'parent':parent,'child':binding(child),
-                'checkpoint':checkpoint,'semantic_adapter':adapter,'completion':completion,
-                'training_credit':0}}
-        write_json_durable(state_path,next_state)
-    return {'checkpoint':checkpoint,'semantic_adapter':adapter,'completion':completion}
 
 
 def stage_failure_signature(stage, config):
@@ -202,7 +138,7 @@ def run(plan_path, *, cycles=None, stop=None):
             state=json.loads(state_path.read_text()) if state_path.exists() else production.initial_controller_state(config)
             if state_path.exists() and production.normalize_legacy_completed_update(state,state_path):
                 write_json_durable(state_path,state)
-            config=bind_state_semantic_route(config,state)
+            config=bind_state_participant(config,state)
             cursor=json.loads(cursor_path.read_text()) if cursor_path.exists() else {
                 'cycle':0,'phase':'rl','rl_round_target':state['round']+1,'stage_index':0}
             write_json_durable(cursor_path,cursor)
@@ -218,11 +154,11 @@ def run(plan_path, *, cycles=None, stop=None):
             # to become ready. Consume the actual current declarations before
             # reserving each next supervised operation, including after RL.
             plan,config,stages=reload_schedule(plan_path,plan,config)
-            config=bind_state_semantic_route(config,json.loads(state_path.read_text()))
+            config=bind_state_participant(config,json.loads(state_path.read_text()))
             while True:
                 if stop is not None and stop.requested:return
                 plan,config,stages=reload_schedule(plan_path,plan,config,stages,cursor=cursor)
-                config=bind_state_semantic_route(config,json.loads(state_path.read_text()))
+                config=bind_state_participant(config,json.loads(state_path.read_text()))
                 if cursor['stage_index']>=len(stages):break
                 index=cursor['stage_index'];stage=stages[index]
                 failure=cursor.get('failed_stages',{}).get(stage['id'])
@@ -235,9 +171,7 @@ def run(plan_path, *, cycles=None, stop=None):
                 declaration=directory/'config.json'
                 if not declaration.exists():
                     parent=binding(json.loads(state_path.read_text())['checkpoint'])
-                    current_state=json.loads(state_path.read_text())
-                    continuation,_=continuation_config(config,stage,checkpoint=parent['path'],
-                        adapter=current_state.get('semantic_adapter'),out=directory)
+                    continuation,_=continuation_config(config,stage,checkpoint=parent['path'],out=directory)
                     continuation.update(supervised_quantum_updates=plan['supervised_quantum_updates'],
                         supervised_stage_quantum_updates=plan.get('supervised_stage_quantum_updates',{}))
                     _supervised_quantum(continuation,continuation['trainer_parameters'])
@@ -254,24 +188,11 @@ def run(plan_path, *, cycles=None, stop=None):
                     continue
                 if not result.get('pending_native_checkpoint'):return result
                 raw_child=binding(result['pending_native_checkpoint'])
-                current_state=json.loads(state_path.read_text())
-                if current_state.get('semantic_adapter'):
-                    from .native_rounds import refresh_job
-                    refresh_dir=directory/'semantic-refresh'
-                    deployment=refresh_job([continuation],current_state['semantic_adapter'],
-                        {config['native_participant']:raw_child['path']},
-                        continuation['semantic_refresh_config'],refresh_dir,
-                        continuation.get('refresh_device','cuda'),stop)
-                    refreshed=publish_semantic_supervised(config,parent,raw_child,deployment)
-                    child=refreshed['checkpoint']
-                else:
-                    publish_supervised(config,parent,raw_child)
-                    child=raw_child
+                publish_supervised(config,parent,raw_child)
+                child=raw_child
                 cursor.get('failed_stages',{}).pop(stage['id'],None)
                 cursor['stage_index']+=1
                 cursor['checkpoint']=child
-                if current_state.get('semantic_adapter'):
-                    cursor['semantic_adapter']=refreshed['semantic_adapter']
                 write_json_durable(cursor_path,cursor)
             state=json.loads(state_path.read_text())
             cursor.update(cycle=cursor['cycle']+1,phase='rl',stage_index=0,rl_round_target=state['round']+1)

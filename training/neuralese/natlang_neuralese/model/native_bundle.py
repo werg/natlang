@@ -286,7 +286,7 @@ def actor_view_dependencies(reference, *, metadata_only=False, checkpoint=None):
     return [reference,state['actor_view']['view'],state['actor_view']['source']]
 
 
-def composite_dependencies(checkpoint, *, participant=None, semantic_only=False, checkpoint_loader=None):
+def composite_dependencies(checkpoint, *, participant=None, checkpoint_loader=None):
     """Verify every parent/parameter/optimizer/training role without loading weights."""
     current = Path(checkpoint).resolve(strict=True)
     result, seen = {}, set()
@@ -300,8 +300,7 @@ def composite_dependencies(checkpoint, *, participant=None, semantic_only=False,
             from .native_shared_checkpoint import shared_manifest, shared_dependencies
             manifest = shared_manifest(current,load=checkpoint_loader)
             if manifest is not None:
-                for source in shared_dependencies(manifest, current, participant=participant,
-                                                  semantic_only=semantic_only).values():
+                for source in shared_dependencies(manifest, current, participant=participant).values():
                     result[sha256_file_hex_cached(source)] = source
             return result
         manifest = json.loads(current.read_text())
@@ -348,51 +347,7 @@ def _copy_immutable(source,destination,digest):
         Path(pending).unlink(missing_ok=True)
 
 
-def _semantic_dependencies(adapter,checkpoint_sha256):
-    adapter = Path(adapter).resolve(strict=True)
-    receipt = json.loads(adapter.read_text())
-    if (receipt.get('schema') != 'natlang.native-semantic-adapter/1' or not receipt.get('models')
-            or receipt['checkpoint']['sha256'] != checkpoint_sha256
-            or set(receipt.get('tokenizers',{})) != set(receipt['models'])
-            or any(value['native_identity']['checkpoint_sha256'] != checkpoint_sha256 for value in receipt['models'].values())):
-        raise ValueError('portable semantic adapter must bind the exact bundled participants/checkpoint')
-    resolve_composite_artifact(receipt['checkpoint'],adapter)
-    result = {}
-    for name,binding in receipt['tokenizers'].items():
-        directory = (adapter.parent/binding['path']).resolve(strict=True)
-        if adapter.parent not in directory.parents:
-            raise ValueError('semantic tokenizer escaped its exact export directory')
-        for filename,digest in binding['files'].items():
-            source = (directory/filename).resolve(strict=True)
-            if directory not in source.parents or sha256_file_hex_cached(source) != digest:
-                raise ValueError('semantic tokenizer content differs from its adapter export')
-            logical = str(source.relative_to(adapter.parent))
-            result[logical] = (source,digest)
-        history = binding.get('history_reasoning_binding')
-        expected_profile = receipt['models'][name].get('history_reasoning_policy')
-        if history is None:
-            if expected_profile is not None:
-                raise ValueError('semantic participant history profile has no portable tokenizer sidecar')
-        else:
-            relative = history.get('path')
-            if not isinstance(relative,str) or not relative or Path(relative).is_absolute():
-                raise ValueError('semantic tokenizer history sidecar path must be relative')
-            sidecar = (directory/relative).resolve(strict=True)
-            if directory not in sidecar.parents or relative not in binding['files']:
-                raise ValueError('semantic tokenizer history sidecar is outside its declared portable inventory')
-            digest = binding['files'][relative]
-            if history.get('sha256') != digest or sha256_file_hex_cached(sidecar) != digest:
-                raise ValueError('semantic tokenizer history sidecar differs from its authenticated inventory')
-            detail = json.loads(sidecar.read_text(encoding='utf-8'))
-            if (detail.get('schema') != 'natlang.raw-native-tokenizer-history/1'
-                    or detail.get('checkpoint_sha256') != checkpoint_sha256
-                    or detail.get('tokenizer_fingerprint') != receipt['models'][name]['native_identity']['tokenizer_fingerprint']
-                    or detail.get('history_reasoning',{}).get('policy') != expected_profile):
-                raise ValueError('semantic tokenizer history sidecar differs from its exact checkpoint profile')
-    return result
-
-
-def export_bundle(checkpoint,out,*,semantic_adapter=None,participant=None):
+def export_bundle(checkpoint,out,*,participant=None):
     checkpoint,out = Path(checkpoint).resolve(strict=True),Path(out).resolve()
     dependencies = composite_dependencies(checkpoint, participant=participant)
     digest = sha256_file_hex_cached(checkpoint)
@@ -407,17 +362,7 @@ def export_bundle(checkpoint,out,*,semantic_adapter=None,participant=None):
             files.append({'path':str(target.relative_to(out)),'sha256':expected,'bytes':target.stat().st_size})
     entry = out/filename
     _copy_immutable(checkpoint,entry,digest)
-    semantic_binding,semantic_files = None,[]
-    if semantic_adapter is not None:
-        adapter = Path(semantic_adapter).resolve(strict=True)
-        for logical,(source,expected) in sorted(_semantic_dependencies(adapter,digest).items()):
-            _copy_immutable(source,out/logical,expected)
-            semantic_files.append({'path':logical,'sha256':expected,'bytes':(out/logical).stat().st_size})
-        adapter_sha = sha256_file_hex_cached(adapter)
-        _copy_immutable(adapter,out/'semantic-adapter.json',adapter_sha)
-        semantic_binding = {'path':'semantic-adapter.json','sha256':adapter_sha}
-    receipt = {'schema':BUNDLE_SCHEMA,'semantic_adapter':semantic_binding,'semantic_files':semantic_files,
-        'participant':participant,
+    receipt = {'schema':BUNDLE_SCHEMA,'participant':participant,
         'checkpoint':{'path':filename,'sha256':digest},
         'files':files,'hf_base':'separately pinned; standard loader --base may relocate identical files',
         'identity_rewritten':False}
@@ -430,11 +375,11 @@ def verify_bundle(path):
     receipt = json.loads((root/'bundle.json').read_text())
     if receipt.get('schema') != BUNDLE_SCHEMA or receipt.get('identity_rewritten') is not False:
         raise ValueError('unsupported native checkpoint bundle')
+    if receipt.get('semantic_adapter') or receipt.get('semantic_files'):
+        raise ValueError('native bundle carries a removed cross-model semantic adapter')
     native_entries = [receipt['checkpoint'],*receipt['files']]
-    entries = [*native_entries,*receipt.get('semantic_files',[]),
-               *([receipt['semantic_adapter']] if receipt.get('semantic_adapter') else [])]
     seen = set()
-    for binding in entries:
+    for binding in native_entries:
         artifact = (root/binding['path']).resolve(strict=True)
         if root not in artifact.parents or str(artifact) in seen or sha256_file_hex_cached(artifact) != binding['sha256']:
             raise ValueError('native bundle inventory changed, repeated or escaped its root')
@@ -448,23 +393,13 @@ def verify_bundle(path):
     declared = {value['sha256'] for value in native_entries}
     if set(actual) != declared:
         raise ValueError('native bundle inventory differs from complete checkpoint dependency closure')
-    semantic = None
-    if receipt.get('semantic_adapter'):
-        adapter = root/receipt['semantic_adapter']['path']
-        dependencies = _semantic_dependencies(adapter,receipt['checkpoint']['sha256'])
-        declared_semantic = {value['path']:value['sha256'] for value in receipt.get('semantic_files',[])}
-        if {key:value[1] for key,value in dependencies.items()} != declared_semantic:
-            raise ValueError('native bundle semantic inventory differs from its exact tokenizer closure')
-        semantic = {**receipt['semantic_adapter'],'resolved':str(adapter)}
-    elif receipt.get('semantic_files'):
-        raise ValueError('native bundle tokenizer files require their semantic adapter binding')
-    return {**receipt,'checkpoint':{**receipt['checkpoint'],'resolved':str(checkpoint)},'semantic_adapter':semantic}
+    return {**receipt,'checkpoint':{**receipt['checkpoint'],'resolved':str(checkpoint)}}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='action',required=True)
-    export = commands.add_parser('export');export.add_argument('--checkpoint',required=True);export.add_argument('--out',required=True);export.add_argument('--semantic-adapter');export.add_argument('--participant')
+    export = commands.add_parser('export');export.add_argument('--checkpoint',required=True);export.add_argument('--out',required=True);export.add_argument('--participant')
     verify = commands.add_parser('verify');verify.add_argument('--bundle',required=True)
     view = commands.add_parser('actor-view');view.add_argument('--checkpoint',required=True);view.add_argument('--out',required=True)
     transport = commands.add_parser('actor-transport');transport.add_argument('--checkpoint',required=True);transport.add_argument('--out',required=True);transport.add_argument('--recovery-receipt');transport.add_argument('--scope',choices=('independent-recovery','diagnostic-local-pin'),required=True)
@@ -475,7 +410,7 @@ def main():
     if args.action == 'actor-transport':
         print(json.dumps(prepare_actor_transport(args.checkpoint,args.out,args.recovery_receipt,scope=args.scope),sort_keys=True))
         return
-    print(json.dumps(export_bundle(args.checkpoint,args.out,semantic_adapter=args.semantic_adapter,participant=args.participant) if args.action=='export' else verify_bundle(args.bundle),sort_keys=True))
+    print(json.dumps(export_bundle(args.checkpoint,args.out,participant=args.participant) if args.action=='export' else verify_bundle(args.bundle),sort_keys=True))
 
 
 if __name__ == '__main__':

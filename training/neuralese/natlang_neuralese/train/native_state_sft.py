@@ -1023,8 +1023,7 @@ def _diloco_drain_request(out, learner):
 
 
 def _full_held_requested(args):
-    return (getattr(args,'held_final_policy','budgeted')=='full'
-            or getattr(args,'foundation_qualification_request',None)is not None)
+    return getattr(args,'held_final_policy','budgeted')=='full'
 
 
 def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backend=None,
@@ -1281,10 +1280,6 @@ def build_parser():
         help='pause at the complete admitted communication cohort with mandatory ordinary credits retained')
     parser.add_argument('--refresh-foundation-readiness', action=argparse.BooleanOptionalAction, default=False,
         help='at an explicitly owned stage boundary, recheck an already earned finite cohort on current weights')
-    parser.add_argument('--foundation-readiness-policy', choices=('at-boundary','on-shared-request'), default='at-boundary',
-        help='continue supervised work until a shared candidate rendezvous requests exact qualification')
-    parser.add_argument('--foundation-qualification-request', type=Path,
-        help='immutable shared candidate request; qualification still checks actual current weights')
     parser.add_argument('--held-native-graphs', type=Path, required=True)
     parser.add_argument('--continued-native-graphs', type=Path)
     parser.add_argument('--continued-held-native-graphs', type=Path)
@@ -1443,18 +1438,16 @@ def configure_ffn_chunk_tokens(port, requested, saved_training):
 
 def _foundation_readiness_boundary(foundation, prior_foundations, *, completed,
                                   new_optimizer_updates, policy_operation, signaled,
-                                  refresh_requested=False, readiness_policy='at-boundary', qualification_requested=False):
+                                  refresh_requested=False):
     """Select a first, completed-continuation, or explicitly owned stage check."""
     if not foundation or foundation.get('complete') is not True or signaled:
-        return False
-    if readiness_policy == 'on-shared-request' and not qualification_requested:
         return False
     cohort = foundation.get('cohort_sha256')
     if not cohort:
         return False
     if cohort not in prior_foundations:
         return True
-    if (refresh_requested or qualification_requested) and not policy_operation:
+    if refresh_requested and not policy_operation:
         return True
     # An earned finite cohort can be re-certified on newer weights after a
     # complete supervised continuation. Partial refresh checkpoints and
@@ -2131,8 +2124,6 @@ def _main(argv=None, *, requested_refresh):
         raise ValueError('communication foundation requires its complete declared admitted source manifest')
     if args.refresh_foundation_readiness and not args.communication_foundation:
         raise ValueError('foundation-readiness refresh requires its exact declared communication cohort')
-    if args.foundation_qualification_request and (not args.communication_foundation or args.foundation_readiness_policy != 'on-shared-request'):
-        raise ValueError('shared qualification request requires its explicit foundation readiness policy')
     foundation_declaration_changed = False
     if args.communication_foundation:
         from .native_continuation import verify_initial_foundation_cohort
@@ -3164,29 +3155,18 @@ def _main(argv=None, *, requested_refresh):
         return communication_foundation(foundation_source, exposure_counts, epochs=args.epochs,
                                         trained_bindings=source_row_bindings)
     foundation_template = foundation_exposure() if args.communication_foundation else None
-    qualification_request = None
-    previous_qualification_history = checkpoint_options['foundation_qualification_history']
-    qualification_history = list(previous_qualification_history)
-    if args.foundation_qualification_request:
-        from .native_readiness import validate_foundation_qualification_request
-        qualification_request = validate_foundation_qualification_request(args.foundation_qualification_request,
-            config['architecture'] + ':' + config['base_inventory_sha256'], foundation_template)
-        checkpoint_options['foundation_qualification_request_binding'] = qualification_request
-        if qualification_request not in qualification_history:
-            qualification_history.append(qualification_request)
-    checkpoint_options['foundation_qualification_history'] = qualification_history
     metadata_dirty = metadata_dirty or qualification_history != previous_qualification_history
     foundation_missing = {key for key,row in (foundation_template or {}).get('rows',{}).items()
         if not row['admitted_to_training'] or row['required_visits']<=0 or row['graph_visits']<row['required_visits']}
     # An explicitly owned refresh continues an already exposed cohort through
     # its declared update boundary before checking the new weights. Exposure
     # alone never adds a qualified completed_foundations acknowledgement.
-    refresh_inherited_foundation = bool((args.refresh_foundation_readiness or args.foundation_readiness_policy == 'on-shared-request') and
+    refresh_inherited_foundation = bool(args.refresh_foundation_readiness and
         foundation_template and foundation_template['complete'])
     def foundation_pending():
         return bool(foundation_template and foundation_template['graphs'] and not foundation_missing and
                     foundation_template['cohort_sha256'] not in prior_foundations and
-                    not refresh_inherited_foundation and args.foundation_readiness_policy != 'on-shared-request')
+                    not refresh_inherited_foundation)
     exception_boundary_safe = True
     specialized_recovery_attempted = False
     loop_error = None
@@ -3382,8 +3362,8 @@ def _main(argv=None, *, requested_refresh):
                         foundation_template = foundation_exposure() if args.communication_foundation else None
                         foundation_missing = {key for key,row in (foundation_template or {}).get('rows',{}).items()
                             if not row['admitted_to_training'] or row['required_visits']<=0 or row['graph_visits']<row['required_visits']}
-                        refresh_inherited_foundation = bool((args.refresh_foundation_readiness or
-                            args.foundation_readiness_policy == 'on-shared-request') and foundation_template and foundation_template['complete'])
+                        refresh_inherited_foundation = bool(args.refresh_foundation_readiness
+                            and foundation_template and foundation_template['complete'])
                     source_receipts = [source_receipt(train), source_receipt(held)]
                     source_hash = hashlib.sha256(json.dumps(
                         [source_receipts[0]['sha256'], source_receipts[1]['sha256'],
@@ -3668,11 +3648,6 @@ def _main(argv=None, *, requested_refresh):
                 break
             due_task = task_eval is not None and ((step == total_end and not policy_operation) or
                         bool(args.task_eval_every and step % args.task_eval_every == 0))
-            # The independent export/async monitor owns historical quality in
-            # this mode. Only an explicit rendezvous (below) or true stage end
-            # runs the synchronous exact-current-weight qualification.
-            if args.foundation_readiness_policy == 'on-shared-request':
-                due_task = bool(task_eval is not None and step == total_end and not policy_operation)
             due_eval = step % eval_at == 0 or step == total_end or due_task
             if due_eval:
                 evaluation_rng = capture_training_rng_state(args.device)
@@ -3945,14 +3920,10 @@ def _main(argv=None, *, requested_refresh):
     completed = (completed and (policy_operation or metrics.get('held', {}).get('scope') == 'full')
                  and metrics.get('held', {}).get('source_sha256') == held.file_sha256)
     foundation = foundation_exposure() if args.communication_foundation else None
-    if qualification_request:
-        from .native_readiness import _bound
-        _bound(qualification_request)  # Request bytes cannot drift during SGD.
     foundation_boundary = _foundation_readiness_boundary(foundation, prior_foundations,
         completed=completed, new_optimizer_updates=step-resumed_step,
         policy_operation=policy_operation, signaled=policy.signaled,
-        refresh_requested=args.refresh_foundation_readiness, readiness_policy=args.foundation_readiness_policy,
-        qualification_requested=qualification_request is not None)
+        refresh_requested=args.refresh_foundation_readiness)
     # A continuation may inherit a completed checkpoint made before task
     # summaries were checkpointed. At the same final weights, make one real
     # cadence call; do not reuse an unbound log row or enter final_at's retry
@@ -4001,20 +3972,14 @@ def _main(argv=None, *, requested_refresh):
                                                checkpoint_sha256=checkpoint_sha)
         write_json(task_receipt_path, task_receipt)
     runtime_path = args.out / 'native-runtime-certificate.json'
-    # Completing an ordinary SFT/RL operation is not a shared qualification request.
-    # In particular a short RL round must not repeat the complete-model derivative
-    # comparison before the next production operation can start.
-    deferred_qualification = (args.foundation_readiness_policy == 'on-shared-request'
-                              and qualification_request is None and not foundation_boundary)
-    if policy.signaled or deferred_qualification or (not completed and not foundation_boundary and not refresh_boundary and not active_stage_complete):
+    if policy.signaled or (not completed and not foundation_boundary and not refresh_boundary and not active_stage_complete):
         # Operational stops preserve the exact resumable checkpoint. Defer a
         # full capture/splice qualification until the declared data exposure is
         # finished; do not make interruptions pay for a second model pass.
         runtime_report = {'schema': 'natlang.native-runtime-certificate/1', 'passed': False,
                           'checkpoint_sha256': checkpoint_sha, 'native_identity': model_identity,
                           'deferred': True, 'reason': ('operational stop; qualification deferred until resume'
-                            if policy.signaled else 'shared qualification request pending' if deferred_qualification
-                            else 'declared native graph exposure is incomplete')}
+                            if policy.signaled else 'declared native graph exposure is incomplete')}
     else:
         try:
             if args.forward_atol is None or args.gradient_atol is None:
@@ -4057,12 +4022,10 @@ def _main(argv=None, *, requested_refresh):
     if requested_refresh.received:
         continuation_boundary['requested_signals'] = requested_refresh.received
     foundation_ready = bool(foundation_boundary and runtime_report.get('passed') is True and task_receipt_ok)
-    qualification_schedule = {'policy':args.foundation_readiness_policy,
-        'request':qualification_request, 'requested':qualification_request is not None,
+    qualification_schedule = {'policy':'at-boundary','request':None,'requested':False,
         'candidate':bool(foundation and foundation.get('complete') is True),
         'readiness_granted':foundation_ready,
-        'historical_quality':'external-monitor-required; trainer does not attest monitor health' if args.foundation_readiness_policy == 'on-shared-request'
-            else 'trainer-cadence'}
+        'historical_quality':'trainer-cadence'}
     resident_receipt = ({'generation': resident.generation, 'directory': str(resident.directory.resolve()),
                          'history': resident.state['history']} if resident and resident.state else None)
     report = {'schema': 'natlang.neuralese-native-sft-report/1',

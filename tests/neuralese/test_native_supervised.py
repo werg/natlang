@@ -45,69 +45,6 @@ def test_pending_source_comparison_checks_real_source_epochs_and_completed_credi
     assert supervised.stage_pending(adapter,'student','full',sources,1)
 
 
-@pytest.mark.parametrize('kind',['native_state_sft','native_offline_preference'])
-def test_interleave_shares_parent_merges_both_partial_updates_and_does_not_repeat_cycle(tmp_path,monkeypatch,kind):
-    import threading
-    from natlang_neuralese.rl import native_rounds
-    parent=tmp_path/'parent.pt';parent.write_bytes(b'joint parent')
-    adapter=tmp_path/'adapter.json'
-    adapter.write_text(json.dumps({'checkpoint':{'path':str(parent),'sha256':sha256_file_hex(parent)},
-        'models':{name:{} for name in ('a','b')}}))
-    train=tmp_path/'train.jsonl';train.write_text('{}\n')
-    held=tmp_path/'held.jsonl';held.write_text('{}\n')
-    recipe=tmp_path/'recipe.json'
-    objective=tmp_path/'objective.json'
-    objective.write_text(json.dumps({'schema':'natlang.native-offline-pairwise-objective/1',
-        'kind':'native-offline-pairwise','beta':.1,'margin':0.,'rows':{'exact-pair':{}}}))
-    preference={'objective_spec':'objective'} if kind=='native_offline_preference' else {}
-    recipe.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1','id':'mechanism-fixture',
-        'input_bindings':{'train':{'path':str(train),'sha256':sha256_file_hex(train)},
-                          'held':{'path':str(held),'sha256':sha256_file_hex(held)},
-                          'objective':{'path':str(objective),'sha256':sha256_file_hex(objective)}},
-        'stages':[{'id':'full','kind':kind,'requires':[],
-            'inputs':{'native_graphs':'train','held_native_graphs':'held',**preference},
-            'parameters':{'epochs':1,'checkpoint_every':7,'eval_every':7,'communication_foundation':True}}]}))
-    configs=[{'native_state':True,'native_participant':name,'checkpoint':str(parent),
-        'semantic_adapter':str(adapter),'production_recipe':str(recipe),'production_stage':'full',
-        'semantic_refresh_config':str(tmp_path/'semantic.json'),'out':str(tmp_path/name),
-        'seed_command':['python','-m','natlang_neuralese.train.native_state_sft']} for name in ('a','b')]
-    barrier=threading.Barrier(2);calls=[]
-    def job(path,config,directory,stop):
-        assert config['mandatory_sft_only'] and config['checkpoint']==str(parent)
-        assert config['seed_native_graphs']==str(train)
-        if kind=='native_offline_preference':
-            assert config['seed_command'][2]=='natlang_neuralese.train.native_preference'
-            assert config['objective_spec']==str(objective)
-        assert config['trainer_parameters']['refresh_at_checkpoint']
-        assert 'communication_foundation' not in config['trainer_parameters']
-        barrier.wait(timeout=10)
-        child=Path(config['out'])/'child.pt';child.write_bytes(config['native_participant'].encode())
-        calls.append(config['native_participant'])
-        return {'pending_native_checkpoint':str(child)}
-    monkeypatch.setattr(native_rounds,'round_job',job)
-    refreshed=tmp_path/'joint.pt';refreshed.write_bytes(b'updated joint parent')
-    next_adapter=tmp_path/'next-adapter.json'
-    next_adapter.write_text(json.dumps({'checkpoint':{'path':str(refreshed),'sha256':sha256_file_hex(refreshed)},
-        'models':{name:{'mandatory_sft':{'complete':False}} for name in ('a','b')}}))
-    refreshes=[]
-    def refresh(configs,source,updates,*args):
-        assert source==str(adapter) and set(updates)=={'a','b'}
-        refreshes.append(updates)
-        return {'checkpoint':{'path':str(refreshed),'sha256':sha256_file_hex(refreshed)},
-            'semantic_adapter':{'path':str(next_adapter),'sha256':sha256_file_hex(next_adapter)},
-            'updated_participants':{name:{'sha256':sha256_file_hex(path)} for name,path in updates.items()}}
-    monkeypatch.setattr(native_rounds,'refresh_job',refresh)
-    latest=tmp_path/'latest.json';stop=SimpleNamespace(requested=False)
-    result=supervised.interleave([],configs,str(adapter),tmp_path/'work',cycle=0,latest=latest,device='cpu',stop=stop)
-    assert result==str(next_adapter) and sorted(calls)==['a','b'] and len(refreshes)==1
-    assert json.loads(latest.read_text())['supervised_cycle']==0
-    for config in configs:
-        state=json.loads((Path(config['out'])/'state.json').read_text())
-        assert state['checkpoint']==str(refreshed) and state['semantic_adapter']==str(next_adapter)
-    assert supervised.interleave([],configs,result,tmp_path/'work',cycle=0,latest=latest,device='cpu',stop=stop)==result
-    assert len(calls)==2  # resume does not redo either completed quantum
-
-
 def test_pending_metadata_admission_is_not_claimed_as_optimizer_work_and_is_resumable(tmp_path,monkeypatch):
     from natlang_neuralese.rl import production
     parent=tmp_path/'parent.pt';parent.write_bytes(b'actual parent numeric fixture')
@@ -149,7 +86,7 @@ def test_offline_continuation_binds_actual_objective_and_effective_revision(tmp_
                           for name,path in [('train',train),('held',held),('objective',objective)]},'stages':[stage]}))
     config={'recipe_lineage_sha256':'a'*64,'production_recipe':str(recipe),'seed_command':['python','-m','natlang_neuralese.train.native_state_sft',
         '--native-graphs','{seed_native_graphs}','{trainer_args}']}
-    declaration,sources=supervised.continuation_config(config,stage,checkpoint='current',adapter='adapter',out=tmp_path/'out')
+    declaration,sources=supervised.continuation_config(config,stage,checkpoint='current',out=tmp_path/'out')
     assert declaration['seed_command'][2]=='natlang_neuralese.train.native_preference'
     assert declaration['trainer_parameters']['recipe_binding']['lineage_sha256']=='a'*64
     assert declaration['trainer_parameters']['recipe_binding']['sha256']==sha256_file_hex(recipe)
@@ -201,7 +138,7 @@ def test_explicit_preference_capacity_survives_emitted_command_and_prepared_requ
     config={'native_state':True,'production_recipe':str(recipe),'production_stage':stage['id'],
         'recipe_lineage_sha256':'a'*64,'seed_command':['python','-m','natlang_neuralese.train.native_state_sft',
             '--native-graphs','{seed_native_graphs}','--out','{learner_out}','{seed_trainer_args}']}
-    declared,_=supervised.continuation_config(config,stage,checkpoint=str(parent),adapter=None,out=tmp_path/'job')
+    declared,_=supervised.continuation_config(config,stage,checkpoint=str(parent),out=tmp_path/'job')
     monkeypatch.setattr(resident,'_source_witness',lambda value:{'source':resident.binding(train),'indexes':[]})
     monkeypatch.setattr(memory,'capacity_identity',lambda *args:{'restored':'same-parent'})
     prepared=[];commands=[]
@@ -266,7 +203,7 @@ def test_actual_resident_append_then_cold_resume_uses_current_source_roles(tmp_p
         '--pending-native-sources','obsolete-pending','--foundation-native-graphs','obsolete-foundation',
         '--withdrawn-native-graphs=obsolete-withdrawal','--task-eval','']
     config={'production_recipe':str(recipe),'recipe_lineage_sha256':'a'*64,'seed_command':old_command}
-    continued,sources=supervised.continuation_config(config,stage,checkpoint='same-full-parent',adapter=None,out=tmp_path/'cold')
+    continued,sources=supervised.continuation_config(config,stage,checkpoint='same-full-parent',out=tmp_path/'cold')
     command=continued['seed_command']
     for role in ('native_graphs','held_native_graphs','continued_native_graphs'):
         flag,key=supervised.SOURCE_ARGUMENTS[role]
@@ -333,7 +270,7 @@ def test_declared_recipe_parameters_cannot_be_disabled_by_seed_defaults(tmp_path
         '--no-checkpoint-layers','--checkpoint-input-offload','--refresh-at-checkpoint','--chunk-tokens','128']
     config={'production_recipe':str(recipe),'recipe_lineage_sha256':'a'*64,
         'seed_command':command,'task_eval_json':'','learned_row_learning_rate':1e-6}
-    declared,_=supervised.continuation_config(config,stage,checkpoint='full-parent',adapter=None,out=tmp_path/'out')
+    declared,_=supervised.continuation_config(config,stage,checkpoint='full-parent',out=tmp_path/'out')
     argv=expand_command(declared['seed_command'],{**declared,
         'trainer_args':stage_parameter_args(declared['trainer_parameters'])})
     assert argv.count('--task-eval')==1

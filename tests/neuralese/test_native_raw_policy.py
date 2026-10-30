@@ -42,7 +42,7 @@ def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_con
     monkeypatch.setattr(native,'load_native_model',lambda *a,**kw:pytest.fail('second model construction'))
     actual=prepare_raw_policy(checkpoint,base=base,tokenizer_out=tmp_path/'tokenizer')
     assert actual['native_identity']==expected
-    assert actual['native_participant'] is None and actual['semantic_adapter_sha256'] is None
+    assert actual['native_participant'] is None
     reloaded=AutoTokenizer.from_pretrained(actual['tokenizer'])
     assert tokenizer_fingerprint(reloaded)==config['tokenizer_fingerprint']
     from natlang_neuralese.rl.native_raw_policy import bind_saved_history_reasoning
@@ -149,8 +149,8 @@ def test_bare_native_factory_keeps_actual_recipe_and_omits_shared_artifact_requi
         'task_eval_every':cadence}}
     monkeypatch.setattr(recipe,'resolve_recipe_data',lambda path:{'stages':[declared]})
     monkeypatch.setattr(recipe,'resolve_stage_inputs',lambda *a:{'foundation_native_graphs':{'path':str(tmp_path/'foundation')}})
-    args=SimpleNamespace(model='lfm',checkpoint=checkpoint,base=base,semantic_adapter=None,native_participant=None,
-        semantic_refresh_config=None,production_stage='native_full',port=8097,
+    args=SimpleNamespace(model='lfm',checkpoint=checkpoint,base=base,native_participant=None,
+        production_stage='native_full',port=8097,
         actor_runtime=Path(__file__).resolve().parents[2],
         **{key:tmp_path/key for key in ('seed_native_graphs','held_native_graphs','production_recipe','out','config','cases','runtime')})
     from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
@@ -159,9 +159,9 @@ def test_bare_native_factory_keeps_actual_recipe_and_omits_shared_artifact_requi
     with monkeypatch.context() as reused:
         reused.setattr(CheckpointPolicy,'load',lambda *a,**kw:pytest.fail('factory reloaded verified native parent'))
         result=production.configure_native(args)
-    assert result['native_actor_mode']=='raw-state' and 'semantic_adapter' not in result
+    assert result['native_actor_mode']=='raw-state'
     for command in ('actor_command','learner_command','seed_command'):
-        assert '--native-participant' not in result[command] and '--semantic-adapter' not in result[command]
+        assert '--native-participant' not in result[command]
     assert result['trainer_parameters']['epochs']==3 and result['trainer_parameters']['task_eval_every']==cadence
     assert result['foundation_native_graphs']==str(tmp_path/'foundation')
     assert '--foundation-native-graphs' in result['seed_command']
@@ -185,7 +185,7 @@ def test_bare_native_factory_keeps_actual_recipe_and_omits_shared_artifact_requi
 def test_synthetic_learner_result_cannot_complete_raw_policy_round(tmp_path,monkeypatch):
     """A controller-only fake checkpoint/report must not receive completed-round credit."""
     import json
-    from natlang_neuralese.rl import production,native_raw_policy,native_refresh
+    from natlang_neuralese.rl import production,native_raw_policy
     source=tmp_path/'cases.jsonl';source.write_text('{"id":"ordinary","split":"train"}\n')
     parent=tmp_path/'parent.pt';parent.write_bytes(b'exact-parent')
     out=tmp_path/'out';config=tmp_path/'config.json'
@@ -193,7 +193,6 @@ def test_synthetic_learner_result_cannot_complete_raw_policy_round(tmp_path,monk
         'out':str(out),'cases':str(source),'endpoints':['unused'],'learner_command':['learn'],
         'after_update':['publish']}))
     monkeypatch.setattr(native_raw_policy,'prepare_raw_policy',lambda *a,**kw:{'tokenizer':'exact-tokenizer'})
-    monkeypatch.setattr(native_refresh,'refresh',lambda **kw:pytest.fail('raw policy must not wait for shared VAE'))
     def collect(**kwargs):
         (kwargs['out']/'rollouts.jsonl').write_text(json.dumps({'task_id':'ordinary','split':'train',
             'reward':{'quality':1},'turns':[{'invocation_id':'ordinary','sampling':{'prompt':[]}}]})+'\n')

@@ -114,7 +114,7 @@ def test_drained_resident_selects_new_priority_plan_and_preserves_exact_parent(a
         assert configured[key]['recipe_binding']['lineage_sha256']==newplan['recipe_sha256']
     from natlang_neuralese.rl.native_supervised import continuation_config
     configured['seed_command']=['python','-m','natlang_neuralese.train.native_state_sft']
-    continued,_=continuation_config(configured,newplan['recipe']['stages'][0],checkpoint=str(pin),adapter=None,out=tmp_path/'continue')
+    continued,_=continuation_config(configured,newplan['recipe']['stages'][0],checkpoint=str(pin),out=tmp_path/'continue')
     assert continued['trainer_parameters']['recipe_binding']['lineage_sha256']==newplan['recipe_sha256']
     assert continued['trainer_parameters']['recipe_binding']['sha256']==checked['recipe']['sha256']
     from natlang_neuralese.train.recipe import main as recipe_main

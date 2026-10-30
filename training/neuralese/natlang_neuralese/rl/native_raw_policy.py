@@ -144,7 +144,7 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
             raise ValueError('immutable raw RL tokenizer history binding changed')
     else:
         write_json_durable(history_path, history_binding)
-    return {'native_identity': identity, 'native_participant': None, 'semantic_adapter_sha256': None,
+    return {'native_identity': identity, 'native_participant': None,
             'tokenizer': str(tokenizer_out.resolve()), 'checkpoint': str(checkpoint),
             'history_reasoning': history_reasoning,
             'history_reasoning_binding': {'path': str(history_path.resolve()),

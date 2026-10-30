@@ -1,4 +1,4 @@
-"""Exact artifacts for colocated sandbox rounds and shared semantic refresh.
+"""Exact artifacts for colocated sandbox rounds.
 
 The provider-specific host launcher owns staging, detached worker PID, polling,
 TERM forwarding and artifact fetch. This worker owns no provider resources.
@@ -55,8 +55,7 @@ def inventory(out, *, exclude=()):
             if path.is_file() and path.absolute() not in excluded]
 
 
-def write_request(directory, *, kind, out, config=None, state=None, adapter=None,
-                  updates=None, semantic_config=None, device='cuda', provider=None):
+def write_request(directory, *, kind, out, config=None, state=None, device='cuda'):
     directory = Path(directory).absolute(); directory.mkdir(parents=True, exist_ok=True)
     request = {'schema': REQUEST_SCHEMA, 'kind': kind, 'out': str(Path(out).absolute()), 'device': device, 'attempt_id': uuid.uuid4().hex}
     if kind == 'round':
@@ -70,26 +69,16 @@ def write_request(directory, *, kind, out, config=None, state=None, adapter=None
         write_json_durable(config_copy, config_value)
         request['config'] = binding(config_copy)
         request['provider'] = config_value.get('provider')
-        adapter = current.get('semantic_adapter', config_value.get('semantic_adapter'))
         request['parent_checkpoint'] = parent
-        if config_value.get('semantic_adapter'):
-            request['native_participant'] = config_value['native_participant']
-        else:
-            if adapter is not None or config_value.get('native_participant') is not None:
-                raise ValueError('raw bridge round cannot inherit a semantic actor/participant')
-            request['native_actor_mode']='raw-state'
+        if config_value.get('native_participant') is not None:
+            raise ValueError('raw bridge round cannot inherit a shared participant')
+        request['native_actor_mode']='raw-state'
         if current:
             snapshot = directory/('state-' + canonical_json_sha256_hex(current) + '.json')
             write_json_durable(snapshot, current)
             request['state'] = binding(snapshot)
-    elif kind == 'refresh':
-        request['updates'] = {name: binding(path) for name, path in updates.items()}
-        request['semantic_config'] = binding(semantic_config)
-        request['provider'] = provider
     else:
-        raise ValueError('native bridge supports only round and refresh requests')
-    if adapter is not None:request['semantic_adapter'] = binding(adapter)
-    elif kind=='refresh':raise ValueError('semantic refresh requires its actual parent adapter')
+        raise ValueError('native bridge supports only round requests')
     request['request_id'] = canonical_json_sha256_hex(request)
     destination = directory/(request['request_id'] + '.request.json')
     write_json_durable(destination, request)
@@ -99,13 +88,12 @@ def write_request(directory, *, kind, out, config=None, state=None, adapter=None
 def read_request(path):
     value = json.loads(Path(path).read_text())
     identity = value.pop('request_id', None)
-    if (value.get('schema') != REQUEST_SCHEMA or value.get('kind') not in {'round', 'refresh'}
+    if (value.get('schema') != REQUEST_SCHEMA or value.get('kind') != 'round'
             or canonical_json_sha256_hex(value) != identity):
         raise ValueError('native bridge request identity/schema changed')
     value['request_id'] = identity
-    if value.get('native_actor_mode')=='raw-state' and (value['kind']!='round'
-            or value.get('semantic_adapter') is not None or value.get('native_participant') is not None):
-        raise ValueError('raw bridge request cannot substitute semantic ownership')
+    if value.get('native_actor_mode')!='raw-state' or value.get('native_participant') is not None:
+        raise ValueError('native bridge round requires the raw-state actor without a shared participant')
     return value
 
 
@@ -173,7 +161,7 @@ def verify_result(request_path, result_path, *, return_raw_checkpoint=False,veri
         path=_bound(item)
         if path.stat().st_size!=item['bytes']:
             raise ValueError('native bridge artifact size changed')
-    for key in ('state','checkpoint','deployment','checkpoint_publication'):
+    for key in ('state','checkpoint','checkpoint_publication'):
         if result.get(key):_bound(result[key])
     publication=result.get('checkpoint_publication')
     if publication:
@@ -209,16 +197,6 @@ def verify_result(request_path, result_path, *, return_raw_checkpoint=False,veri
             if sha256_file_hex_cached(selected)!=result['checkpoint']['sha256']:
                 raise ValueError('raw bridge result lost its actual current/pending learner checkpoint')
             if not advanced:verified_raw=raw_checkpoint()
-    if request['kind'] == 'refresh' and result.get('deployment'):
-        deployment = json.loads(_bound(result['deployment']).read_text())
-        if (deployment.get('schema') != 'natlang.native-rl-deployment/1'
-                or deployment.get('parent_adapter_sha256') != request['semantic_adapter']['sha256']
-                or {name: item['sha256'] for name, item in deployment['updated_participants'].items()}
-                    != {name: item['sha256'] for name, item in request['updates'].items()}):
-            raise ValueError('native bridge semantic deployment omitted/substituted participant updates')
-        if deployment['checkpoint'] != result.get('checkpoint'):
-            raise ValueError('native bridge semantic deployment checkpoint differs from its result')
-        _bound(deployment['semantic_adapter'])
     if return_raw_checkpoint:
         if verified_raw is None:raise ValueError('completed raw checkpoint verification was not performed')
         return result,(result['checkpoint'],verified_raw)
@@ -236,14 +214,12 @@ def execute(request_path, result_path, *, stop=None):
     result = {'schema': RESULT_SCHEMA, 'kind': request['kind'], 'request_id': request['request_id'],
               'request_sha256': sha256_file_hex_cached(request_path)}
     try:
-        adapter_path = _bound(request['semantic_adapter']) if request.get('semantic_adapter') else None
         if request['kind'] == 'round':
             from .production import run
             config_path = _bound(request['config'])
             config = json.loads(config_path.read_text())
             if (not config.get('native_state') or Path(config['out']).absolute() != out.absolute()
-                    or config.get('native_participant') != request.get('native_participant')
-                    or bool(config.get('semantic_adapter'))!=bool(adapter_path)):
+                    or config.get('native_participant') != request.get('native_participant')):
                 raise ValueError('native bridge round config changes participant/output ownership')
             state_path = out/'state.json'
             if request.get('state'):
@@ -264,11 +240,9 @@ def execute(request_path, result_path, *, stop=None):
                         raise ValueError('raw worker resident optimizer owner is still alive; drain or reattach its exact request')
             _bound(request['parent_checkpoint'])
             prior = json.loads(state_path.read_text()) if state_path.exists() else config
-            if (sha256_file_hex_cached(prior['checkpoint']) != request['parent_checkpoint']['sha256']
-                    or (adapter_path is not None and sha256_file_hex_cached(prior.get('semantic_adapter', config['semantic_adapter']))
-                        != request['semantic_adapter']['sha256'])):
-                raise ValueError('native bridge round changed its exact actor checkpoint/adapter')
-            state = run(config_path, rounds=1, defer_native_refresh=True, stop=stop)
+            if sha256_file_hex_cached(prior['checkpoint']) != request['parent_checkpoint']['sha256']:
+                raise ValueError('native bridge round changed its exact actor checkpoint')
+            state = run(config_path, rounds=1, stop=stop)
             result['state'] = binding(state_path)
             if state.get('pending_native_checkpoint'):
                 result['checkpoint'] = binding(state['pending_native_checkpoint'])
@@ -282,13 +256,6 @@ def execute(request_path, result_path, *, stop=None):
                 from ..model.native_checkpoint_control import result_checkpoint_publication
                 publication=result_checkpoint_publication(config,result['checkpoint'])
                 if publication is not None:result['checkpoint_publication']=publication
-        else:
-            from .native_refresh import refresh
-            updates = {name: _bound(value) for name, value in request['updates'].items()}
-            deployment = refresh(adapter=adapter_path, updates=updates,
-                config=_bound(request['semantic_config']), out=out, device=request['device'], stop=stop)
-            result['deployment'] = binding(out/'deployment.json')
-            result['checkpoint'] = deployment['checkpoint']
         result['status'] = 'stopped' if stop.requested else 'completed'
     except InterruptedError as error:
         result.update(status='stopped', error=str(error))

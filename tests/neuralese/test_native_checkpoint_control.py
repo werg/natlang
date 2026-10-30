@@ -546,7 +546,7 @@ def test_provider_publication_survives_actual_recipe_continuation_and_both_argv(
     configure_provider(config,{'native_checkpoint_publication':selection},{},{},tmp_path/'config.json',write=False)
     assert 'seed_trainer_parameters' not in config
     assert config['trainer_parameters']['learning_rate']==0.001
-    continued,_=continuation_config(config,stage,checkpoint='actual-parent.pt',adapter=None,out=tmp_path/'continued')
+    continued,_=continuation_config(config,stage,checkpoint='actual-parent.pt',out=tmp_path/'continued')
     for key in ('trainer_parameters','seed_trainer_parameters'):
         argv=stage_parameter_args(continued.get(key,continued['trainer_parameters']))
         assert '--checkpoint-publication' in argv

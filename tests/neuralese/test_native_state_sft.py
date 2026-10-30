@@ -901,7 +901,7 @@ def test_token_volume_batches_preserve_every_graph_and_long_graph():
 def authenticated_pair(identifier='pair', *, roles=(58, 59, 60, 61), fingerprint='1'*64):
     import copy
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_hex
-    from natlang_neuralese.train.native_semantic import PAIR_SCHEMA
+    from natlang_neuralese.data.native_pair_schema import PAIR_SCHEMA
     po, pc, co, cc = roles
     models = {}
     for name, ids, offsets, fp in [('lfm', [5, 6], [[0, 2], [2, 4]], fingerprint),

@@ -742,7 +742,7 @@ def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,ver
     from ..train.recipe import resolve_recipe_data
     recipe=resolve_recipe_data(config['production_recipe']);stage=next(item for item in recipe['stages'] if item['id']==stage_id)
     from .native_supervised import continuation_config,bind_recipe_lineage
-    continued,_=continuation_config(config,stage,checkpoint=proof['checkpoint']['path'],adapter=None,out=config['out'])
+    continued,_=continuation_config(config,stage,checkpoint=proof['checkpoint']['path'],out=config['out'])
     # Preserve all controller/case/selection/parent fields; only the recipe-owned
     # supervised invocation contract and provider hooks may change here.
     for key in ('trainer_parameters','seed_native_graphs','held_native_graphs','foundation_native_graphs','foundation_declaration_recovery',

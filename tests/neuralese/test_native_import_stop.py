@@ -33,20 +33,14 @@ def test_stop_flag_schema_legacy_identity_and_transitive_logical_aliases():
         compile_graph([Invocation('bad',(1,),imports=(ImportSpan(0,'external',0,1,stop_gradient=1),))],external_sizes={'external':1})
 
 
-def test_packing_and_semantic_rewrite_preserve_explicit_constants():
+def test_packing_preserves_explicit_constants():
     from natlang_neuralese.data.native_graph_schema import NativeGraphExample
     from natlang_neuralese.train.native_state_sft import pack_native_graphs
-    from natlang_neuralese.train.native_semantic import consumer_example
     plan=stopped_plan()
     example=NativeGraphExample('stop','train',('stop',),'fixture',plan,(0.,)*plan.token_count)
     packed,*_=pack_native_graphs([example,example])
     assert sum(packed.slot_stops)==2*sum(plan.slot_stops)
     assert sum(edge.stop_gradient for node in packed.invocations for edge in node.imports)==2
-    adapted,wire=consumer_example(example,{'export':{'node':'source','start':1,'stop':4},
-        'consumer_nodes':['constant']},3)
-    edge=adapted.plan.invocations[0].imports[0]
-    assert edge.source==wire and edge.stop_gradient
-    assert sum(adapted.plan.slot_stops)==3
 
 
 def test_existing_row_and_source_hash_bytes_unchanged_without_explicit_stop():

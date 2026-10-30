@@ -12,7 +12,7 @@ def _source(event):
     return selected[0]
 
 
-def capture_occurrences(name,capture,nodes,*,semantic=False):
+def capture_occurrences(name,capture,nodes):
     """Consume every graph event and captured state once; never pick latest ID.
 
     Identical same-origin uses may exchange event positions without changing the
@@ -37,7 +37,7 @@ def capture_occurrences(name,capture,nodes,*,semantic=False):
     bound_reads=[]
     for index,segment in enumerate(captured_reads):
         observed=segment.get('id');source_id=segment.get('source_state_id',observed)
-        if source_id!=observed and (not semantic or not isinstance(segment.get('semantic_adaptation'),dict)):
+        if source_id!=observed:
             raise ValueError('native decoded/reencoded inputs require explicit differentiable lowering')
         if 'stop_gradient' in segment and segment['stop_gradient'] is not True:
             raise ValueError('native input stop_gradient must be explicitly true or absent')
@@ -57,8 +57,8 @@ def capture_occurrences(name,capture,nodes,*,semantic=False):
     return bound_writes,bound_reads
 
 
-def graph_binding(name,capture,nodes,*,semantic=False):
-    writes,reads=capture_occurrences(name,capture,nodes,semantic=semantic)
+def graph_binding(name,capture,nodes):
+    writes,reads=capture_occurrences(name,capture,nodes)
     write_counts=Counter(item['id'] for item in writes)
     read_counts=Counter(item['source_state_id'] for item in reads)
     binding={'graph_turn':name,'written_nodes':{item['id']:item['node'] for item in writes if write_counts[item['id']]==1},

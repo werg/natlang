@@ -456,7 +456,6 @@ class Engine:
             from ..model.native_state_derivation import verify_state_derivation
             verify_state_derivation(self.store,block)
         exact = self._native_exact(block)
-        adaptation = None
         state_receipt = None
         declared_mode = (seq.request.native_state_modes or {}).get(block_id)
         if declared_mode is not None:
@@ -499,31 +498,8 @@ class Engine:
                 seq.native_rl_prompt.append({"kind": "native_state", "id": block_id,
                     "native_identity": self._native_block_identity(block),
                     **({'state_derivation':block.derivation} if block.derivation is not None else {})})
-        elif (getattr(self, 'semantic_channel', None) is not None and
-              self.execution_native_identity in self.semantic_channel.bindings.values() and
-              self._native_block_identity(block) in self.semantic_channel.bindings.values()):
-            try:
-                adapted, adaptation = self.semantic_channel.adapt(block, target_name=self.semantic_participant,
-                    target_model=self.shared_model, target_tokenizer=self.tokenizer, target_identity=self.execution_native_identity,
-                    allow_nearest=True,source_state_id=block_id)
-            except ValueError as error:
-                raise RequestError('neuralese-semantic-adapter-mismatch',
-                    f'{error}; restore the matching model/adapter export or write the text with the target native writer') from error
-            seq.cache = splice_block(self.shared_model, seq.cache, adapted,
-                                     checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
-                                     tokenizer_fingerprint=self.model_config['tokenizer_fingerprint'],
-                                     embedding_weight_sha256=self.embedding_weight_sha256, stop_gradient=stop_gradient)
-            mode = 'learned-semantic-state-deltas'
-            if capture_enabled(seq):
-                adapted_record = self.store.put_native_state(adapted, owner=seq.request.native_store_owner)
-                observed_id = adapted_record.id
-                seq.native_rl_prompt.append({'kind': 'native_state', 'id': adapted_record.id,
-                    'source_state_id': block_id, 'semantic_adaptation': adaptation,
-                    'native_identity': self._native_block_identity(adapted),
-                    **({'state_derivation':adapted.derivation} if adapted.derivation is not None else {})})
         else:
-            # Until joint semantic adaptation is trained, foreign state is
-            # best-effort only: discard its tensors and rebuild target KV from text.
+            # Foreign state is best-effort only: discard its tensors and rebuild target KV from text.
             fallback_ids = self._tokens(block.text)
             if not fallback_ids and len(block.token_ids):
                 raise RequestError("neuralese-native-state-empty-text", f"{block_id} has no text for target reencoding")
@@ -545,7 +521,6 @@ class Engine:
         seq.native_imports.append({"id": block_id, "mode": mode,
                                    **({'state_derivation':block.derivation} if block.derivation is not None else {}),
                                    **({'observed_native_state_id': observed_id} if observed_id is not None else {}),
-                                   **({'semantic_adaptation': adaptation} if adaptation is not None else {}),
                                    **({'adapter_state_consumption': state_receipt} if state_receipt is not None else {})})
 
     @staticmethod
@@ -730,8 +705,6 @@ class Engine:
             seq.native_template_suffix = []
         if capture_enabled(seq):
             seq.native_rl_writes.append({"state_id": record.id,
-                **({'raw_state_id': self.store.put_native_state(block, owner=seq.request.native_store_owner).id}
-                   if record.block.metadata()['schema'] == 'neuralese.semantic-state/1' else {}),
                 "begin_sample": seq.native_write_start_sample,
                 "end_sample": (seq.native_write_close_sample + 1
                                if seq.native_write_close_sample is not None else None),
@@ -767,9 +740,7 @@ class Engine:
                                  adapter_binding=({'schema': ADAPTER_SCHEMA, 'base_native_identity': self.native_identity,
                                                    'adapters': bindings} if bindings else None), **fields)
         block.validate()
-        channel = getattr(self, 'semantic_channel', None)
-        stored = channel.message(block) if channel is not None and self.execution_native_identity in channel.bindings.values() else block
-        return block, self.store.put_native_state(stored, owner=owner)
+        return block, self.store.put_native_state(block, owner=owner)
 
     def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
         return self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type), adapters)

@@ -24,8 +24,40 @@ def initialize(engine,seq):
         raise RequestError('neuralese-guidance-template-conflict','the forced template violates guidance; choose a compatible call template')
 
 
+def retained_source_offsets(tokenizer, text, ids):
+    """Character offsets of actual sampled IDs in their decoded text, including byte fragments and noncanonical BPE
+    splits; returns (offsets, policy)."""
+    encoded = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+    if list(encoded['input_ids']) == list(ids):
+        return [list(pair) for pair in encoded['offset_mapping']], 'exact-tokenizer-offsets'
+    from difflib import SequenceMatcher
+    def decode(values):
+        return tokenizer.decode(values, skip_special_tokens=False, clean_up_tokenization_spaces=False)
+    decoded = decode(ids)
+    boundaries = [0]
+    for stop in range(1, len(ids)+1):
+        prefix = decode(ids[:stop])
+        common = 0
+        for left, right in zip(prefix, decoded):
+            if left != right:
+                break
+            common += 1
+        boundaries.append(max(boundaries[-1], common))
+    boundaries[-1] = len(decoded)
+    mapping = list(range(len(decoded)+1))
+    policy = 'actual-token-decoder-alignment'
+    if decoded != text:
+        policy = 'actual-token-decoder-text-alignment'
+        for _, a, b, c, d in SequenceMatcher(None, decoded, text, autojunk=False).get_opcodes():
+            if a == b:
+                mapping[a] = d
+            else:
+                for index in range(a, b+1):
+                    mapping[index] = c + (index-a)*(d-c)//(b-a)
+    return [[mapping[a], mapping[b]] for a,b in zip(boundaries, boundaries[1:])], policy
+
+
 def render(engine,seq):
-    from ..model.semantic_message import retained_source_offsets
     text,starts,stops='',[],[]
     run=[]
     def flush():

@@ -95,7 +95,7 @@ class NativeBundleStore:
         return (self.policy_id, canonical_json_sha256_hex(self.manifest),
                 canonical_json_sha256_hex(contract.state_optimizer_arithmetic()),
                 *(value for value in (state.verify_state_derivation,
-                  state._verify_optimizer_derivation,state._verify_semantic_derivation,
+                  state._verify_optimizer_derivation,
                   contract.validate_derivation,contract.verify_derivative_gradient_origin)))
 
     def _verified_dependency_paths(self, dependencies):

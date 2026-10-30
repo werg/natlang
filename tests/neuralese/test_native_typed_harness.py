@@ -38,7 +38,7 @@ def cpu_harness_threads():
 
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
-@pytest.mark.parametrize('mode', ['handoff', 'recorded', 'forced', 'compact'])
+@pytest.mark.parametrize('mode', ['handoff', 'recorded', 'forced'])
 def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypatch, family, mode, cpu_harness_threads):
     repo = Path(__file__).resolve().parents[2]
     fixture = repo / ('ts-host/test/fixtures/native-state-child-parent.mjs' if mode in {'handoff', 'recorded'} else 'ts-host/test/fixtures/native-state-forced-text.mjs')
@@ -112,19 +112,6 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     if mode not in {'handoff', 'recorded'}:
         engine.context = 2048
         engine.max_block = 8
-    if mode == 'compact':
-        from dataclasses import replace
-        from natlang_neuralese.model.semantic_vae import SemanticStateVAE, StateLayout
-        from natlang_neuralese.model.semantic_channel import SemanticChannel
-        raw = engine.native_write_text('t5')
-        captured = engine.store.get_native_state(raw['id']).block
-        other = {**identity, 'checkpoint_sha256': '9' * 64}
-        vae = SemanticStateVAE({'source': StateLayout.from_block(captured), 'peer': StateLayout.from_block(captured)},
-                              latent_width=4, hidden_width=16)
-        engine.semantic_channel = SemanticChannel(vae, {'source': identity, 'peer': other},
-            {'source': tokenizer, 'peer': tokenizer}, adapter_sha256='a' * 64)
-        engine.semantic_participant = 'source'
-        engine.dialect = 'semantic-state/' + 'a' * 64
     # One payload token is actually forwarded/captured; parent then samples EOS.
     samples = iter([(5, -.2), (61, -.3), (2, -.4)] * 4 if mode not in {'handoff', 'recorded'} else [(60, -.1), (5, -.2), (61, -.3), (2, -.4), (2, -.5)])
     def forced_sample(sequence):
@@ -180,7 +167,7 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
             assert progress['repeated_scope_imports'] is True
         if mode not in {'handoff', 'recorded'}:
             assert receipt == {'forced': True, 'contextual': True, 'view_parts': 2}
-            assert imports and all(item['mode'] == ('learned-semantic-state-deltas' if mode == 'compact' else 'exact-native-state') for item in imports)
+            assert imports and all(item['mode'] == 'exact-native-state' for item in imports)
         else:
             assert imports[0]['id'] == imports[0]['observed_native_state_id'] == receipt['state_id']
             assert imports[0]['mode'] == 'exact-native-state'

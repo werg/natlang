@@ -13,7 +13,7 @@ from pathlib import Path
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
 from natlang_neuralese.common.runtime_inventory import task_runtime_inventory
-from natlang_neuralese.model.native_bundle import composite_dependencies, _semantic_dependencies
+from natlang_neuralese.model.native_bundle import composite_dependencies
 from natlang_neuralese.train.recipe import native_source_dependencies
 
 
@@ -95,7 +95,6 @@ def source_task_baseline_dependencies(training):
 def dependency_closure(request, *, namespace='/work/native-production', readonly_input_roots=(),
                        _checkpoint_payload=None):
     files, assets, active_configs, relocations = {}, {}, set(), {}
-    consumed_adapters = set()
     consumed_checkpoints=set()
     consumed_payloads=set()
     checkpoint_controls={}
@@ -374,7 +373,6 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         held_correction_inputs(training.get('training_options') or {})
         for reference in source_task_baseline_dependencies(training):
             bound(reference)
-        policy_sources(training.get('policy_source_history', []))
         history = training.get('config_history') or []
         supervision = (history[-1].get('config') or {}).get('ce_supervision_policy') if history else None
         if supervision is not None:
@@ -417,19 +415,19 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             for source in frame.get('source_receipts', []):
                 graphs(bound(source))
 
-    def checkpoint(value, *, semantic_only=False):
+    def checkpoint(value):
         declared = Path(value['path'] if isinstance(value, dict) else value).absolute()
         if '..' in declared.parts or root not in declared.parents:
             raise ValueError('provider checkpoint escaped its declared namespace')
         path = bound(value) if isinstance(value, dict) else add(value)
         selected=request.get('native_participant') if request.get('kind')=='round' else None
         if selected is None and isinstance(value,dict):selected=value.get('participant')
-        context=(selected,semantic_only,tuple(sorted((type(key).__name__,str(key),str(value)) for key,value in relocations.items())))
+        context=(selected,tuple(sorted((type(key).__name__,str(key),str(value)) for key,value in relocations.items())))
         marker=(str(path.resolve()),files[str(path)]['sha256'],context)
         if marker in consumed_checkpoints:return
         consumed_checkpoints.add(marker)
         control = checkpoint_controls.get(files[str(path)]['sha256'])
-        if control is not None and selected is None and not semantic_only:
+        if control is not None and selected is None:
             from natlang_neuralese.model.native_checkpoint_control import read_checkpoint_control, checkpoint_control_dependencies
             metadata = read_checkpoint_control(path, control)
             # Different immutable verifier revisions conservatively take the
@@ -459,7 +457,7 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             if key not in decoded:decoded[key]=CheckpointPolicy.load(child,expand_shared=False)
             return decoded[key]
         for digest, child in composite_dependencies(path, participant=selected,
-                semantic_only=semantic_only,checkpoint_loader=load_once).items():
+                checkpoint_loader=load_once).items():
             # Bundle resolver may resolve an offload symlink outside the root.
             # Such a dependency needs an explicit portable bundle before use.
             if '..' in child.parts or root not in child.absolute().parents:
@@ -518,39 +516,16 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         manifest_path = bound(reference)
         manifest = json.loads(manifest_path.read_text())
         if manifest.get('schema') != 'natlang.rl-block-bundle/1':
-            raise ValueError('provider semantic external input is not a native block bundle')
+            raise ValueError('provider external input is not a native block bundle')
         if policy_id is not None and manifest.get('policy_id') != policy_id:
             raise ValueError('provider policy bundle differs from its behavior adapter checkpoint')
         from natlang_neuralese.rl.graph_replay import verified_bundle_path
         for ident, entry in manifest['blocks'].items():
             child = (manifest_path.parent/entry['path']).resolve(strict=True)
             if child.parent != manifest_path.parent.resolve():
-                raise ValueError('provider semantic block escaped its bound bundle')
+                raise ValueError('provider bundle block escaped its bound bundle')
             bound({**entry, 'path': str(child)})
             verified_bundle_path(manifest_path, ident, policy_id=manifest.get('policy_id'), manifest=manifest)
-
-    def semantic_adapter(reference):
-        path = bound(reference)
-        value = json.loads(path.read_text())
-        if str(path) in consumed_adapters:
-            return value
-        consumed_adapters.add(str(path))
-        curriculum = value.get('qualified_curriculum')
-        if curriculum is not None:
-            if canonical_json_sha256_hex(curriculum['config']) != curriculum['sha256']:
-                raise ValueError('provider qualified semantic curriculum hash changed')
-            config_value(curriculum['config'], 'qualified-curriculum:'+curriculum['sha256'])
-        checkpoint(value['checkpoint'], semantic_only=True)
-        for child, digest in _semantic_dependencies(path, value['checkpoint']['sha256']).values():
-            add(child, digest)
-        policy_sources((value.get('policy_training_progress') or {}).get('policy_source_history', []))
-        return value
-
-    def policy_sources(sources):
-        for source in sources:
-            bound(source['rollouts'])
-            adapter = semantic_adapter(source['adapter'])
-            bundle(source['block_bundle'], policy_id=adapter['checkpoint']['sha256'])
 
     def config_value(value, marker, *, inherited_completed_provenance=False):
         if marker in active_configs:
@@ -592,8 +567,7 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         for name,declaration in value.get('models',{}).items():
             if declaration.get('base'):
                 relocations.setdefault(name,declaration['base'])
-        policy_sources((value.get('policy_training') or {}).get('sources', []))
-        # Exact fields consumed by production.run/native semantic refresh.
+        # Exact fields consumed by production.run.
         for reference in value.get('operational_inputs', []):
             bound(reference)
         classification = value.get('source_classification_migration')
@@ -694,7 +668,6 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
                     for stage in recipe.get('stages', []):
                         selected = (stage.get('parameters') or {}).get('sft_packed_geometry')
                         if selected is not None: packed_geometry_input(selected)
-        if value.get('semantic_refresh_config'): config(add(value['semantic_refresh_config']))
         if value.get('base'): asset(value['base'], base=True)
         if value.get('runtime'): asset(value['runtime'])
         for key in ('pairs', 'held_pairs'):
@@ -714,28 +687,15 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
 
     # Resolve explicitly consumed relocations before checking saved checkpoint
     # inventories. Saved paths may name a different model on the coordinator.
-    for key in ('config', 'semantic_config'):
-        if request.get(key): config(bound(request[key]))
+    if request.get('config'): config(bound(request['config']))
     for key in ('parent_checkpoint', 'partial_checkpoint'):
         if request.get(key): checkpoint(request[key])
-    for value in request.get('updates', {}).values():
-        checkpoint(value)
-        update_path = Path(value['path'])
-        receipt_path = add(update_path.parent/'native-training-receipt.json')
-        receipt = json.loads(receipt_path.read_text())
-        bound(receipt['training_receipt'])
     if request.get('state'):
         state = json.loads(bound(request['state']).read_text())
         for key in ('checkpoint', 'pending_native_checkpoint', 'partial_checkpoint'):
             if state.get(key): checkpoint(state[key])
         progress=state.get('last_learner_progress') or {}
         if progress.get('full_report'):bound(progress['full_report'])
-        if state.get('pending_semantic_source'):
-            policy_sources([state['pending_semantic_source']])
-    for reference in request.get('semantic_participants',[]):
-        checkpoint(reference,semantic_only=True)
-    if request.get('semantic_adapter'):
-        semantic_adapter(request['semantic_adapter'])
     if _checkpoint_payload is not None:
         if request:
             raise ValueError('in-process checkpoint payload is a producer-only dependency request')

@@ -115,7 +115,7 @@ def prepare(args):
     parameters=SimpleNamespace(model='lfm',checkpoint=parent,base=Path(args.base),cases=cases,
         runtime=Path(args.runtime)/'ts-host',actor_runtime=Path(args.runtime),out=Path(args.out),config=config,
         native_participant=None,coefficient_policy=None,coefficient_optimizer=None,coefficient_task_eval=None,
-        semantic_adapter=None,semantic_refresh_config=None,seed_native_graphs=source,held_native_graphs=held,
+        seed_native_graphs=source,held_native_graphs=held,
         production_recipe=recipe,production_stage=args.production_stage,port=args.port,rl_policy_loss=None,
         task_eval=eval_spec,task_eval_every=args.task_eval_every)
     configured=configure_native(parameters)

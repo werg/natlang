@@ -159,30 +159,6 @@ def test_sft_directory_inherits_then_changes_without_losing_visits(tmp_path):
     assert fourth['options']['checkpoint_input_offload_directory'] is None and fourth['exposure_counts']=={'train':4}
 
 
-def test_semantic_phases_and_resume_keep_actual_file_mode(tmp_path,monkeypatch):
-    from test_native_semantic_stage import _fixture
-    from natlang_neuralese.train import native_semantic_stage as stage
-    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-    path,manifest,config,_=_fixture(tmp_path,monkeypatch)
-    config['checkpoint_input_offload']=True
-    config['checkpoint_input_offload_directory']=str((tmp_path/'scratch').resolve())
-    path.write_text(json.dumps(config));out=tmp_path/'shared'
-    result=stage.run(path,manifest,out,device='cpu');assert result['completed']
-    before=CheckpointPolicy.load(out/'checkpoint.pt')
-    assert all(p['training_options']['checkpoint_input_offload_directory']==config['checkpoint_input_offload_directory']
-               for p in before['participants'].values())
-    # Remove explicit mode: the shared checkpoint's actual saved participant
-    # settings, rather than the original SFT parent's mode, must be inherited.
-    del config['checkpoint_input_offload'];del config['checkpoint_input_offload_directory']
-    for phase in config['phases']:phase['epochs']+=1
-    path.write_text(json.dumps(config))
-    result=stage.run(path,manifest,out,device='cpu',resume=out/'checkpoint.pt');assert result['completed']
-    after=CheckpointPolicy.load(out/'checkpoint.pt')
-    for name,participant in after['participants'].items():
-        assert participant['training_options']==before['participants'][name]['training_options']
-    assert after['training']['step']>before['training']['step']
-
-
 def test_file_mode_bound_in_capacity_identity_and_explicit_settings_are_checked(tmp_path):
     from types import SimpleNamespace
     from natlang_neuralese.eval.native_memory import capacity_identity
