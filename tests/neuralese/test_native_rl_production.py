@@ -526,3 +526,44 @@ def test_actual_policy_update_keeps_pending_sft_focus_without_resolving_rl_rows(
     updated=torch.load(tmp_path/'learner/checkpoint.pt',map_location='cpu',weights_only=False)
     assert updated['training']['global_step']==2
     assert updated['training']['options']['pending_focus_history']==history
+
+
+def test_long_graph_limit_records_and_refuses_on_the_real_stage(tmp_path):
+    """--max-graph-forward-tokens: a limit above every graph defers none (recorded); below every graph refuses."""
+    test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path/'kept', False,
+        extra_args=('--max-graph-forward-tokens', '100000'))
+    receipt = json.loads((tmp_path/'kept/learner/rl-data-receipt.json').read_text())
+    record = receipt['omissions']['deferred_long_graphs']
+    assert record['max_graph_forward_tokens'] == 100000 and record['episodes'] == [] and record['path'] is None
+    with pytest.raises(ValueError, match='exceeds --max-graph-forward-tokens'):
+        test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path/'refused', False,
+            extra_args=('--max-graph-forward-tokens', '1'))
+
+
+def test_long_graph_deferral_keeps_deferred_episodes_whole(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_stage
+    import natlang_neuralese.data.native_sources as sources
+    import natlang_neuralese.rl.native_replay as replay
+    sizes = {'short': 10, 'long': 500}
+    class Source:
+        def __init__(self, path, *_, **__): self.rows = [json.loads(line) for line in Path(path).read_text().splitlines()]
+        def iter_from(self, _):
+            return [SimpleNamespace(id=row['id'], plan=SimpleNamespace(token_count=sizes[row['id']])) for row in self.rows]
+    monkeypatch.setattr(sources, 'NativeGraphSource', Source)
+    monkeypatch.setattr(replay, 'NativePolicyObjective', lambda path: SimpleNamespace(identity={'tokenizer_fingerprint': 'f'}))
+    graphs = [{'id': 'short', 'nodes': []}, {'id': 'long', 'nodes': [{'token_ids': [1]}]}]
+    objective = {'rows': {'short': {'task_id': 't1', 'sample': 0, 'actions': [1]},
+                          'long': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]}}}
+    graph_path, objective_path = tmp_path/'g.jsonl', tmp_path/'o.json'
+    graph_path.write_text(''.join(json.dumps(row) + '\n' for row in graphs)); objective_path.write_text(json.dumps(objective))
+    record = native_stage._defer_long_graphs(SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path),
+                                             graphs, objective, graph_path, objective_path)
+    assert [row['id'] for row in graphs] == ['short'] and set(objective['rows']) == {'short'}
+    assert [json.loads(line)['id'] for line in graph_path.read_text().splitlines()] == ['short']
+    assert set(json.loads(objective_path.read_text())['rows']) == {'short'}
+    assert record['episodes'] == [{'id': 'long', 'task_id': 't2', 'sample': 1, 'forward_tokens': 500, 'sampled_tokens': 2}]
+    kept = [json.loads(line) for line in (tmp_path/'deferred-long-graphs.jsonl').read_text().splitlines()]
+    assert kept == [{'graph': {'id': 'long', 'nodes': [{'token_ids': [1]}]},
+                     'objective_row': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]}}]
+    assert record['path']['path'].endswith('deferred-long-graphs.jsonl')

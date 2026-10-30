@@ -202,6 +202,10 @@ def main(argv=None):
     # rollout objective or trainer arguments.
     parser.add_argument('--publication-owner-pointer', type=Path)
     parser.add_argument('--publication-role', choices=('lfm', 'mellum'))
+    # Stopgap while multi-turn episode graphs replay every turn's full history (memory and time grow with the
+    # square of the turn count): episodes whose packed graph exceeds this many forward tokens are deferred, kept
+    # whole in deferred-long-graphs.jsonl and recorded in the data receipt, never silently dropped.
+    parser.add_argument('--max-graph-forward-tokens', type=int)
     args, trainer = parser.parse_known_args(argv)
     from contextlib import nullcontext
     from .native_output_lease import coefficient_output_lease
@@ -224,6 +228,9 @@ def _admit_and_train(args,trainer):
     graph_path, objective_path = args.out/'rl-native-graphs.jsonl', args.out/'rl-native-objective.json'
     write_bytes_durable(graph_path, ''.join(json.dumps(row) + '\n' for row in graphs).encode())
     write_json_durable(objective_path, objective)
+    deferred = _defer_long_graphs(args, graphs, objective, graph_path, objective_path)
+    if not graphs:
+        raise ValueError('every admitted native policy episode exceeds --max-graph-forward-tokens')
     write_json_durable(args.out/'rl-data-receipt.json', {
         'schema': 'natlang.native-rl-admission/1',
         **({'base_native_identity':objective['base_native_identity'],'behavior_policy_sha256':objective['behavior_policy_sha256']}
@@ -231,7 +238,8 @@ def _admit_and_train(args,trainer):
         **({'policy_loss': objective['policy_loss']} if 'policy_loss' in objective else {}),
         'rollouts': {str(path.resolve()): sha256_file_hex_cached(path) for path in args.rollouts},
         'tasks_selected': [{'task_id': row['task_id'], 'split': 'train'} for row in objective['rows'].values()],
-        'omissions':{'unscored':[{'task_id':row.get('task_id'),'sample':row.get('sample')} for row in rows if row.get('reward') is None]},
+        'omissions':{'unscored':[{'task_id':row.get('task_id'),'sample':row.get('sample')} for row in rows if row.get('reward') is None],
+                     **({'deferred_long_graphs':deferred} if deferred is not None else {})},
         'episodes': len(graphs), 'sampled_tokens': sum(len(row['actions']) for row in objective['rows'].values()),
         'native_graphs_sha256': sha256_file_hex_cached(graph_path),
         'objective_sha256': sha256_file_hex_cached(objective_path), 'execution': 'one-packed-graph-forward'})
@@ -262,6 +270,37 @@ def _admit_and_train(args,trainer):
     from .diloco_contract import register_admitted_stage
     register_admitted_stage(args,trainer_args)
     return _invoke_raw_trainer(args, trainer, trainer_args, train)
+
+
+def _defer_long_graphs(args, graphs, objective, graph_path, objective_path):
+    """Apply --max-graph-forward-tokens in place: keep deferred episodes whole beside the round, return the record."""
+    limit = args.max_graph_forward_tokens
+    if limit is None:
+        return None
+    if type(limit) is not int or limit < 1:
+        raise ValueError('--max-graph-forward-tokens must be a positive integer')
+    from ..data.native_sources import NativeGraphSource
+    from .native_replay import NativePolicyObjective
+    source = NativeGraphSource(graph_path, NativePolicyObjective(objective_path).identity['tokenizer_fingerprint'],
+                               required_split='train')
+    sizes = {example.id: example.plan.token_count for example in source.iter_from(0)}
+    long = {key for key, size in sizes.items() if size > limit}
+    record = {'reason': 'packed episode graph exceeds the learner forward-token limit (full-history turn replay)',
+              'max_graph_forward_tokens': limit, 'path': None,
+              'episodes': [{'id': key, 'task_id': objective['rows'][key].get('task_id'),
+                            'sample': objective['rows'][key].get('sample'), 'forward_tokens': sizes[key],
+                            'sampled_tokens': len(objective['rows'][key]['actions'])} for key in sorted(long)]}
+    if not long:
+        return record
+    deferred_path = args.out / 'deferred-long-graphs.jsonl'
+    write_bytes_durable(deferred_path, ''.join(json.dumps({'graph': row, 'objective_row': objective['rows'][row['id']]})
+                                               + '\n' for row in graphs if row['id'] in long).encode())
+    record['path'] = {'path': str(deferred_path.resolve()), 'sha256': sha256_file_hex_cached(deferred_path)}
+    graphs[:] = [row for row in graphs if row['id'] not in long]
+    objective['rows'] = {key: row for key, row in objective['rows'].items() if key not in long}
+    write_bytes_durable(graph_path, ''.join(json.dumps(row) + '\n' for row in graphs).encode())
+    write_json_durable(objective_path, objective)
+    return record
 
 
 def _publication_values(args, trainer):
