@@ -157,6 +157,12 @@ export async function buildTarget(name, outdir) {
       : { packages: 'external' }),
     outdir, absWorkingDir: root, metafile: true, legalComments: 'none', logLevel: 'silent',
     plugins: target.plugins?.(entrySource) ?? [], define: target.define?.() ?? {} });
+  // esbuild names each bundled module in a comment by its path relative to the working directory; a package that resolves
+  // through the checkout's node_modules link sits outside it, so the comment would depend on where the build ran.
+  if (target.selfContained) for (const bundle of Object.keys(target.entries)) {
+    const file = join(outdir, `${bundle}.js`);
+    writeFileSync(file, readFileSync(file, 'utf8').replace(/^\/\/ (?:\.\.\/)+(?:[^\n]*?\/)?(node_modules\/)/gm, '// $1'));
+  }
   const declarations = mkdtempSync(join(tmpdir(), 'natlang-types-'));
   try {
     emitDeclarations(entrySource, declarations);
