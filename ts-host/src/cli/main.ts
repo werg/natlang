@@ -1044,9 +1044,13 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       runtime: { trace: fileTraceSink(join(root, '.natlang', 'test-traces')), ...(progress.live ? { onLive: progress.live } : {}) } });
     let failed = 0;
     try {
-      // Examples run together: the runtime's scheduler fills the model's slots, and results print in file order.
+      // Examples run together (the runtime's scheduler fills the model's slots); each result prints when it finishes,
+      // so a run that is stopped keeps what it found.
       const started = Date.now();
-      const results = await Promise.all(examples.map(async (example, index) => {
+      let finished = 0;
+      const report = (result: { ok: boolean; text: string }) => { finished++; if (!result.ok) failed++;
+        output(`[${finished}/${examples.length}] ${result.text}`, false); return result; };
+      await Promise.all(examples.map(async (example, index) => report(await (async () => {
         const name = example.name ?? `${example.function} #${index + 1}`, began = Date.now();
         try {
           const fn = loadNatlang(resolve(root, example.function), root) as unknown as ((...args: unknown[]) => Promise<unknown>) & Record<symbol, { definition: { params: { name: string }[] } }>;
@@ -1056,8 +1060,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
           return isDeepStrictEqual(result, example.expected) ? { ok: true, text: `PASS ${name} (${seconds})` } :
             { ok: false, text: `FAIL ${name} (${seconds})\n  expected: ${JSON.stringify(example.expected)}\n  received: ${JSON.stringify(result)}` };
         } catch (error) { return { ok: false, text: `FAIL ${name}: ${(error as Error).message}` }; }
-      }));
-      for (const result of results) { if (!result.ok) failed++; output(result.text, false); }
+      })())));
       output(`${examples.length} examples in ${((Date.now() - started) / 1000).toFixed(1)} s`, false);
     } finally { progress.close(); await natlang.close(); }
     output(`${examples.length - failed}/${examples.length} passed. Traces: ${join(root, '.natlang', 'test-traces')}`, false);
