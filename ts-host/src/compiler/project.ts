@@ -17,7 +17,7 @@ import { declarationNamespace } from '../native/external.js';
 import { analyzeInlineLambdas, spanOf, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
 import { checkConstrainedSource } from './policy.js';
 import { fusionCallSites } from './call-flow.js';
-import { natlangTransformer } from './lower.js';
+import { analysisLowering, natlangTransformer } from './lower.js';
 import { typeScriptText } from './eval-check.js';
 import { INTRINSICS_FILE, NATLANG_COMPILE_VERSION, SURFACE_MODULE_FILE } from './intrinsics.js';
 import { createNatlangCompilerHost } from './host.js';
@@ -597,19 +597,10 @@ export function compileProject(options: BuildOptions): BuildResult {
       const fileReadouts = readouts.get(source) ?? [];
       const commonjs = source.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS;
       const rewriteFor = new Map([...rewrite.keys()].map(specifier => [specifier, specifierFor(commonjs)]));
-      return natlangTransformer({ plans: new Map(filePlans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan])),
-        readouts: new Set(fileReadouts.filter(item => !item.kind).map(item => `${item.start}:${item.end}`)),
-        conditionalReadouts: new Set(fileReadouts.filter(item => item.conditional).map(item => `${item.start}:${item.end}`)),
-        joins: new Set(fileReadouts.filter(item => item.kind === 'join').map(item => `${item.start}:${item.end}`)),
-        jsons: new Set(fileReadouts.filter(item => item.kind === 'json').map(item => `${item.start}:${item.end}`)),
-        scalarConversions: new Map(fileReadouts.filter(item => item.kind === 'scalar-conversion' && item.conversion)
-          .map(item => [`${item.start}:${item.end}`, { argument: item.argument ?? 0, conversion: item.conversion!,
-            ...(item.conditional ? { conditional: true as const } : {}) }])),
-        stringReplaces: new Map(fileReadouts.filter(item => item.kind === 'string-replace')
-          .map(item => [`${item.start}:${item.end}`, { ...(item.conditional ? { conditional: true as const } : {}) }])),
+      return natlangTransformer({
+        ...analysisLowering({ plans: filePlans, readouts: fileReadouts, instantiations: instantiations.get(source) ?? [] },
+          item => `${rel(file.fileName)}:${item.line}`),
         fusionSites: fusionSitesOf(source),
-        instantiations: new Map((instantiations.get(source) ?? []).map(item => [`${item.start}:${item.end}`,
-          { representation: item.representation, site: `${rel(file.fileName)}:${item.line}` }])),
         checker: program.getTypeChecker(), runtime: '__natlang',
         context: contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,
         constrained: options.constrained ?? false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',

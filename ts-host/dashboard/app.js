@@ -1,6 +1,7 @@
 // natlang dashboard: one page, one view per section (location.hash), all state from the local API (src/dashboard/server.ts).
 import { createExecutionModel as liveModel, createExecutionView } from './execution.js';
-import { argumentForm } from './arguments.js';
+import { argumentForm, typedValueEditor } from './arguments.js';
+import { valueView, valueSummary, createOutputView, modelDescription, problemView, fieldLabel, downloadData, eventTimeline, messageSummary, codeView } from './presentation.js';
 import { connection, providersPanel, signIn } from './providers.js';
 const TOKEN = document.querySelector('meta[name="natlang-token"]').content;
 // Each route renders into its own element: a view still loading when the route changes writes into a detached one.
@@ -11,7 +12,7 @@ async function api(method, path, body, signal) {
   const response = await fetch(path, { method, headers: { 'x-natlang-token': TOKEN, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), ...(signal ? { signal } : {}) });
   const value = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
+  if (!response.ok) throw Object.assign(new Error(messageSummary(value.error) || `The request failed (${response.status}).`), { status: response.status });
   return value;
 }
 const get = (path, signal) => api('GET', path, undefined, signal);
@@ -33,9 +34,12 @@ const fill = (element, ...children) => element.replaceChildren(...children.flat(
 let toastTimer;
 function toast(text, error = false) {
   const element = document.getElementById('toast');
-  element.textContent = text; element.className = error ? 'error' : ''; element.hidden = false;
+  element.textContent = messageSummary(text); element.className = error ? 'error' : ''; element.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { element.hidden = true; }, error ? 7000 : 3500);
 }
+/** An empty state that says what is missing and offers the next step as links. */
+const emptyState = (text, ...actions) => h('div', { class: 'empty' }, h('p', {}, text),
+  actions.length ? h('div', { class: 'row' }, actions.map(([label, href, primary]) => h('a', { class: `button${primary ? ' primary' : ''}`, href }, label))) : null);
 const attempt = fn => async (...args) => { try { return await fn(...args); } catch (error) { toast(error.message, true); } };
 const bytes = n => n == null ? '–' : n >= 2 ** 30 ? `${(n / 2 ** 30).toFixed(1)} GB` : n >= 2 ** 20 ? `${(n / 2 ** 20).toFixed(0)} MB` : `${Math.round(n / 1024)} KB`;
 const ms = n => n == null ? '–' : n >= 60000 ? `${Math.floor(n / 60000)}m ${Math.round(n / 1000) % 60}s` : n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${n} ms`;
@@ -43,9 +47,9 @@ const tokens = n => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n ?? 0);
 const ago = iso => { if (!iso) return '–'; const s = (Date.now() - Date.parse(iso)) / 1000;
   return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : new Date(iso).toLocaleString(); };
 const OUTCOME = { done: 'ok', running: 'info', failed: 'bad', quiesced: 'warn', stopped: 'idle', lost: 'warn', interrupted: 'warn', blocked: 'warn' };
-const pill = (text, kind = OUTCOME[text] ?? 'idle') => h('span', { class: `pill ${kind}` }, text);
-const short = (value, limit = 160) => { const text = typeof value === 'string' ? value : JSON.stringify(value); return text === undefined ? '' : text.length > limit ? text.slice(0, limit) + '…' : text; };
-const pretty = value => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+const pill = (text, kind = OUTCOME[text] ?? 'idle') => h('span', { class: `pill ${kind}`, 'data-status': text },
+  ({ done: 'Finished', running: 'Running', failed: 'Needs attention', lost: 'Interrupted', quiesced: 'Stopped', stopped: 'Stopped' })[text] || text);
+const short = (value, limit = 160) => { const text = valueSummary(value); return text === undefined ? '' : text.length > limit ? text.slice(0, limit) + '…' : text; };
 function programDialog(options = {}) {
   const name = h('input', { placeholder: 'my-program', value: 'my-program', required: true, pattern: '[A-Za-z0-9][A-Za-z0-9._-]{0,63}' });
   const errorBox = h('div', { class: 'callout warn', hidden: true });
@@ -130,7 +134,7 @@ async function overview(_arg, target) {
   else if (release && !release.installed) problems.push([`${release.label} (${bytes(release.bytes)}) is not downloaded yet; the first run would download it.`, 'Download now',
     attempt(async () => { await api('POST', `/api/stock/${release.id}/download`); toast('Download started'); go('models'); })]);
   fill(target, 
-    header('Overview', `Programs under ${status.root}. Everything here is the same machine state the natlang CLI uses.`,
+    header('Overview', 'Your programs, models, and recent work at a glance.',
       h('button', { onclick: () => programDialog() }, 'Create program'), h('button', { onclick: () => go('playground') }, 'Ask the model'), h('button', { class: 'primary', onclick: () => go('programs') }, 'Run a program')),
     ...problems.map(([text, label, action]) => h('div', { class: 'callout warn row' }, h('span', {}, text), h('button', { onclick: action }, label),
       model.kind === 'managed-local' ? h('button', { onclick: () => go('models') }, 'Use a hosted model instead') : null)), progress,
@@ -143,13 +147,13 @@ async function overview(_arg, target) {
     await keptModelPanel(),
     h('div', { class: 'grid', style: 'grid-template-columns: repeat(auto-fit, minmax(360px, 1fr))' },
       h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Recent runs'), h('a', { href: '#runs' }, 'All runs')),
-        jobs.length ? jobTable(jobs.slice(0, 8)) : h('div', { class: 'empty' }, 'No runs yet. Start one from Programs or the Playground.')),
+        jobs.length ? jobTable(jobs.slice(0, 8)) : emptyState('No runs yet. Run a program, or try an instruction in the Playground.', ['Open Programs', '#programs', true], ['Open Playground', '#playground'])),
       h('section', { class: 'panel' }, h('h2', {}, 'Busiest functions'),
         hot.length ? h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Function'), h('th', { class: 'num' }, 'Calls'), h('th', { class: 'num' }, 'Crisp'), h('th', { class: 'num' }, 'Tokens'))),
           h('tbody', {}, hot.slice(0, 8).map(row => h('tr', { class: 'click', onclick: () => go(`traces-${encodeURIComponent(row.definition_name)}`) },
             h('td', {}, row.definition_name, h('div', { class: 'small muted' }, row.definition_source ?? '')), h('td', { class: 'num' }, row.calls),
             h('td', { class: 'num' }, row.crisp_calls), h('td', { class: 'num' }, tokens(row.tokens))))))) :
-          h('div', { class: 'empty' }, 'No recorded calls yet.'))));
+          emptyState(status.calls ? 'No recorded calls yet. Every run records its function calls here.' : 'Call recording is off on this machine, so there is nothing to rank.'))));
 }
 /** The model the dashboard keeps loaded for every natlang command on this machine (one server, warm slots, no load time). */
 async function keptModelPanel() {
@@ -169,49 +173,27 @@ async function keptModelPanel() {
     h('div', { class: 'small muted' }, 'One llama.cpp server for every run, call and terminal command on this machine whose model matches: no load time per run, warm slots, and one copy of the model in memory.'),
     server ? kv([['Model', `${server.model} (profile ${server.profile})`], ['Server', `${server.endpoint} · ${server.slots} slots of ${tokens(server.contextPerSlot)} tokens`],
       ['Since', ago(server.startedAt)]]) : state.other ? h('div', { class: 'small' }, `Another natlang process (pid ${state.other.pid}) keeps ${state.other.model} loaded at ${state.other.endpoint}.`) : null,
-    state.log?.length ? h('pre', { class: 'block small' }, state.log.slice(-4).join('\n')) : null);
+    state.log?.length ? h('details', { class: 'value-disclosure' }, h('summary', {}, 'Model notices'), ...state.log.slice(-4).map(message => problemView(h, message))) : null);
   return panel;
 }
 const tile = (label, value, sub) => h('div', { class: 'panel tile' }, h('div', { class: 'label' }, label), h('div', { class: 'value' }, value), h('div', { class: 'sub' }, sub));
+function jobLabel(job) {
+  const path = job.meta?.path || (job.kind === 'run' || job.kind === 'call' || job.kind === 'build' || job.kind === 'test' ? job.argv?.[1] : '');
+  const name = path && path !== '.' ? path.split('/').filter(Boolean).at(-1) : job.cwd?.split('/').filter(Boolean).at(-1);
+  return job.kind === 'run' ? `${name || 'Program'}${job.meta?.target ? ` · ${job.meta.target}` : ''}` : job.kind === 'call' ? name || 'Function call' :
+    job.kind === 'ask' ? 'Playground experiment' : job.kind === 'setup' ? 'Prepare model' : job.kind === 'build' ? `Build ${name || 'program'}` : job.kind === 'test' ? `Test ${name || 'program'}` : fieldLabel(job.kind);
+}
 function jobTable(jobs) {
   return h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Run'), h('th', {}, 'State'), h('th', {}, 'Started'), h('th', { class: 'num' }, 'Time'))),
     h('tbody', {}, jobs.map(job => h('tr', { class: 'click', onclick: () => go(`runs-${job.id}`) },
-      h('td', { class: 'mono' }, short(job.title, 70)), h('td', {}, pill(job.status)), h('td', {}, ago(job.startedAt)),
+      h('td', { class: 'mono' }, jobLabel(job)), h('td', {}, pill(job.status)), h('td', {}, ago(job.startedAt)),
       h('td', { class: 'num' }, ms((job.endedAt ? Date.parse(job.endedAt) : Date.now()) - Date.parse(job.startedAt))))))));
 }
 
 // ---- jobs: start and supervise ---------------------------------------------------------------------------------------
 async function startJob(spec) {
-  try { const job = await api('POST', '/api/jobs', spec); toast(`Started: ${job.title}`); go(`runs-${job.id}`); return job; }
+  try { const job = await api('POST', '/api/jobs', spec); toast(`Started: ${jobLabel(job)}`); go(`runs-${job.id}`); return job; }
   catch (error) { toast(error.message, true); }
-}
-
-// Generation speed as the server measured it, and the prefill time when the prompt took noticeably long.
-const rate = turn => turn.generationMs > 0 ? ` · ${(turn.completion * 1000 / turn.generationMs).toFixed(1)} tokens/s${turn.prefillMs > 1000 ? ` after ${ms(turn.prefillMs)} prefill` : ''}` : '';
-function renderCall(call, all = false) {
-  const turns = [...call.turns.values()].sort((a, b) => a.number - b.number);
-  const totals = turns.reduce((sum, turn) => [sum[0] + turn.prompt, sum[1] + turn.completion], [0, 0]);
-  const kind = call.status === 'done' ? 'done' : call.status === 'running' ? '' : 'failed';
-  return h('div', { class: `call ${kind}` },
-    h('div', { class: 'row', style: 'justify-content: space-between' }, h('strong', {}, call.name), pill(call.status)),
-    h('div', { class: 'meta' }, `${turns.length} turn${turns.length === 1 ? '' : 's'} · ${tokens(totals[0])} prompt + ${tokens(totals[1])} generated tokens`,
-      call.ended && call.started ? ` · ${ms(call.ended - call.started)}` : ''),
-    call.detail && call.status !== 'done' ? h('div', { class: 'turn' }, h('div', { class: 'fail' }, call.detail)) : null,
-    (all ? turns : turns.slice(-4)).map(turn => h('div', { class: 'turn' },
-      h('div', { class: 'meta' }, `turn ${turn.number}${turn.working ? ` · ${turn.reasoning ? 'thinking' : turn.text || turn.tools.length ? 'writing' : 'reading the prompt'}… ` : turn.ms ? ` · ${ms(turn.ms)} · ${tokens(turn.prompt)} prompt (${tokens(turn.cached ?? 0)} cached) + ${tokens(turn.completion)} generated${rate(turn)}` : ''}`,
-        turn.working && turn.since && !all ? h('span', { 'data-since': turn.since }, ms(Date.now() - turn.since)) : null),
-      turn.reasoning ? h('div', { class: 'reason' }, turn.reasoning.slice(-1500)) : null,
-      turn.text ? h('div', {}, turn.text.slice(-1500)) : null,
-      turn.tools.map((tool, index) => [h('div', { class: 'code' }, toolText(tool)),
-        turn.results[index] ? h('div', { class: 'result' }, short(turn.results[index], all ? 2400 : 600)) : null]),
-      turn.failures.filter(text => !turn.results.some(result => result.includes(String(text).slice(0, 80))))
-        .map(text => h('div', { class: 'fail' }, short(text, 600))))),
-    call.children.length ? h('div', { class: 'children' }, call.children.map(child => renderCall(child, all))) : null);
-}
-function toolText(tool) {
-  try { const args = JSON.parse(tool.arguments || '{}');
-    return tool.name === 'eval' && typeof args.code === 'string' ? args.code : `${tool.name}(${JSON.stringify(args)})`; }
-  catch { return `${tool.name}(${tool.arguments})`; }
 }
 
 async function runs(id, target) {
@@ -219,12 +201,14 @@ async function runs(id, target) {
   const selected = id || jobs[0]?.id;
   const list = h('div', { class: 'list scroll' });
   const drawList = rows => fill(list, rows.length ? rows.map(job => h('button', { class: `item${job.id === selected ? ' selected' : ''}`, onclick: () => go(`runs-${job.id}`) },
-    h('div', { class: 'title' }, h('span', { class: 'mono' }, short(job.title, 46)), pill(job.status)),
-    h('div', { class: 'desc' }, `${job.kind} · ${ago(job.startedAt)}`))) : h('div', { class: 'empty' }, 'No runs yet. Start one from Programs or the Playground.'));
+    h('div', { class: 'title' }, h('span', { class: 'mono' }, jobLabel(job)), pill(job.status)),
+    h('div', { class: 'desc' }, `${job.kind} · ${ago(job.startedAt)}`))) : emptyState('No runs yet. Run a program, or try an instruction in the Playground.', ['Open Programs', '#programs', true], ['Open Playground', '#playground']));
   drawList(jobs);
-  every(attempt(async () => drawList(await get('/api/jobs'))), 4000);
+  const updateJob = event => { const index = jobs.findIndex(job => job.id === event.detail.id); if (index >= 0) { jobs[index] = event.detail; drawList(jobs); } };
+  document.addEventListener('natlang-job-update', updateJob); cleanup.push(() => document.removeEventListener('natlang-job-update', updateJob));
+  every(attempt(async () => { jobs.splice(0, jobs.length, ...await get('/api/jobs')); drawList(jobs); }), 4000);
   const detail = h('div', { class: 'stack' });
-  fill(target, header('Runs', 'Every program run, call, ask, build and tuning job started from here, with its live calls and output.'),
+  fill(target, header('Runs', 'Follow work as it happens, then revisit any result.'),
     h('div', { class: 'split' }, h('section', { class: 'panel', style: 'padding: 6px 10px' }, list), detail));
   if (selected) await jobDetail(selected, detail);
 }
@@ -234,24 +218,25 @@ async function jobDetail(id, container) {
   const state = { stdout: 0, stderr: 0, live: 0, out: '', err: '', model: liveModel(), tab: 'output', job: null, drained: false };
   const body = h('div', { class: 'stack' }), headLine = h('div', { class: 'row', style: 'justify-content: space-between' });
   const tabs = h('div', { class: 'tabs' }), summary = h('div', {}), execution = createExecutionView(h);
-  const failureTitle = h('strong'), failureMessage = h('pre', { class: 'block run-failure-message' });
+  const failureTitle = h('strong'), failureMessage = h('div', { class: 'run-failure-message' });
   const failureBox = h('div', { class: 'callout warn', hidden: true }, failureTitle, failureMessage,
     h('p', {}, 'See Output, expand a lambda that needs attention, or open Log for details.'));
   summary.append(failureBox);
-  const output = h('pre', { class: 'console program-output', tabindex: '0', 'aria-label': 'Program output' });
-  const log = h('pre', { class: 'console', tabindex: '0', 'aria-label': 'Program log' });
+  const outputReader = createOutputView(h, { label: 'Program output', empty: 'Your result will appear here. Follow live execution alongside it.', controls: true, className: 'program-output' });
+  const output = outputReader.content;
+  const logReader = createOutputView(h, { label: 'Program log', empty: 'No log messages.', controls: true }), log = logReader.element;
   const field = h('input', { id: 'job-input', 'aria-label': 'Program input', placeholder: 'Type input for the program and press Enter', style: 'flex: 1' });
   const input = h('form', { class: 'row', onsubmit: attempt(async event => {
     event.preventDefault(); await api('POST', `/api/jobs/${id}/input`, { text: field.value }); field.value = '';
   }) }, field, h('button', { type: 'submit' }, 'Send'));
-  let followOutput = true, outputPending = false, headerKey = '', mountedTab = '', busy = false, failures = 0, nextPoll = 0, lastRail = 0;
+  let followOutput = true, outputPending = false, headerKey = '', mountedTab = '', busy = false, failures = 0, nextPoll = 0, lastRail = 0, lastFailure = '';
   const follow = h('button', { type: 'button', hidden: true, onclick: () => { followOutput = true; output.scrollTop = output.scrollHeight; follow.hidden = true; } }, 'Follow output');
   output.addEventListener('scroll', () => {
     if (outputPending) return;
     followOutput = output.scrollHeight - output.scrollTop - output.clientHeight < 28;
     follow.hidden = followOutput;
   });
-  const outputPane = h('section', { class: 'panel output-panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Program output'), follow), output, input);
+  const outputPane = h('section', { class: 'panel output-panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Program output'), follow), outputReader.element, input);
   const workspace = h('div', { class: 'run-workspace' }, execution.element, outputPane);
   fill(container, h('section', { class: 'panel' }, headLine, summary, tabs), body);
   const buttons = new Map();
@@ -272,9 +257,9 @@ async function jobDetail(id, container) {
       headerKey = key;
       const commandOpen = headLine.querySelector('.run-command')?.open ?? false;
       const command = `natlang ${job.argv.map(arg => /\s/.test(arg) ? JSON.stringify(arg) : arg).join(' ')}`;
-      fill(headLine, h('div', { class: 'stack', style: 'gap: 2px' }, h('h2', {}, job.title),
-        h('details', { class: 'run-command', open: commandOpen }, h('summary', { class: 'small muted' }, 'Command'), h('code', {}, command))),
-        h('div', { class: 'row' }, pill(job.status), job.exitCode !== null ? h('span', { class: 'small muted' }, `exit ${job.exitCode}`) : null,
+      fill(headLine, h('div', { class: 'stack', style: 'gap: 2px' }, h('h2', {}, jobLabel(job)),
+        h('details', { class: 'run-command', open: commandOpen }, h('summary', { class: 'small muted' }, 'Terminal details'), h('span', { class: 'small muted' }, 'Use the same inputs and model from your terminal. '), h('button', { type: 'button', class: 'ghost small', onclick: attempt(async () => { await navigator.clipboard.writeText(command); toast('Command copied'); }) }, 'Copy command'), job.exitCode !== null ? h('span', { class: 'small muted' }, `Exit code ${job.exitCode}`) : null)),
+        h('div', { class: 'row' }, pill(job.status),
           job.meta?.program || job.kind === 'run' ? h('button', { onclick: () => go(`programs-${encodeURIComponent(job.meta?.program ?? job.meta?.path ?? '.')}`) }, 'Program and source') : null,
           job.status === 'running' ? h('button', { class: 'danger', onclick: attempt(async () => { state.job = await api('POST', `/api/jobs/${id}/stop`); draw(); }) }, 'Stop') :
             h('button', { onclick: attempt(async () => { await api('DELETE', `/api/jobs/${id}`); go('runs'); }) }, 'Remove'),
@@ -284,7 +269,7 @@ async function jobDetail(id, container) {
     if (!failureBox.hidden) {
       updateText(failureTitle, job.status === 'lost' ? 'The run was interrupted.' : 'The run failed.');
       const message = job.kind === 'test' ? state.out.trim() || state.err.trim() : state.err.trim() || state.out.trim();
-      updateText(failureMessage, message.split('\n').slice(-8).join('\n') || 'See Log for details.');
+      if (message !== lastFailure) { lastFailure = message; failureMessage.replaceChildren(problemView(h, message || 'See Log for details.')); }
     }
     if (mountedTab !== state.tab) {
       mountedTab = state.tab;
@@ -296,19 +281,23 @@ async function jobDetail(id, container) {
     buttons.get('live').textContent = `Lambdas${state.model.calls.size ? ` (${state.model.calls.size})` : ''}`;
     input.hidden = !job.interactive || job.status !== 'running';
     outputPending = true;
-    updateText(output, state.out || (job.status === 'running' ? 'Waiting for program output. Live execution shows what is happening alongside it.' : '(no program output)'), followOutput);
+    const outputTop = output.scrollTop;
+    outputReader.update(state.out, { running: job.status === 'running' });
+    output.scrollTop = followOutput ? output.scrollHeight : outputTop;
     requestAnimationFrame(() => { outputPending = false; });
-    updateText(log, state.err || '(nothing logged)', log.scrollHeight - log.scrollTop - log.clientHeight < 28);
+    logReader.update(state.err, { running: job.status === 'running' });
     execution.update(state.model, { ...job, drained: state.drained }, state.err);
   };
   const poll = async () => {
     const value = await get(`/api/jobs/${id}?stdout=${state.stdout}&stderr=${state.stderr}&live=${state.live}`, AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]));
+    const statusChanged = value.job.status !== state.job?.status;
     state.job = value.job; state.stdout = value.stdout.offset; state.stderr = value.stderr.offset; state.live = value.live.offset;
     state.out += value.stdout.text; state.err += value.stderr.text;
     for (const line of value.live.text.split('\n')) if (line) { try { state.model.add(JSON.parse(line)); } catch { /* only complete event lines are supplied */ } }
     state.drained = value.job.status !== 'running' && Boolean(value.job.endedAt) && !value.live.text && !value.stdout.text && !value.stderr.text;
     failures = 0; execution.connection(true); draw();
-    if (Date.now() - lastRail > 4000) { lastRail = Date.now(); refreshRail(); }
+    if (statusChanged) document.dispatchEvent(new CustomEvent('natlang-job-update', { detail: value.job }));
+    if (statusChanged || Date.now() - lastRail > 4000) { lastRail = Date.now(); refreshRail(); }
   };
   await poll();
   every(async () => {
@@ -331,7 +320,7 @@ async function programs(path, target) {
   const list = await get('/api/programs');
   const selected = path ? decodeURIComponent(path) : list[0]?.directory;
   const detail = h('div', { class: 'stack' });
-  const search = h('input', { id: 'program-search', type: 'search', placeholder: `Filter ${list.length} programs`, style: 'width: 100%' });
+  const search = h('input', { id: 'program-search', type: 'search', placeholder: list.length === 1 ? 'Filter programs' : `Filter ${list.length} programs`, 'aria-label': 'Filter programs', style: 'width: 100%' });
   const listBox = h('div', { class: 'list scroll' });
   fill(target, header('Programs', 'Choose a program and run it with sample input, or create your own.',
     h('button', { onclick: openProgramDialog }, 'Open program'), h('button', { class: 'primary', onclick: () => programDialog() }, 'Create program')),
@@ -342,7 +331,7 @@ async function programs(path, target) {
     fill(listBox, shown.length ? shown.map(item => h('button', { class: `item${item.directory === selected ? ' selected' : ''}`, onclick: () => go(`programs-${encodeURIComponent(item.directory)}`) },
       h('div', { class: 'title' }, h('span', {}, item.name), item.warm ? pill('warm', 'ok') : item.targets.length ? null : pill('functions', 'idle')),
       h('div', { class: 'small muted mono' }, item.directory), h('div', { class: 'desc' }, item.description))) :
-      h('div', { class: 'empty' }, list.length ? 'No program matches.' : 'No programs yet. Create a program above, or open a directory containing natlang.json.'));
+      list.length ? h('div', { class: 'empty' }, 'No program matches.') : emptyState('No programs yet. Create one, or open a directory containing natlang.json.'));
   };
   search.addEventListener('input', draw); draw();
   if (selected) await programDetail(selected, detail);
@@ -368,7 +357,10 @@ function markdown(text) {
     if (/^\s*(```|~~~)/.test(line)) {
       const fence = line.trim().slice(0, 3), body = [];
       for (index++; index < lines.length && !lines[index].trim().startsWith(fence); index++) body.push(lines[index]);
-      index++; blocks.push(h('pre', { class: 'block' }, body.join('\n'))); continue;
+      index++; const source = body.join('\n');
+      try { blocks.push(valueView(h, JSON.parse(source))); }
+      catch { blocks.push(/^\s*(?:```|~~~)json\b/i.test(line) ? problemView(h, source, { title: 'This data example is incomplete' }) : codeView(h, source)); }
+      continue;
     }
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) { blocks.push(h(heading[1].length <= 2 ? 'h3' : 'h4', {}, inline(heading[2]))); index++; continue; }
@@ -383,7 +375,8 @@ function markdown(text) {
       index++;
     }
     if (kind === 'list') blocks.push(h('ul', {}, group.map(item => h('li', {}, inline(item)))));
-    else if (kind === 'table') blocks.push(h('pre', { class: 'block' }, group.join('\n')));
+    else if (kind === 'table') { const rows = group.filter(row => !/^\s*\|?[\s:|-]+\|?\s*$/.test(row)).map(row => row.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim()));
+      blocks.push(h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, (rows[0] ?? []).map(cell => h('th', {}, inline(cell))))), h('tbody', {}, rows.slice(1).map(row => h('tr', {}, row.map(cell => h('td', {}, inline(cell))))))))); }
     else blocks.push(h('p', {}, inline(group.map(item => item.trim()).join(' '))));
   }
   return blocks;
@@ -446,13 +439,13 @@ async function programDetail(path, container) {
       h('tbody', {}, warm.cases.map(item => h('tr', { class: item.call_id ? 'click' : '', onclick: () => item.call_id && go(`traces-call-${encodeURIComponent(item.call_id)}`) },
         h('td', {}, item.name, item.detail ? h('div', { class: 'small muted' }, short(item.detail, 200)) : null), h('td', {}, pill(item.outcome)),
         h('td', { class: 'num' }, ms(item.wall_ms)), h('td', { class: 'num' }, `${tokens(item.tokens_in)} + ${tokens(item.tokens_out)}`)))))) : null,
-    !(manifest.warmup ?? []).length && program.functions.length ? h('div', { class: 'small muted' }, `Add "warmup": [{ "function": "${program.functions[0].source}", "inputs": { … } }] to natlang.json to trace and prefill this program ahead of time.`) : null);
+    !(manifest.warmup ?? []).length && program.functions.length ? h('div', { class: 'small muted' }, 'Add a warm-up example to prepare the model before a run. Warm-up settings live in the program manifest.') : null);
   fill(container, 
     h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, manifest.name, h('span', { class: 'muted' }, ` ${manifest.version}`)),
       h('a', { href: `#traces-program-${encodeURIComponent(program.directory)}` }, 'Traces of this program')),
       manifest.description ? h('div', {}, manifest.description) : null,
       program.problem ? h('div', { class: 'callout warn' }, `natlang.json: ${program.problem}`) : null,
-      manifest.model ? h('div', { class: 'small' }, 'Declared model: ', h('code', {}, JSON.stringify(manifest.model))) : h('div', { class: 'small muted' }, 'Runs on the machine default model unless natlang.json declares "model".')),
+      modelDescription(h, manifest.model)),
     runPanel, functions,
     h('section', { class: 'panel' }, h('h2', {}, 'Saved tests'), h('p', {}, program.examplesProblem ?? `${program.examples} saved input/expected-output example${program.examples === 1 ? '' : 's'}. Tests execute real model calls and compare exact results.`),
       h('button', { onclick: () => startJob({ kind: 'test', path: program.directory }) }, 'Run tests')),
@@ -460,46 +453,33 @@ async function programDetail(path, container) {
     program.readme ? h('section', { class: 'panel' }, h('h3', { class: 'muted small' }, program.readme.name), h('div', { class: 'prose' }, markdown(program.readme.text))) : null);
 }
 function functionCard(program, fn) {
-  const formId = encodeURIComponent(fn.source);
-  const fields = fn.params.map(param => { const [name, ...type] = param.split(':'); return { name: name.replace('?', '').trim(), type: type.join(':').trim() }; });
+  const formId = encodeURIComponent(fn.source), ui = { h, fill, api, get, toast };
+  const fields = fn.fields ?? fn.params.map(param => { const [name, ...type] = param.split(':'); return { name: name.replace('?', '').trim(), required: !name.includes('?'), tree: { kind: 'prim', name: type.join(':').trim() } }; });
   const warmCase = (program.manifest.warmup ?? []).find(item => item.function === fn.source);
   const last = program.lastCalls?.[`${program.directory === '.' ? '' : program.directory + '/'}${fn.source}`];
   const sample = last?.inputs ?? warmCase?.inputs ?? {};
-  const inputs = fields.map(field => h('label', { class: 'field' }, `${field.name}: ${field.type}`,
-    h('textarea', { id: `in-${formId}-${field.name}`, rows: 2, placeholder: field.type === 'string' ? 'text' : 'JSON' },
-      sample[field.name] !== undefined ? (field.type === 'string' && typeof sample[field.name] === 'string' ? sample[field.name] : JSON.stringify(sample[field.name])) : '')));
-  const sourceBox = h('div', { class: 'stack', hidden: true });
-  const profile = h('span', {});
+  const inputs = fields.map(field => ({ field, editor: typedValueEditor(ui, { name: field.name, type: field.tree, value: sample[field.name], required: field.required, description: field.description ?? field.problem }) }));
+  const valuesFromFields = () => Object.fromEntries(inputs.map(({ field, editor }) => [field.name, editor.get()]).filter(([, value]) => value !== undefined));
+  const sourceBox = h('div', { class: 'stack', hidden: true }), profile = h('span', {});
   profileSelect(`call-profile-${formId}`, last?.profile).then(select => fill(profile, select)).catch(error => fill(profile, error.message));
-  const valuesFromFields = () => {
-    const values = {};
-    for (const field of fields) {
-      const raw = document.getElementById(`in-${formId}-${field.name}`).value;
-      if (raw === '' && field.type !== 'string') continue;
-      if (field.type === 'string') values[field.name] = raw;
-      else try { values[field.name] = JSON.parse(raw); } catch { throw new Error(`${field.name} must be JSON (${field.type})`); }
-    }
-    return values;
-  };
   const call = attempt(async () => startJob({ kind: 'call', function: `${program.directory}/${fn.source}`, inputs: valuesFromFields(), program: program.directory,
     profile: document.getElementById(`call-profile-${formId}`)?.value || undefined }));
-  const expected = h('textarea', { rows: 2, placeholder: 'Expected JSON result, e.g. "billing" or {"count": 2}' });
-  return h('details', { class: 'panel', style: 'padding: 10px 12px; gap: 8px' },
-    h('summary', { style: 'cursor: pointer' }, h('strong', { class: 'mono' }, fn.name), h('span', { class: 'muted mono small' }, ` (${fn.params.join(', ')}) → ${fn.returns}`),
-      fn.description ? h('div', { class: 'small muted' }, fn.description) : null),
-    h('div', { class: 'stack', style: 'margin-top: 8px' }, h('code', { class: 'small muted' }, fn.source), inputs, h('div', { class: 'row' }, profile, h('button', { class: 'primary', onclick: call }, 'Call'),
-      h('a', { href: `#traces-${encodeURIComponent(fn.name)}` }, 'Recorded calls'),
-      h('button', { onclick: attempt(async () => { const source = await get(`/api/programs/source?path=${encodeURIComponent(`${program.directory}/${fn.source}`)}`);
-        const editor = h('textarea', { rows: 14, class: 'source-editor', 'aria-label': `Source of ${fn.name}` }, source.text);
-        let previous = source.text;
-        fill(sourceBox, h('code', {}, source.path), editor, h('button', { onclick: attempt(async () => {
-          await api('PUT', '/api/programs/source', { path: source.path, text: editor.value, previous }); previous = editor.value; toast('Saved. Call the function or run the program to try the change.');
-        }) }, 'Save source'), h('p', { class: 'small muted' }, 'Arguments and returns define the contract. Instructions can use these arguments and helpers in the companion folder. Static checking checks the contract; saved examples check behavior.'));
-        sourceBox.hidden = false; }) }, 'Edit source')), sourceBox,
-      h('details', {}, h('summary', {}, 'Save an expected result as a test'), h('label', { class: 'field' }, 'Expected result (JSON)', expected),
+  const expected = typedValueEditor(ui, { name: 'Expected result', type: fn.result?.tree, required: true, description: 'Choose what this function should return for the inputs above.' });
+  return h('details', { class: 'panel function-card' },
+    h('summary', {}, h('strong', {}, fn.name), h('span', { class: 'small muted' }, fn.description || fn.source)),
+    h('div', { class: 'stack function-body' }, h('code', { class: 'small muted' }, fn.source), inputs.map(({ editor }) => editor.element),
+      h('div', { class: 'row' }, profile, h('button', { class: 'primary', onclick: call }, 'Call function'),
+        h('a', { href: `#traces-${encodeURIComponent(fn.name)}` }, 'Recorded calls'),
+        h('button', { onclick: attempt(async () => { const source = await get(`/api/programs/source?path=${encodeURIComponent(`${program.directory}/${fn.source}`)}`);
+          const editor = h('textarea', { rows: 14, class: 'source-editor', 'aria-label': `Source of ${fn.name}` }, source.text); let previous = source.text;
+          fill(sourceBox, h('code', {}, source.path), editor, h('button', { onclick: attempt(async () => {
+            await api('PUT', '/api/programs/source', { path: source.path, text: editor.value, previous }); previous = editor.value; toast('Saved. Call the function or run the program to try the change.');
+          }) }, 'Save source'), h('p', { class: 'small muted' }, 'Arguments and returns define the contract. Save an example to check the behavior.'));
+          sourceBox.hidden = false; }) }, 'Edit instructions')),
+      sourceBox, h('details', { class: 'save-test' }, h('summary', {}, 'Save an expected result as a test'), expected.element,
         h('button', { onclick: attempt(async () => {
-          let result; try { result = JSON.parse(expected.value); } catch { throw new Error('Enter the expected result as JSON. Put quotes around a string.'); }
-          await api('POST', '/api/programs/example', { path: program.directory, example: { function: fn.source, inputs: valuesFromFields(), expected: result } }); toast('Test saved to examples.json. Use Run tests to verify it.');
+          await api('POST', '/api/programs/example', { path: program.directory, example: { function: fn.source, inputs: valuesFromFields(), expected: expected.get() } });
+          toast('Test saved. Use Run tests to verify the expected result.');
         }) }, 'Save test'))));
 }
 
@@ -509,26 +489,29 @@ async function traces(arg, target) {
   if (arg.startsWith('call-')) callId = decodeURIComponent(arg.slice(5));
   else if (arg.startsWith('program-')) program = decodeURIComponent(arg.slice(8));
   else if (arg) definition = decodeURIComponent(arg);
-  const filters = { definition: h('input', { id: 'f-definition', placeholder: 'function', value: definition }),
-    outcome: h('select', { id: 'f-outcome' }, ['', 'done', 'failed', 'quiesced', 'running', 'interrupted'].map(value => h('option', { value }, value || 'any outcome'))),
-    program: h('input', { id: 'f-program', placeholder: 'program directory', value: program }) };
+  const filters = { definition: h('input', { id: 'f-definition', placeholder: 'Function name', 'aria-label': 'Function name', type: 'search', value: definition }),
+    outcome: h('select', { id: 'f-outcome', 'aria-label': 'Outcome' }, ['', 'done', 'failed', 'quiesced', 'running', 'interrupted'].map(value => h('option', { value }, value || 'any outcome'))),
+    program: h('input', { id: 'f-program', placeholder: 'Program directory', 'aria-label': 'Program directory', type: 'search', value: program }) };
   const table = h('div', { class: 'table-wrap' }), detail = h('div', { class: 'stack' });
+  let recordingOff = false;
   const load = attempt(async () => {
     const query = new URLSearchParams(Object.entries({ definition: filters.definition.value, outcome: filters.outcome.value, program: filters.program.value, limit: '150' }).filter(([, v]) => v));
-    const rows = await get(`/api/traces?${query}`);
+    const rows = await get(`/api/traces?${query}`).catch(error => { if (error.status !== 409) throw error; recordingOff = true; return null; });
+    if (!rows) { fill(table, emptyState('Call recording is off on this machine (NATLANG_CALL_STORE=off), so there are no traces to show. Unset it and restart the dashboard to record every call.')); return; }
+    const filtered = Object.values(filters).some(field => field.value);
     fill(table, rows.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Function'), h('th', {}, 'Outcome'), h('th', {}, 'Executor'), h('th', {}, 'Started'), h('th', { class: 'num' }, 'Time'), h('th', { class: 'num' }, 'Tokens'))),
       h('tbody', {}, rows.map(row => h('tr', { class: `click${row.call_id === callId ? ' selected' : ''}`, onclick: () => { callId = row.call_id; traceDetail(row.call_id, detail); } },
         h('td', {}, row.definition_name, row.parent_call_id ? h('span', { class: 'small muted' }, ' · child') : null, h('div', { class: 'small muted' }, row.definition_source ?? '')),
         h('td', {}, pill(row.outcome)), h('td', {}, row.executor), h('td', {}, ago(row.started_at)), h('td', { class: 'num' }, ms(row.wall_ms)),
-        h('td', { class: 'num' }, `${tokens(row.tokens_in)} + ${tokens(row.tokens_out)}`))))) : h('div', { class: 'empty' }, 'No recorded calls match.'));
+        h('td', { class: 'num' }, `${tokens(row.tokens_in)} + ${tokens(row.tokens_out)}`))))) : filtered ? h('div', { class: 'empty' }, 'No recorded calls match these filters.') : emptyState('No recorded calls yet. Run a program and its calls appear here.', ['Open Programs', '#programs', true]));
   });
   for (const field of Object.values(filters)) field.addEventListener('change', load);
-  fill(target, header('Traces', 'Every natural-language call this machine ran: exact inputs, output, model turns, evals, service calls and cost. Mark calls good or fix them to grow the program\'s tuning examples.'),
-    h('div', { class: 'row' }, filters.definition, filters.outcome, filters.program, h('button', { onclick: load }, 'Filter')),
+  fill(target, header('Traces', 'Understand a call: its inputs, result, steps, and corrections.'),
+    h('div', { class: 'row' }, filters.definition, filters.outcome, filters.program, h('button', { onclick: load }, 'Apply filters'), h('button', { class: 'ghost', onclick: () => { for (const field of Object.values(filters)) field.value = ''; load(); } }, 'Clear')),
     h('div', { class: 'split', style: 'grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr)' }, h('section', { class: 'panel' }, table), detail));
   await load();
   if (callId) await traceDetail(callId, detail);
-  else fill(detail, h('div', { class: 'panel empty' }, 'Select a call to see its execution.'));
+  else if (!recordingOff) fill(detail, h('div', { class: 'panel empty' }, 'Select a call on the left to see its inputs, steps and result.'));
 }
 
 async function traceDetail(id, container) {
@@ -540,10 +523,10 @@ async function traceDetail(id, container) {
     return;
   }
   const record = value.record, cost = record.cost ?? {};
-  const expected = h('textarea', { id: 'fix-expected', rows: 3, placeholder: 'The right result, as JSON (a string in quotes)' });
+  const expected = typedValueEditor({ h, fill, api, get, toast }, { name: 'Expected result', value: record.output, required: true, description: 'Start from the recorded result and correct the fields that should change.' });
   const feedback = verdict => attempt(async () => {
-    const result = await api('POST', `/api/traces/${encodeURIComponent(id)}/feedback`, { verdict, ...(expected.value.trim() ? { expected: expected.value.trim() } : {}) });
-    toast(result.message);
+    const result = await api('POST', `/api/traces/${encodeURIComponent(id)}/feedback`, { verdict, ...(verdict === 'fix' ? { expected: expected.get() } : {}) });
+    toast(verdict === 'fix' ? 'Correction saved.' : verdict === 'bad' ? 'Marked as needing improvement.' : 'Marked as useful and saved as an example.');
   });
   const events = h('div', {});
   // The recorded turns, drawn as the live view draws a running call.
@@ -553,28 +536,33 @@ async function traceDetail(id, container) {
     model.add({ type: 'call_start', ...call, at: Date.parse(record.started_at) });
     for (const event of list) if (event.kind !== 'state' && event.kind !== 'reduction') model.add({ type: 'trace', ...call, event });
     model.add({ type: 'call_end', ...call, outcome: record.outcome, detail: record.detail ?? '', at: Date.parse(record.started_at) + (cost.wall_ms ?? 0) });
-    fill(execution, model.roots.map(root => renderCall(root, true)));
+    const viewer = createExecutionView(h, { traceLinks: false });
+    viewer.update(model, { kind: 'call', status: record.outcome === 'done' ? 'done' : record.outcome === 'quiesced' ? 'stopped' : 'failed', drained: true, endedAt: new Date(Date.parse(record.started_at) + (cost.wall_ms ?? 0)).toISOString() });
+    fill(execution, viewer.element);
   }, error => fill(execution, h('div', { class: 'muted small' }, error.message)));
   fill(container, h('section', { class: 'panel' },
     h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, record.definition.name), pill(record.outcome)),
-    record.detail && record.outcome !== 'done' ? h('div', { class: 'callout' }, record.detail) : null,
+    record.detail && record.outcome !== 'done' ? problemView(h, record.detail) : null,
     kv([['Call', h('span', { class: 'mono small' }, record.call_id)], ['Source', record.definition.source ?? record.definition.site],
       ['Executor', `${record.executor.kind}${record.executor.model_id ? ` · ${record.executor.model_id}` : ''}`],
       ['Cost', `${ms(cost.wall_ms)} · ${cost.model_requests ?? 0} model requests · ${tokens(cost.tokens_in)} + ${tokens(cost.tokens_out)} tokens · ${cost.evals ?? 0} evals`],
       ['Started', new Date(record.started_at).toLocaleString()], record.parent_call_id ? ['Caller', h('a', { href: `#traces-call-${encodeURIComponent(record.parent_call_id)}` }, record.parent_call_id)] : null]),
-    h('h3', {}, 'Inputs'), h('pre', { class: 'block' }, pretty(record.inputs)),
-    h('h3', {}, 'Output'), h('pre', { class: 'block' }, pretty(record.output)),
+    h('h3', {}, 'Inputs'), valueView(h, record.inputs),
+    h('h3', {}, 'Result'), valueView(h, record.output),
     h('h3', {}, 'Execution'), execution,
-    record.effects?.length ? [h('h3', {}, 'Service calls'), h('pre', { class: 'block' }, record.effects.map(effect => `${effect.service}.${effect.method}(${short(effect.args, 200)}) ${effect.error ? `failed: ${effect.error}` : `→ ${short(effect.result, 200)}`}`).join('\n'))] : null,
+    record.effects?.length ? [h('h3', {}, 'Service calls'), h('div', { class: 'service-calls' }, record.effects.map(effect => h('details', { class: 'service-card' },
+      h('summary', {}, h('strong', {}, `${effect.service} · ${effect.method}`), pill(effect.error ? 'Needs attention' : 'Finished', effect.error ? 'bad' : 'ok')),
+      h('h4', {}, 'Arguments'), valueView(h, effect.args), h('h4', {}, effect.error ? 'Problem' : 'Result'), effect.error ? problemView(h, effect.error) : valueView(h, effect.result))))] : null,
     value.children.length ? [h('h3', {}, 'Calls it made'), h('div', { class: 'list' }, value.children.map(child => h('button', { class: 'item', onclick: () => traceDetail(child.call_id, container) },
       h('div', { class: 'title' }, h('span', {}, child.definition_name), pill(child.outcome)))))] : null,
-    value.annotations.length ? [h('h3', {}, 'Annotations'), h('pre', { class: 'block' }, value.annotations.map(item => `${item.kind}: ${short(item.value, 300)} (${item.source ?? ''}, ${ago(item.created_at)})`).join('\n'))] : null,
+    value.annotations.length ? [h('h3', {}, 'Feedback history'), h('div', { class: 'annotation-list' }, value.annotations.map(item => h('article', { class: 'annotation' },
+      h('div', { class: 'row' }, h('strong', {}, fieldLabel(item.kind)), h('span', { class: 'small muted' }, `${item.source ?? 'User'} · ${ago(item.created_at)}`)), valueView(h, item.value))))] : null,
     h('h3', {}, 'Feedback'),
     h('div', { class: 'row' }, h('button', { onclick: feedback('good') }, 'Good: add as example'), h('button', { onclick: feedback('bad') }, 'Bad'),
-      h('button', { class: 'primary', onclick: feedback('fix') }, 'Fix with expected result')), expected,
-    h('div', { class: 'row' }, h('button', { onclick: attempt(async () => { const list = await get(`/api/traces/${encodeURIComponent(id)}/events`);
-      fill(events, h('pre', { class: 'block', style: 'max-height: 600px' }, list.filter(event => event.kind !== 'state').map(event =>
-        `${String(event.elapsed_ms ?? '').padStart(7)} ms  ${event.kind}${event.phase ? `/${event.phase}` : ''}  ${short(Object.fromEntries(Object.entries(event).filter(([key]) => !['version', 'seq', 'kind', 'phase', 'observed_at', 'elapsed_ms', 'call_id'].includes(key))), 260)}`).join('\n'))); }) }, 'Show the full event trace')),
+      h('button', { class: 'primary', onclick: feedback('fix') }, 'Save correction')), expected.element,
+    h('div', { class: 'row' }, h('button', { onclick: attempt(async () => {
+      const list = await get(`/api/traces/${encodeURIComponent(id)}/events`); fill(events, eventTimeline(h, list));
+    }) }, 'Explore event history'), h('button', { onclick: attempt(async () => downloadData(await get(`/api/traces/${encodeURIComponent(id)}/events`), 'trace.json')) }, 'Download trace')),
     events));
 }
 
@@ -584,13 +572,15 @@ async function playground(_arg, target) {
   const input = h('textarea', { id: 'pg-input', rows: 7 }, 'Hi team, the March invoice run failed for 14 customers because the payment provider rotated its API key. Ops rotated our copy at 10:40. Please re-run billing for those accounts today and email them an apology.');
   const returns = h('input', { id: 'pg-returns', placeholder: 'string', value: '{ summary: string; actions: string[] }' });
   const profile = await profileSelect('pg-profile');
-  fill(target, header('Playground', 'Run one natural-language call (natlang ask) on any configured model and watch it work. The run appears under Runs and its trace under Traces.'),
+  const run = h('button', { class: 'primary', title: 'Ctrl+Enter', onclick: () => startJob({ kind: 'ask', instruction: instruction.value, input: input.value,
+    returns: returns.value.trim() || undefined, profile: profile.value || undefined }) }, 'Run');
+  for (const field of [instruction, input, returns]) field.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); run.click(); } });
+  fill(target, header('Playground', 'Try an instruction with example input, follow its execution, and save it as a program.'),
     h('section', { class: 'panel' },
       h('label', { class: 'field' }, 'Instruction', instruction), h('label', { class: 'field' }, 'Input (passed as the call\'s input)', input),
       h('div', { class: 'row' }, h('label', { class: 'field', style: 'flex: 1' }, 'Result type (TypeScript)', returns), h('label', { class: 'field' }, 'Model profile', profile)),
-      h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => startJob({ kind: 'ask', instruction: instruction.value, input: input.value,
-        returns: returns.value.trim() || undefined, profile: profile.value || undefined }) }, 'Run'),
-        h('button', { onclick: () => programDialog({ instruction: instruction.value, input: input.value, returns: returns.value.trim() || 'string', profile: profile.value || undefined }) }, 'Save as program'))));
+      h('div', { class: 'row' }, run,
+        h('button', { onclick: () => programDialog({ instruction: instruction.value, input: input.value, returns: returns.value.trim() || 'string', profile: profile.value || undefined }) }, 'Save as program'), h('span', { class: 'small muted' }, 'Ctrl+Enter runs from any field.'))));
 }
 
 // ---- models ---------------------------------------------------------------------------------------------------------
@@ -675,7 +665,7 @@ async function models(_arg, target) {
           h('label', { class: 'field', style: 'flex: 1' }, 'Model name', h('input', { id: 'p-model-name', value: profile.model ?? '', placeholder: 'as the server expects' }))),
           h('div', { class: 'row' }, h('label', { class: 'field' }, 'API key variable', h('input', { id: 'p-key-env', value: profile.apiKeyEnv ?? 'NATLANG_API_KEY' })),
             h('label', { class: 'field', style: 'flex: 1' }, 'API key (optional; saved for that variable)', h('input', { id: 'p-key', type: 'password' }))));
-      } else fill(fields, h('pre', { class: 'block' }, JSON.stringify(profile, null, 2)), h('div', { class: 'small muted' }, 'Native profiles are written by natlang setup --native; edit them there.'));
+      } else fill(fields, valueView(h, profile), h('div', { class: 'small muted' }, 'Native profiles are written by natlang setup --native; edit them there.'));
     };
     kindField.addEventListener('change', drawFields);
     const temperature = h('input', { id: 'p-temperature', type: 'number', min: 0, max: 2, step: 0.1, value: profile.request?.temperature ?? '', placeholder: 'model default' });

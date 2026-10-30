@@ -20,7 +20,7 @@ export type TargetArgument = { name: string; type: string; description?: string;
   path?: 'file' | 'folder' };
 
 /** A type expanded for an editor: aliases inlined (named by `alias`), record fields with their `types.ts` doc comments,
- * and a recursive or unknown name left as `{ kind: 'name' }` for a JSON editor. */
+ * and a recursive or unknown name left as `{ kind: 'name' }` for the general value editor. */
 export type ExpandedType = Type & { alias?: string };
 export type ArgumentDescription = TargetArgument & { required: boolean; text: string; tree: ExpandedType;
   /** How the command line spells it: `text` as written, `json` as JSON. */

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import ts from 'typescript';
 import { declarationsForValues, lowerHostCell } from '../dist/compiler/host-cell.js';
-import { createNatlangRuntime, nl } from '../dist/index.js';
+import { __natlang, createNatlangRuntime, iterateOn, nl } from '../dist/index.js';
+import { inferValueType } from '../dist/native/runtime.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const TICKETS = [{ id: 'a', text: 'site is down' }, { id: 'b', text: 'a typo' }];
@@ -127,7 +128,7 @@ test('declared types drive inference: scope contents come from the values', () =
     scope: { tickets: TICKETS, owner: { name: 'ada' }, byId: Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`k${i}`, i])),
       empty: [], handle: new Map(), run: () => 1, opened: new Date(0), opaque: new (class Thing { x = 1; })() },
     count: 3, label: 'tickets', 'not-an-identifier': 1, class: 2 });
-  assert.match(declarations, /^declare const scope: \{ tickets: \(\{ id: string, text: string \}\)\[\]; owner: \{ name: string \}; byId: Record<string, number>; empty: unknown\[\]; handle: Map<any, any>; run: \(\.\.\.args: any\[\]\) => any; opened: Date; opaque: any \};$/m);
+  assert.match(declarations, /^declare const scope: \{ tickets: \(\{ id: string, text: string \}\)\[\], owner: \{ name: string \}, byId: Record<string, number>, empty: unknown\[\], handle: Map<any, any>, run: \(\.\.\.args: any\[\]\) => any, opened: Date, opaque: any \};$/m);
   assert.match(declarations, /^declare const count: number;$/m);
   assert.doesNotMatch(declarations, /not-an-identifier|class/);
   const result = lowerHostCell('for (const t of scope.tickets) { const u: "urgent" | "normal" = await nl`Decide urgency.`(t); }\n' +
@@ -241,4 +242,65 @@ test('a lowered cell runs against a scripted agent: captures read live, a let is
   assert.match(decisions[0], /let seen: number = 0;.*written back/);
   assert.match(decisions[1], /Tickets seen so far: 101\./, 'interpolations are evaluated in the cell, at the call');
   assert.match(decisions[1], /let seen: number = 101;.*written back/, 'the capture is read live at each call');
+});
+
+const run = (code, bindings) => {
+  const js = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+  return new AsyncFunction(...Object.keys(bindings), js)(...Object.values(bindings));
+};
+
+test('iterateOn call sites get their compiler site identity, as in project builds, and the iteration runs', async () => {
+  const source = [
+    'const step = nl<(n: number) => number>`Add one to n.`;',
+    'const first = await step.iterateOn(0).withLimit({ maxSteps: 5 }).until(n => n >= 2);',
+    'const second = await iterateOn(nl<(n: number) => number>`Add two to n.`, 0).withLimit({ maxSteps: 5 }).until(n => n >= 4);',
+    'return { first, second };'].join('\n');
+  const result = lower(source);
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.usesNl, true);
+  assert.match(result.code, /withCompilerSite\("cell\.ts#first"\) : \w+\)\(step\.iterateOn\(0\)\)\.withLimit/);
+  assert.match(result.code, /withCompilerSite\("cell\.ts#second"\) : \w+\)\(iterateOn\(nl\.__inline\(/);
+  assert.equal(lines(result.code), lines(source));
+  // A cell whose only natlang is a callable's iterateOn is lowered too.
+  const named = lowerHostCell('const done = await brief.iterateOn(0).withLimit({ maxSteps: 3 }).until(n => n > 1);', { ambientDeclarations: 'declare const brief: NatlangFunction<[state: number], number>;' });
+  assert.equal(named.usesNl, false);
+  assert.match(named.code, /withCompilerSite\("cell\.ts#done"\)/);
+
+  const model = scriptedModel(opening => opening.includes('Add one') || opening.includes('Add two') ? `return n + ${opening.includes('Add two') ? 2 : 1}` : null);
+  const out = await createNatlangRuntime({ model: model.driver }).run(() => run(result.code, { nl, iterateOn, scope: {} }));
+  assert.deepEqual(out, { first: 2, second: 4 });
+});
+
+test('typed Neuralese readouts are lowered in cells as in project builds, through top-level await', () => {
+  const declarations = 'declare const memo: Neuralese<string>;\ndeclare const notes: Neuralese<string>[];';
+  const source = 'const text: string = `note: ${memo}`;\nconst joined = notes.join(", ");\nconst plain = await read(memo);\nreturn [text, joined, plain];';
+  // Where the host says its scope holds Neuralese values every cell is analyzed; the word `read(` or `Neuralese` alone also does.
+  const lowered = lowerHostCell(source, { ambientDeclarations: declarations, neuralese: true });
+  assert.deepEqual(lowered.diagnostics, []);
+  assert.equal(lowered.usesNl, false);
+  assert.match(lowered.code, /`note: \$\{await __natlang\.readNeuralese\(memo\)\}`/);
+  assert.match(lowered.code, /await \(\w+ => \(async \(\w+, \w+\) => \(await __natlang\.joinNeuralese\(/);
+  assert.match(lowered.code, /const plain = await __natlang\.readNeuralese\(memo\);/);
+  assert.equal(lines(lowered.code), lines(source));
+  assert.equal(lowerHostCell('const t: string = `${memo}`;', { ambientDeclarations: declarations }).code, 'const t: string = `${memo}`;',
+    'a cell with no sign of natlang and no host switch is not analyzed');
+  assert.match(lowerHostCell('const t = await read(memo);', { ambientDeclarations: declarations }).code, /__natlang\.readNeuralese\(memo\)/);
+  // Misuse is reported with the same teaching message, at its place.
+  const misuse = lowerHostCell('const a = 1;\nif (memo) {}', { ambientDeclarations: declarations, neuralese: true });
+  assert.equal(misuse.diagnostics[0].code, 'neuralese-condition');
+  assert.deepEqual([misuse.diagnostics[0].line, misuse.diagnostics[0].column], [2, 5]);
+  // The lowered cell is valid JavaScript for the host's transform, and reads through the runtime's support functions.
+  const js = ts.transpileModule(lowered.code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
+  assert.equal(js.diagnostics?.length ?? 0, 0);
+  assert.equal(typeof __natlang.readNeuralese, 'function');
+  assert.equal(typeof __natlang.joinNeuralese, 'function');
+});
+
+test('inferValueType types the fields around a live value only when asked; otherwise a container with one is one live value', () => {
+  const value = { rows: [{ id: 'a' }], opened: new Date(0), tools: [() => 1] };
+  assert.equal(inferValueType(value), 'Live<"object", "any", "">');
+  assert.equal(inferValueType(value, { liveFields: true }),
+    '{ rows: ({ id: string })[], opened: Live<"Date", "tag", "Date">, tools: (Live<"function", "function", "">)[] }');
+  assert.equal(inferValueType({ rows: [{ id: 'a' }] }, { liveFields: true }), inferValueType({ rows: [{ id: 'a' }] }));
 });

@@ -9,6 +9,7 @@
  */
 import ts from 'typescript';
 import type { InlineLambdaPlan } from './inline.js';
+import type { GenericInstantiation, NeuraleseReadout } from './neuralese.js';
 import { resolveIntrinsic, suffixWithCallOf } from './inline.js';
 import { authoredCallables, finiteCounterComparison, guardArguments, loopLabel, makesCalls } from './policy.js';
 
@@ -54,6 +55,11 @@ export type LowerOptions = {
    * (`instantiate(fn, representation, site)(args)`).
    */
   instantiations?: ReadonlyMap<string, { representation: import('../native/representation.js').Representation; site: string }>;
+  /**
+   * Called with each source node the lowering replaced by new code (a site) and that code, innermost first; a node
+   * rebuilt only because something inside it changed is not reported. Hosts that splice sites into their own text use it.
+   */
+  replaced?: (source: ts.Node, lowered: ts.Node) => void;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -83,8 +89,35 @@ function enclosingSymbolName(node: ts.Node): string {
   return 'module';
 }
 
+/**
+ * The lowering options one file's analysis determines: its plans, its typed Neuralese readouts and its generic
+ * instantiations. `instantiationSite` names the site ID a generic call's instance runs under.
+ */
+export function analysisLowering(analysis: { plans: readonly InlineLambdaPlan[]; readouts: readonly NeuraleseReadout[];
+  instantiations: readonly GenericInstantiation[] }, instantiationSite: (item: GenericInstantiation) => string):
+  Pick<LowerOptions, 'plans' | 'readouts' | 'conditionalReadouts' | 'joins' | 'arrayStrings' | 'arrayMaps' | 'arrayMapCallbacks' |
+    'concats' | 'jsons' | 'errors' | 'stringArguments' | 'scalarConversions' | 'stringReplaces' | 'instantiations'> {
+  const span = (item: { start: number; end: number }) => `${item.start}:${item.end}`;
+  const spans = (kind?: NeuraleseReadout['kind']) => new Set(analysis.readouts.filter(item => item.kind === kind).map(span));
+  const conditional = (item: NeuraleseReadout) => item.conditional ? { conditional: true as const } : {};
+  return {
+    plans: new Map(analysis.plans.map(plan => [span(plan.sourceSpan), plan])),
+    readouts: spans(undefined),
+    conditionalReadouts: new Set(analysis.readouts.filter(item => item.conditional).map(span)),
+    joins: spans('join'), arrayStrings: spans('array-string'), arrayMaps: spans('array-map'), concats: spans('concat'),
+    arrayMapCallbacks: new Set(analysis.readouts.filter(item => item.kind === 'array-map' && item.callback).map(item => span(item.callback!))),
+    jsons: spans('json'), errors: spans('error'),
+    stringArguments: new Map(analysis.readouts.filter(item => item.kind === 'string-argument').map(item => [span(item), item.argument ?? 0])),
+    scalarConversions: new Map(analysis.readouts.filter(item => item.kind === 'scalar-conversion' && item.conversion)
+      .map(item => [span(item), { argument: item.argument ?? 0, conversion: item.conversion!, ...conditional(item) }])),
+    stringReplaces: new Map(analysis.readouts.filter(item => item.kind === 'string-replace').map(item => [span(item), conditional(item)])),
+    instantiations: new Map(analysis.instantiations.map(item => [span(item),
+      { representation: item.representation, site: instantiationSite(item) }])),
+  };
+}
+
 /** What lowering one inline `nl` site needs: its plan, the callable context expression, and how nested expressions lower. */
-export type InlineSite = { plan: InlineLambdaPlan; context?: string; lower(expression: ts.Expression): ts.Expression };
+type InlineSite = { plan: InlineLambdaPlan; context?: string; lower(expression: ts.Expression): ts.Expression };
 
 const interpolationValues = (site: InlineSite, template: ts.TemplateLiteral): ts.Expression[] =>
   !site.plan.softBody && ts.isTemplateExpression(template) ? template.templateSpans.map(span => site.lower(span.expression)) : [];
@@ -96,7 +129,7 @@ const contextArgument = (f: ts.NodeFactory, site: InlineSite): ts.Expression =>
  * `nl`...`` with captures by mention: `tag.__inline(plan, values, { name: [get, set?] }, context)`. `tag` is the file's own
  * (already lowered) `nl` reference, so module transforms rebind it correctly.
  */
-export function plainInlineCall(f: ts.NodeFactory, site: InlineSite, tag: ts.Expression, template: ts.TemplateLiteral): ts.Expression {
+function plainInlineCall(f: ts.NodeFactory, site: InlineSite, tag: ts.Expression, template: ts.TemplateLiteral): ts.Expression {
   const accessors = site.plan.captures.map(capture => {
     const getter = f.createArrowFunction(undefined, undefined, [], undefined, undefined, f.createIdentifier(capture.name));
     const setter = capture.mutable ? [f.createArrowFunction(undefined, undefined,
@@ -116,7 +149,7 @@ export function plainInlineCall(f: ts.NodeFactory, site: InlineSite, tag: ts.Exp
  * of `.with(...)` as written. A snapshot that is an expression is evaluated where the call is written, in listing order
  * (after the interpolated values), and the getter returns its value: the expression may `await`, which a getter could not.
  */
-export function explicitInlineCall(f: ts.NodeFactory, site: InlineSite, receiver: ts.Expression, listing: ts.Expression | undefined,
+function explicitInlineCall(f: ts.NodeFactory, site: InlineSite, receiver: ts.Expression, listing: ts.Expression | undefined,
   template: ts.TemplateLiteral): ts.Expression {
   const properties = listing && ts.isObjectLiteralExpression(listing) ? listing.properties : f.createNodeArray<ts.ObjectLiteralElementLike>();
   const recordTemp = listing && !ts.isObjectLiteralExpression(listing) ? f.createUniqueName('__natlang_capture_record') : undefined;
@@ -180,7 +213,16 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       return readNeuraleseValue(lowered, conditional);
     };
 
+    // Rebuilt only because a descendant changed: not a site of its own.
+    const rebuilt = new WeakSet<ts.Node>();
+    const passthrough = (node: ts.Node): ts.Node => { const result = ts.visitEachChild(node, visit, context); rebuilt.add(result); return result; };
     const visit = (node: ts.Node): ts.Node => {
+      const result = lowerNode(node);
+      const source = original(node);
+      if (options.replaced && result !== node && !rebuilt.has(result) && source.pos >= 0) options.replaced(source, result);
+      return result;
+    };
+    const lowerNode = (node: ts.Node): ts.Node => {
       const source = original(node);
       // A generic result runs the instance its call site's expected type picked (DECISIONS.md 2026-10-09).
       const instance = ts.isCallExpression(node) && ts.isCallExpression(source) && source.pos >= 0 ?
@@ -479,7 +521,7 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
         if (ts.isIdentifier(declaration.name)) {
           const counter = declaration.name;
           const boundedCondition = finiteCounterComparison(node.condition, counter.text);
-          if (!boundedCondition) return ts.visitEachChild(node, visit, context);
+          if (!boundedCondition) return passthrough(node);
           const comparison = boundedCondition.comparison;
           const left = ts.isIdentifier(comparison.left) && comparison.left.text === counter.text;
           const bound = f.createUniqueName('__natlang_bound');
@@ -561,7 +603,7 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
           f.createCallExpression(f.createPropertyAccessExpression(f.createIdentifier('globalThis'), '__natlang_bindAwait'),
             undefined, [operand]))), undefined, []);
       }
-      return ts.visitEachChild(node, visit, context);
+      return passthrough(node);
     };
     const lowered = ts.visitNode(file, visit) as ts.SourceFile;
     const module = options.module;

@@ -25,6 +25,13 @@ is labeled as model output; the program's actual output remains alongside it.
 Providers that return complete responses still show call progress, then their
 complete step when it arrives.
 
+Structured results appear as summaries, labeled facts, counts, lists, and tables.
+Large collections reveal more rows on demand; nested details stay collapsed until
+opened. Inputs, expected results, and trace corrections use field controls,
+including a value-kind chooser for open types. **Import data** loads a data file
+into those controls; explicit copy and download actions preserve the original
+data. Partial structured output shows a receiving status until it can be read.
+
 Open sections and typed input stay in place during updates. Scroll back through
 program output without being pulled to the bottom; **Follow output** resumes
 following it. **Pause updates** freezes the execution display while the program
@@ -50,8 +57,8 @@ to reuse one local server across runs.
 calls for the `{ function, inputs, expected }` cases in `examples.json` and
 compares outputs exactly. A mismatch prints expected and received values and
 returns a nonzero exit code. From a dashboard function form, enter an expected
-JSON result and choose **Save test**, then **Run tests**. Changing an existing
-input's expectation replaces that test. Tests measure the selected model;
+result using its typed controls and choose **Save test**, then **Run tests**.
+Changing an existing input's expectation replaces that test. Tests measure the selected model;
 they do not establish correctness on unseen inputs.
 
 Programs use their declared model or the machine default, with command-line

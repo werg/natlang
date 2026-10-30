@@ -443,8 +443,12 @@ function liveTypeText(value: object): string {
   return tag !== 'Object' ? `Live<${JSON.stringify(tag)}, "tag", ${JSON.stringify(tag)}>` :
     `Live<${JSON.stringify(label)}, "class", ${JSON.stringify(label)}>`;
 }
-/** The scope type of a portable value, as a local holding it is declared. */
-export function inferValueType(value: unknown): string {
+/**
+ * The scope type of a portable value, as a local holding it is declared. A list or record that holds a live value is one
+ * live value, unless `liveFields`: then it is typed field by field and only the live value itself is a live type (for a
+ * host that reads the fields around a handle, such as an eval cell's `scope`).
+ */
+export function inferValueType(value: unknown, options: { liveFields?: boolean } = {}): string {
   if (isLive(value)) return liveTypeText(value as object);
   if (value instanceof Folder || value instanceof FolderHandle) return 'Folder';
   if (value instanceof FileHandle) return 'FileHandle';
@@ -457,21 +461,21 @@ export function inferValueType(value: unknown): string {
   if (Array.isArray(value)) {
     // An empty list may still be filled with anything, and a mixed list holds the union of its item types.
     if (!value.length) return 'unknown[]';
-    if (containsLive(value)) return 'Live<"array", "tag", "Array">';
-    const types = [...new Set(value.map(item => inferValueType(item)))];
+    if (!options.liveFields && containsLive(value)) return 'Live<"array", "tag", "Array">';
+    const types = [...new Set(value.map(item => inferValueType(item, options)))];
     return types.length === 1 ? `(${types[0]})[]` : `(${types.join(' | ')})[]`;
   }
   if (value && typeof value === 'object') {
     const entries = Object.entries(value);
     if (!entries.length) return 'Record<string, unknown>';
-    if (containsLive(value)) return 'Live<"object", "any", "">';
+    if (!options.liveFields && containsLive(value)) return 'Live<"object", "any", "">';
     // An object keyed by data (ids, emails, names) is a dictionary: Record<string, T>, so later evals can add keys.
     // Only a few identifier keys read as a record with fixed fields.
     if (entries.length > 12 || entries.some(([key]) => !/^[A-Za-z_$][\w$]*$/.test(key))) {
-      const types = [...new Set(entries.map(([, item]) => inferValueType(item)))];
+      const types = [...new Set(entries.map(([, item]) => inferValueType(item, options)))];
       return `Record<string, ${types.length === 1 ? types[0] : types.join(' | ')}>`;
     }
-    return `{ ${entries.map(([key, item]) => item === undefined ? `${key}?: unknown` : `${key}: ${inferValueType(item)}`).join(', ')} }`;
+    return `{ ${entries.map(([key, item]) => item === undefined ? `${key}?: unknown` : `${key}: ${inferValueType(item, options)}`).join(', ')} }`;
   }
   if (isNatlangCallable(value)) {
     throw new Reject([{ path: 'value', code: 'callable-not-invoked',
