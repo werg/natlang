@@ -30,6 +30,7 @@ PRICE_MEMORY_GIB_HOUR = 0.0212
 KINDS = ('smoke', 'eval', 'render', 'train', 'probe')
 _ID = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
 _QUANTITY = re.compile(r'^(\d+(?:\.\d+)?)(m|Ki|Mi|Gi|Ti)?$')
+_ACCOUNT = re.compile(r'^[a-z0-9][a-z0-9-]{0,31}$')
 _BUCKET = re.compile(r'^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$')
 SERVICE_TIMEOUT_SECONDS = 900  # the platform maximum for one HTTPS request
 _SECRETISH = re.compile(r'(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)', re.I)
@@ -152,6 +153,14 @@ def validate(job: dict[str, Any]) -> dict[str, Any]:
     if service is not None and (not isinstance(service, dict) or set(service) != {'port'}
                                 or type(service['port']) is not int or not 1024 <= service['port'] <= 65535):
         raise JobError('service: {"port": an unprivileged TCP port} served over HTTPS behind the sandbox share token')
+    account = job.get('account')
+    if account is not None and (not isinstance(account, str) or not _ACCOUNT.match(account)):
+        raise JobError('account: the credential profile name (accounts.py): lower-case letters, digits, dashes')
+    exports = job.get('exports')
+    if exports is not None and (not isinstance(exports, list) or not all(
+            isinstance(e, dict) and e.get('kind') in ('file', 'tree') and str(e.get('remote', '')).startswith('/')
+            for e in exports)):
+        raise JobError('exports: [{"kind": "file"|"tree", "remote": absolute path, "role": name}] pulled to the DGX')
     job.setdefault('placement_mode', 'serverless')
     job.setdefault('tags', [])
     return job

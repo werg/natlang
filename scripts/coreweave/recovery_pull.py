@@ -132,6 +132,10 @@ def main(argv=None) -> int:
     receipt = {**intent, 'local': str(local), 'verified': True, 'seconds': round(seconds, 1),
                'MBps': round(intent['bytes'] / max(seconds, 1e-9) / 1e6, 2)}
     (target_dir / 'receipt.json').write_text(json.dumps(receipt, indent=1, sort_keys=True) + '\n')
+    # The accounts ledger counts earned work not yet on the DGX from these events (cwctl.py accounts).
+    cwctl.record({'event': 'export_verified', 'sandbox_id': args.sandbox, 'account': cwctl.sandbox_account(args.sandbox),
+                  'source': args.remote, 'kind': args.kind, 'sha256': intent['sha256'], 'bytes': intent['bytes'],
+                  'step': intent.get('checkpoint_policy_step'), 'owner': args.owner, 'local': str(local)})
     latest = args.dest / 'latest'
     tmp = args.dest / '.latest.tmp'
     tmp.unlink(missing_ok=True)

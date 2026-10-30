@@ -95,7 +95,8 @@ class Cloud:
 
     def inspect(self, snapshot_id):
         from cwsandbox import Sandbox
-        s = Sandbox.get_snapshot(snapshot_id, auth=cwctl.sdk_auth(), timeout_seconds=30).result(timeout=45)
+        s = Sandbox.get_snapshot(snapshot_id, auth=cwctl.auth_for_sandbox(self.sandbox_id),
+                                 timeout_seconds=30).result(timeout=45)
         return {'snapshot_id':snapshot_id, 'status':str(s.status).upper(),
                 'source_sandbox_id':s.source_sandbox_id, 'size_bytes':s.size_bytes}
 

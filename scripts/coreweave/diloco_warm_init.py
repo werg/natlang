@@ -163,11 +163,17 @@ def create(spec, supervisor_source, intent_path, *, sandbox_run, cwctl):
            'image':spec['image'],'entrypoint_sha256':hashlib.sha256(program.encode()).hexdigest(),
            'entrypoint_compile_passed':True,'created_at':time.time()}
     _atomic(intent,value)
+    # Snapshots are account-scoped: restore in the snapshot's own account (legacy unbound snapshots: default).
+    account=spec.get('account') or cwctl.cwaccounts.bound(cwctl.STATE,'snapshots',spec['snapshot_id']) or 'default'
+    auth=cwctl.account_auth(account)
     sandbox=cwctl.throttled_create(lambda:sandbox_run('python','-u','-c',program,container_image=spec['image'],
         resources=spec['resources'],max_lifetime_seconds=spec['max_lifetime_seconds'],
         file_system_snapshot={'name':'work','mount_path':config['work'],'size':spec['volume_size'],
                               'file_system_snapshot_id':spec['snapshot_id']},
-        tags=spec['tags'],services=spec['services'],data_plane_mode='gateway',auth=cwctl.sdk_auth()),attempts=1)
+        tags=spec['tags'],services=spec['services'],data_plane_mode='gateway',auth=auth),attempts=1,account=account)
+    cwctl.cwaccounts.bind(cwctl.STATE,'sandboxes',sandbox.sandbox_id,account)
+    cwctl.record({'event':'launched','sandbox_id':sandbox.sandbox_id,'account':account,'job':'diloco-warm-init',
+                  'kind':'train','lifetime_hours':spec['max_lifetime_seconds']/3600,'resources':spec['resources']})
     value.update(sandbox_id=sandbox.sandbox_id,phase='created');_atomic(intent,value)
     token=Path(cwctl.keep_share_token(sandbox))
     with token.open('rb') as stream:os.fsync(stream.fileno())

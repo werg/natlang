@@ -162,7 +162,9 @@ def main():
     cwctl.load_env_file()
     from cwsandbox import Sandbox
     from cwsandbox.exceptions import SnapshotNotFoundError
-    auth = cwctl.sdk_auth()
+    # Snapshots are account-scoped: every snapshot call uses the source sandbox's own account.
+    account = cwctl.sandbox_account(args.sandbox_id)
+    auth = cwctl.account_auth(account)
     args.state_dir.mkdir(parents=True, exist_ok=True)
     with (args.state_dir / 'operator.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -198,6 +200,7 @@ def main():
 
         def inspect(snapshot_id):
             s = Sandbox.get_snapshot(snapshot_id, auth=auth, timeout_seconds=30).result(timeout=45)
+            cwctl.cwaccounts.bind(cwctl.STATE, 'snapshots', snapshot_id, account)
             return {'status': str(s.status).upper(), 'source_sandbox_id': s.source_sandbox_id,
                     'size_bytes': s.size_bytes}
 

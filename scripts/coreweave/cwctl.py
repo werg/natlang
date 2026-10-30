@@ -14,7 +14,14 @@ implementation. Which job goes to CoreWeave is the placement policy's decision, 
                                           (a passed GPU smoke is recorded and makes CoreWeave "ready" for placement)
   cwctl.py records                        sandboxes this machine launched (local state file)
   cwctl.py status-line                    one line for this machine's coord status page
+  cwctl.py accounts [status|refresh|choose JOB.json|drain NAME|retire NAME|activate NAME]   per-account ledger,
+                                          caps, headroom, placement and retirement (accounts.py)
   cwctl.py ls|get|exec|logs|stop|files|snapshots ...   passed to `cwsandbox` (tag filter: --tag natlang)
+
+Accounts (accounts.py, plans/COREWEAVE_SANDBOXES.md "Multiple accounts"): `--account NAME` (or NATLANG_CW_ACCOUNT, or
+a job's "account" field) selects the credential profile for a new sandbox. Every launch records and binds its account;
+every later call on that sandbox (exec, files, logs, stop, snapshots, collect) uses the bound account, never the
+default. Without a selection the account is `default` (the credential file below).
 
 Credentials: CWSANDBOX_API_KEY (the documented name for a CoreWeave API access token) or COREWEAVE_API_TOKEN (the
 name `cwic` reads), taken from the environment or from NATLANG_CW_ENV_FILE (default ~/.config/natlang/coreweave.env,
@@ -38,6 +45,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import accounts as cwaccounts  # noqa: E402
 import job as jobs  # noqa: E402
 
 VENV = Path(os.environ.get('NATLANG_CW_VENV', Path.home() / '.local/share/natlang/cw-venv'))
@@ -118,6 +126,58 @@ def require_key() -> None:
                               f'it in {ENV_FILE} (chmod 600)')
 
 
+def selected_account() -> str:
+    """The account chosen for this process (--account / NATLANG_CW_ACCOUNT), else the default profile."""
+    return cwaccounts.check_name(os.environ.get('NATLANG_CW_ACCOUNT') or cwaccounts.DEFAULT)
+
+
+def account_auth(account: str):
+    """SDK auth of one account: the default profile keeps the environment strategy; any other account passes its own
+    key as explicit per-call headers (never through os.environ)."""
+    if cwaccounts.check_name(account) == cwaccounts.DEFAULT:
+        return sdk_auth()
+    return cwaccounts.auth_headers(account)
+
+
+def account_of(sandbox_id: str) -> str | None:
+    """The account a sandbox was created in (binding file, then its launch record); None for an unknown sandbox."""
+    return cwaccounts.bound(STATE, 'sandboxes', sandbox_id, records())
+
+
+def sandbox_account(sandbox_id: str, account: str | None = None) -> str:
+    owner = account_of(sandbox_id)
+    if account and owner and account != owner:
+        raise ControllerError(f'sandbox {sandbox_id} belongs to account {owner!r}, not {account!r}')
+    return owner or account or selected_account()
+
+
+def auth_for_sandbox(sandbox_id: str, account: str | None = None):
+    return account_auth(sandbox_account(sandbox_id, account))
+
+
+def check_launch_account(job: dict, account: str) -> None:
+    """A new sandbox may start in ``account``: credential present, account not draining or retired, and every
+    account-scoped input (restored snapshot, object-storage bucket) belongs to the same account."""
+    if account == cwaccounts.DEFAULT:
+        require_key()
+    elif not cwaccounts.has_credential(account):
+        raise ControllerError(f'account {account!r} has no credential in {cwaccounts.profile_path(account)}')
+    life = cwaccounts.lifecycle(STATE).get(account, {}).get('state', 'active')
+    if life != 'active' or account_ledger(write=False)['accounts'].get(account, {}).get('freeze', {}).get('frozen'):
+        raise ControllerError(f'account {account!r} is {life if life != "active" else "frozen (detected)"}: new '
+                              'sandboxes go to another account (cwctl.py accounts activate NAME after a false alarm)')
+    snapshot = job['scratch'].get('restore_from_snapshot_id')
+    if snapshot:
+        owner = cwaccounts.bound(STATE, 'snapshots', snapshot)
+        if (owner or cwaccounts.DEFAULT) != account:
+            raise ControllerError(f'snapshot {snapshot} belongs to account {owner or "unknown (legacy: default)"!r}; '
+                                  f'snapshots are account-scoped, so a sandbox in {account!r} cannot restore it. '
+                                  'Seed it from the DGX-verified state instead.')
+    if job.get('bucket') and account != cwaccounts.DEFAULT and job['bucket'] != cwaccounts.bucket_for(account):
+        raise ControllerError(f'bucket {job["bucket"]} is not the bucket of account {account!r} (NATLANG_CW_BUCKET in '
+                              'its profile); buckets are org-scoped')
+
+
 def in_venv() -> bool:
     return Path(sys.prefix).resolve() == VENV.resolve()
 
@@ -136,7 +196,8 @@ def bootstrap_text() -> str:
     return script.replace(marker, repr((HERE / 'code_archive.py').read_text()))
 
 
-def load_job(path: Path, bundle: str | None = None, bucket: str | None = None, resume: bool = False) -> dict:
+def load_job(path: Path, bundle: str | None = None, bucket: str | None = None, resume: bool = False,
+             account: str | None = None) -> dict:
     """The job file, with the bundle key from the command line and bucket/region from the environment if unset."""
     try:
         job = json.loads(path.read_text())
@@ -146,7 +207,10 @@ def load_job(path: Path, bundle: str | None = None, bucket: str | None = None, r
         job['bundle'] = bundle
     if resume:
         job['resume'] = True
-    job.setdefault('bucket', bucket or os.environ.get('NATLANG_CW_BUCKET'))
+    if account:
+        job['account'] = account
+    owner = job.get('account') or selected_account()
+    job.setdefault('bucket', bucket or cwaccounts.bucket_for(owner))
     if job['bucket'] is None:
         job.pop('bucket')
     region = os.environ.get('NATLANG_CW_REGION') or os.environ.get('AWS_REGION')
@@ -241,11 +305,13 @@ def error_facts(error: BaseException) -> dict:
     reason = getattr(error, 'reason', None)
     delay = getattr(error, 'retry_delay', None)
     text = f'{type(error).__name__}: {error}'
-    retryable = (reason in RETRYABLE_REASONS or type(error).__name__ == 'SandboxResourceExhaustedError'
-                 or 'RESOURCE_EXHAUSTED' in text or '429' in text)
+    quota = cwaccounts.quota_error({'event': 'create_refused', 'reason': reason, 'error': text}) is not None
+    # An explicit quota error means the account is frozen: retrying it is pointless; another account takes the work.
+    retryable = not quota and (reason in RETRYABLE_REASONS or type(error).__name__ == 'SandboxResourceExhaustedError'
+                               or 'RESOURCE_EXHAUSTED' in text or '429' in text)
     return {'reason': reason, 'metadata': dict(getattr(error, 'metadata', {}) or {}),
             'retry_delay_seconds': delay.total_seconds() if delay is not None else None, 'error': text[:500],
-            'retryable': retryable}
+            'retryable': retryable, 'quota_error': quota}
 
 
 def backoff_seconds(attempt: int, hint: float | None, rand=None) -> float:
@@ -256,7 +322,8 @@ def backoff_seconds(attempt: int, hint: float | None, rand=None) -> float:
     return max(hint or 0.0, CREATE_INTERVAL_SECONDS, ceiling * (0.5 + 0.5 * rand()))
 
 
-def throttled_create(create, *, sleep=time.sleep, clock=time.time, attempts: int | None = None):
+def throttled_create(create, *, sleep=time.sleep, clock=time.time, attempts: int | None = None,
+                     account: str | None = None):
     """Run ``create()`` serialized across processes (a file lock), at least CREATE_INTERVAL_SECONDS after the
     previous create from this machine, retrying only retryable errors with backoff. Every refusal is recorded
     (an occupancy-quota error tells us the real concurrent limit: learned passively, never probed)."""
@@ -277,9 +344,10 @@ def throttled_create(create, *, sleep=time.sleep, clock=time.time, attempts: int
                 return create()
             except Exception as error:
                 facts = error_facts(error)
-                record({'event': 'create_refused', 'attempt': attempt, **facts})
+                tagged = {'account': account} if account else {}
+                record({'event': 'create_refused', 'attempt': attempt, **tagged, **facts})
                 if facts['reason'] == 'CWSANDBOX_OCCUPANCY_QUOTA_EXCEEDED':
-                    record({'event': 'quota_observed', 'limit': facts['metadata'].get('limit'),
+                    record({'event': 'quota_observed', **tagged, 'limit': facts['metadata'].get('limit'),
                             'current': facts['metadata'].get('current')})
                 if not facts['retryable'] or attempt == attempts - 1:
                     raise
@@ -340,14 +408,29 @@ def start_startup_log_capture(sandbox_id, timeout=30):
         time.sleep(0.1)
     raise ControllerError('startup log stream did not become ready before input transfer')
 
+def create_recorded(run_args: list[str], keywords: dict, account: str, entry: dict, *, attempts: int | None = None):
+    """Create one sandbox in ``account`` (throttled), then record and bind it before anything else touches it."""
+    from cwsandbox import Sandbox
+    auth = account_auth(account)
+    sandbox = throttled_create(lambda: Sandbox.run(*run_args, auth=auth, **keywords), attempts=attempts,
+                               account=account)
+    cwaccounts.bind(STATE, 'sandboxes', sandbox.sandbox_id, account)
+    entry = {'event': 'launched', 'sandbox_id': sandbox.sandbox_id, 'account': account, **entry}
+    record(entry)
+    return sandbox, entry
+
+
 def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, bundle_file: Path | None = None,
-           secrets: dict[str, bytes] | None = None, on_created=None) -> dict:
+           secrets: dict[str, bytes] | None = None, on_created=None, account: str | None = None) -> dict:
+    account = cwaccounts.check_name(account or job.get('account') or selected_account())
+    if job.get('account') not in (None, account):
+        raise ControllerError(f'job {job["id"]} declares account {job["account"]!r}, the launch asked for {account!r}')
     request = jobs.sandbox_request(job, bootstrap_text())
     if bundle_file is not None:
         import prebuilt  # an image-bound prebuilt artifact must match the job's image
         prebuilt.check_job(job, json.loads(bundle_file.read_text()),
                            json.loads(bundle_file.with_suffix('.sources.json').read_text()))
-    summary = {'job': job['id'], 'kind': job['kind'], 'placement': job['placement'],
+    summary = {'job': job['id'], 'kind': job['kind'], 'placement': job['placement'], 'account': account,
                'cost': jobs.cost_estimate(job, gpu_hour_price), 'request': describe_request(request)}
     if dry_run:
         return {'dry_run': True, **summary, 'wire_request': wire_request(request)}
@@ -355,16 +438,15 @@ def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, b
     if where not in (None, 'coreweave'):
         raise ControllerError(f'the placement decision put this job on {where!r} ({job["placement"]["reason"]}); '
                               'run `cwctl.py place` again when the fleet changes')
-    require_key()
-    from cwsandbox import Sandbox
-    auth = sdk_auth()
+    check_launch_account(job, account)
+    if secrets:
+        cwaccounts.refuse_credentials(secrets)
     created = time.time()
-    sandbox = throttled_create(lambda: Sandbox.run(*run_arguments(request), auth=auth, **run_keywords(request)))
+    sandbox, entry = create_recorded(run_arguments(request), run_keywords(request), account, {
+        'job': job['id'], 'kind': job['kind'], 'lifetime_hours': job['lifetime_hours'], 'resources': job['resources'],
+        'bucket': job.get('bucket'), 'bundle': job.get('bundle'), 'reason': job['placement']['reason'],
+        'cost': summary['cost'], 'exports': export_targets(job)})
     created = max(created, time.time() - 5)  # the throttle may have waited before the create itself
-    entry = {'event': 'launched', 'sandbox_id': sandbox.sandbox_id, 'job': job['id'], 'kind': job['kind'],
-             'lifetime_hours': job['lifetime_hours'], 'resources': job['resources'], 'bucket': job.get('bucket'),
-             'bundle': job.get('bundle'), 'reason': job['placement']['reason'], 'cost': summary['cost']}
-    record(entry)
     if on_created is not None:
         on_created(entry["sandbox_id"])
     if wait:
@@ -431,6 +513,78 @@ def stop_snapshot_operator(sandbox_id: str) -> None:
         record({'event': 'snapshot_operator_stopped', 'sandbox_id': sandbox_id, 'unit': unit})
 
 
+def export_targets(job: dict) -> list[dict]:
+    """What the continuous exporter and an evacuation pull from this sandbox to the DGX (account_exports.py): the job's
+    declared ``exports`` ([{"kind": "file"|"tree", "remote": path, "role": name}]), else every declared output tree."""
+    declared = job.get('exports')
+    if declared is not None:
+        return [dict(item) for item in declared]
+    return [{'kind': 'tree', 'remote': path, 'role': Path(path).name} for path in job.get('outputs', [])
+            if str(path).startswith('/')]
+
+
+def account_ledger(write: bool = True) -> dict:
+    """Our per-account ledger from this machine's records (no provider usage API exists); written to accounts.json."""
+    names = cwaccounts.profile_names()
+    value = cwaccounts.ledger(records(), cwaccounts.settings(), state_lifecycle=cwaccounts.lifecycle(STATE),
+                              profiles=names, credentials={n: cwaccounts.has_credential(n) for n in names})
+    if write:
+        cwaccounts.write_ledger(STATE, value)
+    return value
+
+
+def refresh_accounts(sandbox_list=None) -> dict:
+    """Status polling (read-only list calls, never a create): record the terminal status and status reason of each
+    sandbox the ledger believes running (a quota reason there is freeze evidence; nothing else is), and an
+    ``api_error`` when an account's list call fails (reported, not a freeze)."""
+    value = account_ledger(write=False)
+    if sandbox_list is None:
+        from cwsandbox import Sandbox
+        sandbox_list = lambda account: Sandbox.list(tags=['natlang'], show_terminated=True, auth=account_auth(account),
+                                                    data_plane_mode='gateway').result(timeout=120)
+    found = {}
+    for name, account in value['accounts'].items():
+        running = {s['sandbox_id'] for s in account['sandboxes'] if s['running']}
+        if not account['credential']:
+            continue
+        try:
+            boxes = list(sandbox_list(name))
+            listed = {box.sandbox_id: str(getattr(box.status, 'value', box.status)).lower() for box in boxes}
+            reasons = {box.sandbox_id: getattr(box, 'status_reason', None) for box in boxes}
+        except Exception as error:  # noqa: BLE001 - recorded as evidence, never fatal to the other accounts
+            facts = error_facts(error)
+            record({'event': 'api_error', 'account': name, 'operation': 'list', **facts})
+            found[name] = {'error': facts['error']}
+            continue
+        ended = {}
+        for ident in sorted(running):
+            status = listed.get(ident, 'absent')
+            if status in cwaccounts.TERMINAL:
+                ended[ident] = status
+                record({'event': 'status', 'sandbox_id': ident, 'account': name, 'status': status, 'source': 'poll',
+                        'status_reason': reasons.get(ident)})
+        unrecorded = sorted(i for i, st in listed.items() if st not in cwaccounts.TERMINAL and not account_of(i))
+        found[name] = {'ended': ended, 'listed': len(listed), 'unrecorded_running': unrecorded}
+    return found
+
+
+def accounts_status(value: dict) -> list[str]:
+    lines = [f"accounts ledger ({value['estimate']}); GPU price {value['gpu_hour_price_usd']} USD/h "
+             f"({value['price_source']}); storage account {value['storage_account']}"]
+    for name, a in value['accounts'].items():
+        state = 'FROZEN' if a['freeze']['frozen'] else a['lifecycle']
+        lines.append(f"{name:12} {state:8} cred={'y' if a['credential'] else 'n'} place={'y' if a['eligible'] else 'n'} "
+                     f"gpu_h={a['gpu_hours']} spend={a['spend_usd']} cap={a['cap_usd']}/{a['cap_gpu_hours']}gpu_h "
+                     f"headroom={a['headroom_usd']}/{a['headroom_gpu_hours']}gpu_h running={a['running']} "
+                     f"unexported_gpu_h={a['unexported_gpu_hours']}")
+        for box in a['sandboxes']:
+            if box['running']:
+                last = (box['last_verified_export'] or {}).get('at', 'never')
+                lines.append(f"  {box['sandbox_id']} {box['job']}: {box['unexported_hours']} h of earned work not yet "
+                             f"verified on the DGX (last verified export {last})")
+    return lines
+
+
 def place(job_path: Path, mode: str | None, model: str | None, write: bool) -> dict:
     """Run the placement policy for one job file; with ``write``, record the served decision in its placement."""
     import placement
@@ -443,7 +597,16 @@ def place(job_path: Path, mode: str | None, model: str | None, write: bool) -> d
                                          bool(job.get('bucket') or os.environ.get('NATLANG_CW_BUCKET')))}
     item = {'id': job['id'], 'job': needs, 'fleet': fleet, 'crisp': placement.crisp_decision(needs, fleet)}
     served = placement.decide([item], placement.mode_of(config, mode), config, model)[0]
+    if served['where'] == 'coreweave' and not raw.get('account'):
+        try:
+            chosen = cwaccounts.choose_account(account_ledger(write=False), cwaccounts.settings(), job['resources'],
+                                               float(job['lifetime_hours']))
+            served = {**served, 'account': chosen['account'], 'account_reason': chosen['reason']}
+        except cwaccounts.NoAccount as error:
+            served = {**served, 'where': 'queue-dgx', 'reason': f'no CoreWeave account can take it: {error}'}
     if write:
+        if served.get('account'):
+            raw['account'] = served['account']
         raw['placement'] = {'where': served['where'], 'reason': served['reason'], 'served': served['served'],
                             'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
         job_path.write_text(json.dumps(raw, indent=1) + '\n')
@@ -538,6 +701,7 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dic
     verified = set(json.loads(result.stdout.strip() or '[]')) if result.returncode == 0 else set()
     if verified != {i['sha256'] for i in items}:
         raise ControllerError('input upload verification failed; readiness was not published')
+    cwaccounts.refuse_credentials(secrets or {})
     for name, value in (secrets or {}).items():
         if not SECRET_NAME.fullmatch(name):
             raise ControllerError(f'secret name {name!r}: lower-case letters, digits, dots and dashes')
@@ -583,7 +747,7 @@ def collect(sandbox_id: str, scratch: str = '/work', mapping: list[tuple[str, st
     the manifest the sandbox wrote, place it (``mapping`` remaps path prefixes), then release the sandbox."""
     import bundle
     from cwsandbox import Sandbox
-    sandbox = Sandbox.from_id(sandbox_id, auth=sdk_auth(), data_plane_mode='gateway').result()
+    sandbox = Sandbox.from_id(sandbox_id, auth=auth_for_sandbox(sandbox_id), data_plane_mode='gateway').result()
     if instance and not jobs._ID.fullmatch(instance):
         raise ControllerError('invalid control instance')
     base = f'{scratch}/.coreweave' + (f'/instances/{instance}' if instance else '')
@@ -634,7 +798,9 @@ def doctor() -> dict:
     facts = {'venv': str(VENV), 'venv_present': (VENV / 'bin' / 'python').is_file(), 'running_in_venv': in_venv(),
              'env_file': str(ENV_FILE), 'env_file_present': ENV_FILE.is_file(),
              'auth': auth_strategy(), 'credential': api_key_name(),
-             'credential_names_checked': list(KEY_NAMES),
+             'credential_names_checked': list(KEY_NAMES), 'selected_account': selected_account(),
+             'accounts_dir': str(cwaccounts.ACCOUNTS_DIR),
+             'accounts': {name: cwaccounts.has_credential(name) for name in cwaccounts.profile_names()},
              'bucket': os.environ.get('NATLANG_CW_BUCKET'), 'region': os.environ.get('AWS_REGION')
              or os.environ.get('NATLANG_CW_REGION'), 'state': str(STATE)}
     for module in ('cwsandbox', 'boto3'):
@@ -653,7 +819,7 @@ def read_sandbox(sandbox_id: str, patience: float = 900):
     deadline = time.time() + patience
     while True:
         try:
-            return Sandbox.from_id(sandbox_id, auth=sdk_auth(), data_plane_mode='gateway').result(
+            return Sandbox.from_id(sandbox_id, auth=auth_for_sandbox(sandbox_id), data_plane_mode='gateway').result(
                 timeout=min(60, max(1, deadline - time.time())))
         except Exception as error:
             transient = isinstance(error, TimeoutError) or type(error).__name__ in (
@@ -709,8 +875,21 @@ def status_line() -> str:
             f'({last["kind"]}, {last["lifetime_hours"]} h max) at {last["at"]}; live list: cwctl.py ls --tag natlang')
 
 
+def passthrough_account(argv: list[str]) -> str:
+    """The one account a CLI call acts in: the bound account of every sandbox/snapshot it names, else the selection."""
+    words = [a for a in argv[1:] if not a.startswith('-')]
+    owners = {owner for owner in (account_of(w) or cwaccounts.bound(STATE, 'snapshots', w) for w in words) if owner}
+    if len(owners) > 1:
+        raise ControllerError(f'the command names sandboxes of several accounts ({sorted(owners)}); run one per account')
+    if owners and os.environ.get('NATLANG_CW_ACCOUNT') and owners != {selected_account()}:
+        raise ControllerError(f'the named sandboxes belong to {owners.pop()!r}, not --account {selected_account()!r}')
+    return owners.pop() if owners else selected_account()
+
+
 def passthrough(argv: list[str]) -> int:
-    require_key()
+    account = passthrough_account(argv)
+    if account == cwaccounts.DEFAULT:
+        require_key()
     cli = VENV / 'bin' / 'cwsandbox'
     if not cli.is_file():
         raise ControllerError('cwsandbox CLI missing: run scripts/coreweave/setup_client.sh')
@@ -718,10 +897,12 @@ def passthrough(argv: list[str]) -> int:
         # The trainers write their final state on SIGTERM; 10 s (the client default) is far too short for 47 GB.
         argv = [*argv, '--graceful-shutdown-seconds', os.environ.get('NATLANG_CW_STOP_GRACE', '600')]
     if argv[0] == 'stop':
-        record({'event': 'stop', 'args': argv[1:]})
-    # The CLI reads CWSANDBOX_AUTH and the key from this environment; nothing is put on its command line.
-    os.environ['CWSANDBOX_AUTH'] = auth_strategy()
-    status = subprocess.call([str(cli), *argv])
+        record({'event': 'stop', 'account': account, 'args': argv[1:]})
+    # The CLI reads CWSANDBOX_AUTH and the key from its environment; nothing is put on its command line. A non-default
+    # account's child environment carries only that account's key.
+    env = {**os.environ, 'CWSANDBOX_AUTH': auth_strategy()} if account == cwaccounts.DEFAULT else \
+        cwaccounts.cli_env(account, dict(os.environ))
+    status = subprocess.call([str(cli), *argv], env=env)
     if argv[0] == 'stop':
         for sandbox_id in (a for a in argv[1:] if not a.startswith('-') and not a.isdigit()):
             stop_snapshot_operator(sandbox_id)
@@ -730,8 +911,12 @@ def passthrough(argv: list[str]) -> int:
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv[:1] == ['--auth'] and len(argv) > 1:
-        os.environ['CWSANDBOX_AUTH'], argv = argv[1], argv[2:]
+    while argv[:1] in (['--auth'], ['--account']) and len(argv) > 1:
+        if argv[0] == '--auth':
+            os.environ['CWSANDBOX_AUTH'] = argv[1]
+        else:
+            os.environ['NATLANG_CW_ACCOUNT'] = cwaccounts.check_name(argv[1])
+        argv = argv[2:]
     load_env_file()
     if argv and argv[0] in PASSTHROUGH:
         return passthrough(argv)
@@ -778,6 +963,12 @@ def main(argv=None) -> int:
     p.add_argument('cmd', nargs=argparse.REMAINDER)
     p.add_argument('--cwd')
     sub.add_parser('records')
+    p = sub.add_parser('accounts', help='per-account ledger, freeze state, export coverage and placement')
+    p.add_argument('action', nargs='?', default='status',
+                   choices=('status', 'json', 'refresh', 'choose', 'freeze', 'retire', 'activate', 'ended'))
+    p.add_argument('target', nargs='*', help='JOB.json for choose; account NAME for freeze/retire/activate; '
+                   'SANDBOX_ID... for ended (an operator-observed end, e.g. after the 2026-10-29 cutoff)')
+    p.add_argument('--reason', default='')
     sub.add_parser('status-line')
     args = parser.parse_args(argv)
     if args.command == '_capture-startup':
@@ -811,6 +1002,29 @@ def main(argv=None) -> int:
         print(json.dumps(result, indent=1))
         if not args.dry_run:
             print(json.dumps(check_smoke(result['sandbox_id'], args.gpu), indent=1))
+    elif args.command == 'accounts':
+        if args.action == 'refresh':
+            print(json.dumps(refresh_accounts(), indent=1))
+        if args.action in ('freeze', 'retire', 'activate'):
+            if len(args.target) != 1:
+                raise ControllerError(f'accounts {args.action} NAME')
+            state = {'freeze': 'frozen', 'retire': 'retired', 'activate': 'active'}[args.action]
+            print(json.dumps(cwaccounts.set_lifecycle(STATE, args.target[0], state, args.reason or 'operator'), indent=1))
+        if args.action == 'ended':
+            if not args.target or not args.reason:
+                raise ControllerError('accounts ended SANDBOX_ID... --reason WHY')
+            for ident in args.target:
+                record({'event': 'stopped', 'sandbox_id': ident, 'account': sandbox_account(ident),
+                        'reason': args.reason, 'source': 'operator'})
+        value = account_ledger()
+        if args.action == 'choose':
+            job = jobs.validate(json.loads(Path(args.target[0]).read_text()))
+            print(json.dumps(cwaccounts.choose_account(value, cwaccounts.settings(), job['resources'],
+                                                       float(job['lifetime_hours'])), indent=1))
+        elif args.action == 'json':
+            print(json.dumps(value, indent=1))
+        elif args.action in ('status', 'refresh'):
+            print('\n'.join(accounts_status(value)))
     elif args.command == 'records':
         print(json.dumps(records(), indent=1))
     elif args.command == 'status-line':
@@ -823,6 +1037,6 @@ if __name__ == '__main__':
         reexec_in_venv()
     try:
         sys.exit(main())
-    except (ControllerError, jobs.JobError, ValueError) as error:
+    except (ControllerError, jobs.JobError, ValueError, cwaccounts.AccountError) as error:
         print(f'cwctl: {error}', file=sys.stderr)
         sys.exit(2)

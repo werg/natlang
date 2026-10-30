@@ -33,9 +33,15 @@ def test_preparation_verifies_identity_mirrors_and_child_environment(tmp_path,mo
 
 def test_create_compiles_before_allocation_and_persists_token(tmp_path):
     token=tmp_path/'token';calls=[]
+    import importlib.util
+    spec=importlib.util.spec_from_file_location('warm_accounts',Path(__file__).resolve().parents[1]/'scripts/coreweave/accounts.py')
+    accounts=importlib.util.module_from_spec(spec);spec.loader.exec_module(accounts)
+    recorded=[]
     class CW:
+        STATE=tmp_path/'state';cwaccounts=accounts
         def throttled_create(self,fn,**kw):return fn()
-        def sdk_auth(self):return 'auth'
+        def account_auth(self,account):assert account=='default';return 'auth'
+        def record(self,event):recorded.append(event)
         def keep_share_token(self,box):token.write_text('secret');return token
     def run(*args,**kwargs):calls.append((args,kwargs));return SimpleNamespace(sandbox_id='sandbox')
     image='image@sha256:'+'a'*64
@@ -48,7 +54,8 @@ def test_create_compiles_before_allocation_and_persists_token(tmp_path):
     _,value=warm.create(spec,'print("owner")',tmp_path/'intent.json',sandbox_run=run,cwctl=CW())
     assert value['phase']=='token-persisted' and token.read_text()=='secret'
     assert json.loads((tmp_path/'intent.json').read_text())['sandbox_id']=='sandbox'
-    assert calls[0][0][:3]==('python','-u','-c')
+    assert calls[0][0][:3]==('python','-u','-c') and calls[0][1]['auth']=='auth'
+    assert recorded[0]['account']=='default' and accounts.bindings(tmp_path/'state')['sandboxes']=={'sandbox':'default'}
     compile(calls[0][0][3],'<entrypoint>','exec')
     with pytest.raises(FileExistsError):warm.create(spec,'pass',tmp_path/'intent.json',sandbox_run=run,cwctl=CW())
 
