@@ -89,6 +89,15 @@ eval and data jobs running):
   the open marker, inside a span, after a closed span, and inside a span with a close-marker logit bias (decode crosses
   sampled close markers, back to ordinary inputs): producing 0.0164 vs floor 0.0166 (control 0.155), ordinary 0.0148
   vs floor 0.0138 (control 0.113).
+- **Produce spans served on SGLang** (fork 15015589e4). No marker is banned (export schema 3, `banned_token_ids` []),
+  so the SGLang law is the native law; the front follows the native decode-step protocol per sampled token and raises
+  the native errors (state-open, -close, -nested, -consume-marker) and recoverable protocol failures. When a span
+  closes, one capture request recomputes it (radix match capped by `logprob_start_len`) and the fork writes its
+  native state; the front stores it as the native engine does. Span export vs `native_step` (5 spans, 49 tokens each,
+  perturbed adapter): relative L2 raw K 0.0138 (native BF16 floor 0.0147), V 0.0157 (0.0177), conv inputs 0.0144
+  (0.0155), raw embeddings exact; empty spans keep the layer layout. Unit tests: scripted token streams through the
+  native engine and the front give identical samples, inputs, writes, reply content and stored blocks, also streamed,
+  and identical failure descriptors for all five protocol violations.
 - **Determinism (for the decision gate): not achieved.** 8 cases, 128 greedy tokens, compared with each case served
   alone: plain mode 4/8 identical in a batch of 8, 3/8 mixed with 8 fillers; `--enable-deterministic-inference` 5/8
   and 5–6/8 with FlashInfer or Triton attention (so attention is not the only batch-dependent op; early divergence at
@@ -116,7 +125,8 @@ images are cached in the same PR). `input_embeds` (which forces `--disable-radix
 |---|---|---|---|---|---|
 | 1 | Compact exact top-k + sampled logp | done | `layers/sampler.py`, `sampling_batch_info.py` | see status | none |
 | 2 | Privileged blocks | done (front) | `serve/sglang_actor.py` | `_insert_privileged` on the plan before token ids, as the native engine | none |
-| 3 | Producer adapter + markers | mechanism done; markers stay banned until span export lands | `Lfm3Model.forward` embedding; extend mapping in `ScheduleBatch.prepare_for_extend`; per-slot span flag | Export precomputes the producing table `adapter(embed(t))` with the native module; producing token t is fed as id t+V. Extend chunks are mapped by scanning the request's tokens, decode tokens from a per-request-slot GPU flag (`inside' = (inside or tok==open) and tok!=close`), CUDA-graph safe | none |
+| 3 | Producer adapter + markers | done | `Lfm3Model.forward` embedding; extend mapping in `ScheduleBatch.prepare_for_extend`; per-slot span flag | Export precomputes the producing table `adapter(embed(t))` with the native module; producing token t is fed as id t+V. Extend chunks are mapped by scanning the request's tokens, decode tokens from a per-request-slot GPU flag (`inside' = (inside or tok==open) and tok!=close`), CUDA-graph safe. No marker is banned: the front follows the native marker protocol (`_sglang_token`) | none |
+| 4a | Span export (KV + conv) | done | `NatlangCapture` in `models/lfm3.py` (attention after the K norm, conv `B_gate*x`), `custom_params.natlang_capture` | When a span closes the front sends one capture request: the sequence through the span with `logprob_start_len` just below it (the radix match is capped there), so the span is recomputed in an eager extend; the fork writes the span's pre-RoPE K, V, conv inputs and raw embeddings (FP32) to a safetensors file, which becomes the native engine's `NativeStateBlock` (`_native_finish_block`). A request evicted mid-span needs no special case: the capture recomputes from tokens, and re-prefill maps the span again | none |
 | 4 | KV span import/export | M | `Lfm3Attention.forward` after `apply_qk_norm`, before `rotary_emb` | Import: `k = where(import_mask, store.k[layer][rows], k)`, same for v, then RoPE at the consumer positions; the span's later layers are also overridden, so it is exact. Rows come from a GPU state store indexed by the native_state items of the batch. Export: copy raw pre-RoPE k, v of producing positions to a staging buffer | radix key per (state hash, position): KV after RoPE depends on the consumer position, so the pad values must include the start position |
 | 5 | Conv-state import/export | S–M | `Lfm3ShortConv.forward` before the CuTe kernel | The kernel forms `Bx = B_gate·x` from `proj`; at imported positions set `B_gate = 1` and `x = stored Bx`, so the carried window becomes `(prefix ‖ span)[-6:]` (`splice_block`'s `ConvState`) without a kernel change. Export: `B_gate·x` of producing positions | mamba checkpoint boundaries (`track_conv_indices`) inside an imported span |
 | 6 | `decide` with imported state | S–M | existing `logprob_start_len` | SGLang caps the radix match at `logprob_start_len` (`schedule_batch.py`), so one request per option reads the shared prefix from the cache and returns input logprobs only past it. Score with raw log-softmax (`SGLANG_RETURN_ORIGINAL_LOGPROB` or a per-request flag) | per-request raw vs post-temperature switch |

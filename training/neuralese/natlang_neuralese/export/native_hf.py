@@ -10,8 +10,8 @@ The low-rank producer adapter applies only to tokens inside a produce span. The 
 embedding of every token, `adapter(embed(t))` with the native module itself, as `model.natlang_producer_embed`,
 and names the markers in the config (`natlang_producer`); the fork's LFM3 model feeds producing token t as id
 t + vocab_size and looks it up there (NATLANG_FORK.md). Native adapters, coefficient policies and imported native
-state are refused by the serving front rather than dropped; `serving.banned_token_ids` lists the role markers the
-front bans (part of every recorded sample's law) until it exports produce spans.
+state are refused by the serving front rather than dropped. `serving.banned_token_ids` is empty: the front samples
+from the native law and follows the native marker protocol.
 
     python -m natlang_neuralese.export.native_hf CHECKPOINT OUT_DIR [--base DIR] [--dtype bfloat16|float32]
 """
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import torch
 
-SCHEMA = 'natlang.native-hf-export/2'
+SCHEMA = 'natlang.native-hf-export/3'
 PRODUCER_CHUNK = 8192
 
 
@@ -128,8 +128,9 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
         'weights_sha256': sha256_file_hex(out_dir / 'model.safetensors'),
         'role_markers': markers,
         'producer_embedding': {'weight': 'model.natlang_producer_embed', 'input_id_offset': hf_config.vocab_size},
-        # The role markers stay banned until the front exports produce spans (fork producer table is in place).
-        'serving': {'banned_token_ids': sorted(markers.values())},
+        # No marker is banned: produce spans run on the fork (producer table, span export), consume markers and other
+        # protocol violations are the native engine's errors, so SGLang samples from the native law.
+        'serving': {'banned_token_ids': []},
     }
     tmp = manifest_path.with_suffix('.json.partial')
     tmp.write_text(json.dumps(manifest, indent=1) + '\n')

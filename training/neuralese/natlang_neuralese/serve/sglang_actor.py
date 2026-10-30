@@ -6,19 +6,24 @@ to SGLang's `/generate`, which samples from the checkpoint's HF export (`export/
 returns per token the exact post-temperature law it drew from, compactly (`custom_params.natlang_top_k`: one base64
 record per token, `<f4 sampled logp | <i4 ids[k] | <f2 logps[k]`; the fork's sampler, `natlang_capture_top_k`).
 
-SGLang serves ordinary-token turns (rendered text, privileged text guidance), sampling or greedy, RL capture with
-behaviour top-k. The four role markers are banned there (logit bias -1e30) because the producer adapter and
-native-state import are not in the fork yet; the ban is recorded in every sample (`banned_token_ids`), so replay uses
-the same law. Streamed requests stream SGLang's tokens as text deltas. Every other request (imported native state, templated
-writes/decodes, guided generation, forced teacher replay, native adapters) runs on the native engine of the same checkpoint, exactly as
-`serve_native_checkpoint.py` serves it without `--engine sglang`; that model is loaded only when such a turn first
-arrives. `/metrics` counts both paths.
+SGLang serves turns over rendered text and privileged text guidance, sampling or greedy, RL capture with behaviour
+top-k, and produce spans: the fork applies the producer adapter inside a span (the export's producing embedding table),
+the front follows the native marker protocol token by token (`_sglang_token`, the native engine's decode step) and,
+when a span closes, has SGLang recompute the span with a capture request (`custom_params.natlang_capture`: pre-RoPE
+keys, values and conv inputs of the span positions) that becomes the same `NativeStateBlock` the native engine stores.
+No marker is banned when the export's `serving.banned_token_ids` is empty (the native law); protocol violations are
+the native engine's errors and recoverable failures. Streamed requests stream text and native-state deltas. Every
+other request (imported native state, templated writes/decodes, guided generation, forced teacher replay, native
+adapters) runs on the native engine of the same checkpoint, exactly as `serve_native_checkpoint.py` serves it without
+`--engine sglang`; that model is loaded only when such a turn first arrives. `/metrics` counts both paths.
 """
 from __future__ import annotations
 
 import base64
 import json
+import os
 import threading
+import uuid
 import urllib.error
 import urllib.request
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -27,9 +32,10 @@ import numpy as np
 
 from .chat import RequestError
 from .engine import Engine, Sequence, _insert_privileged, derive_seed
-from .native_protocol import capture_enabled
+from .native_protocol import FAILURE_CODES, capture_enabled, failure_descriptor
 
 TOP_K_KEY = 'natlang_top_k'
+CAPTURE_KEY = 'natlang_capture'
 BAN_BIAS = -1e30
 
 
@@ -118,14 +124,18 @@ class SglangEngine(Engine):
             raise ValueError('the SGLang actor does not serve semantic channels')
         self.sglang_url, self.sglang_workers = url.rstrip('/'), workers
         roles = self.role_tokens
-        self.sglang_banned = sorted({int(roles.produce_open), int(roles.produce_close),
-                                     int(roles.consume_open), int(roles.consume_close)})
-        if sorted(export_manifest['serving']['banned_token_ids']) != self.sglang_banned:
-            raise ValueError('HF export and serving front disagree on the banned role markers')
+        markers = {int(roles.produce_open), int(roles.produce_close), int(roles.consume_open), int(roles.consume_close)}
+        self.sglang_banned = sorted(int(token) for token in export_manifest['serving']['banned_token_ids'])
+        if not set(self.sglang_banned) <= markers:
+            raise ValueError('the HF export bans tokens other than the role markers')
+        if (int(roles.produce_open) not in self.sglang_banned
+                and (export_manifest.get('producer_embedding') or {}).get('input_id_offset') is None):
+            raise ValueError('produce markers need the producing embedding table in the HF export')
+        self.sglang_capture_dir = None
         if export_manifest['checkpoint_sha256'] != self.checkpoint_sha256:
             raise ValueError('HF export was made from another checkpoint')
         self.sglang_export = export_manifest
-        self.sglang_requests = self.sglang_tokens = self.native_fallbacks = 0
+        self.sglang_requests = self.sglang_tokens = self.native_fallbacks = self.sglang_state_writes = 0
         self.native_fallback_reasons = {}
         self._sglang_lock = threading.Lock()
         binding = getattr(self, 'rl_policy_binding', None)
@@ -139,6 +149,7 @@ class SglangEngine(Engine):
         return {**super().progress_metrics(), 'natlang_sglang_requests_total': self.sglang_requests,
                 'natlang_sglang_generated_tokens_total': self.sglang_tokens,
                 'natlang_native_fallback_requests_total': self.native_fallbacks,
+                'natlang_sglang_native_state_writes_total': self.sglang_state_writes,
                 'natlang_native_model_resident': int(self.__dict__.get('_native_model') is not None),
                 **self.native_fallback_reasons}
 
@@ -261,27 +272,41 @@ class SglangEngine(Engine):
         params = {'temperature': float(request.temperature) if sampling else 0.0,
                   'max_new_tokens': min(int(request.max_tokens), self.context - len(ids)),
                   'stop_token_ids': sorted(self.stop_ids), 'skip_special_tokens': False,
-                  'no_stop_trim': True, 'logit_bias': {str(token): BAN_BIAS for token in self.sglang_banned},
-                  'custom_params': {TOP_K_KEY: max(k, 1)}}
+                  'no_stop_trim': True, 'custom_params': {TOP_K_KEY: max(k, 1)}}
+        if self.sglang_banned:
+            params['logit_bias'] = {str(token): BAN_BIAS for token in self.sglang_banned}
         body = {'input_ids': ids, 'sampling_params': params, 'rid': request.request_id}
-        state = {'index': 0, 'finish': 'length', 'done': False, 'text': ''}
-        if request.on_delta is None:
-            result = self._sglang_generate(body)
-            self._sglang_consume(seq, result.get('output_ids'), (result.get('meta_info') or {}).get(TOP_K_KEY),
-                                 k, sampling, state)
-        else:
-            # Streamed replies: SGLang sends incremental token chunks (--incremental-streaming-output); the text
-            # reaches the client as it is generated, the capture is completed from the same per-token records.
-            for chunk in self._sglang_stream(body):
-                if request.cancelled:
-                    raise RequestError('cancelled', 'the client went away')
-                self._sglang_consume(seq, chunk.get('output_ids'), (chunk.get('meta_info') or {}).get(TOP_K_KEY),
+        state = {'index': 0, 'finish': 'length', 'done': False, 'text': '', 'run': 0, 'prompt': ids, 'fed': []}
+        try:
+            if request.on_delta is None:
+                result = self._sglang_generate(body)
+                self._sglang_consume(seq, result.get('output_ids'), (result.get('meta_info') or {}).get(TOP_K_KEY),
                                      k, sampling, state)
-                if state['done']:
-                    break
-        with self._sglang_lock:
-            self.sglang_requests += 1
-            self.sglang_tokens += state['index']
+            else:
+                # Streamed replies: SGLang sends incremental token chunks (--incremental-streaming-output); the text
+                # reaches the client as it is generated, the capture is completed from the same per-token records.
+                # Leaving the stream early (a protocol error) closes the connection, which aborts the SGLang request.
+                for chunk in self._sglang_stream(body):
+                    if request.cancelled:
+                        raise RequestError('cancelled', 'the client went away')
+                    self._sglang_consume(seq, chunk.get('output_ids'), (chunk.get('meta_info') or {}).get(TOP_K_KEY),
+                                         k, sampling, state)
+                    if state['done']:
+                        break
+            if seq.native_capture_open:
+                # The native engine's check before the next draw: the token allowance ran out inside the span.
+                raise RequestError('neuralese-native-state-open', 'generation ended inside a produce span')
+        except RequestError as error:
+            if (error.code not in FAILURE_CODES or not request.native_protocol_recovery
+                    or seq.native_rl_policy is None):
+                raise
+            # The native engine's recoverable protocol failure (_native_protocol_fail): the actual boundary, no block.
+            seq.native_protocol_failure = failure_descriptor(self, seq, error)
+            state['finish'] = 'error'
+        finally:
+            with self._sglang_lock:
+                self.sglang_requests += 1
+                self.sglang_tokens += state['index']
         if request.on_delta is not None:
             self._sglang_emit(seq, state, final=True)
         seq.finish_reason = state['finish']
@@ -295,33 +320,125 @@ class SglangEngine(Engine):
         for token, record in zip(output, records):
             if state['done']:
                 raise RequestError('sglang-actor-capture', 'SGLang returned tokens after the stop token')
-            token, index = int(token), state['index']
-            state['index'] += 1
-            if token in self.sglang_banned:
-                raise RequestError('sglang-actor-capture', f'SGLang sampled banned role marker {token}')
-            logp, top_ids, top_logps = decode_record(record, k)
-            terminal = token in self.stop_ids
-            if capture_enabled(seq):
-                sample = {'index': index, 'token_id': token, 'logp': logp if sampling else None,
-                          'banned_token_ids': list(self.sglang_banned), 'input_role': 'ordinary',
-                          'terminal': terminal, 'query_own_position': seq.native_own_position - 1}
-                if k:
-                    sample['top_k'] = {'ids': base64.b64encode(top_ids.astype('<i4').tobytes()).decode('ascii'),
-                                       'logps': base64.b64encode(top_logps.astype('<f2').tobytes()).decode('ascii')}
-                seq.rl_samples.append(sample)
-            if terminal:
-                state['finish'], state['done'] = 'stop', True
-                continue
-            seq.generated_positions += 1
-            self._native_record_input(seq, token, producing=False, sample_index=index)
-            seq.items.append(token)
-            seq.native_item_positions.append(seq.native_own_position - 1)
+            self._sglang_token(seq, int(token), decode_record(record, k), k, sampling, state)
         if seq.request.on_delta is not None:
             self._sglang_emit(seq, state)
 
+    def _sglang_token(self, seq, token, record, k, sampling, state):
+        """One sampled token through the native engine's decode-step protocol (`_native_sequence_step`)."""
+        index = state['index']
+        state['index'] += 1
+        if token in self.sglang_banned:
+            raise RequestError('sglang-actor-capture', f'SGLang sampled banned role marker {token}')
+        logp, top_ids, top_logps = record
+        marker = self.role_tokens
+        terminal = token in self.stop_ids
+        producing_input = seq.native_capture_open and token not in (marker.produce_open, marker.produce_close)
+        if capture_enabled(seq):
+            sample = {'index': index, 'token_id': token, 'logp': logp if sampling else None,
+                      **({'banned_token_ids': list(self.sglang_banned)} if self.sglang_banned else {}),
+                      'input_role': 'produce' if producing_input else 'ordinary',
+                      'terminal': terminal, 'query_own_position': seq.native_own_position - 1}
+            if k:
+                sample['top_k'] = {'ids': base64.b64encode(top_ids.astype('<i4').tobytes()).decode('ascii'),
+                                   'logps': base64.b64encode(top_logps.astype('<f2').tobytes()).decode('ascii')}
+            seq.rl_samples.append(sample)
+        if terminal:
+            if seq.native_capture_open:
+                raise RequestError('neuralese-native-state-open', 'generation stopped inside a produce span')
+            state['finish'], state['done'] = 'stop', True
+            return
+        if token == marker.produce_close and not seq.native_capture_open:
+            raise RequestError('neuralese-native-state-close', 'generation emitted a produce end marker without an open span')
+        if token in (marker.consume_open, marker.consume_close):
+            raise RequestError('neuralese-native-state-consume-marker',
+                               'consume markers are inserted only around an imported native-state part')
+        if seq.native_capture_open and token == marker.produce_close:
+            seq.native_write_close_sample = index
+            seq.generated_positions += 1
+            self._native_record_input(seq, token, producing=False, sample_index=index)
+            state['fed'].append(token)
+            self._sglang_finish_block(seq, state)
+            return
+        producing = seq.native_capture_open and token != marker.produce_open
+        if token == marker.produce_open:
+            seq.native_write_start_own = seq.native_own_position
+            seq.native_write_open_sample = index
+        seq.generated_positions += 1
+        self._native_record_input(seq, token, producing=producing, sample_index=index)
+        state['fed'].append(token)
+        if token == marker.produce_open:
+            if seq.native_capture_open:
+                raise RequestError('neuralese-native-state-nested', 'produce spans cannot nest')
+            seq.native_capture_chunks = []
+            seq.native_capture_ids = []
+            seq.native_capture_open = True
+            seq.native_write_start_sample = index
+        elif producing:
+            seq.native_capture_ids.append(token)
+        else:
+            seq.items.append(token)
+            seq.native_item_positions.append(seq.native_own_position - 1)
+
+    def _sglang_finish_block(self, seq, state):
+        """Store the span that just closed: SGLang recomputes it once and exports its native state."""
+        if seq.request.on_delta is not None:
+            self._sglang_emit(seq, state, final=True)  # text before the block reaches the client first
+        ids = state['prompt'] + state['fed'][:-1]  # through the last span token (the close marker is not part)
+        start = seq.native_write_start_own + 1
+        end = start + len(seq.native_capture_ids)
+        if end != len(ids) or ids[start:end] != seq.native_capture_ids:
+            raise RequestError('sglang-actor-capture', 'produce span positions disagree with the generated tokens')
+        seq.native_capture_chunks = [self._sglang_capture(ids, start, end)]
+        self._native_finish_block(seq)
+        with self._sglang_lock:
+            self.sglang_state_writes += 1
+        state['run'], state['text'] = len(seq.items), ''
+
+    def _sglang_capture(self, ids, start, end):
+        """The native capture chunk (`native_step`'s token_ids/embeddings/positions/layers) of ids[start:end].
+
+        One SGLang request recomputes the sequence with the radix match capped below the span (logprob_start_len), so
+        the span runs through the model and the fork writes its pre-RoPE keys, values and conv inputs."""
+        import torch
+        from safetensors.torch import load_file
+        if self.sglang_capture_dir is None:
+            import tempfile
+            directory = getattr(self.store, 'directory', None)
+            if directory is not None:
+                self.sglang_capture_dir = os.path.join(directory, 'sglang-capture')
+                os.makedirs(self.sglang_capture_dir, exist_ok=True)
+            else:
+                self.sglang_capture_dir = tempfile.mkdtemp(prefix='sglang-capture-')
+        path = os.path.join(self.sglang_capture_dir, f'{uuid.uuid4().hex}.safetensors')
+        body = {'input_ids': ids, 'return_logprob': True, 'logprob_start_len': max(start - 1, 0),
+                'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1,
+                                    'custom_params': {CAPTURE_KEY: {'path': path, 'start': start, 'end': end}}}}
+        self._sglang_generate(body)
+        try:
+            tensors = load_file(path)
+        except FileNotFoundError:
+            raise RequestError('sglang-actor-capture', 'SGLang did not export the produce span') from None
+        finally:
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+        dtype = getattr(torch, getattr(self, 'native_dtype', None)
+                        or str(self.backbone.embedding_weight.dtype).replace('torch.', ''))
+        layers = []
+        for index in range(sum(1 for name in tensors if name.startswith('layers.') and name.endswith(('.v', '.gated_inputs')))):
+            if f'layers.{index}.raw_k' in tensors:
+                layers.append({'kind': 'attention', 'raw_k': tensors[f'layers.{index}.raw_k'],
+                               'v': tensors[f'layers.{index}.v']})
+            else:
+                layers.append({'kind': 'finite_convolution', 'gated_inputs': tensors[f'layers.{index}.gated_inputs']})
+        return {'token_ids': tensors['token_ids'], 'embeddings': tensors['embeddings'].to(dtype),
+                'positions': tensors['positions'], 'layers': tuple(layers)}
+
     def _sglang_emit(self, seq, state, final=False):
         """Send the reply text decoded so far, holding back an incomplete UTF-8 tail until it completes."""
-        text = self.tokenizer.decode(seq.items, skip_special_tokens=False)
+        text = self.tokenizer.decode(seq.items[state['run']:], skip_special_tokens=False)
         if not final:
             text = text.rstrip('\ufffd')
         if len(text) > len(state['text']) and text.startswith(state['text']):
