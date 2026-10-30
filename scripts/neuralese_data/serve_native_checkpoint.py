@@ -51,8 +51,9 @@ def main() -> None:
     parser.add_argument('--sglang-max-total-tokens', type=int,
                         help='KV pool tokens shared by all sequences (default: 4 x --sglang-context; prompts share prefixes)')
     parser.add_argument('--sglang-mem-fraction', type=float, default=0.3, help='ceiling, not the allocation')
-    parser.add_argument('--sglang-adapter-slots', type=int, default=0,
-                        help='resident native adapter stacks on SGLang (0: adapted turns run on the native engine)')
+    parser.add_argument('--sglang-adapter-slots', type=int, default=4,
+                        help='resident native adapter stacks on SGLang (0 opts out: adapted turns run on the native '
+                             'engine); batches without an adapted request replay the base-only decode graph')
     parser.add_argument('--sglang-adapter-rank', type=int, default=32,
                         help='largest summed adapter rank per SGLang module and slot')
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')

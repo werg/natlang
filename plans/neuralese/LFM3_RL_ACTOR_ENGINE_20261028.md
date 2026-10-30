@@ -108,8 +108,10 @@ eval and data jobs running):
   native engine's; imported positions occupy cache but not own positions. `decide` on GPU
   (`check_sglang_decide_parity.py`, 5 prompts x 6 options): per-token |dlogp| vs native FP32 0.021 (native BF16 floor
   0.022), max 0.076 (floor 0.125), same continuation tokens, same best option in 5/5, 0 fallbacks.
-- **Native adapters on SGLang** (fork c98c324989f2e96e377b13b69ce379da169b34ca[:10], actor flag `--sglang-adapter-slots N`, default 0 = adapted turns on
-  the native engine). The front turns a request's adapter stack (or the actor's default stack) into one summed
+- **Native adapters on SGLang** (fork c98c324989 + dff145de20, actor flag `--sglang-adapter-slots N`, default 4; 0 opts out and runs
+  adapted turns on the native engine). Batches without an adapted request replay the base-only (`nolora`) decode
+  graph and skip the delta path eagerly, so an empty pool adds no per-step work; the overhead is measured on the live
+  RL actor (decode tok/s and request rate, first round-6+ collection vs round 5). The front turns a request's adapter stack (or the actor's default stack) into one summed
   low-rank pair per fork module (`native_adapters.lowrank_factors`: xs `left@core`/`right^T`, free-lora
   `alpha/r*scale*B`/`A`; q|k|v and w1|w3 packed at their row offsets, export schema 5 `adapter_targets`), assigns
   one of N resident slots (never reassigned while a request uses it) and records the native effective identity and
