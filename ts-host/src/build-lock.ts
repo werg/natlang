@@ -5,16 +5,16 @@
  */
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
-import { currentRelease } from '../adaptation/weights/release.js';
-import { natlangRuntime, type ConfiguredNatlangRuntime } from '../configured-runtime.js';
-import { readNatlangFrontmatter } from '../runtime/loader.js';
-import { fileTraceSink, loadNatlang } from '../runtime/node-files.js';
-import type { LiveSink } from '../runtime/runtime.js';
-import { parsePackageManifest, type NatlangPackageManifest } from '../package/manifest.js';
-import { BUILD_LOCK_SCHEMA, readBuildLock, writeBuildLock, type BuildLock, type WarmCaseResult } from '../package/warm.js';
-import type { LoadedModelConfiguration } from '../model/config.js';
-import { discoverLlamaRuntime, type LlamaRuntimeDiscovery, type LlamaServerInspection } from '../model/llama-runtime.js';
-import { runtimeLabel } from '../model/local-server.js';
+import { currentRelease } from './adaptation/weights/release.js';
+import { natlangRuntime, type ConfiguredNatlangRuntime } from './configured-runtime.js';
+import { readNatlangFrontmatter } from './runtime/loader.js';
+import { fileTraceSink, loadNatlang } from './runtime/node-files.js';
+import type { LiveSink } from './runtime/runtime.js';
+import { parsePackageManifest, type NatlangPackageManifest } from './package/manifest.js';
+import { BUILD_LOCK_SCHEMA, readBuildLock, writeBuildLock, type BuildLock, type WarmCaseResult } from './package/warm.js';
+import type { LoadedModelConfiguration } from './model/config.js';
+import { discoverLlamaRuntime, type LlamaRuntimeDiscovery, type LlamaServerInspection } from './model/llama-runtime.js';
+import { runtimeLabel } from './model/local-server.js';
 
 const IGNORED = new Set(['.git', '.natlang', 'node_modules', 'dist', '.venv']);
 

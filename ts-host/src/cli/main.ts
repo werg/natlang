@@ -5,13 +5,13 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { isDeepStrictEqual } from 'node:util';
-import { createProgram, readExamples } from './authoring.js';
+import { createProgram, readExamples } from '../package/authoring.js';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, defaultNatlangConfigDirectory, satisfiesVersion } from '../package/store.js';
 import { modelStatus, programForStatus } from './status.js';
 import { commandProgress, parseProgressMode } from './progress.js';
-import { lockFor, readProgramManifest, warmProgram } from './build-lock.js';
+import { lockFor, readProgramManifest, warmProgram } from '../build-lock.js';
 import { writeBuildLock, type BuildLock } from '../package/warm.js';
 import { defaultNativePython, ensureNativeServer, ownsNativeServer, pinNativeCheckpoint, readCheckpointPointer, removeNativePin, exportNativeGguf, findNativeCheckpoint,
   stopNativeServer, type NativeModelSettings } from '../model/native-managed.js';

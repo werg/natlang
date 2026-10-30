@@ -29,11 +29,12 @@ const SCHEMA = 'natlang.vendor-pin/1';
 /** Files besides the bundles' own inputs that decide what a build produces. Paths relative to ts-host. */
 const BUILD_CONFIGURATION = ['scripts/vendor-build.mjs', 'scripts/browser-node-imports.mjs', 'tsconfig.json'];
 
-const git = (...args) => {
+const gitRaw = (...args) => {
   const result = spawnSync('git', ['-C', tsHost, ...args], { encoding: 'utf8', maxBuffer: 1 << 28 });
   if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr.trim()}`);
-  return result.stdout.trim();
+  return result.stdout;
 };
+const git = (...args) => gitRaw(...args).trim();
 const sha256 = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 const repositoryRoot = git('rev-parse', '--show-toplevel');
 const prefix = relative(repositoryRoot, tsHost).split('\\').join('/');
@@ -54,7 +55,7 @@ function filesUnder(directory) {
 function differingFromHead(paths) {
   const unique = [...new Set(paths)].sort();
   const tracked = new Set(git('ls-files', '--', ...unique).split('\n').filter(Boolean));
-  const changed = new Set(git('status', '--porcelain', '--', ...unique).split('\n').filter(Boolean).map(line => relative(prefix, line.slice(3)).split('\\').join('/')));
+  const changed = new Set(gitRaw('status', '--porcelain', '--', ...unique).split('\n').filter(Boolean).map(line => relative(prefix, line.slice(3)).split('\\').join('/')));
   return unique.filter(path => !tracked.has(path) || changed.has(path));
 }
 
