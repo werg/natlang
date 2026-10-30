@@ -436,7 +436,12 @@ def test_reverse_kl_stays_finite_for_a_peaked_sample_the_twin_rates_much_lower()
     assert torch.isfinite(actual).all()
     torch.testing.assert_close(actual.double(), expected, rtol=1e-4, atol=1e-5)
     actual.sum().backward()
+    z64 = logits.double().requires_grad_(True)
+    lp64 = torch.log_softmax(z64, -1)
+    (lp64.exp() * (lp64 - lq)).sum(-1).sum().backward()
+    # The normalizer shift cancels in the gradient p (delta - KL); a saturated p leaves ~1e-9 absolute gradient.
     assert torch.isfinite(z.grad).all()
+    torch.testing.assert_close(z.grad.double(), z64.grad, rtol=0, atol=1e-8)
 
 
 def test_root_calls_come_from_the_execution_graph_not_turn_order():
