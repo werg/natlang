@@ -278,6 +278,26 @@ def _as_insertion(block, rendering_turn):
     return replace(block, token_ids=tuple(tokens), import_offset=offset)
 
 
+def check_episode_guidance(rollout, turns):
+    """The episode's JOLT+ role after the model-free integrity checks of its recorded guidance modes.
+
+    Integrity, not custody: a failure here is never turned into a refusal. Also used by the RL runtime-switch
+    preflight to check a collected round against a learner before that learner is launched."""
+    role = rollout.get('jolt_role', 'student')
+    if role not in ('student', 'teacher'):
+        raise ValueError('JOLT+ episode role must be student or teacher')
+    flagged = policy_turns(turns)
+    for turn in turns:
+        capture = turn.get('sampling') or {}
+        sampled = any(segment.get('privileged') for segment in capture.get('prompt') or [])
+        mode = (capture.get('privileged') or {}).get('mode')
+        if role == 'student' and (sampled or mode not in (None, 'write-only', 'text-twin')):
+            raise ValueError('a student episode was sampled with guidance; mark it as a teacher attempt')
+        if (sampled or mode is not None) and turn.get('graph_turn') in flagged:
+            raise ValueError('a guidance policy turn carries guidance itself')
+    return role
+
+
 def add_privileged_twin(replay, rollout, graph, source, *, turns):
     """Append the episode's whole-graph twin to ``graph``; bind every sampled action to its twin query.
 
@@ -296,18 +316,8 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
     from ..model.native_graph_plan import compile_graph, invocation_dict
     from ..common.custody import CustodyError
     from .privileged_scoring import student_form, teacher_form, writer_span
-    role = rollout.get('jolt_role', 'student')
-    if role not in ('student', 'teacher'):
-        raise ValueError('JOLT+ episode role must be student or teacher')
+    role = check_episode_guidance(rollout, turns)
     flagged = policy_turns(turns)
-    for turn in turns:  # integrity, not custody: never turned into a refusal
-        capture = turn.get('sampling') or {}
-        sampled = any(segment.get('privileged') for segment in capture.get('prompt') or [])
-        mode = (capture.get('privileged') or {}).get('mode')
-        if role == 'student' and (sampled or mode not in (None, 'write-only', 'text-twin')):
-            raise ValueError('a student episode was sampled with guidance; mark it as a teacher attempt')
-        if (sampled or mode is not None) and turn.get('graph_turn') in flagged:
-            raise ValueError('a guidance policy turn carries guidance itself')
     try:
         if source is None:
             raise CustodyError('no privileged source is available to this learner')

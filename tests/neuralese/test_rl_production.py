@@ -489,3 +489,33 @@ def test_collection_binding_treats_removed_null_semantic_adapter_field_as_absent
     assert _legacy_collection_binding(old) == {'cases_sha256': 'a', 'expected_native_actor': {'checkpoint': 'c'}}
     bound = {'cases_sha256': 'a', 'expected_native_actor': {'checkpoint': 'c', 'semantic_adapter_sha256': 'x'}}
     assert _legacy_collection_binding(bound) == bound
+
+
+def test_binding_differences_name_nested_keys_and_runtime_as_one():
+    recorded = {'cases_sha256': 'a', 'runtime': {'x.js': '1'}, 'expected_native_actor': {'python_runtime': 'p', 'k': 1}}
+    current = {'cases_sha256': 'a', 'runtime': {'x.js': '2'}, 'expected_native_actor': {'python_runtime': 'q'}}
+    assert production._binding_differences(recorded, current) == [
+        'expected_native_actor.k', 'expected_native_actor.python_runtime', 'runtime']
+
+
+def test_resolve_collection_binding_keeps_recorded_teacher_attempts():
+    base = {'cases_sha256': 'a'}
+    jolt = {**base, 'jolt_teacher_attempts': 1,
+            'jolt_guidance': {'schema': 'natlang.guidance-run/1', 'teacher_plan': 'crisp'}}
+    assert production.resolve_collection_binding(jolt, base, 1, 'crisp') == (jolt, 1)
+    assert production.resolve_collection_binding(None, base, 1, 'crisp') == (jolt, 1)
+    # A collection bound without teacher attempts keeps that behaviour.
+    assert production.resolve_collection_binding(base, base, 1, 'crisp') == (base, 0)
+
+
+def test_resume_preflight_unbound_round_writes_nothing_outside_scratch(tmp_path):
+    out = tmp_path / 'lineage'
+    (out / 'round-000003').mkdir(parents=True)
+    write_json_durable(out / 'state.json', {'round': 3, 'trained_rounds': 3})
+    config = tmp_path / 'config.json'
+    config.write_text(json.dumps({'out': str(out), 'native_state': True}))
+    before = sorted(str(p) for p in tmp_path.rglob('*'))
+    result = production.resume_preflight(config, tmp_path / 'scratch')
+    assert result['ok'] and result['status'] == 'unbound'
+    after = sorted(str(p) for p in tmp_path.rglob('*') if 'scratch' not in str(p))
+    assert after == before

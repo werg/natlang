@@ -429,6 +429,50 @@ def bind_collection_prompt(entries, mode):
     return entries
 
 
+def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root_mode, runtime, seed_base,
+                       neuralese_server, case_seconds, max_model_requests, max_turns, expected_native=None,
+                       behavior_top_k=None, system_prompt=None, prompt_rendering=None, guidance_stage=None,
+                       coefficient_policy=None):
+    """The exact provenance a collection binds (no side effects): cases, policy, sampling, runtime and actor."""
+    from ..common.hashing import sha256_file_hex, sha256_hex
+    runtime = Path(runtime or root('repo') / 'ts-host')
+    binding = {'schema': 'natlang.rl-collection-binding/1',
+        'cases_sha256': sha256_file_hex(Path(cases)), 'policy_id': policy_id,
+        'rows': rows, 'offset': offset, 'group': group, 'root_mode': root_mode,
+        'seed_base': seed_base, 'temperature': 1., 'guided': False,
+        'case_seconds': case_seconds, 'max_model_requests': max_model_requests, 'max_turns': max_turns,
+        **({'guidance_stage':guidance_stage} if guidance_stage is not None else {}),
+        'endpoints': endpoints, 'neuralese_server': neuralese_server,
+        **({'prompt_rendering':prompt_rendering} if prompt_rendering is not None else {}),
+        'runtime': {str(p.relative_to(runtime)): sha256_file_hex(p)
+                    for p in sorted((runtime / 'dist').rglob('*.js'))},
+        'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py'),
+        **({'expected_native_actor': expected_native} if expected_native is not None else {}),
+        **({'behavior_top_k': behavior_top_k} if behavior_top_k is not None else {}),
+        **({'guided': True, 'system_prompt_sha256': sha256_hex(system_prompt.encode())}
+           if system_prompt is not None else {})}
+    coefficient_runtime=None
+    if coefficient_policy is not None:
+        from ..model.native_coefficient_policy import runtime_binding
+        coefficient_policy=Path(coefficient_policy).resolve(strict=True)
+        coefficient_runtime=runtime_binding(json.loads(coefficient_policy.read_text()),coefficient_policy)
+        binding['coefficient_policy']={'path':str(coefficient_policy),'sha256':sha256_file_hex(coefficient_policy),'runtime':coefficient_runtime}
+    return binding
+
+
+def resolve_collection_binding(recorded, binding, teacher_attempts, teacher_plan):
+    """(binding to compare or write, effective teacher attempts) for a collection whose receipt is ``recorded``."""
+    if teacher_attempts and recorded != binding:
+        # A collection bound before teacher attempts existed keeps its recorded behaviour.
+        if teacher_plan not in ('nl', 'crisp'):
+            raise ValueError("jolt_teacher_plan is 'nl' (planTeacherAttempts) or 'crisp'")
+        binding = {**binding, 'jolt_teacher_attempts': teacher_attempts,
+                   'jolt_guidance': {'schema': 'natlang.guidance-run/1', 'teacher_plan': teacher_plan}}
+    elif recorded is not None:
+        teacher_attempts = 0
+    return binding, teacher_attempts
+
+
 def _legacy_collection_binding(recorded):
     """Bindings written before the semantic-adapter route was removed carry its always-null actor field;
     a null value binds nothing, so it is equal to the field's absence."""
@@ -463,42 +507,21 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         raise InterruptedError('collection stop requested')
     if not endpoints or workers < 1:
         raise ValueError('RL needs served endpoints and positive worker concurrency')
-    from ..common.hashing import sha256_file_hex, sha256_hex
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    runtime = Path(runtime or root('repo') / 'ts-host')
-    binding = {'schema': 'natlang.rl-collection-binding/1',
-        'cases_sha256': sha256_file_hex(Path(cases)), 'policy_id': policy_id,
-        'rows': rows, 'offset': offset, 'group': group, 'root_mode': root_mode,
-        'seed_base': seed_base, 'temperature': 1., 'guided': False,
-        'case_seconds': case_seconds, 'max_model_requests': max_model_requests, 'max_turns': max_turns,
-        **({'guidance_stage':guidance_stage} if guidance_stage is not None else {}),
-        'endpoints': endpoints, 'neuralese_server': neuralese_server,
-        **({'prompt_rendering':prompt_rendering} if prompt_rendering is not None else {}),
-        'runtime': {str(p.relative_to(runtime)): sha256_file_hex(p)
-                    for p in sorted((runtime / 'dist').rglob('*.js'))},
-        'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py'),
-        **({'expected_native_actor': expected_native} if expected_native is not None else {}),
-        **({'behavior_top_k': behavior_top_k} if behavior_top_k is not None else {}),
-        **({'guided': True, 'system_prompt_sha256': sha256_hex(system_prompt.encode())}
-           if system_prompt is not None else {})}
-    coefficient_runtime=None
+    binding = collection_binding(cases=cases, endpoints=endpoints, policy_id=policy_id, rows=rows, offset=offset,
+        group=group, root_mode=root_mode, runtime=runtime, seed_base=seed_base, neuralese_server=neuralese_server,
+        case_seconds=case_seconds, max_model_requests=max_model_requests, max_turns=max_turns,
+        expected_native=expected_native, behavior_top_k=behavior_top_k, system_prompt=system_prompt,
+        prompt_rendering=prompt_rendering, guidance_stage=guidance_stage, coefficient_policy=coefficient_policy)
+    coefficient_runtime = (binding.get('coefficient_policy') or {}).get('runtime')
     if coefficient_policy is not None:
-        from ..model.native_coefficient_policy import runtime_binding
-        coefficient_policy=Path(coefficient_policy).resolve(strict=True)
-        coefficient_runtime=runtime_binding(json.loads(coefficient_policy.read_text()),coefficient_policy)
-        binding['coefficient_policy']={'path':str(coefficient_policy),'sha256':sha256_file_hex(coefficient_policy),'runtime':coefficient_runtime}
+        coefficient_policy = Path(coefficient_policy).resolve(strict=True)
     receipt = out / 'collection-binding.json'
-    if teacher_attempts and not (receipt.exists() and json.loads(receipt.read_text()) == binding):
-        # A collection bound before teacher attempts existed keeps its recorded behaviour.
-        if teacher_plan not in ('nl', 'crisp'):
-            raise ValueError("jolt_teacher_plan is 'nl' (planTeacherAttempts) or 'crisp'")
-        binding['jolt_teacher_attempts'] = teacher_attempts
-        binding['jolt_guidance'] = {'schema': 'natlang.guidance-run/1', 'teacher_plan': teacher_plan}
-    elif receipt.exists():
-        teacher_attempts = 0
-    if receipt.exists():
-        if _legacy_collection_binding(json.loads(receipt.read_text())) != binding:
+    recorded = json.loads(receipt.read_text()) if receipt.exists() else None
+    binding, teacher_attempts = resolve_collection_binding(recorded, binding, teacher_attempts, teacher_plan)
+    if recorded is not None:
+        if _legacy_collection_binding(recorded) != binding:
             raise ValueError('RL collection resume policy/cases/sampling/runtime changed')
     elif (out / 'score.json').exists():
         raise ValueError('completed RL collection has no provenance binding')
@@ -922,6 +945,193 @@ def initial_capacity_collection(config,state):
     return {**config,'rows_per_round':1,'group':2,'workers':1}
 
 
+def prepare_round_collection(config, state, round_dir, selected_path, selection, control=None, tokenizer_out=None):
+    """The current round's actor policy, learner values and exact collect() arguments (shared by run and preflight).
+
+    ``tokenizer_out`` redirects the raw policy's tokenizer export (a dry-run preflight writes only scratch)."""
+    from ..common.hashing import sha256_file_hex
+    policy = sha256_file_hex(Path(state['checkpoint']))
+    if config.get('native_checkpoint_control_directory') is not None:
+        from ..model.native_checkpoint_control import resolve_checkpoint_controls
+        config = resolve_checkpoint_controls(config, {'path': state['checkpoint'],
+            'sha256': policy, 'bytes': Path(state['checkpoint']).stat().st_size})
+    values = {**{k: v for k, v in config.items() if isinstance(v, (str, int, float, list))},
+              'checkpoint': state['checkpoint'], 'policy_id': policy, 'out': str(round_dir),
+              'rollouts': str(round_dir / 'rollouts.jsonl'), 'mode': 'grpo',
+              'learner_out': str(round_dir / 'learner'), 'block_bundle': '',
+              'continue_identity': str(Path(state['checkpoint']).parent / 'identity-check.json'),
+              'continue_monitor_reference': str(Path(state['checkpoint']).parent / 'monitor-reference.pt')}
+    if control is not None:
+        values['_run_control'] = control
+    policy_loss = bind_policy_loss(config, values)
+    from ..train.recipe import stage_parameter_args
+    expected_native = None
+    if config.get('native_state'):
+        from .native_raw_policy import prepare_raw_policy
+        controls = config.get('native_checkpoint_controls') or {}
+        if not isinstance(controls, dict):
+            raise ValueError('raw checkpoint controls must be explicit full-source SHA256 selectors')
+        raw = prepare_raw_policy(state['checkpoint'], base=config['base'],
+            tokenizer_out=tokenizer_out or Path(config['out'])/'actor-tokenizers'/policy,
+            **({'checkpoint_control': controls[policy]} if policy in controls else {}))
+        expected_native = raw
+        values['rl_tokenizer'] = raw['tokenizer']
+        if raw.get('history_reasoning') is not None:
+            values['history_reasoning_policy'] = raw['history_reasoning']['policy']
+        else:
+            values.pop('history_reasoning_policy', None)
+        if raw.get('history_reasoning_binding') is not None:
+            values['history_reasoning_binding_path'] = raw['history_reasoning_binding']['path']
+            values['history_reasoning_binding_sha256'] = raw['history_reasoning_binding']['sha256']
+        else:
+            values.pop('history_reasoning_binding_path', None)
+            values.pop('history_reasoning_binding_sha256', None)
+    values['trainer_args'] = (native_policy_trainer_args(config.get('trainer_parameters', {}), expected_native)
+        if expected_native is not None else stage_parameter_args(config.get('trainer_parameters', {})))
+    values['seed_trainer_args']=stage_parameter_args(config.get('seed_trainer_parameters',config.get('trainer_parameters',{})))
+    if config.get('coefficient_policy'):
+        policy_path=Path(state.get('coefficient_policy',config['coefficient_policy'])).resolve(strict=True)
+        # An already sealed round keeps its original collection actor
+        # while the learner/publication is resumed. The current policy
+        # may already have advanced; never recollect or relabel that row.
+        if state.get('active_update_round')==str(round_dir) and state.get('update_coefficient_policy'):
+            sealed=state['update_coefficient_policy']
+            policy_path=Path(sealed['path']).resolve(strict=True)
+            if sha256_file_hex(policy_path)!=sealed['sha256']:
+                raise ValueError('sealed coefficient round source policy changed during publication recovery')
+        values.update(coefficient_policy=str(policy_path),coefficient_policy_sha256=sha256_file_hex(policy_path),
+            coefficient_cancel_stale_reason=config.get('coefficient_cancel_stale_reason'))
+    if config.get('heads'):
+        values['heads_sha256'] = sha256_file_hex(Path(config['heads']))
+    if config.get('actor_engine', 'native-python') not in ('native-python', 'llama-cpp'):
+        raise ValueError('RL actor_engine must be native-python or llama-cpp')
+    if config.get('actor_engine') == 'llama-cpp':
+        if expected_native is None:
+            raise ValueError('llama.cpp RL actor requires the raw native policy')
+        expected_native, actor_values = prepare_llama_actor(config, state['checkpoint'], policy, expected_native)
+        values.update(actor_values)
+    elif config.get('native_actor_python_runtime') is not None:
+        if expected_native is None:
+            raise ValueError('Python actor runtime binding requires an exact native policy')
+        validate_actor_runtime_configuration(config)
+        expected_native = {**expected_native, 'python_runtime': config['native_actor_python_runtime']}
+    # The llama.cpp fork does not insert or record privileged guidance blocks (only the Python native server does),
+    # so its teacher attempts would be unprivileged and refused by the learner. JOLT+ there keeps its outcome and
+    # student self-teaching terms without teacher twins.
+    teacher_attempts = (config.get('jolt_teacher_attempts', 1)
+        if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'
+        and config.get('update_objective', 'policy') == 'policy'
+        and config.get('actor_engine', 'native-python') == 'native-python' else 0)
+    kwargs = dict(cases=selected_path, out=round_dir, endpoints=config['endpoints'], policy_id=policy,
+        rows=len(selection), offset=0, group=selection[0]['samples'], workers=config.get('workers', 4),
+        root_mode=config.get('root_mode', 'student'), runtime=config.get('runtime'),
+        seed_base=700000 + state['round'] * 1000000, neuralese_server=config.get('neuralese_server', True),
+        coefficient_policy=values.get('coefficient_policy'), case_seconds=config.get('case_seconds', 600),
+        max_model_requests=config.get('max_model_requests', 128), max_turns=config.get('max_turns', 160),
+        control=control, expected_native=expected_native,
+        **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
+        teacher_attempts=teacher_attempts, teacher_plan=config.get('jolt_teacher_plan', 'nl'),
+        guidance_stage=config.get('jolt_guidance_stage'), prompt_rendering=config.get('prompt_rendering'))
+    return config, values, policy, policy_loss, expected_native, kwargs
+
+
+def _binding_differences(recorded, current, prefix=''):
+    """Dotted keys whose values differ between two bindings (nested dictionaries are compared key by key)."""
+    out = []
+    for key in sorted(set(recorded) | set(current)):
+        a, b = recorded.get(key, '<absent>'), current.get(key, '<absent>')
+        if isinstance(a, dict) and isinstance(b, dict) and key != 'runtime':
+            out += _binding_differences(a, b, prefix + key + '.')
+        elif a != b:
+            out.append(prefix + key)
+    return out
+
+
+def resume_preflight(config_path, scratch):
+    """Dry run: would THIS code resume the lineage's current round from its actual state and bindings?
+
+    Run under the candidate runtime before switching a lineage to it. Writes only below ``scratch``; never starts
+    an actor, a collection or a learner. A round without a collection binding is ``unbound`` (any runtime may take
+    it). A bound round passes when the collection binding this code would compute equals the recorded one and,
+    for JOLT+, every collected episode passes the learner's model-free guidance-mode integrity checks."""
+    import copy
+    from ..common.hashing import sha256_file_hex, canonical_json_sha256_hex
+    from ..train.recipe import resolve_recipe_data
+    scratch = Path(scratch)
+    scratch.mkdir(parents=True, exist_ok=True)
+    scratch_state = scratch / 'state.json'
+    config = resolve_recipe_data(Path(config_path))
+    out = Path(config['out']).resolve()
+    state_path = out / 'state.json'
+    report = {'schema': 'natlang.rl-resume-preflight/1', 'config': str(config_path), 'runtime': str(root('repo'))}
+    if not state_path.exists():
+        return {**report, 'ok': True, 'status': 'unbound', 'reason': 'no controller state yet'}
+    state = copy.deepcopy(json.loads(state_path.read_text()))
+    normalize_legacy_completed_update(state, scratch_state)
+    report['round'] = state.get('round')
+    attempt = state.get('collection_attempt', 0)
+    round_dir = out / (f"round-{state['round']:06d}" + (f'-attempt-{attempt}' if attempt else ''))
+    selection_file = out / f"round-{state['round']:06d}-selection.json"
+    receipt = round_dir / 'collection-binding.json'
+    if not receipt.exists():
+        return {**report, 'ok': True, 'status': 'unbound', 'reason': 'current round has no collection binding'}
+    report['round_dir'] = str(round_dir)
+    config = adopt_policy_loss_defaults(config, state, scratch_state)
+    config = initial_capacity_collection(config, state)
+    if state.get('native_participant') is not None:
+        config = {**config, 'native_participant': state['native_participant']}
+    if config.get('actor_engine') == 'llama-cpp':
+        return {**report, 'ok': False, 'status': 'unchecked',
+                'reason': 'llama.cpp actor preparation exports weights; preflight does not run it'}
+    snapshot = json.loads(selection_file.read_text())
+    selection, selected = snapshot['selection'], snapshot['cases']
+    selected_path = round_dir / 'selected-cases.jsonl'
+    if canonical_json_sha256_hex(list(read_jsonl(selected_path))) != canonical_json_sha256_hex(selected):
+        return {**report, 'ok': False, 'status': 'mismatch', 'differences': ['selected_cases']}
+    config, values, policy, policy_loss, expected_native, kwargs = prepare_round_collection(
+        config, state, round_dir, selected_path, selection, tokenizer_out=scratch / 'actor-tokenizer')
+    if expected_native is not None and 'tokenizer' in expected_native:
+        # The scratch tokenizer export stands for the lineage's real one: rebind its paths after proving the
+        # history-reasoning binding has identical content.
+        real = Path(config['out']).resolve() / 'actor-tokenizers' / policy
+        history = real / 'natlang-history-reasoning.json'
+        scratch_binding = expected_native.get('history_reasoning_binding')
+        if scratch_binding is not None:
+            if not history.exists() or sha256_file_hex(history) != scratch_binding['sha256']:
+                return {**report, 'ok': False, 'status': 'mismatch', 'differences': ['actor_tokenizer.history_reasoning']}
+            scratch_binding = {**scratch_binding, 'path': str(history)}
+        expected_native = {**expected_native, 'tokenizer': str(real),
+                           **({'history_reasoning_binding': scratch_binding} if scratch_binding is not None else {})}
+    continuation = (config.get('sealed_collection_continuations') or {}).get(str(Path(round_dir).resolve()))
+    if continuation is not None:
+        return {**report, 'ok': False, 'status': 'unchecked', 'reason': 'sealed collection continuation'}
+    binding = collection_binding(**{key: kwargs[key] for key in ('cases', 'endpoints', 'policy_id', 'rows',
+        'offset', 'group', 'root_mode', 'runtime', 'seed_base', 'neuralese_server', 'case_seconds',
+        'max_model_requests', 'max_turns', 'behavior_top_k', 'prompt_rendering', 'guidance_stage',
+        'coefficient_policy') if key in kwargs}, expected_native=expected_native)
+    recorded = json.loads(receipt.read_text())
+    binding, _ = resolve_collection_binding(recorded, binding, kwargs['teacher_attempts'], kwargs['teacher_plan'])
+    differences = _binding_differences(_legacy_collection_binding(recorded), binding)
+    report['collection'] = {'ok': not differences, 'differences': differences}
+    learner = {'ok': True, 'checked_episodes': 0}
+    rollouts = round_dir / 'rollouts.jsonl'
+    if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' and rollouts.exists():
+        from .episode_graph import whole_episode_turns
+        from .jolt import check_episode_guidance
+        for rollout in read_jsonl(rollouts):
+            if not rollout.get('turns'):
+                continue
+            try:
+                check_episode_guidance(rollout, whole_episode_turns(rollout))
+            except ValueError as error:
+                learner = {'ok': False, 'error': str(error), 'task_id': rollout.get('task_id')}
+                break
+            learner['checked_episodes'] += 1
+    report['learner'] = learner
+    ok = not differences and learner['ok']
+    return {**report, 'ok': ok, 'status': 'match' if ok else 'mismatch'}
+
+
 def run(config_path, *, rounds=None, stop=None):
     """Hot-reload configuration at round boundaries; preserve actual state/exposure."""
     from ..common.hashing import sha256_file_hex
@@ -1013,96 +1223,13 @@ def run(config_path, *, rounds=None, stop=None):
             else:
                 from ..common.jsonio import write_bytes_durable
                 write_bytes_durable(selected_path, ''.join(json.dumps(row) + '\n' for row in selected).encode('utf-8'))
-            policy = sha256_file_hex(Path(state['checkpoint']))
-            if config.get('native_checkpoint_control_directory') is not None:
-                from ..model.native_checkpoint_control import resolve_checkpoint_controls
-                config = resolve_checkpoint_controls(config, {'path': state['checkpoint'],
-                    'sha256': policy, 'bytes': Path(state['checkpoint']).stat().st_size})
-            values = {**{k: v for k, v in config.items() if isinstance(v, (str, int, float, list))},
-                      'checkpoint': state['checkpoint'], 'policy_id': policy, 'out': str(round_dir),
-                      'rollouts': str(round_dir / 'rollouts.jsonl'), 'mode': 'grpo',
-                      'learner_out': str(round_dir / 'learner'), 'block_bundle': '',
-                      'continue_identity': str(Path(state['checkpoint']).parent / 'identity-check.json'),
-                      'continue_monitor_reference': str(Path(state['checkpoint']).parent / 'monitor-reference.pt')}
-            if control is not None:
-                values['_run_control'] = control
-            policy_loss = bind_policy_loss(config, values)
             from ..train.recipe import stage_parameter_args
-            expected_native = None
-            if config.get('native_state'):
-                from .native_raw_policy import prepare_raw_policy
-                controls = config.get('native_checkpoint_controls') or {}
-                if not isinstance(controls, dict):
-                    raise ValueError('raw checkpoint controls must be explicit full-source SHA256 selectors')
-                raw = prepare_raw_policy(state['checkpoint'], base=config['base'],
-                    tokenizer_out=Path(config['out'])/'actor-tokenizers'/policy,
-                    **({'checkpoint_control': controls[policy]} if policy in controls else {}))
-                expected_native = raw
-                values['rl_tokenizer'] = raw['tokenizer']
-                if raw.get('history_reasoning') is not None:
-                    values['history_reasoning_policy'] = raw['history_reasoning']['policy']
-                else:
-                    values.pop('history_reasoning_policy', None)
-                if raw.get('history_reasoning_binding') is not None:
-                    values['history_reasoning_binding_path'] = raw['history_reasoning_binding']['path']
-                    values['history_reasoning_binding_sha256'] = raw['history_reasoning_binding']['sha256']
-                else:
-                    values.pop('history_reasoning_binding_path', None)
-                    values.pop('history_reasoning_binding_sha256', None)
-            values['trainer_args'] = (native_policy_trainer_args(config.get('trainer_parameters', {}), expected_native)
-                if expected_native is not None else stage_parameter_args(config.get('trainer_parameters', {})))
-            values['seed_trainer_args']=stage_parameter_args(config.get('seed_trainer_parameters',config.get('trainer_parameters',{})))
-            if config.get('coefficient_policy'):
-                policy_path=Path(state.get('coefficient_policy',config['coefficient_policy'])).resolve(strict=True)
-                # An already sealed round keeps its original collection actor
-                # while the learner/publication is resumed. The current policy
-                # may already have advanced; never recollect or relabel that row.
-                if state.get('active_update_round')==str(round_dir) and state.get('update_coefficient_policy'):
-                    sealed=state['update_coefficient_policy']
-                    policy_path=Path(sealed['path']).resolve(strict=True)
-                    if sha256_file_hex(policy_path)!=sealed['sha256']:
-                        raise ValueError('sealed coefficient round source policy changed during publication recovery')
-                values.update(coefficient_policy=str(policy_path),coefficient_policy_sha256=sha256_file_hex(policy_path),
-                    coefficient_cancel_stale_reason=config.get('coefficient_cancel_stale_reason'))
-            if config.get('heads'):
-                values['heads_sha256'] = sha256_file_hex(Path(config['heads']))
-            if config.get('actor_engine', 'native-python') not in ('native-python', 'llama-cpp'):
-                raise ValueError('RL actor_engine must be native-python or llama-cpp')
-            if config.get('actor_engine') == 'llama-cpp':
-                if expected_native is None:
-                    raise ValueError('llama.cpp RL actor requires the raw native policy')
-                expected_native, actor_values = prepare_llama_actor(config, state['checkpoint'], policy, expected_native)
-                values.update(actor_values)
-            elif config.get('native_actor_python_runtime') is not None:
-                if expected_native is None:
-                    raise ValueError('Python actor runtime binding requires an exact native policy')
-                validate_actor_runtime_configuration(config)
-                expected_native = {**expected_native, 'python_runtime': config['native_actor_python_runtime']}
+            config, values, policy, policy_loss, expected_native, collect_kwargs = prepare_round_collection(
+                config, state, round_dir, selected_path, selection, control)
             if config.get('before_collect'):
                 run_command(config['before_collect'], values)
             try:
-                report = collect_with_actor(config, values, cases=selected_path, out=round_dir,
-                    endpoints=config['endpoints'], policy_id=policy,
-                    rows=len(selected), offset=0,
-                    group=selection[0]['samples'], workers=config.get('workers', 4),
-                    root_mode=config.get('root_mode', 'student'), runtime=config.get('runtime'),
-                    seed_base=700000 + state['round'] * 1000000,
-                    neuralese_server=config.get('neuralese_server', True),
-                    coefficient_policy=values.get('coefficient_policy'),
-                    case_seconds=config.get('case_seconds', 600),
-                    max_model_requests=config.get('max_model_requests', 128),
-                    max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native,
-                    **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
-                    # The llama.cpp fork does not insert or record privileged guidance blocks (only the Python
-                    # native server does), so its teacher attempts would be unprivileged and refused by the learner.
-                    # JOLT+ there keeps its outcome and student self-teaching terms without teacher twins.
-                    teacher_attempts=(config.get('jolt_teacher_attempts', 1)
-                                      if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'
-                                      and config.get('update_objective', 'policy') == 'policy'
-                                      and config.get('actor_engine', 'native-python') == 'native-python' else 0),
-                    teacher_plan=config.get('jolt_teacher_plan', 'nl'),
-                    guidance_stage=config.get('jolt_guidance_stage'),
-                    prompt_rendering=config.get('prompt_rendering'))
+                report = collect_with_actor(config, values, **collect_kwargs)
             except InterruptedError:
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)
@@ -1590,6 +1717,9 @@ def main(argv=None):
     r = sub.add_parser('run')
     r.add_argument('--config', type=Path, required=True)
     r.add_argument('--rounds', type=int)
+    f = sub.add_parser('preflight', help='dry-run: can this runtime resume the lineage\'s current round? (exit 3: no)')
+    f.add_argument('--config', type=Path, required=True)
+    f.add_argument('--scratch', type=Path, required=True)
     c = sub.add_parser('collect')
     c.add_argument('--cases', type=Path, required=True)
     c.add_argument('--out', type=Path, required=True)
@@ -1621,6 +1751,10 @@ def main(argv=None):
     if a.command == 'configure':
         configure(a)
         return
+    if a.command == 'preflight':
+        result = resume_preflight(a.config, a.scratch)
+        print(json.dumps(result))
+        raise SystemExit(0 if result['ok'] else 3)
     if a.command == 'run':
         from ..train.loop import StopSignal
         stop = StopSignal().install()
