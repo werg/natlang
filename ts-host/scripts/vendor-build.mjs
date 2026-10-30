@@ -3,6 +3,7 @@
  * (scripts/build-core.mjs). One definition per target, one build function:
  *
  *   core   the platform-neutral runtime for workerd (src/core/index.ts): an ESM bundle that loads with `nodejs_compat`
+ *   workerd  the same core with TypeScript bundled in, for hosts that cannot install TypeScript 5 as a package (see below)
  *   llama  the managed llama.cpp package (src/llama/index.ts), for Node
  *   eval   the evaluation, adaptation and optimization APIs (src/entry/evaluation.ts), for Node, with the evaluation worker
  *   dashboard  the dashboard's embeddable page modules and styles (scripts/dashboard-assets.mjs): copied files, not a bundle
@@ -57,10 +58,32 @@ function coreNodeImports(entry) {
   } };
 }
 
+/**
+ * What a self-contained workerd bundle does with the CommonJS compiler it carries. TypeScript decides at load whether it
+ * runs on Node by reading `process.browser` (defined true for this target), so the Node built-ins it can `require` stay
+ * unused: they become empty modules (`process` the isolate's own). `undici` is the Node model backend's long-request
+ * dispatcher, which the core's model drivers never need in an isolate: its one use is stubbed to a class with no behavior.
+ */
+function selfContainedHost() {
+  const builtins = /^(?:node:)?(?:fs|path|os|crypto|util|events|buffer|stream|zlib|assert|string_decoder|url|process|inspector|perf_hooks|module|readline|tty|net|vm|child_process|worker_threads)$/;
+  return { name: 'self-contained-host', setup(build) {
+    build.onResolve({ filter: builtins }, args => args.importer.includes('/node_modules/typescript/') ? { path: args.path, namespace: 'self-contained-builtin' } : undefined);
+    build.onLoad({ filter: /.*/, namespace: 'self-contained-builtin' }, args => ({ loader: 'js',
+      contents: /process$/.test(args.path) ? 'module.exports = globalThis.process ?? {};' : 'module.exports = {};' }));
+    build.onResolve({ filter: /^undici$/ }, args => ({ path: args.path, namespace: 'self-contained-undici' }));
+    build.onLoad({ filter: /.*/, namespace: 'self-contained-undici' }, () => ({ loader: 'js', contents: 'export class Agent {}' }));
+  } };
+}
+
 /** `entries`: bundle name -> source path (the first is the target's entry point; the others are files it loads at run time). */
 export const TARGETS = {
   core: { directory: 'core', entries: { 'natlang-core': 'src/core/index.ts' }, platform: 'neutral',
     plugins: entry => [coreNodeImports(entry)], define: () => ({ __NATLANG_TS_LIBS__: JSON.stringify(embeddedLibs()) }) },
+  // Self-contained: TypeScript (the compiler API natlang runs) is bundled, so the host declares no `typescript` package, which
+  // a host that ships TypeScript 7 (no JavaScript compiler API) could not satisfy. `yaml` and `@noble/hashes` stay external.
+  workerd: { directory: 'workerd', entries: { 'natlang-workerd': 'src/core/index.ts' }, platform: 'neutral', selfContained: true,
+    plugins: entry => [coreNodeImports(entry), selfContainedHost()],
+    define: () => ({ __NATLANG_TS_LIBS__: JSON.stringify(embeddedLibs()), 'process.browser': 'true' }) },
   llama: { directory: 'llama', entries: { 'natlang-llama': 'src/llama/index.ts' }, platform: 'node' },
   // The evaluation runner starts `./worker-entry.js` beside its own file (evaluation/worker.ts).
   dashboard: { directory: 'dashboard', assets: true },
@@ -119,7 +142,9 @@ export async function buildTarget(name, outdir) {
   rmSync(join(outdir, 'types'), { recursive: true, force: true });
   for (const bundle of [...Object.keys(target.entries)]) rmSync(join(outdir, `${bundle}.js`), { force: true });
   const bundled = await esbuild({ entryPoints: Object.fromEntries(Object.entries(target.entries).map(([bundle, source]) => [bundle, join(root, source)])),
-    bundle: true, format: 'esm', platform: target.platform, packages: 'external', target: target.platform === 'node' ? 'node22' : 'es2022',
+    bundle: true, format: 'esm', platform: target.platform, target: target.platform === 'node' ? 'node22' : 'es2022',
+    ...(target.selfContained ? { external: ['yaml', '@noble/hashes', '@noble/hashes/*'], mainFields: ['module', 'main'], conditions: ['workerd', 'worker', 'browser'] }
+      : { packages: 'external' }),
     outdir, absWorkingDir: root, metafile: true, legalComments: 'none', logLevel: 'silent',
     plugins: target.plugins?.(entrySource) ?? [], define: target.define?.() ?? {} });
   const declarations = mkdtempSync(join(tmpdir(), 'natlang-types-'));
@@ -132,7 +157,7 @@ export async function buildTarget(name, outdir) {
       cpSync(join(declarations, file), join(outdir, 'types', file));
     }
     writeFileSync(join(outdir, `${entryName}.d.ts`), `export * from './types/${entryDeclaration.replace(/\.d\.ts$/, '.js')}';\n`);
-    const sources = new Set(Object.keys(bundled.metafile.inputs).filter(path => !/^[^/]*:/.test(path)));
+    const sources = new Set(Object.keys(bundled.metafile.inputs).filter(path => !/^[^/]*:/.test(path) && !path.startsWith('node_modules/')));
     for (const file of emitted) sources.add(`src/${file.replace(/\.d\.ts$/, '.ts')}`);
     const files = [...Object.keys(target.entries).map(bundle => `${bundle}.js`), `${entryName}.d.ts`, ...emitted.map(file => `types/${file}`)];
     return { files: files.sort(), sources: [...sources].sort(), metafile: bundled.metafile };
