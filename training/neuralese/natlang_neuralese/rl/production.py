@@ -206,7 +206,10 @@ def normalize_legacy_completed_update(state, state_path):
     # Known active phases are retriable work, not stale residue. Let the normal
     # state machine reopen the exact round/stage and validate its report,
     # checkpoint, source bindings and publication step before committing it.
-    if state.get('phase') in {'updating','publishing','learner_pending','awaiting_semantic_refresh'}:return False
+    # requested_stop is what a stop during the learner records (run(): no checkpoint/report yet), so it
+    # keeps its active update for the same exact reopen.
+    if state.get('phase') in {'updating','publishing','learner_pending','awaiting_semantic_refresh',
+                              'requested_stop'}:return False
     if (state.get('phase')!='collect' or type(state.get('round'))is not int or state['round']<1
             or type(state.get('trained_rounds'))is not int or state['trained_rounds']<1
             or any(key in state for key in ('pending_native_checkpoint','pending_native_round_dir',

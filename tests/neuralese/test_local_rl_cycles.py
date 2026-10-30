@@ -76,7 +76,8 @@ def test_legacy_round_marker_refuses_partial_or_noncollection_state(tmp_path,mut
 
 def test_active_round_phase_is_preserved_for_exact_state_machine_resume(tmp_path):
     from natlang_neuralese.rl.production import normalize_legacy_completed_update
-    for phase in ('updating','publishing','learner_pending','awaiting_semantic_refresh'):
+    # requested_stop: a stop during the learner keeps the active update (LFM3 sd-r1 round 4, guard stop).
+    for phase in ('updating','publishing','learner_pending','awaiting_semantic_refresh','requested_stop'):
         state={'phase':phase,'round':3,'trained_rounds':2,
             'active_update_round':str(tmp_path/'round-000002'),'update_mode':'grpo'}
         before=dict(state)
