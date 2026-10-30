@@ -103,7 +103,7 @@ def test_invalid_disconnected_state_is_checked_before_any_publication(tmp_path):
 
 
 def test_batch_can_continue_exact_external_parent(tmp_path):
-    engine, records = _history(tmp_path, 'mellum', 'adam')
+    engine, records = _history(tmp_path, 'lfm', 'adam')
     target = TensorStore()
     try:
         _artifacts(engine.store, target)

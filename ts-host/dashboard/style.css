@@ -384,4 +384,22 @@
 .nl-dash .empty .row { margin-top: 12px; }
 .nl-dash a.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
 .nl-dash a.button:hover { border-color: var(--muted); }
+/* Program page: a run bar that stays visible over long argument forms; compact function rows that open to "Try it". */
+.nl-dash .run-bar { position: sticky; bottom: 0; z-index: 2; background: var(--panel); border-top: 1px solid var(--line); margin: 0 -16px -16px; padding: 10px 16px 12px;
+  border-radius: 0 0 var(--r) var(--r); display: flex; flex-direction: column; gap: 6px; }
+.nl-dash .function-list { display: flex; flex-direction: column; gap: 8px; }
+.nl-dash .function-list > .function-card { display: block; padding: 10px 14px; }
+.nl-dash .function-card > summary { list-style: none; flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; }
+.nl-dash .function-card > summary::-webkit-details-marker { display: none; }
+.nl-dash .function-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nl-dash .function-open { color: var(--accent); white-space: nowrap; }
+.nl-dash .function-open::after { content: " ▸"; }
+.nl-dash .function-card[open] .function-open::after { content: " ▾"; }
+.nl-dash .function-card:hover { border-color: var(--muted); }
+.nl-dash .function-list .function-body { margin-top: 14px; display: flex; }
+/* Models page */
+.nl-dash .jump { display: flex; flex-direction: row; gap: 4px; flex-wrap: wrap; margin: -8px 0 -6px; }
+.nl-dash #profile-editor:empty { display: none; }
+.nl-dash .more-providers > summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.nl-dash .more-providers[open] > summary { margin-bottom: 8px; }
 }

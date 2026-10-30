@@ -5,12 +5,13 @@
  */
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createNatlangRuntime, loadNatlang } from '../dist/index.js';
 import { openAICompatibleModelTurn } from '../dist/model/openai-compatible.js';
+import { fileTraceSink } from '../dist/runtime/node-files.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const chunk = (delta, finish = null) => ({ id: 'c1', object: 'chat.completion.chunk', created: 1, model: 'm',
@@ -179,4 +180,23 @@ test('calls are bracketed by call_start and call_end live events, and their trac
   const request = events.find(event => event.type === 'trace' && event.event.kind === 'model_request' && event.event.phase === 'end');
   assert.equal(request.event.prompt_tokens, 40);
   assert.ok(!kinds.includes('trace:state'), 'scope snapshots stay out of live events');
+});
+
+test('a file trace sink writes each trace as it grows, then whole, and keeps the reasoning of each turn', async () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'natlang-trace-stream-')), 'traces');
+  const sink = fileTraceSink(dir);
+  let midCall = null;
+  const driver = () => {
+    // While the model answers, the call's file already holds the events recorded so far.
+    const files = existsSync(dir) ? readdirSync(dir) : [];
+    midCall = files.length ? readFileSync(join(dir, files[0]), 'utf8').trim().split('\n').map(line => JSON.parse(line)) : [];
+    return { calls: [['return_result', { status: 'success', value: 9 }]], reasoning: 'n is 4, so the answer is 9.', completion_tokens: 2, prompt_tokens: 40 };
+  };
+  assert.equal(await createNatlangRuntime({ model: driver, calls: false, trace: sink }).run(() => program()(4)), 9);
+  assert.ok(midCall.some(event => event.kind === 'manifest') && midCall.some(event => event.kind === 'model_request' && event.phase === 'start'),
+    'the invocation start and the pending model request are on disk before the model answers');
+  const [file] = readdirSync(dir);
+  const events = readFileSync(join(dir, file), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.deepEqual(events.map(event => event.seq), events.map((_, index) => index), 'the final file is the complete trace, each event once');
+  assert.equal(events.find(event => event.kind === 'proposal' && event.phase === 'generated').reasoning, 'n is 4, so the answer is 9.');
 });

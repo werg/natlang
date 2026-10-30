@@ -1,5 +1,5 @@
 /** Node filesystem access for the natlang loader and compiler. */
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { callableMeta, callableTree, makeCallable, namedCallable, recordOf, rememberRecord, type NatlangCallable } from './callable.js';
 import { findApplicationContext, loadCallableFolder, loadNamedFunction, type ItemRecord, type SourceFiles } from './loader.js';
@@ -93,10 +93,20 @@ export function applicationContextRecords(start: string, root?: string): { dir: 
 }
 
 /** A trace sink writing one JSONL file per natlang invocation into `dir`. */
-export function fileTraceSink(dir: string): (trace: import('./runtime.js').InvocationTrace) => void {
-  return trace => {
+export function fileTraceSink(dir: string): import('./runtime.js').TraceSink {
+  const fileOf = (callId: string) => join(dir, `${callId.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 160)}.jsonl`);
+  // Events already appended per running call: each call's file grows as it runs and is rewritten whole when it ends.
+  const written = new Map<string, number>();
+  const sink = (trace: import('./runtime.js').InvocationTrace) => {
     mkdirSync(dir, { recursive: true });
-    const name = trace.callId.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 160);
-    writeFileSync(join(dir, `${name}.jsonl`), trace.events.map(event => JSON.stringify(event)).join('\n') + '\n');
+    written.delete(trace.callId);
+    writeFileSync(fileOf(trace.callId), trace.events.map(event => JSON.stringify(event)).join('\n') + '\n');
   };
+  return Object.assign(sink, { stream(callId: string, events: readonly Record<string, unknown>[]) {
+    const from = written.get(callId) ?? 0;
+    if (events.length <= from) return;
+    if (!from) mkdirSync(dir, { recursive: true });
+    appendFileSync(fileOf(callId), events.slice(from).map(event => JSON.stringify(event)).join('\n') + '\n', { flag: from ? 'a' : 'w' });
+    written.set(callId, events.length);
+  } });
 }

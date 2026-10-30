@@ -2769,12 +2769,19 @@ def _main(argv=None, *, requested_refresh):
             'schema':'natlang.diloco-standalone-rejoin/1', 'parent':new_outer_proof['parent'],
             'global_step':global_step, 'outer_history':'new',
             'historical_outer_checkpoint':prior_outer_history[-1]['checkpoint'] if prior_outer_history else None}
+    # A replayed transition (same checkpoint/source resume) is already in the carried history: only a newly
+    # recorded transition changes the checkpoint metadata.
+    diloco_identity_history_changed=False
     if diloco is not None and getattr(diloco,'identity_transition',None):
         history=checkpoint_options.setdefault('diloco_identity_transition_history',list(((resume or {}).get('options') or {}).get('diloco_identity_transition_history') or []))
-        if diloco.identity_transition not in history:history.append(diloco.identity_transition)
+        if diloco.identity_transition not in history:
+            history.append(diloco.identity_transition)
+            diloco_identity_history_changed=True
     reopened_diloco=False
+    carried_final_delivery=None
     if diloco is not None and (not parent_continuation or carried_diloco is not None) and resume and new_outer_proof is None:
         previous_delivery=((resume.get('options') or {}).get('diloco_final_delivery') or {})
+        carried_final_delivery=previous_delivery or None
         previous_source=resume.get('source_hash')
         if previous_delivery and previous_source != source_hash:
             if (previous_delivery.get('schema')!='natlang.diloco-final-delivery/1' or
@@ -3116,7 +3123,7 @@ def _main(argv=None, *, requested_refresh):
         admission_record = None  # An actual subsequent update is a new continuation.
     if admission_record is not None:
         checkpoint_options['_pending_source_admission'] = admission_record
-    metadata_dirty = (bool(diloco_identity_transition) or reopened_diloco or last_saved_step < 0 or args.native_optimizer_migration is not None
+    metadata_dirty = (diloco_identity_history_changed or diloco_withdrawal_changed or reopened_diloco or last_saved_step < 0 or args.native_optimizer_migration is not None
         or source_correction_result.get('changed', False)
         or foundation_declaration_changed
         or foundation_dependencies_changed
@@ -3817,12 +3824,16 @@ def _main(argv=None, *, requested_refresh):
                 if getattr(diloco,'contract_sha256',None) is not None and not diloco.drain_for_contract(stop_requested=lambda: policy.signaled):
                     raise RuntimeError('DiLoCo objective boundary requires all prior windows merged and installed')
                 diloco.declare_completion(drained=True,generation=source_hash)
-                checkpoint_options['diloco_final_delivery'] = {
+                delivery = {
                     'schema': 'natlang.diloco-final-delivery/1',
                     'worker': diloco.worker, 'fingerprint': diloco.manifest['fingerprint'],
                     'sequences': list(diloco.sequences), 'generation': source_hash}
-                # The final delivery changes DiLoCo state even without another SGD step.
-                metadata_dirty = True
+                checkpoint_options['diloco_final_delivery'] = delivery
+                # The final delivery changes DiLoCo state even without another SGD step, unless this is a no-op
+                # resume of a checkpoint that already records exactly this delivery (same worker, fingerprint,
+                # sequences and source generation): rewriting it would only replace identical earned state.
+                if delivery != carried_final_delivery or reopened_diloco or step != resumed_step:
+                    metadata_dirty = True
         except BaseException as error:
             loop_error, loop_error_tb = error, error.__traceback__
         finally:

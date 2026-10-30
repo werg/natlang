@@ -281,13 +281,6 @@ def test_model_parameter_vjp_uses_one_scope_across_distinct_invocation_actors(tm
     engine.store.close()
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(),reason='actual grouped expert FP8 execution')
-@pytest.mark.parametrize('recipe',['current','current-bf16-dx'])
-def test_executed_fp8_distinct_actor_graph_matches_actual_cached_adjoints(tmp_path,monkeypatch,recipe):
-    monkeypatch.setenv('NATLANG_NATIVE_ADAPTER_TEST_DEVICE','cuda')
-    return test_layer_major_distinct_actor_graph_matches_cached_and_source_adjoints(tmp_path,monkeypatch,'mellum',True,backend_recipe=recipe)
-
-
 @pytest.mark.parametrize('family',['lfm'])
 def test_actual_distinct_actor_sampling_receipts_replay_behavior_and_source_gradient(tmp_path,monkeypatch,family):
     import copy

@@ -73,6 +73,14 @@ function markdown(h, text) {
   return blocks;
 }
 
+// Where a run will go, in plain words, with the next step when something still has to happen first.
+const BACKEND = { 'managed-local': 'a local model on this machine', 'pi-provider': 'a hosted provider', external: 'your own model server' };
+function readinessText(ctx, model) {
+  const { h } = ctx;
+  if (model.kind === 'managed-local') return [h('span', {}, 'Runs on '), h('strong', {}, model.model), `, ${BACKEND[model.kind]}: ${model.detail}`];
+  return [h('span', {}, 'Runs on '), h('strong', {}, model.model), `, ${BACKEND[model.kind] ?? model.kind}. `, ...(ctx.can('models') ? [h('a', { href: ctx.href('models') }, 'Test the connection on Models'), '.'] : [])];
+}
+
 async function programDetail(ctx, path, container) {
   const { h, fill, api } = ctx, { pill, kv } = widgets(ctx), attempt = ctx.attempt;
   const program = await api.programs.detail(path);
@@ -94,7 +102,7 @@ async function programDetail(ctx, path, container) {
       const refresh = async () => {
         const current = ++revision;
         try { const model = await api.programs.model(program.directory, chosen?.value ?? '');
-          if (revision === current) readiness.textContent = `${model.model} · ${model.kind} · ${model.detail}`;
+          if (revision === current) fill(readiness, readinessText(ctx, model));
         } catch (error) { if (revision === current) readiness.textContent = error.message; }
       };
       profileSelect(ctx, `profile-${name}`, previous?.profile).then(select => {
@@ -105,11 +113,13 @@ async function programDetail(ctx, path, container) {
       return h('div', { class: 'stack run-target' }, h('div', {}, h('strong', { class: 'mono' }, name), target.description ? h('span', { class: 'muted' }, ` · ${target.description}`) : null),
         form.element,
         previous ? h('div', { class: 'small muted' }, 'Inputs restored from the last successful run.') : null,
-        h('div', { class: 'row' }, profile, h('button', { class: 'primary', title: 'Run (Ctrl+Enter)', onclick: run }, 'Run'),
-          h('button', { onclick: () => form.reset() }, 'Reset inputs')), readiness);
+        // The run bar stays in view while a long argument form scrolls.
+        h('div', { class: 'run-bar' }, h('div', { class: 'row' }, h('button', { class: 'primary', title: 'Run (Ctrl+Enter)', onclick: run }, 'Run'), profile,
+          h('button', { class: 'ghost', onclick: () => form.reset() }, 'Reset inputs')), readiness));
     }) : h('div', { class: 'muted' }, 'This package has no targets; call its functions below.'));
   const functions = h('section', { class: 'panel' }, h('h2', {}, 'Natural-language functions'),
-    program.functions.length ? h('div', { class: 'stack' }, program.functions.map(fn => functionCard(ctx, program, fn))) : h('div', { class: 'muted' }, 'No .nl files.'));
+    program.functions.length ? h('div', { class: 'small muted' }, 'Call one function on its own with your inputs, edit its instructions, or save its result as a test.') : null,
+    program.functions.length ? h('div', { class: 'function-list' }, program.functions.map(fn => functionCard(ctx, program, fn))) : h('div', { class: 'muted' }, 'No .nl files.'));
   const warm = lock?.warm;
   const buildable = ctx.can('run:build');
   const build = h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Compiled program'),
@@ -155,7 +165,7 @@ function functionCard(ctx, program, fn) {
     profile: chosen?.value || undefined }));
   const expected = typedValueEditor(ctx, { name: 'Expected result', type: fn.result?.tree, required: true, description: 'Choose what this function should return for the inputs above.' });
   return h('details', { class: 'panel function-card' },
-    h('summary', {}, h('strong', {}, fn.name), h('span', { class: 'small muted' }, fn.description || fn.source)),
+    h('summary', {}, h('span', { class: 'function-title' }, h('strong', {}, fn.name), h('span', { class: 'small muted' }, fn.description || fn.source)), h('span', { class: 'small function-open' }, 'Try it')),
     h('div', { class: 'stack function-body' }, h('code', { class: 'small muted' }, fn.source), inputs.map(({ editor }) => editor.element),
       h('div', { class: 'row' }, profile, ctx.can('run:call') ? h('button', { class: 'primary', onclick: call }, 'Call function') : null,
         ctx.can('traces') ? h('a', { href: ctx.href(`traces-${encodeURIComponent(fn.name)}`) }, 'Recorded calls') : null,

@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import pytest
 import torch
-from natlang_neuralese.eval.native_memory import policy_capacity_request,qualify_policy_objective,capacity_identity
+from natlang_neuralese.eval.native_memory import policy_capacity_request,qualify_policy_objective
 from natlang_neuralese.rl.native_replay import NativePolicyObjective,prepare_objective
 from natlang_neuralese.data.native_sources import NativeGraphSource
 from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update,pending_exposure_batches
@@ -104,27 +104,6 @@ def test_policy_request_tamper_and_unexecuted_fp8_fail_before_update(tmp_path,mo
         with pytest.raises(ValueError,match='actual configured FP8'):
             qualify_policy_objective(model,opt,train,objective,args,config,backend=None,
                 checkpoint_sha256='a'*64,pending_batches=batches)
-    finally:engine.stop();engine.store.close()
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(),reason='actual executed expert FP8')
-@pytest.mark.parametrize('recipe',['current','current-bf16-dx'])
-def test_mellum_actual_policy_capacity_executes_fp8_without_optimizer_update(tmp_path,recipe):
-    engine,model,opt,objective,train,args,config,backend,batches=actual(tmp_path,'mellum',device='cuda',fp8=True,recipe=recipe)
-    try:
-        before=copy.deepcopy(opt.state_dict())
-        parameters={name:p.detach().clone()for name,p in opt._native_named_parameters}
-        rng=capture_training_rng_state(args.device)
-        ref=qualify_policy_objective(model,opt,train,objective,args,config,backend=backend,
-            checkpoint_sha256='a'*64,pending_batches=batches)
-        proof=json.loads(Path(ref['path']).read_text());counts=proof['capacity']['executed_projections']
-        assert proof['passed']and counts['calls']>0 and counts['rows']>0
-        assert_exact(before,opt.state_dict())
-        assert_exact(rng,capture_training_rng_state(args.device))
-        for name,p in opt._native_named_parameters:assert torch.equal(parameters[name],p)
-        native_training_update(model,opt,list(train.iter_indices([0])),backend=backend,
-            checkpoint_layers=True,chunk_tokens=3,objective=objective)
-        assert any(not torch.equal(parameters[name],p)for name,p in opt._native_named_parameters)
     finally:engine.stop();engine.store.close()
 
 

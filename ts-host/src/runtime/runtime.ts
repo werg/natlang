@@ -47,7 +47,9 @@ export type ModelConfig = { driver: ModelDriver;
 /** One natlang invocation's trace, delivered to the runtime's trace sink when the invocation ends. */
 export type InvocationTrace = { callId: string; parentCallId: string | null; taskId: string;
   adaptation?: Record<string, unknown>; definitionId: string; name: string; outcome: string; detail: string; events: Record<string, unknown>[] };
-export type TraceSink = (trace: InvocationTrace) => void;
+/** Receives each invocation's complete trace when it ends. A sink with `stream` also sees the trace as it grows (`events`
+ * is the whole list so far), so a process that is stopped mid-call still leaves the calls it had in flight. */
+export type TraceSink = ((trace: InvocationTrace) => void) & { stream?(callId: string, events: readonly Record<string, unknown>[]): void };
 /**
  * A live event of a running task (plans/STREAMING.md §1.6), delivered while it happens so a host can show a natlang
  * function at work. `model_delta`: a piece of one of the call's model turns as it streams (`ModelTurnDelta`), tagged
@@ -369,6 +371,12 @@ export class NatlangTask {
     this.traceSink?.(trace);
     this.runtime.options.trace?.(trace);
   }
+  /** Hands a running invocation's events to the trace sinks that stream (TraceSink.stream). */
+  streamTrace(callId: string, events: readonly Record<string, unknown>[]): void {
+    for (const sink of [this.traceSink, this.runtime.options.trace]) try { sink?.stream?.(callId, events); } catch { /* sinks never affect the task */ }
+  }
+  /** Whether any trace sink streams, so the kernel observes traces only when someone writes them as they grow. */
+  get streamsTraces(): boolean { return !!(this.traceSink?.stream || this.runtime.options.trace?.stream); }
   environment(): EvalEnvironment {
     if (this.runtime.options.environment) return this.runtime.options.environment();
     if (!defaultEnvironment) throw new NatlangPlatformUnavailableError();

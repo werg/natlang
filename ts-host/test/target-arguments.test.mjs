@@ -51,6 +51,19 @@ test('every wrong argument is reported at the path the runtime check names', () 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('arguments can be named: --name VALUE or --name=VALUE, and the other words fill the rest in order', () => {
+  const root = program();
+  try {
+    assert.deepEqual(readTargetArguments(declared, ['--count', '3', 'careful', '--note=x=y'], root, root),
+      { values: { mode: 'careful', count: 3, note: 'x=y' }, problems: [] });
+    assert.deepEqual(readTargetArguments(declared, ['--count=4', '--mode='], root, root).values, { mode: 'fast', count: 4 });
+    assert.deepEqual(readTargetArguments(declared, ['--colour=red', '--count'], root, root).problems.map(problem => problem.message),
+      ['--colour is not an argument of this target; its arguments are --mode, --count, --tickets, --file, --note',
+        '--count needs a value: --count VALUE or --count=VALUE', 'count is required (number)']);
+    assert.match(readTargetArguments(declared, ['--count=1', '--count=2'], root, root).problems[0].message, /--count is given twice/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('the dashboard description expands aliases with field docs and reports a default of the wrong type', () => {
   const root = program();
   try {

@@ -36,7 +36,7 @@ export const mount = definePage({ id, requires, runKinds, async render(target, c
   const editor = h('div', { id: 'profile-editor' });
   const providerUi = { ...ctx, editProfile };
   const hosted = providersPanel(providerUi, providers, config, ctx.reload);
-  const profilesPanel = h('section', { class: 'panel' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Profiles'),
+  const profilesPanel = h('section', { class: 'panel', id: 'profiles' }, h('div', { class: 'row', style: 'justify-content: space-between' }, h('h2', {}, 'Profiles'),
       h('label', { class: 'row small muted' }, 'Default', h('select', { id: 'default-profile', onchange: attempt(async event => { await api.models.setDefault(event.target.value || null); ctx.toast('Default profile saved'); ctx.refreshStatus(); ctx.reload(); }) },
         h('option', { value: '' }, 'built-in (stock LFM3 1.7B, local)'), profileRows.map(([name]) => h('option', { value: name, selected: name === config.defaultProfile }, name))))),
       profileRows.length ? h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Profile'), h('th', {}, 'Backend'), h('th', {}, 'Model'), h('th', {}, 'Settings'), h('th', {}))),
@@ -47,12 +47,14 @@ export const mount = definePage({ id, requires, runKinds, async render(target, c
             ctx.can('run:ask') ? h('button', { onclick: () => ctx.startRun({ kind: 'ask', instruction: 'Reply with the single word: ready', input: '', profile: name }) }, 'Test') : null,
             h('button', { class: 'danger', onclick: attempt(async () => { await api.models.deleteProfile(name); ctx.toast(`Deleted ${name}`); ctx.reload(); }) }, 'Delete')))))))) :
         h('div', { class: 'muted' }, 'No profiles yet, so every command runs the built-in local model (stock LFM3 1.7B on the managed llama.cpp server). Connecting a hosted model above creates one; New profile sets up anything else.'));
+  const localModels = h('section', { class: 'panel', id: 'local-models' }, h('h2', {}, 'Local models'), h('div', { class: 'muted small' }, 'Stock GGUF files natlang serves on its managed llama.cpp server, pinned to one repository revision and checked by SHA-256.'),
+    h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Model'), h('th', { class: 'num' }, 'Size'), h('th', {}, 'State'), h('th', {}))), stockRows)));
   fill(target, header('Models', 'Choose the model natlang runs: a hosted provider or a model on this machine. Every natlang command, program and this dashboard use the same profiles (~/.config/natlang/config.json).',
       h('button', { onclick: () => editProfile('', {}) }, 'New profile')),
     // On a first run the hosted-model choices come first; once profiles exist, the profile list leads.
-    ...(profileRows.length ? [profilesPanel, hosted] : [hosted, profilesPanel]), editor, await keptModelPanel(ctx),
-    h('section', { class: 'panel' }, h('h2', {}, 'Local models'), h('div', { class: 'muted small' }, 'Stock GGUF files natlang serves on its managed llama.cpp server, pinned to one repository revision and checked by SHA-256.'),
-      h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Model'), h('th', { class: 'num' }, 'Size'), h('th', {}, 'State'), h('th', {}))), stockRows))));
+    h('nav', { class: 'jump', 'aria-label': 'Sections on this page' }, [['Hosted models', hosted], ['Profiles', profilesPanel], ['Local models', localModels]]
+      .map(([label, section]) => h('button', { class: 'ghost', onclick: () => section.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, label))),
+    ...(profileRows.length ? [profilesPanel, hosted] : [hosted, profilesPanel]), editor, localModels, await keptModelPanel(ctx));
 
   function editProfile(name, profile) {
     const kind = profile.provider ? 'provider' : profile.endpoint ? 'endpoint' : profile.native ? 'native' : 'local';
