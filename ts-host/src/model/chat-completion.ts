@@ -10,6 +10,7 @@ import { nativeProtocolFailure } from '../native/native-protocol.js';
 import { runtimePartsToText, type RuntimeContentPart } from '../native/neuralese.js';
 import { TOOL_MARKUP } from '../native/tool-markup.js';
 import { parseNativeXmlCalls } from './native-xml-calls.js';
+import { promptLogprobRequest, scoresFromPromptLogprobs, type PromptLogprobResponse } from './decision-scoring.js';
 import { NATIVE_XML_POLICY_SHA256 } from './native-xml-policy.js';
 
 type Json = Record<string, unknown>;
@@ -415,26 +416,11 @@ export function promptLogprobDecider(transport: ChatTransport, options: { reques
     const { messages, options: replies } = item;
     if (!replies.length) throw new Error('a decision needs at least one option');
     const itemExtra = options.extraFor?.(item);
-    const sequences = await Promise.all(replies.map(async reply => {
-      const raw = await transport({ ...extra, ...itemExtra, messages: [...messages, { role: 'assistant', content: reply }],
-        add_generation_prompt: false, continue_final_message: false, prompt_logprobs: 0, max_tokens: 1 }, signal);
-      const body = isStream(raw) ? await assembleChatCompletion(raw) : raw;
-      const rows = body.prompt_logprobs;
-      if (!Array.isArray(rows)) throw new Error('decision-unsupported: the server returned no prompt_logprobs');
-      // Each row maps token ID to its entry; with prompt_logprobs 0 the prompt's own token is the only (first) key.
-      return rows.map(row => {
-        if (!row || typeof row !== 'object') return null;
-        const [id, entry] = Object.entries(row as Record<string, { logprob?: number }>)[0] ?? [];
-        return id === undefined || typeof entry?.logprob !== 'number' ? null : { id, logprob: entry.logprob };
-      });
+    const responses = await Promise.all(replies.map(async reply => {
+      const raw = await transport({ ...promptLogprobRequest(messages, reply, { ...extra, ...itemExtra }) }, signal);
+      return (isStream(raw) ? await assembleChatCompletion(raw) : raw) as PromptLogprobResponse;
     }));
-    let shared = 0;
-    const shortest = Math.min(...sequences.map(sequence => sequence.length));
-    while (shared < shortest && sequences.every(sequence => sequence[shared]?.id === sequences[0]![shared]?.id)) shared++;
-    // With a single option nothing differs; its score is the whole reply after the shared prompt.
-    if (replies.length === 1) shared = 0;
-    return { log_probs: sequences.map(sequence => sequence.slice(shared).reduce((sum, row) => sum + (row?.logprob ?? 0), 0)),
-      tokens: sequences.map(sequence => sequence.length - shared) };
+    return scoresFromPromptLogprobs(responses);
   };
 }
 

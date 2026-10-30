@@ -1109,7 +1109,7 @@ export class NativeToolAgent {
    * Answer a finite-typed call by scoring each allowed value as the reply to its opening (native/decision.ts).
    * Returns false when the readout does not apply, so the tool loop runs; a string is a failure, as from run.
    */
-  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[]): Promise<false | string | void> {
+  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[], guidance: string): Promise<false | string | void> {
     const lam = session.lam;
     const wanted = lam.readout === 'decision' || this.options.decisionReadout === 'finite-returns';
     if (!wanted || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
@@ -1122,8 +1122,9 @@ export class NativeToolAgent {
       return false;
     }
     const replies = values.map(value => JSON.stringify(value));
-    const inherited = typeof opening[0]?.content === 'string' ? opening[0].content : '';
-    const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + '\n\n' + inherited;
+    // The readout offers no tools, so its system turn is the short decision prompt and the program's guidance; the
+    // tool manual of the opening's system turn stays out (it is most of the opening's tokens).
+    const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + guidance;
     const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: decisionPrompt(replies) }];
     const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
     const training = this.options.trainingGuidance;
@@ -1253,7 +1254,8 @@ export class NativeToolAgent {
     session.pages.budget = shownCharsFor(budget);
     // Fixed for the whole call, so the server can reuse its prompt cache across turns.
     let adaptedSystem: string | undefined;
-    const nativeGuidance = await this.runtimeProgramGuidance();
+    // The program's guidance, which every prompt of the call carries: the tool loop's system prompt and the decision readout's.
+    const guidance = renderAuthoredTextGuidance(this.options.authoredTextGuidance) + await this.runtimeProgramGuidance();
     const systemPrompt = () => {
       if (adaptedSystem !== undefined) return adaptedSystem;
       const base = typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT;
@@ -1262,7 +1264,7 @@ export class NativeToolAgent {
       (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
       (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc,
         session.lam.projectTransaction.folder.access !== 'read') : '') +
-      renderAuthoredTextGuidance(this.options.authoredTextGuidance) + nativeGuidance;
+      guidance;
       if (this.options.programGuidance !== undefined || this.options.authoredTextGuidance !== undefined) adaptedSystem = composed;
       return composed;
     };
@@ -1298,7 +1300,7 @@ export class NativeToolAgent {
     const guidancePolicy = trainingGuidance?.policyOf(session.lam, session.runtime.currentCallId ?? null);
     const guidanceConsumer = !!trainingGuidance && !guidancePolicy && !trainingGuidance.insidePolicy(session);
     let guidanceRequest: Record<string, unknown> | undefined, guidanceReady = false;
-    const decided = await this.decisionReadout(session, messages);
+    const decided = await this.decisionReadout(session, messages, guidance);
     if (decided !== false) return decided;
     const openingLength = messages.length;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.

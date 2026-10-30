@@ -32,10 +32,8 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildProject } from '../compiler/node-project.js';
 import { formatDiagnostics } from '../compiler/project.js';
-import { createResolvedModelSession, executorIdentityForChoice, loadModelConfiguration } from '../model/index.js';
+import { createResolvedModelSession, executorIdentityForChoice, loadModelConfiguration, sessionDriver } from '../model/index.js';
 import { activateRelease, currentManifest, currentRelease, readActive, readRelease, rollbackRelease, tuneDirectory, tuneStatus } from '../adaptation/weights/release.js';
-import type { ModelDriver } from '../runtime/runtime.js';
-import type { DecisionRequest, ModelTurnRequest, ModelTurnOptions } from '../contracts.js';
 import { loadTuneSettings, prepareDerivedStudent } from '../tune/settings.js';
 import { ensureNativeServer } from '../model/native-managed.js';
 import { loadVllmStacks, uploadRelease } from '../tuned-serving.js';
@@ -67,12 +65,6 @@ const identityOf = (profile: string) => executorIdentityForChoice(loadModelConfi
 
 const RUNTIME_MODULE = { url: new URL('../index.js', import.meta.url).href, path: fileURLToPath(new URL('../index.js', import.meta.url)),
   types: fileURLToPath(new URL('../index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
-
-type Session = ReturnType<typeof createResolvedModelSession>;
-const driverOf = (session: Session): ModelDriver => Object.assign(
-  (request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => session.turn(request, signal, options),
-  { decide: (request: DecisionRequest, signal?: AbortSignal) => session.decide(request, signal), contextWindow: () => session.contextWindow(),
-    ...(session.neuralese ? { neuralese: true as const, neuraleseRuntime: () => session.neuraleseRuntime!() } : {}) });
 
 function formatReport(report: TuneReport): string {
   const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
@@ -140,7 +132,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
         await requireNativeReaderIdentity(serving.choice.endpoint, student.base, {
           apiKey: process.env[serving.choice.apiKeyEnv], headers: serving.choice.headers });
       };
-      return await fn({ root: programRoot, program, settings, student, teacher: driverOf(teacherSession),
+      return await fn({ root: programRoot, program, settings, student, teacher: sessionDriver(teacherSession),
         teacherId, examplesPath: value('--examples'), log: io.err,
         assertStudentBase,
         serve: async ({ manifest, directory, capture }) => {
@@ -154,7 +146,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
             const loaded = await uploadRelease(session.nativeArtifacts!()!, directory,
               [...manifest.artifacts.map(item => item.artifact), ...manifest.families.map(item => item.artifact),
                 ...manifest.softStates.map(item => item.state)], manifest.receipts.inferenceStateMaterializations);
-            return { driver: driverOf(session), loaded, nativeState: true, close: () => session.close() };
+            return { driver: sessionDriver(session), loaded, nativeState: true, close: () => session.close() };
           }
           if (settings.backend === 'vllm') {
             const serving = loadModelConfiguration(settings.servingProfile);
@@ -164,7 +156,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
             await session.prepare();
             const loaded = await loadVllmStacks(serving.choice.endpoint, directory, serving.choice.headers ?? {});
             session.vllmStacks?.(loaded.names);
-            return { driver: driverOf(session), loaded: loaded.available, close: () => session.close() };
+            return { driver: sessionDriver(session), loaded: loaded.available, close: () => session.close() };
           }
           const adapters = [...manifest.artifacts, ...manifest.families].filter(item => item.exports?.gguf).map(item => ({ id: item.artifact, path: join(directory, item.exports!.gguf!.file) }));
           const serving = loadModelConfiguration(settings.servingProfile);
@@ -174,7 +166,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
           const session = createResolvedModelSession(serving.choice, process.env, process.stderr,
             { loraAdapters: () => adapters, nativeStates: () => states });
           await session.prepare();
-          return { driver: driverOf(session), loaded: new Set([...adapters, ...states].map(item => item.id)), nativeState: states.length > 0, close: () => session.close() };
+          return { driver: sessionDriver(session), loaded: new Set([...adapters, ...states].map(item => item.id)), nativeState: states.length > 0, close: () => session.close() };
         } });
     } finally { await teacherSession.close(); }
   };
@@ -316,11 +308,11 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     try {
       const examples = currentSplit(root, value('--examples')).filter(example => example.partition === 'development' && !example.protected);
       const calibrations = await calibrateTeachers({ root, program: inventory.manifest.adaptation!, examples, log: io.err, execution: settings.execution,
-        candidates: sessions.map(({ profile, session }) => ({ profile, id: identityOf(profile), driver: driverOf(session) })) });
+        candidates: sessions.map(({ profile, session }) => ({ profile, id: identityOf(profile), driver: sessionDriver(session) })) });
       // The natural-language policy runs on the default teacher; it only chooses among measured eligible teachers.
       const policySession = sessions.find(item => item.profile === settings.teacher)?.session ?? sessions[0]!.session;
       const nl = async (candidates: string, minSuccess: number) => {
-        const runtime = createNatlangRuntime({ model: driverOf(policySession) });
+        const runtime = createNatlangRuntime({ model: sessionDriver(policySession) });
         try { return await runtime.run(() => (loadNatlang(ROUTE_TEACHER) as (...args: unknown[]) => Promise<unknown>)(candidates, minSuccess)); }
         finally { runtime.close(); }
       };

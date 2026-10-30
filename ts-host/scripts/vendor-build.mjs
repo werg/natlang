@@ -4,6 +4,7 @@
  *
  *   core   the platform-neutral runtime for workerd (src/core/index.ts): an ESM bundle that loads with `nodejs_compat`
  *   workerd  the same core with TypeScript bundled in, for hosts that cannot install TypeScript 5 as a package (see below)
+ *   pi  Pi translation and decision scoring as pure functions, no compiler or platform (src/entry/pi.ts)
  *   evaluation  the declarations of the eval target, without its code (for type-checking suites)
  *   llama  the managed llama.cpp package (src/llama/index.ts), for Node
  *   eval   the evaluation, adaptation and optimization APIs (src/entry/evaluation.ts), for Node, with the evaluation worker
@@ -97,6 +98,8 @@ export const TARGETS = {
     define: () => ({ __NATLANG_TS_LIBS__: JSON.stringify(embeddedLibs()), 'process.browser': 'true' }) },
   // Declarations only: what a workspace's suites type-check against (`@workspace/natlang/evaluation`); they run on the `eval` bundle.
   evaluation: { directory: 'evaluation', entries: { 'natlang-evaluation': 'src/entry/evaluation.ts' }, platform: 'node', typesOnly: true },
+  // Pi translation and decision scoring, with nothing behind them: for hosts that run model calls through their own service.
+  pi: { directory: 'pi', entries: { 'natlang-pi': 'src/entry/pi.ts' }, platform: 'neutral' },
   llama: { directory: 'llama', entries: { 'natlang-llama': 'src/llama/index.ts' }, platform: 'node' },
   // The evaluation runner starts `./worker-entry.js` beside its own file (evaluation/worker.ts).
   dashboard: { directory: 'dashboard', assets: true },

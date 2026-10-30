@@ -183,6 +183,26 @@ test('decision scoring runs against a server the host supervises: the package\'s
   } finally { await new Promise(resolve => http.close(resolve)); }
 });
 
+test('a stock release with sliding-window layers is served with --swa-full; a configured model file is not', async () => {
+  const bytes = Buffer.from('a tiny stand-in for a GGUF file');
+  const release = { id: 'swa', label: 'SWA', family: 'fixture', file: 'swa.gguf', quant: 'Q', bytes: bytes.length,
+    sha256: createHash('sha256').update(bytes).digest('hex'), contextTokens: 2048, kvBytesPerToken: 1000, fullSlidingWindowCache: true,
+    downloadUrl: 'https://models.invalid/swa.gguf', template: 'template.jinja', source: { repository: 'x/y', revision: 'r' } };
+  const serve = async (configured, stock) => {
+    const { host, spawned } = fixtureHost(mkdtempSync(join(tmpdir(), 'natlang-llama-swa-')));
+    if (!configured) { delete host.environment.NATLANG_MODEL_PATH; delete host.environment.NATLANG_TEMPLATE; }
+    mkdirSync(host.directories.models, { recursive: true });
+    writeFileSync(stockModelPath(host, release), bytes);
+    const server = createLlamaServer(host, { release: stock, local: { parallel: 2 } });
+    await server.start();
+    await server.close();
+    return spawned[0].args;
+  };
+  assert.ok((await serve(false, release)).includes('--swa-full'), 'the stock file needs the full window cache to reuse a cached prompt prefix');
+  assert.equal((await serve(true, release)).includes('--swa-full'), false, 'a configured file is another model');
+  assert.equal((await serve(false, { ...release, fullSlidingWindowCache: undefined })).includes('--swa-full'), false);
+});
+
 test('stock model download and verification go through the host\'s fetch, directories and log', async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-llama-download-'));
   const bytes = Buffer.from('a tiny stand-in for a GGUF file');

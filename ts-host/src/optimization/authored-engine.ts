@@ -130,7 +130,7 @@ export function merge():unknown;
 export function check(candidate:unknown):Promise<{valid:boolean;id:string;feedback?:string}>;
 export function evaluate(id:string,split:'mini'|'train'|'validation',parent?:boolean):Promise<{evidence:string;quality:number;gatesPassed:boolean}>;
 export function finish(decision:unknown):Promise<{state:ComponentLoopState;candidate:Candidate}>;`;
-  const runtime=createNatlangRuntime({model:{driver:(request,signal)=>gateway.request(options.reflection,request,signal??options.signal,'reflection'),maxTurns:16,maxTokens:32000,turnTokens:4096,maxFailureRepairs:settings.maxRepairs},
+  const runtime=createNatlangRuntime({model:{driver:gateway.driver(options.reflection,'reflection',options.signal),maxTurns:16,maxTokens:32000,turnTokens:4096,maxFailureRepairs:settings.maxRepairs},
     services:{search:services},serviceDeclarations:{search:declaration},serviceScopes:{search:['componentSearchStep.nl']},trace:context.trace,network:false,codeEdits:'deny',signal:options.signal});
   const folder=Folder.fromFiles({'components.json':JSON.stringify(member().value)});
   const initial:LoopState={iteration:state.iteration,incumbent:state.incumbent,done:gateway.ledger.proposals>=gateway.limits.maxProposals,stopReason:''};

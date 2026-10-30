@@ -22,7 +22,8 @@ import { dirname, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import type { ResolvedWeightStack, WeightBinding } from '../adaptation/weights/binding.js';
 import type { WeightManifest } from '../adaptation/weights/manifest.js';
-import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, DecisionScorer, DecisionScores, ModelTurn, ModelTurnRequest } from '../contracts.js';
+import { wrapDriver } from '../runtime/driver.js';
 import { neuraleseServerModelTurn, type NeuraleseServerOptions } from '../model/neuralese-server.js';
 import { currentFrame } from '../runtime/context.js';
 import { loadNatlang } from '../runtime/node-files.js';
@@ -118,7 +119,31 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
   // A refusal inside the driver surfaces through the runtime as an ordinary failure; remember it so it never scores 0.
   const refuse = (reason: string): never => { refused ??= reason; throw new Skip(reason); };
   const inner = options.driver as (request: ModelTurnRequest, ...rest: unknown[]) => Promise<ModelTurn>;
-  const driver = Object.assign(async (request: ModelTurnRequest, ...rest: unknown[]) => {
+  // A decision readout is an action over its option set: sampled from softmax(scores / T) for exploration, with its
+  // exact scoring capture and sampling receipt as the episode turn (rl/decision_policy.py).
+  const rolloutDecide = (decide: DecisionScorer): DecisionScorer => async (request: DecisionRequest, signal?: AbortSignal) => {
+    const call = request.invocation_id;
+    if (!call) return refuse('a decision readout has no invocation identity');
+    const turn = (counters.get(call) ?? 0) + 1;
+    counters.set(call, turn);
+    const turnSeed = derivedSeed(seed, call, turn);
+    let scores: DecisionScores;
+    try { scores = await decide({ ...request, native_recording: true }, signal); }
+    catch (error) { transport ??= error; throw error; }
+    const capture = scores.native_decision_capture;
+    if (!capture) throw fatal ??= new Error('rollout-capture-unavailable: decision readouts need the native server\'s '
+      + 'decision capture');
+    const chosen = sampleOption(scores.log_probs, options.temperature, turnSeed);
+    const binding = currentFrame()?.weights?.binding ?? null;
+    if (call in bindings && bindings[call] !== binding) refuse('one invocation ran under two bindings');
+    bindings[call] = binding;
+    turns.push({ messages: structuredClone(request.messages), target: { role: 'assistant', content: request.options[chosen]! },
+      invocation_id: call, sampling: { ...structuredClone(capture), decision_sample: { schema: 'natlang.decision-sample/1',
+        log_probs: [...scores.log_probs], chosen, temperature: options.temperature, seed: turnSeed } },
+      replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });
+    return { ...scores, chosen };
+  };
+  const driver = wrapDriver(options.driver, { decide: rolloutDecide, turn: async (request: ModelTurnRequest, ...rest: unknown[]) => {
     const call = request.invocation_id;
     if (!call) return refuse('a model turn has no invocation identity');
     const turn = (counters.get(call) ?? 0) + 1;
@@ -143,32 +168,7 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
       invocation_id: call, sampling: { ...structuredClone(capture), ...(Array.isArray(imports) ? { native_state_imports: structuredClone(imports) } : {}) },
       replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });
     return reply;
-  }, Object.fromEntries(Object.entries(options.driver))) as unknown as ModelDriver;
-  // A decision readout is an action over its option set: sampled from softmax(scores / T) for exploration, with its
-  // exact scoring capture and sampling receipt as the episode turn (rl/decision_policy.py).
-  const decide = (options.driver as unknown as { decide?: (request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores> }).decide;
-  if (decide) (driver as unknown as { decide: unknown }).decide = async (request: DecisionRequest, signal?: AbortSignal) => {
-    const call = request.invocation_id;
-    if (!call) return refuse('a decision readout has no invocation identity');
-    const turn = (counters.get(call) ?? 0) + 1;
-    counters.set(call, turn);
-    const turnSeed = derivedSeed(seed, call, turn);
-    let scores: DecisionScores;
-    try { scores = await decide({ ...request, native_recording: true }, signal); }
-    catch (error) { transport ??= error; throw error; }
-    const capture = scores.native_decision_capture;
-    if (!capture) throw fatal ??= new Error('rollout-capture-unavailable: decision readouts need the native server\'s '
-      + 'decision capture');
-    const chosen = sampleOption(scores.log_probs, options.temperature, turnSeed);
-    const binding = currentFrame()?.weights?.binding ?? null;
-    if (call in bindings && bindings[call] !== binding) refuse('one invocation ran under two bindings');
-    bindings[call] = binding;
-    turns.push({ messages: structuredClone(request.messages), target: { role: 'assistant', content: request.options[chosen]! },
-      invocation_id: call, sampling: { ...structuredClone(capture), decision_sample: { schema: 'natlang.decision-sample/1',
-        log_probs: [...scores.log_probs], chosen, temperature: options.temperature, seed: turnSeed } },
-      replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });
-    return { ...scores, chosen };
-  };
+  } });
   const runtime = createNatlangRuntime({ program: options.program, ...await tuneRuntime(driver, options.execution), weights: options.weights,
     ...await rootServices(options.root, options.services, example), trace: trace => {
     const weights = (trace.adaptation as { weights?: ResolvedWeightStack } | undefined)?.weights;

@@ -6,6 +6,7 @@
 import type { DecisionRequest, DecisionScorer, DecisionScores } from '../contracts.js';
 import type { Scheduler } from './scheduler.js';
 import { fetchModel } from './chat-completion.js';
+import { batchScoreItem, scoresFromBatchResult } from './decision-scoring.js';
 
 type Settled = PromiseSettledResult<DecisionScores>;
 type ScoreOne = (request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores>;
@@ -59,11 +60,11 @@ export function coalescingScorer(base: DecisionScorer, options: { windowMs?: num
  * The explicit-batch scoring contract (optional endpoint, capability-gated; plans/BATCHED_EXECUTION.md step 2):
  *
  *   POST {url}  { items: [{ messages, continuations: string[], adapters?, ...itemExtra }], ...extra }
- *   200         { results: [{ log_probs: number[], tokens?: number[] } | { error: string }] }
+ *   200         { results: [{ log_probs: number[], tokens?: number[], prompt_tokens?: number } | { error: string }] }
  *
  * `continuations[k]` is the k-th option written as the closed final assistant message after `messages`. The server
  * prefills each item's prompt once and scores its K continuations from it. `log_probs[k]` and `tokens[k]` mean what
- * they mean in `DecisionScores`. 404, 405 and 501 mean the server has no such endpoint; the caller then falls back to concurrent scoring.
+ * they mean in `DecisionScores`, as does `prompt_tokens` (the tokens the item's continuations evaluate in full). 404, 405 and 501 mean the server has no such endpoint; the caller then falls back to concurrent scoring.
  */
 export type ExplicitBatchOptions = { url: string; headers?: Record<string, string>; extra?: Record<string, unknown>;
   scheduler?: Scheduler; maxItems?: number;
@@ -78,21 +79,15 @@ export async function postExplicitBatch(options: ExplicitBatchOptions, items: De
   try {
     const response = await fetchModel(options.url, { method: 'POST', signal,
       headers: { 'content-type': 'application/json', ...options.headers },
-      body: JSON.stringify({ ...options.extra, items: items.map(item => ({ ...options.itemExtra?.(item), messages: item.messages, continuations: item.options,
-        ...(item.adapters?.length ? { adapters: item.adapters } : {}),
-        ...(item.native_state_modes ? {native_state_modes:item.native_state_modes}:{}),
-        ...(item.native_recording ? {native_recording:true}:{}) })) }) });
+      body: JSON.stringify({ ...options.extra, items: items.map(item => batchScoreItem(item, options.itemExtra?.(item))) }) });
     if ([404, 405, 501].includes(response.status)) throw new ScoreEndpointMissing(`no scoring endpoint at ${options.url}`);
     if (!response.ok) throw new Error(`batched scoring HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
-    const body = await response.json() as { results?: ({ log_probs?: number[]; tokens?: number[]; error?: string; native_decision_capture?: Record<string,unknown> } | null)[] };
+    const body = await response.json() as { results?: ({ log_probs?: number[]; tokens?: number[]; prompt_tokens?: number; error?: string; native_decision_capture?: Record<string,unknown> } | null)[] };
     if (!Array.isArray(body.results) || body.results.length !== items.length)
       throw new Error('batched scoring returned a different number of results than items');
     return body.results.map((result, index): Settled => {
-      if (!result || typeof result.error === 'string' || !Array.isArray(result.log_probs) ||
-          result.log_probs.length !== items[index]!.options.length)
-        return { status: 'rejected', reason: new Error(result?.error ?? 'batched scoring returned no scores for an item') };
-      return { status: 'fulfilled', value: { log_probs: result.log_probs, ...(result.tokens ? { tokens: result.tokens } : {}),
-        ...(result.native_decision_capture?{native_decision_capture:result.native_decision_capture}:{}) } };
+      try { return { status: 'fulfilled', value: scoresFromBatchResult(result, items[index]!.options.length) }; }
+      catch (reason) { return { status: 'rejected', reason }; }
     });
   } finally { release(); }
 }

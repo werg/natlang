@@ -158,11 +158,14 @@ test('the shared crisp policy selects facts per invocation and the block is a sy
     { id: 'decisive:0', kind: 'decisive', text: 'Decisive evidence: total(order) returns 9500' },
     { id: 'expected_result:0', kind: 'expected_result', text: 'The verified result of this program is "grant".' }];
   assert.deepEqual(selectFacts(facts, { role: 'root', text: 'Decide an access request.' }).map(fact => fact.id), ['expected_result:0', 'decisive:0']);
-  assert.deepEqual(selectFacts(facts, { role: 'child', text: 'Rate the risk of the request.' }).map(fact => fact.id), ['child_value:0']);
+  // A child's answer guides it only when it fits the result type the child declares in its opening.
+  const rating = 'You are inside this call: rate(request: string): "low" | "high"\n';
+  assert.deepEqual(selectFacts(facts, { role: 'child', text: rating + 'Rate the risk of the request.' }).map(fact => fact.id), ['child_value:0']);
+  assert.deepEqual(selectFacts(facts, { role: 'child', text: 'You are inside this call: rate(request: string): number\nRate the risk of the request.' }), []);
   assert.deepEqual(selectFacts(facts, { role: 'child', text: 'Apply in order' }), []);
   // Two different verified values match one child: no answer is given (ambiguous).
   assert.deepEqual(selectFacts([...facts, { ...facts[0], id: 'child_value:1', text: 'The verified answer of this call is "high".' }],
-    { role: 'child', text: 'Rate the risk' }), []);
+    { role: 'child', text: rating + 'Rate the risk' }), []);
   const text = privilegedText(selectFacts(facts, { role: 'root', text: '' }));
   assert.equal(text, `${PRIVILEGED_HEADER}\n\nThe verified result of this program is "grant".\n\nDecisive evidence: total(order) returns 9500`);
   assert.equal(privilegedText([]), null);

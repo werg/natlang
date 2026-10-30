@@ -12,6 +12,12 @@ export type LocalModelRelease = {
   readonly contextTokens: number;
   /** Measured context memory per token (KV, sliding-window and recurrent state), which sizes the server's slots. */
   readonly kvBytesPerToken: number;
+  /**
+   * The model has sliding-window attention layers, so the server runs with `--swa-full`. Without it llama.cpp
+   * cannot resume from a cached prompt prefix on those layers (a restored warm opening, or any earlier prompt): it logs
+   * "forcing full prompt re-processing" and evaluates the whole prompt again. `kvBytesPerToken` is the cache size with it.
+   */
+  readonly fullSlidingWindowCache?: boolean;
   readonly downloadUrl: string;
   /** Chat template under models/templates/ (packaged as model-assets/); the GGUF's own template, extracted verbatim. */
   readonly template: string;
@@ -23,8 +29,10 @@ export type LocalModelRelease = {
 const LFM3_REPOSITORY = 'LiquidAI/LFM3-1.7B-GGUF', LFM3_REVISION = 'b3f2ae5d73cd3c91bf40e8ba752c648aa05dffdf';
 const lfm3 = (quant: string, bytes: number, sha256: string): LocalModelRelease => Object.freeze({
   id: `lfm3-1.7b-${quant.toLowerCase()}`, label: `LFM3 1.7B · ${quant}`, family: 'lfm3', file: `LFM3-1.7B-${quant}.gguf`, quant, bytes, sha256,
-  // 1,568 MiB for 131,072 tokens on llama.cpp 0.8: most layers are short convolutions or 256-token windows.
-  contextTokens: 32768, kvBytesPerToken: 12800, template: 'LFM3-1.7B.jinja',
+  // Most layers are short convolutions or 256-token windows. Measured on llama.cpp 0.8 at 163,840 tokens of Q8_0: 3,809 MiB
+  // resident (12,800 bytes per token over the weights) with the default window cache, 5,380 MiB (about 23,000) with --swa-full,
+  // which the server needs to reuse a cached prompt prefix at all.
+  contextTokens: 32768, kvBytesPerToken: 23000, fullSlidingWindowCache: true, template: 'LFM3-1.7B.jinja',
   downloadUrl: `https://huggingface.co/${LFM3_REPOSITORY}/resolve/${LFM3_REVISION}/LFM3-1.7B-${quant}.gguf`,
   source: Object.freeze({ repository: LFM3_REPOSITORY, revision: LFM3_REVISION }),
   // Greedy, with reasoning kept in the history: the settings of the base evaluation.

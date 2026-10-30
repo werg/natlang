@@ -76,7 +76,9 @@ A blocked result can be an expected semantic outcome. Provider outages, worker
 failures and malformed scoring are infrastructure errors; do not score them as
 incorrect answers. `EvaluationInfrastructureError` exposes the case, attempt and
 incurred ledger. An explicit `UsageGateway` passed to `evaluate()` retains usage on
-success, failure or cancellation.
+success, failure or cancellation. A `readout: decision` function is scored by the executor
+driver's `decide` inside the evaluation and counted as one model request; give custom
+drivers a `decide` (or wrap them with `wrapDriver`) or those calls run the tool loop.
 
 If helper behavior is part of the objective, exercise and observe those helpers;
 correct final answers alone do not prove local behavior. Changed guidance requires

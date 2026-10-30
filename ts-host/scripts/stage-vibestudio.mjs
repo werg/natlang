@@ -3,7 +3,7 @@
  * Stage natlang for vendoring into Vibestudio (and any host that vendors rather than installs): generated ESM bundles
  * from one natlang commit, with a pin that lets the host verify its copy.
  *
- *   node scripts/stage-vibestudio.mjs --out DIR [--only core|workerd|llama|eval|dashboard]
+ *   node scripts/stage-vibestudio.mjs --out DIR [--only core|workerd|pi|llama|eval|dashboard]
  *       Build and write, under DIR, `core/natlang-core.js` (+ `.d.ts`, `types/`; workerd, npm packages external), `workerd/natlang-workerd.js` (the same core with TypeScript bundled in, for hosts that cannot install TypeScript 5), `llama/natlang-llama.js`
  *       (+ `.d.ts`; Node), `eval/natlang-eval.js` and `eval/worker-entry.js` (+ `.d.ts`; Node), `dashboard/` (the embeddable
  *       page modules, styles and `types.d.ts`; copied files) and `natlang-pin.json`:
@@ -139,7 +139,7 @@ try {
   } else if (option('--out')) {
     await stage(resolve(option('--out')), option('--only'));
   } else {
-    console.error('usage: stage-vibestudio.mjs --out DIR [--only core|workerd|llama|eval|dashboard] | --check DIR');
+    console.error('usage: stage-vibestudio.mjs --out DIR [--only core|workerd|pi|llama|eval|dashboard] | --check DIR');
     process.exit(2);
   }
 } catch (error) {

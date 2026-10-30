@@ -26,6 +26,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ModelDriver } from '../runtime/runtime.js';
 import type { DecisionRequest, DecisionScorer, ModelTurnRequest } from '../contracts.js';
+import { wrapDriver } from '../runtime/driver.js';
 import { currentFrame } from '../runtime/context.js';
 import { loadGuidanceWriter } from '../teacher/guidance-writer.js';
 import type { GuidanceFact } from '../native/training-guidance.js';
@@ -139,16 +140,9 @@ export function privilegedDriver(student: ModelDriver, reference: PrivilegedRefe
     const text = privilegedText(selectFacts(reference.facts, { role, name: request.invocation_id, text: promptText(request.messages) }));
     return text ? withPrivileged(request, text) : request;
   };
-  const wrapped = Object.assign((request: ModelTurnRequest, ...rest: unknown[]) => inner(privileged(request), ...rest),
-    Object.fromEntries(Object.entries(student))) as unknown as ModelDriver & { decide?: DecisionScorer };
-  const decide = (student as ModelDriver & { decide?: DecisionScorer }).decide;
-  if (decide) {
-    const scored: DecisionScorer = (request, signal) => decide(privileged(request), signal);
-    if (decide.scoreMany) scored.scoreMany = (requests: DecisionRequest[], signal?: AbortSignal) =>
-      decide.scoreMany!(requests.map(privileged), signal);
-    wrapped.decide = scored;
-  }
-  return wrapped;
+  return wrapDriver(student, { turn: (request: ModelTurnRequest, ...rest: unknown[]) => inner(privileged(request), ...rest),
+    decide: decide => Object.assign((request: DecisionRequest, signal?: AbortSignal) => decide(privileged(request), signal),
+      decide.scoreMany ? { scoreMany: (requests: DecisionRequest[], signal?: AbortSignal) => decide.scoreMany!(requests.map(privileged), signal) } : {}) });
 }
 
 /** Whether a captured reply echoes the privileged block (never a positive target). */

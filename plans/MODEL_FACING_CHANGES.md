@@ -1,5 +1,20 @@
 # Model-facing changes and their measurement
 
+### 2026-10-30 — Decision readout prompt: the tool manual leaves the scored system turn (debt: live outcome)
+
+`readout: decision` scored each value after `DECISION_SYSTEM_PROMPT + '\n\n' + <the opening's whole system turn>`, so the
+tool manual (eval, nl, iterateOn, return_result instructions; 16.8k characters, about 3.6k of the 3.9k prompt tokens of a
+one-line classifier) was part of a prompt that offers no tools. Since 7a9427894 (guidance carried by inheriting the system
+turn) the compact prompt of 59fb10517 and the trainer's mirror (`natlang_neuralese/data/decision_graph.py`: decision system
+prompt plus guidance, then the opening without its system turn) had diverged. The system turn is again `DECISION_SYSTEM_PROMPT`
+(plus the iteration addendum) followed by the program's authored-text and native guidance; nothing else of the system turn.
+Measured on LFM3-1.7B Q4_K_M, CPU, 3 values, 2 slots, load 5-8 from other jobs: the scoring request went from 3.6k to about
+290 prompt tokens (3 cold prefills of the 3.6k opening took 97-101 s; of the compact opening 8-13 s). Decision quality was not
+measured: the compact form is the one the decision trainer's rows use, and the stock model's absolute scores of the reply
+(-33 to -50 nats for the first value) are dominated by the template's reply prefix, as before.
+**Measurement debt:** decision accuracy/calibration of `readout: decision` functions on the applications that declare them
+(15 application functions) before and after, on a model that was not trained on the compact form.
+
 ### 2026-10-30 — JOLT+ child references match the child's inputs, not the reference wording (debt: live outcome)
 
 A reference child fact (`child_value`) applied only when every match string occurred in the child call's prompt.

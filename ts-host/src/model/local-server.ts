@@ -161,8 +161,16 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint ?? (choice.kind === 'managed-local' || undefined),
     ...(choice.kind === 'managed-local' ? { scoreAll: true } : {}),
     ...(choice.kind === 'managed-local' ? { tunedRequest, nativeStates: () => llama!.nativeStatesLoaded } : external?.vllm ? { tunedRequest: vllmTunedRequest } : {}) });
-  const driver = (options: OpenAICompatibleOptions) => external?.neuraleseServer ? Object.assign(nativeDriver(),
-    { contextWindow: () => serverContextWindow(options) }) : openai(options);
+  // One driver per server: its scheduler, request limit and decision coalescer are what turns and readouts that
+  // arrive together share, so they are not rebuilt per request.
+  const drivers = new Map<string, ReturnType<typeof openai> | ReturnType<typeof nativeDriver>>();
+  const driver = (options: OpenAICompatibleOptions) => {
+    const key = `${options.endpoint}\n${options.model}`;
+    let built = drivers.get(key);
+    if (!built) drivers.set(key, built = external?.neuraleseServer ? Object.assign(nativeDriver(),
+      { contextWindow: () => serverContextWindow(options) }) : openai(options));
+    return built as ReturnType<typeof openai>;
+  };
   let unscored: string | null = null, sized = false;
 
   const start = async (): Promise<OpenAICompatibleOptions> => {

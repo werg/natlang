@@ -33,6 +33,7 @@ import type { CallStore } from './calls/store.js';
 import { machineStoreRoot, openMachineStore } from './machine-store.js';
 import { recordEscalation } from './calls/feedback.js';
 import { supportsGuidance } from './native/neuralese.js';
+import { sessionDriver } from './model/driver.js';
 
 export type NatlangRuntimeConfiguration = {
   /** Model selection: a profile name, or a Pi provider / model override (as `--profile`, `--provider`, `--model`). */
@@ -139,14 +140,6 @@ export async function bindTunedModel(selected: LoadedModelConfiguration, program
   log.write(`natlang: ${program} runs its tuned release ${release.manifest.digest.slice(0, 12)} on the checkpoint it was tuned on ` +
     `(${sha256.slice(0, 12)}${step !== undefined ? `, step ${step}` : ''}) instead of ${selected.name}; --no-weights runs ${selected.name} untuned${current}\n`);
   return { ...selected, name: `${program}-tuned`, profile, choice: resolveModelChoice(profile) };
-}
-
-/** A model session's turns, decisions and context window as a runtime model driver. */
-export function sessionDriver(session: ManagedModelSession): ModelDriver {
-  return Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => session.turn(request, signal, options),
-    { decide: (request: DecisionRequest, signal?: AbortSignal) => session.decide(request, signal), contextWindow: () => session.contextWindow(),
-      ...(session.guidance ? { guidance: true as const } : {}),
-      ...(session.neuralese ? { neuralese: true as const, neuraleseRuntime: () => session.neuraleseRuntime!() } : {}) });
 }
 
 /** The runtime's `model` (and seed, native-state reader) for a resolved choice and its driver. */

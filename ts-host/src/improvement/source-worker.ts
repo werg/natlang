@@ -6,13 +6,13 @@ import ts from 'typescript';
 import { Folder,APPLY_TO_FOLDER } from '../native/scoped-fs.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import { compileVirtualProject } from '../runtime/node.js';
-import type { ModelTurn } from '../contracts.js';
+import { remoteDriver } from '../runtime/driver.js';
 class FixtureError extends Error {}
-const pending = new Map<number, { resolve: (turn: ModelTurn) => void; reject: (error: Error) => void }>();
+const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 let sequence = 0;
 parentPort!.on('message', message => {
   const request = pending.get(message.id);
-  if (request) { pending.delete(message.id); message.error ? request.reject(new Error(message.error)) : request.resolve(message.turn); }
+  if (request) { pending.delete(message.id); message.error ? request.reject(new Error(message.error)) : request.resolve(message.value); }
 });
 try {
   const build = compileVirtualProject({ files: workerData.files }, targetRuntime, { programId: workerData.contract.programId, constrained: true, target: 'node' });
@@ -25,9 +25,9 @@ try {
     return [name, serviceBuild.require('service.ts')];
   }));
   if (typeof target !== 'function') throw new Error('target entry is not callable');
-  const task = runtime.createNatlangRuntime({ model: {driver:request => new Promise((resolve, reject) => {
-    const id = sequence++; pending.set(id, { resolve, reject }); parentPort!.postMessage({ type: 'request', id, request });
-  })}, trace:trace=>parentPort!.postMessage({type:'trace',callId:trace.callId,events:trace.events.filter(event=>event.kind==='action'||event.kind==='model_request'||event.kind==='skill_use')}), services, serviceDeclarations, network: false, codeEdits: 'deny', seed: { mode: 'derived', root: workerData.seed }, limits: workerData.limits });
+  const task = runtime.createNatlangRuntime({ model: {driver: remoteDriver(call => new Promise((resolve, reject) => {
+    const id = sequence++; pending.set(id, { resolve, reject }); parentPort!.postMessage({ type: 'request', id, call });
+  }), workerData.decisions === true)}, trace:trace=>parentPort!.postMessage({type:'trace',callId:trace.callId,events:trace.events.filter(event=>event.kind==='action'||event.kind==='model_request'||event.kind==='skill_use')}), services, serviceDeclarations, network: false, codeEdits: 'deny', seed: { mode: 'derived', root: workerData.seed }, limits: workerData.limits });
   const folder=workerData.folder?Folder.fromFiles(workerData.folder):undefined;
   const value = await task.run(() => folder ? (typeof (target as unknown as Record<PropertyKey,unknown>)[APPLY_TO_FOLDER]==='function'?folder.apply(target, ...workerData.args):target(folder,...workerData.args)) : target(...workerData.args));
   parentPort!.postMessage({ type: 'result', value: JSON.parse(JSON.stringify(value)),...(folder?{files:Object.fromEntries(folder.filePaths().map(path=>[path,new TextDecoder().decode(folder.readBytesSync(path))]))}:{}) });

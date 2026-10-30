@@ -233,7 +233,9 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
     const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel', String(plan.slots),
       '-c', String(plan.totalContext), '-ngl',
       String(options.local?.gpuLayers ?? 99), '--cache-ram', String(options.local?.cacheRamMiB ?? 256), '--no-webui',
-      '--jinja', ...(template ? ['--chat-template-file', template] : []), ...(options.local?.args ?? [])];
+      '--jinja', ...(template ? ['--chat-template-file', template] : []),
+      // The stock file's sliding-window layers need the full cache for a warm opening or earlier prompt to be reused.
+      ...(release.fullSlidingWindowCache && !environment.NATLANG_MODEL_PATH ? ['--swa-full'] : []), ...(options.local?.args ?? [])];
     loraIndex.clear();
     const adapters = options.loraAdapters?.() ?? [];
     if (adapters.length) {

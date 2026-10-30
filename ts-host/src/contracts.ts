@@ -130,6 +130,8 @@ export type DecisionRequest = { messages: unknown[]; options: string[]; adapters
   /** Set by the transport for a JOLT+ teacher attempt: the server renders this invocation's privileged block. */
   x_natlang_privileged_context?: Record<string, unknown> };
 export type DecisionScores = { log_probs: number[]; tokens?: number[];
+  /** The prompt tokens the scorer processed for this readout, when the backend reports them (usage accounting). */
+  prompt_tokens?: number;
   /** Set only by an RL collection scorer that samples the readout for exploration: the option the call returns
    * instead of the most probable one (its sampling receipt is recorded with the capture). */
   chosen?: number;

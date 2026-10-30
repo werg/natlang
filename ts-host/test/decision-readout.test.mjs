@@ -161,3 +161,22 @@ test('a driver\'s scoreMany batches the readouts of concurrent calls', async () 
   assert.deepEqual(answers, ['knave', 'knave', 'knave']);
   assert.deepEqual(batches, [3]);
 });
+
+test('the readout offers no tools: its system turn is the decision prompt and the program guidance, not the tool manual', async () => {
+  const { NativeToolAgent } = await import('../dist/native/agent.js');
+  const { authoredTextGuidance } = await import('../dist/adaptation/index.js');
+  const { DECISION_SYSTEM_PROMPT } = await import('../dist/native/decision.js');
+  const { interpreter, lambda } = await import('./support/natlang.mjs');
+  const requests = [];
+  const driver = Object.assign(async () => { throw new Error('the tool loop must not run'); }, {
+    decide: async request => { requests.push(request); return { log_probs: [Math.log(0.3), Math.log(0.7)] }; } });
+  const agent = new NativeToolAgent(driver, { decisionReadout: 'finite-returns',
+    authoredTextGuidance: authoredTextGuidance('Use the approved procedure.', 'fixture-program') });
+  const runtime = interpreter({ agent: session => agent.run(session) });
+  await runtime.run(lambda({ type: '() => "yes" | "no"', instructions: 'Decide.' }));
+  const [system, ...rest] = requests[0].messages;
+  assert.equal(system.role, 'system');
+  assert.equal(system.content, DECISION_SYSTEM_PROMPT + '\n\n<natlang_program_guidance>\nUse the approved procedure.\n</natlang_program_guidance>\n');
+  assert.doesNotMatch(system.content, /return_result|eval|read_code/, 'the tool manual stays out of a prompt that offers no tools');
+  assert.match(String(rest.at(-1).content), /exactly one of these JSON values/);
+});

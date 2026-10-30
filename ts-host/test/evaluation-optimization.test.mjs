@@ -7,6 +7,8 @@ import { pathToFileURL } from 'node:url';
 import { loadEvaluationSuite, evaluate, preflightEvaluation, validateCases, validateMetrics } from '../dist/evaluation/index.js';
 import { optimize, resumeOptimization, revalidateAdaptation } from '../dist/optimization/index.js';
 import { candidateArtifact } from '../dist/evaluation/runner.js';
+import { BudgetExhausted, UsageGateway } from '../dist/evaluation/usage.js';
+const limits = overrides => ({ maxRollouts: 4, maxProposals: 3, maxModelCalls: 4, ...overrides });
 import { scriptedModel } from './support/natlang.mjs';
 
 const componentStep = `const plan=await search.plan(state.iteration); let finished;
@@ -91,6 +93,54 @@ test('evaluation imports application state afresh, scores real runtime execution
   assert.equal(first.results[0].usage.inputTokens, null);
   assert.notEqual(first.results[0].id, second.results[0].id);
   assert.ok(model.openings.every(opening => !opening.includes('Only the first word is needed')), 'scoring feedback is not in executor source');
+});
+
+test('a driver that scores decision readouts answers them for the evaluation worker, metered as model calls', async () => {
+  const fixture = fixtureSuite();
+  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: decision\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
+  const suite = await loadEvaluationSuite(fixture.path);
+  const scored = [];
+  const driver = Object.assign(() => { throw new Error('a scored decision must not run the tool loop'); }, {
+    decide: async request => { scored.push(request.options); return { log_probs: request.options.map(option => option === '"ordinary"' ? -0.1 : -3) }; },
+  });
+  const batch = await evaluate(suite, { split: 'validation', driver });
+  assert.equal(batch.quality, 1);
+  assert.deepEqual(scored, [['"ordinary"', '"urgent"']]);
+  assert.equal(batch.results[0].usage.modelCalls, 1);
+  assert.equal(batch.results[0].usage.inputTokens, null);
+  const gateway = new UsageGateway(limits({ maxModelCalls: 1 }));
+  await gateway.score(driver.decide, { messages: [], options: ['"a"', '"b"'] });
+  assert.equal(gateway.ledger.usage.modelCalls, 1);
+  await assert.rejects(gateway.score(driver.decide, { messages: [], options: ['"a"', '"b"'] }), error => error instanceof BudgetExhausted && error.dimension === 'modelCalls');
+});
+
+test('the CLI evaluation driver of a model session scores decision readouts in the evaluation', async () => {
+  const { sessionDriver } = await import('../dist/model/driver.js');
+  const fixture = fixtureSuite();
+  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: decision\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
+  const suite = await loadEvaluationSuite(fixture.path);
+  const scored = [];
+  const session = { turn: async () => { throw new Error('a scored decision must not run the tool loop'); },
+    decide: async request => { scored.push(request.options); return { log_probs: [-0.1, -3] }; }, contextWindow: async () => 4096 };
+  const batch = await evaluate(suite, { split: 'validation', driver: sessionDriver(session) });
+  assert.equal(batch.quality, 1);
+  assert.deepEqual(scored, [['"ordinary"', '"urgent"']]);
+});
+
+test('a driver that declines to score leaves the evaluation worker running the tool loop, charged for the turn only', async () => {
+  const fixture = fixtureSuite();
+  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: decision\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
+  const suite = await loadEvaluationSuite(fixture.path);
+  const model = scriptedModel(() => 'return "ordinary"');
+  let turns = 0;
+  const driver = Object.assign((...args) => { turns++; return model.driver(...args); },
+    { decide: async () => { throw new Error('decision-unsupported: this backend cannot score replies'); } });
+  const gateway = new UsageGateway(limits({ maxModelCalls: 20 }));
+  const batch = await evaluate(suite, { split: 'validation', driver, gateway });
+  assert.equal(batch.results[0].status, 'scored');
+  assert.ok(turns > 0, 'the call ran its tool loop');
+  assert.equal(batch.results[0].usage.modelCalls, turns, 'only the turns were requests');
+  assert.equal(gateway.ledger.usage.modelCalls, turns);
 });
 
 test('fixture disposal and model transport failures remain infrastructure failures', async () => {
