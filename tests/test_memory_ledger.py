@@ -1113,3 +1113,23 @@ def test_fresh_same_unit_retry_survives_old_waiter_cancellation(monkeypatch, tmp
         assert state['claims']['retry.service']['command'] == ['new-job']
         assert state['cancel_generations']['retry.service'] == 2
     assert len(launches) == 1
+
+
+def test_stopped_unit_survivors_are_killed_only_when_same_process(capsys):
+    import subprocess
+    import sys
+    proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+    try:
+        start = ledger.process_start(proc.pid)
+        assert start is not None
+        # A reused pid (different start time) is left alone.
+        assert ledger.sweep_survivors('u.service', {proc.pid: start + 1}) == []
+        assert proc.poll() is None
+        assert ledger.sweep_survivors('u.service', {proc.pid: start}) == [proc.pid]
+        proc.wait(timeout=10)
+        assert proc.returncode == -9
+        assert 'survivor_killed' in capsys.readouterr().out
+        assert ledger.sweep_survivors('u.service', {proc.pid: start}) == []  # already gone
+    finally:
+        proc.kill()
+        proc.wait()

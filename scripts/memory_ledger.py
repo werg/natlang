@@ -46,6 +46,7 @@ import mmap
 import json
 import re
 import os
+import signal
 import shlex
 import subprocess
 import sys
@@ -882,6 +883,7 @@ def status(args):
                       **({'fixed_claim': True} if fixed_claim(c) else {}),
                       'command': shlex.join(c['command'])[:160]} for u, c in live.items()}
     print(json.dumps({'available_gb': round(mem_available() / GIB, 1), 'headroom_gb': round(free / GIB, 1),
+                      'orphans_gb': {str(pid): round(size / GIB, 1) for pid, size in orphans(live, gpu).items()},
                       **({'driver_cuda_free_gb': round(driver_cuda_free / GIB, 1),
                           'cuda_headroom_gb': round(cuda_free / GIB, 1)} if cuda_free is not None else {}),
                       'claims': claims,
@@ -1014,6 +1016,61 @@ def terminate(unit, container):
         subprocess.Popen(['docker', 'kill', '--signal', 'SIGTERM', name], stderr=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL)
     subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGTERM', unit])
+
+
+def process_start(pid):
+    """Start time (clock ticks since boot, ``/proc/<pid>/stat`` field 22) of a live non-zombie process, else None.
+    With the pid it identifies the process, so a reused pid is never mistaken for the original."""
+    try:
+        stat = open(os.path.join(PROC, str(pid), 'stat')).read()
+        fields = stat[stat.rindex(')') + 2:].split()
+        return None if fields[0] in ('Z', 'X') else int(fields[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def unit_processes(unit):
+    """{pid: start time} of the processes in the unit's cgroup now ({} once it is gone)."""
+    cgroup = unit_state(unit)[1]
+    try:
+        pids = [int(p) for p in open('/sys/fs/cgroup' + cgroup + '/cgroup.procs').read().split()] if cgroup else []
+    except OSError:
+        return {}
+    return {pid: start for pid in pids if (start := process_start(pid)) is not None}
+
+
+def sweep_survivors(unit, recorded):
+    """SIGKILL every recorded process of a stopped unit that is still alive after the unit ended (2026-10-30: an RL
+    controller and its 97 GB learner outlived lfm3-rl-alt-2, reparented to user@1000.service, and held CUDA memory the
+    cgroup accounting cannot see). Returns the pids killed; each is logged to the journal via stdout."""
+    killed = []
+    for pid, start in recorded.items():
+        if process_start(pid) == start:
+            with contextlib.suppress(OSError):
+                os.kill(pid, signal.SIGKILL)
+                killed.append(pid)
+                print(json.dumps({'survivor_killed': pid, 'unit': unit}), flush=True)
+    return killed
+
+
+def orphans(live, gpu, min_bytes=2 * GIB):
+    """Large processes (RSS or CUDA memory) belonging to no live unit and no container: what a stopped unit left
+    behind, invisible to the ledger's claims. {pid: bytes}."""
+    found = {}
+    for entry in os.listdir(PROC):
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        try:
+            rss = int(open(os.path.join(PROC, entry, 'statm')).read().split()[1]) * os.sysconf('SC_PAGE_SIZE')
+            cgroup = open(os.path.join(PROC, entry, 'cgroup')).read()
+        except (OSError, ValueError, IndexError):
+            continue
+        size = rss + gpu.get(pid, 0)
+        if size >= min_bytes and 'user@' in cgroup and 'docker-' not in cgroup \
+                and not any(f'/{unit}' in cgroup for unit in live):
+            found[pid] = size
+    return found
 
 
 def forget_failure(unit):
@@ -1198,10 +1255,13 @@ def guard(args):
             # its memory. Signal the job inside, then give it its grace to write its full state.
             container = containers
             terminate(unit, container)
-            pending[unit] = {'deadline': time.time() + grace, 'container': container, 'requeued': requeued}
+            pending[unit] = {'deadline': time.time() + grace, 'container': container, 'requeued': requeued,
+                             'pids': unit_processes(unit)}
             stopped[unit] = time.time()
         for name in list(pending):
             active = unit_state(name)[0] in ('active', 'activating', 'deactivating')
+            if active:
+                pending[name]['pids'].update(unit_processes(name))  # children forked during the grace count too
             if pending[name].get('killed'):
                 # Killed: watch it until it has ended, so a requeued unit's stop is cleared below (bounded wait).
                 action = 'wait' if active and time.time() < pending[name]['deadline'] + 60 else 'done'
@@ -1218,6 +1278,7 @@ def guard(args):
                 pending[name]['killed'] = True
                 continue
             stop_containers(pending[name]['container'])  # the unit ended; a detached container may live on
+            sweep_survivors(name, pending[name]['pids'])  # and so may processes that escaped its cgroup kill
             if pending[name].get('requeued'):
                 forget_failure(name)
             pending.pop(name)
