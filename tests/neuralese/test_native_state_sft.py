@@ -104,7 +104,7 @@ def test_quality_held_rows_are_skipped_and_full_held_qualification_stays_incompl
     monkeypatch.setattr(trainer,'_evaluate',lambda model, graphs, **kwargs:
         {'examples':sum(1 for _ in graphs),'loss':0.25,'correct':1})
     args=SimpleNamespace(held_eval_tokens=0,held_eval_graphs=0,held_final_policy='full',
-        foundation_qualification_request=None,checkpoint_layers=False,chunk_tokens=8,ce_supervision_policy=None)
+        checkpoint_layers=False,chunk_tokens=8,ce_supervision_policy=None)
     result,after=trainer._evaluate_cadence(object(),source,args=args,coverage=coverage,final=True)
     assert result['examples']==2 and source.used==[0,2]
     assert result['scope']=='cadence-subset' and result['source_graphs']==3

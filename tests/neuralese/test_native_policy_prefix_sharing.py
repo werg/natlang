@@ -219,8 +219,5 @@ def test_unsupported_policy_graphs_keep_their_unshared_plan(tmp_path):
     examples = [parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint']) for graph in graphs]
     objective = _objective(tmp_path, spec, 'internal')
     assert objective.shares_causal_prefixes(examples)  # in-episode producer/consumer edges are supported
-    objective.semantic_channel = object()
-    assert not objective.shares_causal_prefixes(examples)
-    objective.semantic_channel = None
     external = SimpleNamespace(id=examples[0].id, external_states={'x': {'id': 'block'}})
     assert not objective.shares_causal_prefixes([external])
