@@ -59,8 +59,18 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
   };
   let sequence = 0;
   const wrap = (target: object, label: string): object => {
-    const proxy = new Proxy(target, {
-    get(object, property, receiver) {
+    // The proxy stands over an empty shell, not over the service: a host may hand over frozen or hardened objects, and a
+    // proxy over a non-configurable, non-writable property must return that property's own value.
+    const object = target;
+    const proxy = new Proxy(Object.create(Object.getPrototypeOf(target)), {
+    has: (_shell, property) => Reflect.has(object, property),
+    ownKeys: () => Reflect.ownKeys(object),
+    getOwnPropertyDescriptor: (_shell, property) => {
+      const descriptor = Reflect.getOwnPropertyDescriptor(object, property);
+      return descriptor && { ...descriptor, configurable: true };
+    },
+    set: (_shell, property, value) => Reflect.set(object, property, value),
+    get(_shell, property, receiver) {
       const value = Reflect.get(object, property, receiver);
       if (typeof property === 'symbol') return value;
       if (typeof value === 'function') {
