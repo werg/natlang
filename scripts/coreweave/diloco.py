@@ -18,6 +18,13 @@ bearer token and the coordinator's share token reach the sandboxes only as secre
     diloco.py launch RUN.json     start the coordinator, then the learners (preserves partial cohorts on failure)
     diloco.py status RUN_ID       the coordinator's merge status
     diloco.py attach-eval RUN_ID JOB.json BUNDLE.json   an eval sandbox with the coordinator URL and secrets
+    diloco.py plan-accounts RUN.json   the account of every role (no API call; accounts.plan_diloco)
+
+Accounts: ``"accounts": "auto"`` spreads the learners across the eligible accounts by remaining headroom and puts a
+declared coordinator replica (``"replica": {"resources": ...}`` in the plan) in another account than the primary;
+``"accounts": {"coordinator": NAME, "learners": [NAME, ...], "replica": NAME}`` pins them. Absent: every role uses the
+job's ``account`` or the selected account. Cross-account traffic is the coordinator's public HTTPS URL with its share
+token and our bearer token; no account key ever enters a sandbox.
 
 Cohosted mode uses the learner bundle for both roles; it must include the exact coordinator parent and code.
 Worker 0 uses loopback, all others use the share-token gateway. Its coordinator remains live after worker 0 finishes.
@@ -75,6 +82,20 @@ def validate(run: dict) -> dict:
     if resident != 'off' and (not isinstance(resident, dict) or set(resident) != {'directory', 'geometry_qualification'} or
             not all(isinstance(v, str) and v.startswith('/') for v in resident.values())):
         raise cwctl.ControllerError('resident needs absolute directory and geometry_qualification paths')
+    accounts = run.get('accounts')
+    if accounts is not None and accounts != 'auto':
+        workers = run['settings'].get('workers')
+        if (not isinstance(accounts, dict) or set(accounts) - {'coordinator', 'learners', 'replica'}
+                or not isinstance(accounts.get('learners'), list) or len(accounts['learners']) != workers):
+            raise cwctl.ControllerError('accounts is "auto" or {"coordinator": NAME, "learners": [one per worker], '
+                                        '"replica": NAME}')
+        for name in [accounts.get('coordinator'), accounts.get('replica'), *accounts['learners']]:
+            if name is not None:
+                cwctl.cwaccounts.check_name(name)
+        if accounts.get('replica') and accounts['replica'] == accounts.get('coordinator'):
+            raise cwctl.ControllerError('the coordinator replica must run in another account than the primary')
+        if run.get('placement', 'cohosted') == 'cohosted' and accounts['learners'][0] != accounts.get('coordinator'):
+            raise cwctl.ControllerError('cohosted: learner 0 shares the coordinator sandbox, so its account too')
     if 'coordinator_url' in run['settings']:
         raise cwctl.ControllerError('settings.coordinator_url is filled in by the launch')
     return run
@@ -285,11 +306,14 @@ def parent_read_secret(run):
     if (pin['path']!=run['coordinator']['parent'] or pin['sha256']!=expected
             or not pin.get('full_optimizer_rng_exposure') or not 0<pin['requested_stop']<=pin['global_step']):
         raise cwctl.ControllerError('private parent pin does not match run parent')
-    remote=wandb.Api().run(receipt['run']).file(receipt['name'])
+    # Private exports live in the storage account (werg/natlang) whatever account the sandbox runs in; only the
+    # resulting scoped read URL (a capability, not a key) reaches the sandbox.
+    key=cwctl.cwaccounts.storage_wandb_key()
+    remote=wandb.Api(api_key=key).run(receipt['run']).file(receipt['name'])
     if remote.size!=identity['bytes']:raise cwctl.ControllerError('private parent object size changed')
     url=remote.url
     if urlparse(url).hostname=='api.wandb.ai':
-        response=requests.get(url,auth=('api',os.environ['WANDB_API_KEY']),stream=True,timeout=60)
+        response=requests.get(url,auth=('api',key),stream=True,timeout=60)
         try:
             response.raise_for_status();url=response.url
         finally:response.close()
@@ -299,7 +323,25 @@ def parent_read_secret(run):
     cap={**pin,'url':url,**({'base':transfer['base']} if transfer.get('base') else {})}
     return {'parent-read':json.dumps(cap).encode()}
 
-def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: list[str], *, first_worker=0, on_started=None, worker_ids=None) -> list[str]:
+def plan_accounts(run: dict, ledger=None) -> dict | None:
+    """The account of every role: pinned, planned from the accounts ledger ("auto"), or None (single account)."""
+    accounts = run.get('accounts')
+    if accounts is None:
+        return None
+    if accounts != 'auto':
+        return {'coordinator': accounts.get('coordinator'), 'replica': accounts.get('replica'),
+                'learners': list(accounts['learners']), 'reasons': {'all': 'pinned in the run file'}}
+    learner = _template(run['learners']['job'])
+    cohosted = run.get('placement', 'cohosted') == 'cohosted'
+    coordinator = learner if cohosted else _template(run['coordinator']['job'])
+    replica = run['coordinator'].get('replica')
+    return cwctl.cwaccounts.plan_diloco(
+        ledger or cwctl.account_ledger(write=False), cwctl.cwaccounts.settings(), workers=run['settings']['workers'],
+        learner=learner['resources'], coordinator=coordinator['resources'], cohosted=cohosted,
+        hours=float(learner['lifetime_hours']), replica=None if replica is None else replica['resources'])
+
+
+def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: list[str], *, first_worker=0, on_started=None, worker_ids=None, accounts=None) -> list[str]:
     """Create missing learners concurrently; persist ownership immediately after creation."""
     import threading
     if 'NATLANG_CW_CREATE_INTERVAL' not in os.environ:
@@ -318,7 +360,7 @@ def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: li
                         on_started(worker, sandbox_id)
             entry = cwctl.launch(learner_job(run, worker, url), False, True, None, Path(run['learners']['bundle_file']),
                                  secrets={'diloco-token': token.encode(), 'diloco-gateway': gateway, **parent_read_secret(run)},
-                                 on_created=created)
+                                 on_created=created, **({'account': accounts[worker]} if accounts else {}))
             with lock:
                 if entry['sandbox_id'] not in started:
                     started.append(entry['sandbox_id'])
@@ -356,8 +398,9 @@ def launch(run: dict, *, coordinator_only=False) -> dict:
     _keep(RUNS / run['id'] / 'token', token)
     started: list[str] = []
     placement = run.get('placement', 'cohosted')
+    planned = plan_accounts(run)
     record = {'run': run, 'placement': placement, 'state': 'launching', 'coordinator': None,
-              'learners': [None] * run['settings']['workers'], 'ownership': {}}
+              'learners': [None] * run['settings']['workers'], 'ownership': {}, 'accounts': planned}
 
     def save_record():
         tmp = record_path.with_suffix('.tmp')
@@ -383,7 +426,8 @@ def launch(run: dict, *, coordinator_only=False) -> dict:
             save_record()
         coordinator = cwctl.launch(job, False, True, None, Path(bundle),
                                    secrets={'diloco-token': token.encode(), **parent_read_secret(run)},
-                                   on_created=coordinator_created)
+                                   on_created=coordinator_created,
+                                   **({'account': planned['coordinator']} if planned else {}))
         if record['coordinator'] is None:
             coordinator_created(coordinator['sandbox_id'])
         if 'service_url' not in coordinator or 'wait_error' in coordinator or 'push' not in coordinator:
@@ -401,7 +445,8 @@ def launch(run: dict, *, coordinator_only=False) -> dict:
                 raise cwctl.ControllerError('coordinator-only pause requires cohosted placement')
             return record
         launch_learners(run, coordinator['service_url'], token, gateway, started,
-                        first_worker=1 if cohosted else 0, on_started=assigned)
+                        first_worker=1 if cohosted else 0, on_started=assigned,
+                        accounts=planned['learners'] if planned else None)
     except BaseException as error:
         record['state'] = 'launch-incomplete'
         record['error'] = f'{type(error).__name__}: {error}'
@@ -444,7 +489,9 @@ def launch_remaining(run_id: str) -> dict:
         record['ownership'][sandbox_id] = [f'learner-{worker}']
         save()
     try:
-        launch_learners(run, record['url'], token, gateway, started, first_worker=1, on_started=assigned, worker_ids=missing)
+        planned = record.get('accounts')
+        launch_learners(run, record['url'], token, gateway, started, first_worker=1, on_started=assigned, worker_ids=missing,
+                        accounts=planned['learners'] if planned else None)
     except BaseException as error:
         record['state'] = 'remaining-launch-failed'
         record['error'] = f'{type(error).__name__}: {error}'
@@ -489,6 +536,7 @@ def main(argv=None) -> int:
     launch_cmd.add_argument('--coordinator-only', action='store_true')
     commands.add_parser('launch-remaining').add_argument('run_id')
     commands.add_parser('status').add_argument('run_id')
+    commands.add_parser('plan-accounts').add_argument('run', type=Path)
     attach = commands.add_parser('attach-eval')
     attach.add_argument('run_id')
     attach.add_argument('job')
@@ -499,6 +547,8 @@ def main(argv=None) -> int:
         print(json.dumps(launch(json.loads(args.run.read_text()), coordinator_only=args.coordinator_only), indent=1))
     elif args.command == 'launch-remaining':
         print(json.dumps(launch_remaining(args.run_id), indent=1))
+    elif args.command == 'plan-accounts':
+        print(json.dumps(plan_accounts(validate(json.loads(args.run.read_text()))), indent=1))
     elif args.command == 'attach-eval':
         print(json.dumps(attach_eval(args.run_id, args.job, args.bundle_file), indent=1))
     else:
@@ -511,6 +561,6 @@ if __name__ == '__main__':
         cwctl.reexec_in_venv()
     try:
         sys.exit(main())
-    except (cwctl.ControllerError, jobs.JobError) as error:
+    except (cwctl.ControllerError, jobs.JobError, cwctl.cwaccounts.AccountError) as error:
         print(f'diloco: {error}', file=sys.stderr)
         sys.exit(2)
