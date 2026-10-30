@@ -1,0 +1,19 @@
+{
+ "schema": "natlang.coreweave-job/1",
+ "id": "@@JOB_ID@@",
+ "kind": "train",
+ "placement": {"where": "coreweave", "reason": "LFM3 whole-graph RL (JOLT+ or self-distillation), one lineage per GPU sandbox (plans/neuralese/LFM3_RL_CLOUD_20261031.md): the SGLang-fork actor collects a round, the native learner updates, alternating as alt_par.sh does per lineage on DGX. Full state exports at every round boundary to private W&B storage and the DGX hub (rl_cloud.py export)."},
+ "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+ "resources": {"gpu": 1, "cpu": "16", "memory": "96Gi"},
+ "lifetime_hours": 720,
+ "scratch": {"path": "/work", "size": "400Gi"},
+ "transport": "api",
+ "env": {"HF_HUB_OFFLINE": "1", "NATLANG_CW_BUILD_TSHOST": "1", "NATLANG_CW_COLLECT_WAIT": "60",
+         "TORCHINDUCTOR_CACHE_DIR": "/work/.cache/inductor", "TRITON_CACHE_DIR": "/work/.cache/triton",
+         "FLASHINFER_WORKSPACE_BASE": "/work/.cache"},
+ "exports": [{"kind": "tree", "remote": "@@ROOT@@/.exports/@@LINEAGE@@", "role": "rl-@@LINEAGE@@"}],
+ "command": ["bash", "scripts/coreweave/lfm3_rl_lineage.sh", "@@ROOT@@", "@@LINEAGE@@", "@@ROUNDS@@"],
+ "needs": {"gpu_memory_gb": 70, "hours": 720, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": true},
+ "resource_notes": "Explicit CPU and RAM minima (owner 2026-10-29; inference sandboxes >= 8 CPU). 16 CPU: 12-24 natlang node workers + the SGLang scheduler + controller during collection. 96Gi: DGX-measured per-lineage host use is about 18 GB while collecting (node workers 6.6, serve front 4.4, SGLang 2.7, controller up to 4) and about 17 GB learner RSS plus the 15 GB full-state checkpoint load while updating; replace with the measured cgroup peak (+25%) from the first rounds. GPU: the learner peaked at 64 GB CUDA on DGX (max graph forward 180k tokens), so H100-80GB or larger.",
+ "bundle_plan": "rl_cloud.py bundle RUN.json (code snapshot, wheelhouse, SGLang fork source + x86_64 lock, HF base, custody packets, config dependencies, task source); rl_cloud.py launch RUN.json LINEAGE pushes it and the rl-parent capability."
+}

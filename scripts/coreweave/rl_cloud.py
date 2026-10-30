@@ -1,0 +1,621 @@
+#!/usr/bin/env python3
+"""LFM3 whole-graph RL lineages on CoreWeave GPU sandboxes, one lineage per sandbox, the DGX as hub
+(plans/neuralese/LFM3_RL_CLOUD_20261031.md; sandbox side: lfm3_rl_lineage.sh and rl_cloud_sandbox.py).
+
+Run with the CoreWeave client venv (/home/werg/.local/share/natlang/cw-venv/bin/python). Credentials never leave the
+DGX: the sandbox gets per-object signed URLs (capabilities) for the private W&B storage (werg/natlang).
+
+  rl_cloud.py seed RUN.json LINEAGE            the lineage's seed export: its cloud config + actor tokenizers + parent
+                                               checkpoint, uploaded once from the DGX (content-addressed: lineages
+                                               sharing a parent share its blob)
+  rl_cloud.py bundle RUN.json                  the run's input bundle: code snapshot, wheelhouse, SGLang fork source +
+                                               x86_64 lock, base model (HF URLs), custody packets, config dependencies
+  rl_cloud.py launch RUN.json LINEAGE [--account A] [--dry-run]
+                                               one GPU sandbox from the newest DGX-verified export of LINEAGE
+  rl_cloud.py export RUN.json [--once] [--interval S]
+                                               the exporter: uploads each lineage's newest staged export (sandbox ->
+                                               W&B by signed PUT), then GETs it to the DGX hub (ROOT/<lineage>,
+                                               verified), the resume point of the next launch
+  rl_cloud.py status RUN.json
+  rl_cloud.py stop RUN.json LINEAGE
+
+RUN.json (schema natlang.rl-cloud-run/1):
+  {"id", "root" (the lineage root, the same absolute path in sandbox and on DGX), "job" (template),
+   "rounds" (per sandbox; 0 = until stopped), "template_runtime" (a DGX RL runtime whose runs/ packets ship),
+   "extras" (absolute config dependencies), "hf" (base model REPO@REV=LOCAL),
+   "lineages": {NAME: {"template": a DGX lineage config.json, "parent": {"checkpoint", "tokenizers"},
+                       "config": {overrides, e.g. "cases": any natlang case JSONL task source}, "account": optional}}}
+The task source is only the lineage config's "cases" file (shipped as an extra): any train-split natlang case JSONL
+whose rows carry the semantics/oracle the runtime's collector scores. A new task mix is a new "cases" value (and its
+file in "extras"), applied at the next round boundary through the controller's own hot reload.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[1]
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
+import cwctl  # noqa: E402
+import job as jobs  # noqa: E402
+
+PROJECT = ('werg', 'natlang')
+PARENT_SCHEMA = 'natlang.rl-cloud-parent/1'
+EXPORT_SCHEMA = 'natlang.rl-cloud-export/1'
+SANDBOX_HELPER = 'scripts/coreweave/rl_cloud_sandbox.py'
+RUNTIME_RE = re.compile(r'/home/werg/data/lfm3-rl-dgx-20261029/runtime-[0-9a-f]+')
+
+
+# -- run files and local state -----------------------------------------------------------------------------------------
+
+def load_run(path):
+    run = json.loads(Path(path).read_text())
+    if run.get('schema') != 'natlang.rl-cloud-run/1':
+        raise SystemExit('not a natlang.rl-cloud-run/1 file')
+    run['_path'] = str(Path(path).resolve())
+    return run
+
+
+def hub(run):
+    path = Path(run['root']) / '.cloud'
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def read_json(path, default=None):
+    path = Path(path)
+    return json.loads(path.read_text()) if path.exists() else default
+
+
+def write_json(path, value):
+    from natlang_neuralese.common.jsonio import write_json_durable
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    write_json_durable(Path(path), value)
+
+
+def note(run, text):
+    """One line in the RL decisions log (the DGX RL operations record)."""
+    line = f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')} cloud {run['id']}: {text}"
+    with open('/home/werg/data/lfm3-rl-dgx-20261029/ops/decisions.log', 'a') as log:
+        log.write(line + '\n')
+    print(line, flush=True)
+
+
+def sha256_file(path):
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    return sha256_file_hex(Path(path))
+
+
+# -- private W&B blob store (content-addressed run files) ----------------------------------------------------------------
+
+def _key():
+    cwctl.load_env_file()
+    return cwctl.cwaccounts.storage_wandb_key()
+
+
+def _gql(query, variables):
+    import requests
+    response = requests.post('https://api.wandb.ai/graphql', auth=('api', _key()),
+                             json={'query': query, 'variables': variables}, timeout=60)
+    response.raise_for_status()
+    data = response.json()
+    if data.get('errors'):
+        raise RuntimeError(str(data['errors'])[:500])
+    return data['data']
+
+
+def blob_run(run):
+    """The W&B run whose files are this cloud run's blobs (created once, private project)."""
+    registry = hub(run) / 'blob-run.json'
+    if registry.exists():
+        return read_json(registry)['run_path']
+    os.environ['WANDB_API_KEY'] = _key()
+    os.environ.setdefault('WANDB_DIR', str(hub(run) / 'wandb'))
+    import wandb
+    access = _gql('query { project(name:"natlang",entityName:"werg") { access } }', {})['project']['access']
+    if access != 'PRIVATE':
+        raise RuntimeError(f'werg/natlang is {access}, not PRIVATE')
+    wb = wandb.init(entity=PROJECT[0], project=PROJECT[1], job_type='rl-cloud-blobs', name=f"{run['id']}-blobs",
+                    settings=wandb.Settings(console='off', disable_code=True, disable_git=True, x_disable_stats=True,
+                                            quiet=True))
+    path = f'{PROJECT[0]}/{PROJECT[1]}/{wb.id}'
+    wb.finish()
+    write_json(registry, {'run_path': path, 'access': 'PRIVATE', 'created': time.time()})
+    return path
+
+
+def blobs(run):
+    return read_json(hub(run) / 'blobs.json', {})
+
+
+def record_blob(run, digest, size):
+    table = blobs(run)
+    table[digest] = {'bytes': size, 'name': f'blobs/{digest}', 'committed': time.time()}
+    write_json(hub(run) / 'blobs.json', table)
+
+
+def upload_urls(run, digests):
+    """Signed PUT URLs for blobs/<sha256> in the blob run (W&B createRunFiles), with the headers the PUT must carry."""
+    run_path = blob_run(run)
+    mutation = ('mutation CreateRunFiles($entity:String!,$project:String!,$run:String!,$files:[String!]!) '
+                '{createRunFiles(input:{entityName:$entity,projectName:$project,runName:$run,files:$files}) '
+                '{runID uploadHeaders files {name uploadUrl}}}')
+    out = {}
+    for start in range(0, len(digests), 50):
+        batch = digests[start:start + 50]
+        data = _gql(mutation, {'entity': PROJECT[0], 'project': PROJECT[1], 'run': run_path.split('/')[-1],
+                               'files': [f'blobs/{d}' for d in batch]})['createRunFiles']
+        headers = dict(h.split(':', 1) for h in data['uploadHeaders'])
+        for item in data['files']:
+            out[item['name'].removeprefix('blobs/')] = {'url': item['uploadUrl'], 'headers': headers}
+    return out
+
+
+def commit_blob(run, digest, size):
+    import wandb
+    from private_export_guard import commit_uploaded_run_file
+    commit_uploaded_run_file(wandb.Api(api_key=_key()), blob_run(run), f'blobs/{digest}')
+    record_blob(run, digest, size)
+
+
+def get_url(run, digest):
+    """A signed GET URL (a capability for one private object, not a key) at storage.googleapis.com."""
+    import requests
+    import wandb
+    from urllib.parse import urlparse
+    key = _key()
+    remote = wandb.Api(api_key=key).run(blob_run(run)).file(f'blobs/{digest}')
+    if remote.size != blobs(run)[digest]['bytes']:
+        raise RuntimeError(f'blob {digest}: remote size {remote.size} differs')
+    url = remote.url
+    if urlparse(url).hostname == 'api.wandb.ai':
+        response = requests.get(url, auth=('api', key), stream=True, timeout=60, allow_redirects=True)
+        response.close()
+        response.raise_for_status()
+        url = response.url
+    parsed = urlparse(url)
+    if parsed.scheme != 'https' or parsed.hostname != 'storage.googleapis.com' or parsed.username or parsed.password:
+        raise RuntimeError('no scoped read URL for the blob')
+    return url
+
+
+def put_local(run, path):
+    """DGX file -> blob (a seed). Skips a blob already committed."""
+    path = Path(path)
+    digest, size = sha256_file(path), path.stat().st_size
+    if digest in blobs(run):
+        return digest, size
+    import requests
+    target = upload_urls(run, [digest])[digest]
+    started = time.time()
+    from private_export_guard import CacheBoundedReader
+    for attempt in range(4):
+        with CacheBoundedReader(path) as body:
+            response = requests.put(target['url'], data=body, timeout=7200,
+                                    headers={**target['headers'], 'Content-Length': str(size)})
+        if response.status_code in (200, 201, 204):
+            break
+        time.sleep(30 * (attempt + 1))
+    else:
+        raise RuntimeError(f'upload of {path} failed: HTTP {response.status_code}')
+    if sha256_file(path) != digest:
+        raise RuntimeError(f'{path} changed during upload')
+    commit_blob(run, digest, size)
+    seconds = time.time() - started
+    print(json.dumps({'event': 'blob_put', 'path': str(path), 'sha256': digest, 'bytes': size,
+                      'seconds': round(seconds, 1), 'mb_per_s': round(size / 1e6 / max(seconds, 0.1), 2)}), flush=True)
+    return digest, size
+
+
+def get_blob(run, digest, destination):
+    """Owner GET of one blob to the DGX, every byte verified before the file is renamed into place."""
+    import requests
+    from verified_download import verify_download_blocks
+    destination = Path(destination)
+    if destination.exists() and sha256_file(destination) == digest:
+        return 0.0
+    size = blobs(run)[digest]['bytes']
+    started = time.time()
+    with requests.get(get_url(run, digest), stream=True, timeout=600) as response:
+        response.raise_for_status()
+        result = verify_download_blocks(response.iter_content(8 << 20), {'sha256': digest, 'bytes': size},
+                                        destination=destination)
+    if not (result.get('local') or {}).get('committed') and not destination.exists():
+        raise RuntimeError(f'blob {digest}: verified download was not retained: {result}')
+    return time.time() - started
+
+
+# -- lineage configs and seeds -------------------------------------------------------------------------------------------
+
+def lineage_dir(run, name):
+    return Path(run['root']) / name
+
+
+def cloud_config(run, name):
+    """The lineage's cloud config from its DGX template: paths moved to ROOT/<name> and ROOT/runtime (built in the
+    sandbox from the bundle's code commit), the learner's DGX GPU lock dropped (one lineage per GPU), the parent
+    checkpoint at ROOT/<name>/parent/checkpoint.pt, then the lineage's overrides."""
+    spec = run['lineages'][name]
+    template = json.loads(Path(spec['template']).read_text())
+    old_out = template['out']
+    text = json.dumps(template)
+    text = RUNTIME_RE.sub(str(Path(run['root']) / 'runtime'), text)
+    text = text.replace(old_out + '/', str(lineage_dir(run, name)) + '/').replace(f'"{old_out}"', json.dumps(str(lineage_dir(run, name))))
+    config = json.loads(text)
+    config['out'] = str(lineage_dir(run, name))
+    if config['learner_command'] and config['learner_command'][0].endswith('/update_lock.sh'):
+        config['learner_command'] = config['learner_command'][1:]
+    config['checkpoint'] = str(lineage_dir(run, name) / 'parent' / 'checkpoint.pt')
+    for key, value in spec.get('config', {}).items():
+        if value is None:
+            config.pop(key, None)
+        else:
+            config[key] = value
+    return config
+
+
+def seed(run, name):
+    """Seed export (seq 'seed', DGX-verified by construction: these are the DGX's own bytes)."""
+    spec = run['lineages'][name]
+    exports = hub(run) / 'exports' / name
+    if (exports / 'seed.json').exists():
+        return read_json(exports / 'seed.json')
+    L = lineage_dir(run, name)
+    if (L / 'state.json').exists():
+        raise SystemExit(f'{L} already has a state; a seed is only for a new lineage')
+    config = cloud_config(run, name)
+    checkpoint = Path(spec['parent']['checkpoint']).resolve()
+    tokenizers = Path(spec['parent']['tokenizers'])
+    with tempfile.TemporaryDirectory(dir=hub(run)) as temp:
+        stage = Path(temp) / name
+        (stage / 'actor-tokenizers').mkdir(parents=True)
+        shutil.copytree(tokenizers, stage / 'actor-tokenizers' / tokenizers.name)
+        (stage / 'config.json').write_text(json.dumps(config, indent=2) + '\n')
+        top = Path(temp) / 'top.tar.zst'
+        subprocess.run(f'tar -C {stage} -cf - config.json actor-tokenizers | zstd -q -3 -c > {top}', shell=True,
+                       check=True)
+        top_sha, top_bytes = put_local(run, top)
+        cas = Path(run['root']) / '.cas'
+        cas.mkdir(parents=True, exist_ok=True)
+        shutil.copy(top, cas / top_sha)
+    ck_sha, ck_bytes = put_local(run, checkpoint)
+    expected = spec['parent'].get('sha256')
+    if expected and expected != ck_sha:
+        raise SystemExit(f'parent checkpoint sha256 {ck_sha} != declared {expected}')
+    record = {'schema': EXPORT_SCHEMA, 'seq': 'seed', 'lineage': name, 'lineage_dir': str(L), 'round': 0,
+              'trained_rounds': 0, 'created': time.time(), 'state_sha256': None,
+              'blobs': [{'kind': 'top', 'sha256': top_sha, 'bytes': top_bytes, 'encoding': 'tar.zst'},
+                        {'kind': 'checkpoint', 'sha256': ck_sha, 'bytes': ck_bytes, 'encoding': 'raw',
+                         'path': str(L / 'parent' / 'checkpoint.pt')}],
+              'links': [], 'parent_source': str(checkpoint), 'dgx_verified': True, 'cloud_committed': True}
+    write_json(exports / 'seed.json', record)
+    note(run, f'{name} seed export: parent {checkpoint} ({ck_sha[:12]}), config from {spec["template"]} with '
+              f'overrides {json.dumps(spec.get("config", {}))}')
+    return record
+
+
+def newest_verified(run, name):
+    exports = hub(run) / 'exports' / name
+    records = [read_json(p) for p in exports.glob('*.json')]
+    verified = [r for r in records if r and r.get('dgx_verified')]
+    if not verified:
+        return None
+    return max(verified, key=lambda r: (r['trained_rounds'], -1 if r['seq'] == 'seed' else r['seq']))
+
+
+def parent_capability(run, record):
+    return {'schema': PARENT_SCHEMA, 'lineage_dir': record['lineage_dir'], 'seq': record['seq'],
+            'trained_rounds': record['trained_rounds'], 'state_sha256': record.get('state_sha256'),
+            'blobs': [{**b, 'url': get_url(run, b['sha256'])} for b in record['blobs']],
+            'links': record.get('links', [])}
+
+
+# -- bundle ---------------------------------------------------------------------------------------------------------------
+
+def fork_inputs(run, code_sha):
+    """The fork source at the pinned commit (git archive) and its x86_64 lock (uv pip compile against the public
+    indexes), staged under ROOT/inputs so the bundle materializes them at the same paths in the sandbox."""
+    fork = json.loads(subprocess.run(['git', '-C', str(REPO), 'show', f'{code_sha}:training/neuralese/sglang-fork.json'],
+                                     capture_output=True, text=True, check=True).stdout)
+    commit = fork['commit']
+    source = (REPO / fork['path']).resolve()
+    inputs = Path(run['root']) / 'inputs'
+    inputs.mkdir(parents=True, exist_ok=True)
+    tar = inputs / f'sglang-natlang-{commit}.tar.gz'
+    if not tar.exists():
+        subprocess.run(f'git -C {source} archive --format=tar.gz -o {tar}.partial {commit} && mv {tar}.partial {tar}',
+                       shell=True, check=True)
+    lock = inputs / f'sglang-lock-{commit}-x86_64.txt'
+    if not lock.exists():
+        with tempfile.TemporaryDirectory() as temp:
+            subprocess.run(f'git -C {source} archive {commit} python | tar -x -C {temp}', shell=True, check=True)
+            subprocess.run(['uv', 'pip', 'compile', f'{temp}/python/pyproject.toml', '--python-version', '3.12',
+                            '--python-platform', 'x86_64-manylinux_2_28', '--extra-index-url',
+                            'https://download.pytorch.org/whl/cu130', '--index-strategy', 'unsafe-best-match',
+                            '--no-header', '-o', f'{lock}.partial'], check=True)
+        os.replace(f'{lock}.partial', lock)
+    runs = inputs / 'runtime-runs'
+    if not runs.exists():
+        runs.symlink_to(Path(run['template_runtime']) / 'runs')
+    return [str(tar), str(lock), str(runs)]
+
+
+def bundle(run):
+    code_sha = subprocess.run(['git', '-C', str(REPO), 'rev-parse', run.get('code', 'HEAD')], capture_output=True,
+                              text=True, check=True).stdout.strip()
+    extras = fork_inputs(run, code_sha) + list(run['extras'])
+    for spec in run['lineages'].values():
+        cases = spec.get('config', {}).get('cases') or json.loads(Path(spec['template']).read_text())['cases']
+        if cases not in extras:
+            extras.append(cases)
+    out = hub(run) / 'bundles' / f'{code_sha[:12]}.json'
+    command = [sys.executable, str(HERE / 'bundle.py'), 'plan', '--code-sha', code_sha, '--prebuilt', 'wheelhouse',
+               '--hf', run['hf'], '-o', str(out)]
+    for extra in extras:
+        command += ['--extra', extra]
+    subprocess.run(command, check=True)
+    state = read_json(hub(run) / 'run-state.json', {})
+    state['bundle'] = str(out)
+    state['code_sha'] = code_sha
+    write_json(hub(run) / 'run-state.json', state)
+    return out
+
+
+# -- launch ---------------------------------------------------------------------------------------------------------------
+
+def render_job(run, name, rounds):
+    text = Path(REPO / run['job']).read_text()
+    for key, value in {'ROOT': run['root'], 'LINEAGE': name, 'ROUNDS': str(rounds),
+                       'JOB_ID': f"{run['id']}-{name}-{time.strftime('%m%d%H%M')}"}.items():
+        text = text.replace(f'@@{key}@@', value)
+    return jobs.validate(json.loads(text))
+
+
+def launch(run, name, account=None, dry_run=False, rounds=None):
+    state = read_json(hub(run) / 'run-state.json', {})
+    if not state.get('bundle'):
+        raise SystemExit('no bundle: rl_cloud.py bundle RUN.json first')
+    live = state.get('lineages', {}).get(name, {})
+    if live.get('sandbox_id') and live.get('status') == 'running':
+        raise SystemExit(f'{name} already runs in {live["sandbox_id"]}: stop it first')
+    record = newest_verified(run, name)
+    if record is None:
+        raise SystemExit(f'{name}: no verified export or seed; rl_cloud.py seed RUN.json {name}')
+    job = render_job(run, name, run.get('rounds', 0) if rounds is None else rounds)
+    account = account or run['lineages'][name].get('account')
+    if account in (None, 'auto'):
+        ledger = cwctl.account_ledger(write=False)
+        busy = [v.get('account') for k, v in state.get('lineages', {}).items() if v.get('status') == 'running']
+        from collections import Counter
+        choice = cwctl.cwaccounts.choose_account(ledger, cwctl.cwaccounts.settings(), job['resources'],
+                                                 float(job['lifetime_hours']), load=Counter(busy))
+        account = choice['account']
+        reason = choice['reason']
+    else:
+        reason = 'pinned'
+    if dry_run:
+        return {'dry_run': True, 'account': account, 'reason': reason, 'parent_seq': record['seq'],
+                'trained_rounds': record['trained_rounds'], 'job': job['id'], 'resources': job['resources']}
+    secrets = {'rl-parent': json.dumps(parent_capability(run, record)).encode()}
+
+    def created(sandbox_id):
+        state.setdefault('lineages', {})[name] = {'sandbox_id': sandbox_id, 'account': account, 'status': 'running',
+                                                  'launched': time.time(), 'job': job['id'],
+                                                  'parent_seq': record['seq']}
+        write_json(hub(run) / 'run-state.json', state)
+    entry = cwctl.launch(job, False, True, None, Path(state['bundle']), secrets=secrets, on_created=created,
+                         account=account)
+    note(run, f'{name} launched in {entry["sandbox_id"]} ({account}: {reason}) from export {record["seq"]} '
+              f'(trained_rounds {record["trained_rounds"]}), job {job["id"]}')
+    return entry
+
+
+def stop(run, name):
+    state = read_json(hub(run) / 'run-state.json', {})
+    live = state.get('lineages', {}).get(name)
+    if not live:
+        raise SystemExit(f'{name} has no sandbox')
+    subprocess.run([sys.executable, str(HERE / 'cwctl.py'), 'stop', live['sandbox_id']], check=False)
+    live['status'] = 'stopped'
+    live['stopped'] = time.time()
+    write_json(hub(run) / 'run-state.json', state)
+    note(run, f'{name} sandbox {live["sandbox_id"]} stopped')
+
+
+# -- exporter -------------------------------------------------------------------------------------------------------------
+
+def _exec(box, argv, timeout):
+    result = box.exec(argv, timeout_seconds=timeout).result(timeout=timeout + 120)
+    return result
+
+
+def materialize(run, record):
+    """The DGX hub copy of the lineage at its export: ROOT/<lineage> on DGX = the sandbox's lineage directory at that
+    boundary (round archives, top files, parent checkpoint), so the DGX itself can resume it too."""
+    L = Path(record['lineage_dir'])
+    cas = Path(run['root']) / '.cas'
+    L.mkdir(parents=True, exist_ok=True)
+    for blob in record['blobs']:
+        source = cas / blob['sha256']
+        if blob['encoding'] == 'raw':
+            target = Path(blob['path'])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not (target.exists() and os.path.samefile(target, source)):
+                temp = target.with_name(f'.{target.name}.link')
+                if temp.exists():
+                    temp.unlink()
+                os.link(source, temp)
+                temp.replace(target)
+        else:
+            subprocess.run(f'zstd -q -dc {source} | tar -x -C {L}', shell=True, check=True)
+    for link in record.get('links', []):
+        target = Path(link['path'])
+        if target.exists():
+            target.unlink()
+        os.link(link['same_as'], target)
+    if record.get('state_sha256') and sha256_file(L / 'state.json') != record['state_sha256']:
+        raise RuntimeError(f'{L}/state.json differs from export {record["seq"]}')
+
+
+def export_lineage(run, name, live, log=print):
+    """One exporter pass for one running lineage: newest staged export -> W&B (signed PUT from the sandbox) ->
+    DGX (owner GET, verified) -> materialized hub copy; then mark it uploaded in the sandbox (prune may proceed)."""
+    box = cwctl.read_sandbox(live['sandbox_id'], patience=300)
+    E = f"{run['root']}/.exports/{name}"
+    listing = _exec(box, ['sh', '-c', f'ls {E} 2>/dev/null'], 120).stdout.split()
+    staged = sorted(n for n in listing if re.fullmatch(r'\d{6}\.json', n))
+    uploaded = {n.split('.')[0] for n in listing if n.endswith('.uploaded')}
+    if not staged:
+        return {'lineage': name, 'idle': 'nothing staged'}
+    newest = staged[-1]
+    seq = newest[:6]
+    exports = hub(run) / 'exports' / name
+    record = read_json(exports / f'{int(seq):06d}.json')
+    if record is None:
+        record = json.loads(box.read_file(f'{E}/{newest}').result(timeout=300))
+        if record.get('schema') != EXPORT_SCHEMA or record.get('lineage') != name:
+            raise RuntimeError(f'{name}: staged export {newest} is not this lineage\'s export')
+        record.update(sandbox_id=live['sandbox_id'], account=live['account'], cloud_committed=False,
+                      dgx_verified=False)
+        write_json(exports / f'{int(seq):06d}.json', record)  # immutable intent before any byte moves
+    if not record.get('cloud_committed'):
+        known = blobs(run)
+        missing = [b for b in record['blobs'] if b['sha256'] not in known]
+        if missing:
+            urls = upload_urls(run, [b['sha256'] for b in missing])
+            items = [{'sha256': b['sha256'], 'bytes': b['bytes'], 'source': f"{E}/cas/{b['sha256']}",
+                      **urls[b['sha256']]} for b in missing]
+            cap = f'{E}/.capability-{seq}.json'
+            box.write_file(cap, json.dumps({'items': items}).encode()).result(timeout=120)
+            _exec(box, ['chmod', '600', cap], 60)
+            started = time.time()
+            try:
+                result = _exec(box, ['python3', f"{run['root']}/runtime/{SANDBOX_HELPER}", 'upload', cap], 6 * 3600)
+            finally:
+                _exec(box, ['rm', '-f', cap], 60)
+            events = [json.loads(l) for l in result.stdout.splitlines() if l.startswith('{')]
+            ok = {e['sha256'] for e in events if e.get('event') == 'uploaded'}
+            for blob in missing:
+                if blob['sha256'] in ok:
+                    commit_blob(run, blob['sha256'], blob['bytes'])
+            if result.returncode != 0 or ok != {b['sha256'] for b in missing}:
+                raise RuntimeError(f'{name}: upload of export {seq} incomplete: {events[-3:]} {result.stderr[-500:]}')
+            record['upload'] = {'bytes': sum(b['bytes'] for b in missing), 'seconds': round(time.time() - started, 1),
+                                'events': [e for e in events if e.get('event') == 'uploaded']}
+        record['cloud_committed'] = True
+        write_json(exports / f'{int(seq):06d}.json', record)
+        box.write_file(f'{E}/{seq}.uploaded', b'').result(timeout=120)
+        log(json.dumps({'event': 'cloud_committed', 'lineage': name, 'seq': seq,
+                        'trained_rounds': record['trained_rounds'], **{k: v for k, v in record.get('upload', {}).items()
+                                                                       if k != 'events'}}))
+    elif seq not in uploaded:
+        box.write_file(f'{E}/{seq}.uploaded', b'').result(timeout=120)
+    if not record.get('dgx_verified'):
+        cas = Path(run['root']) / '.cas'
+        cas.mkdir(parents=True, exist_ok=True)
+        started, total = time.time(), 0
+        for blob in record['blobs']:
+            if not (cas / blob['sha256']).exists():
+                get_blob(run, blob['sha256'], cas / blob['sha256'])
+                total += blob['bytes']
+        materialize(run, record)
+        record['dgx_verified'] = True
+        record['dgx_get'] = {'bytes': total, 'seconds': round(time.time() - started, 1), 'at': time.time()}
+        write_json(exports / f'{int(seq):06d}.json', record)
+        note(run, f'{name} export {seq} (trained_rounds {record["trained_rounds"]}) verified on DGX: '
+                  f'{total / 1e9:.2f} GB in {record["dgx_get"]["seconds"]} s; hub copy {record["lineage_dir"]}')
+        prune_hub(run, name)
+    return {'lineage': name, 'seq': seq, 'trained_rounds': record['trained_rounds'], 'dgx_verified': True}
+
+
+def prune_hub(run, name):
+    """Keep the blobs of every lineage's newest verified export (and anything newer); drop older local CAS copies.
+    W&B objects stay until a later retention pass (they are the cloud tier of the same exports)."""
+    keep = set()
+    for lineage in run['lineages']:
+        exports = hub(run) / 'exports' / lineage
+        records = [read_json(p) for p in exports.glob('*.json')]
+        newest = newest_verified(run, lineage)
+        for record in records:
+            if record and (record is newest or (newest and record['trained_rounds'] >= newest['trained_rounds'])):
+                keep |= {b['sha256'] for b in record['blobs']}
+    for blob in (Path(run['root']) / '.cas').glob('[0-9a-f]' * 64):
+        if blob.name not in keep and blob.stat().st_nlink == 1:
+            blob.unlink()
+
+
+def export_loop(run, once=False, interval=120):
+    while True:
+        state = read_json(hub(run) / 'run-state.json', {})
+        for name, live in state.get('lineages', {}).items():
+            if live.get('status') != 'running':
+                continue
+            try:
+                print(json.dumps(export_lineage(run, name, live)), flush=True)
+            except Exception as error:  # one lineage's failure must not stop the others' exports
+                print(json.dumps({'event': 'export_error', 'lineage': name,
+                                  'error': f'{type(error).__name__}: {error}'[:800]}), flush=True)
+        if once:
+            return
+        time.sleep(interval)
+
+
+def status(run):
+    state = read_json(hub(run) / 'run-state.json', {})
+    out = {'bundle': state.get('bundle'), 'code_sha': state.get('code_sha'), 'lineages': {}}
+    for name in run['lineages']:
+        newest = newest_verified(run, name)
+        out['lineages'][name] = {**state.get('lineages', {}).get(name, {}),
+                                 'newest_verified': newest and {'seq': newest['seq'],
+                                                                'trained_rounds': newest['trained_rounds']}}
+    return out
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest='command', required=True)
+    for command in ('seed', 'launch', 'stop'):
+        p = sub.add_parser(command)
+        p.add_argument('run')
+        p.add_argument('lineage')
+        if command == 'launch':
+            p.add_argument('--account')
+            p.add_argument('--rounds', type=int)
+            p.add_argument('--dry-run', action='store_true')
+    for command in ('bundle', 'status', 'export'):
+        p = sub.add_parser(command)
+        p.add_argument('run')
+        if command == 'export':
+            p.add_argument('--once', action='store_true')
+            p.add_argument('--interval', type=float, default=120)
+    args = parser.parse_args(argv)
+    run = load_run(args.run)
+    if args.command == 'seed':
+        print(json.dumps(seed(run, args.lineage), indent=1))
+    elif args.command == 'bundle':
+        print(bundle(run))
+    elif args.command == 'launch':
+        print(json.dumps(launch(run, args.lineage, args.account, args.dry_run, args.rounds), indent=1, default=str))
+    elif args.command == 'stop':
+        stop(run, args.lineage)
+    elif args.command == 'export':
+        export_loop(run, args.once, args.interval)
+    elif args.command == 'status':
+        print(json.dumps(status(run), indent=1))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
