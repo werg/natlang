@@ -47,6 +47,7 @@ if [ ! -f "$SGL_VENV/.natlang-$SGL_COMMIT" ]; then
   rm -rf "$SGL_DIR" "$SGL_VENV"; mkdir -p "$SGL_DIR"
   tar -xzf "$INPUTS/sglang-natlang-$SGL_COMMIT.tar.gz" -C "$SGL_DIR" || { log '"event":"failed","step":"fork-source"'; exit 2; }
   python3 -m pip install -q --no-cache-dir uv >/dev/null 2>&1 || { log '"event":"failed","step":"uv"'; exit 2; }
+  export -n PIP_CONSTRAINT 2>/dev/null; unset PIP_CONSTRAINT
   python3 -m uv venv -q -p "$(command -v python3)" "$SGL_VENV" || { log '"event":"failed","step":"sglang-venv"'; exit 2; }
   python3 -m uv pip install -q -p "$SGL_VENV/bin/python" -r "$INPUTS/sglang-lock-$SGL_COMMIT-x86_64.txt" \
     --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > "$OUT/sglang-install.log" 2>&1 \

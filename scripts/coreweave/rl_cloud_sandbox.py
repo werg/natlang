@@ -36,21 +36,10 @@ ROUND = re.compile(r'round-(\d{6})(-attempt-\d+)?$')
 SKIP = ('.pending', '.partial', '.tmp', '.reserve')
 
 
-def sha256_file(path, block=8 << 20):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as stream:
-        for chunk in iter(lambda: stream.read(block), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def write_json(path, value):
-    path = Path(path)
-    temp = path.with_name(f'.{path.name}.tmp')
-    temp.write_text(json.dumps(value, indent=1, sort_keys=True) + '\n')
-    with open(temp, 'rb') as stream:
-        os.fsync(stream.fileno())
-    temp.replace(path)
+# The shared stdlib-only helpers of the code snapshot (natlang_neuralese.common), usable before any pip install.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as file_digest  # noqa: E402
+from natlang_neuralese.common.jsonio import write_json_durable  # noqa: E402
 
 
 def event(**fields):
@@ -72,7 +61,7 @@ def _tar_zst(base, members, out):
             raise RuntimeError(f'archive of {base} failed')
     finally:
         os.unlink(listing.name)
-    digest = sha256_file(out)
+    digest = file_digest(out)
     return digest, out.stat().st_size
 
 
@@ -139,7 +128,7 @@ def stage(lineage, exports):
     links = []
     if checkpoint.is_file():
         stat = checkpoint.stat()
-        digest = sha256_file(checkpoint)
+        digest = file_digest(checkpoint)
         target = cas / digest
         if not target.exists():
             os.link(checkpoint, target)
@@ -148,16 +137,16 @@ def stage(lineage, exports):
         for alias in sorted(checkpoint.parent.glob('*.pt')):
             if alias != checkpoint:
                 a = alias.stat()
-                same = (a.st_dev, a.st_ino) == (stat.st_dev, stat.st_ino) or sha256_file(alias) == digest
+                same = (a.st_dev, a.st_ino) == (stat.st_dev, stat.st_ino) or file_digest(alias) == digest
                 if same:
                     links.append({'path': str(alias), 'same_as': str(checkpoint)})
     seq = (prior.get('seq', -1) + 1)
     manifest = {'schema': SCHEMA, 'seq': seq, 'lineage': lineage.name, 'lineage_dir': str(lineage),
                 'created': time.time(), 'round': current, 'trained_rounds': state.get('trained_rounds', 0),
-                'phase': state.get('phase'), 'state_sha256': sha256_file(lineage / 'state.json'),
+                'phase': state.get('phase'), 'state_sha256': file_digest(lineage / 'state.json'),
                 'checkpoint': str(checkpoint), 'blobs': blobs, 'links': links,
                 'previous_seq': prior.get('seq')}
-    write_json(exports / f'{seq:06d}.json', manifest)
+    write_json_durable(exports / f'{seq:06d}.json', manifest)
     event(event='staged', seq=seq, trained_rounds=manifest['trained_rounds'], blobs=len(blobs),
           bytes=sum(b['bytes'] for b in blobs))
     return manifest
@@ -237,7 +226,7 @@ def fetch(parent, lineage):
     scratch.mkdir(exist_ok=True)
     for blob in parent['blobs']:
         temp = scratch / blob['sha256']
-        if not (temp.exists() and temp.stat().st_size == blob['bytes'] and sha256_file(temp) == blob['sha256']):
+        if not (temp.exists() and temp.stat().st_size == blob['bytes'] and file_digest(temp) == blob['sha256']):
             _download(blob['url'], temp, blob['sha256'], blob['bytes'])
         if blob['encoding'] == 'raw':
             target = Path(blob['path'])
@@ -254,7 +243,7 @@ def fetch(parent, lineage):
             target.unlink()
         os.link(link['same_as'], target)
     state = lineage / 'state.json'
-    if parent.get('state_sha256') and sha256_file(state) != parent['state_sha256']:
+    if parent.get('state_sha256') and file_digest(state) != parent['state_sha256']:
         raise ValueError('restored state.json differs from the export')
     shutil.rmtree(scratch, ignore_errors=True)
     event(event='parent_restored', seq=parent.get('seq'), trained_rounds=parent.get('trained_rounds'))
