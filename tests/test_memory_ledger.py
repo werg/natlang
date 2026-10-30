@@ -1147,5 +1147,7 @@ def test_floor_does_not_stop_the_sole_unit_within_its_budget():
     del live['render.service']
     assert ledger.victim(live, True, 1.15)[0] is not None  # two units: stopping one protects the other
     del live['rl2.service']
-    live['rl.service']['used'] = 106 * GIB  # past its budget (not yet the overshoot): the floor may take it again
+    live['rl.service']['used'] = 107 * GIB  # 2% past its budget, within the overshoot (18:34 the same day): kept
+    assert ledger.victim(live, True, 1.15) == (None, None)
+    live['rl.service']['used'] = 125 * GIB  # past the overshoot: stopped as over budget
     assert ledger.victim(live, True, 1.15)[0] == 'rl.service'
