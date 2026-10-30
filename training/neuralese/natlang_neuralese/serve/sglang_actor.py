@@ -289,9 +289,6 @@ class SglangEngine(Engine):
     def _routes_native(self, request, plan):
         """Whether this request runs on the native engine (counted per reason in /metrics)."""
         reason = self._sglang_reason(request, plan)
-        if reason is None and request.privileged_context is not None and any(
-                kind == 'privileged_state' for kind, _ in self._guidance(request, plan)[1] or ()):
-            reason = 'privileged state'
         native = reason is not None
         if native:
             with self._sglang_lock:
@@ -366,10 +363,14 @@ class SglangEngine(Engine):
             if kind == 'insertion_point':
                 seq.native_guidance_receipt['insert_at'] = seq.native_own_position
                 continue
-            if kind in ('native_state', 'native_state_constant'):
+            if kind in ('native_state', 'native_state_constant', 'privileged_state'):
+                begin = len(seq.native_rl_prompt)
                 self._sglang_import(seq, ids, value['id'] if isinstance(value, dict) else value,
                                     stop_gradient=kind == 'native_state_constant',
                                     source_occurrence=value.get('source_occurrence') if isinstance(value, dict) else None)
+                if kind == 'privileged_state' and capture_enabled(seq):
+                    for segment in seq.native_rl_prompt[begin:]:  # JOLT+ state guidance, as the native engine marks it
+                        segment['privileged'] = True
                 continue
             if kind not in ('tokens', 'privileged'):
                 raise RequestError('sglang-actor-unsupported',

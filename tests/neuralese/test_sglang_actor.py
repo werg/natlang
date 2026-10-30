@@ -379,3 +379,34 @@ def test_adapted_turns_bind_like_the_native_engine_and_pack_module_factors(tmp_p
     front.sglang_adapter_rank = 4  # summed rank 8 in qkv_proj no longer fits: the native engine serves it
     front._adapter_files.clear()
     assert front._sglang_reason(make(), [('tokens', [1])]) == 'adapter rank'
+
+
+def test_privileged_state_guidance_imports_on_sglang_like_the_native_engine(tmp_path):
+    """JOLT+ guidance in import mode (the writer's native state inserted into the teacher's prompt) runs on SGLang:
+    same prompt receipt (privileged marks included), guidance receipt and imports as the native engine."""
+    from natlang_neuralese.rl.privileged_context import REQUEST_SCHEMA, WRITER_FUNCTION
+    native, front, roles, word, block, _ = _import_fixture(tmp_path)
+    block_id = native.store.put_native_state(block).id
+    request = {'schema': REQUEST_SCHEMA, 'invocation': {'name': 'run-1', 'role': 'root'}, 'mode': 'import',
+               'custody': {'schema': 'natlang.jolt-privileged-custody/1', 'case_id': 'c', 'split': 'train',
+                           'world_sha256': 'd' * 64, 'protected_sha256': 'c' * 64},
+               'selection': {'implementation': 'nl', 'sha256': 'b' * 64},
+               'writer': {'function': WRITER_FUNCTION, 'sha256': 'a' * 64}, 'state': {'id': block_id},
+               'facts': [{'id': 'expected_result:0', 'kind': 'expected_result', 'text': 'The verified result is t6.'}]}
+    messages = [{'role': 'system', 'content': 't7'}, {'role': 'user', 'content': 't4 t5'}]
+    make = lambda: GenerationRequest(messages=messages, temperature=.9, seed=5, max_tokens=4, rl_capture=True, rl_top_k=3,
+                                     privileged_context=request, native_recording=True, request_id='p')
+    reply = word('t8') + [sorted(front.stop_ids)[0]]
+    script = iter(reply)
+    native._native_token = lambda seq: (next(script), -0.5)
+    expected = native.generate(make())
+    records = [record(-0.5, [t, t + 1, t + 2], [-0.5, -1.5, -2.5]) for t in reply]
+    sent = []
+    front._sglang_generate = lambda body: (sent.append(body), {'output_ids': reply, 'meta_info': {'natlang_top_k': records}})[1]
+    assert front._sglang_reason(make(), front._prompt_plan(messages, None)) is None
+    actual = front.generate(make())
+    mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
+    assert mine['prompt'] == theirs['prompt'] and mine['privileged'] == theirs['privileged']
+    assert any(segment.get('privileged') and segment['kind'] == 'native_state' for segment in mine['prompt'])
+    assert actual['native_state']['imports'] == expected['native_state']['imports'] and front.native_fallbacks == 0
+    assert sent[0]['sampling_params']['custom_params']['natlang_import']

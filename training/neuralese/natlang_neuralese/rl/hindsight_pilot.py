@@ -405,6 +405,8 @@ def score(args):
             rows.append(json.loads(done.read_text()))
             continue
         tau = json.loads(path.read_text())
+        if tau['action_tokens'] > args.max_action_tokens:
+            continue
         invocations, actions = _tau(engine, tau)
         # tau* is the root call; each of its model turns is a graph invocation and gets the call's hint.
         turns = [n.name for n in invocations if not n.cache_prefix]
@@ -541,6 +543,7 @@ def main(argv=None):
     parser.add_argument('--sigma', type=float, default=.5)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--rank', type=int, default=8)
+    parser.add_argument('--max-action-tokens', type=int, default=12000)
     parser.add_argument('--steps', type=int, default=200)
     parser.add_argument('--eval-every', type=int, default=50)
     args = parser.parse_args(argv)

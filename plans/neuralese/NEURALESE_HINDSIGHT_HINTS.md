@@ -227,6 +227,44 @@ Measurements (eval compute kept minimal):
 Go/no-go: go if the hinted gain Δ = log p(τ*|hint) − log p(τ*) is clearly positive after phase 1, at a mean hint
 length of 64 tokens or fewer, with the channel on, and if it beats the facts-only text hint.
 
-## Results
+## Results (pilot, 2026-10-30, DGX, LFM3 RL lineage base `fresh-init`)
 
-(filled in by the pilot)
+Data: `/home/werg/data/hindsight-pilot-20261030` (`selection.json`, `hints/`, `scores/`). The driver is
+`rl/hindsight_pilot.py`. 25 custody-checked train τ*: 15 shortest successful RL episodes (one per task, all
+single-call) and 10 teacher-corpus rows (Qwen3.6 verified, `lfm3-program-header`, final-action row of each source
+row, all assistant turns as τ*). Node classes: 25 root (hint), 0 children; no selected τ* has a child call, so
+there is no per-depth breakdown. Writer: `writeHint` through the natlang runtime on the native server (neuralese
+profile), K = 2.
+
+Writer cost: 6 to 25 minutes per episode on the shared GB10, which was preempted repeatedly by the live RL runner.
+Hints were obtained for 1 RL τ* (2 hints) and 6 teacher τ* (10 hints). 6 teacher episodes timed out at 30 minutes.
+Hint length: 148 to 576 tokens (mean ≈ 250), far above the ≤ 64 target. Cold-start hints restate the steps
+and also copy code.
+
+Mean NLL per τ* action token (frozen policy), with Δ = NLL(no hint) − NLL(condition):
+
+| τ* source | no hint | facts-only text | Neuralese hint (import) | same hint as text | τ* verbatim text |
+| --- | --- | --- | --- | --- | --- |
+| RL successes (15; hints for 1) | 0.65 | +0.04 worse | 000: 0.794 → 0.876 (worse) | 0.854 (worse) | strong gain on short τ* (0.79 → 0.11); none on long |
+| Teacher corpus (10; hints for 6) | 2.11 | n/a (no world facts) | Δ = +0.051 (−0.008 … +0.097) | Δ = +0.005 | 2.11 → 0.35 |
+
+- With the channel on (σ = 0.5), NLL moves by ±0.04, with no systematic loss. The channel KL is ≈ 7e4 nats per hint
+  token because it sums over every imported dimension, so λ_kl defaults to 1e-6.
+- Teacher τ* are far off-policy: 2.1 nats/token, against 0.65 for the policy's own successes. The cold-start Neuralese
+  hint recovers about 2.5% of that gap. The same text inserted as a text turn recovers almost nothing, so the
+  native import carries more than the text turn does.
+- Phase-1 run: producer adapter plus a rank-8 writer LoRA on the hint invocations only, backbone frozen, fixed
+  hints, pathwise loss, 9 train hints and 3 dev hints, lr 2e-4. Dev NLL went 1.291 → 1.283 (step 25) → 1.229
+  (step 50), then rose to 1.65 by step 100. It is learnable but unstable at this lr and data size. The run was stopped
+  at step ~100 for production RL memory.
+- Not measured: self-teacher success with and without the hint (no oracle runs; eval compute kept minimal), the
+  score-function term over writer episodes (it needs captured writer turns from the collector), and phase 2.
+
+**Decision: no-go for the live JOLT+ loop now.** The writer gives a small but positive signal on teacher-corpus τ*.
+Three things block cutover: hints are long, writer episodes are too slow on the native server, and the phase-1 gain
+is small and unstable. Next steps, in order:
+(1) run `writeHint` on the SGLang actor engine with captured turns, so episodes are fast and the score-function term
+is available;
+(2) phase 1 over a few hundred teacher τ* at lr ≤ 5e-5 with λ_len active, checking dev Δ and hint length;
+(3) re-measure, and integrate only if Δ ≥ 0.2 nats/token at ≤ 64 tokens.
+
