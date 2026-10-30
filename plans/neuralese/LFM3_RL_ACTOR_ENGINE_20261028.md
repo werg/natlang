@@ -81,6 +81,14 @@ eval and data jobs running):
   prompt, top-k 128, 4 rows x group 2 + teacher, jolt-r1 round-1 checkpoint): 98 turns, 79,002 tokens, 0
   fallbacks, collection complete (8 task successes of 12 rollouts); every token has a sorted top-128 record, the
   sampled token is inside it for 99.84% of tokens, and its recorded logp matches the sample's within 0.004 (FP16).
+- **Producer spans** (fork 1b910fb875, `check_sglang_producer_parity.py`). The checkpoint's adapter is the identity
+  (`up` = 0 in every current LFM3 checkpoint), so the check replaces it by a seeded random adapter (update norm 0.5 x
+  embedding norm), exports it and compares with `native_step` and its producing mask, FP32 reference, native BF16 as
+  floor, over 5 real turns (2.0k-7.2k tokens). Forced spans (prefill, one crossing a 2048-token chunk boundary): mean
+  |dlogp| 0.051 on producing positions vs floor 0.050 (no-adapter control 0.66). Decode at T=1 from prompts ending at
+  the open marker, inside a span, after a closed span, and inside a span with a close-marker logit bias (decode crosses
+  sampled close markers, back to ordinary inputs): producing 0.0164 vs floor 0.0166 (control 0.155), ordinary 0.0148
+  vs floor 0.0138 (control 0.113).
 - **Determinism (for the decision gate): not achieved.** 8 cases, 128 greedy tokens, compared with each case served
   alone: plain mode 4/8 identical in a batch of 8, 3/8 mixed with 8 fillers; `--enable-deterministic-inference` 5/8
   and 5–6/8 with FlashInfer or Triton attention (so attention is not the only batch-dependent op; early divergence at
@@ -108,7 +116,7 @@ images are cached in the same PR). `input_embeds` (which forces `--disable-radix
 |---|---|---|---|---|---|
 | 1 | Compact exact top-k + sampled logp | done | `layers/sampler.py`, `sampling_batch_info.py` | see status | none |
 | 2 | Privileged blocks | done (front) | `serve/sglang_actor.py` | `_insert_privileged` on the plan before token ids, as the native engine | none |
-| 3 | Producer adapter + markers | M | `Lfm3Model.forward` embedding; a per-request GPU `producing` flag in the decode CUDA-graph buffers | `h = e + producing·up(down(e))`, always computed (static graphs). `producing` flips on the GPU from the sampled token (`inside' = (inside or tok==open) and tok!=close`); lift the role-marker ban | adapter weights in the export; flag state through overlap scheduling |
+| 3 | Producer adapter + markers | mechanism done; markers stay banned until span export lands | `Lfm3Model.forward` embedding; extend mapping in `ScheduleBatch.prepare_for_extend`; per-slot span flag | Export precomputes the producing table `adapter(embed(t))` with the native module; producing token t is fed as id t+V. Extend chunks are mapped by scanning the request's tokens, decode tokens from a per-request-slot GPU flag (`inside' = (inside or tok==open) and tok!=close`), CUDA-graph safe | none |
 | 4 | KV span import/export | M | `Lfm3Attention.forward` after `apply_qk_norm`, before `rotary_emb` | Import: `k = where(import_mask, store.k[layer][rows], k)`, same for v, then RoPE at the consumer positions; the span's later layers are also overridden, so it is exact. Rows come from a GPU state store indexed by the native_state items of the batch. Export: copy raw pre-RoPE k, v of producing positions to a staging buffer | radix key per (state hash, position): KV after RoPE depends on the consumer position, so the pad values must include the start position |
 | 5 | Conv-state import/export | S–M | `Lfm3ShortConv.forward` before the CuTe kernel | The kernel forms `Bx = B_gate·x` from `proj`; at imported positions set `B_gate = 1` and `x = stored Bx`, so the carried window becomes `(prefix ‖ span)[-6:]` (`splice_block`'s `ConvState`) without a kernel change. Export: `B_gate·x` of producing positions | mamba checkpoint boundaries (`track_conv_indices`) inside an imported span |
 | 6 | `decide` with imported state | S–M | existing `logprob_start_len` | SGLang caps the radix match at `logprob_start_len` (`schedule_batch.py`), so one request per option reads the shared prefix from the cache and returns input logprobs only past it. Score with raw log-softmax (`SGLANG_RETURN_ORIGINAL_LOGPROB` or a per-request flag) | per-request raw vs post-temperature switch |

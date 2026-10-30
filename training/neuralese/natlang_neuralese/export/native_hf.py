@@ -6,10 +6,12 @@ which replace the embedding row and the readout row of their tokens (`SharedStat
 writes those rows into the embedding (and an untied head) of a copy of the backbone state, so the exported HF model is
 exact for every ordinary token. The source checkpoint and the loaded model are not modified.
 
-Not represented, recorded in the manifest and enforced by serving: the low-rank producer adapter, which applies only
-inside producing spans. Serving through this export bans all four role markers (`banned_token_ids`), so execution stays
-in ordinary tokens and the ban is part of every recorded sample's law. Native adapters, coefficient policies and
-imported native state are refused by the serving front rather than dropped.
+The low-rank producer adapter applies only to tokens inside a produce span. The export precomputes the producing
+embedding of every token, `adapter(embed(t))` with the native module itself, as `model.natlang_producer_embed`,
+and names the markers in the config (`natlang_producer`); the fork's LFM3 model feeds producing token t as id
+t + vocab_size and looks it up there (NATLANG_FORK.md). Native adapters, coefficient policies and imported native
+state are refused by the serving front rather than dropped; `serving.banned_token_ids` lists the role markers the
+front bans (part of every recorded sample's law) until it exports produce spans.
 
     python -m natlang_neuralese.export.native_hf CHECKPOINT OUT_DIR [--base DIR] [--dtype bfloat16|float32]
 """
@@ -22,7 +24,8 @@ from pathlib import Path
 
 import torch
 
-SCHEMA = 'natlang.native-hf-export/1'
+SCHEMA = 'natlang.native-hf-export/2'
+PRODUCER_CHUNK = 8192
 
 
 def merged_state(model):
@@ -57,6 +60,17 @@ def merged_state(model):
     return state, tied
 
 
+@torch.no_grad()
+def producer_embeddings(model):
+    """Row t: the producing input embedding of token t (`model.adapter(model.embed(t), producing)`, as native_step)."""
+    weight = model.port.embedding_weight
+    rows = []
+    for start in range(0, weight.shape[0], PRODUCER_CHUNK):
+        ids = torch.arange(start, min(start + PRODUCER_CHUNK, weight.shape[0]), device=weight.device)[None]
+        rows.append(model.adapter(model.embed(ids), torch.ones_like(ids, dtype=torch.bool))[0].detach())
+    return torch.cat(rows)
+
+
 def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha256, out_dir, dtype=torch.bfloat16):
     """Write OUT_DIR (config, model.safetensors, tokenizer, natlang-export.json) from an already loaded native model.
 
@@ -70,7 +84,7 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
     except (OSError, ValueError):
         earlier = None
     dtype_name = str(dtype).replace('torch.', '')
-    if (earlier and earlier.get('checkpoint_sha256') == checkpoint_sha256 and earlier.get('dtype') == dtype_name
+    if (earlier and earlier.get('schema') == SCHEMA and earlier.get('checkpoint_sha256') == checkpoint_sha256 and earlier.get('dtype') == dtype_name
             and (out_dir / 'model.safetensors').is_file()
             and sha256_file_hex(out_dir / 'model.safetensors') == earlier['weights_sha256']):
         return earlier
@@ -78,6 +92,7 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
         raise ValueError(f"SGLang export is qualified for lfm3 only, not {config['architecture']!r}")
     out_dir.mkdir(parents=True, exist_ok=True)
     state, tied = merged_state(model)
+    state['model.natlang_producer_embed'] = producer_embeddings(model)
     state = {name: tensor.to(dtype).contiguous().cpu() for name, tensor in state.items()}
     partial = out_dir / 'model.safetensors.partial'
     save_file(state, str(partial), metadata={'format': 'pt'})
@@ -85,6 +100,8 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
     hf_config = model.port.hf.config
     hf_config.vocab_size = int(state[next(name for name in state if name.endswith('embed_tokens.weight'))].shape[0])
     hf_config.torch_dtype = dtype_name
+    markers = {name: int(getattr(roles, name)) for name in ('produce_open', 'produce_close', 'consume_open', 'consume_close')}
+    hf_config.natlang_producer = {**markers, 'offset': hf_config.vocab_size}
     hf_config.save_pretrained(out_dir)
     # The config's auto_map names LFM3's Hub remote code; SGLang reads the config through it (--trust-remote-code)
     # and runs its own model. The vendored files are byte-identical to the pinned revision (third_party/lfm3).
@@ -103,7 +120,6 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
     finally:
         if bound is not None:
             tokenizer.apply_chat_template = bound
-    markers = {name: int(getattr(roles, name)) for name in ('produce_open', 'produce_close', 'consume_open', 'consume_close')}
     manifest = {
         'schema': SCHEMA, 'checkpoint': str(checkpoint), 'checkpoint_sha256': checkpoint_sha256, 'dtype': dtype_name,
         'architecture': config['architecture'], 'tokenizer_fingerprint': config.get('tokenizer_fingerprint'),
@@ -111,7 +127,8 @@ def export_loaded(model, tokenizer, roles, config, *, checkpoint, checkpoint_sha
                         'token_override_ids': list(config.get('token_override_ids', [])), 'tied': tied},
         'weights_sha256': sha256_file_hex(out_dir / 'model.safetensors'),
         'role_markers': markers,
-        'not_represented': {'producer_adapter': 'applies only inside producing spans; serving bans the role markers'},
+        'producer_embedding': {'weight': 'model.natlang_producer_embed', 'input_id_offset': hf_config.vocab_size},
+        # The role markers stay banned until the front exports produce spans (fork producer table is in place).
         'serving': {'banned_token_ids': sorted(markers.values())},
     }
     tmp = manifest_path.with_suffix('.json.partial')
