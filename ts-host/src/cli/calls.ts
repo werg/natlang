@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CallStore } from '../calls/store.js';
+import { expandedRecord } from '../calls/expanded.js';
 import { machineStoreRoot, openMachineStore } from '../machine-store.js';
 import { exportSpecializationCorpus } from '../calls/corpus.js';
 import { renderEvidence, renderHistory, study } from '../calls/specializer.js';
@@ -43,16 +44,6 @@ const table = (rows: Record<string, unknown>[], columns: string[]): string => {
   return cells.map(row => row.map((cell, index) => cell.slice(0, 60).padEnd(widths[index]!)).join('  ').trimEnd()).join('\n');
 };
 const short = (value: unknown, limit = 200) => { const shown = JSON.stringify(value); return shown === undefined ? 'undefined' : shown.length > limit ? `${shown.slice(0, limit)}…` : shown; };
-
-/** A record with its values in place of their references. */
-export function expandedRecord(store: CallStore, record: CallRecord): Record<string, unknown> {
-  const value = (ref: Parameters<CallStore['value']>[0]) => ref?.complete ? store.value(ref) : ref;
-  return { ...record, inputs: Object.fromEntries(Object.entries(record.inputs).map(([name, ref]) => [name, value(ref)])),
-    captures: Object.fromEntries(Object.entries(record.captures).map(([name, ref]) => [name, value(ref)])),
-    output: value(record.output), effects: record.effects.map(effect => ({ ...effect, args: value(effect.args), result: value(effect.result) })),
-    capture_writes: record.capture_writes.map(write => ({ ...write, after: value(write.after) })),
-    definition: { ...record.definition, instructions: value(record.definition.instructions) } };
-}
 
 function describeCall(store: CallStore, record: CallRecord): string {
   const view = expandedRecord(store, record);

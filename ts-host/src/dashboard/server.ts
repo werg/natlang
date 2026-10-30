@@ -13,9 +13,9 @@ import { basename, dirname, extname, join, relative, resolve, sep } from 'node:p
 import { fileURLToPath } from 'node:url';
 import type { CallStore } from '../calls/store.js';
 import { machineStoreRoot, openMachineStore } from '../machine-store.js';
-import { expandedRecord } from '../cli/calls.js';
-import { programFunctions, readProgramManifest } from '../cli/build-lock.js';
-import { createProgram, readExamples, saveExample, type SavedExample } from '../cli/authoring.js';
+import { expandedRecord } from '../calls/expanded.js';
+import { programFunctions, readProgramManifest } from '../build-lock.js';
+import { createProgram, readExamples, saveExample, type SavedExample } from '../package/authoring.js';
 import { currentRelease } from '../adaptation/weights/release.js';
 import { loadModelConfiguration, resolveModelChoice, type ModelProfile } from '../model/config.js';
 import { recommendedProviderModel } from '../model/provider-recommendations.js';

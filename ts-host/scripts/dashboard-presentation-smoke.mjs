@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { chromiumPath } from './chromium-path.mjs';
 import { startDashboard } from '../dist/dashboard/server.js';
-import { createProgram } from '../dist/cli/authoring.js';
+import { createProgram } from '../dist/package/authoring.js';
 
 const root = mkdtempSync(join(tmpdir(), 'natlang-designed-values-'));
 const report = { summary: 'Two customers need help with checkout. Billing issues are ready for review.', urgent: 2, by_label: { billing: 3, technical: 2 },

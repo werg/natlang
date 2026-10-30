@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { createProgram, readExamples, saveExample } from '../dist/cli/authoring.js';
+import { createProgram, readExamples, saveExample } from '../dist/package/authoring.js';
 import { parsePackageManifest } from '../dist/package/manifest.js';
 import { startDashboard } from '../dist/dashboard/server.js';
 
