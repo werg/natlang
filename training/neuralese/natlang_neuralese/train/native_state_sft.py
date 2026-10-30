@@ -1132,6 +1132,10 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
         policy.save(state, metric=metric, async_allowed=True, async_optimizer=optimizer)
     else:
         policy.save(state, metric=metric)
+    if torch.cuda.is_available() and torch.cuda.is_initialized():
+        # Serialization staged tensors through the caching allocator; on unified memory its idle cache is host
+        # memory other jobs cannot use. Return it; the next step re-maps what it needs.
+        torch.cuda.empty_cache()
 
 
 def qualify_precision_transition(model, tokenizer, roles, config, *, previous_precision,
@@ -1667,6 +1671,8 @@ def validate_static_args(args, *, check_output=True):
 
 
 def main(argv=None):
+    from .hardware_profile import apply_environment_early
+    apply_environment_early()  # allocator settings must precede CUDA initialization
     from .loop import StopSignal
     requested_refresh = StopSignal().install((signal.SIGUSR2,))
     try:
@@ -3639,9 +3645,13 @@ def _main(argv=None, *, requested_refresh):
             if diloco is not None:
                 progress['diloco'] = diloco.metrics()
             if str(args.device).startswith('cuda'):
+                step_peak = torch.cuda.max_memory_allocated(args.device)
+                lifetime_peak = max(step_peak, getattr(args, '_cuda_lifetime_peak', 0))
+                args._cuda_lifetime_peak = lifetime_peak
                 progress['cuda_memory_bytes'] = {'allocated': torch.cuda.memory_allocated(args.device),
                     'reserved': torch.cuda.memory_reserved(args.device),
-                    'lifetime_peak_allocated': torch.cuda.max_memory_allocated(args.device)}
+                    'step_peak_allocated': step_peak, 'lifetime_peak_allocated': lifetime_peak}
+                torch.cuda.reset_peak_memory_stats(args.device)
             with (args.out / 'train.jsonl').open('a') as log:
                 log.write(json.dumps(progress, sort_keys=True) + '\n')
             write_json(args.out / 'progress.json', progress)

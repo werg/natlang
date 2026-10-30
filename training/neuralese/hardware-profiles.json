@@ -5,9 +5,9 @@
   {
    "name": "dgx-gb10",
    "match": {"capability": [12, 1], "integrated": true},
-   "status": "baseline: the native recipe already uses the measured DGX execution settings; nothing to override",
+   "status": "expandable CUDA segments: the caching allocator's fixed segments fragmented under varying RL graph sizes (reserved 72 GB vs 13 GB allocated, 61 GB peak; 2026-10-30); unified memory makes reserved-but-idle CUDA memory host memory other jobs cannot use",
    "stage_parameters": {},
-   "environment": {}
+   "environment": {"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"}
   },
   {
    "name": "rtx-pro-6000-blackwell",

@@ -81,13 +81,14 @@ def load(path: str | Path | None = None) -> dict:
     return validate(json.loads(Path(path or DEFAULT_PATH).read_text()))
 
 
-def detect(device: str = 'cuda') -> dict | None:
+def detect(device: str = 'cuda', *, use_torch: bool = True) -> dict | None:
     """Facts of the GPU a stage will run on: name, [major, minor], memory in GB, integrated (unified memory).
 
-    torch when it is importable with CUDA (the trainer's own view), else ``nvidia-smi``; None without a GPU."""
+    torch when it is importable with CUDA (the trainer's own view), else ``nvidia-smi``; None without a GPU.
+    ``use_torch=False`` asks only ``nvidia-smi``, leaving CUDA uninitialized in this process."""
     try:
         import torch
-        if torch.cuda.is_available():
+        if use_torch and torch.cuda.is_available():
             index = torch.device(device).index or 0 if str(device).startswith('cuda') else 0
             props = torch.cuda.get_device_properties(index)
             return {'name': props.name, 'capability': [props.major, props.minor],
@@ -169,3 +170,19 @@ def for_stage(kind: str, parameters: dict, device: str = 'cuda', path: str | Pat
     if record is not None:
         record['device'] = facts
     return merged, environment, record
+
+
+def apply_environment_early(path: str | Path | None = None) -> dict | None:
+    """Apply the matched profile's environment to THIS process before it initializes CUDA (allocator settings are
+    read once, at CUDA initialization). For trainers started directly rather than by the recipe runner, e.g. the RL
+    learner. Variables already set (by the runner or the operator) win; returns {name: value} applied, or None."""
+    override = os.environ.get('NATLANG_HARDWARE_PROFILE')
+    source = Path(path or DEFAULT_PATH)
+    if override == 'none' or not source.is_file():
+        return None
+    profile = select(load(source), detect(use_torch=False), override)
+    if profile is None:
+        return None
+    applied = {key: value for key, value in profile.get('environment', {}).items() if key not in os.environ}
+    os.environ.update(applied)
+    return applied

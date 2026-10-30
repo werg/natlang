@@ -161,6 +161,8 @@ def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerpri
 
 
 def main(argv=None):
+    from ..train.hardware_profile import apply_environment_early
+    apply_environment_early()  # allocator settings must precede CUDA initialization
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--rollouts', action='append', type=Path, required=True)
     parser.add_argument('--rl-tokenizer', type=Path, required=True)
@@ -267,7 +269,21 @@ def _admit_and_train(args,trainer):
         '--objective-continuation', '--out', str(args.out), *trainer]
     from .diloco_contract import register_admitted_stage
     register_admitted_stage(args,trainer_args)
+    # The trainer reads the admitted graphs/objective back from disk; release the preparation copies (parsed
+    # rollouts, graphs, objective: several GB of Python objects) so they do not sit in host memory, which on
+    # unified memory is also GPU memory, for the whole update.
+    del rows, graphs, objective, policy_objective, source, request
+    _release_host_memory()
     return _invoke_raw_trainer(args, trainer, trainer_args, train)
+
+
+def _release_host_memory():
+    import ctypes, gc
+    gc.collect()
+    try:
+        ctypes.CDLL('libc.so.6').malloc_trim(0)
+    except OSError:
+        pass
 
 
 def _defer_long_graphs(args, graphs, objective, graph_path, objective_path, *, share=True):

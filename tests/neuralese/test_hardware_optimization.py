@@ -67,10 +67,24 @@ def test_apply_records_replaced_values(tmp_path):
         {'k': 1}, {}, None)
 
 
-def test_gb10_profile_changes_nothing():
-    """The running DGX lineages see no profile change: the GB10 profile is empty."""
+def test_gb10_profile_sets_only_the_expandable_allocator():
+    """GB10: stage parameters unchanged; the allocator uses expandable segments (unified memory, varying RL graphs)."""
     merged, env, record = hp.for_stage('native_state_sft', {'checkpoint_layers': True}, detected=GB10)
-    assert merged == {'checkpoint_layers': True} and env == {} and record['applied'] == {}
+    assert merged == {'checkpoint_layers': True} and record['applied'] == {}
+    assert env == {'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True'}
+
+
+def test_apply_environment_early_keeps_existing_settings(monkeypatch):
+    monkeypatch.setattr(hp, 'detect', lambda device='cuda', use_torch=True: GB10)
+    monkeypatch.delenv('NATLANG_HARDWARE_PROFILE', raising=False)
+    monkeypatch.delenv('PYTORCH_CUDA_ALLOC_CONF', raising=False)
+    assert hp.apply_environment_early() == {'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True'}
+    monkeypatch.setenv('PYTORCH_CUDA_ALLOC_CONF', 'operator-choice')
+    assert hp.apply_environment_early() == {}
+    import os
+    assert os.environ['PYTORCH_CUDA_ALLOC_CONF'] == 'operator-choice'
+    monkeypatch.setenv('NATLANG_HARDWARE_PROFILE', 'none')
+    assert hp.apply_environment_early() is None
 
 
 @pytest.mark.parametrize('family', ['lfm'])
