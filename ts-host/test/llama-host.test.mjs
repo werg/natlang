@@ -153,7 +153,22 @@ test('an attached server is planned and warmed through the host\'s fetch, with i
     { attach: { endpoint: 'http://127.0.0.1:9000', slots: 1, contextPerSlot: 8192, modelSha256: sha, runtime: null, warm: true } });
   (await busy.admit(request)).release();
   assert.equal(busy.status().warm.length, 0);
-  await server.close(); await again.close(); await busy.close();
+  assert.match(log.join(''), /prompt warming skipped: the server is serving other requests/, 'a skipped warm-up says why');
+  // a server that cannot list its slots is reported with its error, not taken for busy; the request is still served
+  const unreadable = createLlamaServer({ ...host, fetch: async url => String(url).endsWith('/slots') ? new Response('loading', { status: 503 }) : new Response('{}') },
+    { attach: { endpoint: 'http://127.0.0.1:9000', slots: 1, contextPerSlot: 8192, modelSha256: sha, runtime: null, warm: true } });
+  (await unreadable.admit(request)).release();
+  assert.equal(unreadable.status().warm.length, 0);
+  assert.match(log.join(''), /prompt warming skipped: the server's \/slots listing answered HTTP 503/);
+  // a slow answer is still the server's answer: no timeout turns it into "busy"
+  const slow = createLlamaServer({ ...host, fetch: async (url, init) => {
+    if (!String(url).endsWith('/slots')) return new Response('{}');
+    assert.equal(init?.signal, undefined, 'the /slots request carries no deadline');
+    await new Promise(resolveWait => setTimeout(resolveWait, 2500));
+    return new Response('[{"is_processing":true}]');
+  } }, { attach: { endpoint: 'http://127.0.0.1:9000', slots: 1, contextPerSlot: 8192, modelSha256: sha, runtime: null, warm: true } });
+  (await slow.admit(request)).release();
+  await server.close(); await again.close(); await busy.close(); await unreadable.close(); await slow.close();
 });
 
 test('decision scoring runs against a server the host supervises: the package\'s endpoint feeds the endpoint driver\'s scorer', async () => {
