@@ -5,7 +5,6 @@
  */
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, statfsSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { DatabaseSync as Database } from 'node:sqlite';
 import { CallStore, type StoreMedium } from './store-core.js';
@@ -37,17 +36,10 @@ function sqlite(): typeof Database {
   return DatabaseSync;
 }
 
-/** Where this machine's store lives: `$NATLANG_CALL_STORE`, else `~/.local/share/natlang/calls`; `off` disables it. */
-export function machineStoreRoot(env: Record<string, string | undefined> = process.env): string | null {
-  const configured = env.NATLANG_CALL_STORE?.trim();
-  if (configured && ['off', '0', 'false', 'none'].includes(configured.toLowerCase())) return null;
-  return resolve(configured || join(env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'natlang', 'calls'));
-}
-
 /** Blobs as files under `blobs/`, settings in `config.json`, processes by PID within this boot and PID namespace. */
 export class FileMedium implements StoreMedium {
   readonly process = { pid: process.pid, scope: PROCESS_SCOPE };
-  constructor(readonly root: string) { mkdirSync(join(root, 'blobs'), { recursive: true }); }
+  constructor(readonly root: string, private readonly mode?: () => string | undefined) { mkdirSync(join(root, 'blobs'), { recursive: true }); }
   private blobPath(hash: string): string { return join(this.root, 'blobs', hash.slice(0, 2), hash.slice(2)); }
   putBlob(hash: string, text: string): void {
     const path = this.blobPath(hash);
@@ -69,7 +61,7 @@ export class FileMedium implements StoreMedium {
     for (const name of ['calls.sqlite', 'calls.sqlite-wal']) try { bytes += statSync(join(this.root, name)).size; } catch { /* absent */ }
     return bytes;
   }
-  modeOverride(): string | undefined { return process.env.NATLANG_SPECIALIZATION; }
+  modeOverride(): string | undefined { return this.mode?.(); }
   /**
    * A row's process is known gone when the row is from an earlier boot, or from this PID namespace and no process has
    * its PID. A row from another namespace (a container) is not: its PID means nothing here.
@@ -84,12 +76,12 @@ export class FileMedium implements StoreMedium {
 }
 
 const opened = new Map<string, CallStore>();
-/** The store at `root` (one instance per root per process). */
-export function openCallStore(root: string): CallStore {
+/** The store at `root` (one instance per root per process; `mode` is the specialization override of the first open). */
+export function openCallStore(root: string, options: { mode?: () => string | undefined } = {}): CallStore {
   const absolute = resolve(root);
   let store = opened.get(absolute);
   if (store) return store;
-  const medium = new FileMedium(absolute);
+  const medium = new FileMedium(absolute, options.mode);
   const db = new (sqlite())(join(absolute, 'calls.sqlite'));
   db.exec('PRAGMA busy_timeout = 10000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
   store = new CallStore(absolute, db, medium);

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fusionFacts, type FusionFacts } from './facts.js';
 import { observedFromStore } from './observed.js';
-import { machineStoreRoot, openCallStore } from '../calls/store.js';
+import { machineStoreRoot, openMachineStore } from '../machine-store.js';
 import { crispPlan, fusedEdges, type FusionPlan } from './plan.js';
 import { planFusionWith } from './planner.js';
 import { fusionReport, type FusionReport } from './report.js';
@@ -26,7 +26,7 @@ function observedSource(root: string, settings: FusionSettings): ReturnType<type
   if (!settings.observed) return undefined;
   const storeRoot = settings.observed.store ? resolve(root, settings.observed.store) : machineStoreRoot();
   if (!storeRoot || !existsSync(join(storeRoot, 'calls.sqlite'))) return undefined;
-  return observedFromStore(openCallStore(storeRoot), settings.observed.minRuns);
+  return observedFromStore(openMachineStore(storeRoot), settings.observed.minRuns);
 }
 
 /** The runtime option for a launched program, and nothing when fusion is off. */

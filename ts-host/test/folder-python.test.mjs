@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Worker } from 'node:worker_threads';
-import { WATCHDOG_SCRIPT } from '../dist/native/folder-python.js';
+import { WATCHDOG_SCRIPT } from '../dist/native/python-watchdog.js';
 import { Folder, runFolderPython } from '../dist/index.js';
 
 test('Python reads and writes the folder through pathlib and sqlite', async () => {

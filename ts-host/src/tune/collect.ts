@@ -20,7 +20,8 @@ import type { DecisionRequest, DecisionScorer, ModelTurn, ModelTurnRequest } fro
 import { scoreRoot } from './reward.js';
 import { rootServices } from './services.js';
 import type { ModelDriver } from '../runtime/runtime.js';
-import { createNatlangRuntime, type Services } from '../runtime/runtime.js';
+import type { Services } from '../runtime/runtime.js';
+import { createNatlangRuntime } from '../runtime/node.js';
 import { journaledServices, type World } from './world.js';
 import { currentFrame } from '../runtime/context.js';
 import { loadNatlang } from '../runtime/node-files.js';

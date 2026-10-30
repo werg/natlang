@@ -13,6 +13,7 @@ import { loadNamedFunction, NatlangSourceError } from '../runtime/loader.js';
 import { namedCallable } from '../runtime/callable.js';
 import { compileVirtualProject, virtualProjectFiles, virtualSourceFiles } from '../runtime/virtual-project.js';
 import type { InvocationTrace, NatlangRuntime } from '../runtime/runtime.js';
+import type { Platform } from '../runtime/platform.js';
 
 export type PlaygroundProject = {
   schema: 'natlang.playground.project/2'; id: string; name: string; root: string;
@@ -119,17 +120,17 @@ export function projectSignature(files: Record<string, string>, path: string):
 /**
  * The callable entry of a project file, taking a record of named inputs. A `.nl` function receives its
  * arguments from the record by name; a TypeScript module exports `main(inputs)`, and TypeScript entries
- * need the runtime namespace their `@natlang/browser` imports resolve to.
+ * need the runtime namespace their `@natlang/browser` imports resolve to and the platform they run on.
  */
 export function projectEntry(files: Record<string, string>, path: string,
-  runtimeNamespace?: Record<string, unknown>): (inputs: Record<string, unknown>) => Promise<unknown> {
+  runtimeNamespace?: Record<string, unknown>, platform?: Platform): (inputs: Record<string, unknown>) => Promise<unknown> {
   if (path.endsWith('.nl')) {
     const record = loadNamedFunction(`${ROOT}/${path}`, sourceFiles(files));
     const fn = namedCallable(record.name, record);
     return async inputs => fn(...Object.keys(record.args).map(name => inputs[name.replace(/\?$/, '')]));
   }
-  if (!runtimeNamespace) throw new Error('running a TypeScript entry needs the runtime namespace');
-  const compiled = compileVirtualProject({ files, root: ROOT }, runtimeNamespace);
+  if (!runtimeNamespace || !platform) throw new Error('running a TypeScript entry needs the runtime namespace and platform');
+  const compiled = compileVirtualProject({ files, root: ROOT }, runtimeNamespace, { platform });
   if (!compiled.ok) throw new Error(formatDiagnostics(compiled.diagnostics));
   const main = compiled.require(path).main;
   if (typeof main !== 'function') throw new Error(`${path} does not export main()`);
@@ -148,7 +149,7 @@ export async function runPlaygroundProject(runtime: NatlangRuntime, project: Pla
   const traces: InvocationTrace[] = [];
   let value: unknown, outcome: PlaygroundRun['outcome'];
   try {
-    value = await runtime.run(async () => projectEntry(snapshot.files, snapshot.root, options.runtimeNamespace)(snapshot.inputs),
+    value = await runtime.run(async () => projectEntry(snapshot.files, snapshot.root, options.runtimeNamespace, runtime.platform)(snapshot.inputs),
       { signal: options.signal, trace: trace => { traces.push(trace); } });
     outcome = { kind: 'done', detail: '' };
   } catch (error) { value = null; outcome = { kind: 'failed', detail: error instanceof Error ? error.message : String(error) }; }

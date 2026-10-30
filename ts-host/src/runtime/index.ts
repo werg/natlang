@@ -1,11 +1,15 @@
-/** Platform-neutral natlang runtime API. Platform entry points install a context store and evaluator. */
+/** Platform-neutral natlang runtime API. A runtime runs on the `Platform` it is created with (runtime/platform.ts). */
 import * as lowered from './lowered.js';
-export { createNatlangRuntime, NatlangRuntime, NatlangTask, recordingServices, resolveFrame,
-  setDefaultEnvironmentFactory, setDefaultCallStoreFactory } from './runtime.js';
+export { createNatlangRuntime, NatlangRuntime, NatlangTask, NatlangPlatformUnavailableError, recordingServices, resolveFrame } from './runtime.js';
+export { realmPlatform } from './platform.js';
+export type { Platform } from './platform.js';
+export { RealmEnvironment, constructorRealm } from '../native/realm.js';
+export type { Realm, RealmEnvironmentOptions, EvalImports } from '../native/realm.js';
+export { ModuleUnavailableError } from './modules.js';
 export type { ModelDriver, ModelConfig, NatlangRuntimeOptions, NatlangLimits, TaskOptions, TraceSink, Decision,
   InvocationTrace, LiveEvent, LiveSink, Services, SpecializationMode } from './runtime.js';
 export { modelTurnsSoFar } from '../native/agent.js';
-export { NatlangContextError, NatlangRecursionError, SlotContextStore, setContextStore, currentFrame } from './context.js';
+export { NatlangContextError, NatlangRecursionError, SlotContextStore, currentFrame } from './context.js';
 export type { ContextStore, Frame } from './context.js';
 export { NatlangCallError, RefinementCallError, invokeDefinition } from './kernel.js';
 export { RefinementError, RefinementChecker, MemoryVerdictCache, decisionJudge, parseRefinementSettings } from '../native/refinement.js';

@@ -29,7 +29,7 @@ export interface StoreMedium {
   freeBytes(): number;
   /** Bytes the database itself takes. */
   databaseBytes(): number;
-  /** A specialization mode set from outside the store (NATLANG_SPECIALIZATION). */
+  /** A specialization mode set from outside the store (Node: NATLANG_SPECIALIZATION, supplied by the machine-store module). */
   modeOverride(): string | undefined;
   /** This process, for the rows of the calls it runs. */
   readonly process: { pid: number | null; scope: string };
@@ -116,10 +116,10 @@ const refHashes = (ref: ValueRef | null | undefined): string[] => ref?.complete 
  */
 export class CallStore {
   /** Opens a store at a path; set by the Node store module (store.ts). */
-  static opener?: (root: string) => CallStore;
-  static open(root: string): CallStore {
+  static opener?: (root: string, options?: { mode?: () => string | undefined }) => CallStore;
+  static open(root: string, options?: { mode?: () => string | undefined }): CallStore {
     if (!CallStore.opener) throw new Error('CallStore.open needs the Node store module (calls/store.js)');
-    return CallStore.opener(root);
+    return CallStore.opener(root, options);
   }
   /** Called when the store closes (the Node module forgets its instance). */
   onClose?: () => void;
@@ -157,7 +157,7 @@ export class CallStore {
 
   // --- Settings ---------------------------------------------------------------------------------------------------
 
-  /** Machine settings: defaults, then the store's config, then NATLANG_SPECIALIZATION. Re-read every 5 s. */
+  /** Machine settings: defaults, then the store's config, then the medium's mode override (Node: NATLANG_SPECIALIZATION). Re-read every 5 s. */
   settings(): CallStoreSettings {
     const cached = this.settingsCache;
     if (cached && Date.now() - cached.at < 5000) return cached.value;

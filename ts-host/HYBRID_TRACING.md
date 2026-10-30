@@ -1,8 +1,8 @@
 # Compatibility-first hybrid JS tracing (opt-in, untraced native route)
 
-`installHybridTracingEnvironment` in `@natlang/node` installs both per-task
-and retained callable-folder evaluator factories. Unlike
-`installOwnedTracingEnvironment`, it can route evaluation to natlang's
+`hybridTracingPlatform` in `@natlang/node` builds a platform whose per-task
+and retained callable-folder evaluators come from your factory. Unlike
+`ownedTracingPlatform`, it can route evaluation to natlang's
 ordinary `TypeScriptEnvironment` even when the owned tracing interpreter
 does not support the code. The default route is **native** so existing
 callable-folder modules and host services have their usual compatibility.
@@ -17,10 +17,10 @@ proof that nested calls are traced. Never feed these native executions to
 megatoken as owned, replay-verified episodes.
 
 ```ts
-import {installHybridTracingEnvironment, EvalFailure} from '@natlang/node';
+import {createNatlangRuntime, hybridTracingPlatform, EvalFailure} from '@natlang/node';
 import {createBoundedNatlangEnvironment} from 'tracing-js-self/natlang';
 
-installHybridTracingEnvironment(
+const platform = hybridTracingPlatform(
   mode => createBoundedNatlangEnvironment({
     mode, EvalFailure,
     onTrace(bundle, request, lowering) {
@@ -56,6 +56,6 @@ roll back side effects. It does **not** make the tracer a complete JS engine,
 supply independently admitted training data, or produce owned instructions
 for code that runs on the native route.
 
-Use `installOwnedTracingEnvironment` when fail-closed training capture is
+Use `ownedTracingPlatform` when fail-closed training capture is
 required. Keep native and owned execution counts separate in dashboards,
 corpora and model evaluation.

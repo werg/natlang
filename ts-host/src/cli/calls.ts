@@ -6,7 +6,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CallStore, machineStoreRoot } from '../calls/store.js';
+import type { CallStore } from '../calls/store.js';
+import { machineStoreRoot, openMachineStore } from '../machine-store.js';
 import { exportSpecializationCorpus } from '../calls/corpus.js';
 import { renderEvidence, renderHistory, study } from '../calls/specializer.js';
 import { emptyEvidence, foldEvent, newTierEvidence, setTierState, type Evidence, type EvidenceState, type TierEvidence } from '../calls/evidence.js';
@@ -31,7 +32,7 @@ const number = (args: Args, name: string, fallback: number) => Number(text(args,
 function openStore(args: Args): CallStore {
   const root = text(args, '--store') ?? machineStoreRoot();
   if (!root) throw new Error('the call store is off on this machine (NATLANG_CALL_STORE=off); pass --store DIR to read one');
-  return CallStore.open(root);
+  return openMachineStore(root);
 }
 const print = (value: unknown, json: boolean) => process.stdout.write(json ? `${JSON.stringify(value, null, 2)}\n` :
   `${String(value)}${String(value).endsWith('\n') ? '' : '\n'}`);
@@ -248,7 +249,7 @@ export async function tracesCommand(argv: string[]): Promise<number> {
   if (action === 'good' || action === 'bad' || action === 'fix') {
     if (!words[0]) throw new Error(`usage: natlang traces ${action} CALL${action === 'fix' ? ' --expected JSON' : action === 'bad' ? ' [--expected JSON]' : ''} [--group G] [--program DIR] [--dry-run]`);
     const { recordFeedback } = await import('../calls/feedback.js');
-    print(recordFeedback(store, { verdict: action, call: words[0], expected: text(args, '--expected'), group: text(args, '--group'),
+    print(recordFeedback(store, { verdict: action, call: words[0], expected: text(args, '--expected'), group: text(args, '--group') || process.env.NATLANG_FEEDBACK_GROUP || undefined,
       program: text(args, '--program'), dryRun: args.options.has('--dry-run'), authorizedProducers: await authorizedProducers() }), false); return 0;
   }
   if (action === 'config') {

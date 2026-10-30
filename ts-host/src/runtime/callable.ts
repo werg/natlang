@@ -6,13 +6,13 @@
  */
 import { RESERVED_CALLABLE_PROPERTIES, reservedNameMessage } from '../compiler/intrinsics.js';
 import { APPLY_TO_FOLDER, type FolderHandle } from '../native/scoped-fs.js';
-import { currentFrame, runInFrame, startedCalls, type Frame } from './context.js';
+import { NatlangContextError, currentFrame, runInFrame, startedCalls, type Frame } from './context.js';
 import { invokeDefinition, type CallableDefinition, type CaptureCell, type Instantiation } from './kernel.js';
 import { checkRepresentation, type Representation } from '../native/representation.js';
 import { parseNatlang, PATH_ONLY, type ItemRecord, type ModuleRecord, type NatlangRecord } from './loader.js';
-import { moduleInstance, moduleInstanceAsync, moduleRealmUsesAsync,
-  moduleRealmGeneration, ModuleRealmChangedError } from './modules.js';
+import { moduleInstance, moduleInstanceAsync, moduleRealmUsesAsync } from './modules.js';
 import { resolveFrame } from './runtime.js';
+import type { Platform } from './platform.js';
 import { iterateOn } from './iterate.js';
 import { traceFor } from '../native/graph.js';
 
@@ -138,8 +138,11 @@ export function natlangDefinition(record: NatlangRecord): CallableDefinition {
     subtype: record.subtype, ...(record.readout ? { readout: record.readout } : {}), ...(record.model ? { model: record.model } : {}), description: record.description, source: record.source, revision: record.revision };
 }
 
-/** A callable for a named `.nl` definition, with its callable-folder children as attributes. */
-export function namedCallable(name: string, record: NatlangRecord, bound?: Frame): NatlangCallable {
+/**
+ * A callable for a named `.nl` definition, with its callable-folder children as attributes. `home` is the platform the
+ * folder's TypeScript modules run on when host code uses them outside any task; inside a task, the task's runtime's wins.
+ */
+export function namedCallable(name: string, record: NatlangRecord, bound?: Frame, home?: Platform): NatlangCallable {
   const definition = natlangDefinition({ ...record, name });
   // Data entries of the companion folder (its .nz files) are bound by default, as read-only scope bindings.
   let cells: ReturnType<DataCells> | undefined | null = null;
@@ -154,7 +157,7 @@ export function namedCallable(name: string, record: NatlangRecord, bound?: Frame
     Object.defineProperty(fn, APPLY_TO_FOLDER, { value: async (folder: FolderHandle, args: unknown[]) =>
       invokeDefinition(bound ?? resolveFrame(), definition, [folder, ...args],
         { folder: { transaction: await folder.beginTransaction(true), mode: 'apply' } }) });
-  attachChildren(fn, record.codebase, bound);
+  attachChildren(fn, record.codebase, bound, home);
   rememberRecord(fn, record);
   return fn;
 }
@@ -172,23 +175,24 @@ export function defineNatlang(text: string, options: { name?: string; types?: Re
     codebase: options.codebase ?? {} });
 }
 
-export function attachChildren(target: object, codebase: Record<string, ItemRecord>, bound?: Frame): void {
-  for (const [name, child] of Object.entries(codebase)) defineChild(target, name, itemValue(child, codebase, bound));
+export function attachChildren(target: object, codebase: Record<string, ItemRecord>, bound?: Frame, home?: Platform): void {
+  for (const [name, child] of Object.entries(codebase)) defineChild(target, name, itemValue(child, codebase, bound, home));
 }
 
 /** The value of one item in its folder `level`. */
-export function itemValue(item: ItemRecord, level: Record<string, ItemRecord>, bound?: Frame): unknown {
-  if (item.kind === 'natlang') return namedCallable(item.name, item, bound);
-  if (item.kind === 'namespace') return callableTree(item.codebase, bound);
-  return moduleValue(item, level, bound);
+export function itemValue(item: ItemRecord, level: Record<string, ItemRecord>, bound?: Frame, home?: Platform): unknown {
+  if (item.kind === 'natlang') return namedCallable(item.name, item, bound, home);
+  if (item.kind === 'namespace') return callableTree(item.codebase, bound, home);
+  return moduleValue(item, level, bound, home);
 }
 
 /** A TypeScript module: callable if it has a default function export; exports and folder children as attributes. */
-function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bound?: Frame): unknown {
-  const generation = moduleRealmGeneration();
+function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bound?: Frame, home?: Platform): unknown {
+  // The module's instances live in the platform of the runtime whose task calls it, else where the folder was loaded.
   const instance = () => {
-    if (generation !== moduleRealmGeneration()) throw new ModuleRealmChangedError();
-    return moduleRealmUsesAsync() ? moduleInstanceAsync(record, level) : moduleInstance(record, level);
+    const platform = currentFrame()?.task.runtime.platform ?? home;
+    if (!platform) throw new NatlangContextError();
+    return moduleRealmUsesAsync(platform) ? moduleInstanceAsync(platform, record, level) : moduleInstance(platform, record, level);
   };
   const enter = <T>(fn: () => T): T => bound ? runInFrame(bound, fn) : fn();
   const invoke = (exportName: string, args: unknown[]) => enter(() => {
@@ -219,7 +223,7 @@ function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bo
         return value instanceof Promise ? value.then(exports => exports[name]) : value[name];
       }, enumerable: true });
   }
-  attachChildren(node, record.codebase, bound);
+  attachChildren(node, record.codebase, bound, home);
   return typeof node === 'function' ? node : Object.freeze(node);
 }
 
@@ -239,9 +243,9 @@ function recordSkillHelperUse(source: string, exportName: string, frame?: Frame)
 }
 
 /** The callable tree for a whole callable folder (for example `natlang.d/`), as a record. */
-export function callableTree(codebase: Record<string, ItemRecord>, bound?: Frame): Record<string, unknown> {
+export function callableTree(codebase: Record<string, ItemRecord>, bound?: Frame, home?: Platform): Record<string, unknown> {
   const tree = Object.create(null) as Record<string, unknown>;
-  attachChildren(tree, codebase, bound);
+  attachChildren(tree, codebase, bound, home);
   return Object.freeze(tree);
 }
 

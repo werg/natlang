@@ -1,112 +1,13 @@
-import { readFileSync } from 'node:fs';
 import { createContext, runInContext, runInThisContext, type Context } from 'node:vm';
-import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
 import { WorkspaceModules, findPackageWorkspace, packageDeclaration } from './workspace-modules.js';
 import { packageNameFromSpecifier } from './package-specifier.js';
 import { markRaces } from './runtime/context.js';
-import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
-  type EvalResult, type HostEvent } from './native/evaluator.js';
+import type { EnvironmentMode, HostEvent } from './native/evaluator.js';
+import { RealmEnvironment, type EvalImports, type Realm } from './native/realm.js';
 export { EvalFailure } from './native/evaluator.js';
 export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './native/evaluator.js';
 
 const ARGUMENTS_KEY = '__natlang_arguments';
-const prelude = readFileSync(fileURLToPath(new URL('../prelude.js', import.meta.url)), 'utf8');
-
-function snapshot(value: unknown): unknown {
-  // Eval scope follows TypeScript: an absent optional property may be undefined.
-  // Published portable results still use the stricter portable() boundary below.
-  if (value === undefined || value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return value;
-  if (Array.isArray(value)) return Object.freeze(Array.from(value, snapshot));
-  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
-    const out: Record<string, unknown> = Object.create(null);
-    for (const [key, item] of Object.entries(value)) out[key] = snapshot(item);
-    return Object.freeze(out);
-  }
-  throw new TypeError('eval scope contains a nonportable value');
-}
-
-export function portable(value: unknown, seen = new Set<object>(), path = '$'): unknown {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return value;
-  if (!value || typeof value !== 'object' || ArrayBuffer.isView(value) || value instanceof ArrayBuffer)
-    throw new TypeError(`eval result ${path} contains an unsupported or inexact ${typeof value} value`);
-  if (typeof (value as Promise<unknown>).then === 'function')
-    throw new TypeError('await the asynchronous imported function call');
-  if (seen.has(value)) throw new TypeError('eval result contains a cycle');
-  seen.add(value);
-  if (Array.isArray(value)) {
-    const out = Array.from(value, (item, index) => portable(item, seen, `${path}[${index}]`));
-    seen.delete(value); return out;
-  }
-  if (Object.prototype.toString.call(value) !== '[object Object]')
-    throw new TypeError('eval result contains a native object');
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== null && (Object.getPrototypeOf(proto) !== null || proto.constructor?.name !== 'Object'))
-    throw new TypeError('eval result contains a native class instance');
-  const out: Record<string, unknown> = Object.create(null);
-  for (const [key, item] of Object.entries(value)) out[key] = portable(item, seen, `${path}.${key}`);
-  seen.delete(value);
-  return out;
-}
-
-function lowerStaticImports(source: string, validateImport: (specifier: string) => void): string {
-  const file = ts.createSourceFile('imports.ts', source, ts.ScriptTarget.Latest, true);
-  const edits: { start: number; end: number; text: string }[] = [];
-  const visit = (node: ts.Node) => {
-    if (ts.isImportDeclaration(node)) {
-      if (!ts.isStringLiteral(node.moduleSpecifier)) throw new Error('Package import must use a string literal');
-      validateImport(node.moduleSpecifier.text);
-      const clause = node.importClause;
-      const call = `await __natlang_import(${node.moduleSpecifier.getText(file)})`;
-      const fields: string[] = [];
-      let text = '';
-      const typeOnlyBindings = clause?.namedBindings && ts.isNamedImports(clause.namedBindings)
-        && clause.namedBindings.elements.length > 0 && clause.namedBindings.elements.every(binding => binding.isTypeOnly);
-      if (!clause?.isTypeOnly && !(typeOnlyBindings && !clause?.name)) {
-        if (clause?.name) fields.push(`default: ${clause.name.text}`);
-        const bindings = clause?.namedBindings;
-        if (bindings && ts.isNamedImports(bindings)) for (const binding of bindings.elements)
-          if (!binding.isTypeOnly) fields.push(`${binding.propertyName?.text ?? binding.name.text}: ${binding.name.text}`);
-        if (fields.length) text += `const { ${fields.join(', ')} } = ${call};`;
-        if (bindings && ts.isNamespaceImport(bindings)) text += `const ${bindings.name.text} = ${call};`;
-        if (!text) text = `${call};`;
-      }
-      edits.push({start:node.getStart(file),end:node.end,text});
-    } else ts.forEachChild(node,visit);
-  };
-  visit(file);
-  for (const edit of edits.sort((a,b)=>b.start-a.start)) source = source.slice(0,edit.start)+edit.text+source.slice(edit.end);
-  return source;
-}
-
-function compile(code: string, body: boolean, asyncBody = false, modules = false,
-  validateImport: (specifier: string) => void = () => {}): string {
-  // The body is a function expression; the scope, live values, and import hook arrive as its parameters,
-  // so nothing of the runtime's plumbing is a global that eval code could find on globalThis.
-  let source = body ? `(${asyncBody ? 'async ' : ''}function (self: any, __live: any, __natlang_import: any) {\n${code}\n})` +
-    `(...(globalThis as any)[${JSON.stringify(ARGUMENTS_KEY)}])` : code;
-  // Reparse lowered imports before TS binding; otherwise TS rewrites uses to removed import aliases.
-  if (modules) source = lowerStaticImports(source, validateImport);
-  const result = ts.transpileModule(source, {
-    fileName: 'natlang-eval.ts', reportDiagnostics: true,
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None,
-      isolatedModules: true, removeComments: false },
-    transformers: modules ? { before: [context => root => {
-      const visit: ts.Visitor = node => {
-        if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword)
-          return ts.factory.updateCallExpression(node, ts.factory.createIdentifier('__natlang_import'), undefined,
-            node.arguments.map(arg => ts.visitNode(arg, visit) as ts.Expression));
-        return ts.visitEachChild(node, visit, context);
-      };
-      return ts.visitNode(root, visit) as ts.SourceFile;
-    }] } : undefined,
-  });
-  const errors = (result.diagnostics ?? []).filter(d => d.category === ts.DiagnosticCategory.Error);
-  if (errors.length) throw new SyntaxError('TypeScript: ' + errors.map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')).join('; '));
-  return result.outputText;
-}
 
 /** Raw native bindings and process-ending calls that model-written eval code must not reach: a malformed call into
  * process.binding('fs') aborted the whole collector natively (2026-10-07, 96 workers lost). Everything else on
@@ -122,56 +23,98 @@ const evalProcess = new Proxy(process, {
 });
 
 /**
- * Node evaluator: a `vm` context in this process. Portable scope data arrives as a frozen snapshot
- * (`self`); live objects, callables, captures and the output sink arrive by reference (`__live`).
- */
-/**
  * Rejections nothing handles of promises eval code made: its realm's Promise is theirs. Model code can drop a promise
  * (an async callback given to forEach) whose rejection would end the host as an unhandled rejection; it is recorded
  * as a host event of the eval's environment instead. Any other unhandled rejection is the host's own and, with no
  * other listener, still ends the process as it would without this one.
+ *
+ * `process` has one `unhandledRejection` event, so the routing is shared, but each open environment owns its share
+ * of it: the listener is installed when the first environment that ran eval code is open and removed when the last
+ * one closes.
  */
-const evalRealms = new WeakMap<object, (reason: unknown) => void>();
-let watchingRejections = false;
-function watchEvalRejections(realmPromise: PromiseConstructor, report: (reason: unknown) => void): void {
-  evalRealms.set(realmPromise, report);
-  if (watchingRejections) return;
-  watchingRejections = true;
-  process.on('unhandledRejection', function evalRejection(reason, promise) {
-    const owner = evalRealms.get((promise as { constructor?: object }).constructor ?? {});
+class RejectionRouter {
+  private readonly owners = new WeakMap<object, (reason: unknown) => void>();
+  private open = 0;
+  private readonly listener = (reason: unknown, promise: Promise<unknown>) => {
+    const owner = this.owners.get((promise as { constructor?: object }).constructor ?? {});
     if (owner) return owner(reason);
     if (process.listenerCount('unhandledRejection') === 1) throw reason;
-  });
+  };
+  /** Take a share of the routing until the returned release is called. */
+  acquire(): () => void {
+    if (this.open++ === 0) process.on('unhandledRejection', this.listener);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      if (--this.open === 0) process.off('unhandledRejection', this.listener);
+    };
+  }
+  route(realmPromise: PromiseConstructor, report: (reason: unknown) => void): void { this.owners.set(realmPromise, report); }
+}
+const rejections = new RejectionRouter();
+
+/** A `node:vm` context as a realm. The call's arguments reach the function through a property that is removed at once. */
+class VmRealm implements Realm {
+  constructor(private readonly context: Context) {}
+  call(body: string, parameters: readonly string[], args: readonly unknown[], options: { timeoutMs?: number } = {}): unknown {
+    Object.defineProperty(this.context, ARGUMENTS_KEY, { value: args, enumerable: false, configurable: true });
+    try {
+      return runInContext(`(function (${parameters.join(', ')}) {\n"use strict";\n${body}\n})(...globalThis[${JSON.stringify(ARGUMENTS_KEY)}])`,
+        this.context, { ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }), displayErrors: true });
+    } finally { delete (this.context as Record<string, unknown>)[ARGUMENTS_KEY]; }
+  }
 }
 
-export class TypeScriptEnvironment implements EvalEnvironment {
-  readonly authority = 'shared-node-host';
-  readonly mode: EnvironmentMode;
-  /** Synchronous run time allowed per eval; unlimited unless set. */
-  readonly timeoutMs?: number;
-  readonly scopeCapabilities: { allowModules: boolean; allowNetwork: boolean };
+/** The host realm: callable-folder module bodies run in the application's own realm, so their values interoperate with its. */
+const hostRealm: Realm = {
+  call: (body, parameters, args) => (runInThisContext(`(function (${parameters.join(', ')}) {\n"use strict";\n${body}\n})`,
+    { displayErrors: true }) as (...values: unknown[]) => unknown)(...args),
+};
+
+export type TypeScriptEnvironmentOptions = { mode?: EnvironmentMode; timeoutMs?: number; observe?: (event: HostEvent) => void;
+  workspace?: string; network?: boolean };
+
+/**
+ * Node evaluator: a `vm` context in this process, under the shared realm evaluator. Eval sees Node's host globals as
+ * any module in the application does; its timers belong to the call and are cleared when it ends.
+ */
+export class TypeScriptEnvironment extends RealmEnvironment {
   readonly modules?: WorkspaceModules;
   private readonly workspace?: string;
   private readonly packageEvents: HostEvent[] = [];
-  private context?: Context;
-  private disposed = false;
-  private readonly observe?: (event: HostEvent) => void;
   /** Cancellers of timers that eval code scheduled and that have not run yet. */
   private readonly timers = new Set<() => void>();
+  private releaseRejections?: () => void;
 
-  constructor(options: { mode?: EnvironmentMode; timeoutMs?: number; observe?: (event: HostEvent) => void;
-    workspace?: string; network?: boolean } = {}) {
-    this.mode = options.mode ?? 'fresh';
-    this.timeoutMs = options.timeoutMs;
-    this.observe = options.observe;
-    this.workspace = options.workspace ?? findPackageWorkspace(process.cwd());
-    this.scopeCapabilities = { allowModules: true, allowNetwork: options.network ?? true };
-    if (this.workspace) this.modules = new WorkspaceModules(this.workspace, event => this.packageEvents.push(event));
-    if (this.timeoutMs !== undefined && (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1)) throw new RangeError('timeoutMs must be positive');
+  constructor(options: TypeScriptEnvironmentOptions = {}) {
+    const workspace = options.workspace ?? findPackageWorkspace(process.cwd());
+    super({ authority: 'shared-node-host', mode: options.mode, timeoutMs: options.timeoutMs, observe: options.observe,
+      scopeCapabilities: { allowModules: true, allowNetwork: options.network ?? true },
+      fork: () => new TypeScriptEnvironment({ mode: 'fresh', timeoutMs: options.timeoutMs, observe: options.observe,
+        workspace, network: options.network }) });
+    this.workspace = workspace;
+    if (workspace) this.modules = new WorkspaceModules(workspace, event => this.packageEvents.push(event));
   }
 
-  fork(): TypeScriptEnvironment { return new TypeScriptEnvironment({ mode: 'fresh',
-    timeoutMs: this.timeoutMs, observe: this.observe, workspace: this.workspace, network: this.scopeCapabilities.allowNetwork }); }
+  protected override makeRealm(): Realm { return new VmRealm(this.makeContext()); }
+  protected override moduleRealm(): Realm { return hostRealm; }
+  protected override hostEvents(): HostEvent[] { return this.packageEvents.splice(0); }
+  protected override abandon(): void { this.clearTimers(); }
+  protected override release(): void { this.clearTimers(); this.releaseRejections?.(); this.releaseRejections = undefined; }
+
+  protected override importer(): EvalImports {
+    return {
+      validate: specifier => {
+        packageNameFromSpecifier(specifier);
+        if (!this.modules) throw new Error(`cannot import ${specifier}: no package.json above ${process.cwd()}`);
+      },
+      load: async specifier => {
+        if (!this.modules) throw new Error(`cannot import ${specifier}: no package.json above ${process.cwd()}`);
+        return this.modules.load(specifier);
+      },
+    };
+  }
 
   private makeContext(): Context {
     // Node's host globals are available to eval code as they are to any module in the application.
@@ -206,10 +149,10 @@ export class TypeScriptEnvironment implements EvalEnvironment {
       queueMicrotask: (callback: unknown) => queueMicrotask(guarded(callback) as () => void),
       structuredClone, performance, crypto: globalThis.crypto,
       TextEncoder, TextDecoder, URL, URLSearchParams, AbortController, AbortSignal, Blob });
-    runInContext(prelude, context);
     const realmPromise = runInContext('Promise', context) as PromiseConstructor;
     markRaces(realmPromise);
-    watchEvalRejections(realmPromise, reason => this.packageEvents.push({
+    this.releaseRejections ??= rejections.acquire();
+    rejections.route(realmPromise, reason => this.packageEvents.push({
       operation: 'eval.unhandled-rejection', message: reason instanceof Error ? reason.message : String(reason) }));
     if (this.scopeCapabilities.allowNetwork) Object.assign(context, {
       fetch: async (input: string | URL | Request, init?: RequestInit) => {
@@ -226,100 +169,15 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     return context;
   }
 
-  private captureConsole(context: Context): string[] {
-    const logs: string[] = [];
-    const write = consoleWriter(logs, value => { try { return JSON.stringify(portable(value)); } catch { return String(value); } });
-    context.console = Object.freeze({ log: write, info: write, warn: write, error: write });
-    return logs;
-  }
-
   declarationOf(name: string): string | undefined {
     return this.modules && this.scopeCapabilities.allowModules ? packageDeclaration(this.modules.workspace, name) : undefined;
-  }
-
-  private readonly importModule = async (specifier: string) => {
-    if (!this.modules) throw new Error(`cannot import ${specifier}: no package.json above ${process.cwd()}`);
-    return this.modules.load(specifier);
-  };
-
-  private prepare(request: EvalRequest): { context: Context; logs: string[]; start: (code: string, timeout?: number) => unknown } {
-    if (this.disposed) throw new Error('TypeScript environment is disposed');
-    if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
-      throw new TypeError('invalid eval request');
-    const context = this.mode === 'retained' ? (this.context ??= this.makeContext()) : this.makeContext();
-    const logs = this.captureConsole(context);
-    const scope = snapshot(request.scope) as Record<string, unknown>;
-    // The body picks its arguments up as it starts; the property is not enumerable and is removed right after.
-    Object.defineProperty(context, ARGUMENTS_KEY, { value: [scope, request.live ?? {}, this.importModule],
-      enumerable: false, configurable: true });
-    return { context, logs, start: (code: string, timeout?: number) => {
-      try { return runInContext(code, context, { ...(timeout === undefined ? {} : { timeout }), displayErrors: true }); }
-      finally { delete (context as Record<string, unknown>)[ARGUMENTS_KEY]; }
-    } };
-  }
-
-  private failure(request: EvalRequest, error: unknown, logs: string[]): EvalFailure {
-    return new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
-      { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
-        error.stack : undefined, logs });
-  }
-
-  execute(request: EvalRequest): EvalResult {
-    let logs: string[] = [];
-    const timeout = request.timeoutMs ?? this.timeoutMs;
-    try {
-      const prepared = this.prepare(request); logs = prepared.logs;
-      const code = '"use strict";\n' + compile(request.code, request.body);
-      const value = prepared.start(code, timeout);
-      if (value && typeof value === 'object' && typeof (value as Promise<unknown>).then === 'function')
-        throw new TypeError('an asynchronous result needs executeAsync');
-      return { result: value === undefined ? null : value, events: this.capture(request, 'completed'), logs };
-    } catch (error) { throw this.failure(request, error, logs); }
-  }
-
-  async executeAsync(request: EvalRequest): Promise<EvalResult> {
-    let logs: string[] = [];
-    const timeout = request.timeoutMs ?? this.timeoutMs;
-    try {
-      const prepared = this.prepare(request); logs = prepared.logs;
-      const code = '"use strict";\n' + compile(request.code, request.body, request.body, true, specifier => {
-        packageNameFromSpecifier(specifier);
-        if (!this.modules) throw new Error(`cannot import ${specifier}: no package.json above ${process.cwd()}`);
-      });
-      const value = await withinTimeout(Promise.resolve(prepared.start(code, timeout)), timeout);
-      return { result: value === undefined ? null : value, events: this.capture(request, 'completed'), logs };
-    } catch (error) { this.clearTimers(); throw this.failure(request, error, logs); }
-  }
-
-  /**
-   * Evaluate a callable-folder module body in the host realm, so its values interoperate with
-   * application code (arrays, classes, Promises). Bindings are passed by reference.
-   */
-  evaluateModule(code: string, bindings: Record<string, unknown>): unknown {
-    if (this.disposed) throw new Error('TypeScript environment is disposed');
-    const names = Object.keys(bindings);
-    const factory = runInThisContext(`(function (${names.join(', ')}) {\n"use strict";\n${code}\n})`,
-      { displayErrors: true }) as (...values: unknown[]) => unknown;
-    return factory(...names.map(name => bindings[name]));
-  }
-
-
-
-  private capture(request: EvalRequest, status: string): HostEvent[] {
-    const events = this.packageEvents.splice(0);
-    for (const event of events) this.observe?.(event);
-    const evalEvent = { operation: 'typescript.eval', mode: this.mode, body: request.body, status };
-    this.observe?.(evalEvent);
-    return [...events, evalEvent];
   }
 
   /** Cancel the timers eval code scheduled that have not run: when the call ends, or when an eval fails. */
   private clearTimers(): void {
     if (!this.timers.size) return;
-    this.observe?.({ operation: 'eval.timers-cleared', count: this.timers.size });
+    this.options.observe?.({ operation: 'eval.timers-cleared', count: this.timers.size });
     for (const cancel of this.timers) cancel();
     this.timers.clear();
   }
-
-  close(): void { this.disposed = true; this.context = undefined; this.clearTimers(); }
 }

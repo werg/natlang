@@ -108,10 +108,9 @@ export async function runSelectedPolicyOrder({select,origin='model',seed=17,chec
     throw new Error('Selected policy source differs from the application crisp.ts source');
   const {WorkflowService}=await workflowApp();
   const {createNatlangSelectedEnvironment}=await import('tracing-js-self/natlang-selected');
-  const {installSelectedSemanticEnvironment,setDefaultEnvironmentFactory}=await import('../dist/runtime/node.js');
-  const {moduleInstanceAsync,setModuleRealm}=await import('../dist/runtime/modules.js');
+  const {selectedSemanticPlatform}=await import('../dist/runtime/node.js');
+  const {moduleInstanceAsync}=await import('../dist/runtime/modules.js');
   const {parseModule,PATH_ONLY}=await import('../dist/runtime/loader.js');
-  const {TypeScriptEnvironment}=await import('../dist/environment.js');
   const temporary=root?null:await mkdtemp(join(repoRoot,'.workflow-selected-'));
   const policyRecord=parseModule('/__natlang__/folder/crisp.ts',policySource??crispSource,{},PATH_ONLY);
   const prefixes=[];
@@ -139,8 +138,8 @@ export async function runSelectedPolicyOrder({select,origin='model',seed=17,chec
       const snapshot={state:before,event,receipt:before.pending?await service.receipt(before.pending):null};
       try {
         selectedEnvironment=factory('fresh');
-        installSelectedSemanticEnvironment(mode=>mode==='fresh'?selectedEnvironment:factory(mode));
-        const module=await moduleInstanceAsync(policyRecord,{crisp:policyRecord});
+        const platform=selectedSemanticPlatform(mode=>mode==='fresh'?selectedEnvironment:factory(mode));
+        const module=await moduleInstanceAsync(platform,policyRecord,{crisp:policyRecord});
         const decision=await module.default(snapshot,limits);
         if(origin==='controlled') {
           const latest=prefixes.at(-1);
@@ -157,8 +156,6 @@ export async function runSelectedPolicyOrder({select,origin='model',seed=17,chec
         journal.push({order,event,failure,state:before});throw Object.assign(new Error(failure.message),{failure});
       } finally {
         selectedEnvironment?.close();selectedEnvironment=undefined;
-        setDefaultEnvironmentFactory(options=>new TypeScriptEnvironment({workspace:options.workspace,network:options.network}));
-        setModuleRealm(()=>new TypeScriptEnvironment({mode:'retained'}));
       }
     };
     const journey=async(id,events)=>{
@@ -203,8 +200,6 @@ export async function runSelectedPolicyOrder({select,origin='model',seed=17,chec
     return JSON.parse(JSON.stringify(report));
   } finally {
     if(temporary) await rm(temporary,{recursive:true,force:true});
-    setDefaultEnvironmentFactory(options=>new TypeScriptEnvironment({workspace:options.workspace,network:options.network}));
-    setModuleRealm(()=>new TypeScriptEnvironment({mode:'retained'}));
   }
 }
 

@@ -26,7 +26,8 @@ import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest } fro
 import { neuraleseServerModelTurn, type NeuraleseServerOptions } from '../model/neuralese-server.js';
 import { currentFrame } from '../runtime/context.js';
 import { loadNatlang } from '../runtime/node-files.js';
-import { createNatlangRuntime, type ModelDriver, type Services } from '../runtime/runtime.js';
+import type { ModelDriver, Services } from '../runtime/runtime.js';
+import { createNatlangRuntime } from '../runtime/node.js';
 import type { SplitExample } from './collect.js';
 import { exampleArguments } from './evaluate.js';
 import { scorable, scoreRoot, verifierDigest, type RootScore } from './reward.js';

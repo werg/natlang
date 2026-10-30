@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Folder, improveProgram, OperationJournal } from '../dist/index.js';
 import { AUTHORED_IMPROVER } from '../dist/improvement/authored-source.js';
-import { compileVirtualProject } from '../dist/runtime/virtual-project.js';
+import { compileVirtualProject } from '../dist/runtime/node.js';
 import * as runtime from '../dist/runtime/node.js';
 import { scriptedModel } from './support/natlang.mjs';
 import { stagedImprover, finishing, STAGES } from './support/improver.mjs';

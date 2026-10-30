@@ -11,7 +11,7 @@ import { coerce, isPlainRecord } from '../native/values.js';
 import { parseType, refinements as crispTable, TypeEnv } from '../native/types.js';
 import { normalizePredicate } from '../native/refinement-settings.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
-import { bindAwait, currentFrame, guard, runInFrame } from './context.js';
+import { currentFrame, guard, runInFrame } from './context.js';
 import { callableMeta, callableTree, inlineCallable, invokeAt, namedCallable, type NatlangCallable } from './callable.js';
 import type { Representation } from '../native/representation.js';
 import { registerFileRecords, type ItemRecord, type NatlangRecord } from './loader.js';
@@ -24,7 +24,7 @@ import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { isNeuraleseRef, neuraleseRef } from '../native/neuralese.js';
 import { withSelectedCaptureAccessors } from './selected-captures.js';
 
-export { bindAwait, guard };
+export { guard };
 
 /**
  * Compiler target for a call the compiler marked as part of a possible hand-off between named functions (compiler/call-flow.ts

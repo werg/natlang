@@ -71,7 +71,7 @@ const SAMPLE_FUNCTION = 'Translate the text into French.';
  * in archive provenance.
  */
 export async function buildStandardLibrary(options: { endpoint: string; headers?: Record<string, string>;
-  store?: NeuraleseStore; textProviderRead?: boolean }): Promise<{ library: StandardLibrary; bytes: Uint8Array }> {
+  store?: NeuraleseStore; textProviderRead?: boolean; platform: import('../runtime/platform.js').Platform }): Promise<{ library: StandardLibrary; bytes: Uint8Array }> {
   const { initBodyInContext } = await import('./text-init.js');
   const { createNatlangRuntime } = await import('../runtime/runtime.js');
   const { MemoryNeuraleseStore } = await import('../native/neuralese-store.js');
@@ -117,7 +117,7 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
         await fetchState(placeholder);
         const all = Object.fromEntries(Object.keys(COMBINATORS).map(key => [key, placeholder])) as Record<CombinatorName, string>;
         const lib = createNeuraleseLibrary({ dialect: info.dialects[0]!, width: info.width, bodies: all });
-        const runtime = createNatlangRuntime({ model: driver as never, neuralese: nativeRuntime });
+        const runtime = createNatlangRuntime({ platform: options.platform, model: driver as never, neuralese: nativeRuntime });
         return runtime.run(() => samples[name](lib));
       } });
     bodies[name] = result.id;

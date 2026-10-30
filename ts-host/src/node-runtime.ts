@@ -7,7 +7,7 @@ import type { LambdaNode, Value } from './native/values.js';
 import { toHost } from './runtime/kernel.js';
 import { kernelHooks } from './runtime/hooks.js';
 import { NatlangRuntime, NatlangTask, type NatlangRuntimeOptions } from './runtime/runtime.js';
-import './runtime/node.js';
+import { nodePlatform } from './runtime/node.js';
 
 export type NodeNativeRuntimeOptions = Partial<NativeRuntimeOptions> & Pick<NatlangRuntimeOptions,
   'neuralese' | 'nativeProgramGuidance' | 'program' | 'adaptation' | 'executorIdentity'> & {
@@ -31,7 +31,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
   constructor(options: NodeNativeRuntimeOptions = {}) {
     options = { ...options, ...runIdentity(options) };
     // Calls this one makes run in the task, so the task holds what they are shown of the services too.
-    const taskFrame = options.frame ?? new NatlangTask(new NatlangRuntime({ services: options.services, agent: options.agent,
+    const taskFrame = options.frame ?? new NatlangTask(new NatlangRuntime({ platform: nodePlatform(), services: options.services, agent: options.agent,
       exactHostTraceCapture: options.exactHostTraceCapture, neuralese: options.neuralese,
       nativeProgramGuidance: options.nativeProgramGuidance, program: options.program, adaptation: options.adaptation,
       executorIdentity: options.executorIdentity,

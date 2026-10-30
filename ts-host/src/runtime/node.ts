@@ -1,41 +1,91 @@
-/** Node wiring: AsyncLocalStorage context propagation, the vm evaluator, and module package loading. */
+/** Node platform: AsyncLocalStorage context propagation, the vm evaluator, the machine's call store and module package loading. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Worker } from 'node:worker_threads';
 import { TypeScriptEnvironment } from '../environment.js';
 import { EvalFailure, type EvalEnvironment, type EnvironmentMode } from '../native/evaluator.js';
 import type { NatlangRuntimeOptions } from './runtime.js';
+import { platformDefaults } from '../platform-defaults.js';
 import { WorkspaceModules, findPackageWorkspace } from '../workspace-modules.js';
-import { currentFrame, setContextStore, type Frame } from './context.js';
-import { setDefaultCallStoreFactory, setDefaultEnvironmentFactory } from './runtime.js';
-import { CallStore, machineStoreRoot } from '../calls/store.js';
-import { registerBuiltinModule, setModuleRealm, setPackageLoader } from './modules.js';
+import type { ReturnErrorText } from '../native/return-errors.js';
+import type { ContextStore, Frame } from './context.js';
+import type { Platform } from './platform.js';
+import { machineStoreRoot, openMachineStore } from '../machine-store.js';
 import { learningModule } from '../neuralese/learning.js';
 import { neuraleseModule } from '../neuralese/combinators.js';
-import { setPythonWatchdog, WATCHDOG_SCRIPT } from '../native/folder-python.js';
+import { runFolderPython as runPython, type PythonHost } from '../native/folder-python.js';
+import { WATCHDOG_SCRIPT, type PythonWatchdog } from '../native/python-watchdog.js';
+import { runFolderBash as runBash, type FolderBashOptions, type FolderBashResult } from '../native/folder-shell.js';
+import type { Folder } from '../native/scoped-fs.js';
 import { gepaModule } from '../gepa/index.js';
 import { selectedServiceSurface } from '../native/effects.js';
 import { selectedNativeIdentity, selectedNativeSurface, selectedNativeCleanup } from '../native/selected-surface.js';
 
 const storage = new AsyncLocalStorage<Frame | undefined>();
-setContextStore({ current: () => storage.getStore(), run: (frame, fn) => storage.run(frame, fn) });
-setDefaultEnvironmentFactory(options => new TypeScriptEnvironment({ workspace: options.workspace, network: options.network }));
-setModuleRealm(() => new TypeScriptEnvironment({ mode: 'retained' }));
+const nodeContextStore: ContextStore = { current: () => storage.getStore(), run: (frame, fn) => storage.run(frame, fn) };
+
+// Python cells time out through a worker thread that sets Pyodide's interrupt flag.
+const nodePythonWatchdog: PythonWatchdog = (buffer, ms) => new Worker(`const { workerData } = require('worker_threads'); const buffer = workerData.buffer, ms = workerData.ms; ${WATCHDOG_SCRIPT}`,
+  { eval: true, workerData: { buffer, ms } });
 
 /**
- * Explicit, process-wide opt-in for an *owned* guest interpreter.
- *
- * Installs both natlang evaluation seams. The factory is supplied by the
- * embedding application (for example tracing-js-self/natlang), so the
- * natlang distribution never silently imports an untraced fallback runtime.
- * This does NOT claim general callback/package/module compatibility: a
- * bounded interpreter must reject any unsupported natlang-generated code.
- *
- * Call before starting tasks or loading callable-folder modules. This mutates
- * the platform defaults; already-created module instances are not migrated.
+ * The Node platform: what `createNatlangRuntime` uses here when no `platform` is passed. It reads the process
+ * environment (`NATLANG_CALL_STORE`, `NATLANG_SPECIALIZATION`, `NATLANG_RETURN_ERROR_TEXT`) where the kernel, which reads
+ * none, is configured. Build a variant with an object spread (`{ ...nodePlatform(), builtinModules }`): module state belongs
+ * to the platform value, so a variant has its own module instances.
  */
-export function installOwnedTracingEnvironment(
-  factory: (mode: EnvironmentMode, options?: NatlangRuntimeOptions) => EvalEnvironment
-): void {
+export function nodePlatform(): Platform { return defaultNodePlatform ??= createNodePlatform(); }
+let defaultNodePlatform: Platform | undefined;
+
+function createNodePlatform(): Platform {
+  // Callable-folder modules load packages from the calling task's workspace.
+  const packages = new Map<string, WorkspaceModules>();
+  return {
+    name: 'node',
+    contextStore: nodeContextStore,
+    environment: options => new TypeScriptEnvironment({ workspace: options.workspace, network: options.network }),
+    moduleRealm: () => new TypeScriptEnvironment({ mode: 'retained' }),
+    // Every runtime records to the machine's call store unless it says otherwise (NATLANG_CALL_STORE=off disables it).
+    callStore: () => { const root = machineStoreRoot(); return root ? openMachineStore(root) : undefined; },
+    builtinModules: { 'natlang:learning': () => learningModule, 'natlang:neuralese': () => neuraleseModule, 'natlang:gepa': () => gepaModule },
+    packageLoader: (specifier, task) => {
+      const workspace = task?.runtime.options.workspace ?? findPackageWorkspace(process.cwd());
+      if (!workspace) throw new Error(`package imports need an application package.json: ${specifier}`);
+      let loader = packages.get(workspace);
+      if (!loader) packages.set(workspace, loader = new WorkspaceModules(workspace));
+      return loader.load(specifier);
+    },
+    runFolderBash,
+    runFolderPython,
+    get returnErrorText() { return process.env.NATLANG_RETURN_ERROR_TEXT as ReturnErrorText | undefined; },
+  };
+}
+
+/** Run a Python cell over `folder`; its timeout is enforced by the Node watchdog unless `host` brings another. */
+export function runFolderPython(folder: Folder, source: string, host: PythonHost = {}, timeoutMs?: number) {
+  return runPython(folder, source, { watchdog: nodePythonWatchdog, ...host }, timeoutMs);
+}
+
+/** Run a shell command over `folder`; its Python cells are bounded by the Node watchdog unless `options.python` brings another. */
+export function runFolderBash(folder: Folder, command: string, options: FolderBashOptions = {}): Promise<FolderBashResult> {
+  return runBash(folder, command, { ...options, python: { watchdog: nodePythonWatchdog, ...options.python } });
+}
+
+export const { createNatlangRuntime, compileVirtualProject, projectEntry, loadVirtualNatlang, loadVirtualCallables } = platformDefaults(nodePlatform);
+
+/**
+ * Explicit opt-in for an *owned* guest interpreter: a platform (`base`, the Node platform by default) whose per-call
+ * and module evaluators both come from `factory`. The factory is supplied by the embedding application (for example
+ * tracing-js-self/natlang), so the natlang distribution never silently imports an untraced fallback runtime.
+ * This does NOT claim general callback/package/module compatibility: a bounded interpreter must reject any
+ * unsupported natlang-generated code.
+ *
+ * Pass the result as `platform` to `createNatlangRuntime`. Module instances belong to the platform value, so an
+ * owned platform never serves exports created by another authority.
+ */
+export function ownedTracingPlatform(
+  factory: (mode: EnvironmentMode, options?: NatlangRuntimeOptions) => EvalEnvironment,
+  base: Platform = nodePlatform(),
+): Platform {
   if (typeof factory !== 'function') throw new TypeError('Owned tracing evaluator factory required');
   function instantiate(mode: EnvironmentMode, options?: NatlangRuntimeOptions): EvalEnvironment {
     const evaluator = factory(mode, options);
@@ -52,20 +102,20 @@ export function installOwnedTracingEnvironment(
       throw new TypeError('An owned tracing evaluator cannot declare ambient network access');
     return evaluator;
   }
-  setDefaultEnvironmentFactory(options => instantiate('fresh', options));
-  setModuleRealm(() => instantiate('retained'));
+  return { ...base, environment: options => instantiate('fresh', options), moduleRealm: () => instantiate('retained') };
 }
 /**
- * Opt in to an asynchronous, selected-semantic executor at both Natlang seams.
+ * A platform (`base`, the Node platform by default) with an asynchronous, selected-semantic executor at both Natlang seams.
  *
  * Synchronous entry and module APIs deliberately throw: falling back to the
  * process V8 evaluator would misrepresent semantic execution as model-owned.
  * The driver must implement its actual selection, tool and observation loop;
  * this installation only wires and checks its authority.
  */
-export function installSelectedSemanticEnvironment(
+export function selectedSemanticPlatform(
   factory: (mode: EnvironmentMode, options?: NatlangRuntimeOptions) => EvalEnvironment,
-): void {
+  base: Platform = nodePlatform(),
+): Platform {
   if (typeof factory !== 'function') throw new TypeError('Selected semantic evaluator factory required');
   const instantiate = (mode: EnvironmentMode, options?: NatlangRuntimeOptions): EvalEnvironment => {
     const driver = factory(mode, options);
@@ -114,18 +164,17 @@ export function installSelectedSemanticEnvironment(
       close() { if (!closed) { closed = true; driver.close(); } },
     };
   };
-  setDefaultEnvironmentFactory(options => instantiate('fresh', options));
-  setModuleRealm(() => instantiate('retained'));
+  return { ...base, environment: options => instantiate('fresh', options), moduleRealm: () => instantiate('retained') };
 }
 /**
- * Compatibility-first integration. Unlike installOwnedTracingEnvironment this
+ * Compatibility-first integration. Unlike ownedTracingPlatform this
  * deliberately permits the ordinary Node evaluator. A native selection has
  * NO owned instruction trace and MUST NOT enter replay-verified training data.
  *
  * Routing happens before evaluation, never as a catch-and-retry after partially
  * executed guest code or committed external side effects.
  */
-export function installHybridTracingEnvironment(
+export function hybridTracingPlatform(
   factory: (mode: EnvironmentMode, options?: NatlangRuntimeOptions) => EvalEnvironment,
   options: {
     route?: (request: {kind: 'execute' | 'executeAsync' | 'evaluateModule';
@@ -133,8 +182,9 @@ export function installHybridTracingEnvironment(
     onNativeExecution?: (event: {operation: 'execution.provenance';
       authority: 'native-untraced/1'; kind: string; mode: EnvironmentMode;
       path?: string}) => void;
-  } = {}
-): void {
+  } = {},
+  base: Platform = nodePlatform(),
+): Platform {
   if (typeof factory !== 'function') throw new TypeError('Hybrid owned evaluator factory required');
   if (!options || typeof options !== 'object' ||
       (options.route !== undefined && typeof options.route !== 'function') ||
@@ -187,8 +237,7 @@ export function installHybridTracingEnvironment(
       }
     };
   }
-  setDefaultEnvironmentFactory(options => instantiate('fresh', options));
-  setModuleRealm(() => instantiate('retained'));
+  return { ...base, environment: options => instantiate('fresh', options), moduleRealm: () => instantiate('retained') };
 }
 
 /**
@@ -197,7 +246,7 @@ export function installHybridTracingEnvironment(
  * Retained callable exports can execute after module installation: those calls
  * are outside this bootstrap-level observer.
  */
-export function installObservedNativeTracingEnvironment(
+export function observedNativeTracingPlatform(
   onTrace: (record: {
     schema: 'natlang-native-observation/1';
     phase: 'start' | 'completed' | 'failed' | 'settled';
@@ -210,7 +259,8 @@ export function installObservedNativeTracingEnvironment(
     completion?: 'returned' | 'fulfilled' | 'rejected';
     error?: string;
   }) => void,
-): void {
+  base: Platform = nodePlatform(),
+): Platform {
   if (typeof onTrace !== 'function') throw new TypeError('Native trace observer required');
   function instantiate(mode: EnvironmentMode, runtimeOptions?: NatlangRuntimeOptions): EvalEnvironment {
     const native = new TypeScriptEnvironment({
@@ -342,34 +392,13 @@ export function installObservedNativeTracingEnvironment(
       close() {if(!closed){closed=true;native.close();}}
     };
   }
-  setDefaultEnvironmentFactory(options=>instantiate('fresh',options));
-  setModuleRealm(()=>instantiate('retained'));
+  return { ...base, environment: options => instantiate('fresh', options), moduleRealm: () => instantiate('retained') };
 }
-
-// Every runtime records to the machine's call store unless it says otherwise (NATLANG_CALL_STORE=off disables it).
-setDefaultCallStoreFactory(() => { const root = machineStoreRoot(); return root ? CallStore.open(root) : undefined; });
-
-// Python cells time out through a worker thread that sets Pyodide's interrupt flag.
-setPythonWatchdog((buffer, ms) => new Worker(`const { workerData } = require('worker_threads'); const buffer = workerData.buffer, ms = workerData.ms; ${WATCHDOG_SCRIPT}`,
-  { eval: true, workerData: { buffer, ms } }));
-
-registerBuiltinModule('natlang:learning', () => learningModule);
-registerBuiltinModule('natlang:neuralese', () => neuraleseModule);
-registerBuiltinModule('natlang:gepa', () => gepaModule);
-
-// Callable-folder modules load packages from the calling task's workspace.
-const packages = new Map<string, WorkspaceModules>();
-setPackageLoader(specifier => {
-  const workspace = currentFrame()?.task.runtime.options.workspace ?? findPackageWorkspace(process.cwd());
-  if (!workspace) throw new Error(`package imports need an application package.json: ${specifier}`);
-  let loader = packages.get(workspace);
-  if (!loader) packages.set(workspace, loader = new WorkspaceModules(workspace));
-  return loader.load(specifier);
-});
 
 export * from './index.js';
 export * from '../calls/index.js';
-export { CallStore, machineStoreRoot } from '../calls/store.js';
+export { CallStore } from '../calls/store.js';
+export { machineStoreRoot, openMachineStore } from '../machine-store.js';
 export type { CallSummary, CallFilter, HotDefinition, AuditJob, FindingInput, FindingRow, SavingsRow } from '../calls/store.js';
 export * from '../calls/replay.js';
 export * from '../calls/judge.js';

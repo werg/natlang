@@ -2,8 +2,10 @@
 import { folderFS, folderView } from './python-folderfs.js';
 import { PYTHON_NATLANG, PYTHON_POLICY } from './python-sources.js';
 import { Folder } from './scoped-fs.js';
+import type { PythonWatchdog } from './python-watchdog.js';
 
-export type PythonHost = { nl?: (instructions: string, returns: string) => (...args: unknown[]) => Promise<unknown>;
+/** What a Python cell can reach: the platform's watchdog for its timeout, and `nl` and `iterateOn` over the calling task. */
+export type PythonHost = { watchdog?: PythonWatchdog; nl?: (instructions: string, returns: string) => (...args: unknown[]) => Promise<unknown>;
   iterateOn?: (step: unknown, initial: unknown, ...fixed: unknown[]) => unknown };
 export type PythonResult = { value: unknown; stdout: string; stderr: string; changedPaths: string[] };
 
@@ -24,26 +26,6 @@ async def __natlang_run(source, namespace):
         return {'__natlang_timeout__': True}
     return namespace.pop('__natlang_result__', None)
 `;
-
-/**
- * Starts a timer outside the interpreter's thread that sets the interrupt flag (`buffer`, an Int32Array's) to 2 after
- * `ms` (Pyodide then raises KeyboardInterrupt). The default uses a Web Worker; the Node wiring (runtime/node.ts)
- * installs one on worker_threads.
- */
-export type PythonWatchdog = (buffer: SharedArrayBuffer, ms: number) => { terminate(): Promise<unknown> | unknown } | undefined;
-// Pyodide consumes and clears the signal slot. Keep requesting interruption
-// after the deadline until the caller terminates this watchdog; a consumed
-// signal must not leave a still-running C iterator without further requests.
-export const WATCHDOG_SCRIPT = 'const flag = new Int32Array(buffer); setTimeout(() => { const interrupt = () => Atomics.store(flag, 0, 2); interrupt(); setInterval(interrupt, Math.max(1, Math.min(25, ms))); }, ms)';
-let startWatchdog: PythonWatchdog = (buffer, ms) => {
-  if (typeof Worker === 'undefined') return undefined;
-  const workerUrl = URL.createObjectURL(new Blob([`onmessage = ({ data }) => { const { buffer, ms } = data; ${WATCHDOG_SCRIPT}; };`],
-    { type: 'text/javascript' }));
-  const worker = new Worker(workerUrl);
-  worker.postMessage({ buffer, ms });
-  return { terminate: () => { worker.terminate(); URL.revokeObjectURL(workerUrl); } };
-};
-export function setPythonWatchdog(start: PythonWatchdog): void { startWatchdog = start; }
 
 let singleton: Promise<any> | undefined;
 let currentHost: PythonHost | undefined;
@@ -127,7 +109,7 @@ export async function runFolderPython(folder: Folder, source: string, host: Pyth
     if (typeof SharedArrayBuffer !== 'undefined') {
       const buffer = new SharedArrayBuffer(4);
       py.setInterruptBuffer(new Int32Array(buffer));
-      watchdog = startWatchdog(buffer, timeoutMs);
+      watchdog = host.watchdog?.(buffer, timeoutMs);
     }
     let value: any;
     try {

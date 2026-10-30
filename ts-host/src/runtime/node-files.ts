@@ -2,6 +2,8 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { callableMeta, callableTree, makeCallable, namedCallable, recordOf, rememberRecord, type NatlangCallable } from './callable.js';
+import type { Platform } from './platform.js';
+import { nodePlatform } from './node.js';
 import { findApplicationContext, loadCallableFolder, loadNamedFunction, type ItemRecord, type SourceFiles } from './loader.js';
 
 /** Node source access; display paths are relative to `root`. */
@@ -22,13 +24,14 @@ export function nodeSourceFiles(root = process.cwd()): SourceFiles {
  * process uses the newest definition from its next call on; a call that started keeps the definition it started with.
  * When the changed sources do not load, calls keep the last definition that loaded and the error is reported once.
  */
-export function loadNatlang(path: string, root = dirname(resolve(path)), options: { live?: boolean } = {}): NatlangCallable {
+export function loadNatlang(path: string, root = dirname(resolve(path)), options: { live?: boolean; platform?: Platform } = {}): NatlangCallable {
   const absolute = resolve(path);
   const name = basename(absolute, '.nl');
-  if (!options.live) return namedCallable(name, loadNamedFunction(absolute, nodeSourceFiles(root)));
+  const home = options.platform ?? nodePlatform();
+  if (!options.live) return namedCallable(name, loadNamedFunction(absolute, nodeSourceFiles(root)), undefined, home);
   return liveCallable(name, () => {
     const watched = new Map<string, string>();
-    const callable = namedCallable(name, loadNamedFunction(absolute, watchedSourceFiles(nodeSourceFiles(root), watched)));
+    const callable = namedCallable(name, loadNamedFunction(absolute, watchedSourceFiles(nodeSourceFiles(root), watched)), undefined, home);
     return { callable, watched };
   });
 }
@@ -81,8 +84,8 @@ function liveCallable(name: string, load: () => { callable: NatlangCallable; wat
 }
 
 /** Load a callable folder (for example `natlang.d/`) as a record of callables. */
-export function loadCallables(dir: string, root = dirname(resolve(dir))): Record<string, unknown> {
-  return callableTree(loadCallableFolder(resolve(dir), nodeSourceFiles(root)));
+export function loadCallables(dir: string, root = dirname(resolve(dir)), platform: Platform = nodePlatform()): Record<string, unknown> {
+  return callableTree(loadCallableFolder(resolve(dir), nodeSourceFiles(root)), undefined, platform);
 }
 
 /** The record tree of the `natlang.d/` context that applies to `start`, if any. */

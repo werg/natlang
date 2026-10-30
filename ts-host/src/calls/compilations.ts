@@ -7,6 +7,7 @@ import ts from 'typescript';
 import { hexDigest } from '../native/hash.js';
 import { parseModule, PATH_ONLY, type ItemRecord, type ModuleRecord } from '../runtime/loader.js';
 import { moduleInstance } from '../runtime/modules.js';
+import type { Platform } from '../runtime/platform.js';
 import type { CallStoreLike } from './recorder.js';
 import type { CaseTier } from './types.js';
 
@@ -54,9 +55,9 @@ export function caseHashes(text: string): string[] {
 }
 
 /** Load a cases file in a definition's context. Throws a source error when it does not compile or is malformed. */
-export function loadCases(id: string, text: string, codebase: Record<string, unknown>, types: Record<string, string>): LoadedCompilation['cases'] {
+export function loadCases(platform: Platform, id: string, text: string, codebase: Record<string, unknown>, types: Record<string, string>): LoadedCompilation['cases'] {
   const record: ModuleRecord = { ...parseModule(`/__natlang__/compilations/${id}/cases.ts`, text, types, PATH_ONLY), id: `compilation:${id}` };
-  const exports = moduleInstance(record, codebase as Record<string, ItemRecord>);
+  const exports = moduleInstance(platform, record, codebase as Record<string, ItemRecord>);
   const cases = exports.cases;
   if (!Array.isArray(cases)) throw new Error(`compilation ${id}: cases.ts does not export an array named cases`);
   const hashes = caseHashes(text), services = caseServices(text);
@@ -86,7 +87,7 @@ export class CompilationCache {
   private checked = 0;
   private readonly loaded = new Map<string, LoadedCompilation | null>();
   private readonly failures = new Set<string>();
-  constructor(readonly store: CallStoreLike) {}
+  constructor(readonly store: CallStoreLike, readonly platform: Platform) {}
 
   /** The current compilation for a definition revision whose context interface matches, or undefined. */
   get(definitionKey: string, interfaceHash: string, codebase: Record<string, unknown>, types: Record<string, string>): LoadedCompilation | undefined {
@@ -101,7 +102,7 @@ export class CompilationCache {
     const row = this.store.currentCompilation(definitionKey);
     if (row && row.interface_hash === interfaceHash && row.files['cases.ts']) {
       try {
-        const cases = loadCases(row.id, row.files['cases.ts'], codebase, types);
+        const cases = loadCases(this.platform, row.id, row.files['cases.ts'], codebase, types);
         const tiers = new Map(row.cases.map(item => [`${item.position}:${item.hash}`, item.tier]));
         result = { id: row.id, cases: cases.map(item => ({ ...item, tier: tiers.get(`${item.position}:${item.hash}`) ?? 'disabled' })) };
       } catch (error) {

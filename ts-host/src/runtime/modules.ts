@@ -4,6 +4,7 @@
  */
 import ts from 'typescript';
 import { currentFrame } from './context.js';
+import type { Platform } from './platform.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from '../compiler/host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan } from '../compiler/inline.js';
@@ -18,17 +19,10 @@ import { inlineDescriptor } from '../adaptation/inventory.js';
 import { fingerprint } from '../adaptation/identity.js';
 import { namedCallable, callableTree } from './callable.js';
 
-let defaultRealm: (() => EvalEnvironment) | undefined;
-let moduleTarget: 'node' | 'browser' = 'node';
-let packageLoader: ((specifier: string) => unknown) | undefined;
-/** Installed by the platform: how callable-folder modules load packages. */
-const builtinModules = new Map<string, () => unknown>();
 /**
- * Platform modules such as `natlang:neuralese` and `natlang:learning`, registered by the platform wiring
- * (runtime/node.ts, browser/index.ts); a platform that cannot provide one registers a factory that throws why.
+ * Importing a platform module this platform cannot provide (code `module-unavailable`); `reason` teaches what to do.
+ * Platforms list their modules in `Platform.builtinModules`; one that cannot provide a module lists a factory that throws this.
  */
-export function registerBuiltinModule(specifier: string, factory: () => unknown): void { builtinModules.set(specifier, factory); }
-/** Importing a platform module this platform cannot provide (code `module-unavailable`); `reason` teaches what to do. */
 export class ModuleUnavailableError extends Error {
   readonly code = 'module-unavailable';
   constructor(readonly specifier: string, reason: string) {
@@ -36,51 +30,41 @@ export class ModuleUnavailableError extends Error {
     this.name = 'ModuleUnavailableError';
   }
 }
-export function hasBuiltinModule(specifier: string): boolean { return builtinModules.has(specifier); }
-export function builtinModule(specifier: string): unknown {
-  const factory = builtinModules.get(specifier);
+export function hasBuiltinModule(platform: Platform, specifier: string): boolean {
+  return !!platform.builtinModules && Object.hasOwn(platform.builtinModules, specifier);
+}
+export function builtinModule(platform: Platform, specifier: string): unknown {
+  const factory = platform.builtinModules && Object.hasOwn(platform.builtinModules, specifier) ? platform.builtinModules[specifier] : undefined;
   if (!factory) throw new ModuleUnavailableError(specifier, 'this platform registers no such module');
   return factory();
 }
 
-export function setPackageLoader(loader: (specifier: string) => unknown): void { packageLoader = loader; }
-/** Browsers restore the task context after each await in callable-folder code. */
-export function setModuleTarget(target: 'node' | 'browser'): void { moduleTarget = target; }
-let realm: EvalEnvironment | undefined;
-let realmGeneration = 0;
-export function moduleRealmGeneration(): number { return realmGeneration; }
 export class ModuleRealmChangedError extends Error {
   readonly code = 'module-realm-changed';
   constructor() {
-    super('The module execution authority changed or closed; restart the task and reload its callable modules.');
+    super('The module execution authority closed; restart the task and reload its callable modules.');
     this.name = 'ModuleRealmChangedError';
   }
 }
-/** Installed by the platform entry point: the evaluator in which module instances live. */
-export function setModuleRealm(factory: () => EvalEnvironment): void {
-  if(typeof factory!=='function')throw new TypeError('Module evaluator factory required');
-  // A cutover must never hand back CommonJS exports created by the previous
-  // realm (which may have been native and untraced). Invalidate the shared
-  // module-instance cache and close the old realm before installing the new
-  // authority. Active task-local caches cannot be migrated in place.
-  const previous=realm;
-  realmGeneration++;
-  defaultRealm=factory;
-  realm=undefined;
-  instances=new WeakMap();
-  const failures: unknown[] = [];
-  for (const scope of [...asyncScopes]) {
-    try { scope.close(); } catch (error) { failures.push(error); }
-  }
-  asyncScopes.clear();
-  sharedAsyncScope=undefined;
-  asyncTaskScopes=new WeakMap();
-  try { previous?.close(); } catch (error) { failures.push(error); }
-  if (failures.length) throw new AggregateError(failures, 'Module authority changed but resource cleanup failed');
+
+/**
+ * The module state of one platform: the evaluator its callable-folder module instances live in and the instances
+ * themselves. Two runtimes on the same platform share module instances (unless they isolate them); runtimes on
+ * different platforms never do.
+ */
+class ModuleHost {
+  realm?: EvalEnvironment;
+  instances = new WeakMap<ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
+  sharedAsyncScope?: AsyncModuleScope;
+  asyncTaskScopes = new WeakMap<object, AsyncModuleScope>();
+  constructor(readonly platform: Platform) {}
+  moduleRealm(): EvalEnvironment { return this.realm ??= this.platform.moduleRealm(); }
 }
-function moduleRealm(): EvalEnvironment {
-  if (!defaultRealm) throw new Error('no module realm is installed for this platform');
-  return realm ??= defaultRealm();
+const moduleHosts = new WeakMap<Platform, ModuleHost>();
+function moduleHost(platform: Platform): ModuleHost {
+  let host = moduleHosts.get(platform);
+  if (!host) moduleHosts.set(platform, host = new ModuleHost(platform));
+  return host;
 }
 
 // A loop over a value whose type decides whether it is a bounded collection needs the checker.
@@ -102,8 +86,17 @@ function natlangDeclaration(record: ItemRecord): string {
   return `declare const fn: ${type};\nexport default fn;\n`;
 }
 
+/** The evaluator `platform`'s callable-folder modules (and compiled virtual projects) run in. */
+export function platformModuleRealm(platform: Platform): EvalEnvironment { return moduleHost(platform).moduleRealm(); }
+
+/** `await-restoring`: the module's awaits restore the natlang task (platforms whose context store loses it across awaits). */
+export type ModuleTarget = 'default' | 'await-restoring';
+/** The target a platform's modules compile for: its context store decides. */
+export const moduleTarget = (platform: Platform): ModuleTarget => platform.contextStore.bindAwait ? 'await-restoring' : 'default';
+
 /** Compile one module to CommonJS-style JavaScript for evaluation. */
-export function compileModule(record: ModuleRecord, level: Record<string, ItemRecord>, inventory?: (plans: InlineLambdaPlan[]) => void): string {
+export function compileModule(record: ModuleRecord, level: Record<string, ItemRecord>, inventory?: (plans: InlineLambdaPlan[]) => void,
+    target: ModuleTarget = 'default'): string {
   let plans = new Map<string, InlineLambdaPlan>();
   let readouts = new Set<string>();
   let conditionalReadouts = new Set<string>();
@@ -188,17 +181,16 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     transformers: { before: [natlangTransformer({ plans, checker, readouts, conditionalReadouts, joins, arrayStrings, arrayMaps, concats, jsons, instantiations,
       errors: errorReadouts, stringArguments, scalarConversions, stringReplaces, runtime: '__natlang', context: '__natlang_context',
       arrayMapCallbacks, constrained: true, guardPrefix: record.programId ? JSON.stringify([record.programId, record.id]) : record.id,
-      modulePath: record.source, browser: moduleTarget === 'browser' })] } });
+      modulePath: record.source, browser: target === 'await-restoring' })] } });
   const errors = (output.diagnostics ?? []).filter(item => item.category === ts.DiagnosticCategory.Error);
   if (errors.length) throw new NatlangSourceError(record.source, errors.map(item => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('; '));
   return output.outputText;
 }
 
-let instances = new WeakMap<ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
 // Compilation is immutable and shareable; mutable exports remain in the task's instance cache.
 const compiled = new Map<string, string>();
-function compiledCode(record: ModuleRecord, level: Record<string, ItemRecord>): string {
-  const key = fingerprint({ target: moduleTarget, source: record.source, id: record.id, revision: record.revision,
+function compiledCode(record: ModuleRecord, level: Record<string, ItemRecord>, target: ModuleTarget): string {
+  const key = fingerprint({ target, source: record.source, id: record.id, revision: record.revision,
     programId: record.programId ?? null, text: record.text, types: record.types,
     siblings: Object.entries(level).map(([name, item]) => ({ name, kind: item.kind,
       text: item.kind === 'namespace' ? null : item.text,
@@ -206,7 +198,7 @@ function compiledCode(record: ModuleRecord, level: Record<string, ItemRecord>): 
         ...(item.generic ? { generic: item.generic.constraint } : {}) } : {}) })) });
   const cached = compiled.get(key);
   if (cached !== undefined) return cached;
-  const code = compileModule(record, level);
+  const code = compileModule(record, level, undefined, target);
   if (compiled.size >= 256) compiled.delete(compiled.keys().next().value!);
   compiled.set(key, code); return code;
 }
@@ -229,10 +221,11 @@ function selectedServicesModule(record: ModuleRecord): object {
 }
 
 /** The live exports of a module in its folder `level` (its sibling items). */
-export function moduleInstance(record: ModuleRecord, level: Record<string, ItemRecord>): Record<string, unknown> {
+export function moduleInstance(platform: Platform, record: ModuleRecord, level: Record<string, ItemRecord>): Record<string, unknown> {
   const task = currentFrame()?.task;
+  const host = moduleHost(platform);
   const cache = task && (task.programView.binding || task.runtime.options.isolateModules || task.programView.revisionId) ?
-    task.moduleInstances : instances;
+    task.moduleInstances : host.instances;
   record = task?.programView.original(record) ?? record;
   const patched = task?.programView.patched(record.source);
   if (patched) record = task!.programView.record(record);
@@ -250,14 +243,14 @@ export function moduleInstance(record: ModuleRecord, level: Record<string, ItemR
         throw new NatlangSourceError(record.source, 'adapted module projection changed frozen inline contracts');
     }
   }
-  const code = compiledCode(record, level);
+  const code = compiledCode(record, level, moduleTarget(platform));
   const exports: Record<string, unknown> = {};
   const state = { exports, ready: false };
   cache.set(record, state);
-  const environment = moduleRealm();
+  const environment = host.moduleRealm();
   const require = (specifier: string): unknown => {
     if (specifier === 'natlang:services') return servicesModule;
-    if (builtinModules.has(specifier)) return builtinModule(specifier);
+    if (hasBuiltinModule(platform, specifier)) return builtinModule(platform, specifier);
     // Every runtime specifier, the neutral one included, is the natlang surface in callable-folder code.
     if (specifier === NEUTRAL_RUNTIME_SPECIFIER || /^@natlang\/(node|browser|core)$/.test(specifier)) return { __esModule: true, ...surface };
     if (specifier.startsWith('./')) {
@@ -271,13 +264,13 @@ export function moduleInstance(record: ModuleRecord, level: Record<string, ItemR
       }
       if (!item) throw new NatlangSourceError(record.source, `cannot import ${JSON.stringify(specifier)}: only items in this callable folder can be imported`);
       if (item.kind === 'natlang') return { __esModule: true, default: namedCallable(item.name, item as never) };
-      if (item.kind === 'module') return moduleInstance(item, parent);
+      if (item.kind === 'module') return moduleInstance(platform, item, parent);
       return { __esModule: true, ...callableTree(item.codebase as never) };
     }
     if (specifier.startsWith('.') || specifier.startsWith('/'))
       throw new NatlangSourceError(record.source, `cannot import ${JSON.stringify(specifier)}: callable-folder code may import its sibling items and packages only`);
-    if (!packageLoader) throw new NatlangSourceError(record.source, `package imports are unavailable here: ${specifier}`);
-    return packageLoader(specifier);
+    if (!platform.packageLoader) throw new NatlangSourceError(record.source, `package imports are unavailable here: ${specifier}`);
+    return platform.packageLoader(specifier, task);
   };
   const module = { exports };
   try {
@@ -306,7 +299,6 @@ type AsyncModuleState = {
 };
 type AsyncModuleScope = {
   environment: EvalEnvironment;
-  generation: number;
   closed: boolean;
   instances: WeakMap<ModuleRecord, AsyncModuleState>;
   pending: WeakMap<ModuleRecord, Promise<Record<string, unknown>>>;
@@ -314,12 +306,8 @@ type AsyncModuleScope = {
   check(): void;
   close(): void;
 };
-let sharedAsyncScope: AsyncModuleScope | undefined;
-let asyncTaskScopes = new WeakMap<object, AsyncModuleScope>();
-const asyncScopes = new Set<AsyncModuleScope>();
-
-export function moduleRealmUsesAsync(): boolean {
-  return typeof moduleRealm().evaluateModuleAsync === 'function';
+export function moduleRealmUsesAsync(platform: Platform): boolean {
+  return typeof moduleHost(platform).moduleRealm().evaluateModuleAsync === 'function';
 }
 
 function relativeModuleItem(specifier: string, level: Record<string, ItemRecord>,
@@ -339,38 +327,36 @@ function relativeModuleItem(specifier: string, level: Record<string, ItemRecord>
   return {item: item!, parent};
 }
 
-function asyncScope(): AsyncModuleScope {
+function asyncScope(platform: Platform): AsyncModuleScope {
   const task = currentFrame()?.task;
+  const host = moduleHost(platform);
   const isolated = !!task && (task.programView.binding || task.runtime.options.isolateModules || task.programView.revisionId);
-  const existing = isolated ? asyncTaskScopes.get(task!) : sharedAsyncScope;
+  const existing = isolated ? host.asyncTaskScopes.get(task!) : host.sharedAsyncScope;
   if (existing) { existing.check(); return existing; }
-  const environment = isolated ? defaultRealm?.() : moduleRealm();
+  const environment = isolated ? platform.moduleRealm() : host.moduleRealm();
   if (!environment || typeof environment.evaluateModuleAsync !== 'function')
     throw new Error('Selected asynchronous module evaluation is not installed');
   const scope: AsyncModuleScope = {
-    environment, generation: realmGeneration, closed: false,
+    environment, closed: false,
     instances: new WeakMap(), pending: new WeakMap(), tail: Promise.resolve(),
     check() {
-      if (scope.closed || scope.generation !== realmGeneration || (isolated && task?.isClosed))
-        throw new ModuleRealmChangedError();
+      if (scope.closed || (isolated && task?.isClosed)) throw new ModuleRealmChangedError();
     },
     close() {
       if (scope.closed) return;
       scope.closed = true;
-      asyncScopes.delete(scope);
       if (isolated) environment.close();
     },
   };
-  asyncScopes.add(scope);
   if (isolated) {
-    asyncTaskScopes.set(task!, scope);
+    host.asyncTaskScopes.set(task!, scope);
     task!.onClose(() => scope.close());
-  } else sharedAsyncScope = scope;
+  } else host.sharedAsyncScope = scope;
   return scope;
 }
 
 /** Preserve descriptor getters and callable identity rather than snapshotting
- * exports. The checks also cover references handed out before authority cutover. */
+ * exports. The checks also cover references handed out before the scope closed. */
 function liveModuleExports(raw: Record<string, unknown>, scope: AsyncModuleScope): Record<string, unknown> {
   const functions = new WeakMap<Function, Function>();
   const expose = (value: unknown): unknown => {
@@ -405,10 +391,10 @@ function liveModuleExports(raw: Record<string, unknown>, scope: AsyncModuleScope
 
 /** Initialize a callable module and all static sibling dependencies through the
  * asynchronous evaluator. No guest source executes in the native loader. */
-export async function moduleInstanceAsync(record: ModuleRecord,
+export async function moduleInstanceAsync(platform: Platform, record: ModuleRecord,
     level: Record<string, ItemRecord>): Promise<Record<string, unknown>> {
   const task = currentFrame()?.task;
-  const scope = asyncScope();
+  const scope = asyncScope(platform);
   const project = (input: ModuleRecord): ModuleRecord => {
     const original = task?.programView.original(input) ?? input;
     const projected = task?.programView.record(original) ?? original;
@@ -438,7 +424,7 @@ export async function moduleInstanceAsync(record: ModuleRecord,
       if (found.ready || visiting.has(current)) return found.exports;
       throw new Error('Module initialization escaped its graph transaction');
     }
-    const code = compiledCode(current, siblings);
+    const code = compiledCode(current, siblings, moduleTarget(platform));
     const raw: Record<string, unknown> = {};
     // A dependency in the same import cycle can publish its selected binding
     // surface before this initializer runs. Declare the statically known names
@@ -466,13 +452,13 @@ export async function moduleInstanceAsync(record: ModuleRecord,
         scope.check();
         if (dependencies.has(specifier)) return dependencies.get(specifier);
         if (specifier === 'natlang:services') return selectedServicesModule(current);
-        if (builtinModules.has(specifier)) return builtinModule(specifier);
+        if (hasBuiltinModule(platform, specifier)) return builtinModule(platform, specifier);
         if (specifier === NEUTRAL_RUNTIME_SPECIFIER || /^@natlang\/(node|browser|core)$/.test(specifier))
           return {__esModule:true, ...surface};
         if (specifier.startsWith('.') || specifier.startsWith('/'))
           throw new NatlangSourceError(current.source, `cannot import ${JSON.stringify(specifier)}: initialize a declared sibling import first`);
-        if (!packageLoader) throw new NatlangSourceError(current.source, `package imports are unavailable here: ${specifier}`);
-        return packageLoader(specifier);
+        if (!platform.packageLoader) throw new NatlangSourceError(current.source, `package imports are unavailable here: ${specifier}`);
+        return platform.packageLoader(specifier, task);
       };
       const module = {exports:raw};
       const runtimeBindings = scope.environment.authority.startsWith('selected-semantic/') ? {

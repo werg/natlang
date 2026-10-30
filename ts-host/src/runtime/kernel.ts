@@ -681,7 +681,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     seedId: task.definitionSeedId(descriptor?.key ?? (owner ?? '') + ':' + definition.id),
     sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: frame.signal ?? task.signal,
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
-    neuralese: task.runtime.options.neuralese,
+    neuralese: task.runtime.options.neuralese, returnErrorText: task.runtime.platform.returnErrorText,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
       sibling_ordinal:siblingOrdinal,
       ...(parentOccurrence&&typeof parentOccurrence==='object'?{parent_occurrence:structuredClone(parentOccurrence)}:{}),

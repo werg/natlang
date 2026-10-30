@@ -1,26 +1,17 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {
-  installObservedNativeTracingEnvironment,createNatlangRuntime,
-  setDefaultEnvironmentFactory,currentFrame
+  observedNativeTracingPlatform,createNatlangRuntime,currentFrame
 } from '../dist/runtime/node.js';
-import {setModuleRealm,moduleInstance} from '../dist/runtime/modules.js';
+import {moduleInstance} from '../dist/runtime/modules.js';
 import {parseModule,PATH_ONLY} from '../dist/runtime/loader.js';
-import {TypeScriptEnvironment} from '../dist/environment.js';
-
-function restore() {
-  setDefaultEnvironmentFactory(options=>new TypeScriptEnvironment({
-    workspace:options.workspace,network:options.network
-  }));
-  setModuleRealm(()=>new TypeScriptEnvironment({mode:'retained'}));
-}
 
 test('unsupported native JS emits start/completion observation records',async()=>{
   const records=[];
   let runtime;
   try {
-    installObservedNativeTracingEnvironment(record=>records.push(record));
-    runtime=createNatlangRuntime();
+    const platform=observedNativeTracingPlatform(record=>records.push(record));
+    runtime=createNatlangRuntime({platform});
     const result=await runtime.run(()=>currentFrame().task.environment().execute({
       code:'[1,2,3].map(x=>x*2).join(",")',body:false,scope:{},path:'observe://native'
     }));
@@ -28,43 +19,43 @@ test('unsupported native JS emits start/completion observation records',async()=
     assert.deepEqual(records.map(record=>record.phase),['start','completed']);
     assert.equal(records[0].schema,'natlang-native-observation/1');
     assert.equal(result.events[0].authority,'native-observed/1');
-  }finally {runtime?.close();restore();}
+  }finally {runtime?.close();}
 });
 
 test('native eval failure records start and failure without a completion',async()=>{
   const records=[];
   let runtime;
   try {
-    installObservedNativeTracingEnvironment(record=>records.push(record));
-    runtime=createNatlangRuntime();
+    const platform=observedNativeTracingPlatform(record=>records.push(record));
+    runtime=createNatlangRuntime({platform});
     await assert.rejects(runtime.run(()=>currentFrame().task.environment().execute({
       code:'throw new Error("boom")',body:true,scope:{},path:'observe://failure'
     })),/boom/);
     assert.deepEqual(records.map(record=>record.phase),['start','failed']);
-  }finally {runtime?.close();restore();}
+  }finally {runtime?.close();}
 });
 
 test('retained module bootstrap is observed, not claimed as owned instruction trace',()=>{
   const records=[];
-  try {
-    installObservedNativeTracingEnvironment(record=>records.push(record));
+  {
+    const platform=observedNativeTracingPlatform(record=>records.push(record));
     const record=parseModule('/__natlang__/folder/observed.ts',
       'export const answer: number = 1;',{},PATH_ONLY);
-    const exports=moduleInstance(record,{observed:record});
+    const exports=moduleInstance(platform,record,{observed:record});
     assert.equal(exports.answer,1);
     assert.ok(records.some(item=>item.kind==='evaluateModule'&&item.phase==='start'));
     assert.ok(records.some(item=>item.kind==='evaluateModule'&&item.phase==='completed'));
-  }finally {restore();}
+  }
 });
 
 test('retained callable invocations are observed with receiver and thrown errors',()=>{
   const records=[];
-  try {
-    installObservedNativeTracingEnvironment(record=>records.push(record));
+  {
+    const platform=observedNativeTracingPlatform(record=>records.push(record));
     const record=parseModule('/__natlang__/folder/observedCall.ts',
       'export function twice(n: number): number { return n * 2; }\n' +
       'export function fail(): never { throw new Error("call failed"); }',{},PATH_ONLY);
-    const exports=moduleInstance(record,{observedCall:record});
+    const exports=moduleInstance(platform,record,{observedCall:record});
     assert.equal(exports.twice(4),8);
     assert.throws(()=>exports.fail(),/call failed/);
     const calls=records.filter(item=>item.kind==='exportCall');
@@ -74,17 +65,17 @@ test('retained callable invocations are observed with receiver and thrown errors
     ]);
     assert.equal(calls[0].invocationId,calls[1].invocationId);
     assert.notEqual(calls[0].invocationId,calls[2].invocationId);
-  } finally {restore();}
+  }
 });
 
 test('native callable async results have distinct returned and settled observations',async()=>{
   const records=[];
-  try {
-    installObservedNativeTracingEnvironment(record=>records.push(record));
+  {
+    const platform=observedNativeTracingPlatform(record=>records.push(record));
     const record=parseModule('/__natlang__/folder/observedAsync.ts',
       'export async function ok(n: number): Promise<number> { return n + 1; }\n' +
       'export async function fail(): Promise<never> { throw new Error("later"); }',{},PATH_ONLY);
-    const exports=moduleInstance(record,{observedAsync:record});
+    const exports=moduleInstance(platform,record,{observedAsync:record});
     const a=exports.ok(4);
     const b=exports.fail();
     assert.equal(await a,5);
@@ -97,5 +88,5 @@ test('native callable async results have distinct returned and settled observati
     }
     assert.equal(calls.find(item=>item.exportName==='ok' && item.phase==='settled').completion,'fulfilled');
     assert.equal(calls.find(item=>item.exportName==='fail' && item.phase==='settled').completion,'rejected');
-  }finally {restore();}
+  }
 });

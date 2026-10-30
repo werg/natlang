@@ -107,6 +107,11 @@ export function markRaces(realmPromise: PromiseConstructor): void {
 export interface ContextStore {
   current(): Frame | undefined;
   run<T>(frame: Frame | undefined, fn: () => T): T;
+  /**
+   * For stores that lose the frame across an `await` (a synchronous slot): compiled code turns `await x` into
+   * `(await bindAwait(x))()`, which captures the frame before the suspension and restores it on resumption.
+   */
+  bindAwait?<T>(value: T | PromiseLike<T>): Promise<() => T>;
 }
 
 /** Synchronous slot. Compiled browser code restores it after each `await`. */
@@ -120,15 +125,42 @@ export class SlotContextStore implements ContextStore {
   }
   /** Used by the await-restoration transform. */
   restore(frame: Frame | undefined): void { this.active = frame; }
+  readonly bindAwait = <T>(value: T | PromiseLike<T>): Promise<() => T> => {
+    const saved = this.active;
+    return Promise.resolve(value).then(
+      resolved => () => { this.restore(saved); return resolved; },
+      error => () => { this.restore(saved); throw error; });
+  };
 }
 
-let store: ContextStore = new SlotContextStore();
+/**
+ * The context stores of the runtimes created in this realm. A runtime's platform chooses its store, but code that asks
+ * for the current frame (the guards of compiled functions, `nl`, the call kernel) has no runtime in hand, so it asks
+ * every store a runtime has used and takes the frame entered last: a runtime started inside another's task is the
+ * innermost. A realm whose runtimes share one store (the usual case) asks that store alone.
+ */
+const stores: ContextStore[] = [];
+const entered = new WeakMap<Frame, number>();
+let sequence = 0;
 
-/** Install the platform context store (Node installs `AsyncLocalStorage`). */
-export function setContextStore(next: ContextStore): void { store = next; }
-export function contextStore(): ContextStore { return store; }
-export function currentFrame(): Frame | undefined { return store.current(); }
-export function runInFrame<T>(frame: Frame | undefined, fn: () => T): T { return store.run(frame, fn); }
+/** Make `store` one the current frame is looked up in; called when a runtime is created. */
+export function useContextStore(store: ContextStore): void { if (!stores.includes(store)) stores.push(store); }
+export function currentFrame(): Frame | undefined {
+  if (stores.length === 1) return stores[0]!.current();
+  let found: Frame | undefined, at = -1;
+  for (const store of stores) {
+    const frame = store.current();
+    const order = frame && (entered.get(frame) ?? 0);
+    if (frame && order! > at) { found = frame; at = order!; }
+  }
+  return found;
+}
+/** Run `fn` in `frame`, in the context store of the platform of the runtime the frame's task belongs to. */
+export function runInFrame<T>(frame: Frame | undefined, fn: () => T): T {
+  if (!frame) return fn();
+  if (stores.length > 1) entered.set(frame, ++sequence);
+  return frame.task.runtime.platform.contextStore.run(frame, fn);
+}
 
 /**
  * Browsers have no AsyncLocalStorage: a callback a promise or timer runs later would lose the task frame, and with it
@@ -163,18 +195,6 @@ export function propagateSlotFrames(slot: SlotContextStore, realm: typeof global
   }
 }
 
-/**
- * Await-restoration helper emitted by the browser transform: `await x` becomes
- * `(await bindAwait(x))()`. The frame is captured before suspension and restored on resumption.
- */
-export function bindAwait<T>(value: T | PromiseLike<T>): Promise<() => T> {
-  const saved = store.current();
-  const slot = store instanceof SlotContextStore ? store : undefined;
-  return Promise.resolve(value).then(
-    resolved => () => { slot?.restore(saved); return resolved; },
-    error => () => { slot?.restore(saved); throw error; });
-}
-
 export class NatlangContextError extends Error {
   constructor(message = 'No natlang task is active here. Call natlang functions inside runtime.run(...), ' +
     'or wrap a callback that runs later with runtime.bind(fn).') { super(message); this.name = 'NatlangContextError'; }
@@ -197,7 +217,7 @@ export const guardName = (id: string): string => /#([^#@]+)@\d+$/.exec(id)?.[1] 
  * repeat, so every chain of re-entries ends (spec: Iteration and termination).
  */
 export function guard<T>(id: string, fn: () => T, args: readonly unknown[] = [], label?: string): T {
-  const frame = store.current();
+  const frame = currentFrame();
   if (!frame) return fn();
   let same = frame.active;
   while (same && same.id !== id) same = same.parent;
@@ -212,7 +232,7 @@ export function guard<T>(id: string, fn: () => T, args: readonly unknown[] = [],
         'bounded loop or iterateOn.');
     }
   }
-  return store.run({ ...frame, active: { id, args, parent: frame.active, same, descent } }, fn);
+  return runInFrame({ ...frame, active: { id, args, parent: frame.active, same, descent } }, fn);
 }
 
 /** The argument positions on which a re-entry is smaller than `previous`, among those still decreasing. */

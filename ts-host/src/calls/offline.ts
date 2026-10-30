@@ -11,6 +11,7 @@ import { nodeSourceFiles } from '../runtime/node-files.js';
 import { invokeDefinition, type CallableDefinition, type CaptureCell } from '../runtime/kernel.js';
 import { currentFrame } from '../runtime/context.js';
 import type { NatlangRuntime } from '../runtime/runtime.js';
+import type { Platform } from '../runtime/platform.js';
 import { loadCases, type LoadedCase } from './compilations.js';
 import { judge, recordedBehavior, type Behavior } from './judge.js';
 import { definitionKey } from './recorder.js';
@@ -41,10 +42,10 @@ export const signatureOf = (definition: { name: string; params: { name: string; 
   `${definition.name}(${definition.params.map(param => `${param.name}${param.optional ? '?' : ''}: ${param.type}`).join(', ')}): ${definition.returns}`;
 
 /** Find a case by hash in the current compilation of a definition revision, loaded in `definition`'s context. */
-export function caseFor(store: CallStore, definitionKeyValue: string, hash: string, definition: CallableDefinition): LoadedCase | undefined {
+export function caseFor(platform: Platform, store: CallStore, definitionKeyValue: string, hash: string, definition: CallableDefinition): LoadedCase | undefined {
   const compilation = store.currentCompilation(definitionKeyValue);
   if (!compilation?.files['cases.ts']) return undefined;
-  return loadCases(compilation.id, compilation.files['cases.ts'], definition.codebase, definition.types).find(item => item.hash === hash);
+  return loadCases(platform, compilation.id, compilation.files['cases.ts'], definition.codebase, definition.types).find(item => item.hash === hash);
 }
 
 /** Run a case on a recorded call's inputs against its recorded effects; its behavior, or why it could not run. */
@@ -89,7 +90,7 @@ export async function runJob(runtime: NatlangRuntime, store: CallStore, job: Aud
   const record = store.call(job.call_id);
   if (!record) return { status: 'skipped', detail: 'the call is no longer in the store' };
   const { definition } = definitionFor(store, record);
-  const item = caseFor(store, record.definition.key, job.case_hash, definition);
+  const item = caseFor(runtime.platform, store, record.definition.key, job.case_hash, definition);
   if (!item) return { status: 'skipped', detail: 'the case is no longer in the current compilation' };
   if (job.kind === 'shadow') {
     if (!isModelEvidence(record)) return { status: 'skipped', detail: 'the call did not run a declared model (a scripted or undeclared executor)' };

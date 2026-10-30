@@ -7,7 +7,8 @@ import { compileProject, type BuildResult, type ProjectFiles } from '../compiler
 import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
 import { loadCallableFolder, loadNamedFunction, type SourceFiles } from './loader.js';
 import { callableTree, namedCallable, type NatlangCallable } from './callable.js';
-import { builtinModule, hasBuiltinModule } from './modules.js';
+import { builtinModule, hasBuiltinModule, moduleTarget, platformModuleRealm } from './modules.js';
+import type { Platform } from './platform.js';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 
 export type VirtualProject = { files: Record<string, string>; root?: string };
@@ -46,32 +47,41 @@ export function virtualSourceFiles(files: Record<string, string>, root = '/proje
     relative: path => path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path };
 }
 
-/** Load a named `.nl` function, with its companion folder, from in-memory files. */
-export function loadVirtualNatlang(files: Record<string, string>, path: string, root = '/project'): NatlangCallable {
+/** Load a named `.nl` function, with its companion folder, from in-memory files; its TypeScript modules run on `platform`. */
+export function loadVirtualNatlang(files: Record<string, string>, path: string, root = '/project', platform?: Platform): NatlangCallable {
   const record = loadNamedFunction(path.startsWith('/') ? path : `${root}/${path}`, virtualSourceFiles(files, root));
-  return namedCallable(record.name, record);
+  return namedCallable(record.name, record, undefined, platform);
 }
 
 /** Load an in-memory directory as a callable folder: its `.nl` and `.ts` items as a record of callables. */
-export function loadVirtualCallables(files: Record<string, string>, dir = '', root = '/project'): Record<string, unknown> {
-  return callableTree(loadCallableFolder(dir ? `${root}/${dir}` : root, virtualSourceFiles(files, root)));
+export function loadVirtualCallables(files: Record<string, string>, dir = '', root = '/project', platform?: Platform): Record<string, unknown> {
+  return callableTree(loadCallableFolder(dir ? `${root}/${dir}` : root, virtualSourceFiles(files, root)), undefined, platform);
 }
 
 export type CompiledProject = BuildResult & { require(path: string): Record<string, unknown> };
 
+export type VirtualProjectOptions = { platform: Platform; constrained?: boolean; programId?: string; guidance?: string;
+  importedGuidancePrograms?: readonly string[]; services?: ProgramDescriptor['services']; runtimeSpecifiers?: string[];
+  target?: 'node' | 'browser'; modules?: Record<string, unknown> };
+
 /**
  * Compile a virtual project and return a loader for its modules. `runtime` is the namespace that
- * `@natlang/browser` (and any `runtimeSpecifiers`) resolve to inside the project.
+ * `@natlang/browser` (and any `runtimeSpecifiers`) resolve to inside the project. The modules run in `platform`'s
+ * module realm (the Function constructor, a vm, a host's confined realm) and resolve its platform modules.
+ *
+ * Compiled code refers to the runtime only through `require(specifier)` for the specifiers in `runtimeSpecifiers`
+ * (default `@natlang/browser`, `@natlang/node`) and the neutral `NEUTRAL_RUNTIME_SPECIFIER`; the loader answers those
+ * with `runtime`, so a host binds the project to its one runtime instance by passing it here. `target` says whether
+ * awaits restore the natlang task (`browser`); by default the platform's context store decides.
  */
-export function compileVirtualProject(project: VirtualProject, runtime: Record<string, unknown>,
-  options: { constrained?: boolean; programId?: string; guidance?: string; importedGuidancePrograms?: readonly string[];
-    services?: ProgramDescriptor['services']; runtimeSpecifiers?: string[]; target?: 'node' | 'browser'; modules?: Record<string, unknown> } = {}): CompiledProject {
+export function compileVirtualProject(project: VirtualProject, runtime: Record<string, unknown>, options: VirtualProjectOptions): CompiledProject {
+  const { platform } = options;
   const root = project.root ?? '/project';
   const files = virtualProjectFiles(project.files, root);
   const specifiers = options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'];
   const result = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
     guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
-    target: options.target ?? 'browser', runtimeSpecifier: specifiers[0]!, write: true, surfaceSpecifiers: specifiers });
+    target: options.target ?? (moduleTarget(platform) === 'await-restoring' ? 'browser' : 'node'), runtimeSpecifier: specifiers[0]!, write: true, surfaceSpecifiers: specifiers });
   const cache = new Map<string, { exports: Record<string, unknown> }>();
   const load = (path: string): Record<string, unknown> => {
     const found = cache.get(path);
@@ -83,7 +93,7 @@ export function compileVirtualProject(project: VirtualProject, runtime: Record<s
     const require = (specifier: string): unknown => {
       if (specifiers.includes(specifier) || specifier === NEUTRAL_RUNTIME_SPECIFIER) return runtime;
       if (options.modules && Object.hasOwn(options.modules, specifier)) return options.modules[specifier];
-      if (hasBuiltinModule(specifier)) return builtinModule(specifier);
+      if (hasBuiltinModule(platform, specifier)) return builtinModule(platform, specifier);
       if (!specifier.startsWith('.')) throw new Error(`module ${specifier} is not available in this virtual project`);
       const base = path.slice(0, path.lastIndexOf('/'));
       const joined = `${base}/${specifier}`.split('/').reduce<string[]>((parts, part) =>
@@ -92,7 +102,7 @@ export function compileVirtualProject(project: VirtualProject, runtime: Record<s
       if (!candidate) throw new Error(`cannot resolve ${specifier} from ${path}`);
       return load(candidate);
     };
-    new Function('exports', 'require', 'module', text)(module.exports, require, module);
+    platformModuleRealm(platform).evaluateModule(text, { exports: module.exports, require, module });
     return module.exports;
   };
   return { ...result, require: (path: string) => {
