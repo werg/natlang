@@ -75,6 +75,18 @@ class SglangEngine(Engine):
         self.__dict__['_native_model'] = value
 
     @property
+    def native_training_state(self):
+        # The checkpoint's training state (optimizer, EMA, SFT frames: ~12 GB for LFM3-1.7B, mmapped from the
+        # checkpoint) is only read by native endpoints; after `release_native` it is reloaded with the native model.
+        if self.__dict__.get('_native_training_state') is None and self.__dict__.get('_native_loader') is not None:
+            self._ensure_native()
+        return self.__dict__.get('_native_training_state')
+
+    @native_training_state.setter
+    def native_training_state(self, value):
+        self.__dict__['_native_training_state'] = value
+
+    @property
     def backbone(self):
         if self.__dict__.get('_native_backbone') is None and self.__dict__.get('_native_loader') is not None:
             self._ensure_native()
@@ -92,6 +104,7 @@ class SglangEngine(Engine):
         self.__dict__['_native_lock'] = threading.Lock()
         self.__dict__['_native_loader'] = dict(loader)
         self.__dict__['_native_model'] = self.__dict__['_native_backbone'] = None
+        self.__dict__['_native_training_state'] = None  # the last reference into the checkpoint mmap
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -121,6 +134,7 @@ class SglangEngine(Engine):
                 raise RuntimeError('lazily reloaded native model differs from the served native identity')
             self.__dict__['_native_backbone'] = model.port
             self.__dict__['_native_model'] = model
+            self.__dict__['_native_training_state'] = _state.get('training') or _state.get('shared_training') or {}
             self.native_reloads = getattr(self, 'native_reloads', 0) + 1
 
     def bind_sglang(self, url, *, export_manifest, fork, workers=512, adapter_slots=0, adapter_rank=32):

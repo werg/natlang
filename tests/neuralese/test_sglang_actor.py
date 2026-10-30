@@ -453,6 +453,17 @@ def test_guidance_rewinds_on_sglang_like_the_native_engine(tmp_path, monkeypatch
     assert bool(deltas['native']) == streamed
 
 
+def test_release_native_drops_the_checkpoint_training_state_until_a_native_path_needs_it(tmp_path):
+    """After `release_native` neither the model nor the checkpoint's training state (optimizer/EMA tensors that keep
+    the checkpoint mmap resident) stays referenced; a native reader reloads both with the exact identity."""
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    before = front.native_training_state
+    front.release_native({'checkpoint': str(tmp_path / 'native.pt'), 'device': 'cpu'})
+    assert front.__dict__['_native_training_state'] is None and front.__dict__['_native_model'] is None
+    assert front.native_training_state.keys() == before.keys()
+    assert front.__dict__['_native_model'] is not None and front.native_reloads == 1
+
+
 def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):
     from natlang_neuralese.serve.native_learning import decide_native
     native, front, roles, word, block, messages = _import_fixture(tmp_path)
