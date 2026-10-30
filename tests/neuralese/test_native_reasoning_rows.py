@@ -251,24 +251,11 @@ def test_sparse_row_restore_rejects_malformed_tensor_before_mutating_channel(fam
 def test_sparse_master_upgrade_real_full_and_both_composite_scopes(tmp_path,family,existing_reasoning):
     import json
     from test_native_model import tiny_source
-    from test_mellum_port import tiny_mellum
     from natlang_neuralese.model.native_model import load_native_model,load_native_checkpoint,model_state,CHECKPOINT_SCHEMA
     from natlang_neuralese.model.native_composite import write_native_composite_checkpoint
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     base=tmp_path/'base';base.mkdir()
-    if family=='lfm':tiny_source(base)
-    else:
-        from transformers import PreTrainedTokenizerFast
-        from tokenizers import Tokenizer
-        from tokenizers.models import WordLevel
-        tiny_mellum(base)
-        tokenizer=PreTrainedTokenizerFast(tokenizer_object=Tokenizer(WordLevel(
-            {f't{i}':i for i in range(128)},unk_token='t0')),unk_token='t0',bos_token='t1',eos_token='t2',pad_token='t3')
-        # A native Mellum source needs its real KEEP rendering contract even
-        # when this fixture is exercising sparse master/moment upgrades.
-        tokenizer.chat_template = ("{% for m in messages %}{{ m['role'] }}:"
-            "{{ m.get('reasoning_content', '') }}{{ m.get('content', '') }};{% endfor %}")
-        tokenizer.save_pretrained(base)
+    tiny_source(base)
     path=base/'tokenizer.json';raw=json.loads(path.read_text())
     raw['model']['vocab']['<think>']=raw['model']['vocab'].pop('t54')
     raw['model']['vocab']['</think>']=raw['model']['vocab'].pop('t55')

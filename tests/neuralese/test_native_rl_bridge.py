@@ -28,11 +28,12 @@ def test_worker_result_carries_exact_request_and_all_pending_bytes(tmp_path, mon
         assert kwargs['stop'].requested is False
         checkpoint = out/'learner/checkpoint.pt'; checkpoint.parent.mkdir()
         checkpoint.write_bytes(b'completed control fixture update')
-        state = {'checkpoint': parent, 'pending_native_checkpoint': str(checkpoint),
-                 'phase': 'awaiting_semantic_refresh'}
+        state = {'checkpoint': parent, 'pending_native_checkpoint': str(checkpoint), 'phase': 'learner_pending'}
         write_json_durable(out/'state.json', state)
         return state
     monkeypatch.setattr(production, 'run', run)
+    # The byte fixture is not a loadable checkpoint; this test covers request/result artifact custody.
+    monkeypatch.setattr(bridge, 'verify_raw_checkpoint', lambda reference, parent, **kwargs: {'path': reference})
     result_path = tmp_path/'result.json'
     result = bridge.execute(request, result_path)
     assert result['status'] == 'completed'
