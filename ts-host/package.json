@@ -69,6 +69,10 @@
       "types": "./dist/model/pi-provider.d.ts",
       "default": "./dist/model/pi-provider.js"
     },
+    "./llama": {
+      "types": "./dist/llama/index.d.ts",
+      "default": "./dist/llama/index.js"
+    },
     "./package": {
       "types": "./dist/package/index.d.ts",
       "default": "./dist/package/index.js"

@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, readFileSync, readdirSync,
   renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
-import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { defaultNatlangDataDirectory } from './directories.js';
 import { canonicalJson, parsePackageArchive, readPackageArchive, sha256, type NatlangPackageArchive } from './archive.js';
 
 export type InstalledPackageIdentity = { name: string; version: string; digest: string; root: string };
@@ -36,30 +36,7 @@ export function satisfiesVersion(actual: string, range: string): boolean {
   return compare(candidate, version(range)) === 0;
 }
 
-export function defaultNatlangDataDirectory(environment: NodeJS.ProcessEnv = process.env): string {
-  if (environment.NATLANG_HOME) return resolve(environment.NATLANG_HOME);
-  if (platform() === 'win32') return join(environment.LOCALAPPDATA ?? homedir(), 'natlang');
-  if (platform() === 'darwin') return join(homedir(), 'Library', 'Application Support', 'natlang');
-  return join(environment.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'natlang');
-}
-export function defaultNatlangConfigDirectory(environment: NodeJS.ProcessEnv = process.env): string {
-  if (environment.NATLANG_CONFIG_HOME) return resolve(environment.NATLANG_CONFIG_HOME);
-  if (platform() === 'win32') return join(environment.APPDATA ?? homedir(), 'natlang');
-  if (platform() === 'darwin') return join(homedir(), 'Library', 'Application Support', 'natlang');
-  return join(environment.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'natlang');
-}
-export function defaultNatlangStateDirectory(environment: NodeJS.ProcessEnv = process.env): string {
-  if (environment.NATLANG_STATE_HOME) return resolve(environment.NATLANG_STATE_HOME);
-  if (platform() === 'win32') return join(environment.LOCALAPPDATA ?? homedir(), 'natlang', 'state');
-  if (platform() === 'darwin') return join(homedir(), 'Library', 'Application Support', 'natlang', 'state');
-  return join(environment.XDG_STATE_HOME ?? join(homedir(), '.local', 'state'), 'natlang');
-}
-export function defaultNatlangCacheDirectory(environment: NodeJS.ProcessEnv = process.env): string {
-  if (environment.NATLANG_CACHE_HOME) return resolve(environment.NATLANG_CACHE_HOME);
-  if (platform() === 'win32') return join(environment.LOCALAPPDATA ?? homedir(), 'natlang', 'cache');
-  if (platform() === 'darwin') return join(homedir(), 'Library', 'Caches', 'natlang');
-  return join(environment.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'natlang');
-}
+export { defaultNatlangDataDirectory, defaultNatlangConfigDirectory, defaultNatlangStateDirectory, defaultNatlangCacheDirectory } from './directories.js';
 
 function encodedName(name: string): string { return encodeURIComponent(name); }
 export class NatlangPackageStore {
