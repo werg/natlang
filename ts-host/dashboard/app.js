@@ -86,15 +86,24 @@ async function overview(_arg, target) {
   const runtime = status.runtime.selected;
   const problems = [];
   if (!runtime && model.kind === 'managed-local') problems.push(['The llama.cpp runtime is not installed.', 'Install runtime and model', () => startJob({ kind: 'setup' })]);
-  if (release && !release.installed) problems.push([`${release.label} (${bytes(release.bytes)}) is not downloaded yet; the first run would download it.`, 'Download now',
+  const downloading = release && !release.installed && release.download && !release.download.done && !release.download.error;
+  const percent = download => Math.floor(100 * download.received / download.total);
+  const progress = downloading ? h('div', { class: 'callout row' }, h('span', {}, `Downloading ${release.label} (${bytes(release.bytes)})…`),
+    h('div', { class: 'bar', style: 'flex: 1' }, h('span', { style: `width: ${percent(release.download)}%` })), h('span', { class: 'small muted' }, `${percent(release.download)}%`)) : null;
+  if (downloading) every(attempt(async () => {
+    const next = (await get('/api/status')).model.release;
+    if (next?.installed || !next?.download || next.download.done || next.download.error) return route();
+    progress.querySelector('.bar span').style.width = `${percent(next.download)}%`; progress.lastChild.textContent = `${percent(next.download)}%`;
+  }), 1500);
+  else if (release && !release.installed) problems.push([`${release.label} (${bytes(release.bytes)}) is not downloaded yet; the first run would download it.`, 'Download now',
     attempt(async () => { await api('POST', `/api/stock/${release.id}/download`); toast('Download started'); go('models'); })]);
   fill(target, 
     header('Overview', `Programs under ${status.root}. Everything here is the same machine state the natlang CLI uses.`,
       h('button', { onclick: () => go('playground') }, 'Ask the model'), h('button', { class: 'primary', onclick: () => go('programs') }, 'Run a program')),
-    ...problems.map(([text, label, action]) => h('div', { class: 'callout warn row' }, h('span', {}, text), h('button', { onclick: action }, label))),
+    ...problems.map(([text, label, action]) => h('div', { class: 'callout warn row' }, h('span', {}, text), h('button', { onclick: action }, label))), progress,
     h('div', { class: 'grid' },
       tile('Model', model.error ? 'Profile problem' : release?.label ?? model.model,
-        model.error ?? `profile ${model.profile} · ${model.kind === 'managed-local' ? 'managed llama.cpp' : model.kind}${release ? (release.installed ? ' · downloaded' : ' · not downloaded') : ''}`),
+        model.error ?? `profile ${model.profile} · ${model.kind === 'managed-local' ? 'managed llama.cpp' : model.kind}${release ? (release.installed ? ' · downloaded' : downloading ? ' · downloading' : ' · not downloaded') : ''}`),
       tile('Runtime', runtime ? `llama.cpp ${runtime.version}` : 'not installed', runtime ? (runtime.source === 'fork' ? `natlang fork ${status.runtime.fork.commit.slice(0, 10)}` : `build ${runtime.build} · ${runtime.source}`) : `pinned ${status.runtime.recommended.version} (b${status.runtime.recommended.build})`),
       tile('Traces', status.calls ? `${status.calls.calls} calls` : 'recording off', status.calls ? `${bytes(status.calls.bytes)} · specialization ${status.calls.settings.specialization}` : ''),
       tile('Machine', `${status.machine.cpus} CPUs · ${bytes(status.machine.memory)}`, `${bytes(status.machine.free)} free · ${status.machine.platform}`)),
@@ -245,7 +254,8 @@ async function jobDetail(id, container) {
     fill(tabs, ...[['live', `Calls${calls ? ` (${calls})` : ''}`], ['output', 'Output'], ['log', 'Log']].map(([key, label]) =>
       h('button', { class: state.tab === key ? 'active' : '', onclick: () => { state.tab = key; draw(); } }, label)));
     if (state.tab === 'live') fill(body, state.model.roots.length ? h('div', { class: 'calltree' }, state.model.roots.map(call => renderCall(call))) :
-      h('div', { class: 'empty' }, job.status === 'running' ? 'Waiting for the first natural-language call… (starting the model can take a moment)' : 'This run made no natural-language calls.'));
+      h('div', { class: 'empty' }, job.kind === 'setup' ? 'Setup installs the llama.cpp runtime and downloads the model; it makes no natural-language calls. Its progress is in Log.' :
+        job.status === 'running' ? 'Waiting for the first natural-language call… (starting the model can take a moment)' : 'This run made no natural-language calls.'));
     else {
       const text = state.tab === 'output' ? state.out : state.err;
       const pre = h('pre', { class: 'console' }, text || (state.tab === 'output' ? '(no output yet)' : '(nothing logged)'));

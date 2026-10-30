@@ -17,7 +17,7 @@ import { programFunctions, readProgramManifest } from '../cli/build-lock.js';
 import { currentRelease } from '../adaptation/weights/release.js';
 import { loadModelConfiguration, resolveModelChoice, type ModelProfile } from '../model/config.js';
 import { DEFAULT_LOCAL_MODEL, STOCK_MODELS, stockModel, type LocalModelRelease } from '../model-catalog.js';
-import { createResolvedModelSession, ensureStockModel, managedModelSha256, profileEnvironment, stockModelPath, supportsNativeStates, warmTag,
+import { createResolvedModelSession, ensureStockModel, managedModelSha256, profileEnvironment, stockModelDownload, stockModelPath, supportsNativeStates, warmTag,
   type ManagedModelSession } from '../model/local-server.js';
 import { publishSharedServer, readSharedServer, withdrawSharedServer } from '../model/shared-server.js';
 import { discoverLlamaRuntime, LLAMA_RUNTIME_RELEASE } from '../model/llama-runtime.js';
@@ -64,7 +64,10 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
   };
   const stock = (release: LocalModelRelease) => {
     const path = [resolve('models', release.file), stockModelPath(release, environment)].find(existsSync);
-    return { ...release, installed: !!path, path: path ?? null, download: downloads.get(release.id) ?? null, default: release.id === DEFAULT_LOCAL_MODEL.id };
+    // This dashboard's own download, else one another process (a setup job, a terminal run) is making.
+    const own = downloads.get(release.id), other = path || (own && !own.done && !own.error) ? null : stockModelDownload(release, environment);
+    return { ...release, installed: !!path, path: path ?? null, download: other ? { received: other.received, total: other.total } : own ?? null,
+      default: release.id === DEFAULT_LOCAL_MODEL.id };
   };
   const pi = async () => import('../model/pi-provider.js');
   const selection = (body: Record<string, unknown>) => [
@@ -199,6 +202,8 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     const release = (() => { try { return stockModel(decodeURIComponent(params.id!)); } catch (error) { throw new HttpError(404, (error as Error).message); } })();
     const current = downloads.get(release.id);
     if (current && !current.done && !current.error) return { started: false, download: current };
+    const other = stockModelDownload(release, environment);
+    if (other) return { started: false, download: { received: other.received, total: other.total } };
     const state = { received: 0, total: release.bytes } as { received: number; total: number; error?: string; done?: boolean };
     downloads.set(release.id, state);
     void ensureStockModel(release, environment, { write: () => true } as unknown as NodeJS.WritableStream, (received, total) => {

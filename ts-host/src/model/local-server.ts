@@ -1,7 +1,7 @@
 import { activeNativeAdapters } from '../native/model-recording.js';
 import { perRequestLora } from './lora-scales.js';
 import { stackServingName } from '../adaptation/weights/binding.js';
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
@@ -149,12 +149,34 @@ async function verifiedRelease(path: string, release: LocalModelRelease): Promis
   return true;
 }
 
-/** The stock model's verified local file, downloaded first when absent (with progress on `error`). */
+/** The download of `release` another live process is writing now (its `.partial-<pid>` file), if any. */
+export function stockModelDownload(release: LocalModelRelease, environment: NodeJS.ProcessEnv = process.env):
+  { received: number; total: number; pid: number } | null {
+  const destination = stockModelPath(release, environment), prefix = `${basename(destination)}.partial-`;
+  let names: string[];
+  try { names = readdirSync(dirname(destination)); } catch { return null; }
+  for (const name of names) {
+    const pid = name.startsWith(prefix) ? Number(name.slice(prefix.length)) : NaN;
+    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
+    try { process.kill(pid, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EPERM') continue; }
+    try { return { received: statSync(join(dirname(destination), name)).size, total: release.bytes, pid }; } catch { continue; }
+  }
+  return null;
+}
+
+/** The stock model's verified local file, downloaded first when absent (with progress on `error`). A download another
+ * process is already making is awaited instead of repeated. */
 export async function ensureStockModel(release: LocalModelRelease, environment: NodeJS.ProcessEnv = process.env,
   error: NodeJS.WritableStream = process.stderr, onProgress?: (received: number, total: number) => void): Promise<string> {
   const checkout = resolve('models', release.file);
   if (await verifiedRelease(checkout, release)) return checkout;
   const destination = stockModelPath(release, environment);
+  if (await verifiedRelease(destination, release)) return destination;
+  for (let other = stockModelDownload(release, environment), announced = false; other; other = stockModelDownload(release, environment)) {
+    if (!announced) error.write(`natlang: waiting for the ${release.label} download already running in process ${other.pid}\n`);
+    announced = true; onProgress?.(other.received, other.total);
+    await new Promise(wake => setTimeout(wake, 1000));
+  }
   if (await verifiedRelease(destination, release)) return destination;
   mkdirSync(dirname(destination), { recursive: true });
   const temporary = `${destination}.partial-${process.pid}`;
@@ -166,14 +188,18 @@ export async function ensureStockModel(release: LocalModelRelease, environment: 
     const counted = async function* (body: AsyncIterable<Uint8Array>) {
       for await (const chunk of body) {
         received += chunk.length; onProgress?.(received, release.bytes);
-        if (!onProgress && 'isTTY' in error && error.isTTY && received - reported > 16_000_000) {
-          reported = received; error.write(`\r\x1b[2Knatlang: ${Math.round(received / 1_000_000)} of ${Math.ceil(release.bytes / 1_000_000)} MB`);
+        // A terminal gets one updating line; logs (the dashboard's jobs, pipes) a line every 5%.
+        const terminal = 'isTTY' in error && error.isTTY === true;
+        if (!onProgress && received - reported > (terminal ? 16_000_000 : release.bytes / 20)) {
+          reported = received;
+          const line = `natlang: downloaded ${Math.round(received / 1_000_000)} of ${Math.ceil(release.bytes / 1_000_000)} MB (${Math.floor(100 * received / release.bytes)}%)`;
+          error.write(terminal ? `\r\x1b[2K${line}` : `${line}\n`);
         }
         yield chunk;
       }
     };
     await pipeline(Readable.from(counted(response.body as AsyncIterable<Uint8Array>)), createWriteStream(temporary, { flags: 'wx' }));
-    if (reported) error.write('\r\x1b[2K');
+    if (reported && 'isTTY' in error && error.isTTY === true) error.write('\r\x1b[2K');
     if (!await verifiedRelease(temporary, release)) throw new Error(`downloaded ${release.file} failed its size or SHA-256 check`);
     try { renameSync(temporary, destination); renameSync(`${temporary}.verified`, `${destination}.verified`); }
     catch (failure) { if (!await verifiedRelease(destination, release)) throw failure; }
