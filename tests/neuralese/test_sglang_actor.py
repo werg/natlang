@@ -1,5 +1,6 @@
 """The SGLang actor front: the fork's packed per-token record and the routing between SGLang and the native engine."""
 import base64
+import json
 
 import numpy as np
 import pytest
@@ -121,7 +122,7 @@ def _span_fixture(tmp_path):
     roles = front.role_tokens
     word = lambda text: list(front.tokenizer(text, add_special_tokens=False)['input_ids'])
 
-    def capture(ids, start, end, adapter=None):
+    def capture(ids, start, end, adapter=None, imports=None):
         # What the fork exports for ids[start:end]: the native forward of the whole sequence with its producing mask.
         import torch
         from natlang_neuralese.model.shared_state import native_step
@@ -296,6 +297,57 @@ def test_same_base_adapter_state_mode_imports_with_the_native_receipt(tmp_path):
             assert error.code == 'neuralese-native-state-mode'
         else:
             raise AssertionError(f'{modes} was accepted')
+
+
+def test_forced_teacher_replay_records_like_the_native_engine(tmp_path, monkeypatch):
+    """Forced teacher replay on SGLang: the same structural capture (forced samples, no law, teacher receipt, replay
+    prompt hash), the same stored producer block, and no SGLang generation besides the span export."""
+    import hashlib
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    prompt = [{'role': 'user', 'content': 't4 t5'}]
+    source = {'schema': 'natlang.teacher-turn-source/1', 'source_path': 'qwen-turns/row-001.jsonl',
+              'source_view': 'privileged-hint', 'source_file_sha256': 'f' * 64,
+              'source_verification_path': 'qwen-turns/source-verification.json',
+              'transfer_receipt_path': 'qwen-turns/transfer-receipt.json', 'invocation_id': 'task/child-1',
+              'ordinal': 0, 'turn_sha256': 'a' * 64, 'task_sha256': 'b' * 64,
+              'prompt_sha256': hashlib.sha256(json.dumps({'messages': prompt, 'tools': []}, ensure_ascii=False,
+                  sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+              'actor': {'model': 'nvidia/Qwen3.6-35B-A3B-NVFP4', 'revision': '1355db6a052410cfd62085d94b58866fd0f2c3c5',
+                        'actor_source_path': 'qwen-turns/actor.json', 'actor_source_sha256': 'c' * 64,
+                        'execution_identity_path': 'qwen-turns/execution.json', 'execution_identity_sha256': 'e' * 64}}
+    marker = 'NATLANGQWENSPAN0123456789END'
+    target = {'schema': 'natlang.native-teacher-forced-turn/1', 'source_receipt': source,
+              'native_text_spans': [{'path': ['content'], 'marker': marker, 'text': 't6 t7'}],
+              'assistant': {'role': 'assistant', 'content': 't8 ' + marker}}
+    for engine in (native, front):  # a chat template that renders the reply exactly after its prompt
+        def forced_template(messages, tools=None, tokenize=False, add_generation_prompt=False, _engine=engine, **kwargs):
+            rendered = ''.join(f"<{m['role']}>{m.get('content', '')}" for m in messages)
+            rendered += '<assistant>' if add_generation_prompt else ''
+            return _engine.tokenizer(rendered, add_special_tokens=False)['input_ids'] if tokenize else rendered
+        monkeypatch.setattr(engine.tokenizer, 'apply_chat_template', forced_template)
+    make = lambda: GenerationRequest(messages=prompt, temperature=0.0, max_tokens=64, native_recording=True, rl_capture=True,
+                                     forced_message=target, request_id='forced', seed=1)
+    assert SglangEngine.sglang_unsupported(make(), [('tokens', [1])]) is None
+    expected = native.generate(make())
+    front._sglang_generate = lambda body: (_ for _ in ()).throw(AssertionError('forced replay sampled on SGLang'))
+    actual = front.generate(make())
+    mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
+    assert mine['schema'] == theirs['schema'] == 'natlang.native-teacher-forced-capture/1'
+    for key in ('teacher_source_receipt', 'replay_prompt_sha256', 'samples', 'generated_inputs', 'prompt'):
+        assert mine[key] == theirs[key], key
+    assert all(sample['forced'] is True and sample['logp'] is None for sample in mine['samples'])
+    assert _protocol_view(mine) == _protocol_view(theirs)
+    assert actual['choices'][0]['message'] == expected['choices'][0]['message']
+    assert len(stored['front']) == len(stored['native']) == 1
+    assert stored['front'][0].text == stored['native'][0].text == 't6 t7'
+    short = GenerationRequest(messages=prompt, temperature=0.0, max_tokens=2, native_recording=True, rl_capture=True,
+                              forced_message=target, request_id='short', seed=1)
+    try:
+        front.generate(short)
+    except RequestError as error:
+        assert error.code == 'forced-message'
+    else:
+        raise AssertionError('a forced reply beyond max_tokens was accepted')
 
 
 def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path):

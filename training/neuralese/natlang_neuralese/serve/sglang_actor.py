@@ -20,6 +20,7 @@ adapters) runs on the native engine of the same checkpoint, exactly as `serve_na
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import threading
@@ -181,7 +182,7 @@ class SglangEngine(Engine):
         """Why SGLang cannot serve this request (None: it can)."""
         # native_recording (the collector's graph recorder) only asks for the capture, which this path records.
         names = [name for name, value in (('template', request.template), ('guidance', request.guidance),
-                 ('forced_message', request.forced_message), ('adapters', request.adapters)) if value]
+                 ('adapters', request.adapters)) if value]
         names += sorted({f'prompt segment {kind}' for kind, _ in plan
                          if kind not in ('tokens', 'privileged', 'native_state', 'native_state_constant')})
         return ', '.join(names) or None
@@ -409,7 +410,9 @@ class SglangEngine(Engine):
         state = {'index': 0, 'finish': 'length', 'done': False, 'text': '', 'run': 0, 'prompt': ids, 'fed': [],
                  'adapter': adapter}
         try:
-            if request.on_delta is None:
+            if request.forced_message is not None:
+                self._sglang_forced_replay(seq, state)
+            elif request.on_delta is None:
                 result = self._sglang_generate(body)
                 self._sglang_consume(seq, result.get('output_ids'), (result.get('meta_info') or {}).get(TOP_K_KEY),
                                      k, sampling, state)
@@ -444,6 +447,32 @@ class SglangEngine(Engine):
         seq.phase = 'done'
         return self._native_response(seq)
 
+    def _sglang_forced_replay(self, seq, state):
+        """Forced teacher replay, as the native engine records it: the exact teacher reply's tokens through the decode
+        protocol (no sampling law), SGLang only exporting the state of each produce span it closes."""
+        request = seq.request
+        if not capture_enabled(seq) or request.native_recording is not True:
+            raise RequestError('forced-message', 'forced teacher replay requires native structural recording')
+        tokens = self._forced_message_plan(request.forced_message, request.tools, opening=request.messages)
+        if len(tokens) > request.max_tokens:
+            raise RequestError('forced-message', 'exact teacher reply exceeds the request token allowance')
+        import copy
+        seq.native_forced_replay = True
+        seq.native_forced_source = copy.deepcopy(request.forced_message['source_receipt'])
+        seq.native_forced_replay_prompt_sha256 = hashlib.sha256(json.dumps(
+            {'messages': request.messages, 'tools': request.tools or []}, ensure_ascii=False, sort_keys=True,
+            separators=(',', ':')).encode('utf-8')).hexdigest()
+        for token in tokens:
+            if state['done']:
+                break
+            self._sglang_token(seq, int(token), (None, None, None), 0, False, state)
+        if not state['done']:
+            if seq.native_capture_open:
+                raise RequestError('neuralese-native-state-open', 'forced teacher reply ended inside a producer span')
+            state['finish'], state['done'] = 'stop', True
+        if request.on_delta is not None:
+            self._sglang_emit(seq, state)
+
     def _sglang_consume(self, seq, output, records, k, sampling, state):
         """Record SGLang's tokens and their per-token law records, exactly as the native engine records samples."""
         if not isinstance(output, list) or not isinstance(records, list) or len(records) != len(output):
@@ -467,6 +496,7 @@ class SglangEngine(Engine):
         producing_input = seq.native_capture_open and token not in (marker.produce_open, marker.produce_close)
         if capture_enabled(seq):
             sample = {'index': index, 'token_id': token, 'logp': logp if sampling else None,
+                      **({'forced': True} if seq.native_forced_replay else {}),
                       **({'banned_token_ids': list(self.sglang_banned)} if self.sglang_banned else {}),
                       'input_role': 'produce' if producing_input else 'ordinary',
                       'terminal': terminal, 'query_own_position': seq.native_own_position - 1}
@@ -669,13 +699,13 @@ class SglangEngine(Engine):
         end = start + len(seq.native_capture_ids)
         if end != len(ids) or ids[start:end] != seq.native_capture_ids:
             raise RequestError('sglang-actor-capture', 'produce span positions disagree with the generated tokens')
-        seq.native_capture_chunks = [self._sglang_capture(ids, start, end, state['adapter'])]
+        seq.native_capture_chunks = [self._sglang_capture(ids, start, end, state['adapter'], seq.sglang_imports)]
         self._native_finish_block(seq)
         with self._sglang_lock:
             self.sglang_state_writes += 1
         state['run'], state['text'] = len(seq.items), ''
 
-    def _sglang_capture(self, ids, start, end, adapter=None):
+    def _sglang_capture(self, ids, start, end, adapter=None, imports=None):
         """The native capture chunk (`native_step`'s token_ids/embeddings/positions/layers) of ids[start:end].
 
         One SGLang request recomputes the sequence with the radix match capped below the span (logprob_start_len), so
@@ -686,6 +716,7 @@ class SglangEngine(Engine):
         body = {'input_ids': ids, 'return_logprob': True, 'logprob_start_len': max(start - 1, 0),
                 'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1,
                                     'custom_params': {CAPTURE_KEY: {'path': path, 'start': start, 'end': end},
+                                                      **({IMPORT_KEY: imports} if imports else {}),
                                                       **({ADAPTER_KEY: adapter} if adapter else {})}}}
         self._sglang_generate(body)
         try:

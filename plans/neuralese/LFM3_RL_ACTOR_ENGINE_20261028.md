@@ -133,8 +133,10 @@ RL wiring: `rl.production` configs for LFM3 raw policies (no semantic adapter or
 `<store-dir>/sglang-hf/<sha>`), starts the fork's server on `--port + 1000` and serves the native API on `--port`.
 Turns SGLang cannot serve yet run on the native engine of the same checkpoint, loaded on first use (`/metrics`:
 `natlang_native_fallback_requests_total`, `natlang_native_fallback_reason_total{reason=...}`,
-`natlang_native_model_resident`). Still native: templated writes/decodes, guidance (rewind), forced teacher
-replay, and adapter stacks beyond `--sglang-adapter-rank`. Declared `native_state_modes` (same-base adapter state)
+`natlang_native_model_resident`). Still native: templated writes/decodes, guidance (rewind), and adapter
+stacks beyond `--sglang-adapter-rank`. Forced teacher replay runs on the front: the exact teacher tokens go through
+the decode protocol without sampling, SGLang only exports the state of each produce span (span exports carry the
+prompt's import spec, so they do not depend on the radix cache still holding imported positions). Declared `native_state_modes` (same-base adapter state)
 import on SGLang through the ordinary import path with the native receipt (`adapter_state_input_receipt` with the
 export's layout check).
 
