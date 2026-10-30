@@ -73,7 +73,7 @@ A fresh install runs every natural-language call on the stock instruction model 
 on natlang's managed llama.cpp server. Our own LFM3 checkpoints replace it once they are trained.
 
 ```sh
-natlang setup --yes     # natlang's llama.cpp build (natlang-b12067) and the model, verified by SHA-256
+natlang setup --yes     # natlang's llama.cpp build (natlang-b12068) and the model, verified by SHA-256
 natlang doctor          # what would run, and whether it is ready
 ```
 
@@ -156,8 +156,10 @@ slots are idle. `NATLANG_SHARED_SERVER=off` makes a command start its own server
 ## llama.cpp
 
 The managed runtime is a release of natlang's llama.cpp fork
-[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese), currently natlang-b12067 (llama.cpp 0.8.0):
-prebuilt CPU builds for Linux and Windows (x64, arm64) and Metal builds for macOS, checked by SHA-256. The fork adds
+[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese), currently natlang-b12068 (llama.cpp 0.8.0):
+prebuilt CPU builds for Linux and Windows (x64, arm64) and Metal builds for macOS, checked by SHA-256. The release also
+carries the Vulkan, ROCm and Windows CUDA builds that Vibestudio's local-models engine installs; natlang's pin selects
+the CPU or Metal archive of each platform from the release manifest's `os`, `arch` and `backends`. The fork adds
 decision scoring, guided generation (whose reasoning streams live), native states, RL capture and backend sampling; an
 upstream llama.cpp serves the same programs without those. Its `natlang-runtime` workflow publishes a release and
 `node scripts/update_llama_runtime.mjs --fork natlang-bNNNN` pins it. For a GPU, or a fork commit newer than the
