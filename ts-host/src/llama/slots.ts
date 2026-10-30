@@ -10,7 +10,7 @@
  *
  * The default cap exists because on unified-memory machines (DGX) admitted jobs claim memory after the server starts.
  *
- * Defaults: memoryFraction 0.5, kvBytesPerToken the stock model's measured figure (LFM3 1.7B: 12,800), else 65536 (64 KiB,
+ * Defaults: memoryFraction 0.5, kvBytesPerToken the stock model's measured figure (LFM3 1.7B served with --swa-full: 23,000), else 65536 (64 KiB,
  * a conservative figure for sub-2B models; set
  * `local.kvBytesPerToken` or NATLANG_MODEL_KV_BYTES_PER_TOKEN for a model whose cache is larger), maxSlots 8. An
  * explicit `local.parallel` always wins. On unified-memory machines (DGX) available memory is the GPU's, so the
