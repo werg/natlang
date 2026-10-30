@@ -37,20 +37,26 @@ export const LLAMA_RUNTIME_RELEASE = Object.freeze(${JSON.stringify(manifest, nu
     artifacts: manifest.artifacts.map(artifact => artifact.key) }) + '\n');
 }
 
-// A release of natlang's llama.cpp fork (its natlang-runtime workflow): the manifest it publishes lists the archives'
-// sizes and digests, so no API call is needed.
+// A release of natlang's llama.cpp fork (its natlang-runtime workflow): the manifest it publishes lists every archive's os,
+// arch, backends, role, size and digest, so no API call is needed. natlang runs the CPU build of each platform, and Metal
+// where the same archive carries it; the GPU archives of the release are Vibestudio's local-models engine's to select.
 if (forkTag) {
   const repository = value('--repository') ?? 'werg/llama.cpp-neuralese';
   const base = `https://github.com/${repository}/releases/download/${forkTag}`;
   const release = JSON.parse(await getText(`${base}/natlang-runtime.json`));
-  if (release.schema !== 'natlang.llama-runtime-release/1' || release.tag !== forkTag) throw new Error(`${base}/natlang-runtime.json is not this release's manifest`);
-  const platforms = [['linux-x64-cpu', 'linux', 'x64', 'cpu', 'tar.gz', 'ubuntu-x64'], ['linux-arm64-cpu', 'linux', 'arm64', 'cpu', 'tar.gz', 'ubuntu-arm64'],
-    ['darwin-arm64-metal', 'darwin', 'arm64', 'metal', 'tar.gz', 'macos-arm64'], ['darwin-x64-metal', 'darwin', 'x64', 'metal', 'tar.gz', 'macos-x64'],
-    ['win32-x64-cpu', 'win32', 'x64', 'cpu', 'zip', 'win-cpu-x64'], ['win32-arm64-cpu', 'win32', 'arm64', 'cpu', 'zip', 'win-cpu-arm64']];
-  const artifacts = platforms.flatMap(([key, platform, arch, backend, archive, name]) => {
-    const file = `llama-natlang-bin-${name}.${archive}`, row = release.artifacts.find(item => item.file === file);
-    return row ? [{ key, platform, arch, backend, archive, url: `${base}/${file}`, bytes: row.bytes, sha256: row.sha256 }] : [];
-  });
+  if (release.schema !== 'natlang.llama-runtime-release/2' || release.tag !== forkTag) throw new Error(`${base}/natlang-runtime.json is not this release's manifest`);
+  const servers = release.archives.filter(archive => archive.role === 'server');
+  const artifacts = [];
+  for (const [platform, arch] of [...new Set(servers.map(archive => `${archive.os} ${archive.arch}`))].map(pair => pair.split(' '))) {
+    const candidates = servers.filter(archive => archive.os === platform && archive.arch === arch);
+    for (const backend of ['metal', 'cpu']) {
+      const row = candidates.find(archive => archive.backends.includes(backend));
+      if (!row) continue;
+      artifacts.push({ key: `${platform}-${arch}-${backend}`, platform, arch, backend, archive: row.file.endsWith('.zip') ? 'zip' : 'tar.gz',
+        url: `${base}/${row.file}`, bytes: row.bytes, sha256: row.sha256 });
+      break;
+    }
+  }
   if (!artifacts.length) throw new Error(`${forkTag} publishes no natlang runtime archives`);
   const [major, minor] = release.version.split('.').map(Number);
   await writeManifest({ version: release.version, build: release.build, commit: release.commit,
