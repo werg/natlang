@@ -12,7 +12,7 @@ For instruction adaptation APIs and their current implementation status, see
 | Package | Contents |
 |---|---|
 | `@natlang/cli` | The `natlang` executable |
-| `@natlang/node` | Node runtime and compiler, terminal utilities, model session, package APIs |
+| `@natlang/node` | Node runtime and compiler, terminal utilities, model session, package APIs; `@natlang/node/llama` is the managed llama.cpp machinery with injected host dependencies |
 | `@natlang/browser` | Browser runtime and in-page compiler, local model loader, WASM assets |
 
 `@natlang/node` lists `@earendil-works/pi-ai` as a peer dependency: only the Pi backend

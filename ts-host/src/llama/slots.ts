@@ -17,7 +17,10 @@
  * budget must be agreed with the GPU ledger: set `local.memoryBudgetMiB` to the ledger's grant.
  */
 import { freemem } from 'node:os';
-import type { ModelProfile } from './config.js';
+
+/** A managed server's settings: a profile's `local` object (model/config.ts) carries these and adds what selects the model. */
+export type LocalServerSettings = { contextTokens?: number; gpuLayers?: number; parallel?: number; cacheRamMiB?: number; args?: string[];
+  memoryBudgetMiB?: number; kvBytesPerToken?: number };
 
 export type SlotPlan = { budgetSource: 'configured-parallel' | 'memoryBudgetMiB' | 'NATLANG_MODEL_MEMORY_BUDGET_MIB' | 'default';
   slots: number; contextPerSlot: number; totalContext: number; source: 'configured' | 'memory';
@@ -29,7 +32,7 @@ export const DEFAULT_MAX_SLOTS = 8;
 /** The default KV budget never exceeds this, so a server started from momentary free memory cannot crowd out later jobs. */
 export const DEFAULT_KV_BUDGET_CAP_BYTES = 4 * 2 ** 30;
 
-export function planServerSlots(input: { local?: ModelProfile['local']; modelBytes: number; defaultContextTokens: number;
+export function planServerSlots(input: { local?: LocalServerSettings; modelBytes: number; defaultContextTokens: number;
   /** The served model's measured figure (model-catalog.ts), used before the generic default. */
   defaultKvBytesPerToken?: number; availableMemoryBytes?: number; environment?: NodeJS.ProcessEnv }): SlotPlan {
   const { local, modelBytes } = input, environment = input.environment ?? process.env;

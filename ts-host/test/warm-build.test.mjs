@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openingOf, pruneWarmStates, sharedPrefix } from '../dist/package/warm.js';
+import { openingOf, pruneWarmStates, sharedPrefix } from '../dist/llama/warm.js';
 import { parsePackageManifest } from '../dist/package/manifest.js';
 import { loadModelConfiguration } from '../dist/model/config.js';
 import { progressReporter } from '../dist/cli/progress.js';

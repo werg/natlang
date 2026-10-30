@@ -5,6 +5,7 @@ import { DEFAULT_LOCAL_MODEL, stockModel, type LocalModelRelease } from '../mode
 import { fingerprint } from '../adaptation/identity.js';
 import type { ProgramModel } from '../package/manifest.js';
 import type { ModelConfig, NatlangRuntimeOptions } from '../runtime/runtime.js';
+import type { LocalServerSettings } from '../llama/slots.js';
 import { nativeEndpoint, validateNativeSettings, type NativeModelSettings } from './native-managed.js';
 
 export type BatchingSettings = {
@@ -38,10 +39,9 @@ export type ModelProfile = {
   piMode?: 'native' | 'simple'; modelOptions?: Record<string, unknown>;
   /**
    * Managed server settings. `contextTokens` is per slot. `parallel` is the slot count; unset, it is sized from memory
-   * (model/server-slots.ts), using `memoryBudgetMiB` (default half of available memory) and `kvBytesPerToken`.
+   * (llama/slots.ts), using `memoryBudgetMiB` (default half of available memory) and `kvBytesPerToken`.
    */
-  local?: { contextTokens?: number; gpuLayers?: number; parallel?: number; cacheRamMiB?: number; args?: string[];
-    memoryBudgetMiB?: number; kvBytesPerToken?: number;
+  local?: LocalServerSettings & {
     /** A GGUF to serve instead of the pinned default, its chat template and model ID (`natlang setup --native SOURCE
      * --gguf TYPE` writes these); NATLANG_MODEL_PATH and NATLANG_TEMPLATE still override them. */
     modelPath?: string; template?: string; modelId?: string;
