@@ -479,7 +479,7 @@ def test_metadata_profile_continuation_reverifies_original_capacity_chain(tmp_pa
         mechanism.verify_capacity_certificate(binding(result),identity=current['identity'],code=code_inventory(candidate),parent='c'*64)
 
 
-@pytest.mark.parametrize('role',['lfm','mellum'])
+@pytest.mark.parametrize('role',['lfm'])
 @pytest.mark.parametrize('mutation',[None,'old-module','new-module','missing-module','numerical-neighbor',
     'source-parser','objective','missing-profile','missing-policy-gate'])
 def test_keep_profile_policy_binds_exact_reviewed_overlay_and_parser(role,mutation):

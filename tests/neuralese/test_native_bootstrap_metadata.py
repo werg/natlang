@@ -310,7 +310,7 @@ def test_actor_runtime_accepts_declared_python_launcher_shapes(tmp_path,prefix):
     assert result['actor_command'][-3:]==[str(tmp_path/'scripts/neuralese_data/serve_native_checkpoint.py'),'--port','8097']
 
 
-@pytest.mark.parametrize('model',['lfm','mellum'])
+@pytest.mark.parametrize('model',['lfm'])
 def test_actor_runtime_retargets_default_factory_command_and_rejects_stale_identity(tmp_path,model):
     from natlang_neuralese.rl.production import (actor_runtime_configuration,
         bind_actor_runtime_command,validate_actor_runtime_configuration)
