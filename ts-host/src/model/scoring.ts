@@ -6,6 +6,7 @@
 import type { DecisionRequest, DecisionScorer, DecisionScores } from '../contracts.js';
 import type { Scheduler } from './scheduler.js';
 import { fetchModel } from './chat-completion.js';
+import { batchScoreItem, scoresFromBatchResult } from './decision-scoring.js';
 
 type Settled = PromiseSettledResult<DecisionScores>;
 type ScoreOne = (request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores>;
@@ -78,22 +79,15 @@ export async function postExplicitBatch(options: ExplicitBatchOptions, items: De
   try {
     const response = await fetchModel(options.url, { method: 'POST', signal,
       headers: { 'content-type': 'application/json', ...options.headers },
-      body: JSON.stringify({ ...options.extra, items: items.map(item => ({ ...options.itemExtra?.(item), messages: item.messages, continuations: item.options,
-        ...(item.adapters?.length ? { adapters: item.adapters } : {}),
-        ...(item.native_state_modes ? {native_state_modes:item.native_state_modes}:{}),
-        ...(item.native_recording ? {native_recording:true}:{}) })) }) });
+      body: JSON.stringify({ ...options.extra, items: items.map(item => batchScoreItem(item, options.itemExtra?.(item))) }) });
     if ([404, 405, 501].includes(response.status)) throw new ScoreEndpointMissing(`no scoring endpoint at ${options.url}`);
     if (!response.ok) throw new Error(`batched scoring HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
     const body = await response.json() as { results?: ({ log_probs?: number[]; tokens?: number[]; prompt_tokens?: number; error?: string; native_decision_capture?: Record<string,unknown> } | null)[] };
     if (!Array.isArray(body.results) || body.results.length !== items.length)
       throw new Error('batched scoring returned a different number of results than items');
     return body.results.map((result, index): Settled => {
-      if (!result || typeof result.error === 'string' || !Array.isArray(result.log_probs) ||
-          result.log_probs.length !== items[index]!.options.length)
-        return { status: 'rejected', reason: new Error(result?.error ?? 'batched scoring returned no scores for an item') };
-      return { status: 'fulfilled', value: { log_probs: result.log_probs, ...(result.tokens ? { tokens: result.tokens } : {}),
-        ...(Number.isSafeInteger(result.prompt_tokens) ? { prompt_tokens: result.prompt_tokens } : {}),
-        ...(result.native_decision_capture?{native_decision_capture:result.native_decision_capture}:{}) } };
+      try { return { status: 'fulfilled', value: scoresFromBatchResult(result, items[index]!.options.length) }; }
+      catch (reason) { return { status: 'rejected', reason }; }
     });
   } finally { release(); }
 }
