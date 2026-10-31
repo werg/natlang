@@ -117,10 +117,12 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     if (not isinstance(old_observations, list) or not isinstance(new_observations, list)
             or any(item not in new_observations for item in old_observations)):
         raise ValueError('resident CE append removed a prior first-row observation')
+    historical_observations = []
     for item in new_observations:
-        if (not isinstance(item, dict) or not isinstance(item.get('path'), str)
-                or (str(Path(item['path']).resolve()), item.get('sha256')) not in declared):
-            raise ValueError('resident CE observation is outside the exact active source DAG')
+        if not isinstance(item, dict) or not isinstance(item.get('path'), str):
+            raise ValueError('resident CE observation is malformed')
+        if (str(Path(item['path']).resolve()), item.get('sha256')) not in declared:
+            historical_observations.append(item)
     prior_inventory = a.get('inventory')
     prior_matches = (prior_inventory is None or (len(prior_inventory) == 1 and
         checked(prior_inventory[0]) == checked(old['native_graphs']) and
@@ -156,6 +158,28 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
             raise ValueError('resident CE prior inventory correction does not bind the actual quarantine transition')
     elif correction is not None and correction != a.get('prior_inventory_correction'):
         raise ValueError('resident CE prior inventory correction is not applicable')
+    if historical_observations:
+        # Preserve earlier observations only when the same bound quarantine
+        # proves each old leaf was replaced by an active successor leaf.
+        import json
+        if not isinstance(correction, dict) or not isinstance(correction.get('quality_receipt'), dict):
+            raise ValueError('resident CE historical observations lack their quarantine proof')
+        receipt = json.loads(checked(correction['quality_receipt']).read_text())
+        if (receipt.get('schema') != 'natlang.nested-semantic-child-quarantine-receipt/1'
+                or receipt.get('source_manifest_sha256') != correction.get('historical_source_sha256')
+                or receipt.get('successor_manifest_sha256') != correction.get('active_source_sha256')):
+            raise ValueError('resident CE historical observation quarantine identities differ')
+        replacements = receipt.get('source_replacements') or {}
+        for item in historical_observations:
+            replacement = replacements.get(item['path'])
+            if (item not in old_observations or not isinstance(replacement, dict)
+                    or replacement.get('source_sha256') != item.get('sha256')
+                    or (str(Path(replacement.get('successor_path', '')).resolve()),
+                        replacement.get('successor_sha256')) not in old_active
+                    or (str(Path(replacement.get('successor_path', '')).resolve()),
+                        replacement.get('successor_sha256')) not in declared):
+                raise ValueError('resident CE historical observation is not an authenticated active replacement')
+            checked(item)
     top_inventory = b.get('inventory')
     if top_inventory is not None and (len(top_inventory) != 1 or
             checked(top_inventory[0]) != checked(train) or top_inventory[0]['sha256'] != train['sha256']):

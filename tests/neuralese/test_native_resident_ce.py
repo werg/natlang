@@ -369,10 +369,15 @@ def test_prior_inventory_repair_requires_exact_quarantine_and_family_custody(tmp
     a=json.loads(paths['old_ce'].read_text());b=json.loads(paths['new_ce'].read_text())
     a['objective']=objective(mass='token',family_balance=family(oldmap));b['objective']=objective(mass='token',family_balance=family(newmap))
     stale=tmp_path/'historical.json';write_json(stale,{'historical':True});a['inventory']=[resident.binding(stale)]
+    stale_leaf=tmp_path/'historical-leaf.jsonl';stale_leaf.write_text('{"historical":true}\n')
+    observation={**resident.binding(stale_leaf),'reason':'retained historical observation'}
+    a['first_row_observations']=[observation];b['first_row_observations']=[observation]
     b['inventory']=[resident.binding(paths['train'])];b['objective_transition']={'from':identity(policy_objective(a))['sha256']}
     write_json(paths['old_ce'],a);oldref={**resident.binding(paths['old_ce']),'binding':'ce'};old['stage_inputs']['sft']['ce_supervision_policy']=oldref
     receipt=tmp_path/'quarantine.json';write_json(receipt,{'schema':'natlang.nested-semantic-child-quarantine-receipt/1',
-        'source_manifest_sha256':resident.sha(stale),'successor_manifest_sha256':before.file_sha256})
+        'source_manifest_sha256':resident.sha(stale),'successor_manifest_sha256':before.file_sha256,
+        'source_replacements':{str(stale_leaf):{'source_sha256':resident.sha(stale_leaf),
+            'successor_path':str(paths['old']),'successor_sha256':resident.sha(paths['old'])}}})
     correction={'schema':'natlang.resident-ce-prior-inventory-correction/1','prior_policy_sha256':oldref['sha256'],
         'historical_source_sha256':resident.sha(stale),'active_source_sha256':before.file_sha256,
         'prior_family_map_sha256':oldmap['sha256'],'quality_receipt':resident.binding(receipt)}
@@ -386,6 +391,9 @@ def test_prior_inventory_repair_requires_exact_quarantine_and_family_custody(tmp
     for key in ('prior_policy_sha256','historical_source_sha256','active_source_sha256','prior_family_map_sha256'):
         bad=copy.deepcopy(b);bad['prior_inventory_correction'][key]='0'*64;bind_new(bad)
         with pytest.raises(ValueError):extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
+    bad=copy.deepcopy(b);bad['first_row_observations'].append({**resident.binding(stale_leaf),'reason':'forged extra'});bind_new(bad)
+    with pytest.raises(ValueError,match='historical observation'):
+        extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
     bad=copy.deepcopy(b);bad['prior_inventory_correction']['quality_receipt']['sha256']='0'*64;bind_new(bad)
     with pytest.raises(ValueError):extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
 
