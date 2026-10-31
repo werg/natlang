@@ -374,10 +374,17 @@ def release_consumer(run, consumer):
                      release=True, write_durable=write_json_durable)
 
 
+BLOB_GRACE_SECONDS = 24 * 3600
+
+
 def retained_blobs(run):
     """Every lineage's newest DGX-verified export, anything newer (in flight), its seed (the fresh-init parent and
-    the seeded config), the current run inputs."""
+    the seeded config), the current and cached run inputs, and every blob committed within the grace window."""
     keep = {i['sha256'] for i in read_json(hub(run) / 'run-state.json', {}).get('inputs', [])}
+    # an input archive is committed before the bundle that references it is stored: the inputs cache covers that gap
+    keep |= {i['sha256'] for i in read_json(hub(run) / 'inputs.json', {}).values()}
+    # any blob committed within the grace window may still be on its way into a record (bundle, seed, export)
+    keep |= {k for k, v in blobs(run).items() if time.time() - v.get('committed', 0) < BLOB_GRACE_SECONDS}
     for lineage in run['lineages']:
         exports = hub(run) / 'exports' / lineage
         records = [r for r in (read_json(p) for p in exports.glob('*.json')) if r]

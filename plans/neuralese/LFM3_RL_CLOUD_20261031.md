@@ -114,6 +114,9 @@ sha256 and must be dropped (`null` override) or rebound for a new file.
   leases its parent and inputs as consumer `launch:<job>`, released when its sandbox ends or exports from a newer
   parent). Intent is durable in `.cloud/rl-blob-retirement.json` before any delete; absence is confirmed against the
   full file listing (W&B `files(names=...)` echoes absent names, and deleting an absent file is an opaque error).
+  Blobs in the inputs cache and any blob committed in the last 24 h are also kept: an input archive is committed
+  before the bundle that references it is stored, and on 2026-10-31 04:06 a prune pass in that gap deleted the just
+  uploaded v1 cases blob a3c95f6d (re-uploaded on the next bundle; v1 was then withdrawn anyway).
 - The exporter GETs whole checkpoints (15 GB, ~25 min each at the DGX downlink); with four lineages it verifies the
   newest export per lineage and skips superseded ones rather than queueing every round.
 
@@ -146,7 +149,9 @@ PUT over the DGX uplink (~3 MB/s) failed after a full pass and restarted from ze
 
 ## Broad task source and runtime (2026-10-31, later)
 
-All cloud lineages use `natlang-rl-broad-external-20261031` (33,047 train cases, 23 external sources plus a curriculum
+All cloud lineages use `natlang-rl-broad-external-20261031-v2` (32,947 train cases; v1 with 33,047 was withdrawn on
+2026-10-31 for 45 held-SFT-related SQuAD/HotpotQA and 55 unloadable DataBench cases; v2 needs a runtime at main
+>= 542df3c08, 23 external sources plus a curriculum
 slice; families already interleaved row by row) with 16 rows and 16 workers per round, `initial_train_world` dropped,
 and template runtime `runtime-9fbae2582` (broad source 7bbf8e055 + Neuralese bonus added after outcome-only centering
 338c5c2ba). The cases file (293 MB) and its db/table assets (613 MB) are run `cloud_inputs`: each is
