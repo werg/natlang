@@ -65,7 +65,13 @@ def score_file(sources: list[str], label: str) -> Path:
 def teacher_twins():
     for receipt_path in sorted(TEACHERS.glob('*/lfm3*/receipt.json')):  # lfm3 (full) and lfm3-program-header
         receipt = json.loads(receipt_path.read_text())
-        if (receipt.get('verification') or {}).get('passed'):
+        if receipt.get('model_key') != 'lfm3':
+            continue
+        twin_passed = (receipt.get('schema') == 'natlang.verified-teacher-native-graph-student-twin/1'
+                       and (receipt.get('verification') or {}).get('passed') is True)
+        direct_passed = (receipt.get('schema') == 'natlang.verified-teacher-native-graph-build/1'
+                         and receipt.get('status') == 'passed')
+        if twin_passed or direct_passed:
             yield receipt_path.parent, receipt
 
 
