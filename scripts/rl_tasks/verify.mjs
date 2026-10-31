@@ -16,6 +16,7 @@ const [runtime, input, out, concurrencyArg] = process.argv.slice(2);
 // verifier changes. Freeze the executable closure before importing it.
 function runtimeBinding() {
   const digest = crypto.createHash('sha256');
+  digest.update(process.execPath + '\0' + process.version + '\0');
   function visit(dir, prefix = '') {
     for (const item of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const name = path.join(prefix, item.name), target = path.join(dir, item.name);

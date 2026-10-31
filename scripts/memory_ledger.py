@@ -682,8 +682,10 @@ def launch(spec):
                '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
     # The user manager's PATH lacks ~/.local/bin, so units got /usr/bin/node v18 (no crypto.randomUUID; ts-host scripts
     # need Node >= 22) while shells get v24 (2026-10-11). Units see the shell's toolchain (scripts/natlang_env.sh).
+    launch_path = next((env[5:] for env in reversed(spec['env']) if env.startswith('PATH=')),
+                       f"{os.path.expanduser('~/.local/bin')}:{os.environ.get('PATH', '/usr/bin:/bin')}")
     if not any(env.startswith('PATH=') for env in spec['env']):
-        command += ['-E', f"PATH={os.path.expanduser('~/.local/bin')}:{os.environ.get('PATH', '/usr/bin:/bin')}"]
+        command += ['-E', f'PATH={launch_path}']
     for env in spec['env']:
         command += ['-E', env]
     # A stopped unit takes its container with it (an orphaned one held 36 GB outside the ledger): the one its command
@@ -705,8 +707,15 @@ def launch(spec):
     if executable and os.sep in executable[0] and not os.path.isabs(executable[0]):
         # systemd-run resolves a relative executable in its caller's directory,
         # before applying --working-directory. Honor the admitted checkout for
-        # explicit paths; ordinary PATH commands keep their existing lookup.
+        # explicit paths.
         executable[0] = os.path.abspath(os.path.join(spec['workdir'], executable[0]))
+    elif executable and os.sep not in executable[0]:
+        # systemd resolves ExecStart's bare name using the manager's search
+        # path, before the child's PATH takes effect. Resolve it here using the
+        # admitted environment so a requested Node24 is not silently Node18.
+        resolved = shutil.which(executable[0], path=launch_path)
+        if resolved is not None:
+            executable[0] = os.path.abspath(resolved)
     return subprocess.run(command + executable).returncode
 
 

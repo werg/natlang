@@ -651,9 +651,21 @@ def test_relative_executable_uses_admitted_workdir_and_preserves_resume_spec(mon
     assert seen[-1][-2:] == [str(checkout/'scripts/check-main.sh'), '--quick']
     assert seen[-1][seen[-1].index('--working-directory')+1] == str(checkout)
     assert spec['command'] == ['scripts/check-main.sh', '--quick']
-    for command in [['node', '-v'], ['/exact/tool', 'relative-argument']]:
-        ledger.launch({**spec, 'command': command})
-        assert seen[-1][-len(command):] == command
+    command = ['/exact/tool', 'relative-argument']
+    ledger.launch({**spec, 'command': command})
+    assert seen[-1][-len(command):] == command
+
+
+def test_bare_executable_uses_admitted_path_instead_of_systemd_manager_path(monkeypatch, tmp_path):
+    seen = []
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda cmd, **k: seen.append(cmd) or type('R', (), {'returncode': 0})())
+    tools = tmp_path / 'tools'; tools.mkdir()
+    node = tools / 'node'; node.write_text('#!/bin/sh\nexit 0\n'); node.chmod(0o755)
+    spec = {'unit': 'u.service', 'budget': GIB, 'priority': 'low', 'oom_policy': 'stop',
+            'workdir': str(tmp_path), 'env': [f'PATH={tools}'], 'command': ['node', '-v'], 'stop_seconds': 5}
+    ledger.launch(spec)
+    assert seen[-1][-2:] == [str(node), '-v']
+    assert spec['command'] == ['node', '-v']
 
 
 def test_a_cache_walk_stops_itself_at_its_deadline_and_skips_the_slow_disk_by_default(tmp_path, monkeypatch):
