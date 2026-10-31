@@ -2,6 +2,7 @@ import { checkConstraints, type WritingConstraint } from './constraints.js';
 import { canonical, jsonStringRecordCanonical } from '../oracle-kit/json-record.js';
 import { decimalForms } from '../oracle-kit/decimal.js';
 import { assertKnownComparator, recordComparator } from '../oracle-kit/oracle-registry.js';
+import { ANSWER_SET_NORMALIZATIONS, answerListEqual, numericClose, qaAliasMapScore, resultSetEqual } from './answer-sets.js';
 export { jsonStringRecordCanonical };
 /** Answer checks used by generated and dataset-backed teacher cases. */
 export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | 'constraints';
@@ -20,7 +21,8 @@ export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknow
   /** Explicit answer-map keys whose lowercase strings are unsigned numerals in a declared base. */
   radix_fields?: Array<{ key: string; base: number }>;
   rubric?: string; context?: unknown; [key: string]: unknown };
-const BUILTIN_NORMALIZATIONS = ['qa', 'qa-string-map', 'named-tree', 'json-string-record', 'semantic-structured'] as const;
+const BUILTIN_NORMALIZATIONS = ['qa', 'qa-string-map', 'named-tree', 'json-string-record', 'semantic-structured',
+  ...ANSWER_SET_NORMALIZATIONS] as const;
 /** Apply only explicitly declared unordered array paths; object keys are already order-free. */
 export function declaredStructuralCanonical(value: unknown, unorderedPaths: string[], prosePaths: string[] = [],
   ignoreProse = false): string | null {
@@ -765,6 +767,25 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
         comparison_version: 'declared-semantic-structure/1' };
     }
     return { accepted: false, level, comparison_version: 'declared-semantic-structure/1' };
+  }
+  if (level === 'normalized' && spec.normalization === 'result-set')
+    return { accepted: candidates.some(candidate => resultSetEqual(actual, candidate, spec.ordered === true)), level,
+      comparison_version: 'result-set/1' };
+  if (level === 'normalized' && spec.normalization === 'numeric-tolerance') {
+    const options = { tolerance: typeof spec.tolerance === 'number' ? spec.tolerance : undefined,
+      abs_tolerance: typeof spec.abs_tolerance === 'number' ? spec.abs_tolerance : undefined,
+      percent_equivalent: spec.percent_equivalent === true };
+    return { accepted: candidates.some(candidate => numericClose(actual, candidate, options)), level,
+      comparison_version: 'numeric-tolerance/1' };
+  }
+  if (level === 'normalized' && spec.normalization === 'answer-list')
+    return { accepted: candidates.some(candidate => answerListEqual(actual, candidate)), level, comparison_version: 'answer-list/1' };
+  if (level === 'normalized' && spec.normalization === 'qa-alias-map') {
+    const threshold = typeof spec.threshold === 'number' ? probability(spec.threshold, 'qa-alias-map') : 0.8;
+    const results = candidates.map(candidate => qaAliasMapScore(actual, candidate, (got, gold) => spanF1(got, gold, true), threshold));
+    const best = results.find(result => result.accepted) ?? results[0]!;
+    return { accepted: best.accepted, level, comparison_version: 'qa-alias-map/1',
+      ...(best.failed.length ? { verdict: `keys below threshold: ${best.failed.join(', ')}` } : {}) };
   }
   const registered = level === 'normalized' ? recordComparator(spec.normalization) : undefined;
   if (registered) return { accepted: candidates.some(candidate => registered.equal(actual, candidate)), level };

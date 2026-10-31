@@ -1,0 +1,21 @@
+# source  module:function
+hotpotqa multihop:hotpot
+musique multihop:musique
+2wikimultihopqa multihop:twowiki
+spider sql:spider
+bird sql:bird
+xlam tools:xlam
+knights-knaves puzzles:knights
+reasoning-gym puzzles:reasoning_gym
+squad reading:squad
+drop reading:drop
+quality reading:quality
+babi reading:babi
+clutrr reading:clutrr
+logiqa2 reading:logiqa
+gsm8k numeric:gsm8k
+math numeric:math
+finqa numeric:finqa
+mbpp code:mbpp
+wikitablequestions tables:wtq
+databench tables:databench
