@@ -152,8 +152,54 @@ Pick these up from their files/units, not from the agents:
      `/mnt/external/natlang-lfm3-data-20261028/native-sft-v13-r2-recovered-20261031/` (`provenance.json`); keep
      `stale-render-state-20261031/natlang-native-turns-v13-r2-render-20261011-v1` until that render registers.
      External disk `sda` I/O pressure ~50% slows everything; an unbounded `bfs /` crawl was killed.
-4. **Broad Neuralese graphs:** `plans/neuralese/NEURALESE_BROAD_GRAPHS_20261031.md`; units `bgraph-*`
-   (rest27 relaunched with 24 GB after 8 GB OOMs; big2 converter fixes; resumable phases 49b061636, 6a2e1e9a2).
+4. **Broad Neuralese graphs + D7 chain-graph conversion (Claude session 01WJvxPP broad-graphs agent, 2026-10-31).**
+   Design/status: `plans/neuralese/NEURALESE_BROAD_GRAPHS_20261031.md` (section 7 still to fill). Root
+   `R=/mnt/external/natlang-broad-graphs-20261031`.
+   - **Done (on main):** case adapters `scripts/neuralese_data/broad_graph_cases.py` (11 sources, held-relation rule,
+     custody resumable+parallel 45298ef37/caf9ba9e5), IR builder `ts-host/scripts/inline-curriculum/build-broad-graph-calls.mjs`,
+     pipeline `scripts/neuralese_data/broad_graph_pipeline.sh`, parity check `check_broad_graph_parity.py`
+     (FP32 one-pass vs cached: h/logits identical, grads <=4.3e-6), general D7 converter
+     `scripts/neuralese_data/build_chain_graphs.py` (one graph per chain, reader cap 64 / result-reader 512, target
+     dedupe 64, serving prompt mix, per-output cap-state; resumable phase 1+2 cde5e1a24/49b061636/6a2e1e9a2,
+     kill/resume byte-identical), diversity report `chain_graph_diversity.py` (ab40a78b3).
+     Converter authentication fixes (all teacher trajectories with inline instructions, handover history or direct
+     Neuralese<string> results previously failed e2e_mine authentication): 945cd9ed1, 2aa17665b. Custody speedup
+     c92be9ca8 (ProtectedWorlds.digest cached, 16x).
+   - **Cases:** `$R/cases/cases.jsonl` 43,930 (train 40,930 / test 3,000; hotpotqa 6000, 2wiki 3478, squad 5000,
+     fetaqa 5000, multi_news 4000, spider 5000, bird 5000, xlam 5244, qmsum 652, loghub 1556, musique test-only).
+     Custody (`$R/ir/custody.json`): 17 train omitted (spider 5, xlam 12). Held-set group closure
+     (`union_groups_fast.py`): 0 conflicts / 40,930 (`$R/cases/held-set-union.json`).
+   - **Running (ledger units, low, resumable; check `journalctl --user -u <unit>` and the logs):**
+     `bgraph-pipeline-3` (replay 173/441 shards in `$R/turns`, then e2e convert + chain graphs per source into
+     `$R/graphs/<source>/`; converter build `/home/werg/data/broad-graphs-tmp/convfix` = 945cd9ed1);
+     `bgraph-rest27-full7` (rest27 D7 graphs, 11,713 chains -> `$R/rest27/graphs`, log `$R/rest27/log`; input copy
+     `/home/werg/data/broad-graphs-tmp/rest27` 14.5 GB on NVMe, delete after receipt);
+     `bgraph-big2-d7-1` (`$R/big2-d7.sh`: tranches 010,011,012,009 then 000-008 when records exist ->
+     `$R/big2/tranche-NNN/graphs`, cap-state `$R/cap-state-big2.json`);
+     `tmine3-a/b/c` (`$R/teacher-mine/scripts/rerun_v3.sh`: 26 teacher groups re-mined with converter build
+     `/home/werg/data/broad-graphs-tmp/convfix2` = 2aa17665b into `$R/teacher-mine/work-v3/<group>`, `<group>.done`
+     markers; old `work`/`work-v2` being deleted by a nohup rm). v2 check on qwen-boot2-21: 13,890 records,
+     5,598 edges, 166 omissions (old converter: 4,282 / 601 / 10,108).
+   - **Not running:** big2 tranches 000-008 records re-extraction (paused for disk I/O):
+     `python3 $R/big2-reextract.py 0 1 2 3 4 5 6 7 8` as ledger unit (low, 3 GB; writes ~140 GB, verifies each
+     tranche sha against its extract-receipt); `big2-d7.sh` picks them up on its next run.
+   - **Next commands:** (1) teacher chains per group once `work-v3/<g>.done`:
+     `build_chain_graphs.py --work $R/teacher-mine/work-v3 --source <g> --out $R/teacher-mine/graphs/<g>
+     --corpus-id <teacher corpus id> --cap-state $R/cap-state-teacher.json --workers 4` (ledger, low, 12 GB).
+     (2) diversity: `chain_graph_diversity.py --out $R/diversity.json $R/graphs/* $R/rest27/graphs $R/big2/tranche-*/graphs
+     $R/teacher-mine/graphs/*`. (3) spot-check producer spans/imports (decode `nodes[i].producing`, `imports`) and
+     one-pass parity on ~10 full-prompt graphs (`check_broad_graph_parity.py`, GPU medium). (4) register in
+     `training/neuralese_corpora.json` with manifests in `training/corpus-manifests/`:
+     `natlang-broad-neuralese-graphs-20261031-v1`, rest27 D7 graphs, big2 D7 graphs, teacher-mined graphs; the big2
+     D7 output supersedes the old big2 communication graphs (audit D7) for future mixtures. (5) fill design doc
+     section 7, delete NVMe temp (`/home/werg/data/broad-graphs-tmp`) and `$R/cases-closure-v1`, `$R/rest27-trial`.
+   - **Open problems:** ledger starvation (RL par-N reserves ~105 GB; low units preempted every RL restart; all
+     stages now resume). MuSiQue train blocked: current protection quality groups cover all musique_hops questions.
+     Residual teacher omissions: soft-state argument reads whose producer text the converter cannot resolve
+     ("unresolved exact source references", ~0.6% on boot2). `e2e_mine.py convert` does not reconvert parts split by
+     `--max-mb` in the same pass (worked around by the 3-pass loop in `teacher-mine/scripts/mine_group.py`).
+     Queued sources: TAT-QA/FinQA, NarrativeQA, QuALITY, KodCode, CodeSearchNet (reasons in the design doc).
+     Learner append goes through the resident source-update mechanism (not done here).
 5. **Learner efficiency (cloud helper):** profile/cut the ~11-min single-core prep in `rl/native_stage.py`;
    train long graphs at lower peak without deferral (checkpoint-input file offload; exact gradient parity).
    GPU window result → `debug/gpu-window-1/result.json`.
