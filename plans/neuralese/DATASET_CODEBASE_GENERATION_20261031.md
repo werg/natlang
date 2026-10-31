@@ -70,6 +70,12 @@ Do not repeat a producer once per edge when one whole-chain graph is available.
 
 ## Execution and admission mechanism
 
+Keep executable RL tasks separate from sampled, qualified SFT demonstrations.
+An application can serve both. The recovered idea reservoirs, artifact states,
+and feature-coverage gaps are tracked in
+`PROGRAM_SUPPLY_AND_FEATURE_COVERAGE_20261031.md`; older useful work must be
+crosswalked into this campaign rather than silently replaced or counted twice.
+
 Reuse `run_reviewed_luna_dispatcher.py` (six slots maximum, one request per slot),
 `run_bonsai_queue.py`, the current loader/verifiers, protection checks and native
 graph converters. The master case list, runtime, source inventory and launch plan
