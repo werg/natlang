@@ -1,5 +1,36 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Machine-wide storage and bounded run state (owner, 2026-10-31)
+
+Account for all project roots and shared stores, not just Natlang's data directory.
+The owner authorized removal of `/home/werg/megatoken-runs` and aggressive cleanup
+of `data/dgxops`; the MegaToken deletion is complete. Keep actual live source,
+held-data and recovery dependencies, but historical directory names or hash
+mentions alone do not justify keeping duplicate staging or orphaned code trees.
+
+Use one rolling checkpoint slot per logical learner across restarts. Bind the
+actual earned slot and prior controller parent through `rolling_sft_resume` under
+the controller lock; never create another full checkpoint directory merely to
+restart, silently ignore a conflicting explicit parent, or invent completed work.
+Reserve the actual future pending inode before optimizer work. Stream into those
+allocated blocks, preserve the durable parent until atomic publication, and retain
+completed in-memory updates while a temporary storage shortage is repaired.
+Budget independent exports, fallback states and concurrent staging explicitly;
+an independently verified export is distinct from a local commit or upload ACK.
+
+New bulk generation belongs on the verified external data volume, with its disk
+floor checked on the actual output filesystem. Do not lower the internal free-space
+floor to bypass pressure. Keep runtime snapshots and caches bounded, reuse qualified
+dependencies, and stage the declared runtime/data closure before launch rather
+than discovering missing ignored assets after allocation. Source and training
+data survive cleanup; disposable unpacked restore tests and byte-identical packing
+intermediates do not need permanent copies.
+
+Storage supervision follows current native writer processes and their reservation
+receipts (`scripts/native_storage_supervision.py`), not an old learner PID/cursor.
+It observes; the checkpoint writer enforces allocation. Preserve live
+`checkpoint.pt.reserved-pending`, `.reservation.json` and `.reservation.lock`.
+
 ## Supervision and genuinely diverse Luna generation (owner, 2026-10-31)
 
 Codex resumes supervision from `plans/neuralese/SUPERVISION_HANDOFF_20261031.md`.

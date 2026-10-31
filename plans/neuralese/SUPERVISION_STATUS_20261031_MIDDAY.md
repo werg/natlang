@@ -4,6 +4,72 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Follow-up observation, 16:05 CET
+
+The owner explicitly authorized deleting `/home/werg/megatoken-runs`. Completed
+15:39 CET, no active FD/map/cwd or nested mount existed; allocated free space rose
+from22,247,063,552 to117,269,401,600bytes (about88.5GiB reclaimed).
+Receipt: `/home/werg/data/lfm3-rl-dgx-20261029/ops/megatoken-deletion-20261031.json`.
+Recovery cleanup also removed13 clean integrated unreferenced worktrees and the
+byte-identical raw `dependencies.tar` plus completed `restore-check/tree` staging
+under `claude-recovery-20261028/data/current-source-runtime-recovery-bundle-v2`.
+The compressed archive was independently decompressed and matched the raw SHA
+before removal; archive, reports, source data and live dependencies remain.
+Cleanup receipts: `ops/recovery-worktree-cleanup-20261031.json` and
+`ops/recovery-duplicate-cleanup-20261031.json` under that same supervision root.
+
+Actual space growth was not just logs. Natlang training states were142GiB,
+DGX preparation/recovery79GiB, the canonical checkout79GiB (57GiB of runs),
+MegaToken88.5GiB, hindsight-kb recovery38.6GiB, application data70GiB and
+shared caches24GiB. These are point-in-time top-level audit observations;
+subdirectories overlap and must not be added twice. Full allocated-byte
+inventory is `ops/whole-home-audit-20261031.txt`.
+
+Training is now advancing in the SAME rolling output slot:
+`runs/lfm3-sft-successors/joint-v4-full-successor-20261031/resume53/run/learner/checkpoint.pt`.
+Global59/stage7 committed with SHA
+`1461cf236cf0a4e54c4e738dc9a595986c92c536341e11b9707410cb8effcf0d`.
+The exact preallocated pending inode11186452 became that checkpoint; the writer
+then allocated inode11141664 (19,014,495,701bytes) before the next update.
+Service `lfm3-v4-same-slot-reserved2.service` uses80GiB admission. It restored
+actual global58, passed fresh memory and packed-schedule GPU checks, and processed
+450,987forward tokens in200.50seconds for global59. Both qualification probes
+made zero updates. Global54–55 from the earlier failed process were lost; the
+later continuation earned them again from committed53. Keep those histories
+distinct. Stage20/global72 remains the initial four-case development boundary.
+
+Persistent checkpoint protection is default native code, with alias/sparse-crash,
+lazy optimizer sizing, post-rename failure and rolling controller custody tests.
+The new actual-process storage observer is installed on a two-minute timer;
+`natlang-continuous-storage.timer` (retired owner/cursor) is disabled. It reports
+actual reservation inode/allocation, not a promise of complete recovery. Main
+quick checks initially found a hardcoded external generation path; C is fixing
+it via machine roots. No full-suite-green claim yet.
+
+Step53 has independently completed Pop full-state readback:
+`/home/werg/data/natlang-independent-recovery-20261031/joint-sft-v4/a5b73d240adf4540ef92aa356b4307ab443f9ee80c74342ff4381aee019ce234/checkpoint.pt`.
+The temporary DGX RAM snapshot was removed after the authenticated remote receipt.
+Exact runtime/control/source recovery closure remains separate. SD52 Pop backup
+and JOLT42 USB backup also remain; SD52 USB copy is slow and still supervised.
+
+Pop's SD52 development baseline is now complete: cases0/32 failed semantically;
+cases88/112 passed exact outcome checks. Same 5a1 actor, full prompt and2048-token
+prefill for the latter three; case0 used an earlier Torch runtime. Aggregate2/4
+is not a controlled backend comparison or training lift. The idle Pop actor was
+stopped. Telecom v3 repaired the helper scope but timed out after15 teacher replies
+and30minutes without a terminal result; retain as incomplete diagnostic only.
+
+LogHub capture completed all33 turns without OOM after request-state cleanup and
+smaller prefill. Complete source is staged externally at
+`/mnt/external/natlang-loghub-hdfs-sft-20261031-v1`:35invocations,30supervised and
+3context-only decisions,4,042supervised tokens, one real inline producer and
+three graph import edges. Task outcome is independently Sol-judged, not exact.
+Current complete protection check passes. It is NOT yet exposed:332,981token
+positions/335,563KV slots exceed current per-batch budget; qualification must
+retain the whole producer/consumer graph. A is separately investigating a measured
+prefix-sharing opportunity (29% geometric reuse in actual step53 groups), not
+running another full model. Current production has not adopted that edit yet.
+
 ## Follow-up observation, 14:53 CET
 
 Attempt 5 is live (`lfm3-v4-joint-sft-20-attempt5.service`, trainer PID1071443).

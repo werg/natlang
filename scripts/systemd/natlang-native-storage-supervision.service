@@ -1,0 +1,10 @@
+[Unit]
+Description=Observe current native training writers and protected checkpoint space
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/werg/natlang
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-native-storage-observer --budget-gb 0.5 --priority medium --class service --wait 120 -- /usr/bin/python3 /home/werg/natlang/scripts/native_storage_supervision.py
+TimeoutStartSec=150
+Nice=10
+
