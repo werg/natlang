@@ -330,3 +330,32 @@ Next: `build_lfm3_joint_sft.py build --policy v4` once scoring completes. Held p
 The build then runs the protection-union check, CE, logical-family objective, geometry, learner inputs and
 registration, followed by a composition report by source and task shape. Target: ≥ ~900k docs and ~360M supervised
 tokens.
+
+### Serving-prompt cutover and further findings (2026-10-31, 03:00-03:30)
+
+- Following the supervisor order after 54a2da40e:
+  - `--serving-entry` defaults to `mix` (bb61df6fd). `recorded` selects the old path. An in-flight pre-cutover work
+    directory or parts plan given no explicit entry keeps its recorded binding.
+  - Serving renders default to full-sample 1.0.
+  - `ts-host/dist` was rebuilt at 5f8eae420, so `schemaOf` is exported. Before the rebuild, serving renders derived
+    untyped returns.
+  - v13-r2, static-s7k, Search/OWL and all 10 gemini renders were stopped and re-queued on the new dist. Their earlier
+    partial outputs are in `stale-render-state-20261031/pre-schemaof-dist`.
+  - The mixture build runs `build_prompt_view_mix.py verify` on every train leaf (86ef270e6). Its prompt-view choice is
+    the same `sha256('prompt-view', id) < 0.2` rule.
+- **native-sft-v13-r2 source lost.** The 8.4 GB `teacher.jsonl` (sha a55d1c9c…) and both of its recorded paths no
+  longer exist on DGX. All 111,186 selected rows (every source row except 115 JeFF-reserved test texts) were recovered
+  from the 2026-10-28/29 LFM3 selection state into
+  `/mnt/external/natlang-lfm3-data-20261028/native-sft-v13-r2-recovered-20261031/` (`provenance.json`). The render
+  now uses that copy. Keep the stale selection state until the recovered render is registered.
+- **Acquired sessions.**
+  - The LFM3 re-encode now follows the 5,526 admitted LFM2.5 receipts and each receipt's history-reasoning profile
+    (D32 history-keep), instead of every export in the audits' complete accounting.
+  - The LFM3 XML call markup cannot carry some leaked call names (`assistant<|channel|>analysis`). These are omitted
+    and counted as `source-render-pending:tool-call-unrepresentable`.
+  - Test on one D32 history-keep export: 1,787 graphs vs LFM2.5's 1,789 (2 such names, 32 tool-argument pending as
+    before).
+  - The D24 exports exist only under `/work` in a CoreWeave sandbox, so they stay blocked until cloud access returns.
+- **Logical-family objective.** On the v3 manifest the census finds communication own-output mass far below its 40%
+  target (it would need a scale of 383). The true cap now holds that family at 8 and gives the remaining share to the
+  others by target. The receipt records capped families and effective shares.
