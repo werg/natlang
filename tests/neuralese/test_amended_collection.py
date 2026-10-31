@@ -64,3 +64,15 @@ def test_policy_cli_rejects_direct_sft_override_and_unknown_control():
     for flag in ('--pending-focus','--sft-packed-geometry','--communication-min-visits','--unknown-control'):
         with pytest.raises(ValueError,match='unclassified native RL trainer flag'):
             validate_native_policy_trainer_cli([flag,'x'])
+
+def test_captured_logprob_probe_reports_exact_deltas(tmp_path):
+    import torch
+    from natlang_neuralese.rl.native_replay import behavior_logprob_probe
+    class Model:
+        def logits(self,states):return states
+    hidden=torch.tensor([[1.,2.,3.],[0.,1.,0.]])
+    actions=[{'query':0,'token_id':2,'temperature':1.,'allowed_token_ids':None,'behavior_logp':-1.},
+             {'query':1,'token_id':1,'temperature':1.,'allowed_token_ids':None,'behavior_logp':-2.}]
+    p=tmp_path/'probe.json';r=behavior_logprob_probe(Model(),hidden,actions,graph_id='g',policy={'checkpoint_sha256':'a'*64},destination=p)
+    assert len(r['positions'])==2 and r['max_abs_delta']>0
+    assert json.loads(p.read_text())==r

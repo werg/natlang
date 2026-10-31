@@ -588,6 +588,27 @@ def token_action_logps(model, hidden, actions, *, chunk_tokens=128, readout=None
 _CENTERING_FIELDS = ('rho', 'alpha', 'tail_q', 'tail_p', 'w_y', 'y_in_top_k')
 
 
+def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destination):
+    """Compare a bounded same-model forward with exact captured behavior logps."""
+    import os
+    from ..common.jsonio import write_json_durable
+    chosen=actions[:16]
+    if not chosen:return None
+    with torch.no_grad():
+        current=token_action_logps(model,hidden,chosen,chunk_tokens=16).float().cpu().tolist()
+    rows=[{'query':a['query'],'token_id':a['token_id'],'behavior_logp':float(a['behavior_logp']),
+           'learner_logp':float(value),'delta':float(value)-float(a['behavior_logp'])}
+          for a,value in zip(chosen,current)]
+    if any(not math.isfinite(r['delta']) for r in rows):raise ValueError('nonfinite captured policy logprob comparison')
+    result={'schema':'natlang.native-policy-behavior-logprob-probe/1','graph_id':graph_id,
+            'policy':policy,'positions':rows,'max_abs_delta':max(abs(r['delta']) for r in rows),
+            'native_compile':os.environ.get('NATLANG_NATIVE_COMPILE','1'),
+            'bf16_reduction':os.environ.get('NATLANG_BF16_REDUCTION','default'),
+            'scope':'first at most 16 scored tokens of one capacity-case graph; not a full-logit or task-quality proof'}
+    write_json_durable(destination,result)
+    return result
+
+
 def behavior_top_k_tensors(actions, k, device):
     """Padded [n, k] sampler top-k IDs (-1) and log q (-inf), truncated to the loss k."""
     from ..common.sampling import decode_top_k_arrays
@@ -1031,6 +1052,13 @@ class NativePolicyObjective:
                         'allowed_token_ids': tuple(action['allowed_token_ids'])
                             if action['allowed_token_ids'] is not None else None}
                        for action in row['actions']]
+            import os
+            probe=os.environ.get('NATLANG_POLICY_LOGPROB_RECEIPT')
+            if probe and actions and not getattr(self,'_behavior_logprob_probe_done',False):
+                from pathlib import Path
+                if Path(probe).exists():raise ValueError('policy logprob probe destination already exists')
+                behavior_logprob_probe(model,hidden,actions,graph_id=example.id,policy=self.identity,destination=probe)
+                self._behavior_logprob_probe_done=True
             parts_before = len(jolt_parts)
             if not actions:
                 terms = hidden.new_zeros((0,), dtype=torch.float32)
