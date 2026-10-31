@@ -203,3 +203,30 @@ def test_snapshot_rejects_dependency_source_change_during_copy(tmp_path, monkeyp
     monkeypatch.setattr(shutil, 'copytree', copy_then_mutate)
     with pytest.raises(ValueError, match='changed during preparation'):
         runtime_inventory.snapshot_task_runtime(root, tmp_path / 'snapshots')
+
+
+def test_dependency_inventory_binds_workspace_symlink_cycle_and_file_changes(tmp_path):
+    from natlang_neuralese.common.runtime_inventory import _dependency_tree
+
+    host = tmp_path / 'ts-host'
+    host.mkdir()
+    deps = tmp_path / 'node_modules'
+    deps.mkdir()
+    (host / 'node_modules').symlink_to(deps, target_is_directory=True)
+    (host / 'package.json').write_text('{"name":"host"}')
+    (deps / 'host').symlink_to(host, target_is_directory=True)
+    first = _dependency_tree(host)
+    assert any('cycle_to_ancestor' in link for link in first['links'].values())
+    (host / 'package.json').write_text('{"name":"changed"}')
+    second = _dependency_tree(host)
+    assert first != second
+    (deps / 'host').unlink()
+    other = tmp_path / 'other'
+    other.mkdir()
+    (other / 'package.json').write_text('{"name":"other"}')
+    (deps / 'host').symlink_to(other, target_is_directory=True)
+    assert _dependency_tree(host) != second
+    (deps / 'host').unlink()
+    (deps / 'host').symlink_to(tmp_path / 'missing-external', target_is_directory=True)
+    with pytest.raises(FileNotFoundError):
+        _dependency_tree(host)

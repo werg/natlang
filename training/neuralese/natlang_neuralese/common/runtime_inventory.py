@@ -34,7 +34,11 @@ def _dependency_tree(path):
                 files[logical] = {'kind': 'directory', 'mode': stat.S_IMODE(target.stat().st_mode)}
                 real = str(target)
                 if real in ancestors:
-                    raise ValueError(f'runtime dependency symlink cycle: {item}')
+                    # Workspace package links can return to an already walked
+                    # dependency directory. The exact edge and resolved target
+                    # remain in the inventory; do not recursively walk it again.
+                    links[logical]['cycle_to_ancestor'] = real
+                    return
                 visit_directory(target, logical, ancestors | {real})
             elif target.is_file():
                 target_info = target.stat()
