@@ -293,6 +293,10 @@ def test_actual_sft_foundation_stops_before_ordinary_and_shared_resume_consumes_
     assert not partial['completed'] and partial['continuation_boundary']['reached']
     assert partial['continuation_boundary']['new_optimizer_updates']==1
     assert partial['mandatory_sft']['remaining_graph_visits']==1
+    # The first bounded continuation has now advanced its rolling checkpoint.
+    # Bind the next resume to that actual parent instead of replaying the stale
+    # shared-stage seed checkpoint.
+    next_args[next_args.index('--continue-from')+1]=str(resumed/'checkpoint.pt')
     assert main(next_args)==0
     final=torch.load(resumed/'checkpoint.pt',weights_only=False)['training']
     assert final['exposure_counts']=={'a':1,'b':1,'lfm:real':1}

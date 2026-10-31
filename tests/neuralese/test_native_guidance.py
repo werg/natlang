@@ -109,7 +109,11 @@ def test_actual_hybrid_cache_rollback_discards_rejected_effects_and_replays_law(
         assert not seq.future.done() or seq.future.exception() is None
         if not seq.future.done():engine._finish(seq,'length')
         response=seq.future.result()
-        assert all(delta.get('native_state',{}).get('id') in [r.id for r in seq.blocks] for delta in deltas if 'native_state' in delta)
+        # Finishing releases sequence-owned block objects; compare streamed
+        # committed states against the response's durable metadata snapshot.
+        response_block_ids=[r['id'] for r in response['native_state']['blocks']]
+        assert all(delta.get('native_state',{}).get('id') in response_block_ids
+                   for delta in deltas if 'native_state' in delta)
         if reject_block:assert not seq.blocks and not response['native_state']['blocks']
         capture=response['x_natlang_rl_capture']
         assert capture['sampling_law']['guidance'] is True
