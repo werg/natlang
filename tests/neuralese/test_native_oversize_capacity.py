@@ -109,3 +109,24 @@ def test_failed_oversize_gate_preserves_gradients_and_records_no_update(tmp_path
     assert parameter.grad is gradient
     record=json.loads(next((tmp_path/'oversize-capacity').glob('*.json')).read_text())
     assert not record['passed'] and record['optimizer_updates']==record['earned_exposure']==0
+
+
+def test_gate_failure_before_update_preserves_durable_checkpoint(tmp_path, monkeypatch):
+    from test_native_source_fetch_recovery import source,equal
+    from natlang_neuralese.train import native_state_sft as trainer,native_packed_capacity
+    base=tmp_path/'base';paths=source(base,'lfm');out=tmp_path/'out'
+    args=['--base',str(base),'--dtype','bfloat16','--rank','4','--device','cpu',
+          '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
+          '--epochs','2','--batch-graphs','1','--accumulate-batches','1','--eval-every','1','--checkpoint-every','1','--checkpoint-seconds','0',
+          '--seed','23','--lr-warmup','8','--refresh-after-updates','1','--out',str(out)]
+    assert trainer.main(args)==0
+    checkpoint=out/'checkpoint.pt';before=torch.load(checkpoint,map_location='cpu',weights_only=False)
+    def fail(*args,**kwargs):raise ValueError('injected oversize capacity failure')
+    monkeypatch.setattr(native_packed_capacity,'qualify_oversize_batches',fail)
+    with pytest.raises(ValueError,match='injected oversize capacity'):
+        trainer.main(args+['--continue-from',str(checkpoint)])
+    after=torch.load(checkpoint,map_location='cpu',weights_only=False)
+    assert after['training']['global_step']==before['training']['global_step']
+    equal(before['training']['optimizer'],after['training']['optimizer'])
+    equal(before['training']['rng'],after['training']['rng'])
+    assert before['training']['exposure_counts']==after['training']['exposure_counts']
