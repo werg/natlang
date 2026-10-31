@@ -75,3 +75,28 @@ def test_current_graph_filter_keeps_quality_only_distinct_from_mixed_reserved_ov
         'source_ref': {'trajectory_id': 'clean'}, 'source_groups': ['train:clean'],
         'task': {'program_ir': {**base, 'id': 'clean-program'}}}}
     assert module.current_protection_omission(clean, protected, {quality}, {reserved}) is None
+
+
+def test_default_chain_conversion_omits_a_real_reserved_source_group(monkeypatch):
+    module = module_under_test()
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
+    from natlang_neuralese.common.custody import ProtectedWorlds
+    reserved = '2wiki-q:00310dc8094611ebbdaeac1f6bf848b6'
+    program = {'id': 'train-program', 'family': 'fixture', 'semantics': {
+        'root': 'main.nl', 'files': {'main.nl': 'body'}, 'inputs': {'request': 'x'}}}
+    protected = ProtectedWorlds.from_cases({'current-v4': ('b' * 64, [
+        {'id': 'held', 'split': 'test', 'family': 'held', 'source_groups': [reserved],
+         'semantics': {'root': 'held.nl', 'files': {'held.nl': 'other'}, 'inputs': {}}}])})
+    rows = {'record:0': {'id': 'record:0', 'split': 'train', 'source_ref': {'trajectory_id': 'trajectory'},
+                         'source_groups': [reserved], 'task': {'program_ir': program}}}
+    monkeypatch.setattr(module, 'read_records', lambda _locations: rows)
+    module.STATE.update({'current_worlds': protected, 'current_quality_groups': set(),
+                         'current_nonquality_groups': {reserved}, 'holds': set(),
+                         'acquired_protection': {'held': set(), 'quality': set(), 'pending': set()}})
+    result = module.convert_unit(({'trajectory': 'trajectory', 'split': 'train', 'records': ['record:0']},
+                                  {'record:0': ('fixture', 0, 1)}, [], 'pieces.jsonl',
+                                  {'supervised': set(), 'edges': set()}))
+    assert result[0:2] == ('omission', 'train')
+    assert result[2]['reason'] == 'current_protected_worlds_custody'
+    assert result[2]['protected_identity_kinds'] == ['binding', 'group']
