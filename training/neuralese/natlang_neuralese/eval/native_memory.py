@@ -240,7 +240,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             raise FloatingPointError('nonfinite capacity-check gradient: '+name)
         observed[name]={'elements':gradient.numel(),'dtype':str(gradient.dtype),'l2':norm}
         if gradient_observer is not None:gradient_observer(name,gradient)
-        parameter.grad=None
+        # Earlier accumulated microbatches keep their gradients live through
+        # the next backward; clearing them here understates peak memory.
+        if not retained_gradients:parameter.grad=None
     try:
         for name,parameter in named:
             hooks.append(parameter.register_post_accumulate_grad_hook(lambda p,name=name:capture(p,name=name)))
@@ -314,7 +316,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             'passed':len(rows)==len(cases) and all(row['status']=='passed' for row in rows),
             'parent_checkpoint_sha256':checkpoint_sha256,'source':source_binding,'cases':rows,
             **({'objective':objective.binding()} if objective is not None else {}),
-            'optimizer_updates':0,'gradients_released_per_parameter':True,'whole_graphs':True,
+            'optimizer_updates':0,'gradients_released_per_parameter':not retained_gradients,'whole_graphs':True,
             'retained_accumulation_gradients':bool(retained_gradients),
             'cotangent_mode':cotangent_mode,
             'qat_point':({'point':precision[1],'mix':float(precision[2]),'loss_weight':float(precision[3])} if precision is not None else None),

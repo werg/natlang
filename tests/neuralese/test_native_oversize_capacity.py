@@ -130,3 +130,21 @@ def test_gate_failure_before_update_preserves_durable_checkpoint(tmp_path, monke
     equal(before['training']['optimizer'],after['training']['optimizer'])
     equal(before['training']['rng'],after['training']['rng'])
     assert before['training']['exposure_counts']==after['training']['exposure_counts']
+
+
+def test_retained_capacity_keeps_accumulated_gradients_during_backward():
+    from test_shared_state import tiny
+    from test_native_optimizer_checkpointing import examples
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer
+    from natlang_neuralese.eval.native_memory import qualify_capacity
+    model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
+    optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
+    params=[p for _,p in optimizer._native_named_parameters if p.requires_grad]
+    counts=[]
+    result=qualify_capacity(model,optimizer,examples()[:1],checkpoint_sha256='a'*64,source_binding={},
+        cotangent_mode='plain',retained_gradients=True,
+        gradient_observer=lambda name,gradient:counts.append(sum(p.grad is not None for p in params)))
+    assert result['passed'] and not result['gradients_released_per_parameter']
+    assert counts and min(counts)==len(params)
+    assert all(p.grad is None for p in params)
