@@ -19,6 +19,32 @@ from test_native_state_sft import graph
 from test_shared_state import tiny
 
 
+def test_bf16_capacity_reports_actual_shared_forward_and_slot_geometry(tmp_path, monkeypatch):
+    from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
+    path = tmp_path/'train.jsonl'
+    path.write_text(json.dumps(graph('a'))+'\n'+json.dumps(graph('b'))+'\n')
+    train = NativeGraphSource(path, 'tokenizer-sha', required_split='train')
+    batch = list(train.iter_indices([0,1]))
+    expected = pack_causal_prefixes(batch, allow_communication=True)[0]
+    assert expected.token_count < sum(example.plan.token_count for example in batch)
+    model = SharedStateModel(tiny('lfm'), (58,59,60,61), rank=4).to(dtype=torch.bfloat16)
+    model.share_causal_prefixes = True
+    calls = []
+    def capacity(_model, _optimizer, batches, **kwargs):
+        calls.append((batches, kwargs))
+        return {'passed':True, 'scope':'layout unit test; no GPU capacity claim'}
+    monkeypatch.setattr(native_memory, 'qualify_capacity', capacity)
+    args = SimpleNamespace(out=tmp_path/'measurement', checkpoint_layers=True, chunk_tokens=3)
+    _, initial_geometry, _ = geometry_for_source(train, args.out, allow_build=True)
+    reference = qualify_pending(model, SimpleNamespace(_native_named_parameters=[]), train,
+        [(0,[0,1],False)], args, backend=None, checkpoint_sha256='a'*64, global_step=17,
+        prior_geometry=initial_geometry)
+    proof = json.loads(Path(reference['proof']['path']).read_text())
+    assert proof['physical_geometry'] == [{'forward_tokens':expected.token_count,
+                                           'kv_slots':len(expected.slot_sources)}]
+    assert calls[0][1]['production_packing'] is True
+
+
 def test_cold_source_preparation_seals_geometry_without_second_parse(tmp_path, monkeypatch):
     from natlang_neuralese.train.native_resident import binding
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'indexes'))

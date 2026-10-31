@@ -158,15 +158,16 @@ def qualify_pending(model, optimizer, train, pending_batches, args, *, backend, 
         indexed_geometry=indexed_geometry if cold_complete else None)
     groups = maximum_pending_groups(train.entries,kv,pending_batches)
     batches = [list(train.iter_indices(list(group))) for group in groups]
-    from .native_state_sft import pack_native_graphs
+    from .native_state_sft import pack_native_graphs, _communication_prefix_allowed
     from .native_prefix_packing import pack_causal_prefixes
-    import torch
     physical=[]
     for batch in batches:
         share = bool(getattr(model,'share_causal_prefixes',False))
-        dtype = model.port.embedding_weight.dtype
-        shared = (pack_causal_prefixes(batch,allow_communication=backend is None and dtype in (torch.float32,torch.float64))
-                  if share and dtype != torch.bfloat16 else None)
+        # Match packed_graph_loss: ordinary SFT shares prefixes in BF16 too.
+        # A pre-BF16 implementation reported unshared geometry while the
+        # actual capacity forward/backward already used the shared layout.
+        shared = (pack_causal_prefixes(batch, allow_communication=_communication_prefix_allowed(backend, None))
+                  if share else None)
         plan = shared[0] if shared is not None else pack_native_graphs(batch)[0]
         physical.append({'forward_tokens':plan.token_count,'kv_slots':len(plan.slot_sources)})
         del plan, shared
