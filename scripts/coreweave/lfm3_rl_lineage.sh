@@ -54,9 +54,20 @@ if [ ! -f "$SGL_VENV/.natlang-$SGL_COMMIT" ]; then
   python3 -m uv pip install -q -p "$SGL_VENV/bin/python" -r "$INPUTS/sglang-lock-$SGL_COMMIT-x86_64.txt" \
     --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > "$OUT/sglang-install.log" 2>&1 \
     || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-deps"'; exit 2; }
-  python3 -m uv pip install -q -p "$SGL_VENV/bin/python" --no-deps -e "$SGL_DIR/python" >> "$OUT/sglang-install.log" 2>&1 \
+  # The fork's Rust radix-tree core (SGLang's default unified tree backend) is built here; the other Rust extensions
+  # (gRPC, Rust server, multimodal) are unused by the actor. The loader may rebuild it for the installed torch, so
+  # cargo stays on PATH for the actor too.
+  if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/cargo" ]; then
+    (curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -q) > "$OUT/rustup.log" 2>&1 \
+      || { tail -20 "$OUT/rustup.log"; log '"event":"failed","step":"rustup"'; exit 2; }
+  fi
+  export PATH="$HOME/.cargo/bin:$PATH"
+  SGLANG_BUILD_RUST_EXTS=mem_cache python3 -m uv pip install -q -p "$SGL_VENV/bin/python" --no-deps -e "$SGL_DIR/python" >> "$OUT/sglang-install.log" 2>&1 \
     || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-fork"'; exit 2; }
-  "$SGL_VENV/bin/python" -c "import sglang, sgl_kernel, torch; print(sglang.__file__, torch.__version__, torch.cuda.is_available())" >> "$OUT/sglang-install.log" 2>&1 \
+  "$SGL_VENV/bin/python" -c "import sglang.srt.mem_cache.rust_tree_core.extension as e; e.load_tree_core_extension()" >> "$OUT/sglang-install.log" 2>&1 \
+    || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-rust-tree-core"'; exit 2; }
+  KERNEL=sgl_kernel; nvidia-smi >/dev/null 2>&1 || KERNEL=sglang  # no driver in a CPU check sandbox
+  "$SGL_VENV/bin/python" -c "import sglang, $KERNEL, torch; print(sglang.__file__, torch.__version__, torch.cuda.is_available())" >> "$OUT/sglang-install.log" 2>&1 \
     || { tail -20 "$OUT/sglang-install.log"; log '"event":"failed","step":"sglang-import"'; exit 2; }
   touch "$SGL_VENV/.natlang-$SGL_COMMIT"
   log "\"event\":\"sglang_ready\",\"commit\":\"$SGL_COMMIT\",\"seconds\":$(since $s)"
@@ -76,6 +87,7 @@ if [ "$(cat "$R/COMMIT" 2>/dev/null)" != "$COMMIT" ]; then
   log "\"event\":\"runtime_ready\",\"commit\":\"$COMMIT\",\"seconds\":$(since $s)"
 fi
 NODE_BIN=$(dirname "$(command -v node)")
+export PATH="$HOME/.cargo/bin:$PATH"
 
 # 3. parent
 if [ ! -f "$L/state.json" ] && [ ! -f "$L/parent/checkpoint.pt" ]; then
