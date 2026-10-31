@@ -10,7 +10,7 @@ from ..model.native_graph_plan import Invocation, ImportSpan, compile_graph
 
 PREFIX_ARITHMETIC_VERSION = 'native-prefix-physical-alias-v2'
 PREFIX_ARITHMETIC_QUALIFICATION_PATH = 'plans/neuralese/native-prefix-arithmetic-qualification-20261031.json'
-PREFIX_ARITHMETIC_QUALIFICATION_SHA256 = 'fa20ba3232dbbefa7273f95d4635b7c2b48723cf035fb678bd925537c511b795'
+PREFIX_ARITHMETIC_QUALIFICATION_SHA256 = '896daddd10c67168ea8ff33d9d1eea42f7494bb9e045783722a8efc2039debb1'
 
 
 def pack_causal_prefixes(examples, *, allow_communication=True):

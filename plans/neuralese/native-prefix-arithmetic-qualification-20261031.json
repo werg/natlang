@@ -109,6 +109,84 @@
     },
     "performance_claim": "Geometry only. No full model or GPU throughput benchmark was run."
   },
+  "native_sft_regressions": {
+    "command": {
+      "environment": {
+        "CUDA_VISIBLE_DEVICES": "",
+        "MKL_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "training/neuralese:."
+      },
+      "launcher": [
+        "python3",
+        "scripts/memory_ledger.py",
+        "run",
+        "--budget-gb",
+        "3",
+        "--class",
+        "experiment",
+        "--priority",
+        "medium",
+        "--reserve-gb",
+        "1",
+        "--wait",
+        "3600",
+        "--"
+      ],
+      "pytest": [
+        ".venv-neuralese/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/neuralese/test_native_prefix_packing.py::test_bf16_ordinary_sft_reuses_exact_raw_prefixes_with_bounded_gradient_change",
+        "tests/neuralese/test_native_communication_prefix.py::test_bf16_sft_shares_only_raw_prefixes_and_preserves_producer_consumer_supervision",
+        "tests/neuralese/test_native_communication_prefix.py::test_qat_sampled_precision_gates_communication_prefix_packing_on_tiny_graphs",
+        "tests/neuralese/test_native_prefix_qat_gate.py",
+        "tests/neuralese/test_checkpoint_file_storage.py::test_sft_directory_inherits_then_changes_without_losing_visits",
+        "tests/neuralese/test_checkpoint_input_offload.py::test_native_sft_explicit_offload_inherits_resume_mode_without_reset",
+        "tests/neuralese/test_diloco_checkpoint_surface.py::test_mmap_coordinator_surface_matches_actual_trainable_parameters",
+        "tests/neuralese/test_diloco_drained_stop.py::test_drain_request_yields_registrable_source_append",
+        "tests/neuralese/test_native_new_outer_entry.py"
+      ]
+    },
+    "coverage": [
+      "checkpoint storage preserves visits across SFT continuation",
+      "explicit checkpoint-input offload resume keeps its mode",
+      "mmap coordinator surface matches trainable parameters",
+      "drain request yields a registrable source append",
+      "native outer entry save/replay and conflicting-parent rejection"
+    ],
+    "limitations": "Does not exercise GPU execution; CUDA was unavailable to this test process by explicit masking.",
+    "result": "12 passed, 14 warnings; 14\u201315s across two runs against the same receipt contract; CPU-only; peak cgroup memory 1.1 GiB.",
+    "retry_guard_fix": {
+      "behavior": "on committed outer-transition replay, binds the shared seed to the prior authenticated reanchor receipt while requiring the writable rolling slot as explicit continuation parent",
+      "commit": "f0a982221",
+      "path": "training/neuralese/natlang_neuralese/train/native_diloco.py",
+      "sha256": "7c0d5075214d8b91b83fb3f4fbb78e1ea2a4ce43b50494d7176af411697f16b6"
+    },
+    "test_source_bindings": [
+      {
+        "path": "tests/neuralese/test_checkpoint_file_storage.py",
+        "sha256": "740a3052e4678719b1d42ed167e127323da9ef6e8fcd24a6b4719842013f4aa8"
+      },
+      {
+        "path": "tests/neuralese/test_checkpoint_input_offload.py",
+        "sha256": "c88aa32d3f885d4cdedc819714d67e5c7dfbd681382c3e3f8bc306924dd35e76"
+      },
+      {
+        "path": "tests/neuralese/test_diloco_checkpoint_surface.py",
+        "sha256": "4a9b5c81dc046d096101adf1e6f9067be0f21f1be771a3a3b5f2ea5b45a15655"
+      },
+      {
+        "path": "tests/neuralese/test_diloco_drained_stop.py",
+        "sha256": "697a5d64a1dba9dd9670e4dcb02c901465c2ec101afa0ed7122b5665902d7cc2"
+      },
+      {
+        "path": "tests/neuralese/test_native_new_outer_entry.py",
+        "sha256": "45b9a745545368ea2918815d0fc901b729852a5f9d8181b56a7ae5bf0966b227"
+      }
+    ]
+  },
   "qat_gate": {
     "live_update_basis": {
       "checkpoint_global_step": 61,
@@ -131,17 +209,24 @@
       "14c20617c9be99415f6887b5eb69a1bc48854c4d",
       "8cf6ce3d7",
       "57345a84b",
-      "913bff106"
+      "913bff106",
+      "f0a982221",
+      "1f90a8123"
     ],
     "implementation_files": [
       {
         "path": "training/neuralese/natlang_neuralese/train/native_state_sft.py",
         "sha256": "eaa828abaf78eb37498a1481edee9beb1c74e651ab7a9761b62434564572029e"
+      },
+      {
+        "path": "training/neuralese/natlang_neuralese/train/native_diloco.py",
+        "sha256": "7c0d5075214d8b91b83fb3f4fbb78e1ea2a4ce43b50494d7176af411697f16b6"
       }
     ],
     "later_schedule_source": "resume53/run/learner/checkpoint.pt; metadata-loaded state was global_step 59 when reconstructing update 60",
     "oversize_gate_source_commit": "913bff106; native_state_sft.py hash above is the final combined source, including failure-path LR restoration and proof-history carry",
     "prefix_packing_source_commit": "9e29372b5; source file not self-hashed because its constant pins this receipt",
+    "qualification_pin_commit": "1f90a8123",
     "recipe_path": "runs/lfm3-sft-successors/joint-v4-full-successor-20261031/recipe.json",
     "recipe_sha256": "32a814d1199b7598acb8161c02eb198a5665877e3bd40b4c565a599ed97cfdfb",
     "reconstructed_pre_update": "global_step 52 with zero exposure credits; post-update checkpoint states global_step 53 and 82 first-visit credits",
