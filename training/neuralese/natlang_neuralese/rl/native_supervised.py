@@ -292,6 +292,35 @@ def qualified_foundation_handoff(config, checkpoint, report_path):
     return True
 
 
+def rolling_resume_parent(config, state, directory):
+    """Authenticate an earned same-slot retry without rewriting its old parent history.
+
+    The caller owns the controller lock. The immutable control binds both the
+    previously selected parent and the exact rolling file at launch. A later
+    retry needs a fresh control if the slot has advanced.
+    """
+    control = config.get('rolling_sft_resume')
+    if control is None:
+        return state['checkpoint'], None
+    if not isinstance(control, dict) or control.get('schema') != 'natlang.rolling-sft-resume/1':
+        raise ValueError('invalid rolling SFT resume control')
+    slot = (Path(directory) / 'checkpoint.pt').resolve(strict=True)
+    if Path(control.get('checkpoint_path', '')).resolve(strict=True) != slot:
+        raise ValueError('rolling SFT resume must bind the actual output checkpoint slot')
+    old = Path(state['checkpoint']).resolve(strict=True)
+    if Path(control.get('previous_checkpoint_path', '')).resolve(strict=True) != old:
+        raise ValueError('rolling SFT resume changed its controller parent')
+    if sha256_file_hex_cached(old) != control.get('previous_checkpoint_sha256'):
+        raise ValueError('rolling SFT resume previous controller parent changed')
+    if sha256_file_hex_cached(slot) != control.get('checkpoint_sha256'):
+        raise ValueError('rolling SFT resume checkpoint changed')
+    record = {'schema':control['schema'], 'checkpoint_path':str(slot),
+              'checkpoint_sha256':control['checkpoint_sha256'],
+              'previous_checkpoint_path':str(old),
+              'previous_checkpoint_sha256':control['previous_checkpoint_sha256']}
+    return str(slot), record
+
+
 def execute(config,state,state_path,control):
     """Existing bridge kind=round enters here without starting a rollout actor."""
     from .production import run_command
@@ -304,8 +333,13 @@ def execute(config,state,state_path,control):
             return state
     directory=Path(config['out'])/'learner'
     report_path=directory/'report.json'
+    selected_parent, rolling = rolling_resume_parent(config, state, directory)
+    if rolling is not None:
+        history = state.setdefault('rolling_sft_resume_history', [])
+        if not history or history[-1] != rolling:
+            history.append(rolling)
     values={**{k:v for k,v in config.items() if isinstance(v,(str,int,float,list))},
-        'checkpoint':state['checkpoint'],'policy_id':sha256_file_hex_cached(state['checkpoint']),
+        'checkpoint':selected_parent,'policy_id':sha256_file_hex_cached(selected_parent),
         'learner_out':str(directory),'trainer_args':stage_parameter_args(config['trainer_parameters']),
         'seed_trainer_args':stage_parameter_args(config['trainer_parameters'])}
     if control is not None:values['_run_control']=control
