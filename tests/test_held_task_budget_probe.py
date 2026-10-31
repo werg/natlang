@@ -23,6 +23,16 @@ def queues(tmp_path, count):
     return result
 
 
+def test_json_budgets_survive_unspecified_cli_values_and_explicit_cli_wins():
+    args = SimpleNamespace(case_seconds=None, max_model_requests=None, max_turns=64, workers=None)
+    spec = probe.apply_cli_budgets({'case_seconds': 1200, 'max_model_requests': 64, 'max_turns': 256}, args)
+    assert spec == {'case_seconds': 1200, 'max_model_requests': 64, 'max_turns': 64, 'workers': 8}
+
+    defaults = probe.apply_cli_budgets({}, SimpleNamespace(
+        case_seconds=None, max_model_requests=None, max_turns=None, workers=None))
+    assert defaults == {'case_seconds': 7200, 'max_model_requests': 1000, 'max_turns': 1000, 'workers': 8}
+
+
 def test_probe_bounds_real_collector_processes_and_refills_slots(tmp_path, monkeypatch):
     events = tmp_path / 'events'
     script = tmp_path / 'collector.py'

@@ -110,16 +110,28 @@ def recipe_spec(path: Path) -> dict:
     return dict(found[0])
 
 
+def apply_cli_budgets(spec: dict, args) -> dict:
+    """Apply explicit CLI limits without erasing limits already bound in JSON."""
+    defaults = {'case_seconds': 7200, 'max_model_requests': 1000, 'max_turns': 1000, 'workers': 8}
+    for name in defaults:
+        value = getattr(args, name)
+        if value is not None:
+            spec[name] = value
+        else:
+            spec.setdefault(name, defaults[name])
+    return spec
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--spec-from', type=Path, help='recipe whose task_eval (packet, cases) is measured')
     parser.add_argument('--spec', help='task_eval JSON instead of --spec-from')
     parser.add_argument('--server', required=True, help='OpenAI-compatible base URL')
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--case-seconds', type=int, default=7200)
-    parser.add_argument('--max-model-requests', type=int, default=1000)
-    parser.add_argument('--max-turns', type=int, default=1000)
-    parser.add_argument('--workers', type=int, default=8)
+    parser.add_argument('--case-seconds', type=int)
+    parser.add_argument('--max-model-requests', type=int)
+    parser.add_argument('--max-turns', type=int)
+    parser.add_argument('--workers', type=int)
     parser.add_argument('--model-concurrency', type=int, default=2)
     parser.add_argument('--cases', help='comma-separated packet row indices instead of the spec subset (e.g. the '
                         'tasks a stopped probe did not finish)')
@@ -134,8 +146,10 @@ def main(argv=None) -> int:
     spec = json.loads(args.spec) if args.spec else recipe_spec(args.spec_from)
     if args.cases:
         spec['cases'] = [int(index) for index in args.cases.split(',')]
-    spec.update(case_seconds=args.case_seconds, max_model_requests=args.max_model_requests,
-                max_turns=args.max_turns, workers=args.workers)
+    # Explicit CLI values take precedence; otherwise retain the task_eval's
+    # declared limits, falling back to the historical probe defaults only when
+    # the JSON omitted a field.
+    spec = apply_cli_budgets(spec, args)
     spec = task_cadence.parse_task_eval(spec)
     evaluation = task_cadence.TaskEval(spec, args.out, None, prompt_rendering='full')
     run = evaluation.root / 'probe'
