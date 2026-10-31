@@ -14,7 +14,7 @@ from test_native_state_sft import graph, authenticated_pair, source_manifest
 
 def test_unearned_stage_replacement_is_bound_and_rejects_earned_rows():
     from natlang_neuralese.train.native_continuation import supersede_unearned_stage
-    frame = {'step': 0, 'epoch': 0, 'cursor': 0, 'source_row_bindings': {'a': 'b'},
+    frame = {'step': 0, 'epoch': 0, 'cursor': 0, 'source_row_bindings': {'a': 'b'}, 'source_row_order': ['a'],
              'exposure_counts': {'a': 0}, 'source_receipts': [{'sha256': 'old'}]}
     proof = {'schema': 'natlang.unearned-sft-source-replacement/1', 'old_stage': 'old',
              'new_stage': 'new', 'parent_sha256': 'parent', 'old_source_sha256': 'old',
@@ -24,7 +24,7 @@ def test_unearned_stage_replacement_is_bound_and_rejects_earned_rows():
         parent_sha256='parent', train_sha256='new', held_sha256='held', new_stage='new')
     assert result == {} and record['old_graph_visits'] == 0 and frame['exposure_counts']['a'] == 0
     for change in ({'exposure_counts': {'a': 1}}, {'step': 1}, {'accumulated_gradients': {}},
-                   {'pending_source_rows': {'a': {}}}):
+                   {'pending_source_rows': {'a': {}}}, {'exposure_counts': {}}):
         with pytest.raises(ValueError):
             supersede_unearned_stage({'old': {**frame, **change}}, training, proof,
                 parent_sha256='parent', train_sha256='new', held_sha256='held', new_stage='new')

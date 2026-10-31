@@ -321,7 +321,11 @@ def supersede_unearned_stage(progress, training, proof, *, parent_sha256, train_
             or any('grad' in str(k).lower() and training[k] is not None for k in training)):
         raise ValueError('unearned SFT replacement needs preserved optimizer and RNG')
     rows = frame.get('source_row_bindings') or {}
-    if not rows or len(rows) != proof.get('old_planned_rows'):
+    counts = frame.get('exposure_counts')
+    order = frame.get('source_row_order')
+    if (not rows or len(rows) != proof.get('old_planned_rows') or not isinstance(counts, dict)
+            or set(counts) != set(rows) or not isinstance(order, list)
+            or len(order) != len(rows) or set(order) != set(rows)):
         raise ValueError('unearned SFT replacement row inventory differs')
     result = dict(progress)
     result.pop(old)
