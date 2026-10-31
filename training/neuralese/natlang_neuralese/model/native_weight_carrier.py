@@ -1514,15 +1514,7 @@ class _TorchStoredLinear(torch.autograd.Function):
     def backward(ctx, grad):
         x, stored = ctx.saved_tensors
         flat_grad, flat_x = grad.reshape(-1, grad.shape[-1]), x.reshape(-1, x.shape[-1])
-        if ctx.needs_input_grad[0] and grad.is_cuda and grad.dtype in (torch.bfloat16, torch.float32):
-            # Canonicalize the row geometry of the input adjoint. cuBLAS can
-            # otherwise choose different reductions for a packed invocation
-            # and the same rows evaluated separately by the cache oracle.
-            rows = flat_grad.shape[0]
-            padded = torch.nn.functional.pad(flat_grad, (0, 0, 0, (-rows) % 128))
-            dx = (padded @ stored)[:rows].reshape(*grad.shape[:-1], stored.shape[-1])
-        else:
-            dx = (grad @ stored) if ctx.needs_input_grad[0] else None
+        dx = (grad @ stored) if ctx.needs_input_grad[0] else None
         dw = None
         if ctx.needs_input_grad[1]:
             def contribution(section):

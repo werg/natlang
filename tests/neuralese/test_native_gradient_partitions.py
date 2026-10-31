@@ -616,24 +616,3 @@ def test_first_order_checkpoint_context_crosses_worker_and_refuses_expired_scope
         scope.finish()
     with pytest.raises(RuntimeError,match='outlived'):
         callback()
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
-@pytest.mark.parametrize('dtype', [torch.bfloat16, torch.float32])
-def test_stored_linear_input_adjoint_is_independent_of_invocation_row_geometry(dtype):
-    from natlang_neuralese.model.native_weight_carrier import stored_linear
-    torch.manual_seed(914)
-    weight = torch.randn(2048, 2048, device='cuda', dtype=dtype)
-    inputs = torch.randn(32, 2048, device='cuda', dtype=dtype, requires_grad=True)
-    upstream = torch.randn(32, 2048, device='cuda', dtype=dtype)
-    previous = torch.backends.cuda.matmul.allow_tf32
-    torch.backends.cuda.matmul.allow_tf32 = False
-    try:
-        grouped = stored_linear(inputs, weight, storage_dtype=dtype)
-        split = torch.cat([stored_linear(part, weight, storage_dtype=dtype)
-                           for part in (inputs[:18], inputs[18:])])
-        whole_dx = torch.autograd.grad(grouped, inputs, upstream, retain_graph=True)[0]
-        split_dx = torch.autograd.grad(split, inputs, upstream)[0]
-        assert torch.equal(whole_dx, split_dx)
-    finally:
-        torch.backends.cuda.matmul.allow_tf32 = previous
