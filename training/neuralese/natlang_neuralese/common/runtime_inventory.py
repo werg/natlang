@@ -315,3 +315,63 @@ def python_runtime_binding(package=None):
         raise ValueError('native actor Python package has no source inventory')
     return {'schema': 'natlang.python-runtime/1',
             'sha256': canonical_json_sha256_hex(files), 'files': len(files)}
+
+
+def assemble_protected_runtime_inputs(predecessor, destination, *, bound_files=()):
+    """Stage registry-selected held packets and verify the exact runtime closure.
+
+    A git archive intentionally omits generated packets. Inherit only the
+    evaluation-only packet cases selected by the destination registry, verify
+    their bytes against the qualified predecessor, then run ProtectedWorlds
+    against the destination itself. Other corpus entries are not dependencies.
+    Additional absolute control/fixture bindings are verified without copying.
+    """
+    import shutil
+    from .custody import ProtectedWorlds
+    predecessor, destination = Path(predecessor).resolve(strict=True), Path(destination).resolve(strict=True)
+    registry = destination / 'training/neuralese_corpora.json'
+    value = json.loads(registry.read_text())
+    entries = value.get('corpora', value) if isinstance(value, dict) else value
+    packets = []
+    for entry in entries:
+        if (not isinstance(entry, dict) or entry.get('admission') != 'evaluation-only-never-training'
+                or 'cases.jsonl' not in (entry.get('include') or [])):
+            continue
+        relative = Path(entry['path']) / 'cases.jsonl'
+        if relative.is_absolute() or '..' in relative.parts:
+            raise ValueError('evaluation packet must be a safe runtime-relative path')
+        source = (predecessor / relative).resolve(strict=True)
+        if not source.is_relative_to(predecessor) or not source.is_file():
+            raise ValueError('predecessor evaluation packet escapes its frozen runtime')
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.parent.resolve(strict=True).is_relative_to(destination):
+            raise ValueError('evaluation packet destination escapes its frozen runtime')
+        expected = sha256_file_hex(source)
+        if target.exists():
+            if not target.resolve(strict=True).is_relative_to(destination) or sha256_file_hex(target) != expected:
+                raise ValueError('destination evaluation packet differs from qualified predecessor')
+        else:
+            temporary = target.with_name(target.name + '.runtime-assembly-pending')
+            with source.open('rb') as src, temporary.open('xb') as dst:
+                shutil.copyfileobj(src, dst, length=1024 * 1024)
+                dst.flush()
+                os.fsync(dst.fileno())
+            if sha256_file_hex(temporary) != expected:
+                temporary.unlink(missing_ok=True)
+                raise ValueError('assembled evaluation packet failed readback')
+            os.replace(temporary, target)
+        packets.append({'id':entry.get('id'), 'path':str(relative), 'sha256':expected})
+    controls = []
+    for item in bound_files:
+        path = Path(item['path']).resolve(strict=True)
+        digest = sha256_file_hex(path)
+        if digest != item['sha256']:
+            raise ValueError('runtime control or prompt fixture changed: ' + str(path))
+        controls.append({'path':str(path), 'sha256':digest})
+    worlds = ProtectedWorlds.load(root=destination)
+    return {'schema':'natlang.protected-runtime-input-closure/1',
+            'predecessor':str(predecessor), 'destination':str(destination),
+            'corpus_registry_sha256':sha256_file_hex(registry),
+            'protected_registry_sha256':sha256_file_hex(destination/'training/protected-worlds.json'),
+            'evaluation_packets':packets, 'bound_files':controls, 'protected_worlds_sha256':worlds.digest}
