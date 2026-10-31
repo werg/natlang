@@ -2158,7 +2158,9 @@ def _main(argv=None, *, requested_refresh):
     if args.objective_spec is not None:
         spec_sha256 = sha256_file_hex_cached(args.objective_spec)
         objective_binding = {'path': str(args.objective_spec.resolve()), 'sha256': spec_sha256}
-        spec = json.loads(args.objective_spec.read_text())
+        # The admitted objective parse is shared per process (an RL stage has just written and opened it).
+        from ..rl.native_replay import _admitted_objective
+        spec = _admitted_objective(args.objective_spec.resolve())[1]
         if ((spec.get('schema')=='natlang.native-offline-pairwise-objective/1' and spec.get('kind')=='native-offline-pairwise')
                 or (spec.get('schema')=='natlang.native-failure-repair-dpo-objective/1'
                     and spec.get('kind')=='native-failure-repair-dpo')):
