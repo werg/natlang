@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from functools import wraps
 from itertools import count
 
+import torch
+
 _ACTIVE = ContextVar('natlang_graph_gradient_partitions', default=None)
 _FRAME_IDS = count()
 _PRIMAL_ROWS = ContextVar('natlang_graph_primal_rows', default=None)
@@ -226,6 +228,7 @@ def reduce_parameter_rows(partitions, count, contribution, *, add=None):
     return total
 
 
+@torch._dynamo.disable
 @_scoped_weight_preparations
 def token_local_chunks(h, chunk_tokens, callback, *, cpu_rowwise=False):
     """Evaluate each physical FFN row once, with invocation-local routing plans.
