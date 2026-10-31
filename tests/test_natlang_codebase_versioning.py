@@ -30,3 +30,19 @@ def test_version_codebase_rejects_symlinked_source_files(tmp_path):
     (source / 'linked').symlink_to(outside)
     with pytest.raises(ValueError, match='cannot be a symlink'):
         version_codebase(source, tmp_path / 'app-v2', ('linked',))
+
+
+def test_version_codebase_independence_check_matches_ignored_runtime_cache_files(tmp_path):
+    source = tmp_path / 'app-v1'
+    cache = source / 'host' / 'python-deps' / '__pycache__'
+    cache.mkdir(parents=True)
+    (cache / 'module.pyc').write_bytes(b'ignored cache')
+    journal = source / 'host' / 'journals' / 'old'
+    journal.mkdir(parents=True)
+    (journal / 'events.jsonl').write_text('ignored journal\n')
+    (source / 'host' / 'worker.py').write_text('worker\n')
+    target = tmp_path / 'app-v2'
+    version_codebase(source, target, (part for part in ('host',)))
+    assert (target / 'host' / 'worker.py').read_text() == 'worker\n'
+    assert not (target / 'host' / 'python-deps' / '__pycache__').exists()
+    assert not (target / 'host' / 'journals').exists()

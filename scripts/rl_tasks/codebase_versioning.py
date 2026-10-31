@@ -10,6 +10,7 @@ from typing import Iterable
 
 def version_codebase(source: Path, destination: Path, include: Iterable[str] = (
         'metadata.json', 'package', 'worlds', 'source')) -> Path:
+    include = tuple(include)
     source = source.resolve(strict=True)
     destination = destination.absolute()
     if destination.exists():
@@ -45,12 +46,19 @@ def version_codebase(source: Path, destination: Path, include: Iterable[str] = (
 
 
 def _assert_independent(source: Path, destination: Path, include: Iterable[str]) -> None:
+    ignored_dirs = {'journals', '__pycache__'}
     for relative in include:
         src, dst = source / relative, destination / relative
         if src.is_file():
             pairs = [(src, dst)]
         else:
-            pairs = [(path, dst / path.relative_to(src)) for path in src.rglob('*') if path.is_file()]
+            pairs = []
+            for path in src.rglob('*'):
+                rel = path.relative_to(src)
+                if any(part in ignored_dirs for part in rel.parts) or path.name.endswith('.pyc'):
+                    continue
+                if path.is_file():
+                    pairs.append((path, dst / rel))
         for original, copy in pairs:
             if not copy.is_file() or original.stat().st_ino == copy.stat().st_ino and original.stat().st_dev == copy.stat().st_dev:
                 raise RuntimeError(f'version snapshot shares or lacks regular-file bytes: {original}')
