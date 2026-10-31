@@ -4,6 +4,22 @@ from pathlib import Path
 import torch
 
 
+def validate_backbone_state_coverage(expected_state, checkpoint_state):
+    """Require an exact, shape-compatible checkpoint for every backbone tensor."""
+    if not isinstance(checkpoint_state, dict):
+        raise ValueError('checkpoint backbone state must be a mapping')
+    expected_keys = set(expected_state)
+    actual_keys = set(checkpoint_state)
+    missing = sorted(expected_keys - actual_keys)
+    unexpected = sorted(actual_keys - expected_keys)
+    if missing or unexpected:
+        raise ValueError(f'checkpoint backbone state is incomplete (missing={missing[:8]}, unexpected={unexpected[:8]})')
+    for name, expected in expected_state.items():
+        value = checkpoint_state[name]
+        if not torch.is_tensor(value) or tuple(value.shape) != tuple(expected.shape):
+            raise ValueError(f'checkpoint backbone tensor has a mismatched shape or type: {name}')
+
+
 def restore_backbone(base, architecture, state, *, device, dtype):
     from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForImageTextToText, AutoTokenizer
 
@@ -30,6 +46,7 @@ def restore_backbone(base, architecture, state, *, device, dtype):
     model_class = AutoModelForImageTextToText if architecture == 'qwen3_5' else AutoModelForCausalLM
     with torch.device('meta'):
         skeleton = model_class.from_config(config)
+    validate_backbone_state_coverage(skeleton.state_dict(), state)
     model_type = type(skeleton)
     del skeleton
     model = model_type.from_pretrained(

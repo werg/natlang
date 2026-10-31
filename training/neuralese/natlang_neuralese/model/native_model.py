@@ -159,6 +159,37 @@ def base_inventory(base):
     """Pin actual model/tokenizer inputs, reusing the shared verified file cache."""
     return _input_inventory(base, include_weights=True)
 
+
+def _checkpoint_bound_config_inventory(base, inventory, backbone_state):
+    """Verify the small base files when a complete checkpoint supplies all backbone weights.
+
+    A saved native checkpoint carries its complete ``backbone_state`` and the
+    original full base inventory. Restoration then needs the original config
+    and tokenizer, but reading base weight shards again is unnecessary. This
+    path accepts only a full saved inventory with safetensors entries and a
+    nonempty checkpoint backbone, and verifies every local config/tokenizer
+    file against that inventory before constructing the model from checkpoint
+    weights.
+    """
+    if not isinstance(inventory, dict) or not inventory or not isinstance(backbone_state, dict) or not backbone_state:
+        raise ValueError('config-only base restore requires the full pinned inventory and checkpoint backbone state')
+    if not any(name in backbone_state for name in (
+            'model.embed_tokens.weight', 'model.language_model.embed_tokens.weight')):
+        raise ValueError('checkpoint backbone state lacks its pinned token embedding')
+    if not any(name.endswith('.safetensors') for name in inventory):
+        raise ValueError('checkpoint base inventory does not bind safetensors weights')
+    names = {'config.json', 'generation_config.json', 'model.safetensors.index.json',
+             'tokenizer.json', 'tokenizer.model', 'spiece.model', 'tokenizer_config.json',
+             'special_tokens_map.json', 'chat_template.jinja', 'vocab.json', 'merges.txt',
+             'added_tokens.json'}
+    expected_config = {name: digest for name, digest in inventory.items() if name in names}
+    if 'config.json' not in expected_config:
+        raise ValueError('checkpoint base inventory does not bind config.json')
+    actual_config = tokenizer_inventory(base)
+    if actual_config != expected_config:
+        raise ValueError('local config/tokenizer inventory differs from the checkpoint-bound pinned base')
+    return actual_config
+
 def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", native_attention_precision=None, token_override_ids=None, token_override_dtype=None, sparse_row_dtype=None, native_ordinary_precision=None, native_norm_execution='stable-v1', history_reasoning_policy=None, native_shared_execution=None, backbone_state=None):
     """Return (SharedStateModel, tokenizer, RoleTokens, model_config).
 
@@ -168,9 +199,24 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     """
     precision = configure_native_precision()
     base = Path(base).resolve(strict=True)
-    actual = base_inventory(base)
-    if inventory is not None and actual != inventory:
-        raise ValueError('native checkpoint base inventory differs from the pinned model inputs')
+    base_restore = None
+    if backbone_state is not None:
+        if inventory is None:
+            raise ValueError('checkpoint backbone restore requires its full source base inventory')
+        actual_config = _checkpoint_bound_config_inventory(base, inventory, backbone_state)
+        # Preserve the full source identity in the restored model config. The
+        # separate receipt records which small local files were actually read.
+        actual = inventory
+        base_restore = {
+            'schema': 'natlang.native-config-only-checkpoint-restore/1',
+            'mode': 'checkpoint-backbone-state+verified-config-tokenizer',
+            'pinned_base_inventory_sha256': canonical_json_sha256_hex(inventory),
+            'verified_local_files': actual_config,
+        }
+    else:
+        actual = base_inventory(base)
+        if inventory is not None and actual != inventory:
+            raise ValueError('native checkpoint base inventory differs from the pinned model inputs')
     architecture = json.loads((base / 'config.json').read_text())['model_type']
     if architecture == 'qwen3_5' and native_ordinary_precision in (None, 'fp32-norms-v1'):
         from .native_parameter_precision import QWEN35_DELTA_PROFILE
@@ -241,6 +287,8 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
               'rank': rank, 'marker_ids': list(roles.ids), 'precision': precision,
               'native_linear_precision': native_linear_precision,
               'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer), 'dtype': str(dtype)}
+    if base_restore is not None:
+        config['base_restore'] = base_restore
     if architecture == 'lfm3':
         # The modeling code is part of the backbone identity: the vendored pinned remote code, hash-verified.
         from ..third_party import lfm3

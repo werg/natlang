@@ -40,6 +40,8 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
         'native_identity': dict(identity),
         'history_reasoning': dict(tokenizer.natlang_history_reasoning),
         **({'native_participant': participant} if participant is not None else {})}
+    if config.get('base_restore') is not None:
+        engine.rl_policy_binding['base_restore'] = dict(config['base_restore'])
     if _state.get('inference_source') is not None:
         engine.rl_policy_binding['inference_source'] = dict(_state['inference_source'])
     if engine.native_actor_view is not None:
