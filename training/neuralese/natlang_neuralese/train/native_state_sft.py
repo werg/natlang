@@ -1102,7 +1102,7 @@ def _resume_identity_for_comparison(identity):
 
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
           source_hash, source_row_bindings, held_row_bindings, exposure_counts, global_step, rng, metrics,
-          architecture, options, fp8_state=None, sft_progress=None, async_allowed=False):
+          architecture, options, fp8_state=None, sft_progress=None, async_allowed=False, reserve_only=False):
     metrics['checkpoint_selection'] = {'continuation':'newest-full-state',
         'raw_ce_best_export':not bool(options.get('ce_supervision_active')),
         'quality_policy':'supervisor-task-and-declared-target-evidence' if options.get('ce_supervision_active')
@@ -1133,6 +1133,9 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
     if sft_progress is not None:
         sft_progress.clear()
         sft_progress.update(state['training']['sft_progress'])
+    if reserve_only:
+        policy.reserve_next(state, optimizer)
+        return
     # Raw historical CE can be prompt dominated and is not the declared new
     # objective. Never let it silently nominate a best-policy export.
     metric = None if options.get('ce_supervision_active') else metrics.get('held', {}).get('loss')
@@ -3605,6 +3608,16 @@ def _main(argv=None, *, requested_refresh):
                 total_end = min(total_end, step + anneal.remaining(global_step))
             if policy.signaled or step >= total_end:
                 break
+            # Reserve the exact future checkpoint inode before any optimizer
+            # work; after each commit this reacquires blocks before proceeding.
+            _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                source_hash=source_hash, source_row_bindings=source_row_bindings,
+                held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                rng=capture_training_rng_state(args.device), metrics=metrics,
+                architecture=config['architecture'], options={**checkpoint_options, '_source_row_order':source_order},
+                fp8_state=backend.extra_state() if backend is not None else None,
+                sft_progress=carried_progress, reserve_only=True)
             update_started = time.monotonic()
             fetch_rng = capture_training_rng_state(args.device)
             try:

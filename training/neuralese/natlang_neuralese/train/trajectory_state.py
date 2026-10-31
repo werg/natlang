@@ -135,13 +135,24 @@ def record_checkpoint_write(path, nbytes, seconds):
         pass
 
 
-def atomic_checkpoint(path, state):
+def atomic_checkpoint(path, state, *, reservation=None):
     """Write ``state`` atomically; data jobs pause (io-quiet marker) while the bytes are going out."""
-    from .checkpoint_safety import CheckpointWriteAdmission, checkpoint_size_upper_bound
+    from .checkpoint_safety import CheckpointWriteAdmission, checkpoint_size_upper_bound, checkpoint_target_lock
     bound = checkpoint_size_upper_bound(state)
-    with CheckpointWriteAdmission(path, bound):
+    if reservation is None:
+        with checkpoint_target_lock(path):
+            with CheckpointWriteAdmission(path, bound):
+                with io_quiet(f'checkpoint write {Path(path).name}'):
+                    _atomic_checkpoint(path, state, write_bound_bytes=bound)
+    else:
+        if Path(path) != reservation.target or bound > reservation.bound:
+            raise ValueError('checkpoint exceeds its persistent reservation or targets another slot')
+        # A prior interrupted final truncate can shrink the inode; restore its
+        # allocation before retrying without touching the committed parent.
+        if os.fstat(reservation._fd).st_size < reservation.bound:
+            reservation.acquire(reservation.bound)
         with io_quiet(f'checkpoint write {Path(path).name}'):
-            _atomic_checkpoint(path, state, write_bound_bytes=bound)
+            _atomic_checkpoint(path, state, write_bound_bytes=reservation.bound, reservation=reservation)
     # The verified copy to the external disk runs in the background (checkpoint_offload; never fails the write).
     from .checkpoint_offload import after_write
     after_write(path)
@@ -202,13 +213,13 @@ class _CheckpointDigestWriter:
         return self.stream.flush()
 
 
-def _atomic_checkpoint(path, state, *, write_bound_bytes=None):
+def _atomic_checkpoint(path, state, *, write_bound_bytes=None, reservation=None):
     path = Path(path)
-    pending = path.with_suffix('.pending')
+    pending = reservation.pending if reservation is not None else path.with_suffix('.pending')
     started = time.monotonic()
     try:
-        with pending.open('wb') as stream:
-            if write_bound_bytes is not None:
+        with (reservation.stream() if reservation is not None else pending.open('wb')) as stream:
+            if write_bound_bytes is not None and reservation is None:
                 # Reserve the actual pending inode too. An unrelated writer
                 # need not honor our lock, so a free-space check alone cannot
                 # protect the bytes this serialization will consume.
@@ -230,9 +241,17 @@ def _atomic_checkpoint(path, state, *, write_bound_bytes=None):
         # Make the rename itself durable: a power loss must leave the old or the new file, never neither.
         directory = os.open(path.parent, os.O_DIRECTORY)
         try:
-            os.fsync(directory)
+            if reservation is None:
+                os.fsync(directory)
+            else:
+                # The rename has happened; retain this in-memory state and
+                # retry transient space exhaustion until publication is durable.
+                from .checkpoint_safety import save_with_space_retry
+                save_with_space_retry(lambda: os.fsync(directory))
         finally:
             os.close(directory)
+        if reservation is not None:
+            reservation.committed()
         committed = path.stat()
         if any(getattr(committed, field) != getattr(written_stat, field)
                for field in ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns')):
@@ -245,7 +264,8 @@ def _atomic_checkpoint(path, state, *, write_bound_bytes=None):
     except BaseException:
         # A failed write (often ENOSPC) leaves an incomplete owned temp file.
         # Remove it so a post-commit recovery save can use the reserved space.
-        pending.unlink(missing_ok=True)
+        if reservation is None:
+            pending.unlink(missing_ok=True)
         raise
 
 

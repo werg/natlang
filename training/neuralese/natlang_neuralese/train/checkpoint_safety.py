@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import fcntl
+import json
 import math
 import os
 import shutil
 import stat
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -230,6 +232,164 @@ class CheckpointWriteAdmission:
         return False
 
 
+@contextmanager
+def checkpoint_target_lock(target):
+    """Exclude other cooperating writers while a target has a live owner."""
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lock = target.with_name(target.name + '.reservation.lock')
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise CheckpointReserveError('checkpoint reservation lock is not a regular file')
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+class PersistentCheckpointReservation:
+    """Own preallocated blocks in the very inode later published as the checkpoint.
+
+    The target lock remains held across training updates. A crash leaves the
+    inode and its identity receipt for the next owner to validate and reuse.
+    A receipt never authorizes modifying the previously committed target.
+    """
+    def __init__(self, target, *, transfer_bytes=None, minimum_free_bytes=None):
+        self.target = Path(target)
+        self.pending = self.target.with_name(self.target.name + '.reserved-pending')
+        self.receipt = self.target.with_name(self.target.name + '.reservation.json')
+        self.lock = self.target.with_name(self.target.name + '.reservation.lock')
+        self.transfer_bytes = transfer_bytes
+        self.minimum_free_bytes = minimum_free_bytes
+        self._lock_fd = None
+        self._fd = None
+        self.bound = 0
+
+    def acquire(self, bound):
+        bound = int(bound)
+        if bound < 1:
+            raise ValueError('checkpoint reservation bound must be positive')
+        self.target.parent.mkdir(parents=True, exist_ok=True)
+        if self._lock_fd is None:
+            self._lock_fd = os.open(self.lock, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+            try:
+                if not stat.S_ISREG(os.fstat(self._lock_fd).st_mode):
+                    raise CheckpointReserveError('checkpoint reservation lock is not a regular file')
+                fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BaseException:
+                os.close(self._lock_fd)
+                self._lock_fd = None
+                raise
+        if self._fd is None:
+            # A crash after rename can leave the old receipt but no pending
+            # name. Remove it only if it names the committed target inode.
+            if self.receipt.exists() and not self.pending.exists() and self.target.exists():
+                try:
+                    old = json.loads(self.receipt.read_text())
+                    target_st = self.target.stat(follow_symlinks=False)
+                except (OSError, ValueError) as error:
+                    raise CheckpointReserveError('invalid post-commit reservation receipt') from error
+                if old != {'schema':'natlang.checkpoint-reservation/1',
+                           'device':target_st.st_dev, 'inode':target_st.st_ino}:
+                    raise CheckpointReserveError('orphaned checkpoint reservation receipt')
+                self.receipt.unlink()
+                self._sync_directory()
+            if self.pending.exists() or self.receipt.exists():
+                try:
+                    receipt = json.loads(self.receipt.read_text())
+                    fd = os.open(self.pending, os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0))
+                except (OSError, ValueError) as error:
+                    raise CheckpointReserveError('incomplete or invalid checkpoint reservation') from error
+                st = os.fstat(fd)
+                if (not stat.S_ISREG(st.st_mode) or receipt != {'schema':'natlang.checkpoint-reservation/1',
+                        'device':st.st_dev, 'inode':st.st_ino}):
+                    os.close(fd)
+                    raise CheckpointReserveError('checkpoint reservation inode does not match receipt')
+                self._fd = fd
+            else:
+                fd = os.open(self.pending, os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+                self._fd = fd
+                st = os.fstat(fd)
+                temp = self.receipt.with_name(self.receipt.name + '.tmp')
+                try:
+                    with temp.open('x') as stream:
+                        json.dump({'schema':'natlang.checkpoint-reservation/1', 'device':st.st_dev,
+                                   'inode':st.st_ino}, stream)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    os.replace(temp, self.receipt)
+                    self._sync_directory()
+                except BaseException:
+                    temp.unlink(missing_ok=True)
+                    os.close(fd)
+                    self._fd = None
+                    self.pending.unlink(missing_ok=True)
+                    raise
+        st = os.fstat(self._fd)
+        path_st = self.pending.stat(follow_symlinks=False)
+        if (st.st_dev, st.st_ino) != (path_st.st_dev, path_st.st_ino):
+            raise CheckpointReserveError('checkpoint reservation path was replaced')
+        # Existing size is not evidence of allocated blocks after a crash or
+        # partial write; fallocate the entire requested range again.
+        additional = max(0, bound - st.st_size)
+        if additional:
+            transfer = self.transfer_bytes
+            if transfer is None:
+                factor = float(os.environ.get('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR', '1.0'))
+                if not math.isfinite(factor) or factor < 0:
+                    raise ValueError('checkpoint transfer headroom factor must be finite and nonnegative')
+                transfer = math.ceil(bound * factor)
+            with CheckpointWriteAdmission(self.target, additional, transfer_bytes=transfer,
+                                          minimum_free_bytes=self.minimum_free_bytes):
+                os.posix_fallocate(self._fd, 0, bound)
+                os.fsync(self._fd)
+        else:
+            os.posix_fallocate(self._fd, 0, bound)
+            os.fsync(self._fd)
+        self.bound = bound
+        return self
+
+    def stream(self):
+        if self._fd is None or not self.bound:
+            raise CheckpointReserveError('checkpoint reservation is not allocated')
+        st = os.fstat(self._fd)
+        path_st = self.pending.stat(follow_symlinks=False)
+        if (st.st_dev, st.st_ino) != (path_st.st_dev, path_st.st_ino) or st.st_size < self.bound:
+            raise CheckpointReserveError('checkpoint reservation changed before write')
+        stream = os.fdopen(os.dup(self._fd), 'r+b')
+        stream.seek(0)
+        return stream
+
+    def committed(self):
+        """Called after the pending inode has been atomically renamed to target."""
+        os.close(self._fd)
+        self._fd = None
+        self.bound = 0
+        self.receipt.unlink(missing_ok=True)
+        self._sync_directory()
+
+    def _sync_directory(self):
+        fd = os.open(self.target.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def close(self):
+        if self._fd is not None:
+            os.close(self._fd)
+            self._fd = None
+        if self._lock_fd is not None:
+            fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+            os.close(self._lock_fd)
+            self._lock_fd = None
+        self.bound = 0
+
+
 class CheckpointDiskReserve:
     """Hold real filesystem blocks for one future atomic checkpoint write."""
 
@@ -408,7 +568,7 @@ def _optimizer_family(optimizer):
     muon_type = getattr(torch.optim, 'Muon', None)
     if (muon_type is not None and isinstance(optimizer, muon_type)) or type(optimizer).__name__ == 'Muon':
         return 'muon'
-    if isinstance(optimizer, torch.optim.AdamW):
+    if isinstance(optimizer, torch.optim.AdamW) or type(optimizer).__name__ == 'AdamWSR':
         return 'adamw'
     raise CheckpointReserveError(
         f'checkpoint reserve does not know optimizer state layout for {type(optimizer).__name__}')

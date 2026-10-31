@@ -90,6 +90,7 @@ class CheckpointPolicy:
         self.async_checkpoint = async_checkpoint
         self._async_writer = AsyncAtomicCheckpointWriter() if async_checkpoint else None
         self.last_committed_step = None
+        self._persistent_reservation = None
         self.best_metric: float | None = None
         self.events: list[dict] = []
         meta = self.out / "checkpoint-policy.json"
@@ -127,11 +128,27 @@ class CheckpointPolicy:
         if expected and shutil.disk_usage(self.out).free < self.free_factor * expected:
             raise OSError(errno.ENOSPC, 'insufficient space for atomic checkpoint replacement; previous file preserved', str(target))
 
+    def reserve_next(self, state, optimizer):
+        """Secure the next rolling checkpoint before advancing the optimizer."""
+        from .checkpoint_safety import (PersistentCheckpointReservation, checkpoint_size_upper_bound,
+                                        optimizer_state_size_upper_bound, save_with_space_retry)
+        self.drain_async()
+        if self._persistent_reservation is None:
+            self._persistent_reservation = PersistentCheckpointReservation(self.slot)
+        lazy = optimizer_state_size_upper_bound(optimizer, lazy=True)
+        current = optimizer_state_size_upper_bound(optimizer, lazy=False)
+        bound = checkpoint_size_upper_bound(state) + math.ceil(max(0, lazy-current) * 1.2)
+        save_with_space_retry(lambda: self._persistent_reservation.acquire(bound))
+
     def _write(self, state: dict, target: Path) -> dict:
         """Preserve the previous slot until the replacement is completely written."""
-        self._require_disk_headroom(target)
+        if self._persistent_reservation is None or target != self.slot:
+            self._require_disk_headroom(target)
         # GPU tensors are copied to host one storage at a time while writing; no second full copy in memory.
-        atomic_checkpoint(target, state)
+        if self._persistent_reservation is not None and target == self.slot:
+            atomic_checkpoint(target, state, reservation=self._persistent_reservation)
+        else:
+            atomic_checkpoint(target, state)
         event = {"time": time.time(), "path": str(target), "bytes": target.stat().st_size,
                  "previous_preserved_until_replace": True}
         self._record_committed(state)
@@ -223,7 +240,7 @@ class CheckpointPolicy:
                     f'{type(writer_error).__name__}: {writer_error}')
                 recovery_error.add_note(f'last known durable checkpoint path: {self.slot}')
                 raise
-        if self._async_writer is not None and async_allowed:
+        if self._async_writer is not None and async_allowed and self._persistent_reservation is None:
             self._require_disk_headroom(self.slot)
             if async_optimizer is None:
                 admission = {'eligible':False,'reason':'optimizer_bound_unavailable',
