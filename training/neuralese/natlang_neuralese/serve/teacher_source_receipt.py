@@ -33,7 +33,7 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
         "plan_path", "plan_sha256", "runtime_path",
         "runtime_receipt_sha256", "split", "source_groups", "trace_sha256", "request_sha256",
         "response_sha256", "transport_provenance_sha256", "actor", "typed_text_writes",
-        "target_text_spans",
+        "target_text_spans", "typed_text_inputs", "target_supervision",
     }
     if not isinstance(source, dict) or source.get("schema") != "natlang.provider-teacher-turn-source/1" or set(source) != keys:
         raise ValueError("provider teacher source receipt needs the complete declared Luna source binding")
@@ -46,6 +46,8 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
             or not source["source_groups"] or any(not isinstance(group, str) or not group for group in source["source_groups"])
             or len(set(source["source_groups"])) != len(source["source_groups"])):
         raise ValueError("provider teacher source receipt needs its exact training split and source groups")
+    if type(source.get("target_supervision")) is not bool:
+        raise ValueError("provider teacher source receipt must distinguish target from context-only supervision")
     for key in ("source_file_sha256", "source_row_sha256", "source_turn_sha256", "task_sha256",
                 "program_sha256", "prompt_sha256", "source_prompt_sha256", "target_sha256", "raw_target_sha256",
                 "target_binding_sha256", "plan_sha256",
@@ -62,7 +64,9 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
     writes = source.get("typed_text_writes")
     spans = native_text_spans
     target_spans = source.get("target_text_spans")
-    if not isinstance(writes, list) or not isinstance(spans, list) or not isinstance(target_spans, list):
+    inputs = source.get("typed_text_inputs")
+    if (not isinstance(writes, list) or not isinstance(spans, list)
+            or not isinstance(target_spans, list) or not isinstance(inputs, list)):
         raise ValueError("provider teacher source receipt needs its typed text write inventory")
     if _sha(_canonical({"messages": opening, "tools": tools or []})) != source["prompt_sha256"]:
         raise ValueError("provider teacher source prompt differs from the exact production prompt")
@@ -84,8 +88,10 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
                 raise ValueError("provider teacher native text encoder binding has invalid ids or body hash")
             matching_writes = [write for write in writes if write["block_id"] == binding["teacher_block_id"]
                                and write["body_sha256"] == binding["body_sha256"]]
-            if len(matching_writes) != 1 or binding["teacher_block_id"] in used:
-                raise ValueError("provider teacher native encoder does not match one authenticated host text write")
+            matching_inputs = [item for item in inputs if item["block_id"] == binding["teacher_block_id"]
+                               and item["body_sha256"] == binding["body_sha256"]]
+            if len(matching_writes) + len(matching_inputs) != 1 or binding["teacher_block_id"] in used:
+                raise ValueError("provider teacher native encoder does not match one authenticated text write or input")
             used.add(binding["teacher_block_id"])
             capture = binding["source_capture"]
             if (not isinstance(capture.get("policy"), dict)
@@ -103,14 +109,15 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
                         for key, item in value.items():
                             find_refs(item, path + (key,))
             find_refs(transformed)
-            if len(positions) != matching_writes[0]["context_occurrences"]:
+            expected_occurrences = ((matching_writes or matching_inputs)[0]["context_occurrences"])
+            if len(positions) != expected_occurrences:
                 raise ValueError("provider teacher text occurrence count differs from its authenticated read receipt")
             for path in positions:
                 parent, last = transformed, path[-1]
                 for part in path[:-1]: parent = parent[part]
                 parent[last] = {"type": "native_state", "id": binding["native_block_id"],
                                 "source_occurrence": binding["source_occurrence"]}
-        if used != {write["block_id"] for write in writes}:
+        if used != {write["block_id"] for write in writes} | {item["block_id"] for item in inputs}:
             raise ValueError("provider teacher native replay omitted an authenticated typed text write")
         if transformed != opening:
             raise ValueError("provider teacher native prompt differs beyond the exact authenticated text encoder rewrite")
@@ -119,12 +126,13 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
     forced_span_by_key = {(tuple(span.get("path", [])), span.get("marker")): span
                           for span in spans if isinstance(span, dict)}
     for receipt in target_spans:
-        required = {"path", "marker", "body_sha256", "rewrite_sha256", "source_turn_sha256",
+        required = {"path", "marker", "body_sha256", "rewrite_sha256", "source_turn_id", "source_turn_sha256",
                     "source_response_sha256", "raw_target_sha256"}
         if (not isinstance(receipt, dict) or set(receipt) != required
                 or not isinstance(receipt.get("path"), list)
                 or any(not isinstance(part, (str, int)) or isinstance(part, bool) for part in receipt["path"])
                 or not isinstance(receipt.get("marker"), str)
+                or not isinstance(receipt.get("source_turn_id"), str) or not receipt["source_turn_id"]
                 or (tuple(receipt.get("path", [])), receipt.get("marker")) not in forced_span_by_key
                 or not all(_valid_sha(receipt.get(key)) for key in ("body_sha256", "rewrite_sha256",
                     "source_turn_sha256", "source_response_sha256", "raw_target_sha256"))
@@ -184,6 +192,21 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
             span = spans_by_path.get(tuple(path))
             if span is None or _sha(span["text"].encode("utf-8")) != write["body_sha256"]:
                 raise ValueError("provider teacher typed text write body differs from its exact target span")
+    input_ids = set()
+    for item in inputs:
+        required = {"block_id", "type", "body_sha256", "producer_call_id", "writer_node",
+                    "transport_provenance_sha256", "request_sha256", "response_sha256", "context_occurrences"}
+        if (not isinstance(item, dict) or set(item) != required
+                or not isinstance(item.get("block_id"), str) or not item["block_id"].startswith("nzt1_")
+                or not isinstance(item.get("type"), str) or not item["type"].startswith("Neuralese<")
+                or not all(_valid_sha(item.get(key)) for key in ("body_sha256", "transport_provenance_sha256",
+                    "request_sha256", "response_sha256"))
+                or not isinstance(item.get("producer_call_id"), str) or not item["producer_call_id"]
+                or not isinstance(item.get("writer_node"), str) or not item["writer_node"]
+                or type(item.get("context_occurrences")) is not int or item["context_occurrences"] < 1
+                or item["block_id"] in input_ids or item["block_id"] in {write["block_id"] for write in writes}):
+            raise ValueError("provider teacher context-only typed text input is malformed")
+        input_ids.add(item["block_id"])
     if seen_paths | target_receipt_paths != set(spans_by_path):
         raise ValueError("provider teacher source receipt does not cover every exact native text span")
     return True

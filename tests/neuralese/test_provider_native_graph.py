@@ -46,6 +46,109 @@ def test_luna_provider_return_result_wrapper_rewrites_to_bound_native_span():
         _rewrite_target_text_spans(broken, source_turn)
 
 
+def test_luna_episode_uses_inline_return_span_as_the_authenticated_reader_writer(tmp_path):
+    engine = engine_fixture(tmp_path, "lfm")
+    def template(messages, tools=None, tokenize=False, add_generation_prompt=False, **kwargs):
+        rendered = "".join(f"<{message['role']}>{message.get('content') or ''}" +
+            "".join(f"<toolcall>{call.get('function', {}).get('name')}:{call.get('function', {}).get('arguments')}</toolcall>"
+                for call in message.get("tool_calls", [])) for message in messages)
+        if add_generation_prompt: rendered += "<assistant>"
+        return engine.tokenizer(rendered, add_special_tokens=False)["input_ids"] if tokenize else rendered
+    engine.tokenizer.apply_chat_template = template
+    tools = [{"type": "function", "function": {"name": "return_result", "parameters": {
+        "type": "object", "properties": {"status": {"type": "string"}, "value": {}},
+        "required": ["status", "value"]}}}]
+    body = 't20 t21'
+    marker = "NATLANG_INLINE_SPAN_0123456789"
+    target = {"role": "assistant", "content": marker}
+    spans = [{"path": ["content"], "marker": marker, "text": body}]
+    binding = {"body_sha256": _sha(body.encode()), "source_turn_id": "episode/0",
+        "source_turn_sha256": "3"*64, "source_response_sha256": "a"*64,
+        "raw_target_sha256": _sha(_canonical(target))}
+    opening = [{"role": "user", "content": "Write a typed result."}]
+    producer_receipt = {"schema": "natlang.provider-teacher-turn-source/1",
+        "source_path": "raw/provider.jsonl", "source_file_sha256": "1"*64,
+        "source_row_id": "teacher-program:inline-edge", "source_row_sha256": "2"*64,
+        "source_turn_index": 0, "source_turn_sha256": "3"*64, "task_sha256": "4"*64,
+        "program_sha256": "5"*64, "prompt_sha256": _sha(_canonical({"messages": opening, "tools": tools})),
+        "source_prompt_sha256": _sha(_canonical({"messages": opening, "tools": tools})),
+        "target_sha256": _sha(_canonical(target)), "raw_target_sha256": "6"*64,
+        "target_binding_sha256": "7"*64, "plan_path": "plan.json", "plan_sha256": "8"*64,
+        "runtime_path": "runtime", "runtime_receipt_sha256": "9"*64, "split": "train",
+        "source_groups": ["loghub-system:HDFS"], "trace_sha256": "a"*64,
+        "request_sha256": "b"*64, "response_sha256": "c"*64,
+        "transport_provenance_sha256": "d"*64,
+        "actor": {"model": "gpt-6-luna", "provider": "openai-codex", "role": "teacher",
+                  "transport": "pi-provider"}, "target_supervision": True,
+        "typed_text_inputs": [], "typed_text_writes": [],
+        "target_text_spans": [{"path": spans[0]["path"], "marker": spans[0]["marker"],
+            "body_sha256": binding["body_sha256"], "rewrite_sha256": _sha(_canonical(binding)),
+            "source_turn_id": binding["source_turn_id"], "source_turn_sha256": binding["source_turn_sha256"],
+            "source_response_sha256": binding["source_response_sha256"],
+            "raw_target_sha256": binding["raw_target_sha256"]}]}
+    forced = {"schema": "natlang.native-teacher-forced-turn/1", "assistant": target,
+        "source_receipt": producer_receipt, "native_text_spans": spans,
+        "source_opening": opening, "native_text_bindings": []}
+    producer_response = engine.generate(GenerationRequest(messages=opening, tools=tools,
+        max_tokens=128, temperature=0.0, seed=21, forced_message=forced,
+        rl_capture=True, native_recording=True))
+    producer_capture = producer_response["x_natlang_rl_capture"]
+    assert len(producer_capture["writes"]) == 1, producer_capture
+    native_id = producer_capture["writes"][0]["state_id"]
+    native_block = engine.store.get_native_state(native_id)
+    assert native_block.block.text == body
+
+    writer_node = "episode/0#24"
+    teacher_id = "nzt1_" + "f" * 52
+    consumer_body = body
+    encoded = engine.native_write_text(consumer_body, value_type="Neuralese<TemplateHypothesis>")
+    encoded_record = engine.store.get_native_state(encoded["id"])
+    occurrence = "teacher-text-encoder:inline-edge"
+    source_opening = [{"role": "user", "content": [
+        {"type": "text", "text": "Read: "}, {"type": "teacher_text", "id": teacher_id,
+            "source_occurrence": writer_node}]}]
+    reader_opening = [{"role": "user", "content": [
+        {"type": "text", "text": "Read: "}, {"type": "native_state", "id": encoded["id"],
+            "source_occurrence": occurrence}]}]
+    reader_target = {"role": "assistant", "content": "t5"}
+    writer_receipt = {"block_id": teacher_id, "body_sha256": _sha(body.encode()),
+        "source": "return_result", "writer_call_id": "episode/0", "writer_node": writer_node,
+        "host_result_receipt_sha256": "e"*64, "raw_response_sha256": "f"*64,
+        "context_receipt_sha256": "0"*64, "target_span_path": None, "context_occurrences": 1}
+    reader_receipt = {**producer_receipt, "source_turn_index": 1, "source_turn_sha256": "c"*64,
+        "prompt_sha256": _sha(_canonical({"messages": reader_opening, "tools": tools})),
+        "source_prompt_sha256": _sha(_canonical({"messages": source_opening, "tools": tools})),
+        "target_sha256": _sha(_canonical(reader_target)), "typed_text_writes": [writer_receipt],
+        "typed_text_inputs": [], "target_text_spans": []}
+    reader_binding = {"teacher_block_id": teacher_id, "body_sha256": _sha(body.encode()),
+        "native_block_id": encoded["id"], "source_occurrence": occurrence,
+        "source_capture": encoded["source_capture"]}
+    reader_forced = {"schema": "natlang.native-teacher-forced-turn/1", "assistant": reader_target,
+        "source_receipt": reader_receipt, "native_text_spans": [], "source_opening": source_opening,
+        "native_text_bindings": [reader_binding]}
+    reader_response = engine.generate(GenerationRequest(messages=reader_opening, tools=tools,
+        max_tokens=128, temperature=0.0, seed=22, forced_message=reader_forced,
+        rl_capture=True, native_recording=True))
+    reader_capture = reader_response["x_natlang_rl_capture"]
+    reader_capture_bundle = {"source_receipt": reader_receipt, "capture": reader_capture,
+        "loaded": {"source_receipt": reader_receipt, "typed_text_bodies": [{"block_id": teacher_id,
+            "body": body, "body_sha256": _sha(body.encode())}]}, "response": reader_response,
+        "native_identity": engine.native_identity, "encoder_binding": reader_binding,
+        "encoder_bindings": [reader_binding], "encoder_state": encoded_record.block,
+        "encoder_states": [encoded_record.block], "encoder_occurrence_counts": {teacher_id: 1}}
+    producer_bundle = {"source_receipt": producer_receipt, "capture": producer_capture,
+        "loaded": {"source_receipt": producer_receipt, "native_text_spans": spans},
+        "response": producer_response, "native_identity": engine.native_identity,
+        "encoder_binding": None, "encoder_bindings": [], "encoder_state": None, "encoder_states": []}
+    graph, example = native_graph_from_luna_episode([producer_bundle, reader_capture_bundle])
+    assert graph["teacher_text_inline_producers"][0]["writer_node"] == writer_node
+    assert example.plan.invocations[0].name == writer_node
+    assert example.plan.invocations[0].producing
+    assert example.plan.invocations[1].imports[0].source == writer_node
+    assert example.plan.invocations[1].imports[0].stop - example.plan.invocations[1].imports[0].start == len(
+        native_block.block.token_ids)
+
+
 def test_luna_text_source_replays_as_student_encoder_and_full_gradient_graph(tmp_path):
     engine = engine_fixture(tmp_path, "lfm")
     def exact_fixture_template(messages, tools=None, tokenize=False, add_generation_prompt=False, **kwargs):
@@ -103,6 +206,8 @@ def test_luna_text_source_replays_as_student_encoder_and_full_gradient_graph(tmp
         "transport_provenance_sha256": "d" * 64,
         "actor": {"model": "gpt-6-luna", "provider": "openai-codex",
                   "role": "teacher", "transport": "pi-provider"},
+        "target_supervision": True,
+        "typed_text_inputs": [],
         "target_text_spans": [],
         "typed_text_writes": [{"block_id": teacher_id, "body_sha256": _sha(body.encode()),
             "source": "eval-finish", "writer_call_id": source_call, "writer_node": source_node,

@@ -1106,7 +1106,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
         teacher_text_read = (isinstance(block_id, str) and re.fullmatch(r"nzt1_[a-z2-7]{52}", block_id) is not None
                              and item.get("teacher_text") is True and item.get("format") == "teacher-text"
                              and item.get("learned_vectors") is False and item.get("tokenizer_ids") is False)
-        if (item.get("type") != "Neuralese<string>" or not isinstance(block_id, str)
+        if (not (item.get("type") == "Neuralese<string>" or teacher_text_read) or not isinstance(block_id, str)
                 or not (block_id.startswith("nz1_") or teacher_text_read) or not isinstance(body_sha256, str)
                 or item.get("learned_vectors") is not False
                 or item.get("qualification_certificate") is not False
@@ -1131,7 +1131,8 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
         producer = context_refs[0].get("producer_write") or {} if context_refs else {}
         direct_return = (producer.get("source") == "return_result"
                          and producer.get("source_kind") == "typed-text-result"
-                         and producer.get("result_type") == "Neuralese<string>"
+                         and isinstance(producer.get("result_type"), str)
+                         and producer.get("result_type", "").startswith("Neuralese<")
                          and isinstance(producer.get("call_id"), str)
                          and isinstance(producer.get("node"), str))
         expected_name = (_direct_result_event_name(block_id, (record.get("source_ref") or {}).get("trajectory_id"),

@@ -210,6 +210,8 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
             'trace_sha256':'3'*64,'request_sha256':'4'*64,'response_sha256':'5'*64,
             'transport_provenance_sha256':'6'*64,
             'actor':{'model':'gpt-6-luna','provider':'openai-codex','role':'teacher','transport':'pi-provider'},
+            'target_supervision':True,
+            'typed_text_inputs':[],
             'target_text_spans':[],
             'typed_text_writes':[{'block_id':'nzt1_'+'a'*52,
                 'body_sha256':hashlib.sha256(luna_body.encode()).hexdigest(),

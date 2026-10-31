@@ -45,7 +45,8 @@ def _replace_refs(value, bindings, expected_occurrences=None):
     return result
 
 
-def capture_luna_native_turn(engine, audit_path, record_id, *, seed=0, encoder_cache=None):
+def capture_luna_native_turn(engine, audit_path, record_id, *, seed=0, encoder_cache=None,
+                             allow_context_only=False):
     """Encode a verified host result with this student, then force the exact Luna action.
 
     This is a teacher-forced native capture, never a sampled-policy rollout. The
@@ -67,7 +68,7 @@ def capture_luna_native_turn(engine, audit_path, record_id, *, seed=0, encoder_c
         raise ValueError("Luna teacher row lacks its exact source prompt")
     tools = record.get("tools") or []
     loaded = load_verified_luna_teacher_turn(audit_path, record_id,
-        replay_messages=source_opening, replay_tools=tools)
+        replay_messages=source_opening, replay_tools=tools, allow_context_only=allow_context_only)
     encoder_cache = {} if encoder_cache is None else encoder_cache
     bindings, encoder_states, replacements, occurrences = [], [], {}, {}
     for typed in loaded["typed_text_bodies"]:
@@ -75,7 +76,8 @@ def capture_luna_native_turn(engine, audit_path, record_id, *, seed=0, encoder_c
                      engine.native_identity.get("tokenizer_fingerprint"))
         cached = encoder_cache.get(cache_key)
         if cached is None:
-            written = engine.native_write_text(typed["body"], value_type="Neuralese<string>")
+            written = engine.native_write_text(typed["body"],
+                value_type=typed.get("type") or "Neuralese<string>")
             native_record = engine.store.get_native_state(written["id"])
             encoder_cache[cache_key] = (written, native_record)
         else:
@@ -257,19 +259,76 @@ def native_graph_from_luna_episode(captures):
         raise ValueError("Luna episode captures use different student checkpoint/tokenizer identities")
     student_identity = identities[0]
 
-    binding_by_teacher, state_by_teacher = {}, {}
+    all_binding_by_teacher, all_state_by_teacher = {}, {}
     for capture in captures:
         for binding, state in zip(capture.get("encoder_bindings") or [], capture.get("encoder_states") or []):
             teacher_id = binding["teacher_block_id"]
-            prior = binding_by_teacher.get(teacher_id)
-            if prior is not None and (prior != binding or state_by_teacher[teacher_id] != state):
+            prior = all_binding_by_teacher.get(teacher_id)
+            if prior is not None and (prior != binding or all_state_by_teacher[teacher_id] != state):
                 raise ValueError("same Luna episode typed write maps to conflicting student encoder states")
-            binding_by_teacher[teacher_id], state_by_teacher[teacher_id] = binding, state
+            all_binding_by_teacher[teacher_id], all_state_by_teacher[teacher_id] = binding, state
         if len(capture.get("encoder_bindings") or []) != len(capture.get("encoder_states") or []):
             raise ValueError("Luna episode capture omits an authenticated encoder state")
+    # When a later provider read receipt names an earlier assistant action as
+    # the producer, use that exact action's captured native span as the graph
+    # writer. A separately re-encoded host body is only a fallback for values
+    # that were not produced by one of the included assistant actions.
+    reader_writes = {}
+    for captured in captures:
+        for write in captured["source_receipt"].get("typed_text_writes") or []:
+            if not isinstance(write, dict):
+                continue
+            reader_writes.setdefault(write.get("block_id"), []).append(write)
+    inline_by_teacher, inline_by_action, inline_receipts = {}, {}, []
+    for producer_index, producer_capture in enumerate(captures):
+        producer_receipt = producer_capture["source_receipt"]
+        for target_span in producer_receipt.get("target_text_spans") or []:
+            matching = [write for writes in reader_writes.values() for write in writes
+                if write.get("writer_call_id") == target_span.get("source_turn_id")
+                and write.get("body_sha256") == target_span.get("body_sha256")]
+            stable = {(write.get("block_id"), write.get("writer_node")) for write in matching}
+            if not matching:
+                continue
+            if len(stable) != 1:
+                raise ValueError("provider target span maps to multiple downstream writer identities")
+            teacher_id, writer_node = next(iter(stable))
+            if teacher_id not in all_binding_by_teacher:
+                raise ValueError("inline producer has no matching authenticated teacher-text context binding")
+            spans = [span for span in (producer_capture.get("loaded", {}).get("native_text_spans") or [])
+                     if span.get("path") == target_span.get("path")
+                     and span.get("marker") == target_span.get("marker")
+                     and _sha(span.get("text", "").encode("utf-8")) == target_span.get("body_sha256")]
+            if len(spans) != 1:
+                raise ValueError("inline producer span differs from its authenticated source target rewrite")
+            output_blocks = {item.get("id"): item for item in
+                ((producer_capture.get("response") or {}).get("native_state") or {}).get("blocks", [])
+                if isinstance(item, dict)}
+            produced = [item for item in producer_capture["capture"].get("writes") or []
+                if isinstance(item, dict) and item.get("state_id") in output_blocks
+                and output_blocks[item["state_id"]].get("text") == spans[0]["text"]]
+            if len(produced) != 1:
+                raise ValueError("inline producer action lacks one captured native state for its exact target text")
+            write = produced[0]
+            lo, hi = write.get("payload_own_begin"), write.get("payload_own_end")
+            if type(lo) is not int or type(hi) is not int or lo < 0 or hi <= lo:
+                raise ValueError("inline producer native payload has invalid captured own-token positions")
+            occurrence = writer_node
+            prior = inline_by_teacher.get(teacher_id)
+            detail = {"teacher_block_id": teacher_id, "body_sha256": target_span["body_sha256"],
+                "source_turn_id": target_span["source_turn_id"], "writer_node": writer_node,
+                "action_index": producer_index, "start": lo, "stop": hi,
+                "native_state_id": write["state_id"]}
+            if prior is not None and prior != detail:
+                raise ValueError("same provider text block resolves to conflicting inline native producers")
+            inline_by_teacher[teacher_id] = detail
+            inline_by_action.setdefault(producer_index, []).append(detail)
+            inline_receipts.append(detail)
+    binding_by_teacher = {teacher_id: binding for teacher_id, binding in all_binding_by_teacher.items()
+                          if teacher_id not in inline_by_teacher}
+    state_by_teacher = {teacher_id: all_state_by_teacher[teacher_id] for teacher_id in binding_by_teacher}
     bindings = list(binding_by_teacher.values())
     states = [state_by_teacher[binding["teacher_block_id"]] for binding in bindings]
-    if not bindings:
+    if not bindings and not inline_by_teacher:
         raise ValueError("Luna episode has no authenticated typed text producer/consumer path")
     from ..serve.store import native_state_id
     writer_nodes, writer_invocations = [], []
@@ -289,19 +348,24 @@ def native_graph_from_luna_episode(captures):
         writer_invocations.append(Invocation(name, tuple(writer_tokens), producing=((lo, hi),)))
 
     action_nodes, action_invocations, action_receipts = [], [], []
-    for captured, receipt in zip(captures, receipts):
+    for action_index, (captured, receipt) in enumerate(zip(captures, receipts)):
         capture = captured["capture"]
         if (capture.get("schema") != "natlang.native-teacher-forced-capture/1"
                 or capture.get("teacher_source_receipt") != receipt
                 or capture.get("policy") != student_identity):
             raise ValueError("Luna episode action is not a native forced capture of its authenticated target")
         writes = receipt.get("typed_text_writes") or []
+        typed_inputs = receipt.get("typed_text_inputs") or []
+        context_sources = [*writes, *typed_inputs]
         expected_by_id = {item.get("block_id"): item.get("context_occurrences")
-                          for item in writes if isinstance(item, dict)}
-        if len(expected_by_id) != len(writes):
+                          for item in context_sources if isinstance(item, dict)}
+        if len(expected_by_id) != len(context_sources):
             raise ValueError("Luna episode action has a duplicate or malformed text-source receipt")
         imports, own = [], []
         observed = {ident: 0 for ident in expected_by_id}
+        local_teacher_by_native = {binding["native_block_id"]: binding["teacher_block_id"]
+            for binding in captured.get("encoder_bindings") or []}
+        producing = []
         for segment in capture.get("prompt") or []:
             if segment.get("kind") == "tokens":
                 ids = segment.get("token_ids")
@@ -309,17 +373,21 @@ def native_graph_from_luna_episode(captures):
                     raise ValueError("Luna episode action has malformed exact prompt tokens")
                 own.extend(ids)
             elif segment.get("kind") == "native_state":
-                binding = binding_by_teacher.get(next((ident for ident, candidate in binding_by_teacher.items()
-                    if candidate["native_block_id"] == segment.get("id")), None))
+                teacher_id = local_teacher_by_native.get(segment.get("id"))
+                binding = all_binding_by_teacher.get(teacher_id)
                 if binding is None or segment.get("source_occurrence") != binding["source_occurrence"]:
                     raise ValueError("Luna episode action imports an unbound student native state")
-                teacher_id = binding["teacher_block_id"]
                 if teacher_id not in expected_by_id:
                     raise ValueError("Luna episode action imports a text result absent from its provider receipt")
                 observed[teacher_id] += 1
-                block = state_by_teacher[teacher_id]
-                imports.append(ImportSpan(at=len(own), source=binding["source_occurrence"],
-                                          start=1, stop=1 + len(block.token_ids)))
+                inline = inline_by_teacher.get(teacher_id)
+                if inline is not None:
+                    imports.append(ImportSpan(at=len(own), source=inline["writer_node"],
+                                              start=inline["start"], stop=inline["stop"]))
+                else:
+                    block = state_by_teacher[teacher_id]
+                    imports.append(ImportSpan(at=len(own), source=binding["source_occurrence"],
+                                              start=1, stop=1 + len(block.token_ids)))
             else:
                 raise ValueError("Luna episode action contains an unsupported native input segment")
         if any(type(expected_by_id[ident]) is not int or expected_by_id[ident] < 1
@@ -329,23 +397,40 @@ def native_graph_from_luna_episode(captures):
         target_ids = [item.get("token_id") for item in target]
         if not target_ids or any(type(token) is not int for token in target_ids):
             raise ValueError("Luna episode action has no exact teacher-forced target tokens")
-        name = "luna-action:" + _sha((receipt["source_row_id"] + ":" +
-              str(receipt["source_turn_index"])).encode())[:24]
+        supervise = receipt.get("target_supervision")
+        if type(supervise) is not bool:
+            raise ValueError("Luna episode action lacks an exact target-versus-context supervision disposition")
+        inline_for_action = inline_by_action.get(action_index, [])
+        if inline_for_action:
+            if len({item["writer_node"] for item in inline_for_action}) != 1:
+                raise ValueError("one Luna action cannot be assigned multiple source writer nodes")
+            name = inline_for_action[0]["writer_node"]
+            producing = [(item["start"], item["stop"]) for item in inline_for_action]
+        else:
+            name = "luna-action:" + _sha((receipt["source_row_id"] + ":" +
+                  str(receipt["source_turn_index"])).encode())[:24]
         node_tokens = [*own, *target_ids]
+        target_weights = ([1.0] * len(target_ids) if supervise else [0.0] * len(target_ids))
         action_nodes.append({"name": name, "token_ids": node_tokens,
-            "target_weights": [0.0] * len(own) + [1.0] * len(target_ids),
+            "target_weights": [0.0] * len(own) + target_weights,
+            **({"producing": [list(span) for span in producing]} if producing else {}),
             "imports": [{"at": edge.at, "source": edge.source, "start": edge.start,
                          "stop": edge.stop} for edge in imports]})
-        action_invocations.append(Invocation(name, tuple(node_tokens), imports=tuple(imports)))
+        action_invocations.append(Invocation(name, tuple(node_tokens), imports=tuple(imports),
+            producing=tuple(producing)))
         action_receipts.append({"source_turn_index": receipt["source_turn_index"],
             "source_turn_sha256": receipt["source_turn_sha256"],
             "target_sha256": receipt["target_sha256"],
-            "capture_sha256": _sha(_canonical(capture)), "supervised_tokens": len(target_ids),
-            "consumer_native_block_ids": [ident for ident, count in observed.items() if count]})
+            "capture_sha256": _sha(_canonical(capture)),
+            "supervised_tokens": len(target_ids) if supervise else 0,
+            "target_supervision": supervise,
+            "consumer_native_block_ids": [ident for ident, count in observed.items() if count],
+            "inline_producer_block_ids": [item["teacher_block_id"] for item in inline_for_action]})
 
     nodes = [*writer_nodes, *action_nodes]
     plan = compile_graph([*writer_invocations, *action_invocations])
     write_receipts = {}
+    input_receipts = {}
     for receipt in receipts:
         for write in receipt.get("typed_text_writes") or []:
             prior = write_receipts.get(write["block_id"])
@@ -354,18 +439,30 @@ def native_graph_from_luna_episode(captures):
             if prior is not None and prior != stable:
                 raise ValueError("Luna episode writer results disagree across consumer receipts")
             write_receipts[write["block_id"]] = stable
+        for item in receipt.get("typed_text_inputs") or []:
+            stable = {key: item.get(key) for key in ("block_id", "body_sha256", "type",
+                "transport_provenance_sha256", "request_sha256", "response_sha256")}
+            prior = input_receipts.get(item["block_id"])
+            if prior is not None and prior != stable:
+                raise ValueError("Luna episode context-only input receipts conflict")
+            input_receipts[item["block_id"]] = stable
     encoders = [{"schema": "natlang.authenticated-teacher-text-encoder/1",
         "teacher_block_id": binding["teacher_block_id"], "native_block_id": binding["native_block_id"],
         "body_sha256": binding["body_sha256"], "source_occurrence": binding["source_occurrence"],
         "source_capture_sha256": _sha(_canonical(binding["source_capture"])),
-        "host_result_receipt_sha256": write_receipts[binding["teacher_block_id"]]["host_result_receipt_sha256"]}
+        **({"host_result_receipt_sha256": write_receipts[binding["teacher_block_id"]]["host_result_receipt_sha256"],
+            "source_kind": "authenticated-same-run-host-result"}
+           if binding["teacher_block_id"] in write_receipts else
+           {"context_input_receipt": input_receipts[binding["teacher_block_id"]],
+            "source_kind": "captured-provider-input-context-only"})}
         for binding in bindings]
     row = {"schema": "natlang.neuralese-native-graph/1",
         "id": "luna-native-episode:" + first["source_row_id"], "split": "train",
         "source_groups": list(first["source_groups"]), "tokenizer_fingerprint": student_identity["tokenizer_fingerprint"],
         "nodes": nodes, "student_native_identity": student_identity,
         "teacher_source_receipt": receipts[-1], "teacher_source_receipts": receipts,
-        "teacher_text_encoders": encoders, "teacher_episode_actions": action_receipts}
+        "teacher_text_encoders": encoders, "teacher_text_inline_producers": inline_receipts,
+        "teacher_episode_actions": action_receipts}
     example = parse_graph(row, tokenizer_fingerprint=student_identity["tokenizer_fingerprint"])
     if (len(example.plan.invocations) != len(bindings) + len(captures)
             or sum(weight > 0 for weight in example.target_weights) != sum(

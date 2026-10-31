@@ -114,7 +114,8 @@ def copy_json(value):
     return json.loads(json.dumps(value, ensure_ascii=False))
 
 
-def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, replay_tools=None):
+def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, replay_tools=None,
+                                    allow_context_only=False):
     """Return an exact forced-turn receipt and authenticated context bodies.
 
     The audit, reviewed plan, frozen runtime, full provider trace, and converted
@@ -124,8 +125,32 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
     """
     audit_bytes = Path(audit_path).read_bytes()
     audit = json.loads(audit_bytes)
-    if audit.get("schema") != "natlang.luna-v6-teacher-text-python-ingestion-audit/1":
+    audit_schema = audit.get("schema")
+    supported_audits = {"natlang.luna-v6-teacher-text-python-ingestion-audit/1",
+                        "natlang.luna-v8-provider-native-ingestion-audit/1"}
+    if audit_schema not in supported_audits:
         raise ValueError("provider teacher source audit schema is unsupported")
+    if audit_schema == "natlang.luna-v8-provider-native-ingestion-audit/1":
+        for name in ("provider_source_manifest", "source_regrade", "decision_cache", "conversion_builder"):
+            binding = audit.get(name) or {}
+            if not isinstance(binding.get("path"), str) or not isinstance(binding.get("sha256"), str):
+                raise ValueError(f"v8 provider source audit omits its exact {name} artifact")
+            _read_bound(binding["path"], binding["sha256"])
+        code_bindings = audit.get("source_code")
+        if (not isinstance(code_bindings, list) or not code_bindings
+                or len({item.get("path") for item in code_bindings if isinstance(item, dict)}) != len(code_bindings)):
+            raise ValueError("v8 provider conversion audit omits or duplicates native loader code bindings")
+        for binding in code_bindings:
+            if not isinstance(binding, dict) or set(binding) != {"path", "sha256"}:
+                raise ValueError("v8 provider conversion source-code binding is malformed")
+            _read_bound(binding["path"], binding["sha256"])
+        manifest = json.loads(Path(audit["provider_source_manifest"]["path"]).read_bytes())
+        regrade = audit["source_regrade"]
+        bound_regrades = [item for item in manifest.get("oracle_regrades") or []
+                          if (item.get("projection") or {}).get("path") == regrade["path"]
+                          and (item.get("projection") or {}).get("sha256") == regrade["sha256"]]
+        if len(bound_regrades) != 1:
+            raise ValueError("v8 provider source regrade is not in the exact closed source manifest")
     raw_binding = audit.get("raw_results") or {}
     converted_binding = audit.get("python_corpus_conversion") or {}
     plan_binding = audit.get("plan") or {}
@@ -140,6 +165,13 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
     raw_row_id = record_id.rsplit(":decision:", 1)[0]
     raw = _jsonl_by_id(raw_bytes, raw_row_id)
     record = _jsonl_by_id(converted_bytes, record_id)
+    if audit_schema == "natlang.luna-v8-provider-native-ingestion-audit/1":
+        raw_regrade = ((raw.get("source_regrade") or {}).get("receipt") or {})
+        if (audit.get("task_id") != raw.get("id")
+                or raw_regrade.get("path") != audit["source_regrade"]["path"]
+                or raw_regrade.get("sha256") != audit["source_regrade"]["sha256"]
+                or (record.get("source_ref") or {}).get("trajectory_id") != raw.get("id")):
+            raise ValueError("v8 provider source audit does not bind this exact source row and Sol regrade")
     if (raw.get("version") != "natlang.teacher_trajectory.native/1"
             or (raw.get("provenance") or {}).get("model") != "gpt-6-luna"
             or (raw.get("provenance") or {}).get("provider") != "openai-codex"
@@ -147,10 +179,12 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
             or (raw.get("provenance") or {}).get("collection_role") != "teacher"
             or (raw.get("provenance") or {}).get("neuralese_server") is not False):
         raise ValueError("provider teacher source row does not preserve the actual Luna provider identity")
-    if (record.get("training_admission", {}).get("approved") is not True
+    admitted = (record.get("training_admission", {}).get("approved") is True
+                and record.get("outcome", {}).get("accepted") is True)
+    if ((not admitted and not allow_context_only)
             or record.get("outcome", {}).get("accepted") is not True
             or record.get("split") != "train"):
-        raise ValueError("only accepted training turns may be forced from this Luna source")
+        raise ValueError("only accepted turns, or explicitly context-only decisions, may be forced")
     source_ref = record.get("source_ref") or {}
     provider_context = source_ref.get("provider_input_context") or {}
     source_conversion = record.get("native_source_conversion") or {}
@@ -209,7 +243,27 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
                 "raw_action": raw_action, "raw_action_sha256": _sha_value(raw_action),
                 "normalized_target": normalized_target, "normalized_target_sha256": normalized_sha,
                 "call_count": len((normalized_target or {}).get("tool_calls") or [])}
-            if reconstructed is None or _canonical(reconstructed) != _canonical(normalized_target):
+            equivalent = False
+            if reconstructed is not None:
+                expected_calls = reconstructed.get("tool_calls") or []
+                actual_calls = (normalized_target or {}).get("tool_calls") or []
+                equivalent = (reconstructed.get("role") == (normalized_target or {}).get("role")
+                    and reconstructed.get("content") == (normalized_target or {}).get("content")
+                    and len(expected_calls) == len(actual_calls))
+                for expected, actual in zip(expected_calls, actual_calls):
+                    expected_fn, actual_fn = expected.get("function") or {}, (actual.get("function") or {})
+                    try:
+                        actual_arguments = json.loads(actual_fn.get("arguments"))
+                        expected_arguments = json.loads(expected_fn.get("arguments"))
+                    except (TypeError, json.JSONDecodeError):
+                        equivalent = False
+                        break
+                    if (expected.get("id") != actual.get("id") or expected.get("type") != actual.get("type")
+                            or expected_fn.get("name") != actual_fn.get("name")
+                            or _canonical(expected_arguments) != _canonical(actual_arguments)):
+                        equivalent = False
+                        break
+            if not equivalent:
                 target_adapter = None
     if (not isinstance(target_adapter, dict)
             or target_adapter.get("schema") != "natlang.provider-action-target-normalization/1"
@@ -217,8 +271,9 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
             or target_adapter.get("source_trajectory_index") != index
             or target_adapter.get("normalized_target_sha256") != target_sha):
         raise ValueError("provider teacher target is not bound to its exact normalized action")
-    rewritten_target, native_text_spans, target_span_binding = _rewrite_target_text_spans(
-        action_target, source_turn)
+    rewritten_target, native_text_spans, target_span_binding = (
+        _rewrite_target_text_spans(action_target, source_turn) if admitted
+        else (copy_json(action_target), [], None))
     if target_span_binding is not None:
         target_adapter = {**target_adapter,
             "native_span_rewrite": target_span_binding,
@@ -230,21 +285,45 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
     source_groups = record.get("source_groups")
     if not isinstance(source_groups, list) or not source_groups:
         raise ValueError("provider teacher turn lacks its upstream source groups")
-    protection_path = next((path for path, digest in (plan.get("artifact_hashes") or {}).items()
-                            if path.endswith("/protection-v2.json")), None)
-    if protection_path is None:
-        raise ValueError("reviewed provider campaign plan omits its protection artifact")
-    protection_digest = (plan.get("artifact_hashes") or {}).get(protection_path)
-    protection = json.loads(_read_bound(protection_path, protection_digest))
     program_ir = ((record.get("task") or {}).get("program_ir") or {})
-    case_id = program_ir.get("id")
-    upstream_groups = program_ir.get("source_groups")
-    selected = [item for item in protection.get("selected_receipts") or []
-                if item.get("case_id") == case_id and item.get("source_groups") == upstream_groups]
-    if len(selected) != 1 or selected[0].get("receipt", {}).get("split") != "train":
-        raise ValueError("provider teacher source groups lack one exact protected-world train disposition")
-    if set(source_groups) != set(selected[0]["source_groups"]) | {selected[0]["case_id"]}:
-        raise ValueError("provider teacher source groups add or omit an upstream protection group")
+    if audit_schema == "natlang.luna-v8-provider-native-ingestion-audit/1":
+        source_regrade = json.loads(_read_bound(audit["source_regrade"]["path"],
+                                                audit["source_regrade"]["sha256"]))
+        current_check = source_regrade.get("fresh_source_group_check") or {}
+        from ..common.custody import ProtectedWorlds
+        protected = ProtectedWorlds.load()
+        if (source_regrade.get("judge_model") != "gpt-6-sol"
+                or source_regrade.get("judge_provider") != "openai-codex"
+                or source_regrade.get("oracle_level") != "judged"
+                or source_regrade.get("exact_oracle_claimed") is not False
+                or source_regrade.get("effective_outcome", {}).get("accepted") is not True
+                or current_check.get("protected_worlds_digest") != protected.digest
+                or current_check.get("receipt", {}).get("split") != "train"
+                or current_check.get("receipt", {}).get("case_id") != raw.get("id")):
+            raise ValueError("v8 Luna decision lacks its current, independent judged train disposition")
+        upstream_groups = program_ir.get("source_groups")
+        if (program_ir.get("split") != "train" or not isinstance(upstream_groups, list)
+                or not upstream_groups or set(source_groups) != set(upstream_groups) | {program_ir.get("id")}
+                or program_ir.get("id") != record.get("program_id")):
+            raise ValueError("v8 provider source groups differ from the exact protected codebase world")
+        custody = protected.check(program_ir)
+        if custody.get("split") != "train":
+            raise ValueError("v8 provider codebase world is not eligible for training")
+    else:
+        protection_path = next((path for path, digest in (plan.get("artifact_hashes") or {}).items()
+                                if path.endswith("/protection-v2.json")), None)
+        if protection_path is None:
+            raise ValueError("reviewed provider campaign plan omits its protection artifact")
+        protection_digest = (plan.get("artifact_hashes") or {}).get(protection_path)
+        protection = json.loads(_read_bound(protection_path, protection_digest))
+        case_id = program_ir.get("id")
+        upstream_groups = program_ir.get("source_groups")
+        selected = [item for item in protection.get("selected_receipts") or []
+                    if item.get("case_id") == case_id and item.get("source_groups") == upstream_groups]
+        if len(selected) != 1 or selected[0].get("receipt", {}).get("split") != "train":
+            raise ValueError("provider teacher source groups lack one exact protected-world train disposition")
+        if set(source_groups) != set(selected[0]["source_groups"]) | {selected[0]["case_id"]}:
+            raise ValueError("provider teacher source groups add or omit an upstream protection group")
     read_receipts = source_ref.get("provider_expanded_read_contexts") or []
     trace_sha = (raw.get("provenance") or {}).get("trace_sha256")
     if (source_turn.get("request_sha256") != provider_context.get("source_request_sha256")
@@ -299,12 +378,61 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
                 or witness.get("raw_response_sha256") is None):
             raise ValueError("provider teacher typed result lacks a bound producer host-result witness")
         typed_writes.append({"block_id": block_id, "body": body,
-            "body_sha256": context["body_sha256"], "source": write.get("source"),
+            "body_sha256": context["body_sha256"], "type": (provider_receipt.get("block") or {}).get("type"),
+            "source": write.get("source"),
             "writer_call_id": write.get("call_id"), "writer_node": write.get("node"),
             "host_result_receipt_sha256": _sha_value(witness),
             "raw_response_sha256": witness.get("raw_response_sha256"),
             "context_receipt_sha256": _sha_value(provider_receipt), "target_span_path": None,
             "context_occurrences": context.get("context_occurrences", 1)})
+    # A provider request can contain an already expanded teacher-text value
+    # without a same-run graph read receipt (for example, a value staged by an
+    # earlier eval-finish in the same invocation). Preserve that exact prompt
+    # input as context-only provenance; do not invent a producer edge.
+    transport = (source_turn.get("model_response") or {}).get("transport_provenance") or {}
+    context_only_inputs = []
+    if transport.get("schema") == "natlang.teacher-text-neuralese-transport/1":
+        if (transport.get("mode") != "teacher-text/1"
+                or transport.get("learned_vectors") is not False
+                or transport.get("qualification_certificate") is not False
+                or transport.get("training_admission") is not False
+                or (transport.get("tokenizer") or {}).get("ids_claimed") is not False
+                or transport.get("raw_request_sha256") != provider_context.get("raw_request_sha256")
+                or transport.get("raw_response_sha256") != source_turn.get("raw_response_sha256")):
+            raise ValueError("provider teacher context transport provenance is not bound to its exact request/response")
+        written_ids = {item["block_id"] for item in typed_writes}
+        for block in transport.get("expanded_input_blocks") or []:
+            if not isinstance(block, dict) or block.get("id") in written_ids:
+                continue
+            body = block.get("body")
+            block_id = block.get("id")
+            if (not isinstance(block_id, str) or not block_id.startswith("nzt1_")
+                    or block.get("format") != "teacher-text" or block.get("teacher_text") is not True
+                    or block.get("learned_vectors") is not False or block.get("tokenizer_ids") is not False
+                    or not isinstance(block.get("type"), str) or not block["type"].startswith("Neuralese<")
+                    or not isinstance(body, str) or not body
+                    or _sha(body.encode("utf-8")) != block.get("body_sha256")):
+                raise ValueError("captured provider context contains a malformed teacher-text input")
+            occurrences = 0
+            def count_ref(value):
+                nonlocal occurrences
+                if isinstance(value, list):
+                    for child in value: count_ref(child)
+                elif isinstance(value, dict):
+                    if value.get("type") == "teacher_text" and value.get("id") == block_id:
+                        occurrences += 1
+                    else:
+                        for child in value.values(): count_ref(child)
+            count_ref(messages)
+            if occurrences < 1:
+                raise ValueError("captured provider expansion is absent from the exact replay prompt")
+            context_only_inputs.append({"block_id": block_id, "type": block["type"],
+                "body": body, "body_sha256": block["body_sha256"],
+                "producer_call_id": block.get("producer_call_id"), "writer_node": block.get("writer_node"),
+                "transport_provenance_sha256": _sha_value(transport),
+                "request_sha256": provider_context.get("raw_request_sha256"),
+                "response_sha256": source_turn.get("raw_response_sha256"),
+                "context_occurrences": occurrences})
     receipt = {"schema": "natlang.provider-teacher-turn-source/1",
         "source_path": raw_binding["path"], "source_file_sha256": raw_binding["sha256"],
         "source_row_id": raw_row_id, "source_row_sha256": source_ref.get("source_row_sha256"),
@@ -324,9 +452,14 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
         "transport_provenance_sha256": provider_context.get("transport_provenance_sha256"),
         "actor": {"model": "gpt-6-luna", "provider": "openai-codex", "role": "teacher",
                   "transport": "pi-provider"},
+        "target_supervision": admitted,
+        "typed_text_inputs": [{key: item[key] for key in ("block_id", "type", "body_sha256",
+            "producer_call_id", "writer_node", "transport_provenance_sha256", "request_sha256",
+            "response_sha256", "context_occurrences")} for item in context_only_inputs],
         "target_text_spans": [{"path": item["path"], "marker": item["marker"],
             "body_sha256": _sha(item["text"].encode("utf-8")),
             "rewrite_sha256": _sha_value(target_span_binding),
+            "source_turn_id": target_span_binding["source_turn_id"],
             "source_turn_sha256": target_span_binding["source_turn_sha256"],
             "source_response_sha256": target_span_binding["source_response_sha256"],
             "raw_target_sha256": target_span_binding["raw_target_sha256"]}
@@ -335,9 +468,16 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
             "writer_node", "host_result_receipt_sha256", "raw_response_sha256", "context_receipt_sha256",
             "target_span_path", "context_occurrences")} for item in typed_writes]}
     return {"record": record, "source_receipt": receipt, "native_text_spans": native_text_spans,
-            "typed_text_bodies": [{key: item[key] for key in ("block_id", "body", "body_sha256", "source",
+            "context_only": not admitted,
+            "typed_text_bodies": [{key: item[key] for key in ("block_id", "body", "body_sha256", "type", "source",
                 "writer_call_id", "writer_node", "host_result_receipt_sha256", "context_receipt_sha256",
                 "context_occurrences")}
-                for item in typed_writes],
+                for item in typed_writes] + [{"block_id": item["block_id"], "body": item["body"],
+                    "body_sha256": item["body_sha256"], "type": item["type"],
+                    "source": "captured-provider-input-context-only",
+                    "writer_call_id": item["producer_call_id"], "writer_node": item["writer_node"],
+                    "context_receipt_sha256": item["transport_provenance_sha256"],
+                    "context_occurrences": item["context_occurrences"]}
+                    for item in context_only_inputs],
             "audit_sha256": _sha(audit_bytes), "raw_row_sha256": _sha_value(raw),
             "runtime_manifest_sha256": _sha(runtime_bytes)}

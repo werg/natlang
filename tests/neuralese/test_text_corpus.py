@@ -356,7 +356,7 @@ def test_teacher_text_nzt1_receipts_reencode_exact_native_text_and_preserve_prod
         "schema": "natlang.typed-result-write/1", "trajectory_id": "inspection-run",
         "source_row_sha256": writer_row_sha, "invocation_id": writer_call,
         "writer_call_id": writer_call, "writer_node": writer_node, "block_id": block_id,
-        "source_kind": "typed-text-result", "source": "return_result", "result_type": "Neuralese<string>",
+        "source_kind": "typed-text-result", "source": "return_result", "result_type": "Neuralese<TemplateHypothesis>",
         "result_path": ["return"], "body_sha256": body_sha, "body_source": body,
         "body_source_basis": "exact-teacher-text-result-marker", "request_sha256": request_sha,
         "raw_response_sha256": response_sha, "source_occurrence": writer_node,
@@ -374,16 +374,16 @@ def test_teacher_text_nzt1_receipts_reencode_exact_native_text_and_preserve_prod
     write_event = {"kind": "block_write", "call_id": writer_call, "node": writer_node, "seq": 9,
         "block": block_id, "truncated": False, "format": "teacher-text", "producer": "teacher-text-emulation",
         "source_kind": "typed-text-result", "source": "return_result", "marker_context": "return-result",
-        "result_type": "Neuralese<string>", "text_body": body, "text_body_sha256": body_sha,
+        "result_type": "Neuralese<TemplateHypothesis>", "text_body": body, "text_body_sha256": body_sha,
         "learned_vectors": False, "tokenizer_ids": False, "training_admission": False}
     read = {"kind": "block_read", "call_id": reader_call, "node": read_node, "turn": turn_node, "seq": 7,
         "block": block_id, "format": "teacher-text", "producer": "teacher-text-emulation",
-        "result_type": "Neuralese<string>", "text_body_sha256": body_sha, "learned_vectors": False,
+        "result_type": "Neuralese<TemplateHypothesis>", "text_body_sha256": body_sha, "learned_vectors": False,
         "tokenizer_ids": False, "inputs": [{"node": writer_node, "block": block_id, "port": "block"}]}
     turn = {"kind": "model_turn", "call_id": reader_call, "node": turn_node,
         "inputs": [{"node": read_node, "port": "read", "block": block_id}]}
     witness = {"kind": "teacher-text-exact-provider-output/1", "source": "return_result",
-        "host_result_call_id": writer_call, "host_result_type": "Neuralese<string>", "writer_node": writer_node,
+        "host_result_call_id": writer_call, "host_result_type": "Neuralese<TemplateHypothesis>", "writer_node": writer_node,
         "body_sha256": body_sha, "raw_response_sha256": response_sha,
         "typed_result_receipt_sha256": _sha(json.dumps(write_receipt, sort_keys=True, separators=(",", ":")))}
     provider_receipt = {"schema": "natlang.provider-expanded-read-context/3", "origin": "same-run-producer",
@@ -394,7 +394,7 @@ def test_teacher_text_nzt1_receipts_reencode_exact_native_text_and_preserve_prod
         "source_request_sha256": request_sha, "source_response_sha256": response_sha,
         "source_trajectory_index": 0, "source_action_target_sha256": sampled_target_sha,
         "source_request_sha256": request_sha, "source_response_sha256": response_sha,
-        "block": {"id": block_id, "type": "Neuralese<string>", "body": body, "body_sha256": body_sha,
+        "block": {"id": block_id, "type": "Neuralese<TemplateHypothesis>", "body": body, "body_sha256": body_sha,
                   "format": "teacher-text", "teacher_text": True, "producer_call_id": writer_call,
                   "writer_node": writer_node, "learned_vectors": False, "tokenizer_ids": False},
         "block_read": read, "model_turn": turn, "producer_write": write_event,
@@ -410,7 +410,7 @@ def test_teacher_text_nzt1_receipts_reencode_exact_native_text_and_preserve_prod
         "neuralese_conversion": {"external_context_inputs": [{
             "schema": "natlang.external-context-input/1", "origin": "same-run-producer",
             "learner_representation": "typed-read-from-authenticated-runtime-writer-event-context-only",
-            "block_id": block_id, "type": "Neuralese<string>", "body_sha256": body_sha,
+            "block_id": block_id, "type": "Neuralese<TemplateHypothesis>", "body_sha256": body_sha,
                 "format": "teacher-text", "teacher_text": True, "learned_vectors": False, "tokenizer_ids": False,
             "qualification_certificate": False, "training_admission": False,
             "invocation_id": reader_call, "parent_invocation_id": "inspection-root",
@@ -426,7 +426,7 @@ def test_teacher_text_nzt1_receipts_reencode_exact_native_text_and_preserve_prod
             "raw_request_sha256": request_sha, "rendered_request_sha256": response_sha,
         }]},
         "messages": [{"role": "user", "content": [{"type": "text", "text": "Prior inspection note: "},
-            {"type": "teacher_text", "id": block_id, "value_type": "Neuralese<string>",
+            {"type": "teacher_text", "id": block_id, "value_type": "Neuralese<TemplateHypothesis>",
              "source_occurrence": writer_node}]}],
         "target": {"role": "assistant", "content": "Reconcile the prior note with the current visit."}}
     anchor = {"id": "teacher-text-anchor", "split": "test", "source_groups": ["case:independent"],
