@@ -45,7 +45,7 @@ def main(argv=None):
                              "prefill then runs on a --prefix-block token grid, so numerics differ from single-chunk "
                              "prefill (default 2, on by default like the managed host; 0 opts out for actors whose exact "
                              "prefill numerics are bound elsewhere)")
-    parser.add_argument("--prefix-block", type=int, default=256, help="prefix cache grid in tokens")
+    parser.add_argument("--prefix-block", type=int, default=None, help="prefix cache grid in tokens (default: existing prefill chunk size)")
     parser.add_argument("--guidance", default=None,
                         help="guidance for requests that do not set one: JSON (serve/guidance.py), e.g. '{\"repeat\": 3}' or true")
     args = parser.parse_args(argv)

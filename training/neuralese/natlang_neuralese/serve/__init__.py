@@ -42,11 +42,13 @@ def native_prefill_configuration(device: str, requested: int | None = None, *,
 
 
 
-def configure_native_prefix_cache(engine, budget_gb: float = 2.0, block: int = 256):
+def configure_native_prefix_cache(engine, budget_gb: float = 2.0, block: int | None = None):
     """Bind prefill grid and cache capacity to the policy identity before serving."""
     import math
     from ..common.hashing import canonical_json_sha256_hex
     from .prefix_cache import PrefixCache
+    if block is None:
+        block = engine.prefill_tokens
     if (isinstance(budget_gb, bool) or not isinstance(budget_gb, (int, float))
             or not math.isfinite(budget_gb) or budget_gb < 0
             or type(block) is not int or block <= 0):

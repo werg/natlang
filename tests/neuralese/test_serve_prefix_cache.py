@@ -121,3 +121,22 @@ def test_prefix_configuration_rejects_invalid_or_live_changes(tmp_path):
     engine._thread = object()
     with pytest.raises(ValueError, match='after engine start'):
         configure_native_prefix_cache(engine, 1, 4)
+
+
+def test_default_prefix_grid_preserves_existing_prefill_chunks(tmp_path):
+    from natlang_neuralese.serve import configure_native_prefix_cache
+    engine = _engine(tmp_path, 0)
+    engine.prefill_tokens = 8
+    ids = list(range(5, 21))
+    old_logits, old_cache = _prefill(engine, ids)
+    config = configure_native_prefix_cache(engine, .01)
+    assert config['prefix_cache']['block_tokens'] == 8
+    cold_logits, cold_cache = _prefill(engine, ids)
+    warm_logits, warm_cache = _prefill(engine, ids)
+    assert torch.equal(old_logits, cold_logits) and torch.equal(cold_logits, warm_logits)
+    assert engine.prefix_cache.reused_tokens == len(ids)
+    for original, cached in zip(old_cache.states, cold_cache.states):
+        for name in original.__dataclass_fields__:
+            a, b = getattr(original, name), getattr(cached, name)
+            if isinstance(a, torch.Tensor):
+                assert torch.equal(a, b)
