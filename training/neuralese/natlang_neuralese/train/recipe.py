@@ -300,6 +300,19 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None, *, source_rout
 
 def native_source_dependencies(path, *, parents=(), source_route=None):
     """Validate portable immutable graph manifests and enumerate every actual input."""
+    return _native_source_dependencies(path, parents=parents, source_route=source_route, graph_payloads_only=False)
+
+
+def native_graph_payload_dependencies(path, *, parents=(), source_route=None):
+    """Graph manifest/payload bindings for consumers that inspect training rows.
+
+    Source metadata is still verified, but is not itself a graph row source.
+    Stage/export/recovery custody must use native_source_dependencies instead.
+    """
+    return _native_source_dependencies(path, parents=parents, source_route=source_route, graph_payloads_only=True)
+
+
+def _native_source_dependencies(path, *, parents, source_route, graph_payloads_only):
     path = Path(path).resolve()
     if path.suffix != '.json':
         return []
@@ -327,7 +340,8 @@ def native_source_dependencies(path, *, parents=(), source_route=None):
             raise ValueError('native graph logical family feature content hash mismatch: ' + str(child))
         if 'bytes' in feature and child.stat().st_size != feature['bytes']:
             raise ValueError('native graph logical family feature byte count mismatch: ' + str(child))
-        dependencies[str(child)] = digest
+        if not graph_payloads_only:
+            dependencies[str(child)] = digest
     for source in manifest['sources']:
         if source.get('kind') not in {'native-graphs', 'semantic-pairs'}:
             raise ValueError('native graph manifest source kind must be explicit')
@@ -341,7 +355,8 @@ def native_source_dependencies(path, *, parents=(), source_route=None):
             raise ValueError('native graph manifest dependency content hash mismatch: ' + str(child))
         dependencies[str(child)] = digest
         if source['kind'] == 'native-graphs':
-            for value in native_source_dependencies(child, parents=(*parents, path), source_route=source_route):
+            for value in _native_source_dependencies(child, parents=(*parents, path), source_route=source_route,
+                                                     graph_payloads_only=graph_payloads_only):
                 dependencies[value['path']] = value['sha256']
     return [{'path': child, 'sha256': digest} for child, digest in dependencies.items()]
 

@@ -15,7 +15,7 @@ from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha256_fi
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.data.native_sources import _jsonl
 from natlang_neuralese.train.native_supervision import SCHEMA, load_policy
-from natlang_neuralese.train.recipe import native_source_dependencies
+from natlang_neuralese.train.recipe import native_graph_payload_dependencies
 
 
 def complete_source_contract(prior, bindings, *, context_weight, inventory):
@@ -66,7 +66,7 @@ def build(sources, *, legacy_pair_context_weight, held_sources=(), expected_spli
     for source in sources:
         path = Path(source).resolve(strict=True)
         roots.append({'path':str(path),'sha256':sha256_file_hex(path)})
-        dependencies = native_source_dependencies(path)
+        dependencies = native_graph_payload_dependencies(path)
         for binding in dependencies or [roots[-1]]:
             child = Path(binding['path'])
             if child.suffix != '.json':
@@ -219,7 +219,7 @@ def main(argv=None):
             leaves, roots = {}, []
             for source in args.source:
                 root = binding(source.resolve(strict=True)); roots.append(root)
-                for child in native_source_dependencies(source) or [root]:
+                for child in native_graph_payload_dependencies(source) or [root]:
                     if Path(child['path']).suffix != '.json':
                         leaves[child['sha256']] = child
             if args.expected_source_count is not None and len(leaves) != args.expected_source_count:

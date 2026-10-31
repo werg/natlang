@@ -24,7 +24,7 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     same_source = old.get('native_graphs') == new.get('native_graphs')
     if not before or not after:
         raise ValueError('resident CE append requires both prior and successor policies')
-    from .recipe import _ce_supervision_input_continuation, native_source_dependencies
+    from .recipe import _ce_supervision_input_continuation, native_graph_payload_dependencies
     if not _ce_supervision_input_continuation(old, new):
         raise ValueError('resident CE append is not a declared data continuation')
     prior, policy = load_policy(before), load_policy(after)
@@ -91,7 +91,7 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
             raise ValueError('resident CE source binding byte count differs')
         return p
     path = checked(train)
-    leaves = native_source_dependencies(path)
+    leaves = native_graph_payload_dependencies(path)
     if not leaves:
         leaves = [{'path':str(path), 'sha256':train['sha256']}]
     leaves = [ref for ref in leaves if Path(ref['path']).suffix != '.json']

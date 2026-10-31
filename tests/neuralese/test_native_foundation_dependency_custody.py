@@ -101,6 +101,9 @@ def test_nested_logical_family_features_survive_staged_recovery(tmp_path):
     paths = {item['path'] for item in native_graph_bindings(bind(staged/'outer.json'))}
     assert paths == {str(staged/name) for name in ('outer.json','inner.json','pairs.jsonl','features.jsonl',
                                                  '.natlang-source-map.json')}
+    from natlang_neuralese.train.recipe import native_graph_payload_dependencies
+    graph_paths = {item['path'] for item in native_graph_payload_dependencies(staged/'outer.json')}
+    assert graph_paths == {str(staged/'inner.json'), str(staged/'pairs.jsonl')}
 
 
 @pytest.mark.parametrize('change', ['hash', 'bytes', 'binding'])
