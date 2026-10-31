@@ -364,6 +364,9 @@ def pack_native_graphs(examples):
     return packed, tuple(weights), tuple(ownership), tuple(external_name_maps)
 
 
+TOKEN_MASS_GRAPH_REFERENCE = 64.0
+
+
 def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_layers=True,
                            chunk_tokens=128, objective=None, precision=None, accumulate=()):
     """One shared complete production update, also used by throughput diagnostics.
@@ -397,7 +400,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     # Token-mass CE is an additive objective. A fixed recorded reference
     # preserves each graph's coefficient when packed update sizes change.
     if objective is None and modes=={'token'} and sum(scored):
-        shares=[count / 64.0 for count in scored]
+        shares=[count / TOKEN_MASS_GRAPH_REFERENCE for count in scored]
     else:
         shares = ([count / sum(scored) for count in scored] if sum(scored) else [1. / len(micro_batches)] * len(micro_batches))
     loss_weight = None if precision is None or precision[3] == 1.0 else float(precision[3])
@@ -2311,7 +2314,7 @@ def _main(argv=None, *, requested_refresh):
         from .own_output_supervision import policy_objective
         if policy_objective(ce_policy).get('mass') == 'token':
             norm_history=list(saved_options.get('token_mass_update_normalization_history') or [])
-            norm={'schema':'natlang.token-mass-update-normalization/1','graph_reference':64,
+            norm={'schema':'natlang.token-mass-update-normalization/1','graph_reference':TOKEN_MASS_GRAPH_REFERENCE,
                   'policy':'fixed-graph-reference','stage_id':args.stage_id,
                   'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))) if saved_training else 0,
                   'preserved':'weights, optimizer, RNG and earned exposure'}
