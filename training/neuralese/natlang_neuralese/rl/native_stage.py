@@ -217,6 +217,7 @@ def main(argv=None):
 def _admit_and_train(args,trainer):
     from ..common.jsonio import iter_jsonl_rows
     rows = [row for path in args.rollouts for _, row in iter_jsonl_rows(path)]
+    rows, unsupported = _defer_text_result_state_groups(rows, args.out)
     graphs, objective = prepare(rows, checkpoint=args.continue_from, tokenizer=args.rl_tokenizer,
         bundle=args.rl_block_bundle, mode=args.rl_mode,coefficient_policy=args.coefficient_policy,
         expected_history_reasoning_policy=args.history_reasoning_policy,
@@ -241,7 +242,8 @@ def _admit_and_train(args,trainer):
         'rollouts': {str(path.resolve()): sha256_file_hex_cached(path) for path in args.rollouts},
         'tasks_selected': [{'task_id': row['task_id'], 'split': 'train'} for row in objective['rows'].values()],
         'omissions':{'unscored':[{'task_id':row.get('task_id'),'sample':row.get('sample')} for row in rows if row.get('reward') is None],
-                     **({'deferred_long_graphs':deferred} if deferred is not None else {})},
+                     **({'deferred_long_graphs':deferred} if deferred is not None else {}),
+                     **({'deferred_text_result_state_graphs':unsupported} if unsupported is not None else {})},
         'episodes': len(graphs), 'sampled_tokens': sum(len(row['actions']) for row in objective['rows'].values()),
         'neuralese_bonus_episodes': sum(bool(row.get('neuralese_bonus')) for row in objective['rows'].values()),
         'native_graphs_sha256': sha256_file_hex_cached(graph_path),
@@ -285,6 +287,41 @@ def _release_host_memory():
         ctypes.CDLL('libc.so.6').malloc_trim(0)
     except OSError:
         pass
+
+
+def _text_result_state_writes(rollout):
+    """Graph writes of a turn's typed text result into ``Neuralese<...>`` state that its sampling did not capture.
+
+    The runtime encodes such a returned text into state outside the model's sampled output (producer null,
+    source_kind typed-text-result). Whole-graph RL has no differentiable lowering for that text-to-state
+    encoding yet, so the occurrence check correctly refuses the episode."""
+    from .episode_graph import rollout_turn_names
+    events = rollout.get('execution_graph') or []
+    found = []
+    for name, turn in zip(rollout_turn_names(rollout.get('turns') or []), rollout.get('turns') or []):
+        writes = [event for event in events if event.get('kind') == 'block_write' and event.get('turn') == name]
+        captured = (turn.get('sampling') or {}).get('writes') or []
+        host = [event for event in writes if event.get('source_kind') == 'typed-text-result' and event.get('producer') is None]
+        if host and len(writes) - len(host) == len(captured):
+            found += [event.get('block') for event in host]
+    return found
+
+
+def _defer_text_result_state_groups(rows, out):
+    """Keep whole groups with uncaptured text-to-state results beside the round (recorded, never silently dropped)."""
+    keys = {(row.get('task_id'), row.get('group')) for row in rows if _text_result_state_writes(row)}
+    if not keys:
+        return rows, None
+    deferred = [row for row in rows if (row.get('task_id'), row.get('group')) in keys]
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / 'deferred-text-result-state-graphs.jsonl'
+    write_bytes_durable(path, ''.join(json.dumps(row) + '\n' for row in deferred).encode())
+    record = {'reason': 'typed text result encoded into Neuralese state outside the sampled output; whole-graph RL '
+                        'lacks its differentiable text-to-state lowering',
+              'path': {'path': str(path.resolve()), 'sha256': sha256_file_hex_cached(path)},
+              'episodes': [{'task_id': row.get('task_id'), 'group': row.get('group'), 'sample': row.get('sample'),
+                            'state_writes': _text_result_state_writes(row)} for row in deferred]}
+    return [row for row in rows if (row.get('task_id'), row.get('group')) not in keys], record
 
 
 def _defer_long_graphs(args, graphs, objective, graph_path, objective_path, *, share=True):
