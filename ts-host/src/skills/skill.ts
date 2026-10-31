@@ -157,7 +157,7 @@ export function readSkillDescription(value: unknown, field: 'description' | 'sum
       const type = parseType(value.$neuralese.type);
       if (type.kind !== 'neuralese' || type.element.kind !== 'prim' || type.element.name !== 'string')
         throw new Error('expected Neuralese<string>');
-      return neuraleseRef(value.$neuralese.type, value.$neuralese.id,value.$neuralese.stop_gradient,value.$neuralese.source_occurrence);
+      return neuraleseRef(value.$neuralese.type, value.$neuralese.id,value.$neuralese.stop_gradient,value.$neuralese.source_occurrence,value.$neuralese.teacher_text === true);
     } catch { error(`skill-${field}-type`, `${field} must have type Neuralese<string> (optionally dialect-qualified)`); return undefined; }
   }
   error(`skill-${field}-${value === undefined ? 'missing' : 'type'}`, `${field} must be nonempty text or a Neuralese<string> reference`);

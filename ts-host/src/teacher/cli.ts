@@ -59,6 +59,7 @@ async function main(): Promise<void> {
       '         --model-concurrency N --max-model-requests N  (limits include all child calls)\n' +
       '         --prompt-rendering full|program-header  native prompt and tool surface (default full)\n' +
       '         --cache-stable-tools --collection-role student|teacher\n' +
+      '         --text-neuralese-emulation  explicit teacher-only literal-text Neuralese over provider/HTTP; no vectors or training qualification\n' +
       '         --execution-adapter MODULE  caller-supplied program execution fixture\n' +
       '         --file-tools all|editor|files  (the file tools directory reducers offer; default all)\n' +
       '         --judge-model-id ID (--judge-server URL | --judge-provider PI_ID) for judged oracles\n' +
@@ -79,6 +80,9 @@ async function main(): Promise<void> {
   const collectionRole = flags.get('--collection-role') ?? 'teacher';
   if (!['student', 'teacher'].includes(collectionRole)) throw new Error('invalid collection role');
   const provider = flags.get('--provider');
+  if (flags.has('--text-neuralese-emulation') && (collectionRole !== 'teacher' || !provider && !flags.has('--server') ||
+      flags.has('--neuralese-server') || flags.has('--program-guidance-file') || flags.has('--chat-request-config')))
+    throw new Error('--text-neuralese-emulation requires teacher role and an explicit provider/server, and excludes native Neuralese/guidance');
   if (flags.has('--neuralese-server') && (!flags.has('--server') || provider))
     throw new Error('--neuralese-server requires --server and excludes Pi');
   if (provider && flags.has('--server')) throw new Error('--provider and --server cannot be used together');
@@ -146,6 +150,7 @@ async function main(): Promise<void> {
     ...(flags.has('--reuse-surfaces') ? { reuseSurfaces: flags.get('--reuse-surfaces')!.split(',').filter(Boolean) } : {}),
     collectionRole: collectionRole as 'student' | 'teacher',
     ...(flags.has('--neuralese-server') ? { neuraleseServer: true } : {}),
+    ...(flags.has('--text-neuralese-emulation') ? { textNeuraleseEmulation: true } : {}),
     ...(judgeModelId ? { judgeModel: { modelId: judgeModelId,
       ...(flags.has('--judge-provider') ? { provider: flags.get('--judge-provider'),
         piOptions: { reasoningEffort: flags.get('--judge-reasoning-effort') ?? 'low' } } :

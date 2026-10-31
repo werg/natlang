@@ -24,7 +24,7 @@ import { UntrustedRegistry, containsUntrusted, hostUntrusted, scopedUntrusted } 
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { NEURALESE_TYPE_DOCUMENTATION } from '../compiler/intrinsics.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
-import { dialectBinding, isNeuraleseRef, neuraleseRef, neuraleseSentinel, nativeLiteralArguments, NeuraleseUnsupportedError, sourceWithLiteralCalls,
+import { dialectBinding, isNeuraleseRef, isTeacherTextNeuraleseId, neuraleseRef, neuraleseSentinel, nativeLiteralArguments, NeuraleseUnsupportedError, sourceWithLiteralCalls,
   type NeuraleseRuntimeOptions } from './neuralese.js';
 import { bindTraceScope, blockInput, FILE_CONTEXT, graphNode, invocationNodeId, producerScopeForTrace, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
@@ -717,19 +717,24 @@ export class NativeRuntime {
       ...(metadata.resultPath ? { result_path: metadata.resultPath } : {}),
       ...(metadata.argumentName ? { argument_name: metadata.argumentName } : {}) };
     const block = await port.write(text, { type, producer });
+    const teacherText = isTeacherTextNeuraleseId(block.id) && block.producer?.kind === 'teacher-text-emulation';
+    if (isTeacherTextNeuraleseId(block.id) && (!teacherText || !this.neuralese?.teacherText?.get(block.id)))
+      throw new NeuraleseUnsupportedError('teacher-text artifact has no exact case-local body store');
     const sourceTurn = metadata.inputs.find(input => /#turn\d+$/.test(input.node))?.node ?? '';
-    graphNode(this.trace, 'block_write', { call_id: callId, block: block.id, length: block.length, turn: sourceTurn, stops: [],
+    const writerNode = graphNode(this.trace, 'block_write', { call_id: callId, block: block.id, length: block.length, turn: sourceTurn, stops: [],
       truncated: !!block.truncated, producer: block.producer?.kind ?? null, source_kind: producer.source_kind,
       source: metadata.source, marker_context: metadata.markerContext,
       ...(metadata.argumentName ? { argument_type: type } : { result_type: type }), text_body_sha256: bodySha,
       ...(producer.result_path ? { result_path: producer.result_path } : {}),
       ...(producer.argument_name ? { argument_name: producer.argument_name } : {}),
+      ...(teacherText ? { format: 'teacher-text', producer: 'teacher-text-emulation', learned_vectors: false, tokenizer_ids: false } : {}),
       ...(block.native_state ? { format: 'native-state', native_identity: {
         architecture: block.native_state.architecture, checkpoint_sha256: block.native_state.checkpoint_sha256,
         tokenizer_fingerprint: block.native_state.tokenizer_fingerprint,
         embedding_weight_sha256: block.native_state.embedding_weight_sha256 },
         source_capture: block.producer?.native_source_capture } : {}) }, metadata.inputs);
-    return neuraleseRef(type, block.id);
+    if (teacherText && writerNode) this.neuralese?.teacherText?.recordWriter(block.id, writerNode);
+    return neuraleseRef(type, block.id, false, writerNode, teacherText);
   }
 
   async evaluate(node: LambdaNode, code: string, scope: Record<string, unknown>, live: Record<string, unknown>, timeoutMs?: number,

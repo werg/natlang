@@ -57,6 +57,7 @@ import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
 import { hostCaptures, type CaptureSource } from '../exact-capture/host-capture.js';
 import { checkItemResultBinding, type ItemResultBindingSpec } from './item-result-binding.js';
 import { RefinementChecker, type RefinementFailure } from '../native/refinement.js';
+import { createTeacherTextNeuralese, TEACHER_TEXT_NEURALESE_PROMPT } from '../model/teacher-text-neuralese.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -112,6 +113,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   programGuidance?: NativeProgramGuidance;
   /** Native value-channel transport to an explicitly configured Neuralese server. */
   neuraleseServer?: boolean;
+  /** Explicit teacher-only literal text transport; carries no native representation or training claim. */
+  textNeuraleseEmulation?: boolean;
   /** Optional collection-specific maximum wall time for one Pi provider request. */
   providerRequestTimeoutMs?: number;
   /** Optional collection-specific maximum wall time for preparation plus provider turns in one action cycle. */
@@ -170,8 +173,8 @@ export function graphShowsMarker(graph: unknown, marker: string): boolean {
 }
 export const recordDigest = (record: ProgramRecord): string => sha256(canonical(record));
 
-export function effectiveSystemPrompt(options: Pick<ProvenanceOptions, 'systemPrompt'>): string {
-  return options.systemPrompt;
+export function effectiveSystemPrompt(options: Pick<ProvenanceOptions, 'systemPrompt' | 'textNeuraleseEmulation'>): string {
+  return options.systemPrompt + (options.textNeuraleseEmulation ? TEACHER_TEXT_NEURALESE_PROMPT : '');
 }
 
 export function validateFocusedRecord(record: ProgramRecord): void {
@@ -234,6 +237,9 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.promptRendering ? { prompt_rendering: options.promptRendering } : {}),
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
     neuralese_server: options.neuraleseServer ?? false,
+    ...(options.textNeuraleseEmulation ? { neuralese_transport: { schema: 'natlang.teacher-text-neuralese-transport/1',
+      mode: 'teacher-text/1', learned_vectors: false, qualification_certificate: false, training_admission: false,
+      tokenizer: { kind: 'provider-native-unspecified', ids_claimed: false } } } : {}),
     ...(options.chatRequestControls ? { chat_request_controls: options.chatRequestControls } : {}),
     ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {},
       ...(options.providerRequestControls ? { provider_request_controls: options.providerRequestControls } : {}),
@@ -868,6 +874,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   }
   if (config.neuraleseServer && (!config.endpoint || config.provider))
     throw new Error('native Neuralese collection requires an endpoint and excludes Pi');
+  if (config.textNeuraleseEmulation && (config.collectionRole !== 'teacher' || config.neuraleseServer || config.trainingGuidance ||
+      config.programGuidance || config.chatRequestControls?.x_natlang_guidance))
+    throw new Error('teacher-text Neuralese emulation requires teacher role and excludes native Neuralese and native guidance');
+  if (config.textNeuraleseEmulation && !config.provider && !config.endpoint)
+    throw new Error('teacher-text Neuralese emulation requires an explicit provider or endpoint transport');
   if (config.judgeModel && (!config.judgeModel.modelId ||
       Number(!!config.judgeModel.endpoint) + Number(!!config.judgeModel.provider) !== 1))
     throw new Error('judge model needs an ID and exactly one endpoint or Pi provider');
@@ -915,7 +926,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       await nativeStateRuntimeOptions({ endpoint: config.endpoint!, store: nativeStore,
         headers: config.apiKeyEnv ? { authorization: 'Bearer ' + process.env[config.apiKeyEnv] } : undefined,
         info: nativeInfo! as import('../model/neuralese-info.js').NeuraleseServerInfo }, { write: 'available' }) : undefined;
-    const valueRuntime = nativeStore ? nativeValueRuntime ?? { store: nativeStore, dialect: nativeInfo!.dialects![0]! } : undefined;
+    const teacherTextTransport = config.textNeuraleseEmulation ? createTeacherTextNeuralese() : undefined;
+    const valueRuntime = teacherTextTransport?.runtime ?? (nativeStore ? nativeValueRuntime ?? { store: nativeStore, dialect: nativeInfo!.dialects![0]! } : undefined);
     const session = config.provider ? createManagedModelSession(controlledProviderProfile(config.provider,
       config.modelId, config.piOptions, config.providerRequestControls)) : undefined;
     const judgeConfig = config.judgeModel;
@@ -1006,7 +1018,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       chatCompletionsUrl: config.chatCompletionsUrl,
       ...(config.apiKeyEnv ? { apiKey: process.env[config.apiKeyEnv] } : {}),
       request: config.request, onRequestStart: recordHttpTransportStart });
-    const send = rawSend;
+    const send = teacherTextTransport ? teacherTextTransport.wrap(rawSend) : rawSend;
     let evidenceHandle: Awaited<ReturnType<typeof open>> | undefined;
     try {
     const interrupted = (actionSignal?: AbortSignal) => actionSignal?.reason instanceof Error ? actionSignal.reason :
@@ -1386,6 +1398,31 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
     throwIfCollectionFatal();
+    // The provider response is journaled before runtime decoding for crash safety. Once the exact
+    // writer node exists, join that graph evidence back to the raw response's marker receipt.
+    const executionGraph = Array.isArray(run.outcome.execution_graph) ? run.outcome.execution_graph as Record<string, unknown>[] : [];
+    for (const event of executionGraph.filter(event => event.kind === 'block_write' && event.format === 'teacher-text')) {
+      const sourceCall = typeof event.call_id === 'string' ? event.call_id : undefined;
+      const bodySha = typeof event.text_body_sha256 === 'string' ? event.text_body_sha256 : undefined;
+      const writerNode = typeof event.node === 'string' ? event.node : undefined;
+      if (!sourceCall || !bodySha || !writerNode || typeof event.text_body !== 'string') continue;
+      const candidates = trajectory.filter(frame => frame.invocation_id === sourceCall &&
+        frame.model_response && typeof frame.model_response === 'object');
+      for (const frame of candidates) {
+        const response = frame.model_response as Record<string, unknown>;
+        const provenance = response.transport_provenance as Record<string, unknown> | undefined;
+        if (!provenance || provenance.raw_response_sha256 !== frame.raw_response_sha256 ||
+            !Array.isArray(provenance.marker_outputs) || !(provenance.marker_outputs as Record<string, unknown>[])
+              .some(marker => marker.body_sha256 === bodySha && marker.body === event.text_body)) continue;
+        const writes = Array.isArray(provenance.typed_result_writes) ? provenance.typed_result_writes as Record<string, unknown>[] : [];
+        const receipt = { id: event.block, type: event.result_type, body: event.text_body, body_sha256: bodySha,
+          producer_call_id: sourceCall, writer_node: writerNode, source_kind: event.source_kind, source: event.source,
+          marker_context: event.marker_context, format: 'teacher-text', teacher_text: true,
+          learned_vectors: false, tokenizer_ids: false };
+        if (!writes.some(write => write.id === receipt.id && write.writer_node === writerNode)) writes.push(receipt);
+        response.transport_provenance = { ...provenance, typed_result_writes: writes };
+      }
+    }
     const trajectoryReview = observedTrajectoryContract(item.record, executionRunId, run);
     requestTelemetry.authored_synthetic_root_actions = partial.turns.filter(turn =>
       (turn.response.raw_response?.natlang_action_provenance as Record<string, unknown> | undefined)?.kind ===

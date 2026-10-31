@@ -574,9 +574,9 @@ export class NativeToolAgent {
   private async decodeNeuralese(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string,
       allowAssistantResult = true): Promise<ModelTurn> {
     const carries = (value: unknown): boolean => typeof value === 'string' ?
-      value.includes('<|neuralese|>') || nativeStateSentinelIds(value).length > 0 :
+      value.includes('<|neuralese|>') || nativeStateSentinelIds(value).length > 0 || runtimeTextToParts(value).some(part => part.type === 'teacher_text') :
       Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
-        (String((value as { type?: unknown }).type) === 'native_state' ||
+        (['native_state','teacher_text'].includes(String((value as { type?: unknown }).type)) ||
           Object.values(value).some(carries));
     const nativeBlocks = (response.raw_response?.native_state as { blocks?: Record<string, unknown>[] } | undefined)?.blocks ?? [];
     const rawChoices = response.raw_response?.choices as Array<{ message?: { content?: unknown } }> | undefined;
@@ -621,7 +621,8 @@ export class NativeToolAgent {
           name === 'return_result' && key === 'value' ? 'return-result' : 'other-tool-argument';
         const resultValue = name === 'return_result' && key === 'value' &&
           (args.status === undefined || args.status === 'success');
-        decodedArgs[key] = await decodeTurnValue(withNativeOrigins(value), port, { ...producer, marker_context: context }, written,
+        decodedArgs[key] = await decodeTurnValue(withNativeOrigins(value), port, { ...producer, marker_context: context,
+          ...(name === 'return_result' && key === 'value' ? { source: 'return_result', source_kind: 'typed-text-result' } : {}) }, written,
           resultValue && expectedReturn ? { type: expectedReturn, env: session.env } : undefined,
           assistantCompletion ? nativeStateText : undefined);
       }
@@ -641,17 +642,58 @@ export class NativeToolAgent {
     }
     // Each native state the turn wrote is a node. A producer span ends at the model's end marker, so it records no stops.
     const reportedArtifacts = new Set<string>();
+    const teacherTextWrites: Record<string, unknown>[] = [];
     for (const block of written) {
       const reported = (block.producer ?? {}) as Record<string, unknown>;
       if (reportedArtifacts.has(block.id)) continue;
       reportedArtifacts.add(block.id);
-      graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id, turn: turnNode ?? '', block: block.id,
+      const teacherText = this.options.neuralese?.teacherText?.get(block.id);
+      const writeNode = graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id, turn: turnNode ?? '', block: block.id,
         length: block.length, truncated: !!block.truncated, stops: Array.isArray(reported.stops) ? reported.stops : [],
+        ...(teacherText ? { format: 'teacher-text', producer: 'teacher-text-emulation', source_kind: reported.source_kind,
+          source: reported.source, marker_context: reported.marker_context,
+          result_type: teacherText.type, text_body: teacherText.body, text_body_sha256: teacherText.body_sha256,
+          learned_vectors: false, tokenizer_ids: false, training_admission: false } : {}),
         ...Object.fromEntries(['position', 'temperature', 'seed']
           .filter(key => reported[key] !== undefined)
-          .map(key => [key, reported[key]])) }, turnNode ? [{ node: turnNode, port: 'turn' }] : []);
+          .map(key => [key, reported[key]])) }, turnNode ? [{ node: turnNode, port: teacherText ? 'result-source' : 'turn' }] : []);
+      if (teacherText && writeNode) {
+        this.options.neuralese?.teacherText?.recordWriter(block.id, writeNode);
+        teacherTextWrites.push({ id: block.id, type: teacherText.type, body: teacherText.body,
+          body_sha256: teacherText.body_sha256, producer_call_id: teacherText.producer_call_id,
+          writer_node: writeNode, source_kind: reported.source_kind, source: reported.source,
+          marker_context: reported.marker_context, format: 'teacher-text' });
+      }
     }
-    return decoded;
+    const bindTeacherOccurrences = (value: unknown): unknown => {
+      if (typeof value === 'string') return value.replace(/(nzt1_[a-z2-7]{52})/g, (marker, id: string) => {
+        const writer = this.options.neuralese?.teacherText?.get(id)?.writer_node;
+        return writer ? neuraleseSentinel(id, false, writer) : marker;
+      });
+      if (Array.isArray(value)) return value.map(bindTeacherOccurrences);
+      if (value && typeof value === 'object') {
+        const record = value as Record<string, unknown>;
+        if (record.type === 'teacher_text' && typeof record.id === 'string') {
+          const writer = this.options.neuralese?.teacherText?.get(record.id)?.writer_node;
+          return writer ? { ...record, source_occurrence: writer } : value;
+        }
+        if (record.$neuralese && typeof record.$neuralese === 'object') {
+          const ref = record.$neuralese as Record<string, unknown>;
+          if (typeof ref.id === 'string' && this.options.neuralese?.teacherText?.get(ref.id)) {
+            const writer = this.options.neuralese.teacherText.get(ref.id)?.writer_node;
+            return writer ? { ...record, $neuralese: { ...ref, source_occurrence: writer } } : value;
+          }
+        }
+        return Object.fromEntries(Object.entries(record).map(([key, child]) => [key, bindTeacherOccurrences(child)]));
+      }
+      return value;
+    };
+    const transportProvenance = decoded.transport_provenance;
+    return { ...decoded,
+      ...(teacherTextWrites.length && transportProvenance ? { transport_provenance: { ...transportProvenance,
+        typed_result_writes: teacherTextWrites } } : {}),
+      ...(decoded.text === undefined ? {} : { text: bindTeacherOccurrences(decoded.text) as string }),
+      ...(decoded.calls === undefined ? {} : { calls: decoded.calls.map(([name, args]) => [name, bindTeacherOccurrences(args) as Record<string, unknown>]) as ModelTurn['calls'] }) };
   }
 
   /**
@@ -695,12 +737,13 @@ export class NativeToolAgent {
     const findRefs = (value: unknown): Use[] => {
       if (typeof value === 'string') {
         return runtimeTextToParts(value).flatMap<Use>(part=>part.type==='text'?[]:
-          [{block:part.id,...(part.stop_gradient?{stop:true as const}:{}),...(part.source_occurrence?{source:part.source_occurrence}:{})}]);
+          [{block:part.id,...(part.type==='native_state'&&part.stop_gradient?{stop:true as const}:{}),...(part.source_occurrence?{source:part.source_occurrence}:{})}]);
       } else if (Array.isArray(value)) return value.flatMap(findRefs);
       else if (value && typeof value === 'object') {
         const record = value as { type?: unknown; id?: unknown;stop_gradient?:unknown;source_occurrence?:unknown };
-        if (record.type === 'native_state' && typeof record.id === 'string') {
-          return [{block:record.id,...(record.stop_gradient===true?{stop:true}:{}),...(typeof record.source_occurrence==='string'?{source:record.source_occurrence}:{})}];
+        if ((record.type === 'native_state' || record.type === 'teacher_text') && typeof record.id === 'string') {
+          return [{block:record.id,...(record.type === 'native_state' && record.stop_gradient===true?{stop:true}:{}),
+            ...(typeof record.source_occurrence==='string'?{source:record.source_occurrence}:{})}];
         }
         return Object.values(record).flatMap(findRefs);
       }
@@ -713,7 +756,7 @@ export class NativeToolAgent {
       const argumentRefs = (value: unknown): Use[] => {
         if (Array.isArray(value)) {
           const parts = value.length > 0 && value.every(part => part && typeof part === 'object' &&
-            ['text','native_state'].includes((part as {type:string}).type));
+            ['text','native_state','teacher_text'].includes((part as {type:string}).type));
           return parts ? findRefs(value) : value.flatMap(argumentRefs);
         }
         if (value && typeof value === 'object') return Object.values(value).flatMap(argumentRefs);
@@ -729,17 +772,29 @@ export class NativeToolAgent {
       for (const [part, uses] of [...contentUses, ...argumentUses].entries()) {
         for (const use of uses) {
           const block=use.block;
-          const artifact = await this.options.neuralese?.store.getNativeState?.(block);
-          if (!artifact) throw new NeuraleseUnsupportedError(`native-state consumer artifact ${block} is unavailable for provenance`);
-          const source = resolveReadSource(block, use.source);
-          const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block,
-            ...(use.stop?{stop_gradient:true}:{}),
-            format: 'native-state', native_identity: {
-              architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
-              tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
-              embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
-            positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source, producerScopeForTrace(trace))]);
-          if (node) reads.push({ node, port: 'read', block, source, stop: !!use.stop });
+          const teacherText = this.options.neuralese?.teacherText?.get(block);
+          if (teacherText) {
+            if (!teacherText.writer_node || use.source && use.source !== teacherText.writer_node)
+              throw new NeuraleseUnsupportedError(`teacher-text consumer ${block} has no exact recorded writer occurrence`);
+            const source = teacherText.writer_node;
+            const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block,
+              format: 'teacher-text', producer: 'teacher-text-emulation', result_type: teacherText.type,
+              text_body_sha256: teacherText.body_sha256, learned_vectors: false, tokenizer_ids: false,
+              positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source, producerScopeForTrace(trace))]);
+            if (node) reads.push({ node, port: 'read', block, source, stop: false });
+          } else {
+            const artifact = await this.options.neuralese?.store.getNativeState?.(block);
+            if (!artifact) throw new NeuraleseUnsupportedError(`native-state consumer artifact ${block} is unavailable for provenance`);
+            const source = resolveReadSource(block, use.source);
+            const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block,
+              ...(use.stop?{stop_gradient:true}:{}),
+              format: 'native-state', native_identity: {
+                architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
+                tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
+                embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
+              positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source, producerScopeForTrace(trace))]);
+            if (node) reads.push({ node, port: 'read', block, source, stop: !!use.stop });
+          }
         }
       }
     }

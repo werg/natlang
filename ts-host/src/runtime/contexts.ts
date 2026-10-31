@@ -164,7 +164,7 @@ function dataDigest(value: unknown): unknown {
 function snapshotContextValue(value: unknown, active = new WeakSet<object>()): unknown {
   if (!value || typeof value !== 'object') return value;
   if (value instanceof Context || isLiveCapture(value)) return value;
-  if (isNeuraleseRef(value)) return neuraleseRef(value.$neuralese.type, value.$neuralese.id,value.$neuralese.stop_gradient,value.$neuralese.source_occurrence);
+  if (isNeuraleseRef(value)) return neuraleseRef(value.$neuralese.type, value.$neuralese.id,value.$neuralese.stop_gradient,value.$neuralese.source_occurrence,value.$neuralese.teacher_text === true);
   if (value instanceof ArrayBuffer) return value.slice(0);
   if (ArrayBuffer.isView(value)) {
     const buffer = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
