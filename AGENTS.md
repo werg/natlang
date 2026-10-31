@@ -299,9 +299,7 @@ on untouched confirmation worlds. Report actual base, teacher, SFT and RL task
 outcomes; saved artifacts and zero-variance rollout groups are not capability
 lift or policy updates. Program fits do not advance production lineage exposure.
 Distill verified training-world executions through ordinary source admission to
-both production recipes, preserving exact actor and split custody. Apply useful
-shared mechanisms to Mellum with its own exact checkpoint, without treating LFM
-adapters or native state as interchangeable.
+the production recipe, preserving exact actor and split custody.
 
 Source appends follow the declared recipe wiring (engineering finding,
 2026-10-27): roles sharing one named input, such as the full training source
@@ -362,49 +360,20 @@ enable `train_basis` and `train_bank` in its operational recipe rather than
 inheriting their disabled code defaults. Individual program label fits may pin a
 bank snapshot; after a shared bank update, publish its actual new snapshot and
 refit/rebind affected coefficient labels. Verify actual basis/component changes
-and downstream behavior, preserve optimizer history, and keep both production
-backbone learners moving. Do not describe target extraction alone as training
+and downstream behavior, preserve optimizer history, and keep the backbone learners moving. Do not describe target extraction alone as training
 the learned mixture system.
-
-## Luna teacher concurrency (owner, 2026-10-27)
-
-Limit Luna training-data generation to **one worker**. This supersedes the earlier
-six-worker target below. Preserve historical actors, plans and completed data;
-new or resumed generation must use a reviewed one-slot plan. Engineering helpers
-are separate from this teacher-worker limit.
-
-## Luna generation resumed (owner, 2026-10-26)
-
-Start and supervise six parallel Luna data-generation workers. This explicit
-owner instruction supersedes the earlier prohibitions on Luna/external-teacher
-generation. Preserve each actor, runtime, source and split identity; verify full
-trajectories and convert/admit useful results into both native training recipes.
-Keep these workers separate from engineering helpers and retain protected held
-data. Local LFM and the authorized one-cloud-Mellum learner continue training.
-This does not restart the paused CoreWeave teacher or evaluators.
 
 ## Recovery and limited compute credit (owner, 2026-10-24)
 
 Remaining CoreWeave access is opaque: $500 is an upper bound and actual remaining
 credit may be lower. Do not treat it as a confirmed balance. Prepare a lean
-placement with local LFM work, one cloud Mellum learner and burst generation
-when recovered/admitted supply warrants it; use additional cloud GPUs only when
-their measured useful throughput justifies the spend. Use actual account rates
+placement; use additional cloud GPUs only when their measured useful throughput
+justifies the spend. Use actual account rates
 when exposed and track cumulative spend; when rates or balance remain opaque,
 limit concurrency and allocation lifetime, monitor whatever usage is available,
 and keep independent recovery current. A time/concurrency bound is not a verified
 dollar cap. Do not invent a balance/rate or turn an unavailable quote into an
 indefinite barrier to useful authorized work.
-Preparation does not itself authorize restarting the paused training services.
-Owner follow-up (2026-10-24): bring the local LFM path up and running first.
-Local LFM full-state continuation and local whole-graph RL alternating with
-SFT/DPO are authorized (owner follow-up, 2026-10-24); cloud learners and generation
-remain paused pending their own resumption. Continue earned local progress rather
-than returning to the salvaged parent when rejoining the full production recipe.
-Owner follow-up (2026-10-25): resume local work after the workstation reboot and
-bring Mellum sandbox training back as quota allows. Use one cloud Mellum learner
-with recovery and usage monitoring; generation remains paused. The external drive
-is mounted again, but verify reads before relying on recovered paths.
 
 Filesystem snapshots are supplemental recovery. A quota cutoff can prevent
 restoring or reading them without another sandbox. The primary durable backup
@@ -423,23 +392,21 @@ quota-independent export path or starting an otherwise idle recovery sandbox.
 Keep supervision, implementation and operations in one primary-agent strand.
 Close existing sub-agent strands after collecting their handoffs; preserve useful
 training, generation and conversion processes. Use sub-agents sparingly and only
-with the Luna model when delegation is needed. Luna is for engineering work,
-never training-data generation. New training data must continue to come from our
-self-hosted teacher in the CoreWeave generation sandbox. These instructions
+with the Luna model when delegation is needed. These instructions
 supersede earlier requests for parallel non-Luna implementation agents.
 
 Owner update (2026-10-27): GPT-6.1 Terra is also authorized for more demanding
 engineering work. Luna remains available. Keep supervision and operations in
 the primary strand, delegate concrete bounded work sparingly, and independently
 review and integrate helpers' changes. This expands engineering model choice;
-it does not change the separate generation authorization or teacher provenance.
+generation authorization and teacher provenance are governed separately.
 
 ## Core memetic learning and legacy removal (owner, 2026-10-23)
 
 Memetic learning and soft skills are a core training and user capability. Learn
 stored native Neuralese guidance from multiple specific invocations of the same
 program, measure actual task outcomes on distinct development and confirmation
-invocations, and keep iterating the guidance and training recipe for both models.
+invocations, and keep iterating the guidance and training recipe.
 Keep related worlds on one side of the split. Do not claim capability lift from
 stored artifacts, admission, source checks or gradient tests alone.
 
@@ -448,8 +415,8 @@ inference. Stored guidance must condition the real executing model. Training
 exports retain the actual producer and every consumer import at their recorded
 positions, with gradients through those dependencies. Retain text and tokenizer
 provenance for re-encoding when the executing checkpoint changes; reuse compatible
-state efficiently across repeated and concurrent calls. Generation and guidance
-authoring remain owned by the self-hosted teacher, with exact actor provenance.
+state efficiently across repeated and concurrent calls. Guidance authoring keeps
+exact actor provenance.
 
 The system has no deployed-user backward-compatibility requirement. Remove legacy
 memetic adapters and flat soft-block fallbacks, migrate their current callers and
@@ -471,49 +438,25 @@ verified.
 
 The owner specifically requested a Sol subagent for this implementation and
 allowed it to delegate missing functionality. That is a task-specific exception
-to Luna-only engineering delegation; other helpers remain Luna, never generation.
+to Luna-only engineering delegation; other helpers remain Luna.
 The primary supervisor reviews, integrates and deploys the complete mechanisms.
 
-## Execution and generation ownership (owner, 2026-10-15)
+## Sandbox ownership and resources (owner, 2026-10-15 to 2026-10-29)
 
-Pop is closed. The DGX supervisor now owns all remaining work and sandbox
-operations; do not defer work to a Pop agent. Only Pop's generation was to
-finish: DGX-supervised data generation must continue. Generate new training
-data only with our own models through the CoreWeave sandboxes, not Luna or
-other external teachers. Existing admitted third-party data remains usable.
-Owner clarification (2026-10-15): "our own models" here means self-hosted
-teachers in our sandboxes, not the student models we are trying to improve.
-Use a substantially stronger teacher; Mellum and LFM are students. The selected
-generation teacher is Qwen3.6-35B-A3B (owner selection, 2026-10-22) on the existing dedicated
-generation sandbox, using the GPU-specific optimized serving engine. Preserve
-verified full trajectories for both students and expand beyond a narrow task
-pilot. Do not allocate an additional sandbox merely to change the teacher.
-Coordinate sandbox inference with training so generation uses available
-capacity without unnecessarily starving training. Preserve exact actor,
-checkpoint, runtime and split provenance; base-model generations are not
-on-policy samples from a trained checkpoint. This supersedes older machine
-ownership and provider-generation restart instructions below and in plans.
-The owner expressly authorized one extra sandbox for continuous own-model data
-generation on 2026-10-15. Our current resource plan is two training sandboxes
-plus that one generation sandbox; no further allocation is planned. Keep the
-generation sandbox supplied with useful tasks and admit verified results into
-the evolving training recipe. Measure actual CPU/RAM need on the allocated
-machine rather than delaying useful generation to test smaller allocations.
+Pop is closed. The DGX supervisor owns all remaining work and sandbox
+operations; do not defer work to a Pop agent. Preserve exact actor,
+checkpoint, runtime and split provenance; base-model or teacher generations are
+not on-policy samples from a trained checkpoint.
 
 Owner correction (2026-10-22): additional CoreWeave sandboxes are authorized,
-including a dedicated evaluator shared by both model lines. The only required
+including a dedicated evaluator. The only required
 resource specification for new GPU sandboxes is exactly one GPU. Omit CPU,
 RAM, GPU-type and GPU-memory requirements; in particular, remove such filters
 when capacity errors occur rather than repeatedly requesting the same constrained
 shape. Inspect the actual assigned resources and adapt execution accordingly.
-This supersedes the earlier three-sandbox allocation plan. Stop the current DGX
-Mellum evaluation, preserve its partial evidence, investigate and repair concrete
-problems, and launch the next evaluation on a sandbox.
 Owner follow-up (2026-10-22): a minimal RAM requirement is also authorized when
 useful. Keep CPU, GPU model and GPU memory unspecified; choose a RAM minimum
-from measured workload needs. The Mellum evaluator completed on 16Gi without
-OOM, but experienced substantial memory-limit pressure; its current replacement
-uses 24Gi. These observations apply to evaluation, not training capacity.
+from measured workload needs (evaluators needed more than 16Gi).
 Prefer an unconstrained one-GPU request when capacity is scarce and adapt to the
 actual assigned resources.
 Owner correction (2026-10-29): "1 CPU for the H100 sandbox is ludicrous; fix things immediately." Leaving CPU and
@@ -538,37 +481,11 @@ through the existing verifier; never relax an identity check to keep a publisher
 alive. Distinguish a live restarted exporter from verified new exports and
 actual learner exposure.
 
-Owner instruction (2026-10-21): test `RecursiveSI/flint` as the generation
-teacher and replace Qwen if its actual natlang task performance is decent.
-Use the existing generation sandbox and preserve full trajectory, actor,
-runtime and source provenance. The publisher's NVFP4 GGUF is a candidate for
-our RTX PRO 6000 Blackwell; model-card scores alone do not establish our task
-quality or useful generation throughput. This conditionally supersedes the
-selected-teacher name above; it does not authorize external teacher generation.
-
-Owner selection (2026-10-22): stick with `Qwen/Qwen3.6-35B-A3B` as the
-self-hosted teacher. This supersedes the provisional Flint selection and the
-earlier Qwen3.8 teacher. Use the existing generation sandbox, with an optimized
-serving engine and an explicitly identified compatible quantization (initial
-candidate: `nvidia/Qwen3.6-35B-A3B-NVFP4`). Preserve useful verified Flint and
-earlier Qwen trajectories with their original identities. Give new Qwen3.6
-batches their own exact checkpoint, tokenizer, runtime and actor provenance;
-never relabel earlier generations. Keep both learners moving during preparation
-and switch generation through explicit actor and guardian epoch bindings.
-
-Historical comparison: Flint produced 32/48 successes versus Qwen's 39/48;
-a later writer-occurrence runtime measurement produced 36/48 Flint successes.
-These do not establish Qwen3.6 task performance. See
-`plans/neuralese/FLINT_TEACHER_REPLACEMENT_20261021.md` and
-`plans/neuralese/QWEN36_TEACHER_SELECTION_20261022.md`. Source admission and
-learner adoption do not establish completed exposure or student capability lift.
-
 Owner clarification (2026-10-16): standing authorization covers replacing any
 stalled sandbox; do not ask again or wait indefinitely. Adjust the resource request if
 capacity is exhausted. Restore the newest independently verified full state,
 including optimizer/RNG/exposure, and preserve necessary data from the old box
-until recovery dependencies are secured. This replacement is authorized despite
-the earlier no-further-allocation plan. Other owner workloads, including
+until recovery dependencies are secured. Other owner workloads, including
 hindsight-kb training, have separate sandboxes: identify their ownership and
 preserve them. A control-plane `Running` label alone does not establish a healthy
 learner; monitor actual logs, progress and command responsiveness.
@@ -604,8 +521,7 @@ The19 unexported updates remain lost until independently recovered.
 
 Inspect assigned host RAM before restoration. An unconstrained one-GPU request
 returned a96GB GPU with only2Gi host RAM; it was closed without starting training.
-The current Mellum restore uses a measured96Gi minimum after128Gi capacity was
-rejected. GPU capacity alone does not establish host-memory capacity. Keep actual
+GPU capacity alone does not establish host-memory capacity. Keep actual
 cgroup pressure and learner progress visible; a Running label or controller exec
 is not an optimizer update.
 
@@ -644,34 +560,15 @@ supersede older projection/recursive graph-replay foundation rules for new work.
   learn to use imported state. Stored Neuralese includes text and a sequence
   of token embeddings. Preserve tokenizer provenance and make cross-tokenizer
   matching explicitly best effort, not assumed exact state interchange.
-- After several networks are trained, train a VAE through a shared joint
-  semantic adaptation space to predict deltas reproducing source KV in the
-  target. Follow with behavioral distillation/self-supervised SFT. Those
-  per-token semantic encodings become the shared dialect. Do not claim that
-  this later adapter is already trained or substitute the old projection.
-  This requires completed training on genuine producer/consumer shared-state
-  graphs in each participating model before VAE adaptation. Ordinary one-node
-  text SFT alone does not qualify. Admit those communication graphs into the
-  active shared trainer promptly, preserve completed per-row exposure and
-  optimizer state, and record their complete exposure explicitly in readiness.
+- Admit genuine producer/consumer communication graphs into the active
+  trainer promptly; ordinary one-node text SFT alone does not train
+  communication. Preserve completed per-row exposure and optimizer state.
 - Replace the old approach end to end: shared trainers, conversions, inference,
   block storage/transport, natlang harness, evaluators and recipes. Retain all
-  usable source data and protected evaluation splits through conversion, and
-  share mechanisms between LFM and Mellum.
+  usable source data and protected evaluation splits through conversion.
 - No prototyping shortcuts or half-solutions at architectural blockers. Work
   out both training and inference. After implementation, a separate agent must
   independently check the integrated work for gaps before cutover.
-- Encode cross-model readiness and work directly in the training recipe and
-  executable scheduling: begin shared-space VAE work as soon as at least two
-  models are ready. Provide resumable, adjustable VAE, control write-out and
-  additional joint training, so useful feedback changes the training rather
-  than waiting for a clean run. A placeholder stage or manual note is not an
-  implemented cross-model training provision.
-- Current old-paradigm cloud runs continue as DIAGNOSTICS during implementation
-  and local validation. Then restart BOTH models on the entire production
-  recipe using the replacement. Continued legacy training is not replacement
-  completion. Preserve useful diagnostic parents until cutover/dependency
-  checks; then apply the standing discarded-work hygiene policy.
 
 Track implementation and cutover in
 `plans/neuralese/SHARED_STATE_MIGRATION_20261015.md`.
@@ -684,8 +581,7 @@ returns under unchanged typed prompts. Verify retained sibling fields, tool
 wrappers and every consumer import on real source trajectories with both model
 tokenizers. The affected converter family is quarantined until repaired sources
 are admitted; preserve original source data and held groups. Historical exposure
-to truncated targets does not qualify repaired communication foundations or VAE
-inputs. Earn and record fresh exposure to the corrected row bindings while
+to truncated targets does not qualify repaired communication foundations. Earn and record fresh exposure to the corrected row bindings while
 preserving useful weights, optimizer/RNG and the original exposure history.
 
 Task contracts and reward validity (engineering finding, 2026-10-26): an exact
@@ -712,7 +608,7 @@ Exchange custody follows the effective shared contract (engineering finding,
 2026-10-22): a runtime cutover can change role verification mechanism identities
 and therefore the fixed exchange-cohort digest. Derive the complete effective
 contract after all controller/publisher loaders and select the same fresh,
-contract-addressed exchange directory on both models before the real launch.
+contract-addressed exchange directory before the real launch.
 Do not reuse or overwrite a differently bound cohort. Rebuild only the completed
 adaptation and control declarations when necessary; preserve earned weights,
 optimizer/RNG/exposure and the existing training lineage. A failed coordinator
@@ -792,7 +688,7 @@ on Neuralese to the detriment of task performance.
 Prepare an executable LFM RL task curriculum, starting with tractable verified
 natlang execution and growing into tool use, multi-step work and communication.
 Use actual task outcomes to adapt difficulty; keep protected evaluation separate.
-Share curriculum mechanisms and useful findings with Mellum. This does not relax
+This does not relax
 comprehensive training on the entire evolving production recipe.
 
 ## Adaptive production training (standing owner instructions, 2026-10-15)
@@ -801,13 +697,13 @@ comprehensive training on the entire evolving production recipe.
   doing science.** Do not optimize operations for clean, frozen, reproducible
   runs or controlled comparisons at the expense of useful training. Existing
   runs are work in progress, not experiments that must remain untouched.
-- **Constantly improve the recipe and keep going.** Monitor both models and
+- **Constantly improve the recipe and keep going.** Monitor the models and
   their processes, investigate concrete impediments, and greedily exploit useful
   data, fixes and insights as soon as they are available. Do not let repeated
   probes, qualification windows, packaging or handoffs become substitutes for
   production training. Use focused checks that resolve a real correctness or
   operational concern, then return the GPUs to useful training promptly.
-- **Comprehensive means the entire production recipe on both models and all
+- **Comprehensive means the entire production recipe on the models and all
   usable available data.** Stages may differ, but progress through them; a short
   warmup, partial epoch, isolated stage or smoke run is not the goal. Track
   actual stage progress and data exposure, and resolve what prevents remaining
@@ -827,8 +723,7 @@ comprehensive training on the entire evolving production recipe.
   or qualification barrier. Exact state and artifact identities support safe
   continuation and debugging; they are not a scientific-purity requirement.
 - **Qualify current foundations on an explicit shared-stage request.** Retain
-  genuine completed producer/consumer exposure and require fresh current-weight
-  qualification before cross-model work. Repeated synchronous zero-update
+  genuine completed producer/consumer exposure. Repeated synchronous zero-update
   qualification must not replace full-source SGD between ordinary SFT/DPO/RL
   continuations. Publish a genuine qualified zero-update boundary through the
   exact normal mechanism without epoch, source-visit or optimizer-update credit;
@@ -853,7 +748,7 @@ comprehensive training on the entire evolving production recipe.
   integrate each ready improvement. An old handover, incomplete source census,
   clean-run boundary or another model's unrelated qualification is not a reason
   to leave useful work disabled. Preserve real numerical, task-quality and
-  cross-model foundation prerequisites, and resolve their concrete blockers.
+  foundation prerequisites, and resolve their concrete blockers.
   Independent model improvements may advance independently; propagate shared
   fixes and retain exact optimizer/RNG/exposure through adaptive continuations.
 - **Share code as much as possible and distribute all generalizable insights
