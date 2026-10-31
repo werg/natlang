@@ -263,13 +263,16 @@ def native_graph_from_luna_episode(captures):
         raise ValueError("Luna episode captures use different student checkpoint/tokenizer identities")
     student_identity = identities[0]
 
+    from ..serve.store import native_state_id
     all_binding_by_teacher, all_state_by_teacher = {}, {}
     for capture in captures:
         for binding, state in zip(capture.get("encoder_bindings") or [], capture.get("encoder_states") or []):
             teacher_id = binding["teacher_block_id"]
             prior = all_binding_by_teacher.get(teacher_id)
-            if prior is not None and (prior != binding or all_state_by_teacher[teacher_id] != state):
-                raise ValueError("same Luna episode typed write maps to conflicting student encoder states")
+            if prior is not None:
+                if (prior != binding
+                        or native_state_id(all_state_by_teacher[teacher_id]) != native_state_id(state)):
+                    raise ValueError("same Luna episode typed write maps to conflicting student encoder states")
             all_binding_by_teacher[teacher_id], all_state_by_teacher[teacher_id] = binding, state
         if len(capture.get("encoder_bindings") or []) != len(capture.get("encoder_states") or []):
             raise ValueError("Luna episode capture omits an authenticated encoder state")
@@ -444,12 +447,7 @@ def native_graph_from_luna_episode(captures):
                 raise ValueError("Luna episode writer results disagree across consumer receipts")
             write_receipts[write["block_id"]] = stable
         for item in receipt.get("typed_text_inputs") or []:
-            stable = {key: item.get(key) for key in ("block_id", "body_sha256", "type",
-                "transport_provenance_sha256", "request_sha256", "response_sha256")}
-            prior = input_receipts.get(item["block_id"])
-            if prior is not None and prior != stable:
-                raise ValueError("Luna episode context-only input receipts conflict")
-            input_receipts[item["block_id"]] = stable
+            _record_context_input_receipt(input_receipts, receipt, item)
     encoders = [{"schema": "natlang.authenticated-teacher-text-encoder/1",
         "teacher_block_id": binding["teacher_block_id"], "native_block_id": binding["native_block_id"],
         "body_sha256": binding["body_sha256"], "source_occurrence": binding["source_occurrence"],
@@ -457,7 +455,7 @@ def native_graph_from_luna_episode(captures):
         **({"host_result_receipt_sha256": write_receipts[binding["teacher_block_id"]]["host_result_receipt_sha256"],
             "source_kind": "authenticated-same-run-host-result"}
            if binding["teacher_block_id"] in write_receipts else
-           {"context_input_receipt": input_receipts[binding["teacher_block_id"]],
+           {"context_input_receipts": input_receipts[binding["teacher_block_id"]]["reads"],
             "source_kind": "captured-provider-input-context-only"})}
         for binding in bindings]
     row = {"schema": "natlang.neuralese-native-graph/1",
@@ -473,3 +471,19 @@ def native_graph_from_luna_episode(captures):
                 item["supervised_tokens"] for item in action_receipts)):
         raise ValueError("Luna episode graph lost a writer, action target, or supervised token")
     return row, example
+
+
+def _record_context_input_receipt(receipts, source_receipt, item):
+    """Keep one provenance record per read; only block identity/body must agree."""
+    block_id = item.get("block_id")
+    stable = {key: item.get(key) for key in ("block_id", "body_sha256", "type")}
+    prior = receipts.get(block_id)
+    if prior is None:
+        prior = {**stable, "reads": []}
+        receipts[block_id] = prior
+    elif any(prior.get(key) != stable[key] for key in stable):
+        raise ValueError("Luna episode context-only input block identity or body conflicts")
+    read = {key: item.get(key) for key in ("transport_provenance_sha256", "request_sha256",
+        "response_sha256", "context_occurrences", "writer_node", "producer_call_id")}
+    read["source_turn_index"] = source_receipt.get("source_turn_index")
+    prior["reads"].append(read)

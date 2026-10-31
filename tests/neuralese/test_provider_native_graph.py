@@ -8,7 +8,8 @@ import pytest
 from test_native_serving_adapters import engine_fixture, run_native
 from natlang_neuralese.serve.engine import GenerationRequest
 from natlang_neuralese.data.provider_native_graph import (native_graph_from_luna_capture,
-                                                          native_graph_from_luna_episode)
+                                                          native_graph_from_luna_episode,
+                                                          _record_context_input_receipt)
 from natlang_neuralese.data.native_graph import graph_loss
 from natlang_neuralese.serve.teacher_source_receipt import validate_provider_teacher_source
 from natlang_neuralese.data.provider_teacher_source import _rewrite_target_text_spans
@@ -57,6 +58,25 @@ def test_luna_capture_forces_the_authenticated_normalized_target(tmp_path, monke
     capture_luna_native_turn(engine, str(audit_path), record["id"])
     assert engine.forced["assistant"] == normalized
     assert engine.forced["assistant"] != original
+
+
+def test_luna_episode_retains_distinct_context_only_read_receipts():
+    receipts = {}
+    block_id = "nzt1_" + "a" * 52
+    base = {"block_id": block_id, "body_sha256": "b" * 64, "type": "Neuralese<string>",
+        "context_occurrences": 1, "writer_node": "writer/1#8", "producer_call_id": "writer/1"}
+    _record_context_input_receipt(receipts, {"source_turn_index": 11}, {
+        **base, "transport_provenance_sha256": "c" * 64, "request_sha256": "d" * 64,
+        "response_sha256": "e" * 64})
+    _record_context_input_receipt(receipts, {"source_turn_index": 12}, {
+        **base, "transport_provenance_sha256": "f" * 64, "request_sha256": "1" * 64,
+        "response_sha256": "2" * 64})
+    assert len(receipts[block_id]["reads"]) == 2
+    assert [read["source_turn_index"] for read in receipts[block_id]["reads"]] == [11, 12]
+    with pytest.raises(ValueError, match="identity or body conflicts"):
+        _record_context_input_receipt(receipts, {"source_turn_index": 13}, {
+            **base, "body_sha256": "3" * 64, "transport_provenance_sha256": "4" * 64,
+            "request_sha256": "5" * 64, "response_sha256": "6" * 64})
 
 
 def test_luna_provider_return_result_wrapper_rewrites_to_bound_native_span():
