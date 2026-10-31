@@ -566,7 +566,6 @@ def main():
                 source_stat_guard.append({'path': str(path.resolve()), 'device': stat.st_dev, 'inode': stat.st_ino,
                     'size': stat.st_size, 'mtime_ns': stat.st_mtime_ns, 'ctime_ns': stat.st_ctime_ns})
             source_receipt_sha = receipt_sha
-            inputs['receipt.json'] = current_binding['source_receipt']
             source_proof = source_receipt_data.get('current_protected_worlds') or {}
             current_binding['source_receipt'] = {'path': str(source_receipt.resolve()),
                                                  'sha256': receipt_sha,
@@ -574,6 +573,7 @@ def main():
                                                      source_proof.get('registry_sha256') == current_binding['registry_sha256']
                                                      and source_proof.get('protected_sha256') == current_binding['protected_sha256']
                                                      else 'rechecked-record-by-record')}
+            inputs['receipt.json'] = current_binding['source_receipt']
         else:
             inputs = {name: {'path': str(args.corpus / name), 'sha256': sha256_file_hex(args.corpus / name)}
                       for name in ('records.jsonl', 'edges.jsonl', 'chains.jsonl', 'pieces.jsonl')}
