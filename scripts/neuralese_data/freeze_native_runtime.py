@@ -5,9 +5,31 @@ import hashlib
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from natlang_neuralese.common.runtime_inventory import assemble_protected_runtime_inputs
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from freeze_training_runtime import isolated_compiled_runtime, check_prompt_features
+
+
+def build_archived_node_runtime(root):
+    """Build the archived commit's sources, never inherit predecessor code or dist."""
+    root = Path(root)
+    host = root / 'ts-host'
+    dependencies = host / 'node_modules'
+    if dependencies.exists() or dependencies.is_symlink():
+        raise ValueError('archived runtime unexpectedly contains Node dependencies')
+    dependencies.symlink_to('../node_modules', target_is_directory=True)
+    with isolated_compiled_runtime(host, root.parent) as built:
+        check_prompt_features(host, built['dist'])
+        shutil.copytree(built['dist'], host / 'dist')
+        # The improver bundle is generated from this same commit during the build.
+        # Other source files remain the exact archived versions.
+        generated = Path('improvement/authored-source.ts')
+        shutil.copy2(built['src'] / generated, host / 'src' / generated)
+        return built['build']
 
 
 def freeze_node_dependencies(source, destination):
@@ -55,12 +77,13 @@ def main():
     finally:
         if archive.stdout:archive.stdout.close()
     if archive.wait()!=0:raise RuntimeError('git archive failed')
-    shutil.copytree(args.predecessor/'ts-host',args.out/'ts-host',dirs_exist_ok=True,symlinks=True)
     node = freeze_node_dependencies(args.node_dependencies, args.out/'node_modules')
+    node_build = build_archived_node_runtime(args.out)
     collector = (args.out/'ts-host/dist/teacher/collector.js').resolve().as_uri()
     subprocess.run(['node', '--input-type=module', '-e', 'await import(process.argv[1])', collector], check=True)
     receipt=assemble_protected_runtime_inputs(args.predecessor,args.out,bound_files=bindings)
     receipt['node_dependencies'] = {**node, 'collector_module_import': 'passed'}
+    receipt['node_build'] = node_build
     receipt['commit']=subprocess.check_output(['git','rev-parse',args.commit],text=True).strip()
     (args.out/'runtime-input-closure.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
     print(json.dumps({'runtime':str(args.out.resolve()),'receipt':str((args.out/'runtime-input-closure.json').resolve()),
