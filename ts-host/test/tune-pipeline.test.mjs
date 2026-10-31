@@ -15,7 +15,7 @@ import { nativeTuneStateExport } from './fixtures/native-tune.mjs';
 
 const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 'd'.repeat(64), embedding_weight_sha256: 'e'.repeat(64) };
 
-test('an uninitialized host aborts evaluation instead of scoring its roots as model failures', () => {
+test('Node evaluation owns its platform without global host initialization', () => {
   const root = project();
   try {
     const descriptor = program(root);
@@ -28,11 +28,17 @@ test('an uninitialized host aborts evaluation instead of scoring its roots as mo
       const root = process.argv[1];
       const program = JSON.parse(readFileSync(process.argv[2], 'utf8'));
       let requests = 0;
-      await assert.rejects(evaluateRoots({ root, program, driver: async () => { requests++; throw new Error('unexpected model request'); },
+      const result = await evaluateRoots({ root, program, driver: async request => {
+        requests++;
+        const code = String(request.messages[1].content).includes('Pass value')
+          ? 'return await inner(value)' : 'return value.toUpperCase()';
+        return { calls: [['eval', { code, finish: true }]] };
+      },
         weights: [], examples: [{ id: 'uninitialized', component: 'world', function: 'outer.nl', input: {value:'alpha'},
-          expected: 'ALPHA', partition: 'development' }], arm: 'missing-host', release: null, partition: 'development' }),
-        error => error.code === 'natlang-platform-unavailable');
-      assert.equal(requests, 0);
+          expected: 'ALPHA', partition: 'development' }], arm: 'node-owned', release: null, partition: 'development' });
+      assert.ok(requests > 0);
+      assert.equal(result.roots[0].ok, true);
+      assert.equal(result.roots[0].correct, true);
     `;
     const child = spawnSync(process.execPath, ['--input-type=module', '-e', code, root, descriptorFile], { encoding:'utf8' });
     assert.equal(child.status, 0, child.stderr);
