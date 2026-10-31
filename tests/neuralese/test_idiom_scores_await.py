@@ -50,3 +50,17 @@ def test_object_typed_annotation_with_semicolons():
     code = ('const judge: Neuralese<(args: {a: string; b: unknown}) => Promise<boolean>> = nl<boolean>`Decide.`; '
             'const verdict = await decide(judge, input); return verdict.value;')
     assert unhandled_nl(code) == 0
+
+
+def test_crisp_checker_labels_count_as_verified():
+    from idiom_scores import turn_scores
+
+    class NoHolds:
+        def __call__(self, program, groups):
+            return None
+    row = {'id': 'refine-judge:exact:x:0:0', 'split': 'train', 'source_groups': ['g'],
+           'messages': [{'role': 'user', 'content': 'judge'}], 'target': {'role': 'assistant', 'content': 'false'},
+           'training_admission': {'approved': True, 'kind': 'crisp-checker-label (refine-judge-exact-20261009-v1)'}}
+    assert turn_scores(row, 'refine', NoHolds())['verified'] is True
+    row['training_admission'] = {'approved': True, 'kind': 'teacher'}
+    assert turn_scores(row, 'refine', NoHolds())['verified'] is None

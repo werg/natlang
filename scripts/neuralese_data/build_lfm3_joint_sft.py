@@ -179,7 +179,9 @@ def build(args):
     policy = policy_value
     objective = policy['objective']
     held = json.loads((mixture / 'held-sources.json').read_text())['sources'][0]
-    if not (out / 'ce-policy.json').exists():
+    logical = 'logical_family_targets' in objective
+    base_policy = out / ('ce-policy-base.json' if logical else 'ce-policy.json')
+    if not base_policy.exists():
         run([PY, 'scripts/neuralese_data/build_native_ce_supervision_policy.py',
              '--source', str(mixture / 'train-sources.json'),
              # An empty held view (inputs with no test rows) has nothing to declare; held CE then comes from later
@@ -188,9 +190,15 @@ def build(args):
                if json.loads((mixture / 'mixture.json').read_text())['held']['rows'] else []),
              '--legacy-pair-context-weight', '0.05', '--objective-reasoning-share', str(objective['reasoning_share']),
              '--objective-tokenizer', tokenizer, '--objective-tokenizer-fingerprint', fingerprint,
-             '--objective-family-balance', json.dumps(objective['family_balance']), '--out', str(out / 'ce-policy.json')])
+             '--objective-family-balance', json.dumps(objective['family_balance']), '--out', str(base_policy)])
     role_ids = [str(i) for i in line_backbones.backbone('lfm3')['role_token_ids']] \
         if 'role_token_ids' in line_backbones.backbone('lfm3') else ['125033', '125034', '125035', '125036']
+    if logical and not (out / 'objective' / 'receipt.json').exists():
+        # Logical-family declared/1 scales from the exact own-output census (source-cohort was the placeholder).
+        run([PY, 'scripts/neuralese_data/build_logical_family_objective.py', '--train', str(mixture / 'train-sources.json'),
+             '--ce-policy', str(base_policy), '--targets', str(REPO / args.policy), '--fingerprint', fingerprint,
+             '--role-ids', *role_ids, '--out', str(out / 'objective')])
+    ce_policy = out / 'objective' / 'ce-policy.json' if logical else base_policy
     run([PY, 'scripts/neuralese_data/build_native_packed_geometry.py', '--source', str(mixture / 'train-sources.json'),
          '--tokenizer-fingerprint', fingerprint, '--role-ids', *role_ids, '--out', str(out / 'geometry')])
     geometry = json.loads((out / 'geometry' / 'packed-geometry-build.json').read_text())
@@ -202,7 +210,8 @@ def build(args):
               'expanded_tokenizer_fingerprint': fingerprint, 'role_token_ids': [int(r) for r in role_ids],
               'native_graph_sources': bind(mixture / 'train-sources.json'),
               'held_sources': bind(mixture / 'held-sources.json'),
-              'ce_supervision_policy': bind(out / 'ce-policy.json'),
+              'ce_supervision_policy': bind(ce_policy),
+              **({'logical_family_objective': bind(out / 'objective' / 'receipt.json')} if logical else {}),
               'sft_packed_geometry': geometry['geometry'],
               'memory_qualification': bind(out / 'sft-capacity-descriptor.json'), 'mixture': bind(mixture / 'mixture.json'),
               'policy': bind(REPO / args.policy), 'config': bind(out / 'config.json'),

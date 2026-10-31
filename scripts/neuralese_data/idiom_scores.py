@@ -359,9 +359,15 @@ def turn_scores(row: dict, corpus: str, holds: Holds) -> dict:
                   decision_index=decision.get('index'), **call_identity(row.get('messages')),
                   **action_shape(target.get('tool_calls'), target.get('content')))
     record['task_modality'] = row.get('task_modality')
-    approved = (row.get('training_admission') or {}).get('approved')
+    admission = row.get('training_admission') or {}
+    approved = admission.get('approved')
     failed = bool(decision.get('failed_action'))
-    return finish(record, s, verified=outcome_verified(row.get('outcome')), approved=approved, failed=failed,
+    verified = outcome_verified(row.get('outcome'))
+    if verified is None and approved is True and str(admission.get('kind') or '').startswith('crisp-checker-label'):
+        # Exact-checker labels (refine-judge-exact): the target IS the crisp checker's verdict, so the row carries its
+        # own verification rather than a root task outcome (2026-10-31 coverage audit: 1,048 judge rows scored 0).
+        verified = True
+    return finish(record, s, verified=verified, approved=approved, failed=failed,
                   held=holds(program, row.get('source_groups')), child=child)
 
 
