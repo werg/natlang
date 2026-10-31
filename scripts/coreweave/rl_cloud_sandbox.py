@@ -143,7 +143,10 @@ def stage(lineage, exports):
                 same = (a.st_dev, a.st_ino) == (stat.st_dev, stat.st_ino) or file_digest(alias) == digest
                 if same:
                     links.append({'path': str(alias), 'same_as': str(checkpoint)})
-    seq = (prior.get('seq', -1) + 1)
+    # Sequence numbers continue the lineage's exports across sandboxes (fetch records the parent's).
+    base = exports / 'parent-seq'
+    parent_seq = int(base.read_text()) if base.exists() else -1
+    seq = max(prior.get('seq', -1), parent_seq) + 1
     manifest = {'schema': SCHEMA, 'seq': seq, 'lineage': lineage.name, 'lineage_dir': str(lineage),
                 'created': time.time(), 'round': current, 'trained_rounds': state.get('trained_rounds', 0),
                 'phase': state.get('phase'), 'state_sha256': file_digest(lineage / 'state.json') if has_state else None,
@@ -249,6 +252,9 @@ def fetch(parent, lineage):
     if parent.get('state_sha256') and file_digest(state) != parent['state_sha256']:
         raise ValueError('restored state.json differs from the export')
     shutil.rmtree(scratch, ignore_errors=True)
+    exports = lineage.parent / '.exports' / lineage.name
+    exports.mkdir(parents=True, exist_ok=True)
+    (exports / 'parent-seq').write_text(str(parent['seq'] if isinstance(parent.get('seq'), int) else -1))
     event(event='parent_restored', seq=parent.get('seq'), trained_rounds=parent.get('trained_rounds'))
     return 0
 
