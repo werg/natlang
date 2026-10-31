@@ -51,7 +51,21 @@ def configure_norm_execution(model, profile=None):
                 and isinstance(getattr(module, 'weight', None), torch.nn.Parameter)
                 and not module.__dict__.get('native_rowwise_norm', False)):
             original = module.forward
-            def forward(x, original_forward=original):
+            def forward(x, original_forward=original, norm=module):
+                # Build one custom adjoint rather than one autograd slice graph
+                # per 128 rows. The latter scatters each slice into a full-size
+                # zero tensor and repeatedly adds those tensors during backward.
+                if (torch.is_grad_enabled() and x.is_cuda and x.dtype == torch.bfloat16
+                        and (x.requires_grad or norm.weight.requires_grad)):
+                    from .native_weight_carrier import _TorchStoredRMSNorm
+                    eps = next((getattr(norm, name) for name in
+                                ('variance_epsilon', 'eps', 'epsilon')
+                                if getattr(norm, name, None) is not None), None)
+                    if eps is None:
+                        raise ValueError('native RMSNorm lacks its epsilon')
+                    def canonical(value):
+                        return rowwise_norm_forward(original_forward, value)
+                    return _TorchStoredRMSNorm.apply(x, norm.weight, float(eps), norm, canonical)
                 return rowwise_norm_forward(original_forward, x)
             module.forward = forward
             module.native_rowwise_norm = True
