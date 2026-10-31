@@ -607,3 +607,29 @@ def test_stop_arriving_after_run_never_returns_passed_evaluation(tmp_path):
     assert result['eligible']is False and result['task_successes']is None
     assert result['observed_task_successes']==16 and result['model_outcome']=='unscored'
     assert json.loads((tmp_path/'task-eval.jsonl').read_text())==result
+
+
+def test_native_task_eval_requires_and_constructs_real_transport(tmp_path, monkeypatch):
+    import hashlib
+    import json
+    from types import SimpleNamespace
+    import natlang_neuralese.common.paths as paths
+    from natlang_neuralese.eval.task_cadence import TaskEval
+
+    collector = tmp_path / 'scripts/run_bonsai_queue.py'
+    collector.parent.mkdir(parents=True)
+    collector.write_text('')
+    runtime = tmp_path / 'runtime'
+    cli = runtime / 'dist/teacher/cli.js'
+    cli.parent.mkdir(parents=True)
+    cli.write_text('')
+    packet = tmp_path / 'cases.jsonl'
+    packet.write_text(json.dumps({'id': 'held', 'split': 'test'}) + '\n')
+    spec = {'packet': {'path': str(packet), 'sha256': hashlib.sha256(packet.read_bytes()).hexdigest()},
+            'runtime': str(runtime), 'cases': [0]}
+    monkeypatch.setattr(paths, 'root', lambda _: tmp_path)
+    engine = SimpleNamespace(native_state_enabled=True)
+    with pytest.raises(ValueError, match='neuralese_server=true'):
+        TaskEval(spec, tmp_path / 'out', engine, prompt_rendering='full')
+    evaluated = TaskEval({**spec, 'neuralese_server': True}, tmp_path / 'out', engine, prompt_rendering='full')
+    assert [row['id'] for row in evaluated.rows] == ['held']
