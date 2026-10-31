@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import time
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
@@ -88,6 +89,34 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
     assert [row['index'] for row in identity['cases']] == [0, 1, 2]
     entry, *_ = dispatcher._claim_queue(plan, identity, 1, identity['cases'][0])
     assert entry['prompt_rendering'] == 'full'
+
+
+def test_text_neuralese_capability_reads_isolated_typescript_seal_and_fails_closed(tmp_path, monkeypatch):
+    runtime = tmp_path / 'isolated-runtime'
+    (runtime / 'dist/teacher').mkdir(parents=True)
+    (runtime / 'dist/teacher/cli.js').write_text("// CLI exposes --text-neuralese-emulation\n")
+    (runtime / 'dist/teacher/collector.js').write_text('// collector transport implementation\n')
+    source_inputs = {'src/teacher/collector.ts': 'a' * 64}
+    source_digest = hashlib.sha256(json.dumps(
+        source_inputs, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    build = {'mode': 'isolated_typescript', 'source_inputs': source_inputs,
+             'source_inputs_sha256': source_digest}
+    manifest = {'version': 'natlang.frozen_runtime/1', 'files': tree_identity(runtime), 'build': build}
+    (runtime / 'frozen-runtime.json').write_text(json.dumps(manifest, sort_keys=True))
+
+    def cli_help(command, **kwargs):
+        assert command[1] == str(runtime / 'dist/teacher/cli.js')
+        return SimpleNamespace(returncode=0, stdout='--text-neuralese-emulation\n', stderr='')
+
+    monkeypatch.setattr(dispatcher.subprocess, 'run', cli_help)
+    capability = dispatcher._validate_text_neuralese_emulation(runtime, manifest)
+    assert capability['build_mode'] == 'isolated_typescript'
+    assert capability['cli_sha256'] == dispatcher.digest(runtime / 'dist/teacher/cli.js')
+    assert capability['collector_sha256'] == dispatcher.digest(runtime / 'dist/teacher/collector.js')
+
+    (runtime / 'dist/teacher/collector.js').write_text('// changed after freeze\n')
+    with pytest.raises(ValueError, match='does not bind'):
+        dispatcher._validate_text_neuralese_emulation(runtime, manifest)
 
 
 def test_prompt_rendering_is_forwarded_into_each_queue(reviewed_plan):

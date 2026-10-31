@@ -104,7 +104,26 @@ def _source_rows(source):
 def _validate_text_neuralese_emulation(runtime, runtime_manifest):
     """Require the pinned runtime to implement the requested transport end to end."""
     runtime = Path(runtime)
-    compiled = runtime_manifest.get('build', {}).get('compiled_dist_files', {})
+    build = runtime_manifest.get('build', {})
+    if not isinstance(build, dict):
+        raise ValueError('text Neuralese emulation requires a sealed build manifest')
+    mode = build.get('mode')
+    if mode == 'explicit_compiled_dist':
+        compiled = build.get('compiled_dist_files', {})
+    elif mode == 'isolated_typescript':
+        sealed_files = runtime_manifest.get('files', {})
+        compiled = ({name: sealed_files.get(f'dist/{name}') for name in
+                     ('teacher/cli.js', 'teacher/collector.js')}
+                    if isinstance(sealed_files, dict) else {})
+        if (not isinstance(build.get('source_inputs'), dict) or
+                not re.fullmatch(r'[0-9a-f]{64}', str(build.get('source_inputs_sha256', '')))):
+            raise ValueError('isolated TypeScript runtime lacks sealed source-input identity')
+        source_digest = hashlib.sha256(json.dumps(
+            build['source_inputs'], sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        if source_digest != build['source_inputs_sha256']:
+            raise ValueError('isolated TypeScript runtime source-input digest mismatch')
+    else:
+        raise ValueError('text Neuralese emulation requires a supported sealed build mode')
     required = ('teacher/cli.js', 'teacher/collector.js')
     if not isinstance(compiled, dict) or any(not isinstance(compiled.get(name), str) for name in required):
         raise ValueError('text Neuralese emulation requires CLI and collector entries in the frozen build manifest')
@@ -123,7 +142,8 @@ def _validate_text_neuralese_emulation(runtime, runtime_manifest):
             'runtime_receipt_sha256': hashlib.sha256(
                 (runtime / 'frozen-runtime.json').read_bytes()).hexdigest(),
             'build_manifest_sha256': hashlib.sha256(
-                json.dumps(compiled, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+                json.dumps(build, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+            'build_mode': mode,
             'cli_sha256': compiled['teacher/cli.js'],
             'collector_sha256': compiled['teacher/collector.js'],
             'cli_help_sha256': hashlib.sha256(result.stdout.encode()).hexdigest(),
