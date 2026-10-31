@@ -114,6 +114,8 @@ def expanded_tokenizer(path):
 
 
 def verify(args):
+    from array import array
+    from natlang_neuralese.common.hashing import sha256_file_hex
     from natlang_neuralese.data.native_sources import NativeGraphSource
     from natlang_neuralese.train.native_packed_capacity import prepare_source
     from natlang_neuralese.train.own_output_supervision import default_objective, graph_weights, label_roles
@@ -123,7 +125,8 @@ def verify(args):
         raise ValueError(f'no own-output objective: {reason}')
     assistant = objective['role_tokens']['roles']['assistant']
     start = objective['role_tokens']['start']
-    report = {'schema': 'natlang.prompt-view-graph-verification/1', 'tokenizer_fingerprint': fingerprint,
+    report = {'schema': 'natlang.prompt-view-graph-verification/1',
+              'verifier_sha256': sha256_file_hex(Path(__file__)), 'tokenizer_fingerprint': fingerprint,
               'objective': objective['name'], 'files': []}
     failures = 0
     wanted = None
@@ -160,8 +163,10 @@ def verify(args):
             stats['rows'] += 1
             stats['tokens'] += sum(len(node['token_ids']) for node in row['nodes'])
             stats['prompt_tokens'] += first
-            sequences.extend(tuple(node['token_ids']) for node in row['nodes'])
-            prompts.append(tuple(ids[:first]))
+            # Keep exact lexicographic prefix counting without retaining Python
+            # integer objects for every token in an entire cohort.
+            sequences.extend(array('I', node['token_ids']) for node in row['nodes'])
+            prompts.append(array('I', ids[:first]))
             stats['objective_target_tokens'] += sum(1 for w in weights if w > 0)
             view = (row['conversion'].get('prompt_view') or {})
             modes[f"{view.get('prompt_rendering', 'undeclared')}/{view.get('system_prompt_mode', 'none')}"] += 1
