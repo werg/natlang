@@ -6,7 +6,8 @@ small curriculum endpoint, including when all observed tasks were successful.
 """
 import math
 
-DEFAULT={'schema':'natlang.rl-task-curriculum/1','breadth_fraction':.25,'promotion_success_rate':.6}
+DEFAULT={'schema':'natlang.rl-task-curriculum/1','breadth_fraction':.25,'promotion_success_rate':.6,
+         'family_exploration_fraction':.5}
 
 
 def metadata(row):
@@ -15,7 +16,10 @@ def metadata(row):
     if type(level) is not int or level<0:raise ValueError('task curriculum level must be a nonnegative integer')
     if value.get('qualification') not in (None,'qualified'):
         raise ValueError('task scaffold requires live model-facing qualification before production selection')
-    return {'level':level,'family':value.get('family',row.get('family','unspecified'))}
+    family=value.get('family',row.get('family','unspecified'))
+    if family is None or family=='':family='unspecified'
+    if not isinstance(family,str):raise ValueError('task curriculum family must be a string or unknown')
+    return {'level':level,'family':family}
 
 
 def policy_options(value):
@@ -24,6 +28,9 @@ def policy_options(value):
     for key in ('breadth_fraction','promotion_success_rate'):
         if type(config[key]) not in (int,float) or not math.isfinite(config[key]) or not 0<config[key]<=1:
             raise ValueError('task curriculum '+key+' must be finite in (0,1]')
+    fraction=config['family_exploration_fraction']
+    if type(fraction) not in (int,float) or not math.isfinite(fraction) or not 0<=fraction<=1:
+        raise ValueError('task curriculum family_exploration_fraction must be finite in [0,1]')
     return config
 
 
@@ -56,9 +63,42 @@ def select(cases,stats,budget,config):
         return (abs(task['level']-frontier),signal,(index-budget['offset'])%len(cases))
     practice=sorted((index for index in range(len(cases)) if index not in reserved),key=priority)
     count=min(budget['rows'],len(cases))
+    slots=count-len(breadth)
+    # The same few mixed-outcome tasks otherwise occupy almost all practice.
+    # Reserve useful exploration by actual semantic family, without changing
+    # physical breadth's cursor or treating historical outcomes as on-policy.
+    served={}
+    for task in tasks:
+        if task['id'] in observed:
+            served[task['family']]=served.get(task['family'],0)+1
+    unknown={}
+    for index in practice:
+        task=tasks[index]
+        if task['id'] not in observed:
+            unknown.setdefault(task['family'],[]).append(index)
+    representatives=[]
+    for family,indices in unknown.items():
+        # New families start at their easiest admitted task. Once exercised,
+        # choose new invocations near the measured difficulty frontier.
+        representative=min(indices,key=(lambda i:(tasks[i]['level'],priority(i)))
+                           if not served.get(family) else priority)
+        representatives.append(representative)
+    representatives.sort(key=lambda i:(served.get(tasks[i]['family'],0),
+        tasks[i]['level'] if not served.get(tasks[i]['family']) else abs(tasks[i]['level']-frontier),
+        priority(i)))
+    exploration=representatives[:math.ceil(slots*config['family_exploration_fraction'])]
+    chosen_practice=list(exploration);selected=set(exploration)
+    families={tasks[index]['family'] for index in chosen_practice}
+    for index in practice:
+        if len(chosen_practice)>=slots:break
+        if index not in selected and tasks[index]['family'] not in families:
+            chosen_practice.append(index);selected.add(index);families.add(tasks[index]['family'])
+    for index in practice:
+        if len(chosen_practice)>=slots:break
+        if index not in selected:chosen_practice.append(index);selected.add(index)
     # Existing production offset advances from the last selected row. Keeping
     # breadth last makes its cursor advance exactly by the breadth allocation.
-    chosen=practice[:count-len(breadth)]+breadth
+    chosen=chosen_practice+breadth
     return [{'row':index,'samples':budget['group']} for index in chosen]
 
 

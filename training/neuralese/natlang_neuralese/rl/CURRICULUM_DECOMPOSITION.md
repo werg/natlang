@@ -9,7 +9,15 @@ is the shared typed natural-language policy for LFM and Mellum.
 2. Reward correct execution regardless of whether communication is used. Task
    difficulty is metadata, never an RL admission edge/node-count requirement.
 3. Keep all usable admitted train tasks scheduled: reserve rotating breadth
-   work alongside adaptive practice. Revisit solved work after policy changes.
+   work alongside adaptive practice. Half of practice explores unvisited
+   invocations from the least-covered declared semantic families; new families
+   start with their easiest admitted task. Other practice retains useful mixed
+   outcomes while preferring distinct families within a batch. Coverage counts
+   actual scored task identities in the current source, not historical sample
+   counts or physical file boundaries. Missing families remain one unknown
+   bucket. Exhausted singleton families do not occupy exploration slots.
+   Physical breadth and its exact cursor remain unchanged, including revisits
+   of solved work after policy changes.
 4. Count only scored outcomes when adapting difficulty. Repair infrastructure;
    use verified whole-trajectory teacher/RFT seeding for all-fail groups.
 5. Preserve protected held separation. New static task scaffolds remain pending

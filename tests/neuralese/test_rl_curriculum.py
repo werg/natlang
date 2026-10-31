@@ -62,3 +62,43 @@ def test_declared_selection_allocation_is_verified(monkeypatch):
         stdout=json.dumps([{'row':i,'samples':4} for i in range(3)])))
     with pytest.raises(ValueError,match='allocation'):
         production.select_tasks(cases(),[],{'rows':2,'group':4,'offset':0},command=['selector'])
+
+
+def test_mixed_outcome_practice_does_not_crowd_out_unvisited_families():
+    rows=[{'id':f'qa-{i}','family':'qa','curriculum':{'rl':{'level':0}}} for i in range(8)]
+    rows += [{'id':'new-program','family':'program-execution','curriculum':{'rl':{'level':1}}},
+             {'id':'new-state','family':'stateful-control','curriculum':{'rl':{'level':0}}}]
+    stats=[{'task_id':f'qa-{i}','scored':6,'mean':.5} for i in range(8)]
+    budget={'rows':6,'group':6,'offset':0}
+    selected=production.select_tasks(rows,stats,budget,curriculum=DEFAULT)
+    ids={rows[item['row']]['id'] for item in selected}
+    assert {'new-program','new-state'}<=ids
+    assert any(value.startswith('qa-') for value in ids)
+    assert len(selected)==6 and {item['samples'] for item in selected}=={6}
+    assert [item['row'] for item in selected[-2:]]==[0,1]
+    # A retired task's historical outcome is not current-source coverage.
+    assert production.select_tasks(rows,[*stats,{'task_id':'retired','scored':1000,'mean':1.}],
+                                   budget,curriculum=DEFAULT)==selected
+
+
+def test_exploration_does_not_repeat_solved_singleton_instead_of_new_invocations():
+    rows=[{'id':'done','family':'singleton','curriculum':{'rl':{'level':0}}},
+          {'id':'fresh','family':'other','curriculum':{'rl':{'level':0}}}]
+    stats=[{'task_id':'done','scored':6,'mean':1.}]
+    selected=production.select_tasks(rows,stats,{'rows':2,'group':4,'offset':0},curriculum=DEFAULT)
+    assert [item['row'] for item in selected]==[1,0]
+
+
+@pytest.mark.parametrize('fraction',[float('nan'),float('inf'),-0.1,1.1,True])
+def test_invalid_family_exploration_fraction_is_rejected(fraction):
+    with pytest.raises(ValueError,match='family_exploration_fraction'):
+        production.select_tasks(cases(),[],{'rows':3,'group':4,'offset':0},
+                                curriculum={**DEFAULT,'family_exploration_fraction':fraction})
+
+
+def test_family_metadata_is_not_fabricated_from_task_ids():
+    from natlang_neuralese.rl.curriculum import task_descriptors
+    rows=[{'id':'a'},{'id':'b','family':None}]
+    assert [row['family'] for row in task_descriptors(rows)]==['unspecified','unspecified']
+    with pytest.raises(ValueError,match='family'):
+        task_descriptors([{'id':'bad','family':['not','an','identifier']}])
