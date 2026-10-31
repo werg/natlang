@@ -89,6 +89,8 @@ def test_fetch_failure_checkpoint_matches_completed_reference_and_resumes(tmp_pa
         finally:stream.close()
     save_calls=[]
     def save(policy,*args,**kwargs):
+        if kwargs.get('reserve_only'):
+            return original_save(policy,*args,**kwargs)
         save_calls.append(dict(kwargs.get('metrics',{})))
         if save_fails and 'source_fetch_failure'in kwargs['metrics']:
             random.random();torch.rand(7)
@@ -132,7 +134,13 @@ def test_initial_fetch_failure_has_no_update_credit_or_checkpoint(tmp_path,monke
         yield
     monkeypatch.setattr(native_diversity,'stream_windows',fail)
     monkeypatch.setattr(trainer,'native_training_update',lambda *a,**k:pytest.fail('bad batch reached update'))
-    monkeypatch.setattr(trainer,'_save',lambda *a,**k:pytest.fail('zero updates earned a recovery checkpoint'))
+    original_save=trainer._save
+    def reserve_without_earning_checkpoint(*args,**kwargs):
+        # Allocating the future inode is mandatory even before the first
+        # source fetch, but must not serialize or credit an unearned update.
+        assert kwargs.get('reserve_only'), 'zero updates earned a recovery checkpoint'
+        return original_save(*args,**kwargs)
+    monkeypatch.setattr(trainer,'_save',reserve_without_earning_checkpoint)
     out=tmp_path/'out'
     with pytest.raises(ValueError)as caught:run(base,paths,out)
     assert caught.value is failure
