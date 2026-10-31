@@ -9,6 +9,14 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 
+def test_prompt_selection_preserves_single_view_and_selects_one_paired_view():
+    for header in (False, True):
+        assert mod.keep_prompt_view('teacher-turn-full', 'p', {'p'}, set(), header)
+        assert mod.keep_prompt_view('teacher-turn', 'p', set(), {'p'}, header)
+        assert mod.keep_prompt_view('teacher-turn', 'p', {'p'}, {'p'}, header) == header
+        assert mod.keep_prompt_view('teacher-turn-full', 'p', {'p'}, {'p'}, header) != header
+
+
 def test_mixture_content_identity_retains_decision_targets_and_state_dependencies():
     import copy
     graph = {'tokenizer_fingerprint': 'fixture', 'nodes': [{'name': 'n', 'token_ids': [1, 2], 'target_weights': [0, 0]}],

@@ -257,6 +257,15 @@ def header_view(decision_id: str, share: float) -> bool:
     return draw < share
 
 
+def keep_prompt_view(view, owner, has_full, has_header, header):
+    serving = view in ('full', 'teacher-turn-full')
+    if serving and owner not in has_header:
+        return True
+    if not serving and owner not in has_full:
+        return True
+    return header != serving
+
+
 def content_key(row) -> str:
     return graph_content_sha256(row)
 
@@ -406,6 +415,8 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
     # lfm3-program-header twins. With prompt_views each decision is taken in exactly one of them.
     has_full = {str(path.parents[2]) for kind, view, path in inputs if view == 'full'}
     has_full |= {str(path.parents[2]) for kind, view, path in inputs if view == 'teacher-turn-full'}
+    has_header = {str(path.parents[2]) for kind, view, path in inputs
+                  if view in ('program-header', 'teacher-turn')}
     for kind, view, path in inputs:
         for number, raw in iter_lines(path):
             row = json.loads(raw)
@@ -430,11 +441,8 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
                 ids = list(conversion.get('source_record_ids') or [])
             if header_share is not None and view in ('full', 'program-header', 'teacher-turn', 'teacher-turn-full'):
                 header = header_view(ids[0] if ids else row['id'], header_share)
-                serving_view = view in ('full', 'teacher-turn-full')
                 owner = str(path.parents[2])
-                if view in ('program-header', 'teacher-turn') and owner not in has_full:
-                    pass  # no full view of this source: its program-header documents stay
-                elif header == serving_view:
+                if not keep_prompt_view(view, owner, has_full, has_header, header):
                     omitted[f'{view}: decision taken in its other prompt view'] += 1
                     continue
             known = [decisions.get(d) for d in ids]
