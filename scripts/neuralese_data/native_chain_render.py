@@ -23,6 +23,32 @@ def edge_digest(edge):
     return hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
+def _plain_result_span(writer, occurrence, body):
+    """Producer span of a child's plain string result (`result:` writes, conversion /15).
+
+    The converter's authenticated producer occurrence points at the string value inside the exact tool-call
+    arguments (`/target/tool_calls/<i>/function/arguments<json>/<path>`). The whole call stays the supervised target;
+    only that value is marked, exactly like a structured `Neuralese<string>` descriptor's value.
+    """
+    if occurrence.get('writer_source_kind') != 'Neuralese<string>':
+        return None
+    parts = [part.replace('~1', '/').replace('~0', '~') for part in occurrence['writer_json_pointer'].split('/')[1:]]
+    json_index = next((index for index, part in enumerate(parts) if part.endswith('<json>')), None)
+    if (len(parts) < 6 or parts[:2] != ['target', 'tool_calls'] or not parts[2].isdigit() or json_index != 4
+            or parts[3] != 'function' or parts[4] != 'arguments<json>' or json_index + 1 >= len(parts)):
+        return None
+    try:
+        value = json.loads(writer['target']['tool_calls'][int(parts[2])]['function']['arguments'])
+        for part in parts[json_index + 1:]:
+            value = value[int(part)] if isinstance(value, list) else value[part]
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    if value != body:
+        return None
+    return {'call_index': int(parts[2]), 'argument_path': parts[json_index + 1:], 'body': body,
+            'payload_sha256': occurrence['payload_sha256'], 'value_type': 'string'}
+
+
 def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerprint,
                  prompt_rendering='program-header', retain_prompt_tools=False):
     """Render each complete source decision once, with every witnessed write and read.
@@ -49,6 +75,9 @@ def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerpr
         producer = derived[wid]
         key = (wid, occurrence['writer_occurrence_id'])
         descriptor = producer.get('producer_span')
+        plain_result = descriptor is None and _plain_result_span(writer, occurrence, body)
+        if plain_result:
+            descriptor = plain_result
         if occurrence.get('writer_source_kind') == 'assistant-text-return':
             _assistant_text_target(writer, body, ROLE_MARKERS)  # exact source proof; never use its partial target
             proof = writer['native_source_conversion']['source_target']['assistant_text_result']
@@ -65,7 +94,7 @@ def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerpr
             seen_producers[key] = copy.deepcopy(descriptor)
             producer_entries[wid].append({'writer_occurrence_id': key[1], 'body': body,
                                           'span': copy.deepcopy(descriptor), 'edge_sha256': []})
-            if descriptor['value_type'] not in ('inline-string', 'assistant-text'):
+            if descriptor['value_type'] not in ('inline-string', 'assistant-text') and not plain_result:
                 targets[wid] = _replace_source_target_span(targets[wid], occurrence, body, ROLE_MARKERS)
         entry = next(x for x in producer_entries[wid] if x['writer_occurrence_id'] == key[1])
         entry['edge_sha256'].append(eid)
