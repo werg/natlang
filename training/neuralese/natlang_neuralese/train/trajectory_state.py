@@ -145,8 +145,12 @@ def atomic_checkpoint(path, state, *, reservation=None):
                 with io_quiet(f'checkpoint write {Path(path).name}'):
                     _atomic_checkpoint(path, state, write_bound_bytes=bound)
     else:
-        if Path(path) != reservation.target or bound > reservation.bound:
-            raise ValueError('checkpoint exceeds its persistent reservation or targets another slot')
+        if Path(path) != reservation.target:
+            raise ValueError('checkpoint reservation targets another slot')
+        if bound > reservation.bound:
+            # Unexpected metadata growth must not discard the completed
+            # in-memory update. Grow the same inode, retrying ENOSPC upstream.
+            reservation.acquire(bound)
         # A prior interrupted final truncate can shrink the inode; restore its
         # allocation before retrying without touching the committed parent.
         if os.fstat(reservation._fd).st_size < reservation.bound:

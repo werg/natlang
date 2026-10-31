@@ -128,3 +128,13 @@ def test_unreserved_writer_cannot_replace_owned_target(tmp_path):
         atomic_checkpoint(path, {'step': 2})
     assert not path.exists()
     owner.close()
+
+
+def test_unexpected_growth_extends_same_reserved_inode(tmp_path):
+    path = tmp_path / 'checkpoint.pt'
+    owner = reservation(path).acquire(1024)
+    inode = owner.pending.stat().st_ino
+    atomic_checkpoint(path, {'large_metadata': 'x' * 10000}, reservation=owner)
+    assert path.stat().st_ino == inode
+    assert torch.load(path, weights_only=True)['large_metadata'] == 'x' * 10000
+    owner.close()
