@@ -86,6 +86,10 @@ def mark_ended(run, name, status):
 
 def launch_on_entitled(run, name, auto, rounds=None):
     """Seed if needed, then launch on the entitled account with the fewest of our running lineages."""
+    current = rl_cloud.load_run(run['_path']) if run.get('_path') else run
+    if current.get('launch_hold'):
+        print(json.dumps({'event': 'launch_held', 'reason': current['launch_hold']}), flush=True)
+        return None
     if rl_cloud.newest_verified(run, name) is None:
         rl_cloud.seed(run, name)
     head = subprocess.run(['git', '-C', str(rl_cloud.REPO), 'rev-parse', 'HEAD'], capture_output=True, text=True,
@@ -125,8 +129,13 @@ def one_pass(run, args, auto):
             return
         auto['entitled'].append(account)
         rl_cloud.note(run, f'GPU entitlement: {account} created a GPU sandbox ({detail}, stopped at once)')
+        next_action = ('launch remains held: ' + str(run['launch_hold']) if run.get('launch_hold') else
+                       f'the autopilot now runs the {args.smoke} GPU smoke, then launches {args.lineages}')
         coord('cloud RL GPU entitlement granted', f'{account} created a GPU sandbox ({detail}, stopped at once); '
-              f'the autopilot now runs the {args.smoke} GPU smoke, then launches {args.lineages}', urgent=True)
+              + next_action, urgent=True)
+    if run.get('launch_hold'):
+        print(json.dumps({'event': 'launch_held', 'reason': run['launch_hold']}), flush=True)
+        return
     smoke = auto.setdefault('smoke', {})
     if not smoke.get('passed'):
         live = lineage_state(run, args.smoke)
@@ -190,6 +199,8 @@ def main(argv=None):
     run = rl_cloud.load_run(args.run)
     path = rl_cloud.hub(run) / 'autopilot.json'
     while True:
+        run = rl_cloud.load_run(args.run)
+        path = rl_cloud.hub(run) / 'autopilot.json'
         auto = rl_cloud.read_json(path, {})
         try:
             one_pass(run, args, auto)

@@ -551,6 +551,9 @@ def render_job(run, name, rounds, check=False):
 
 
 def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=False, check=False):
+    current = load_run(run['_path']) if run.get('_path') else run
+    if current.get('launch_hold'):
+        raise ValueError(f'cloud launch held: {current["launch_hold"]}')
     state = read_json(hub(run) / 'run-state.json', {})
     if not state.get('bundle'):
         raise SystemExit('no bundle: rl_cloud.py bundle RUN.json first')
