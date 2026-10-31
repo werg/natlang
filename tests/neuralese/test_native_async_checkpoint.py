@@ -349,6 +349,44 @@ def test_reserved_background_write_retains_separate_next_slot(tmp_path, monkeypa
         pass
 
 
+def test_policy_close_drains_live_writer_and_releases_reusable_reservation(tmp_path, monkeypatch):
+    from natlang_neuralese.train import trajectory_state
+    monkeypatch.setenv('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR', '0')
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES', '0')
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)
+    entered, release = threading.Event(), threading.Event()
+    original = trajectory_state.atomic_checkpoint
+    def delayed(path, state, **kwargs):
+        entered.set()
+        assert release.wait(10)
+        return original(path, state, **kwargs)
+    monkeypatch.setattr(trajectory_state, 'atomic_checkpoint', delayed)
+    optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
+    state = {'step': 1, 'training': {'optimizer': optimizer.state_dict(), 'rng': {},
+                                    'exposure_counts': {'graph': 1}, 'options': {}}}
+    policy = CheckpointPolicy(tmp_path, async_checkpoint=True)
+    policy.reserve_next(state, optimizer)
+    event = policy.save(state, async_allowed=True, async_optimizer=optimizer)
+    assert event['async_pending'] and entered.wait(5)
+    pending = policy._persistent_reservation.pending
+    pending_inode = pending.stat().st_ino
+    closed = threading.Event()
+    def close_policy():
+        policy.close()
+        closed.set()
+    closer = threading.Thread(target=close_policy)
+    closer.start()
+    assert not closed.wait(.1)  # close must wait for the owned background write
+    release.set()
+    closer.join(5)
+    assert closed.is_set() and not closer.is_alive()
+    assert torch.load(policy.slot, weights_only=False)['training']['exposure_counts'] == {'graph': 1}
+    successor = CheckpointPolicy(tmp_path)
+    successor.reserve_next(state, optimizer)
+    assert successor._persistent_reservation.pending.stat().st_ino == pending_inode
+    successor.close()
+
+
 def test_reserved_submit_failure_recovers_current_state_synchronously(tmp_path, monkeypatch):
     from natlang_neuralese.train import trajectory_state
     monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)

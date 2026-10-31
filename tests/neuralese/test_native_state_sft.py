@@ -1185,12 +1185,14 @@ def test_real_resume_appends_pair_ahead_of_backlog_without_losing_optimizer_rng_
     manifest.write_text(json.dumps(declaration))
     continued[continued.index('--batch-tokens')+1]='0'
     continued += ['--batch-graphs','2']
-    actual_loss, observed = trainer.packed_graph_loss, []
-    def record_order(model, examples, **kwargs):
-        observed.extend(example.id for example in examples)
-        return actual_loss(model, examples, **kwargs)
+    actual_update, observed = trainer.native_training_update, []
+    def record_order(model, optimizer, batch, **kwargs):
+        # Capacity qualification and precision probes may call packed_graph_loss
+        # more than once; only native_training_update records optimizer exposure.
+        observed.extend(example.id for micro in [*kwargs.get('accumulate', ()), batch] for example in micro)
+        return actual_update(model, optimizer, batch, **kwargs)
     with monkeypatch.context() as patch:
-        patch.setattr(trainer,'packed_graph_loss',record_order)
+        patch.setattr(trainer,'native_training_update',record_order)
         assert trainer.main(continued)==0
     assert observed[0] == 'lfm:new'
     assert Counter(observed)=={'a':1,'b':2,'lfm:new':1,'qwen-new':2}
@@ -1534,8 +1536,9 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
     original_save = trainer._save
     save_calls = []
     def save(*args, **kwargs):
-        save_calls.append(dict(kwargs.get('metrics', {})))
-        if recovery_save_fails and 'held_evaluation_failure' in kwargs['metrics']:
+        metrics = dict(kwargs.get('metrics', {}))
+        save_calls.append({'metrics': metrics, 'reserve_only': bool(kwargs.get('reserve_only', False))})
+        if recovery_save_fails and 'held_evaluation_failure' in metrics:
             raise OSError('injected full disk')
         return original_save(*args, **kwargs)
     monkeypatch.setattr(trainer, '_save', save)
@@ -1543,8 +1546,13 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
     with pytest.raises(ValueError) as caught:
         run(interrupted)
     assert caught.value is failure
-    assert len(save_calls) == 2  # Step-one cadence plus one specialized step-two recovery attempt.
-    assert sum('held_evaluation_failure' in metrics for metrics in save_calls) == 1
+    # Each update first reserves its next checkpoint inode. Those capacity
+    # reservations are distinct from the two durable states: step one and the
+    # specialized step-two recovery attempt.
+    assert [call['reserve_only'] for call in save_calls] == [True, False, True, False]
+    durable_saves = [call['metrics'] for call in save_calls if not call['reserve_only']]
+    assert len(durable_saves) == 2
+    assert sum('held_evaluation_failure' in metrics for metrics in durable_saves) == 1
     slot = interrupted / 'checkpoint.pt'
     saved = torch.load(slot, map_location='cpu', weights_only=False)
     saved_step = 1 if recovery_save_fails else 2
@@ -1560,6 +1568,8 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
         assert metrics['held_evaluation_failure']['message'] == str(failure)
         assert metrics['previous_evaluation_metrics']['step'] == 1
     assert not (interrupted / 'native-training-receipt.json').exists()
+    # Resume in this same process while the original exception remains
+    # inspectable; _main must release its process-local reservation on exit.
     monkeypatch.setattr(trainer, '_evaluate_cadence', original)
     assert run(interrupted, slot) == 0
     actual = torch.load(slot, map_location='cpu', weights_only=False)

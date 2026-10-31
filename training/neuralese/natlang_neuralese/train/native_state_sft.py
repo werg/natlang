@@ -3240,6 +3240,7 @@ def _main(argv=None, *, requested_refresh):
             'optimizer_updates':0}
         write_json(args.out/'continuation-preflight.json',receipt)
         print(json.dumps({'continuation_preflight':str(args.out/'continuation-preflight.json'),'passed':True,'global_step':global_step}),flush=True)
+        policy.close()
         return 0
     if args.memory_qualification and objective is None:
         from .native_packed_capacity import qualify_pending
@@ -3396,7 +3397,7 @@ def _main(argv=None, *, requested_refresh):
             architecture=config['architecture'], options={**checkpoint_options, '_source_row_order':source_order},
             fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
         schedule.close()
-        policy.drain_async()
+        policy.close()
         return
     if new_outer_proof is not None and diloco.local_steps == 0:
         if not new_outer_resumed and new_outer_proof['schema']=='natlang.diloco-first-outer/1':
@@ -4162,6 +4163,10 @@ def _main(argv=None, *, requested_refresh):
         elif not exception_boundary_safe:
             loop_error.add_note('exception occurred inside native_training_update; potentially partial optimizer state '
                 'was not checkpointed')
+        try:
+            policy.close()
+        except BaseException as close_error:
+            loop_error.add_note(f'checkpoint reservation release also failed: {type(close_error).__name__}: {close_error}')
         raise loop_error.with_traceback(loop_error_tb)
     if writer_error is not None:
         # Replace the failed background snapshot with exact fully-accounted
@@ -4395,6 +4400,7 @@ def _main(argv=None, *, requested_refresh):
                      'by_source_group': exposure_by_source_group,
                      'consumed_rows': min(target_rows, sum(exposure_counts.values())),
                      'consumed_updates': step, 'completed_epochs': epoch},checkpoint_detail)})
+    policy.close()
     return 0
 
 

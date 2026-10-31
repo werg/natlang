@@ -134,7 +134,16 @@ class CheckpointPolicy:
                                         optimizer_state_size_upper_bound, save_with_space_retry)
         self.check_async()
         if self._persistent_reservation is None:
-            self._persistent_reservation = PersistentCheckpointReservation(self.slot)
+            # Async checkpoints alternate reservation inodes. If the previous
+            # owner stopped after the writer committed, its spare may be the
+            # alternate inode; reuse it instead of leaking it and allocating a
+            # new default reservation on every in-process/fresh-process resume.
+            default = PersistentCheckpointReservation(self.slot)
+            alternate = PersistentCheckpointReservation(self.slot, slot_suffix='.alternate')
+            suffix = ('' if default.pending.exists() or default.receipt.exists()
+                      or not (alternate.pending.exists() or alternate.receipt.exists())
+                      else '.alternate')
+            self._persistent_reservation = (default if suffix == '' else alternate)
         lazy = optimizer_state_size_upper_bound(optimizer, lazy=True)
         current = optimizer_state_size_upper_bound(optimizer, lazy=False)
         bound = checkpoint_size_upper_bound(state) + math.ceil(max(0, lazy-current) * 1.2)
@@ -191,6 +200,26 @@ class CheckpointPolicy:
         """Wait for the exact pending snapshot and its post-commit hooks."""
         if self._async_writer is not None:
             self._async_writer.drain()
+
+    def close(self):
+        """Release process-local checkpoint ownership without deleting recovery files."""
+        error = None
+        try:
+            self.drain_async()
+        except BaseException as caught:
+            error = caught
+        if self._persistent_reservation is not None:
+            reservation = self._persistent_reservation
+            self._persistent_reservation = None
+            try:
+                reservation.close()
+            except BaseException as caught:
+                if error is None:
+                    error = caught
+                else:
+                    error.add_note(f'checkpoint reservation close also failed: {type(caught).__name__}: {caught}')
+        if error is not None:
+            raise error
 
     @staticmethod
     def _record_async_failure(state, error):
