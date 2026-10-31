@@ -139,3 +139,13 @@ PUT over the DGX uplink (~3 MB/s) failed after a full pass and restarted from ze
   the parent from W&B 30-76 MB/s per part (209 s for parent fetch); staged export -> signed PUT -> commit -> DGX GET
   at ~12 MB/s -> hub copy `ROOT/smoke-jolt` with the checkpoint sha256 `5ff07638...` re-verified. Fixed on the way:
   exports recorded the sandbox's resolved `/work/mirror` paths (now logical paths).
+
+## Broad task source and runtime (2026-10-31, later)
+
+All cloud lineages use `natlang-rl-broad-external-20261031` (33,047 train cases, 23 external sources plus a curriculum
+slice; families already interleaved row by row) with 16 rows and 16 workers per round, `initial_train_world` dropped,
+and template runtime `runtime-9fbae2582` (broad source 7bbf8e055 + Neuralese bonus added after outcome-only centering
+338c5c2ba). The bundle ships the cases file (293 MB) and its db/table assets (613 MB) through the file API, about
+15 minutes per launch at the measured ~1.2 MB/s; moving them to W&B blobs (cloud-speed fetch) is the next transfer
+improvement. The DGX lineages switch to the same source and runtime at their next unbound round (cutover.sh);
+`lfm3-rl-broad-watch` reports per-source success of each lineage's first broad round with failure samples.
