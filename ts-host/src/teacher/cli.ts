@@ -16,6 +16,7 @@ import { observeCollectionPromise, type CollectionLivenessSnapshot } from './col
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, loadRecords, nativeJobRunner,
   sha256, writeAtomic, type CollectorConfig } from './collector.js';
 import { CollectorRequestTelemetryAccumulator } from './request-telemetry.js';
+import { teacherCollectorCapabilities } from './runtime-capabilities.js';
 
 function fileToolSurface(value: string): FileToolSurface {
   if (!FILE_TOOL_SURFACES.includes(value as FileToolSurface)) throw new Error(`--file-tools must be one of ${FILE_TOOL_SURFACES.join(', ')}`);
@@ -42,6 +43,11 @@ const integer = (flags: Map<string, string>, name: string, fallback: number): nu
 
 async function main(): Promise<void> {
   const { positionals, flags } = argumentsOf(process.argv.slice(2));
+  if (flags.has('--capabilities')) {
+    if (flags.get('--capabilities') !== 'json') throw new Error('--capabilities must be json');
+    process.stdout.write(JSON.stringify(await teacherCollectorCapabilities()) + '\n');
+    return;
+  }
   if (flags.has('--help')) {
     process.stdout.write('usage: teacher-collector IR JOBS OUT --model-id ID --root-seed N [options]\n\n' +
       'Options: --server URL | --provider PI_ID --start N --limit N|--all --workers N --context-tokens N\n' +

@@ -183,6 +183,70 @@ def _validate_text_neuralese_emulation(runtime, runtime_manifest):
             'option': '--text-neuralese-emulation'}
 
 
+def _validate_runtime_semantics_capabilities(runtime, runtime_manifest, required_features):
+    """Execute the frozen collector's feature probes before using dependent semantics."""
+    required_features = sorted(set(required_features))
+    if not required_features:
+        return None
+    runtime = Path(runtime)
+    build = runtime_manifest.get('build', {})
+    if not isinstance(build, dict):
+        raise ValueError('semantic runtime capability check requires a sealed build manifest')
+    if build.get('mode') == 'explicit_compiled_dist':
+        compiled = build.get('compiled_dist_files', {})
+    elif build.get('mode') == 'isolated_typescript':
+        files = runtime_manifest.get('files', {})
+        compiled = {name: files.get(f'dist/{name}') for name in ('teacher/cli.js', 'teacher/collector.js')} \
+            if isinstance(files, dict) else {}
+    else:
+        raise ValueError('semantic runtime capability check requires a supported sealed build mode')
+    if not isinstance(compiled, dict):
+        raise ValueError('semantic runtime capability check requires compiled CLI and collector pins')
+    for name in ('teacher/cli.js', 'teacher/collector.js'):
+        path = runtime / 'dist' / name
+        if not isinstance(compiled.get(name), str) or not path.is_file() or \
+                hashlib.sha256(path.read_bytes()).hexdigest() != compiled[name]:
+            raise ValueError(f'semantic capability check is not bound to frozen {name}')
+    try:
+        result = subprocess.run(['node', str(runtime / 'dist/teacher/cli.js'), '--capabilities=json'],
+                                capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ValueError('could not execute semantic capability probes on the frozen collector') from error
+    if result.returncode != 0:
+        raise ValueError('frozen collector does not expose executable semantic capability probes')
+    try:
+        report = json.loads(result.stdout)
+    except ValueError as error:
+        raise ValueError('frozen collector returned malformed semantic capability evidence') from error
+    versions = {'service_aliases': 'natlang.service-aliases/1',
+                'service_scopes': 'natlang.service-scopes/1',
+                'report_completeness': 'natlang.report-completeness/1'}
+    if (not isinstance(report, dict) or report.get('schema') != 'natlang.teacher-collector-capabilities/1' or
+            not isinstance(report.get('probes'), dict)):
+        raise ValueError('frozen collector returned an unsupported semantic capability schema')
+    for feature in required_features:
+        if feature not in versions or report.get(feature) != versions[feature] or report['probes'].get(feature) is not True:
+            raise ValueError(f'frozen collector failed the required {feature} capability probe')
+    return {'schema': 'natlang.reviewed_runtime_semantics_capability/1',
+            'runtime_receipt_sha256': hashlib.sha256((runtime / 'frozen-runtime.json').read_bytes()).hexdigest(),
+            'cli_sha256': compiled['teacher/cli.js'], 'collector_sha256': compiled['teacher/collector.js'],
+            'report_sha256': hashlib.sha256(result.stdout.encode()).hexdigest(),
+            'required_features': required_features, 'report': report}
+
+
+def _required_runtime_semantics_features(rows, cases):
+    required = set()
+    for case in cases:
+        semantics = rows[case['index']].get('semantics', {})
+        if semantics.get('service_aliases'):
+            required.add('service_aliases')
+        if semantics.get('service_scopes'):
+            required.add('service_scopes')
+        if semantics.get('report_completeness'):
+            required.add('report_completeness')
+    return sorted(required)
+
+
 def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
     digest_fn = digest_fn or digest
     plan_path = Path(plan_path).resolve(strict=True)
@@ -325,6 +389,8 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
         if type(seed) is not int or seed < 0:
             raise ValueError(f'Case {index} requires a nonnegative integer seed')
         normalized_cases.append({'index': index, 'seed': seed})
+    runtime_semantics_capability = _validate_runtime_semantics_capabilities(
+        runtime, runtime_manifest, _required_runtime_semantics_features(rows, normalized_cases))
 
     inventory_record = None
     if schema == 'natlang.reviewed_luna_dispatch_plan/2':
@@ -396,7 +462,8 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
                   'authority': str(authority), 'slots': slots,
                   'max_transport_retries': transport_retries,
                   'cases': normalized_cases, 'source_inventory': inventory_record,
-                  'text_neuralese_emulation_capability': text_emulation_capability}
+                  'text_neuralese_emulation_capability': text_emulation_capability,
+                  'runtime_semantics_capability': runtime_semantics_capability}
 
 
 def _verify_ledger_identity(events, identity):
