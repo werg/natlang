@@ -9,7 +9,30 @@
 // Writes OUT_DIR/cases.jsonl (kept rows, input order) and OUT_DIR/verification.json.
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 const [runtime, input, out, concurrencyArg] = process.argv.slice(2);
+// A source hash alone cannot qualify cached outcomes after the runtime or the
+// verifier changes. Freeze the executable closure before importing it.
+function runtimeBinding() {
+  const digest = crypto.createHash('sha256');
+  function visit(dir, prefix = '') {
+    for (const item of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const name = path.join(prefix, item.name), target = path.join(dir, item.name);
+      if (item.isDirectory()) visit(target, name);
+      else if (/\.(?:js|json|wasm|node)$/.test(item.name)) {
+        digest.update(name + '\0'); digest.update(fs.readFileSync(target)); digest.update('\0');
+      }
+    }
+  }
+  visit(path.join(runtime, 'dist'));
+  for (const target of [fileURLToPath(import.meta.url), path.join(runtime, 'package.json'),
+    path.join(runtime, '..', 'package-lock.json')]) {
+    if (fs.existsSync(target)) { digest.update(target + '\0'); digest.update(fs.readFileSync(target)); }
+  }
+  return digest.digest('hex');
+}
+const executableBinding = runtimeBinding();
 const { verifyCases, replayReference } = await import(runtime + '/dist/teacher/curriculum.js');
 const { TOOLS_PROMPT } = await import(runtime + '/dist/native/prompt.js');
 const { externalModule } = await import(runtime + '/dist/native/external.js');
@@ -120,19 +143,24 @@ async function qualify(record) {
   result.ok = result.reference_ok && result.wrong_rejected;
   return result;
 }
-// Resumable: each result is appended to OUT_DIR/partial.jsonl under the input's SHA-256, so a preempted run (ledger
-// low priority) continues where it stopped instead of starting over.
+// Resume only under the exact input and executable closure. Preserve obsolete
+// evidence rather than relabeling old results as checks of the current runtime.
 const results = new Array(rows.length);
 fs.mkdirSync(out, { recursive: true });
 const inputSha = crypto.createHash('sha256').update(fs.readFileSync(input)).digest('hex');
 const partialPath = out + '/partial.jsonl';
 if (fs.existsSync(partialPath)) {
   const lines = fs.readFileSync(partialPath, 'utf8').split('\n').filter(Boolean);
-  if (lines.length && JSON.parse(lines[0]).input_sha256 === inputSha)
-    for (const line of lines.slice(1)) { try { const { index, result } = JSON.parse(line); results[index] = result; } catch {} }
-  else fs.rmSync(partialPath);
+  const header = lines.length ? JSON.parse(lines[0]) : {};
+  if (header.input_sha256 === inputSha && header.executable_sha256 === executableBinding)
+    for (const line of lines.slice(1)) { try {
+      const { index, result } = JSON.parse(line);
+      if (Number.isInteger(index) && index >= 0 && index < rows.length && result.id === rows[index].id)
+        results[index] = result;
+    } catch {} }
+  else fs.renameSync(partialPath, partialPath + '.previous-' + crypto.createHash('sha256').update(lines[0] || '').digest('hex').slice(0, 16) + '-' + Date.now());
 }
-if (!fs.existsSync(partialPath)) fs.writeFileSync(partialPath, JSON.stringify({ input_sha256: inputSha }) + '\n');
+if (!fs.existsSync(partialPath)) fs.writeFileSync(partialPath, JSON.stringify({ input_sha256: inputSha, executable_sha256: executableBinding }) + '\n');
 const todo = rows.map((_, i) => i).filter(i => results[i] === undefined);
 let next = 0, done = rows.length - todo.length;
 async function worker() {
@@ -145,8 +173,14 @@ async function worker() {
 }
 await Promise.all(Array.from({ length: concurrency }, worker));
 const kept = rows.filter((_, i) => results[i].ok);
-fs.writeFileSync(out + '/cases.jsonl', kept.map(r => JSON.stringify(r) + '\n').join(''));
-fs.writeFileSync(out + '/materialized-input.jsonl', rows.map(r => JSON.stringify(r) + '\n').join(''));
+function writeRows(target, values) {
+  const temp = target + '.pending', fd = fs.openSync(temp, 'w');
+  try { for (const row of values) fs.writeSync(fd, JSON.stringify(row) + '\n'); fs.fsyncSync(fd); }
+  finally { fs.closeSync(fd); }
+  fs.renameSync(temp, target);
+}
+writeRows(out + '/cases.jsonl', kept);
+writeRows(out + '/materialized-input.jsonl', rows);
 const sha = p => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 const rate = (n, d) => d ? Number((n / d).toFixed(4)) : null;
 const aliasTried = results.flatMap(r => r.aliases).filter(a => a.accepted !== null);
@@ -160,7 +194,9 @@ const summary = {
   alias_false_negative_rate: rate(aliasTried.filter(a => !a.accepted).length, aliasTried.length),
   by_split: Object.fromEntries(['train', 'dev', 'confirmation'].map(s => [s, kept.filter(r => r.split === s).length])),
 };
+if (runtimeBinding() !== executableBinding) throw new Error('verification executable closure changed during replay; rerun against an immutable runtime');
 const report = { schema: 'natlang.broad-rl-case-verification/1', input: { path: input, sha256: sha(input) }, runtime,
+  executable_sha256: executableBinding,
   cases_sha256: sha(out + '/cases.jsonl'), summary,
   failures: results.filter(r => !r.ok).slice(0, 200).map(r => ({ id: r.id, problems: r.problems.slice(0, 3),
     wrong_accepted: r.wrong.filter(w => w.accepted !== false).map(w => w.value) })),

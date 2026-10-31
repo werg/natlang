@@ -92,7 +92,7 @@ def test_babi_temporal_successor_keeps_long_history_and_adds_awaited_helper(tmp_
     assert len(case['semantics']['inputs']['facts']) == 125
     assert case['semantics']['expected'] == 'garden'
     assert case['curriculum']['external']['framing'] == 'neuralese-helper'
-    assert 'await nl(facts, question)' in case['semantics']['files']['answer_from_facts.nl']
+    assert 'await track_query_history(facts, question)' in case['semantics']['files']['answer_from_facts.nl']
     assert 'answer_from_facts/track_query_history.nl' in case['semantics']['files']
     assert 'babi:train-3-1' in case['source_groups']
 
@@ -112,7 +112,7 @@ def test_clutrr_guided_successor_keeps_only_multi_hop_and_preserves_world_group(
     assert case['curriculum']['external']['upstream_id'] == 'long'
     assert case['semantics']['expected'] == 'brother'
     assert case['curriculum']['external']['framing'] == 'neuralese-helper'
-    assert 'await nl(sentence)' in case['semantics']['files']['find_relation.nl']
+    assert 'await extract_relation_edge(sentence)' in case['semantics']['files']['find_relation.nl']
     assert 'clutrr:long' in case['source_groups']
 
 
@@ -153,7 +153,16 @@ def test_verified_guidance_variant_preserves_exact_world_and_answer(tmp_path):
     assert guided['source_groups'] == row['source_groups']
     assert guided['semantics']['inputs'] == row['semantics']['inputs']
     assert guided['semantics']['expected'] == row['semantics']['expected']
-    assert 'await nl(facts, question)' in guided['semantics']['files']['answer_from_facts.nl']
+    assert 'await track_query_history(facts, question)' in guided['semantics']['files']['answer_from_facts.nl']
+    # A repair must reach an already failing world even when its ID sorts past
+    # the old first-48 pilot. Held rows stay outside this train-only treatment.
+    expanded = [dict(row, id=f'babi:task3:{i:03d}') for i in range(61)]
+    expanded.append(dict(row, id='held', split='confirmation'))
+    _write_jsonl(path, expanded)
+    complete = _guided_rows('babi', path, None)
+    assert len(complete) == 61
+    assert complete[-1]['curriculum']['external']['source_case_id'] == 'babi:task3:060'
+    assert all(item['split'] == 'train' for item in complete)
 
 
 def test_assembly_interleave_skips_sources_with_no_train_rows():

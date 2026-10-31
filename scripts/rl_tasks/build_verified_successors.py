@@ -77,7 +77,7 @@ def _sql_rows(source: str, path: Path, cap_per_db: int):
     return out
 
 
-def _guided_rows(source: str, path: Path, cap: int):
+def _guided_rows(source: str, path: Path, cap: int | None):
     eligible = []
     for row in rows(path):
         if row.get('split') != 'train':
@@ -91,18 +91,18 @@ def _guided_rows(source: str, path: Path, cap: int):
         eligible.append(row)
     eligible.sort(key=lambda r: r['id'])
     out = []
-    for original in eligible[:cap]:
+    for original in eligible if cap is None else eligible[:cap]:
         row = json.loads(json.dumps(original))
         old_id = row['id']
         family = f'ext_{source}_guided'
-        row['id'] = f'{old_id}:guided-v1'
+        row['id'] = f'{old_id}:guided-v2'
         row['source'] = f'external-rl:{source}-guided'
         row['source_ids'] = [f'{source}-guided:{row["source_ids"][0]}']
-        row['source_revisions'] = list(row.get('source_revisions', [])) + [source + '-guided@verified-case-derived-v1']
+        row['source_revisions'] = list(row.get('source_revisions', [])) + [source + '-guided@verified-case-derived-v2']
         row['family'] = family
         row['curriculum']['family'] = family
         row['curriculum']['shape'] += '-guided'
-        row['curriculum']['variant'] = 'complete-evidence-guidance-v1'
+        row['curriculum']['variant'] = 'complete-evidence-guidance-v2'
         ext = row['curriculum']['external']
         ext['source'] = f'{source}-guided'
         ext['source_case_id'] = old_id
@@ -113,7 +113,7 @@ def _guided_rows(source: str, path: Path, cap: int):
             helper = 'answer_from_facts/track_query_history.nl'
             row['semantics']['files'][root] = row['semantics']['files'][root].replace(
                 'facts is a numbered story, in order. Answer question from it, taking into account that later facts can change earlier ones. Return only the answer word or words (comma-separated when there are several).',
-                'Use the entire numbered event history in order. Track state changes for the named entity, preserve fact ids, and answer the exact temporal question (including before/after references) from the decisive earlier event. Return only the answer word or words.') + '\n\nCall `const timeline = await nl(facts, question);` once with the complete list. Check the decisive fact ids and the requested time; never truncate or substitute the final state for an earlier state.\n'
+                'Use the entire numbered event history in order. Track state changes for the named entity, preserve fact ids, and answer the exact temporal question (including before/after references) from the decisive earlier event. Return only the answer word or words.') + '\n\nCall `const timeline = await track_query_history(facts, question);` once with the complete list. Check the decisive fact ids and the requested time; never truncate or substitute the final state for an earlier state.\n'
             row['semantics']['files'][helper] = ('---\nargs:\n  facts: "string[]"\n  question: "string"\nreturns: "Neuralese<string>"\n---\n'
                 'Read the complete numbered history and question. Keep an ordered timeline for relevant entities and transitions, preserving fact ids. For a before/after query, state the value at that exact point. Distinguish movement, object possession, and location. Do not omit repeated changes or infer unstated events.\n')
             ext['neuralese_room'] = 'One awaited helper call tracks the complete ordered history; parent checks temporal target and decisive fact ids.'
@@ -121,7 +121,7 @@ def _guided_rows(source: str, path: Path, cap: int):
             ext['neuralese_room'] = 'Per-sentence direct-edge extraction followed by an explicit target-to-anchor path composition.'
             root = 'find_relation.nl'
             helper = 'find_relation/extract_relation_edge.nl'
-            row['semantics']['files'][root] = row['semantics']['files'][root] + ('\n\nSplit the story into its stated sentences. For every sentence call `const edge = await nl(sentence);`, retain each direct edge, and compose only the path from target to anchor. Check direction and do not infer marriage or an unstated parent edge. Return one relation word.\n')
+            row['semantics']['files'][root] = row['semantics']['files'][root] + ('\n\nSplit the story into its stated sentences. For every sentence call `const edge = await extract_relation_edge(sentence);`, retain each direct edge, and compose only the path from target to anchor. Check direction and do not infer marriage or an unstated parent edge. Return one relation word.\n')
             row['semantics']['files'][helper] = ('---\nargs:\n  sentence: "string"\nreturns: "Neuralese<string>"\n---\n'
                 'Extract only a direct family relation stated in this sentence. Return “PERSON_A is PERSON_B’s RELATION”, preserving direction. Do not infer unstated relations.\n')
         out.append(row)
@@ -135,8 +135,10 @@ def build(base: Path, out: Path):
     result = {}
     for name, cap in [('spider', 4), ('bird', 4)]:
         result[name + '-hard'] = _sql_rows(name, base / name / 'verified/cases.jsonl', cap)
-    result['babi-temporal3'] = _guided_rows('babi', base / 'babi/verified/cases.jsonl', 48)
-    result['clutrr-guided'] = _guided_rows('clutrr', base / 'clutrr/verified/cases.jsonl', 48)
+    # The source is already bounded and verified. A first-48 cap left known
+    # failing worlds on the defective plain framing while advertising a fix.
+    result['babi-temporal3'] = _guided_rows('babi', base / 'babi/verified/cases.jsonl', None)
+    result['clutrr-guided'] = _guided_rows('clutrr', base / 'clutrr/verified/cases.jsonl', None)
     for name, items in result.items():
         target = out / name
         target.mkdir()

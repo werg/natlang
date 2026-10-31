@@ -14,14 +14,7 @@ import json
 from pathlib import Path
 
 from natlang_neuralese.common.custody import related_components, world_identities
-
-
-def sha(path: Path):
-    h = hashlib.sha256()
-    with path.open('rb') as f:
-        for block in iter(lambda: f.read(8 * 1024 * 1024), b''):
-            h.update(block)
-    return h.hexdigest()
+from natlang_neuralese.common.hashing import sha256_file_hex as sha
 
 
 def load_rows(path: Path):

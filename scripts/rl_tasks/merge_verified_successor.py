@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 from natlang_neuralese.common.custody import REGISTRY, ProtectedWorlds, related_components, world_identities
 from natlang_neuralese.common.hashing import sha256_file_hex as sha_file
+from natlang_neuralese.common.paths import resolve
 from scripts.rl_tasks.sources.sql import complexity, sql_profile
 
 
@@ -574,13 +575,11 @@ def main():
     transition_path = out / 'transition-change-cases.jsonl'
     write_rows(transition_path, transition_changes)
     replay_dir = out / 'transition-replay'
-    node_bin = Path('/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin')
     env = os.environ.copy()
     env.update({'NATLANG_RL_TASK_ASSETS': str(out / 'assets'),
                 'NATLANG_RL_TASK_ASSETS_V3': str(out / 'assets-v3'),
                 'NATLANG_HASH_CACHE': str(out / '.transition-replay-hash-cache.jsonl'),
-                'NODE_OPTIONS': '--max-old-space-size=1400', 'OMP_NUM_THREADS': '1',
-                'PATH': str(node_bin) + os.pathsep + env.get('PATH', '')})
+                'NODE_OPTIONS': '--max-old-space-size=1400', 'OMP_NUM_THREADS': '1'})
     replay = subprocess.run(['node', 'scripts/rl_tasks/verify.mjs', str(ROOT / 'ts-host'),
                              str(transition_path), str(replay_dir), '4'], cwd=ROOT, env=env,
                             text=True, capture_output=True)
@@ -611,7 +610,7 @@ def main():
 
 def _load_source_case(source, case_id):
     # The raw verified source is the source of provenance for formerly capped-out hard examples.
-    base = Path('/home/werg/data/broad-rl-tasks-20261031/build') / source / 'verified/cases.jsonl'
+    base = resolve('data_nvme', 'broad-rl-tasks-20261031', 'build', source, 'verified/cases.jsonl')
     if not base.is_file():
         return None
     for row in iter_rows(base):
@@ -626,12 +625,10 @@ def finalize_existing(out: Path):
     cases = rows(out / 'transition-change-cases.jsonl')
     replay_dir = out / 'transition-replay'
     env = os.environ.copy()
-    node_bin = Path('/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin')
     env.update({'NATLANG_RL_TASK_ASSETS': str(out / 'assets'),
                 'NATLANG_RL_TASK_ASSETS_V3': str(out / 'assets-v3'),
                 'NATLANG_HASH_CACHE': str(out / '.transition-replay-hash-cache.jsonl'),
-                'NODE_OPTIONS': '--max-old-space-size=1400', 'OMP_NUM_THREADS': '1',
-                'PATH': str(node_bin) + os.pathsep + env.get('PATH', '')})
+                'NODE_OPTIONS': '--max-old-space-size=1400', 'OMP_NUM_THREADS': '1'})
     replay = subprocess.run(['node', 'scripts/rl_tasks/verify.mjs', str(ROOT / 'ts-host'),
                              str(out / 'transition-change-cases.jsonl'), str(replay_dir), '4'], cwd=ROOT, env=env,
                             text=True, capture_output=True)

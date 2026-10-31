@@ -196,7 +196,7 @@ BABI_HISTORY_NEURALESE = {
                    'state the value after it. Distinguish a person moving from an object changing holder or location. '
                    'Never omit a repeated move or infer a transition absent from the facts.',
     'root_note': 'Use the whole numbered history, even when it is long. Call `const timeline = await '
-                 'nl(facts, question);` once with the full list. Check the decisive fact ids and the state immediately '
+                 'track_query_history(facts, question);` once with the full list. Check the decisive fact ids and the state immediately '
                  'before or after the named event, then return only the typed answer. Do not truncate the history or '
                  'answer from the final state when the question names an earlier time.',
 }
@@ -257,7 +257,7 @@ CLUTRR_PATH_NEURALESE = {
                    'Paula is Beverly\'s daughter; "Paula\'s brother Samuel" means Samuel is Paula\'s brother. Do not '
                    'infer a relationship that the sentence does not state.',
     'root_note': 'Split story into its stated sentences and extract each direct edge with `const edge = await '
-                 'nl(sentence);`. Await one call per sentence and retain every edge. Verify that each name and direct '
+                 'extract_relation_edge(sentence);`. Await one call per sentence and retain every edge. Verify that each name and direct '
                  'relation appears in that sentence; then compose the connecting family path from target to anchor. '
                  'The requested string means "target is anchor\'s ___". Do not assume marriage or invent a parent edge. '
                  'Return only one relation word.',
