@@ -265,7 +265,8 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
                 'assumptions': [], 'decisive': [], 'plausible_actions': [], 'minimum_sequence': [],
                 'reference': {'root': [[row['reference_action']['tool'], row['reference_action']['arguments']]]
                               if row.get('reference_action') else
-                              [['return_result', {'status': 'success', 'value': row['expected']}]]},
+                              ([['return_result', {'status': 'success', 'value': row['expected']}]]
+                               if oracle == 'exact' else [])},
                 'rl': {'level': int(row.get('level', 2)), 'family': f'ext_natlang_codebase_{slug(program_id, 36)}_{slug(row["task_family"], 30)}',
                        'basis': 'independent-codebase-world-fixture'},
                 'external': {'source': 'natlang-codebase-intake', 'upstream': dataset['identity'],
@@ -277,7 +278,7 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
                              'invocation_index': row.get('invocation_index'), 'entity_model_sha256': _sha(json.dumps(entity_model, sort_keys=True).encode()),
                              'workflow_ids': row.get('workflow_ids', []), 'instruction_sha256': text_digest(row['task']),
                              'external_services': service_bindings,
-                             'checks': {'wrong_code': row.get('wrong_code', [])},
+                             'checks': {'wrong_code': row['wrong_code']} if row.get('wrong_code') else {},
                              'oracle_kind': 'exact' if oracle == 'exact' else 'judged'},
             },
             'semantics': {'root': root, 'files': case_files, 'inputs': row['inputs'], 'expected': row['expected'],

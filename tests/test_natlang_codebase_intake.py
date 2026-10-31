@@ -93,6 +93,7 @@ def test_intake_binds_multiple_operations_and_preserves_exact_vs_judged(tmp_path
     assert 'For this invocation: Select a safe response' in rows[0]['semantics']['files']['reconcile.nl']
     assert rows[0]['semantics']['oracle'] == 'exact'
     assert judged_rows[0]['semantics']['oracle']['level'] == 'judged'
+    assert judged_rows[0]['curriculum']['reference']['root'] == []
     assert 'reconcile.nl' in rows[0]['semantics']['files']
     assert 'CC0' in rows[0]['semantics']['files']['LICENSE.notice']
     assert receipt['semantic_status'].startswith('fixture-backed, not yet runtime-verified')
