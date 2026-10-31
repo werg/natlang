@@ -138,3 +138,15 @@ def test_unexpected_growth_extends_same_reserved_inode(tmp_path):
     assert path.stat().st_ino == inode
     assert torch.load(path, weights_only=True)['large_metadata'] == 'x' * 10000
     owner.close()
+
+
+def test_fresh_composite_native_optimizer_lazy_bound():
+    from natlang_neuralese.train.optim import PortMuonAdamW
+    ordinary = torch.nn.Parameter(torch.ones(4, dtype=torch.bfloat16))
+    latent = torch.nn.Parameter(torch.ones((4, 4), dtype=torch.bfloat16))
+    optimizer = PortMuonAdamW([('norm', ordinary)], lr=1e-3, vocab_size=64,
+        latent=[('latent', latent, 1e-3, 1)], latent_optimizer='muonsr',
+        auxiliary_rounding='stochastic')
+    bound = optimizer_state_size_upper_bound(optimizer, lazy=True)
+    assert bound >= 2 * ordinary.numel() * 2 + 4 + latent.numel() * 2
+    assert optimizer_state_size_upper_bound(optimizer, lazy=False) == 0
