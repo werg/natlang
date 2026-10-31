@@ -79,7 +79,8 @@ def bind_world_services(package_root: Path, metadata: dict[str, Any], services: 
                 or not isinstance(digest, str) or not _SHA256.fullmatch(digest)):
             raise ValueError(f'invalid fixture binding for {alias}')
         file = root / path
-        if file.is_symlink() or not file.is_file() or not file.resolve().is_relative_to(root):
+        if (file.is_symlink() or not file.is_file() or not file.resolve().is_relative_to(root)
+                or file.resolve().is_relative_to(package_root.resolve())):
             raise ValueError(f'unsafe fixture binding for {alias}')
         raw = file.read_bytes()
         if hashlib.sha256(raw).hexdigest() != digest:
