@@ -47,7 +47,23 @@ def refused_for_entitlement(error_text):
     return NOT_ALLOWED in error_text or 'not entitled to create GPU sandboxes' in error_text
 
 
-def probe(account):
+def stop_probe(sandbox_id):
+    """Confirm provider termination; a successful stop request alone is insufficient."""
+    command = [sys.executable, str(HERE / 'cwctl.py')]
+    try:
+        stopped = subprocess.run([*command, 'stop', sandbox_id, '--graceful-shutdown-seconds', '1'],
+                                 capture_output=True, text=True, timeout=30)
+        observed = subprocess.run([*command, 'get', sandbox_id], capture_output=True, text=True, timeout=30)
+    except (subprocess.TimeoutExpired, OSError) as error:
+        return False, f'{sandbox_id}: cleanup observation failed ({type(error).__name__})'
+    status = next((line.split()[-1].lower() for line in observed.stdout.splitlines()
+                   if line.startswith('STATUS') and len(line.split()) > 1), None)
+    if observed.returncode == 0 and status in ('completed', 'failed', 'terminated'):
+        return True, f'{sandbox_id}, verified {status}'
+    return False, f'{sandbox_id}: stop exit={stopped.returncode}, observed status={status!r}'
+
+
+def probe(account, *, created=None):
     """One minimal GPU sandbox create in ``account``; a created sandbox is stopped at once. True / False / None (other
     error, unknown)."""
     cwctl = rl_cloud.cwctl
@@ -59,8 +75,15 @@ def probe(account):
     except Exception as error:  # noqa: BLE001 -- classified below
         text = f'{type(error).__name__}: {error}'
         return (False if refused_for_entitlement(text) else None), text[:400]
-    subprocess.run([sys.executable, str(HERE / 'cwctl.py'), 'stop', entry['sandbox_id']], capture_output=True)
-    return True, entry['sandbox_id']
+    sandbox_id = entry['sandbox_id']
+    if created is not None:
+        try:
+            created(sandbox_id)
+        except BaseException:
+            stop_probe(sandbox_id)
+            raise
+    stopped, detail = stop_probe(sandbox_id)
+    return (True if stopped else None), detail
 
 
 def lineage_state(run, name):
@@ -115,12 +138,29 @@ def one_pass(run, args, auto):
     path = rl_cloud.hub(run) / 'autopilot.json'
     auto.setdefault('entitled', [])
     auto.setdefault('probes', [])
+    pending = auto.get('probe_cleanup')
+    if pending:
+        stopped, detail = stop_probe(pending['sandbox_id'])
+        if not stopped:
+            print(json.dumps({'event':'probe_cleanup_pending', 'account':pending['account'], 'detail':detail}), flush=True)
+            return  # Never create another allocation while this one is unresolved.
+        auto.pop('probe_cleanup')
+        if pending['account'] not in auto['entitled']:
+            auto['entitled'].append(pending['account'])
+        auto.setdefault('probe_cleanup_history', []).append({**pending, 'verified_at':time.time(), 'detail':detail})
+        rl_cloud.store_json(path, auto)
+        print(json.dumps({'event':'probe_cleanup_verified', 'detail':detail}), flush=True)
     if not auto['entitled']:
         if auto['probes'] and time.time() - auto['probes'][-1]['at'] < args.interval - 60:
             return  # exactly one probe per interval, also across autopilot restarts
         candidates = accounts()
         account = candidates[len(auto['probes']) % len(candidates)]
-        ok, detail = probe(account)
+        def remember_created(sandbox_id):
+            auto['probe_cleanup'] = {'account':account, 'sandbox_id':sandbox_id, 'created_at':time.time()}
+            rl_cloud.store_json(path, auto)
+        ok, detail = probe(account, created=remember_created)
+        if ok:
+            auto.pop('probe_cleanup', None)
         auto['probes'].append({'at': time.time(), 'account': account, 'entitled': ok, 'detail': detail})
         rl_cloud.store_json(path, auto)
         if not ok:
@@ -187,6 +227,19 @@ def one_pass(run, args, auto):
         coord('cloud RL launched', '; '.join(launched) + f' (run {run["id"]}, plans/neuralese/LFM3_RL_CLOUD_20261031.md)')
 
 
+def next_delay(auto, interval, *, now=None):
+    if auto.get('probe_cleanup'):
+        return min(interval, 30)
+    if auto.get('entitled'):
+        return min(interval, 300)
+    probes = auto.get('probes') or []
+    # Restarting the monitor must not move an already scheduled hourly probe
+    # another full hour into the future.
+    if probes:
+        return max(1, interval - ((time.time() if now is None else now) - probes[-1]['at']))
+    return interval
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('run')
@@ -212,7 +265,7 @@ def main(argv=None):
         if args.once:
             return 0
         # entitlement probes hourly; once entitled, the smoke and the launches are followed every 5 minutes
-        time.sleep(args.interval if not auto.get('entitled') else min(args.interval, 300))
+        time.sleep(next_delay(auto, args.interval))
 
 
 if __name__ == '__main__':
