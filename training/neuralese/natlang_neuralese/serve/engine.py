@@ -765,20 +765,48 @@ class Engine:
             raise RequestError('forced-message','forced replay needs the bound teacher-turn source receipt and assistant target')
         message=forced['assistant'];source=forced['source_receipt'];actor=source.get('actor')
         valid_hash=lambda value:isinstance(value,str) and len(value)==64 and all(c in '0123456789abcdef' for c in value)
-        if (source.get('schema')!='natlang.teacher-turn-source/1' or not isinstance(actor,dict)
-                or not isinstance(source.get('source_path'),str) or not source['source_path']
-                or not isinstance(source.get('source_view'),str) or source['source_view'] not in {'unhinted','privileged-hint'}
-                or not isinstance(source.get('source_verification_path'),str) or not source['source_verification_path']
-                or not isinstance(source.get('transfer_receipt_path'),str) or not source['transfer_receipt_path']
-                or not isinstance(source.get('invocation_id'),str) or not source['invocation_id']
-                or type(source.get('ordinal')) is not int or source['ordinal']<0
-                or any(not valid_hash(source.get(key)) for key in ('turn_sha256','prompt_sha256','task_sha256','source_file_sha256'))
-                or actor.get('model')!='nvidia/Qwen3.6-35B-A3B-NVFP4'
-                or actor.get('revision')!='1355db6a052410cfd62085d94b58866fd0f2c3c5'
-                or not isinstance(actor.get('actor_source_path'),str) or not actor['actor_source_path']
-                or not isinstance(actor.get('execution_identity_path'),str) or not actor['execution_identity_path']
-                or any(not valid_hash(actor.get(key)) for key in ('actor_source_sha256','execution_identity_sha256'))):
-            raise RequestError('forced-message','teacher turn source binding is incomplete or has the wrong teacher actor')
+        if source.get('schema') == 'natlang.teacher-turn-source/1':
+            if (not isinstance(actor,dict)
+                    or not isinstance(source.get('source_path'),str) or not source['source_path']
+                    or not isinstance(source.get('source_view'),str) or source['source_view'] not in {'unhinted','privileged-hint'}
+                    or not isinstance(source.get('source_verification_path'),str) or not source['source_verification_path']
+                    or not isinstance(source.get('transfer_receipt_path'),str) or not source['transfer_receipt_path']
+                    or not isinstance(source.get('invocation_id'),str) or not source['invocation_id']
+                    or type(source.get('ordinal')) is not int or source['ordinal']<0
+                    or any(not valid_hash(source.get(key)) for key in ('turn_sha256','prompt_sha256','task_sha256','source_file_sha256'))
+                    or actor.get('model')!='nvidia/Qwen3.6-35B-A3B-NVFP4'
+                    or actor.get('revision')!='1355db6a052410cfd62085d94b58866fd0f2c3c5'
+                    or not isinstance(actor.get('actor_source_path'),str) or not actor['actor_source_path']
+                    or not isinstance(actor.get('execution_identity_path'),str) or not actor['execution_identity_path']
+                    or any(not valid_hash(actor.get(key)) for key in ('actor_source_sha256','execution_identity_sha256'))):
+                raise RequestError('forced-message','teacher turn source binding is incomplete or has the wrong teacher actor')
+        elif source.get('schema') == 'natlang.provider-teacher-turn-source/1':
+            try:
+                from .teacher_source_receipt import validate_provider_teacher_source
+                validate_provider_teacher_source(source, forced['assistant'], opening, tools, forced.get('native_text_spans'),
+                    source_opening=forced.get('source_opening'), native_text_bindings=forced.get('native_text_bindings'))
+                for binding in forced.get('native_text_bindings') or []:
+                    native = self.store.get_native_state(binding['native_block_id'])
+                    if native is None:
+                        raise ValueError('provider teacher native encoder state is not in this checkpoint store')
+                    block = native.block
+                    source_capture = binding['source_capture']
+                    source_tokens = [token for segment in source_capture['segments'] for token in segment['token_ids']]
+                    payload_start, payload_stop = source_capture.get('payload_start'), source_capture.get('payload_stop')
+                    if (hashlib.sha256(block.text.encode('utf-8')).hexdigest() != binding['body_sha256']
+                            or native.id != binding['native_block_id']
+                            or source_capture.get('policy') != self._native_block_identity(block)
+                            or type(payload_start) is not int or type(payload_stop) is not int
+                            or not 0 <= payload_start < payload_stop <= len(source_tokens)
+                            or source_tokens[payload_start:payload_stop] != block.token_ids.tolist()
+                            or payload_start != 1 or payload_stop != len(source_tokens)-1
+                            or source_tokens[0] != self.role_tokens.produce_open
+                            or source_tokens[-1] != self.role_tokens.produce_close):
+                        raise ValueError('provider teacher native encoder state differs from its exact student capture')
+            except (TypeError, ValueError) as error:
+                raise RequestError('forced-message', str(error)) from error
+        else:
+            raise RequestError('forced-message','teacher turn source binding uses an unsupported provenance schema')
         if not isinstance(message,dict) or message.get('role')!='assistant':
             raise RequestError('forced-message','the replay target must be one assistant message')
         import copy,re
@@ -844,8 +872,43 @@ class Engine:
             target['tool_calls'][index]['function']['arguments']=json.dumps(arguments,ensure_ascii=False,separators=(',',':'))
         from .chat import assistant_reply_segments,normalize_tool_call_arguments
         target=normalize_tool_call_arguments([target])[0][0]
-        apply=lambda messages,generation:self.tokenizer.apply_chat_template(messages,tools=tools or None,
-            tokenize=False,add_generation_prompt=generation)
+        def apply(messages,generation):
+            # Prefix comparison validates the assistant continuation, not a
+            # serialized rendering of native KV. The actual prompt was already
+            # rendered by render_messages into token/native-state segments.
+            # Give template prefix comparison a stable textual stand-in for
+            # each native reference so input-state parts never stringify as
+            # Python dictionaries and perturb the assistant continuation.
+            import copy
+            prepared=copy.deepcopy(messages)
+            def stand_in(value):
+                if isinstance(value,list):return [stand_in(item) for item in value]
+                if isinstance(value,dict):
+                    if isinstance(value.get('role'),str) and isinstance(value.get('content'),list):
+                        parts=[]
+                        for part in value['content']:
+                            if isinstance(part,dict) and part.get('type')=='native_state':
+                                parts.append(f'[native state {part.get("id")}]')
+                            elif isinstance(part,dict) and part.get('type')=='text' and isinstance(part.get('text'),str):
+                                parts.append(part['text'])
+                            else:
+                                raise RequestError('forced-message','native-state prefix validation encountered an unsupported content part')
+                        return {**{key:stand_in(item) for key,item in value.items() if key!='content'},
+                            'content':''.join(parts)}
+                    if value.get('type')=='native_state':
+                        ident=value.get('id')
+                        return {'type':'text','text':f'[native state {ident}]'}
+                    return {key:stand_in(item) for key,item in value.items()}
+                return value
+            prepared=stand_in(prepared)
+            # Provider-captured Natlang history uses OpenAI JSON-text tool
+            # arguments. Chat-template renderers consume structured objects;
+            # render_request performs this same normalization before prefix
+            # validation and native prefill.
+            from .chat import normalize_tool_call_arguments
+            prepared=normalize_tool_call_arguments(prepared)[0]
+            return self.tokenizer.apply_chat_template(prepared,tools=tools or None,
+                tokenize=False,add_generation_prompt=generation)
         segments=assistant_reply_segments(apply,target,self.specials,opening=opening,
             call_format=getattr(self,"tool_call_format",None),tools=tools)
         if segments is None:raise RequestError('forced-message','assistant response does not continue this exact actual prompt')

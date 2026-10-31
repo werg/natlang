@@ -189,6 +189,58 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert repaired_block.block.text=='t5 t6 t7'
         assert any(part.get('type')=='native_state' and part.get('id')==repaired_block.id
             for part in repaired['choices'][0]['message']['content'])
+
+        # Provider-normalized Luna outputs have their own strict source schema;
+        # they do not inherit or impersonate the pinned Qwen actor identity.
+        luna_body = 't5 t6 t7'
+        luna_target = {'role':'assistant','content':'t4 LUNASPAN0123456789END'}
+        luna_prompt = [{'role':'user','content':'Review the authenticated inspection record.'}]
+        canonical = lambda value: json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
+        luna_source = {'schema':'natlang.provider-teacher-turn-source/1',
+            'source_path':'campaign-v6/raw-completed.jsonl','source_file_sha256':'a'*64,
+            'source_row_id':'teacher-program:8aa364874d84e7185ecc','source_row_sha256':'b'*64,
+            'source_turn_index':5,'source_turn_sha256':'c'*64,'task_sha256':'d'*64,'program_sha256':'e'*64,
+            'prompt_sha256':hashlib.sha256(canonical({'messages':luna_prompt,'tools':[]})).hexdigest(),
+            'source_prompt_sha256':hashlib.sha256(canonical({'messages':luna_prompt,'tools':[]})).hexdigest(),
+            'target_sha256':hashlib.sha256(canonical(luna_target)).hexdigest(),
+            'raw_target_sha256':'8'*64,'target_binding_sha256':'9'*64,
+            'plan_path':'campaign-v6/plan-v2.reviewed.json','plan_sha256':'1'*64,
+            'runtime_path':'runtime-codebase-c-v6/receipt.json','runtime_receipt_sha256':'2'*64,
+            'split':'train','source_groups':['sql-db:bird:food_inspection'],
+            'trace_sha256':'3'*64,'request_sha256':'4'*64,'response_sha256':'5'*64,
+            'transport_provenance_sha256':'6'*64,
+            'actor':{'model':'gpt-6-luna','provider':'openai-codex','role':'teacher','transport':'pi-provider'},
+            'typed_text_writes':[{'block_id':'nzt1_'+'a'*52,
+                'body_sha256':hashlib.sha256(luna_body.encode()).hexdigest(),
+                'source':'return_result','writer_call_id':'task/1','writer_node':'task/1#31',
+                'host_result_receipt_sha256':'7'*64,'raw_response_sha256':'5'*64,
+                'context_receipt_sha256':'a'*64,'target_span_path':['content'],'context_occurrences':1}]}
+        luna_turn={'schema':'natlang.native-teacher-forced-turn/1','source_receipt':luna_source,
+            'native_text_spans':[{'path':['content'],'marker':'LUNASPAN0123456789END','text':luna_body}],
+            'assistant':luna_target}
+        luna_reply=post({'messages':luna_prompt,'max_tokens':64,'temperature':0.0,
+            'x_natlang_native_recording':True,'x_natlang_forced_message':luna_turn})
+        luna_capture=luna_reply['x_natlang_rl_capture']
+        assert luna_capture['schema']=='natlang.native-teacher-forced-capture/1'
+        assert luna_capture['teacher_source_receipt']==luna_source
+        assert luna_capture['writes'], (luna_capture.get('generated_inputs'), luna_reply['choices'],
+                                        luna_reply.get('native_state'))
+        luna_block=engine.store.get_native_state(luna_capture['writes'][0]['state_id'])
+        assert luna_block.block.text==luna_body
+        assert luna_block.block.checkpoint_sha256==engine.checkpoint_sha256
+        luna_consumer=post({'messages':[{'role':'user','content':[{'type':'native_state','id':luna_block.id}]}],
+            'max_tokens':8,'temperature':0.0,'x_natlang_native_recording':True,
+            'x_natlang_forced_message':{**luna_turn,'assistant':{'role':'assistant','content':'Next step.'},
+                'native_text_spans':[],'source_receipt':{**luna_source,'typed_text_writes':[],
+                    'target_sha256':hashlib.sha256(canonical({'role':'assistant','content':'Next step.'})).hexdigest(),
+                    'prompt_sha256':hashlib.sha256(canonical({'messages':[{'role':'user','content':[
+                        {'type':'native_state','id':luna_block.id}]}],'tools':[]})).hexdigest()}}})
+        assert luna_consumer['x_natlang_rl_capture']['schema']=='natlang.native-teacher-forced-capture/1'
+        assert luna_consumer['native_state']['imports'][0]['id']==luna_block.id
+        forged_luna={**luna_turn,'source_receipt':{**luna_source,'actor':{**luna_source['actor'],'model':'qwen'}}}
+        with pytest.raises(AssertionError):
+            post({'messages':luna_prompt,'max_tokens':64,'temperature':0.0,
+                'x_natlang_native_recording':True,'x_natlang_forced_message':forged_luna})
         monkeypatch.setattr(engine.tokenizer,'apply_chat_template',previous_template)
 
         with urllib.request.urlopen(endpoint + f"/v1/neuralese/native-states/{record.id}", timeout=30) as response:
