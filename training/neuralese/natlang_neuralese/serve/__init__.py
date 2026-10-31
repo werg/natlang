@@ -95,7 +95,8 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     # those training passes do not silently change the deployed policy.
     serving_config['precision'] = {'schema':'natlang.native-policy-precision/1',
         'weights':'checkpoint-master', 'inline_qat_point':'inactive',
-        'ordinary_precision':config.get('native_ordinary_precision'), 'model_dtype':config.get('dtype')}
+        'ordinary_precision':config.get('native_ordinary_precision'), 'model_dtype':config.get('dtype'),
+        'stock_arithmetic':dict(config.get('precision') or {})}
     serving_config['identity_sha256'] = canonical_json_sha256_hex(
         {key:value for key,value in serving_config.items() if key != 'identity_sha256'})
     model.eval()

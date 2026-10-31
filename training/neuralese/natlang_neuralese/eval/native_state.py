@@ -106,7 +106,7 @@ def validate_task_execution_receipt(receipt, identity):
 
 def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forward_atol, gradient_atol,
                      task_execution_receipt=None, backbone_optimizer_updates=0,
-                     gradient_parameters=None, gradient_rtol=1e-4,before_graph=None,gradient_observer=None,minimum_source_tokens=0):
+                     gradient_parameters=None, gradient_rtol=1e-4,before_graph=None,gradient_observer=None,minimum_source_tokens=0,minimum_target_tokens=0):
     """Verify the live trained instance without reloading a second backbone or changing training state.
 
     The check compares graph execution with the explicit cached reference, compares
@@ -119,6 +119,8 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
 
     if type(minimum_source_tokens)is not int or minimum_source_tokens<0:
         raise ValueError('runtime reference minimum source tokens must be nonnegative')
+    if type(minimum_target_tokens)is not int or minimum_target_tokens<0:
+        raise ValueError('runtime reference minimum target tokens must be nonnegative')
     start = time.monotonic()
     identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha256)
     def probe_tokens(text):
@@ -145,6 +147,8 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
         # Repeat existing round-tripped lexical tokens to exercise the selected
         # token-local execution boundary; this is reference input, never training data.
         source=(source*((minimum_source_tokens+len(source)-1)//len(source)))[:minimum_source_tokens]
+    if minimum_target_tokens>len(target):
+        target=(target*((minimum_target_tokens+len(target)-1)//len(target)))[:minimum_target_tokens]
     payload_width = min(4, len(source))
     lo = len(source) - payload_width + 1
     source = source[:-payload_width] + (roles.produce_open,) + source[-payload_width:] + (roles.produce_close,)

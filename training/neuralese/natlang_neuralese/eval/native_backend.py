@@ -10,7 +10,7 @@ from ..train.loop import capture_training_rng_state, restore_training_rng_state
 
 def qualify_training_backend(model, tokenizer, roles, config, *, backend,
                              checkpoint_sha256, forward_atol, gradient_atol, device,
-                             gradient_parameters=None,raise_on_failed=True,gradient_rtol=1e-4,minimum_source_tokens=0):
+                             gradient_parameters=None,raise_on_failed=True,gradient_rtol=1e-4,minimum_source_tokens=0,minimum_target_tokens=0):
     if backend is None:
         raise ValueError('training backend qualification requires an enabled backend')
     if forward_atol is None or gradient_atol is None:
@@ -24,6 +24,7 @@ def qualify_training_backend(model, tokenizer, roles, config, *, backend,
         with backend.autocast():
             options={'gradient_rtol':gradient_rtol}
             if minimum_source_tokens:options['minimum_source_tokens']=minimum_source_tokens
+            if minimum_target_tokens:options['minimum_target_tokens']=minimum_target_tokens
             if gradient_parameters is not None:
                 options.update(gradient_parameters=gradient_parameters,
                     before_graph=lambda:backend.restore_extra_state(copy.deepcopy(extra)))
@@ -58,7 +59,7 @@ def qualify_training_backend(model, tokenizer, roles, config, *, backend,
 
 def qualify_complete_runtime(model,tokenizer,roles,config,*,optimizer,backend,fp8_profile,
                              checkpoint_sha256,forward_atol,gradient_atol,device,
-                             task_execution_receipt=None,backbone_optimizer_updates=0):
+                             task_execution_receipt=None,backbone_optimizer_updates=0,minimum_source_tokens=0,minimum_target_tokens=0):
     """The same complete proof at ordinary and shared-training publication."""
     from ..common.hashing import canonical_json_sha256_hex
     from .native_gradients import validate_complete_proof
@@ -67,6 +68,8 @@ def qualify_complete_runtime(model,tokenizer,roles,config,*,optimizer,backend,fp
     rng=capture_training_rng_state(device)
     try:
         args=dict(checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol)
+        if minimum_source_tokens:args['minimum_source_tokens']=minimum_source_tokens
+        if minimum_target_tokens:args['minimum_target_tokens']=minimum_target_tokens
         if backend is None:
             report=qualify_existing(model,tokenizer,roles,config,gradient_parameters=named,**args)
         else:

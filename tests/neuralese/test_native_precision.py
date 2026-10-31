@@ -303,7 +303,14 @@ def test_production_stock_arithmetic_uses_tf32_tensor_cores(monkeypatch):
     from natlang_neuralese.model.native_model import configure_native_precision
     monkeypatch.delenv('NATLANG_STOCK_ARITHMETIC', raising=False)
     try:
-        assert configure_native_precision() == {'float32_matmul': 'high', 'cuda_matmul_tf32': True, 'cudnn_tf32': True}
+        assert configure_native_precision() == {'float32_matmul': 'high', 'cuda_matmul_tf32': True, 'cudnn_tf32': True, 'cuda_bf16_reduced_precision_reduction': False}
+        assert not torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction
+        monkeypatch.setenv('NATLANG_BF16_REDUCTION', 'reduced')
+        assert configure_native_precision()['cuda_bf16_reduced_precision_reduction'] is True
+        monkeypatch.setenv('NATLANG_BF16_REDUCTION', 'invalid')
+        with pytest.raises(ValueError, match='NATLANG_BF16_REDUCTION'):
+            configure_native_precision()
+        monkeypatch.delenv('NATLANG_BF16_REDUCTION')
         assert torch.backends.cuda.matmul.allow_tf32 and torch.backends.cudnn.allow_tf32
         monkeypatch.setenv('NATLANG_STOCK_ARITHMETIC', 'fp64')
         with pytest.raises(ValueError):
