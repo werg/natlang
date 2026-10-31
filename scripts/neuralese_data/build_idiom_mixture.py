@@ -238,10 +238,23 @@ def held_groups_of(config) -> tuple[set, dict]:
 
 
 def graph_files(render: str, split: str):
-    for view in ('whole-trajectory', 'program-header'):  # whole trajectories first: they cover chains
+    # Whole trajectories first: they cover chains. ``full`` is a serving-prompt render's decision view (the current
+    # ts-host prompt and tool schemas, render_native_turn_corpus --serving-entry); with ``prompt_views`` each decision
+    # is taken once, in its full or program-header view.
+    for view in ('whole-trajectory', 'full', 'program-header'):
         path = REPO / render / 'native-graphs' / view / split / 'native-graphs.jsonl.zst'
         if path.exists():
             yield view, path
+
+
+PROMPT_FULL_SUFFIX = ':prompt-full'
+
+
+def header_view(decision_id: str, share: float) -> bool:
+    """The prompt view of one decision: program-header when sha256('prompt-view', id) falls below ``share``, else the
+    full/serving view (build_prompt_view_mix.py's rule)."""
+    draw = int.from_bytes(hashlib.sha256(('prompt-view\0' + decision_id).encode()).digest()[:8], 'big') / 2 ** 64
+    return draw < share
 
 
 def content_key(row) -> str:
@@ -316,8 +329,12 @@ def carve_groups(config, policy, trained_groups=frozenset(), held_groups=frozens
     members = collections.defaultdict(set)
     for g in list(parent):
         members[find(g)].add(g)
+    # ``unit: component`` (policy v4): one hash draw per connected component (its root, the least group), so a
+    # component's chance of being held does not grow with its number of groups (v3: any group under the fraction held
+    # the component, which held 100% of folder rows with > 50 item groups; coverage audit D10).
+    per_component = carve.get('unit') == 'component'
     candidates = [root for root, groups in members.items()
-                  if size[root] and any(carved([g], carve) for g in groups)
+                  if size[root] and (carved([root], carve) if per_component else any(carved([g], carve) for g in groups))
                   and not groups & (set(trained_groups) | protected)]
     candidates.sort(key=lambda root: hashlib.sha256((carve['salt'] + root).encode()).hexdigest())
     chosen, held_rows = set(), 0
@@ -383,6 +400,12 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
     regrade = OracleRegradeHold(policy.get('oracle_regrade_hold'))
     inputs = [('render', view, path) for render in config['renders'] for view, path in graph_files(render, 'train')]
     inputs += [('teacher', 'teacher-turn', REPO / p) for p in config.get('teacher_graphs', [])]
+    inputs += [('teacher', 'teacher-turn-full', REPO / p) for p in config.get('teacher_graphs_full', [])]
+    header_share = (policy.get('prompt_views') or {}).get('header_share')
+    # Decision views of one source: a render's full and program-header graphs, a teacher package's lfm3 (full) and
+    # lfm3-program-header twins. With prompt_views each decision is taken in exactly one of them.
+    has_full = {str(path.parents[2]) for kind, view, path in inputs if view == 'full'}
+    has_full |= {str(path.parents[2]) for kind, view, path in inputs if view == 'teacher-turn-full'}
     for kind, view, path in inputs:
         for number, raw in iter_lines(path):
             row = json.loads(raw)
@@ -405,6 +428,15 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
                 ids = [f'{source.get("source_row_id")}#{source.get("teacher_turn_index")}']
             else:
                 ids = list(conversion.get('source_record_ids') or [])
+            if header_share is not None and view in ('full', 'program-header', 'teacher-turn', 'teacher-turn-full'):
+                header = header_view(ids[0] if ids else row['id'], header_share)
+                serving_view = view in ('full', 'teacher-turn-full')
+                owner = str(path.parents[2])
+                if view in ('program-header', 'teacher-turn') and owner not in has_full:
+                    pass  # no full view of this source: its program-header documents stay
+                elif header == serving_view:
+                    omitted[f'{view}: decision taken in its other prompt view'] += 1
+                    continue
             known = [decisions.get(d) for d in ids]
             if not ids or any(k is None for k in known):
                 omitted[f'{view}: decision without an idiom score'] += 1
@@ -447,7 +479,10 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
             category = min((k['category'] for k in known), key=ORDER.index)
             fit = sum(k['fit'] for k in known) / len(known)
             target_tokens = sum(sum(1 for w in node.get('target_weights') or () if w) for node in row['nodes'])
-            out.append({'tier': tier, 'category': category, 'fit': fit, 'id': row['id'], 'file': str(path),
+            rewrite_id = row['id'] + PROMPT_FULL_SUFFIX if view in ('full', 'teacher-turn-full') \
+                and not row['id'].endswith(PROMPT_FULL_SUFFIX) else None
+            out.append({'tier': tier, 'category': category, 'fit': fit, 'id': rewrite_id or row['id'], 'file': str(path),
+                        'rewrite_id': rewrite_id,
                         'target_tokens': target_tokens,
                         'trajectory': trajectory,
                         'line': number, 'decisions': len(ids), 'view': view, 'features': features})
@@ -463,7 +498,8 @@ def coding_sample(cands, policy, dropped):
     tier = coding['tier']
     natlang = [c for c in cands if c['tier'] != tier]
     pool = sorted((c for c in cands if c['tier'] == tier), key=lambda c: hashlib.sha256(c['id'].encode()).hexdigest())
-    budget = coding['share'] / (1 - coding['share']) * sum(c['target_tokens'] for c in natlang)
+    bounded = {m['tier'] for m in (policy.get('bounded_mixes') or {}).values()}
+    budget = coding['share'] / (1 - coding['share']) * sum(c['target_tokens'] for c in natlang if c['tier'] not in bounded)
     clusters, families = set(), collections.defaultdict(list)
     for c in pool:
         key = c['features']['near_duplicate_cluster']
@@ -483,13 +519,121 @@ def coding_sample(cands, policy, dropped):
     return natlang + chosen
 
 
+def balance(cands, policy, dropped):
+    """Policy ``balance`` (v4, coverage audit 2026-10-31 D14): downsample templated families instead of letting one
+    curriculum dominate. Per near-duplicate cluster (one task text over one world) at most ``cluster_rows`` rows; then
+    per family at most max(``family_floor_rows``, ``family_share`` * rows) rows, taken round-robin over the family's
+    clusters (higher tiers first inside a cluster), so a capped family keeps its breadth of tasks and worlds. Families
+    matching ``exempt_family_pattern`` (unique external tasks under one label) keep every row after the cluster cap.
+    Bounded mixes (coding, external agents) are sampled by their own shares, not here."""
+    rule = policy.get('balance')
+    if not rule:
+        return cands
+    bounded = {m['tier'] for m in (policy.get('bounded_mixes') or {}).values()}
+    if policy.get('coding_mix'):
+        bounded.add(policy['coding_mix']['tier'])
+    pool = [c for c in cands if c['tier'] not in bounded]
+    rest = [c for c in cands if c['tier'] in bounded]
+    key = lambda c: (c['tier'], hashlib.sha256(c['id'].encode()).hexdigest())
+    clusters = collections.defaultdict(list)
+    for c in sorted(pool, key=key):
+        clusters[(c['features']['family'], c['features']['near_duplicate_cluster'])].append(c)
+    kept = []
+    for members in clusters.values():
+        kept += members[:rule['cluster_rows']]
+        dropped['balance: near-duplicate cluster cap'] += max(0, len(members) - rule['cluster_rows'])
+    exempt = re.compile(rule['exempt_family_pattern']) if rule.get('exempt_family_pattern') else None
+    limit = max(rule['family_floor_rows'], math.ceil(rule['family_share'] * len(kept)))
+    by_family = collections.defaultdict(lambda: collections.defaultdict(list))
+    for c in kept:
+        by_family[c['features']['family']][c['features']['near_duplicate_cluster']].append(c)
+    out = []
+    for family, groups in by_family.items():
+        rows = sum(len(v) for v in groups.values())
+        if rows <= limit or (exempt and exempt.search(family)):
+            out += [c for v in groups.values() for c in v]
+            continue
+        queues = [groups[k] for k in sorted(groups, key=lambda k: hashlib.sha256(k.encode()).hexdigest())]
+        taken, depth = [], 0
+        while len(taken) < limit:
+            layer = [q[depth] for q in queues if len(q) > depth]
+            if not layer:
+                break
+            taken += layer[:limit - len(taken)]
+            depth += 1
+        out += taken
+        dropped[f'balance: family cap ({family})'] += rows - len(taken)
+    return out + rest
+
+
+def bounded_candidates(config, policy, held, carve_set, seen, omitted):
+    """Rows of declared bounded mixes without idiom scores (config ``bounded_graphs``: e.g. complete acquired agent
+    sessions): admitted train rows, no held/carved group, no exact duplicate; sampled later to the mix's share."""
+    mixes = policy.get('bounded_mixes') or {}
+    out = []
+    for item in config.get('bounded_graphs', []):
+        mix = mixes[item['mix']]
+        path = REPO / item['path']
+        for number, raw in iter_lines(path):
+            row = json.loads(raw)
+            if row.get('split') != 'train':
+                omitted[f'{item["mix"]}: not train split'] += 1
+                continue
+            if set(row.get('source_groups') or ()) & (held | carve_set):
+                omitted[f'{item["mix"]}: shares a held/dev source group'] += 1
+                continue
+            key = content_key(row)
+            if key in seen:
+                omitted[f'{item["mix"]}: exact duplicate graph'] += 1
+                continue
+            seen.add(key)
+            target_tokens = sum(sum(1 for w in node.get('target_weights') or () if w) for node in row['nodes'])
+            features = {'family': item.get('family') or item['mix'], 'near_duplicate_cluster': row['id'],
+                        'reducer': False, 'verified': True, 'max_depth': 0, 'max_branching': 0,
+                        'distinct_functions': 0, 'neuralese_edges': graph_edges(row), 'invocations': 1,
+                        'text_neuralese_markers': 0, 'task_shape': f'{item["mix"]}/{item.get("family") or ""}',
+                        'domain': item['mix']}
+            out.append({'tier': mix['tier'], 'category': mix.get('category', 'broad'), 'fit': 0., 'id': row['id'],
+                        'file': str(path), 'rewrite_id': None, 'target_tokens': target_tokens, 'trajectory': row['id'],
+                        'line': number, 'decisions': 1, 'view': item['mix'], 'mix': item['mix'], 'features': features})
+    return out
+
+
+def bounded_sample(cands, policy, dropped):
+    """Each bounded mix keeps rows, round-robin over its families in hash order, until its target tokens reach
+    ``share`` of the natlang tiers' target tokens."""
+    mixes = policy.get('bounded_mixes') or {}
+    if not mixes:
+        return cands
+    tiers = {m['tier'] for m in mixes.values()}
+    natlang = [c for c in cands if c['tier'] not in tiers]
+    natlang_tokens = sum(c['target_tokens'] for c in natlang if c['tier'] != (policy.get('coding_mix') or {}).get('tier'))
+    chosen = []
+    for name, mix in mixes.items():
+        pool = sorted((c for c in cands if c.get('mix') == name), key=lambda c: hashlib.sha256(c['id'].encode()).hexdigest())
+        budget = mix['share'] * natlang_tokens
+        families = collections.defaultdict(list)
+        for c in pool:
+            families[c['features']['family']].append(c)
+        queues = [families[k] for k in sorted(families)]
+        used = 0
+        while used < budget and any(queues):
+            for q in queues:
+                if q and used < budget:
+                    c = q.pop(0)
+                    chosen.append(c)
+                    used += c['target_tokens']
+        dropped[f'{name}: beyond the declared share'] += sum(len(q) for q in queues)
+    return natlang + chosen
+
+
 def apply_caps(cands, policy):
     """Per tier: near-duplicate cluster cap, then family share caps (reducer families have their own). A policy
     without ``caps`` (v2, owner 2026-10-28: tiers order and weight, they do not filter) keeps every eligible row;
     the coding mix is sampled to its declared share."""
     dropped = collections.Counter()
     if not policy.get('caps'):
-        return coding_sample(cands, policy, dropped), dropped
+        return bounded_sample(coding_sample(balance(cands, policy, dropped), policy, dropped), policy, dropped), dropped
     caps, kept = policy['caps'], []
     for tier in sorted({c['tier'] for c in cands}):
         rows = sorted((c for c in cands if c['tier'] == tier),
@@ -597,6 +741,7 @@ def main(argv=None):
     carve_set, held = carve_groups(config, policy, prior[5], held, prior[6])
     carve_out = []
     cands, omitted = candidates(config, policy, decisions, trajectories, held, carve_out, carve_set, prior)
+    cands += bounded_candidates(config, policy, held, carve_set, prior[3] if prior else set(), omitted)
     chosen, cap_drops = apply_caps(cands, policy)
     resolved = objective(config, policy)
 
@@ -635,6 +780,9 @@ def main(argv=None):
             if reply + reasoning == 0:  # nothing the objective would train: refused, counted
                 cap_drops['refused: zero own-output target tokens'] += 1
                 continue
+            if item.get('rewrite_id'):  # a full/serving view row: its own id (the header view keeps the plain id)
+                row['id'] = item['rewrite_id']
+                raw = json.dumps(row, ensure_ascii=False, separators=(',', ':')).encode()
             writers[(tier, category, cohort)].write(raw)
             f = item['features']
             for key in (f'tier{tier}', f'tier{tier}:{category}', f'category:{category}', 'all'):

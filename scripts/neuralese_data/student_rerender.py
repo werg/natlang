@@ -364,7 +364,7 @@ def launch(args):
                 slots -= 1
             elif item['status'] == 'verify-failed' and not item.get('subset_unit') and subset_eligible(
                     load(REPO / item['out'] / 'student-verification.json'), item):
-                unit = short_unit('lfm3-data-s', item['id']) + f'-{int(time.time()) % 100000}'
+                unit = short_unit('lfm3-data-x', item['id']) + f'-{int(time.time()) % 100000}'
                 cmd = ['python3', str(LEDGER), 'run', '--unit', unit, '--budget-gb', str(args.verify_budget_gb),
                        '--priority', args.priority, '--resumable', '--wait', '86400', '--detach', '--workdir', str(REPO),
                        '--', 'bash', '-c',

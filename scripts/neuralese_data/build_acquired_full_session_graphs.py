@@ -69,14 +69,14 @@ def prevalidate_session_tool_arguments(value, *, template_backbone=None):
     source name or output directory.
     """
     normalized, conversions = normalize_tool_call_arguments(value['trajectory']['messages'])
-    if template_backbone == 'lfm2':
+    if template_backbone in ('lfm2', 'lfm3'):  # both LFM templates render tool arguments as named parameters
         for message_index, message in enumerate(normalized):
             for call_index, call in enumerate(message.get('tool_calls') or []):
                 function = call.get('function', call)
                 if 'arguments' in function and not isinstance(function['arguments'], dict):
                     raise RequestError('tool-arguments',
                         f'tool-call arguments at messages/{message_index}/tool_calls/{call_index} '
-                        'must decode to a mapping for the lfm2 tokenizer template')
+                        f'must decode to a mapping for the {template_backbone} tokenizer template')
     return normalized, conversions
 
 
@@ -583,7 +583,7 @@ def _convert(args, prepared):
         raise ValueError('prepared tokenizer history-reasoning profile differs from requested source conversion')
     source_fp, expanded_fp = prepared.source_fingerprint, prepared.expanded_fingerprint
     template_backbone = prepared.rendering_configuration.get('history_reasoning', {}).get('backbone')
-    if template_backbone not in ('lfm2', 'mellum'):
+    if template_backbone not in ('lfm2', 'lfm3', 'mellum'):
         raise ValueError('prepared tokenizer receipt lacks a supported template backbone')
     # Complete source-file held-group closure before writing any shard. Final
     # corpus admission also closes groups across all source files and views.
