@@ -338,7 +338,7 @@ def supersede_unearned_stage(progress, training, proof, *, parent_sha256, train_
     policy_archive = {key: deepcopy_metadata(training.get(key)) for key in
         ('schema', 'identity', 'step', 'global_step', 'epoch', 'cursor', 'source_hash',
          'source_receipts', 'source_row_bindings', 'source_row_order', 'held_row_bindings',
-         'exposure_counts', 'required_visits') if key in training}
+         'exposure_counts', 'required_visits', 'options', 'metrics') if key in training}
     result = dict(progress)
     result.pop(old)
     return result, {'schema': proof['schema'], 'old_stage': old, 'new_stage': new_stage,
