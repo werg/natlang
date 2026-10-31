@@ -90,6 +90,35 @@ def _primary_world_group(row: dict) -> str:
     return next((group for group in groups if not group.startswith(('codebase:', 'world:'))), groups[0])
 
 
+def _intake_execution_adapter_bindings(intake_receipt: dict | None) -> list[tuple[Path, str]]:
+    """Return and revalidate the host files authenticated by codebase intake.
+
+    Intake-time validation alone is insufficient: the executable adapter can
+    change between intake and campaign planning. These paths become ordinary
+    reviewed-plan artifact pins, so dispatcher validation checks them again
+    immediately before launch.
+    """
+    if intake_receipt is None:
+        return []
+    bindings = intake_receipt.get('execution_adapter_bindings', [])
+    if not isinstance(bindings, list):
+        raise ValueError('intake execution_adapter_bindings must be a list')
+    checked: list[tuple[Path, str]] = []
+    seen: set[Path] = set()
+    for binding in bindings:
+        if not isinstance(binding, dict):
+            raise ValueError('invalid intake execution adapter binding')
+        path_value, expected = binding.get('path'), binding.get('sha256')
+        if not isinstance(path_value, str) or not isinstance(expected, str):
+            raise ValueError('incomplete intake execution adapter binding')
+        path = Path(path_value).expanduser().resolve(strict=True)
+        if path in seen or not path.is_file() or _sha(path) != expected:
+            raise ValueError(f'Execution adapter changed since intake: {path}')
+        seen.add(path)
+        checked.append((path, expected))
+    return checked
+
+
 def _program_id(row: dict) -> str:
     identifier = (row.get('curriculum', {}).get('external') or {}).get('program_id')
     return identifier if isinstance(identifier, str) and identifier else '__unknown_codebase__'
@@ -259,10 +288,16 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
                  protection_receipt]
     if intake_receipt:
         artifacts.append(intake_receipt.resolve(strict=True))
+        adapter_bindings = _intake_execution_adapter_bindings(intake_record)
+        artifacts.extend(path for path, _ in adapter_bindings)
     if diversity_manifest:
         artifacts.append(diversity_manifest.resolve(strict=True))
     artifact_hashes = {str(path.resolve(strict=True)): _sha(path.resolve(strict=True))
                        for path in artifacts if path.is_file()}
+    if intake_record:
+        for adapter_path, expected_sha in _intake_execution_adapter_bindings(intake_record):
+            if artifact_hashes.get(str(adapter_path)) != expected_sha:
+                raise ValueError(f'Execution adapter changed while the reviewed plan was being assembled: {adapter_path}')
     plan = {
         'schema': 'natlang.reviewed_luna_dispatch_plan/2', 'root_approved': False,
         'campaign_id': campaign_id, 'cwd': str(ROOT), 'supervisor': str(supervisor_path),

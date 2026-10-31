@@ -98,5 +98,8 @@ def bind_world_services(package_root: Path, metadata: dict[str, Any], services: 
                 raise ValueError(f'invalid or duplicate fixture world for {alias}')
             seen.add(row['id'])
             source = services[alias].replace(marker, json.dumps(row['fixture'], ensure_ascii=True, separators=(',', ':')))
+            root_marker = '/*__NATLANG_CODEBASE_ROOT__*/'
+            if root_marker in source:
+                source = source.replace(root_marker, json.dumps(root.as_posix(), ensure_ascii=True))
             result.setdefault(row['id'], {})[alias] = source
     return result

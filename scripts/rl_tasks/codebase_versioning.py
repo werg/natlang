@@ -7,10 +7,15 @@ import shutil
 import tempfile
 from typing import Iterable
 
+IGNORED_DIRS = {'.git', 'node_modules', '.venv', '.natlang', 'build', 'dist', 'cache', 'caches',
+                '__pycache__', 'journals'}
+
 
 def version_codebase(source: Path, destination: Path, include: Iterable[str] = (
-        'metadata.json', 'package', 'worlds', 'source')) -> Path:
+        'metadata.json', 'package', 'worlds', 'source'), *,
+        exclude_paths: Iterable[str] = ()) -> Path:
     include = tuple(include)
+    exclude_paths = tuple(Path(value).as_posix().strip('/') for value in exclude_paths)
     source = source.resolve(strict=True)
     destination = destination.absolute()
     if destination.exists():
@@ -26,18 +31,29 @@ def version_codebase(source: Path, destination: Path, include: Iterable[str] = (
             src = source / rel
             if src.is_symlink() or not src.exists():
                 raise ValueError(f'version input must exist and cannot be a symlink: {relative}')
-            if src.is_dir() and any(path.is_symlink() for path in src.rglob('*')):
-                raise ValueError(f'version input tree contains a symlink: {relative}')
+            if src.is_dir():
+                for directory, dirs, files in os.walk(src, topdown=True, followlinks=False):
+                    current = Path(directory)
+                    for name in tuple(dirs):
+                        item = current / name
+                        if _ignored(source, item, exclude_paths):
+                            dirs.remove(name)
+                        elif item.is_symlink():
+                            raise ValueError(f'version input tree contains a symlink: {item}')
+                    for name in files:
+                        item = current / name
+                        if not _ignored(source, item, exclude_paths) and item.is_symlink():
+                            raise ValueError(f'version input tree contains a symlink: {item}')
             out = stage / rel
             if src.is_dir():
                 shutil.copytree(src, out, symlinks=False, copy_function=shutil.copy2,
-                    ignore=shutil.ignore_patterns('journals', '__pycache__', '*.pyc'))
+                    ignore=_ignore_callback(source, exclude_paths))
             elif src.is_file():
                 out.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, out)
             else:
                 raise ValueError(f'version input is not a regular file or directory: {relative}')
-        _assert_independent(source, stage, include)
+        _assert_independent(source, stage, include, exclude_paths)
         os.replace(stage, destination)
         return destination
     except BaseException:
@@ -45,20 +61,39 @@ def version_codebase(source: Path, destination: Path, include: Iterable[str] = (
         raise
 
 
-def _assert_independent(source: Path, destination: Path, include: Iterable[str]) -> None:
-    ignored_dirs = {'journals', '__pycache__'}
+def _ignored(source: Path, path: Path, exclude_paths: tuple[str, ...]) -> bool:
+    relative = path.relative_to(source).as_posix()
+    name = path.name
+    if name in IGNORED_DIRS or name.endswith('.pyc') or name.startswith('.venv-'):
+        return True
+    for excluded in exclude_paths:
+        if relative == excluded or relative.startswith(excluded + '/'):
+            return True
+    return False
+
+
+def _ignore_callback(source: Path, exclude_paths: tuple[str, ...]):
+    def ignored(directory: str, names: list[str]) -> set[str]:
+        parent = Path(directory)
+        return {name for name in names if _ignored(source, parent / name, exclude_paths)}
+    return ignored
+
+
+def _assert_independent(source: Path, destination: Path, include: Iterable[str],
+                        exclude_paths: tuple[str, ...]) -> None:
     for relative in include:
         src, dst = source / relative, destination / relative
         if src.is_file():
             pairs = [(src, dst)]
         else:
             pairs = []
-            for path in src.rglob('*'):
-                rel = path.relative_to(src)
-                if any(part in ignored_dirs for part in rel.parts) or path.name.endswith('.pyc'):
-                    continue
-                if path.is_file():
-                    pairs.append((path, dst / rel))
+            for directory, dirs, files in os.walk(src, topdown=True, followlinks=False):
+                parent = Path(directory)
+                dirs[:] = [name for name in dirs if not _ignored(source, parent / name, exclude_paths)]
+                for name in files:
+                    path = parent / name
+                    if not _ignored(source, path, exclude_paths):
+                        pairs.append((path, dst / path.relative_to(src)))
         for original, copy in pairs:
             if not copy.is_file() or original.stat().st_ino == copy.stat().st_ino and original.stat().st_dev == copy.stat().st_dev:
                 raise RuntimeError(f'version snapshot shares or lacks regular-file bytes: {original}')

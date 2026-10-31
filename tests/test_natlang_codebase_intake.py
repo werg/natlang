@@ -8,7 +8,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.rl_tasks.audit_natlang_packages import audit
 from scripts.rl_tasks.intake_natlang_codebase import intake
-from scripts.rl_tasks.build_reviewed_luna_plan import build_plan, select_balanced_train
+from scripts.rl_tasks.build_reviewed_luna_plan import (build_plan, select_balanced_train,
+                                                       _intake_execution_adapter_bindings)
 import scripts.rl_tasks.build_reviewed_luna_plan as plan_builder
 import run_reviewed_luna_dispatcher as dispatcher
 
@@ -97,6 +98,65 @@ def test_intake_binds_multiple_operations_and_preserves_exact_vs_judged(tmp_path
     assert 'reconcile.nl' in rows[0]['semantics']['files']
     assert 'CC0' in rows[0]['semantics']['files']['LICENSE.notice']
     assert receipt['semantic_status'].startswith('fixture-backed, not yet runtime-verified')
+
+
+def test_execution_adapter_hash_is_bound_at_intake_and_rechecked_for_plan(tmp_path):
+    package, root = _package(tmp_path)
+    host = root / 'host' / 'runner.py'
+    host.parent.mkdir()
+    host.write_text('def run(): return 1\n')
+    digest = hashlib.sha256(host.read_bytes()).hexdigest()
+    metadata_path = root / 'metadata.json'
+    metadata = json.loads(metadata_path.read_text())
+    metadata['execution_adapter'] = {'paths': {'host/runner.py': digest}}
+    metadata_path.write_text(json.dumps(metadata))
+
+    receipt = intake(package, output=tmp_path / 'bound.jsonl')
+    assert receipt['execution_adapter_bindings'] == [
+        {'path': str(host.resolve()), 'relative_path': 'host/runner.py', 'sha256': digest}]
+    assert _intake_execution_adapter_bindings(receipt) == [(host.resolve(), digest)]
+
+    host.write_text('def run(): return 2\n')
+    with pytest.raises(ValueError, match='changed since intake'):
+        _intake_execution_adapter_bindings(receipt)
+
+
+def test_intake_rejects_tampered_execution_adapter_path(tmp_path):
+    package, root = _package(tmp_path)
+    host = root / 'host' / 'runner.py'
+    host.parent.mkdir()
+    host.write_text('def run(): return 1\n')
+    metadata_path = root / 'metadata.json'
+    metadata = json.loads(metadata_path.read_text())
+    metadata['execution_adapter'] = {'paths': {'host/runner.py': '0' * 64}}
+    metadata_path.write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match='hash mismatch'):
+        intake(package, output=tmp_path / 'tampered.jsonl')
+
+
+def test_fixture_binding_resolves_codebase_root_marker_for_runtime_service(tmp_path):
+    package, root = _package(tmp_path)
+    host = root / 'host'
+    host.mkdir()
+    service = host / 'service.ts'
+    service.write_text('const fixture = /*__NATLANG_WORLD_FIXTURE__*/;\n'
+                       'const root = /*__NATLANG_CODEBASE_ROOT__*/;\n')
+    fixtures = root / 'source' / 'fixtures.jsonl'
+    fixtures.parent.mkdir()
+    fixtures.write_text(''.join(json.dumps({'id': identifier, 'fixture': {'x': index}}) + '\n'
+                               for index, identifier in enumerate(('case-1', 'case-2'))))
+    metadata_path = root / 'metadata.json'
+    metadata = json.loads(metadata_path.read_text())
+    digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    metadata['external_services'] = {'service': {
+        'source_path': 'host/service.ts', 'source_sha256': digest(service),
+        'fixtures_path': 'source/fixtures.jsonl', 'fixtures_sha256': digest(fixtures)}}
+    metadata_path.write_text(json.dumps(metadata))
+    receipt = intake(package, output=tmp_path / 'service.jsonl')
+    row = json.loads((tmp_path / 'service.jsonl').read_text().splitlines()[0])
+    bound_source = row['semantics']['services']['service']
+    assert json.dumps(root.resolve().as_posix()) in bound_source
+    assert '/*__NATLANG_CODEBASE_ROOT__*/' not in bound_source
 
 
 def test_related_worlds_cannot_cross_splits(tmp_path):

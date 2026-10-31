@@ -46,3 +46,20 @@ def test_version_codebase_independence_check_matches_ignored_runtime_cache_files
     assert (target / 'host' / 'worker.py').read_text() == 'worker\n'
     assert not (target / 'host' / 'python-deps' / '__pycache__').exists()
     assert not (target / 'host' / 'journals').exists()
+
+
+def test_version_codebase_excludes_checkout_caches_and_requested_external_runtime(tmp_path):
+    source = tmp_path / 'app-v1'
+    for relative in ('package/src.nl', 'package/.natlang/generated.js', 'package/.natlang/build/generated.js',
+                     'host/.git/config', 'host/.venv/lib/site.py', 'host/node_modules/pkg/index.js',
+                     'host/python-deps/pkg/module.py', 'host/runner.ts'):
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative + '\n')
+    target = tmp_path / 'app-v2'
+    version_codebase(source, target, ('package', 'host'), exclude_paths=('host/python-deps',))
+    assert (target / 'package/src.nl').is_file()
+    assert (target / 'host/runner.ts').is_file()
+    for relative in ('package/.natlang', 'host/.git', 'host/.venv',
+                     'host/node_modules', 'host/python-deps'):
+        assert not (target / relative).exists()
