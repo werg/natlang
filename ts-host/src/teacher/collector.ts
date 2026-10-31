@@ -22,6 +22,7 @@ import { resolveModelChoice } from '../model/config.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { NativeToolAgent } from '../native/agent.js';
 import type { GuidanceRun } from '../native/training-guidance.js';
+import type { NativeProgramGuidance } from '../adaptation/prompts.js';
 import { trainingGuidance } from './guidance-writer.js';
 import type { PromptRendering } from '../native/system-prompts.js';
 import { GENERATION_GUIDANCE, TOOLS_PROMPT } from '../native/prompt.js';
@@ -105,6 +106,9 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   chatRequestControls?: Record<string, unknown>;
   /** In-run training guidance (`x_natlang_guidance` of the chat controls), handed to the agent, never sent on the wire. */
   trainingGuidance?: GuidanceRun;
+  /** Stored native program guidance (a `natlang.memetic-program-guidance/1` binding) every call of the run carries:
+   * the tool loop's system prompt and the decision readout's (NativeToolAgent programGuidance). */
+  programGuidance?: NativeProgramGuidance;
   /** Native value-channel transport to an explicitly configured Neuralese server. */
   neuraleseServer?: boolean;
   /** Optional collection-specific maximum wall time for one Pi provider request. */
@@ -225,6 +229,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     counter_loop_policy_version: 2,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(effectiveSystemPrompt(options)), context_tokens: options.contextTokens,
+    ...(options.programGuidance ? { program_guidance_sha256: sha256(canonical(options.programGuidance.binding ?? options.programGuidance)) } : {}),
     ...(options.promptRendering ? { prompt_rendering: options.promptRendering } : {}),
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
     neuralese_server: options.neuraleseServer ?? false,
@@ -1459,6 +1464,8 @@ export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }>;
   /** In-run training guidance (native/training-guidance.ts): every consumer call gets its guidance written in-run. */
   trainingGuidance?: GuidanceRun;
+  /** Stored native program guidance carried by every call of the run (see ProvenanceOptions.programGuidance). */
+  programGuidance?: NativeProgramGuidance;
   /** Persist observed native trace prefixes when execution aborts; snapshots never imply a completed result. */
   onPartialExecution?: (snapshot: PartialExecutionSnapshot) => Promise<void> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[];
@@ -1553,6 +1560,7 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     ...(options.fileTools ? { fileTools: options.fileTools } : {}),
     ...(options.neuralese ? { neuralese: options.neuralese } : {}),
     ...(options.trainingGuidance ? { trainingGuidance: trainingGuidance(options.trainingGuidance) } : {}),
+    ...(options.programGuidance ? { programGuidance: options.programGuidance } : {}),
     contextTokens: options.contextTokens, maxTurns: options.maxTurns,
     ...(bindingSpec ? { refinement: { checker: new RefinementChecker(),
       returnGuard: async (runId: string): Promise<RefinementFailure[]> => {

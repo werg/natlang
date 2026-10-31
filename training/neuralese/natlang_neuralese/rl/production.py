@@ -432,9 +432,10 @@ def bind_collection_prompt(entries, mode):
 def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root_mode, runtime, seed_base,
                        neuralese_server, case_seconds, max_model_requests, max_turns, expected_native=None,
                        behavior_top_k=None, system_prompt=None, prompt_rendering=None, guidance_stage=None,
-                       coefficient_policy=None, context_tokens=None, neuralese_use_bonus=None):
+                       coefficient_policy=None, context_tokens=None, neuralese_use_bonus=None,
+                       program_guidance=None):
     """The exact provenance a collection binds (no side effects): cases, policy, sampling, runtime and actor."""
-    from ..common.hashing import sha256_file_hex, sha256_hex
+    from ..common.hashing import sha256_file_hex, sha256_hex, canonical_json_sha256_hex
     runtime = Path(runtime or root('repo') / 'ts-host')
     binding = {'schema': 'natlang.rl-collection-binding/1',
         'cases_sha256': sha256_file_hex(Path(cases)), 'policy_id': policy_id,
@@ -452,7 +453,9 @@ def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root
         **({'expected_native_actor': expected_native} if expected_native is not None else {}),
         **({'behavior_top_k': behavior_top_k} if behavior_top_k is not None else {}),
         **({'guided': True, 'system_prompt_sha256': sha256_hex(system_prompt.encode())}
-           if system_prompt is not None else {})}
+           if system_prompt is not None else {}),
+        **({'guided': True, 'program_guidance_sha256': canonical_json_sha256_hex(program_guidance)}
+           if program_guidance is not None else {})}
     coefficient_runtime=None
     if coefficient_policy is not None:
         from ..model.native_coefficient_policy import runtime_binding
@@ -497,7 +500,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
             system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
-            neuralese_use_bonus=None):
+            neuralese_use_bonus=None, program_guidance=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -510,7 +513,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     collector's 16384 default. The agent compacts its history at three quarters of it, so a budget far below the
     served window forces compaction long before the model needs it.
     ``neuralese_use_bonus`` (None: task_rollouts.DEFAULT_NEURALESE_USE_BONUS; 0 opts out) is bound into the
-    collection binding and added to correct student episodes that pass Neuralese state between calls."""
+    collection binding and added to correct student episodes that pass Neuralese state between calls.
+    ``program_guidance`` (a ``natlang.memetic-program-guidance/1`` binding) is stored native program guidance every call
+    of every rollout carries through the runtime's program-guidance channel (tool loop and decision readouts alike);
+    it is bound by digest into the collection binding."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
     if guidance_stage not in (None,'backbone'):
@@ -530,7 +536,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         case_seconds=case_seconds, max_model_requests=max_model_requests, max_turns=max_turns,
         expected_native=expected_native, behavior_top_k=behavior_top_k, system_prompt=system_prompt,
         prompt_rendering=prompt_rendering, guidance_stage=guidance_stage, coefficient_policy=coefficient_policy,
-        context_tokens=context_tokens, neuralese_use_bonus=bonus_setting(neuralese_use_bonus))
+        context_tokens=context_tokens, neuralese_use_bonus=bonus_setting(neuralese_use_bonus),
+        program_guidance=program_guidance)
     coefficient_runtime = (binding.get('coefficient_policy') or {}).get('runtime')
     if coefficient_policy is not None:
         coefficient_policy = Path(coefficient_policy).resolve(strict=True)
@@ -590,6 +597,13 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         system.write_text(system_prompt)
         for entry in entries:
             entry['system_file'] = str(system)
+    if program_guidance is not None:
+        if not neuralese_server:
+            raise ValueError('stored native program guidance needs the native-state server')
+        guidance_file = out / 'program-guidance.json'
+        write_json_durable(guidance_file, program_guidance)
+        for entry in entries:
+            entry['program_guidance_file'] = str(guidance_file)
     directory = out / 'workers'
     directory.mkdir(exist_ok=True)
     config = out / 'sampling-config.json'

@@ -60,6 +60,18 @@ def state_guidance(text: str, state_id: str) -> str:
     return '\ue002' + state_id + '\ue003'
 
 
+def program_binding(program_id: str, student: dict, text: str, written: dict, archive: dict) -> dict:
+    """The ``natlang.memetic-program-guidance/1`` binding the runtime's program-guidance channel carries
+    (ts-host adaptation/prompts.ts nativeProgramGuidance): exact student, text, state ID and archived bytes."""
+    state_id = written['id']
+    if not STATE_ID.fullmatch(state_id) or not text.strip():
+        raise ValueError('native program guidance needs text and an exact state ID')
+    return {'schema': 'natlang.memetic-program-guidance/1', 'program_id': program_id,
+            'student': {key: student[key] for key in IDENTITY}, 'text': text, 'native_state_id': state_id,
+            'native_state_artifact': {key: archive[key] for key in ('path', 'sha256', 'bytes')},
+            'program_guidance': state_guidance(text, state_id)}
+
+
 def write_state(server: str, text: str, expected_identity: dict):
     written = request_json(server, '/v1/neuralese/native-states/write-text', {'text': text, 'type': 'Neuralese<ProgramGuidance>'})
     state_id = written.get('id')
@@ -161,8 +173,8 @@ def _definition_bindings(root: Path) -> dict[str, str]:
               if name in {'queue_worker', 'task_classifier', 'collector_cli', 'collector_core'}}
     definitions = {
         'task_rollouts': ('build_queue', 'reward_of', 'rollout_turns'),
-        'memetic_program': ('load_slices', 'evaluate'),
-        'memetic_runner': ('default_system_prompt', 'guided_system'),
+        'memetic_program': ('load_slices', 'evaluate', 'program_binding'),
+        'memetic_runner': ('default_system_prompt',),
         'production': ('collect',),
     }
     for module, names in definitions.items():
@@ -314,7 +326,7 @@ def evaluator_inputs(out: Path, inputs: dict, actor: dict, previous_runtime: Pat
         exact_keys = ('queue_worker', 'task_classifier', 'collector_cli', 'collector_core',
                       'task_rollouts.build_queue', 'task_rollouts.reward_of', 'task_rollouts.rollout_turns',
                       'memetic_program.load_slices', 'production.collect',
-                      'memetic_runner.default_system_prompt', 'memetic_runner.guided_system')
+                      'memetic_runner.default_system_prompt', 'memetic_program.program_binding')
         if any(old_semantics.get(key) != new_semantics.get(key) for key in exact_keys):
             raise ValueError('evaluator continuation changed a task collector or policy-scoring mechanism')
         prior_inputs = {origin_sha, previous_sha}
@@ -360,8 +372,13 @@ def author_provenance(endpoint: str, model: str, info=None):
 
 
 def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, base_system: str,
-             actor: dict, server_info_sha256: str, evaluation_inputs_sha256: str | None = None):
-    """Paired-seed outcome of one guidance on one slice, collected by the production collector."""
+             actor: dict, server_info_sha256: str, evaluation_inputs_sha256: str | None = None,
+             guidance_binding: dict | None = None):
+    """Paired-seed outcome of one guidance on one slice, collected by the production collector.
+
+    ``guidance`` is the state's sentinel (receipt identity); ``guidance_binding`` (program_binding) delivers it
+    through the runtime's program-guidance channel, so every call of every rollout, including decision readouts,
+    imports the stored state."""
     from .production import collect
     packet = out / (name + '-packet.jsonl')
     packet_bytes = ''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows).encode()
@@ -375,9 +392,14 @@ def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, bas
     state_id = re.fullmatch(r'\ue002(nzs1_[a-z2-7]{52})\ue003', guidance) if guidance else None
     if guidance and not state_id:
         raise ValueError('program guidance must be an exact native state sentinel')
+    if bool(guidance) != (guidance_binding is not None) or (
+            guidance_binding is not None and guidance_binding.get('native_state_id') != state_id.group(1)):
+        raise ValueError('guided evaluation needs the exact program-guidance binding of its state')
     receipt = {'evaluation_inputs_sha256': evaluation_inputs_sha256 or sha256_file_hex(out / 'inputs.json'),
                'guidance_sha256': hashlib.sha256(guidance.encode()).hexdigest(),
-               'packet_sha256': hashlib.sha256(packet_bytes).hexdigest()}
+               'packet_sha256': hashlib.sha256(packet_bytes).hexdigest(),
+               **({'guidance_delivery': 'native-program-guidance/1',
+                   'guidance_binding_sha256': canonical_json_sha256_hex(guidance_binding)} if guidance else {})}
     if fit_path.exists():
         fit = json.loads(fit_path.read_text())
         exact_receipt = all(fit.get(key) == value for key, value in receipt.items()
@@ -394,7 +416,7 @@ def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, bas
                      rows=len(rows), group=args.samples, workers=args.shards, root_mode='authored',
                      seed_base=args.seed_base, case_seconds=args.case_seconds,
                      max_model_requests=args.max_model_requests, max_turns=args.max_turns,
-                     system_prompt=runner.guided_system(base_system, guidance))
+                     system_prompt=base_system, program_guidance=guidance_binding)
     if report['scored'] != len(rows) * args.samples:
         raise ValueError('guidance evaluation lacks complete scored task outcomes')
     if not rollouts_reached(target, actor, state_id.group(1) if state_id else None):
@@ -743,7 +765,8 @@ def main(argv=None):
         if 'development' not in seed:
             seed['development'] = evaluate(args, out, 'seed-dev', state_guidance(seed_text, seed['write']['id']), dev,
                 base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
-                evaluation_inputs_sha256=current_inputs_sha256)
+                evaluation_inputs_sha256=current_inputs_sha256,
+                guidance_binding=program_binding(args.program_id, identity, seed_text, seed['write'], seed['archive']))
             write_json_durable(seed_pending_path, seed)
         state['best'] = seed
         write_json_durable(state_path, state)
@@ -775,7 +798,9 @@ def main(argv=None):
         if 'development' not in candidate:
             candidate['development'] = evaluate(args, out, prefix + '-dev', state_guidance(proposed, written['id']), dev,
                                              base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
-                                             evaluation_inputs_sha256=current_inputs_sha256)
+                                             evaluation_inputs_sha256=current_inputs_sha256,
+                                             guidance_binding=program_binding(args.program_id, identity, proposed,
+                                                                              written, candidate['archive']))
             write_json_durable(pending, candidate)
         # Development selection only: confirmation worlds stay untouched until the final decision.
         accepted = acceptance.select(best['development'], candidate['development'])
@@ -792,7 +817,8 @@ def main(argv=None):
     if 'confirmation' not in best:
         best['confirmation'] = evaluate(args, out, 'selected-confirm-' + artifact[5:21],
             state_guidance(best['text'], artifact), confirm, base_system=base_system, actor=identity,
-            server_info_sha256=server_info_sha256, evaluation_inputs_sha256=current_inputs_sha256)
+            server_info_sha256=server_info_sha256, evaluation_inputs_sha256=current_inputs_sha256,
+            guidance_binding=program_binding(args.program_id, identity, best['text'], best['write'], best['archive']))
         write_json_durable(state_path, state)
     decision = acceptance.confirm(artifact=artifact, baseline=baseline,
         selected={split: best[split] for split in ('development', 'confirmation')},

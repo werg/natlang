@@ -72,9 +72,6 @@ def default_system_prompt() -> str:
     return subprocess.run(["node", "-e", script, str(ROOT / "ts-host/dist/teacher/collector.js")], check=True,
                           capture_output=True, text=True).stdout
 
-def guided_system(base: str, guidance: str) -> str:
-    """The runtime's program-guidance wrapper (ts-host adaptation/prompts.ts programGuidance)."""
-    return base + ("\n\n<natlang_program_guidance>\n" + guidance + "\n</natlang_program_guidance>\n" if guidance else "")
 
 def failure_digest(fit: dict, limit: int = 6) -> str:
     """Failed rollouts of an evaluation: outcome class, failed checks, returned value, errors. Never the gold."""

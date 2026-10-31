@@ -304,6 +304,8 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         with pytest.raises(ValueError, match='consistent native RL policy'):
             memetic.actor_identity(url, unbound_info)
         written = memetic.write_state(url, 'guide', identity)
+        guidance_binding = memetic.program_binding('one', identity, 'guide', written,
+                                                   memetic.archive_state(url, tmp_path, written))
         task = {**case('one'), 'version': 'natlang.program/2', 'kind': 'lambda_source',
             'semantics': {'root': 'task.nl', 'files': {'task.nl': '---\nargs: {}\nreturns: "number"\n---\nReturn 1.\n'},
                           'inputs': {}, 'expected': 1}}
@@ -315,8 +317,10 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
             server=url)
         fit = memetic.evaluate(args, tmp_path, 'actual', memetic.state_guidance('guide', written['id']), [task],
             base_system=memetic.runner.default_system_prompt(), actor=identity,
-            server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64)
+            server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64,
+            guidance_binding=guidance_binding)
         assert fit['rollouts'] == 2 and fit['native_import_reached_model'] is True
+        assert fit['guidance_delivery'] == 'native-program-guidance/1'
         assert memetic.rollouts_reached(tmp_path / 'evals/actual', identity, written['id'])
         # The production collector must retain sampled decision captures as policy turns, including their
         # native input state and request accounting, rather than falling back to a generated tool turn.
@@ -329,13 +333,20 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         decision_args = Namespace(**{**vars(args), 'samples': 2})
         decision_fit = memetic.evaluate(decision_args, tmp_path, 'decision', memetic.state_guidance('guide', written['id']),
             [decision_task], base_system=memetic.runner.default_system_prompt(), actor=identity,
-            server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64)
+            server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64,
+            guidance_binding=guidance_binding)
         assert decision_fit['rollouts'] == 2
         from natlang_neuralese.common.jsonio import iter_jsonl_rows
         decision_rows = [row for _, row in iter_jsonl_rows(tmp_path / 'evals/decision/rollouts.jsonl')]
         decisions = [turn['sampling'] for row in decision_rows for turn in row['turns']
                      if (turn.get('sampling') or {}).get('schema') == 'natlang.native-decision-capture/1']
         assert len(decisions) == 2 and all(value['decision_sample']['temperature'] > 0 for value in decisions)
+        # Stored guidance conditions the decision readout too: its compact scored prompt imports the state.
+        assert all(any(item.get('id') == written['id'] for item in value['native_state_imports'])
+                   for value in decisions)
+        with pytest.raises(ValueError, match='program-guidance binding'):
+            memetic.evaluate(args, tmp_path, 'unbound', memetic.state_guidance('guide', written['id']), [task],
+                base_system='x', actor=identity, server_info_sha256='f' * 64, evaluation_inputs_sha256='e' * 64)
         development, confirmation = tmp_path / 'dev.jsonl', tmp_path / 'confirmation.jsonl'
         for path, ids in ((development, ('a', 'b')), (confirmation, ('c', 'd'))):
             path.write_text(''.join(json.dumps({**task, 'id': name, 'curriculum': {**task['curriculum'],

@@ -1,5 +1,17 @@
 # Model-facing changes and their measurement
 
+### 2026-10-31 — Memetic guidance evaluations deliver stored guidance through the program-guidance channel (debt: live outcome)
+
+`memetic_program.evaluate` used to append the candidate's `<natlang_program_guidance>` native-state block to a replaced
+collector system prompt (`--system-file`). Since 466a473df the decision readout's scored system turn no longer inherits
+the call's system turn, so `readout: decision` functions were evaluated without the guidance being fitted (their captures
+imported no state). The evaluator now passes a `natlang.memetic-program-guidance/1` binding (`--program-guidance-file`,
+collection binding `program_guidance_sha256`) that `NativeToolAgent.programGuidance` renders for every call. Model-visible
+effects: (1) decision readouts of guided memetic evaluations now carry the same block after `DECISION_SYSTEM_PROMPT`;
+(2) in the tool loop the block now follows the function-tools and directory-reducer prompt sections instead of
+preceding them (identical when a call has neither). **Measurement debt:** guided vs unguided task outcomes of finite-typed (`readout: decision`)
+functions under the new delivery; tool-loop outcomes for calls with a codebase or directory reducer (block position).
+
 ### 2026-10-30 — Decision readout prompt: the tool manual leaves the scored system turn (debt: live outcome)
 
 `readout: decision` scored each value after `DECISION_SYSTEM_PROMPT + '\n\n' + <the opening's whole system turn>`, so the
