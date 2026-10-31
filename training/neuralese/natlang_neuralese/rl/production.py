@@ -1093,12 +1093,14 @@ def _stale_guidance_facts(round_dir, rollouts):
     """Case facts recorded in the round's captured guidance blocks whose digest this code no longer reproduces
     (``task_id/fact id``). Group-dependent facts (attempt feedback, teacher trajectories) are left to the learner."""
     from ..common.custody import ProtectedWorlds
-    from .episode_graph import whole_episode_turns
+    from .episode_graph import uncaptured_text_result_writes, whole_episode_turns
     from .privileged_context import captured_block, case_facts
     cases = {case.get('id'): case for case in read_jsonl(Path(round_dir) / 'selected-cases.jsonl')}
     custody = ProtectedWorlds.load()
     current, stale = {}, []
     for rollout in read_jsonl(rollouts):
+        if uncaptured_text_result_writes(rollout):
+            continue  # the learner defers these groups (native_stage._defer_text_result_state_groups)
         for turn in whole_episode_turns(rollout) if rollout.get('turns') else ():
             block = captured_block(turn)
             if block is None:
@@ -1184,14 +1186,14 @@ def resume_preflight(config_path, scratch):
     learner = {'ok': True, 'checked_episodes': 0}
     rollouts = round_dir / 'rollouts.jsonl'
     if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' and rollouts.exists():
-        from .episode_graph import whole_episode_turns
+        from .episode_graph import uncaptured_text_result_writes, whole_episode_turns
         from .jolt import check_episode_guidance
         stale = _stale_guidance_facts(round_dir, rollouts)
         if stale:
             learner = {'ok': False, 'error': 'recorded guidance facts that this code renders differently (the learner '
                        'would refuse them): ' + ', '.join(stale[:5])}
         for rollout in read_jsonl(rollouts) if learner['ok'] else ():
-            if not rollout.get('turns'):
+            if not rollout.get('turns') or uncaptured_text_result_writes(rollout):
                 continue
             try:
                 check_episode_guidance(rollout, whole_episode_turns(rollout))

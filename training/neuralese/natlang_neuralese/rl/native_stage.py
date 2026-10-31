@@ -289,27 +289,10 @@ def _release_host_memory():
         pass
 
 
-def _text_result_state_writes(rollout):
-    """Graph writes of a turn's typed text result into ``Neuralese<...>`` state that its sampling did not capture.
-
-    The runtime encodes such a returned text into state outside the model's sampled output (producer null,
-    source_kind typed-text-result). Whole-graph RL has no differentiable lowering for that text-to-state
-    encoding yet, so the occurrence check correctly refuses the episode."""
-    from .episode_graph import rollout_turn_names
-    events = rollout.get('execution_graph') or []
-    found = []
-    for name, turn in zip(rollout_turn_names(rollout.get('turns') or []), rollout.get('turns') or []):
-        writes = [event for event in events if event.get('kind') == 'block_write' and event.get('turn') == name]
-        captured = (turn.get('sampling') or {}).get('writes') or []
-        host = [event for event in writes if event.get('source_kind') == 'typed-text-result' and event.get('producer') is None]
-        if host and len(writes) - len(host) == len(captured):
-            found += [event.get('block') for event in host]
-    return found
-
-
 def _defer_text_result_state_groups(rows, out):
     """Keep whole groups with uncaptured text-to-state results beside the round (recorded, never silently dropped)."""
-    keys = {(row.get('task_id'), row.get('group')) for row in rows if _text_result_state_writes(row)}
+    from .episode_graph import uncaptured_text_result_writes
+    keys = {(row.get('task_id'), row.get('group')) for row in rows if uncaptured_text_result_writes(row)}
     if not keys:
         return rows, None
     deferred = [row for row in rows if (row.get('task_id'), row.get('group')) in keys]
@@ -320,7 +303,7 @@ def _defer_text_result_state_groups(rows, out):
                         'lacks its differentiable text-to-state lowering',
               'path': {'path': str(path.resolve()), 'sha256': sha256_file_hex_cached(path)},
               'episodes': [{'task_id': row.get('task_id'), 'group': row.get('group'), 'sample': row.get('sample'),
-                            'state_writes': _text_result_state_writes(row)} for row in deferred]}
+                            'state_writes': uncaptured_text_result_writes(row)} for row in deferred]}
     return [row for row in rows if (row.get('task_id'), row.get('group')) not in keys], record
 
 
