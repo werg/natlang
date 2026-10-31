@@ -424,7 +424,46 @@ def local_decode_progress(server=None):
     return None
 
 
-def partial_metrics(entry):
+def _spooled_partial_path(root, entry, job):
+    """Resolve one live case partial only through its exact collector spool lease."""
+    if root is None:
+        return None
+    root = Path(root).expanduser().resolve()
+    jobs = Path(entry['jobs']).expanduser().resolve()
+    identity = hashlib.sha256(f'{jobs}:{job["key"]}'.encode()).hexdigest()
+    lease_path = root / '.leases' / f'{identity}.json'
+    try:
+        if lease_path.is_symlink():
+            return None
+        lease = json.loads(lease_path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    if (not isinstance(lease, dict)
+            or lease.get('schema') != 'natlang.teacher_journal_spool_lease/1'
+            or lease.get('key') != identity
+            or lease.get('case_identity_sha256') != identity
+            or type(lease.get('pid')) is not int or lease['pid'] < 1
+            or lease.get('per_case_limit_bytes') != 268435456):
+        return None
+    case_dir = root / 'cases' / identity
+    candidate = case_dir / f'{job["key"]}.partial.json'
+    try:
+        if candidate.is_symlink() or not candidate.is_file():
+            return None
+        resolved = candidate.resolve(strict=True)
+        resolved_cases = (root / 'cases').resolve(strict=True)
+        resolved_case_dir = case_dir.resolve(strict=True)
+        if (not resolved_case_dir.is_relative_to(resolved_cases)
+                or not resolved.is_relative_to(resolved_case_dir)):
+            return None
+        if candidate.stat().st_size > 268435456:
+            return None
+    except OSError:
+        return None
+    return candidate
+
+
+def partial_metrics(entry, journal_spool_root=None):
     """Saved replies show activity. Repeated action shapes across distinct child inputs do not imply a loop."""
     metrics = dict(saved_turns=0, fresh_model_replies=0, completion_tokens=0, repeated_action_sets=0, repeated_request_hashes=0)
     seen = set()
@@ -440,7 +479,9 @@ def partial_metrics(entry):
     for job in resolve_entry_jobs(entry):
         result = Path(entry['jobs']) / f"{job['key']}.result.json"
         partial = Path(entry['jobs']) / f"{job['key']}.partial.json"
-        paths = sorted((path for path in (result, partial) if path.exists()),
+        spooled_partial = _spooled_partial_path(journal_spool_root, entry, job)
+        paths = sorted((path for path in (result, partial, spooled_partial)
+                        if path is not None and path.exists()),
                        key=lambda path: path.stat().st_mtime_ns, reverse=True)
         for path in paths:
             completed = path.name.endswith('.result.json')
@@ -563,13 +604,13 @@ def identical_turn_streak(entry, limit):
     return None
 
 
-def partial_progress_signature(entry, jobs=None):
+def partial_progress_signature(entry, jobs=None, journal_spool_root=None):
     """Snapshot durable per-job partial identities without reading their contents."""
     jobs = resolve_entry_jobs(entry) if jobs is None else jobs
     root = Path(entry['jobs'])
     rows = []
     for job in jobs:
-        path = root / f"{job['key']}.partial.json"
+        path = _spooled_partial_path(journal_spool_root, entry, job) or root / f"{job['key']}.partial.json"
         try:
             stat = path.stat()
         except FileNotFoundError:
@@ -802,7 +843,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         Path(entry['output']).parent.mkdir(parents=True, exist_ok=True)
         Path(entry['log']).parent.mkdir(parents=True, exist_ok=True)
         start = time.monotonic()
-        last_activity, previous = start, partial_metrics(entry)
+        last_activity, previous = start, partial_metrics(entry, journal_spool_root)
         previous_poll, unobserved_seconds, was_waiting = start, 0, False
         last_activity_heartbeat = start
         repetition_poll_seconds = (REPETITION_GUARD_POLL_SECONDS if identical_turn_limit
@@ -848,13 +889,13 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                         now = time.monotonic()
                         partial_changed = False
                         if identical_turn_limit:
-                            current_partial_signature = partial_progress_signature(entry, entry_jobs)
+                            current_partial_signature = partial_progress_signature(entry, entry_jobs, journal_spool_root)
                             partial_changed = (last_partial_signature is None or
                                                current_partial_signature != last_partial_signature)
                             last_partial_signature = current_partial_signature
-                            current = partial_metrics(entry) if partial_changed else previous
+                            current = partial_metrics(entry, journal_spool_root) if partial_changed else previous
                         else:
-                            current = partial_metrics(entry)
+                            current = partial_metrics(entry, journal_spool_root)
                         heartbeat = (not identical_turn_limit or
                                      now - last_activity_heartbeat >= ACTIVITY_HEARTBEAT_SECONDS)
                         repeated = (identical_turn_streak(entry, identical_turn_limit)
@@ -969,7 +1010,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 'provider_observation': observation,
                 'failure_streak': failure_streak, 'next_allowed_at': next_allowed_at,
                 'elapsed_seconds': round(time.monotonic() - start, 1), 'time': time.time(),
-                'output_accounting': accounting, **partial_metrics(entry)})
+                'output_accounting': accounting, **partial_metrics(entry, journal_spool_root)})
         attempted.add(entry['key'])
         # Preserve original attempt keys when roots share one collector batch.
         # A terminal batch event covers both attempts, even when only one produced a result.

@@ -332,6 +332,33 @@ def test_repeated_action_shapes_do_not_imply_repeated_requests(tmp_path):
     assert partial_metrics(entry)['repeated_request_hashes'] == 1
 
 
+def test_active_spool_partial_metrics_require_exact_case_lease(tmp_path):
+    from scripts.run_bonsai_queue import partial_metrics
+    entry = queue_entry(tmp_path, key='spooled')
+    job = queue_module.resolve_entry_jobs(entry, TS_HOST)[0]
+    spool = tmp_path / 'nvme-spool'
+    identity = hashlib.sha256(f"{Path(entry['jobs']).resolve()}:{job['key']}".encode()).hexdigest()
+    lease_dir = spool / '.leases'; case_dir = spool / 'cases' / identity
+    lease_dir.mkdir(parents=True); case_dir.mkdir(parents=True)
+    lease_path = lease_dir / f'{identity}.json'
+    lease = {'schema':'natlang.teacher_journal_spool_lease/1','key':identity,
+             'case_identity_sha256':identity,'pid':os.getpid(),'per_case_limit_bytes':268435456}
+    lease_path.write_text(json.dumps(lease))
+    partial = {'program_id':job['program_id'],
+               'provenance':{'program_ir_sha256':job['digest']},
+               'turns':[{'request_sha256':'actual-request','response':{
+                   'raw_response':{'sampled':True},'completion_tokens':13,'calls':[]}}]}
+    (case_dir / f"{job['key']}.partial.json").write_text(json.dumps(partial))
+    metrics = partial_metrics(entry, spool)
+    assert metrics['saved_turns'] == 1
+    assert metrics['fresh_model_replies'] == 1
+    assert metrics['completion_tokens'] == 13
+
+    lease['key'] = '0' * 64
+    lease_path.write_text(json.dumps(lease))
+    assert partial_metrics(entry, spool)['saved_turns'] == 0
+
+
 def test_local_pair_shares_one_collector_and_one_global_two_request_cap(tmp_path, monkeypatch):
     from scripts.run_bonsai_queue import partial_metrics
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
