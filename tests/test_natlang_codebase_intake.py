@@ -1,6 +1,7 @@
 import json
 import hashlib
 import sys
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -133,6 +134,14 @@ def test_intake_rejects_tampered_execution_adapter_path(tmp_path):
     metadata_path.write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match='hash mismatch'):
         intake(package, output=tmp_path / 'tampered.jsonl')
+
+
+def test_dispatcher_entrypoint_imports_shared_tree_checker_from_other_cwd(tmp_path):
+    script = Path(__file__).resolve().parents[1] / 'scripts' / 'run_reviewed_luna_dispatcher.py'
+    result = subprocess.run([sys.executable, str(script), '--help'], cwd=tmp_path,
+                            text=True, capture_output=True, check=False)
+    assert result.returncode == 0, result.stderr
+    assert 'usage: run_reviewed_luna_dispatcher.py' in result.stdout
 
 
 def test_fixture_binding_resolves_codebase_root_marker_for_runtime_service(tmp_path):
