@@ -230,7 +230,7 @@ def test_text_emulation_runtime_requires_compiled_cli_and_effective_option(tmp_p
         target.write_bytes(body)
         bindings[rel] = hashlib.sha256(body).hexdigest()
     (runtime / 'frozen-runtime.json').write_text('{}\n')
-    manifest = {'build': {'compiled_dist_files': bindings}}
+    manifest = {'build': {'mode': 'explicit_compiled_dist', 'compiled_dist_files': bindings}}
     monkeypatch.setattr('scripts.run_reviewed_luna_dispatcher.subprocess.run',
         lambda *args, **kwargs: SimpleNamespace(returncode=0,
             stdout='Options: --text-neuralese-emulation\n', stderr=''))

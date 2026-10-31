@@ -52,7 +52,7 @@ def test_text_result_writer_replay_preserves_policy_and_consumer_gradient(tmp_pa
     def execute():
         values,behavior=replay_logps(model,replay)
         torch.testing.assert_close(values.detach(),behavior,rtol=2e-5,atol=2e-6)
-        ids=torch.tensor([[token for n in replay.plan.invocations for token in n.token_ids]])
+        ids=torch.tensor([[token for n in replay.plan.invocations for token in n.token_ids]],device=next(model.parameters()).device)
         embeddings=model.embed(ids).detach().requires_grad_(True)
         out=model(replay.plan,embeddings=embeddings)
         reader_offset=replay.plan.offsets[2]
