@@ -29,6 +29,8 @@ import argparse
 import collections
 import hashlib
 import json
+import os
+import pickle
 import math
 import re
 import subprocess
@@ -38,7 +40,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
 sys.path.insert(0, str(REPO / 'scripts' / 'neuralese_data'))
-from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
+from natlang_neuralese.common.hashing import sha256_file_hex, sha256_file_hex_cached  # noqa: E402
 from build_verified_teacher_trajectory_graphs import graph_content_sha256  # noqa: E402
 
 SCHEMA = 'natlang.idiom-mixture/2'
@@ -285,7 +287,43 @@ def communication_is_held(row, graphs, held, carve_set):
     return bool(set(row.get('source_groups') or graphs[0].get('source_groups') or ()) & (held | carve_set))
 
 
-def carve_groups(config, policy, trained_groups=frozenset(), held_groups=frozenset(), prior_components=()):
+def _scan_identity(paths, config, policy, extra):
+    """Bind a resumable scan to its controls and stable five-field file states."""
+    def state(path):
+        s = Path(path).stat()
+        digest = sha256_file_hex_cached(path)
+        after = Path(path).stat()
+        before = (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+        if before != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+            raise ValueError(f'mixture scan input changed while hashing: {path}')
+        return [str(Path(path).resolve()), *before, digest]
+    return hashlib.sha256(json.dumps({'paths': [state(p) for p in paths], 'config': config, 'policy': policy,
+        'extra': extra, 'code': sha256_file_hex(Path(__file__))}, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _save_scan(path, value):
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.partial')
+    with temporary.open('wb') as stream:
+        pickle.dump(value, stream, protocol=pickle.HIGHEST_PROTOCOL)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, path)
+
+
+def _load_scan(path, identity):
+    if path is None or not path.exists():
+        return None
+    with path.open('rb') as stream:
+        value = pickle.load(stream)
+    if value.get('identity') != identity:
+        raise ValueError('resumable mixture scan inputs or protection changed; create a fresh build')
+    return value
+
+
+def carve_groups(config, policy, trained_groups=frozenset(), held_groups=frozenset(), prior_components=(), *, checkpoint_path=None):
     """Source groups of the permanent held slice. Rows sharing a source group form one component (a row touching a
     held group is held whole); a component is a candidate when one of its groups falls in the declared hash fraction,
     and never when it touches a group an earlier version trained on. Candidates are taken in hash order while their
@@ -316,9 +354,21 @@ def carve_groups(config, policy, trained_groups=frozenset(), held_groups=frozens
     paths += [REPO / item for item in config.get('teacher_graphs', [])]
     paths += [REPO / item for item in config.get('teacher_graphs_full', [])]
     paths += [REPO / item['path'] for item in config.get('bounded_graphs', [])]
-    for path in paths:
+    # The scan stores only source connectivity and row counts. Current held,
+    # quality and pending groups are applied afresh below on every resume.
+    identity = _scan_identity(paths, config, policy, 'source-connectivity-only') if checkpoint_path else None
+    saved = _load_scan(checkpoint_path, identity)
+    start = 0
+    if saved:
+        parent.update(saved['parent']); rows.extend(saved['rows']); start = saved['next']
+    for index, path in enumerate(paths):
+        if index < start:
+            continue
         for _, raw in iter_lines(path):
             add_groups(json.loads(raw).get('source_groups') or (), count=True)
+        if checkpoint_path and ((index + 1) % 128 == 0 or path.stat().st_size >= 32 * 1024 * 1024
+                                or index + 1 == len(paths)):
+            _save_scan(checkpoint_path, {'identity': identity, 'next': index + 1, 'parent': parent, 'rows': rows})
     for groups in prior_components:
         add_groups(groups, count=False)
     for item in config.get('communication', []):
@@ -401,7 +451,8 @@ def prior_versions(config):
     return sources, ids, decisions, keys, groups, trained, components
 
 
-def candidates(config, policy, decisions, trajectories, held, carve_out=None, carve_set=frozenset(), prior=None):
+def candidates(config, policy, decisions, trajectories, held, carve_out=None, carve_set=frozenset(), prior=None,
+               *, checkpoint_path=None):
     """Eligible samples with features, tier and category; omissions by reason. Rows of carved held groups go to
     ``carve_out`` (held, up to the declared row cap; beyond it they are dropped, never trained)."""
     out, omitted, covered, seen = [], collections.Counter(), set(), set()
@@ -421,7 +472,19 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
     has_full |= {str(path.parents[2]) for kind, view, path in inputs if view == 'teacher-turn-full'}
     has_header = {str(path.parents[2]) for kind, view, path in inputs
                   if view in ('program-header', 'teacher-turn')}
-    for kind, view, path in inputs:
+    identity = _scan_identity([p for _, _, p in inputs], config, policy,
+        {'held': sorted(held), 'carve': sorted(carve_set), 'prior_decisions': sorted(covered),
+         'prior_keys': sorted(seen), 'score_files': [_scan_identity([p], {}, {}, None) for p in config['scores']]}) \
+        if checkpoint_path else None
+    saved = _load_scan(checkpoint_path, identity)
+    start = 0
+    if saved:
+        out, omitted, covered, seen, start = (saved[k] for k in ('out', 'omitted', 'covered', 'seen', 'next'))
+        if carve_out is not None:
+            carve_out[:] = saved['carve_out']
+    for index, (kind, view, path) in enumerate(inputs):
+        if index < start:
+            continue
         for number, raw in iter_lines(path):
             row = json.loads(raw)
             if row.get('split') != 'train':
@@ -498,6 +561,10 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
                         'target_tokens': target_tokens,
                         'trajectory': trajectory,
                         'line': number, 'decisions': len(ids), 'view': view, 'features': features})
+        if checkpoint_path and ((index + 1) % 128 == 0 or path.stat().st_size >= 32 * 1024 * 1024
+                                or index + 1 == len(inputs)):
+            _save_scan(checkpoint_path, {'identity': identity, 'next': index + 1, 'out': out,
+                'omitted': omitted, 'covered': covered, 'seen': seen, 'carve_out': list(carve_out or ())})
     return out, omitted
 
 
@@ -766,9 +833,10 @@ def main(argv=None):
 
     prior = prior_versions(config)
     held |= prior[4]
-    carve_set, held = carve_groups(config, policy, prior[5], held, prior[6])
+    carve_set, held = carve_groups(config, policy, prior[5], held, prior[6], checkpoint_path=out.parent / 'carve-scan.pkl')
     carve_out = []
-    cands, omitted = candidates(config, policy, decisions, trajectories, held, carve_out, carve_set, prior)
+    cands, omitted = candidates(config, policy, decisions, trajectories, held, carve_out, carve_set, prior,
+                                checkpoint_path=out.parent / 'candidate-scan.pkl')
     cands += bounded_candidates(config, policy, held, carve_set, prior[3] if prior else set(), omitted)
     chosen, cap_drops = apply_caps(cands, policy)
     resolved = objective(config, policy)

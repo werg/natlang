@@ -179,6 +179,10 @@ def build(args):
         (out / 'config.json').write_text(json.dumps(bound['value'], indent=1) + '\n')
         if sha256_file_hex(out / 'config.json') != bound['sha256']:
             raise SystemExit('config.json differs from the one the existing mixture was built from')
+    elif (out / 'config.json').exists():
+        # A preempted build resumes the same selected inputs; later additions
+        # enter a separately bound successor, never a mixed partial scan.
+        config = json.loads((out / 'config.json').read_text())
     else:
         (out / 'config.json').write_text(json.dumps(config, indent=1) + '\n')
     if not (mixture / 'mixture.json').exists():

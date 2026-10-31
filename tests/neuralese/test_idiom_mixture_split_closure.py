@@ -70,6 +70,19 @@ def test_held_closure_includes_full_teacher_and_bounded_inputs(tmp_path, monkeyp
     assert held == {'held', 'bridge', 'end'}
 
 
+def test_resumed_connectivity_reapplies_current_held_and_checks_source(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, 'REPO', tmp_path)
+    rows = tmp_path / 'rows.jsonl'; put(rows, [{'source_groups': ['a', 'b']}])
+    monkeypatch.setattr(mod, 'graph_files', lambda render, split: [('program-header', rows)])
+    config = {'renders': ['one']}; checkpoint = tmp_path / 'scan.pkl'
+    _, first = mod.carve_groups(config, {}, held_groups={'a'}, checkpoint_path=checkpoint)
+    _, second = mod.carve_groups(config, {}, held_groups={'unrelated'}, checkpoint_path=checkpoint)
+    assert first == {'a', 'b'} and second == {'unrelated'}
+    put(rows, [{'source_groups': ['a', 'c']}])
+    with pytest.raises(ValueError, match='inputs or protection changed'):
+        mod.carve_groups(config, {}, held_groups={'a'}, checkpoint_path=checkpoint)
+
+
 def cand(i, family, cluster, tier=2, tokens=10):
     return {'id': f'r{i}', 'tier': tier, 'target_tokens': tokens,
             'features': {'family': family, 'near_duplicate_cluster': cluster}}
