@@ -210,6 +210,10 @@ def main(argv=None):
     args, trainer = parser.parse_known_args(argv)
     from .production import validate_native_policy_trainer_cli
     validate_native_policy_trainer_cli(trainer)
+    if any((args.communication_foundation, args.foundation_native_graphs,
+            args.foundation_communication_batches, args.refresh_foundation_readiness,
+            args.resident_data_directory, args.resident_geometry_qualification)):
+        raise ValueError('SFT source controls cannot be applied to a native RL stage')
     from contextlib import nullcontext
     from .native_output_lease import coefficient_output_lease
     with coefficient_output_lease(args.out) if args.coefficient_policy is not None else nullcontext():
