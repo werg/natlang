@@ -74,7 +74,7 @@ REPAIR = ('The supplied folder is the project to repair. The `repair_program` op
           'your change with `diff_files`. The harness checks that the project loads after you finish.\n\n'
           'The project no longer loads: {hint} Repair it so that the program loads again. Change only what is '
           'broken; keep every function\'s declared parameters, result and uses as intended, and leave all other '
-          'files unchanged. Return a one-line description of the change.')
+          'files unchanged. Return exactly `repair complete` after the edit.')
 HINTS = {
     'type-typo': 'one function declares a parameter or result type with a misspelled name.',
     'uses-typo': 'one function lists a `uses` entry whose path is misspelled.',
@@ -360,13 +360,13 @@ def natlang_codebases(per_package=60, repairs=24, seed=20261031):
             preserve = {p: hashlib.sha256(t.encode()).hexdigest() for p, t in files.items() if p != path}
             check = {'load': True, 'preserve': preserve, 'require': [path], **extras}
             write = lambda text: (f'await folder.file({json.dumps(path)}).writeText({json.dumps(text)}); '
-                                  f'return "repaired {path}";')
+                                  'return "repair complete";')
             hint = HINTS[kind].format(contract=contract or '')
             case = make_case(
                 source='natlang-codebase', family=f'natlang_codebase_repair_{kind.replace("-", "_")}',
                 shape=f'natlang-codebase-repair-{kind}', upstream='natlang:codebases', upstream_id=item,
                 upstream_split=upstream_split, unit=unit, groups=[unit], root_name='repair_program', args={},
-                returns='string', instruction=REPAIR.format(hint=hint), inputs={}, expected=None, oracle='exact',
+                returns='string', instruction=REPAIR.format(hint=hint), inputs={}, expected='repair complete', oracle='exact',
                 split=split, framing='plain', level=3, license_='natlang repository (owner)', domain='relational',
                 slice_='folder_failure', reference_root=[['eval', {'code': write(files[path]), 'finish': True}]],
                 revision=commit, extra_semantics={'folder_files': folder, 'codebase_check': check})
