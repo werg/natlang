@@ -91,6 +91,27 @@ log "\"event\":\"setup_done\",\"seconds\":$(since $t0)"
 export NATLANG_REPO=$R PYTHONPATH=$R/training/neuralese:$R PATH=$NODE_BIN:$VENV/bin:$PATH
 export HF_HUB_OFFLINE=1 PYTHONUNBUFFERED=1 NATLANG_HASH_CACHE=$ROOT/hash-cache.jsonl
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+
+# NATLANG_RL_CHECK=1 (a CPU sandbox, rl_cloud.py launch --check): everything but the GPU work -- environments,
+# runtime, parent, custody load, imports, one export of the parent boundary through the DGX exporter -- then exit.
+if [ "${NATLANG_RL_CHECK:-0}" = 1 ]; then
+  (cd "$R" && "$VENV/bin/python" -c 'import sys; from natlang_neuralese.common.custody import ProtectedWorlds; ProtectedWorlds.load(root=sys.argv[1]); import natlang_neuralese.rl.production, natlang_neuralese.rl.native_stage' "$R") \
+    > "$OUT/check-learner.log" 2>&1; log "\"event\":\"check_learner_imports\",\"rc\":$?"
+  "$SGL_VENV/bin/python" -c 'import sglang, sglang.srt.models.lfm3, sglang.srt.layers.sampler; print(sglang.__file__)' \
+    > "$OUT/check-sglang.log" 2>&1; log "\"event\":\"check_sglang_imports\",\"rc\":$?"
+  (cd "$R" && "$VENV/bin/python" - "$L/config.json" "$R" <<'PY'
+import json, sys
+from natlang_neuralese.rl.production import actor_runtime_configuration, bind_actor_runtime_command, validate_actor_runtime_configuration
+c = json.load(open(sys.argv[1])); r = sys.argv[2]
+c.update(actor_runtime_configuration(r)); c['actor_command'] = bind_actor_runtime_command(c['actor_command'], r)
+validate_actor_runtime_configuration(c); print('actor binding ok', c['native_actor_python_runtime']['sha256'][:12])
+PY
+  ) > "$OUT/check-binding.log" 2>&1; log "\"event\":\"check_actor_binding\",\"rc\":$?"
+  python3 "$HELPER" stage "$L" "$E" >> "$OUT/exports.log" 2>&1; log "\"event\":\"check_staged\",\"rc\":$?"
+  seq=$(ls "$E" | grep -E '^[0-9]{6}\.json$' | tail -1 | cut -c1-6)
+  while [ -n "$seq" ] && [ ! -f "$E/$seq.uploaded" ]; do sleep 20; done
+  log "\"event\":\"check_done\",\"seconds\":$(since $t0)"; exit 0
+fi
 trained() { python3 -c "import json;print(json.load(open('$L/state.json')).get('trained_rounds',0))" 2>/dev/null || echo 0; }
 child=
 trap 'log "\"event\":\"term\""; [ -n "$child" ] && kill -TERM $child 2>/dev/null; wait $child 2>/dev/null; exit 143' TERM INT

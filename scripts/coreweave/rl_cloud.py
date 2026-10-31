@@ -376,15 +376,22 @@ def bundle(run):
 
 # -- launch ---------------------------------------------------------------------------------------------------------------
 
-def render_job(run, name, rounds):
+def render_job(run, name, rounds, check=False):
     text = Path(REPO / run['job']).read_text()
     for key, value in {'ROOT': run['root'], 'LINEAGE': name, 'ROUNDS': str(rounds),
-                       'JOB_ID': f"{run['id']}-{name}-{time.strftime('%m%d%H%M')}"}.items():
+                       'JOB_ID': f"{run['id']}-{name}-{'check-' if check else ''}{time.strftime('%m%d%H%M')}"}.items():
         text = text.replace(f'@@{key}@@', value)
-    return jobs.validate(json.loads(text))
+    job = json.loads(text)
+    if check:  # the CPU pipeline check: no GPU, small, short
+        job['resources'] = {'cpu': '4', 'memory': '16Gi'}
+        job['lifetime_hours'] = 3
+        job['kind'] = 'smoke'
+        job['env']['NATLANG_RL_CHECK'] = '1'
+        job['placement']['reason'] = 'CPU check of the cloud RL pipeline without GPU work: ' + job['placement']['reason']
+    return jobs.validate(job)
 
 
-def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=False):
+def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=False, check=False):
     state = read_json(hub(run) / 'run-state.json', {})
     if not state.get('bundle'):
         raise SystemExit('no bundle: rl_cloud.py bundle RUN.json first')
@@ -395,7 +402,7 @@ def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=Fal
     if record is None and not parent_later:
         raise SystemExit(f'{name}: no verified export or seed; rl_cloud.py seed RUN.json {name}')
     record = record or {'seq': 'later', 'trained_rounds': None}
-    job = render_job(run, name, run.get('rounds', 0) if rounds is None else rounds)
+    job = render_job(run, name, run.get('rounds', 0) if rounds is None else rounds, check)
     account = account or run['lineages'][name].get('account')
     if account in (None, 'auto'):
         ledger = cwctl.account_ledger(write=False)
@@ -638,6 +645,7 @@ def main(argv=None):
             p.add_argument('--rounds', type=int)
             p.add_argument('--dry-run', action='store_true')
             p.add_argument('--parent-later', action='store_true', help='deliver the parent with deliver-parent')
+            p.add_argument('--check', action='store_true', help='CPU sandbox: pipeline check without GPU work')
     for command in ('bundle', 'status', 'export'):
         p = sub.add_parser(command)
         p.add_argument('run')
@@ -651,7 +659,8 @@ def main(argv=None):
     elif args.command == 'bundle':
         print(bundle(run))
     elif args.command == 'launch':
-        print(json.dumps(launch(run, args.lineage, args.account, args.dry_run, args.rounds, args.parent_later),
+        print(json.dumps(launch(run, args.lineage, args.account, args.dry_run, args.rounds, args.parent_later,
+                                args.check),
                          indent=1, default=str))
     elif args.command == 'deliver-parent':
         deliver_parent(run, args.lineage)

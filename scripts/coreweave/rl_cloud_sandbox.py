@@ -94,7 +94,10 @@ def stage(lineage, exports):
     lineage, exports = Path(lineage).resolve(), Path(exports)
     cas = exports / 'cas'
     cas.mkdir(parents=True, exist_ok=True)
-    state = json.loads((lineage / 'state.json').read_text())
+    has_state = (lineage / 'state.json').is_file()
+    # A lineage before its first round (the CPU pipeline check): the seeded parent is the boundary.
+    state = (json.loads((lineage / 'state.json').read_text()) if has_state
+             else {'checkpoint': str(lineage / 'parent' / 'checkpoint.pt'), 'round': 0, 'trained_rounds': 0})
     previous = sorted(exports.glob('[0-9]*.json'))
     prior = json.loads(previous[-1].read_text()) if previous else {}
     if prior.get('trained_rounds') == state.get('trained_rounds') and prior.get('round') == state.get('round'):
@@ -143,7 +146,7 @@ def stage(lineage, exports):
     seq = (prior.get('seq', -1) + 1)
     manifest = {'schema': SCHEMA, 'seq': seq, 'lineage': lineage.name, 'lineage_dir': str(lineage),
                 'created': time.time(), 'round': current, 'trained_rounds': state.get('trained_rounds', 0),
-                'phase': state.get('phase'), 'state_sha256': file_digest(lineage / 'state.json'),
+                'phase': state.get('phase'), 'state_sha256': file_digest(lineage / 'state.json') if has_state else None,
                 'checkpoint': str(checkpoint), 'blobs': blobs, 'links': links,
                 'previous_seq': prior.get('seq')}
     write_json_durable(exports / f'{seq:06d}.json', manifest)
