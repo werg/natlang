@@ -76,3 +76,19 @@ def test_captured_logprob_probe_reports_exact_deltas(tmp_path):
     p=tmp_path/'probe.json';r=behavior_logprob_probe(Model(),hidden,actions,graph_id='g',policy={'checkpoint_sha256':'a'*64},destination=p)
     assert len(r['positions'])==2 and r['max_abs_delta']>0
     assert json.loads(p.read_text())==r
+
+
+def test_zero_signal_jolt_projection_preserves_active_and_privileged_graphs():
+    from natlang_neuralese.rl.native_stage import skip_zero_signal_jolt
+    graphs=[{'id':x} for x in ('zero','outcome','privileged')]
+    rows={'zero':{'advantage':0.,'jolt':{'role':'student','privileged':None}},
+          'outcome':{'advantage':1.,'jolt':{'role':'student','privileged':None}},
+          'privileged':{'advantage':0.,'jolt':{'role':'teacher','privileged':{'state':'x'}}}}
+    objective={'mode':'grpo','policy_loss':{'schema':'jolt-plus/1'},'rows':rows}
+    kept,projected,receipt=skip_zero_signal_jolt(graphs,objective)
+    assert [x['id'] for x in kept]==['outcome','privileged']
+    assert set(projected['rows'])=={'outcome','privileged'} and set(rows)=={'zero','outcome','privileged'}
+    assert receipt['omitted_graph_visits']==0 and receipt['omitted_graph_ids']==['zero']
+    assert 'active episodes' in receipt['normalization']
+    with pytest.raises(ValueError,match='all admitted'):
+        skip_zero_signal_jolt(graphs[:1],{**objective,'rows':{'zero':rows['zero']}})

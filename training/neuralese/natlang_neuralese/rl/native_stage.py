@@ -220,6 +220,34 @@ def main(argv=None):
         return _admit_and_train(args,trainer)
 
 
+def skip_zero_signal_jolt(graphs, objective):
+    """Omit only complete episodes whose JOLT outcome and privileged terms are both zero."""
+    import math
+    if (objective.get('mode')!='grpo' or (objective.get('policy_loss') or {}).get('schema')!='jolt-plus/1'):
+        return graphs,objective,None
+    rows=objective['rows'];ids=[graph['id'] for graph in graphs]
+    if len(ids)!=len(set(ids)) or set(ids)!=set(rows):
+        raise ValueError('JOLT graph/objective identity differs before zero-signal projection')
+    omitted=[]
+    for ident in ids:
+        row=rows[ident];info=row.get('jolt');advantage=row.get('advantage')
+        if (isinstance(info,dict) and info.get('role') in ('student','teacher')
+                and info.get('privileged') is None and type(advantage) in (int,float)
+                and math.isfinite(advantage) and advantage==0):
+            omitted.append(ident)
+    if not omitted:return graphs,objective,None
+    omitted_set=set(omitted);kept=[graph for graph in graphs if graph['id'] not in omitted_set]
+    if not kept:raise ValueError('all admitted JOLT episodes have provably zero objective signal')
+    projected={**objective,'rows':{key:value for key,value in rows.items() if key not in omitted_set}}
+    disposition={'schema':'natlang.jolt-zero-signal-projection/1','omitted_graph_ids':omitted,
+        'omitted_count':len(omitted),'active_count':len(kept),'omitted_graph_visits':0,
+        'reason':'zero centered outcome advantage and no privileged twin; no active decision KL or writer term',
+        'normalization':'active episodes and their sampled actions only; explicit change from retaining zero-loss episodes',
+        'coverage':'original scored rollouts and complete execution graphs remain immutable evidence'}
+    projected['zero_signal_projection']=disposition
+    return kept,projected,disposition
+
+
 def _admit_and_train(args,trainer):
     from ..common.jsonio import iter_jsonl_rows
     rows = [row for path in args.rollouts for _, row in iter_jsonl_rows(path)]
@@ -231,6 +259,7 @@ def _admit_and_train(args,trainer):
         policy_loss=args.rl_policy_loss, jolt_cases=args.jolt_cases, actors=args.rl_actors)
     if not graphs:
         raise ValueError('no useful native policy episodes: route flat failures to verified graph SFT seeding')
+    graphs,objective,zero_signal = skip_zero_signal_jolt(graphs,objective)
     args.out.mkdir(parents=True, exist_ok=True)
     graph_path, objective_path = args.out/'rl-native-graphs.jsonl', args.out/'rl-native-objective.json'
     # Deferral runs on the admitted graphs in memory, so the (large) graph and objective files are written once.
@@ -264,6 +293,7 @@ def _admit_and_train(args,trainer):
         **({'policy_loss': objective['policy_loss']} if 'policy_loss' in objective else {}),
         'rollouts': {str(path.resolve()): sha256_file_hex_cached(path) for path in args.rollouts},
         'tasks_selected': [{'task_id': row['task_id'], 'split': 'train'} for row in objective['rows'].values()],
+        **({'zero_signal_projection':zero_signal} if zero_signal is not None else {}),
         'omissions':{'unscored':[{'task_id':row.get('task_id'),'sample':row.get('sample')} for row in rows if row.get('reward') is None],
                      **({'deferred_long_graphs':deferred} if deferred is not None else {}),
                      },
