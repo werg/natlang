@@ -149,3 +149,20 @@ def test_retained_capacity_keeps_accumulated_gradients_during_backward(mode):
     assert result['passed'] and not result['gradients_released_per_parameter']
     assert counts and min(counts)==len(params)
     assert all(p.grad is None for p in params)
+
+
+def test_retained_gradient_allocation_oom_is_reported_without_update(monkeypatch):
+    from test_shared_state import tiny
+    from test_native_optimizer_checkpointing import examples
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer
+    from natlang_neuralese.eval.native_memory import qualify_capacity
+    model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
+    optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
+    def fail(*args,**kwargs):raise torch.cuda.OutOfMemoryError('injected retained buffer OOM')
+    monkeypatch.setattr(torch,'zeros_like',fail)
+    result=qualify_capacity(model,optimizer,examples()[:1],checkpoint_sha256='a'*64,source_binding={},
+        cotangent_mode='plain',retained_gradients=True)
+    assert not result['passed'] and result['optimizer_updates']==0
+    assert result['cases'][0]['failure_phase']=='retained-gradient-allocation'
+    assert all(p.grad is None for p in model.parameters())

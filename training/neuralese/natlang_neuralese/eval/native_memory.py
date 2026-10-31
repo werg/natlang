@@ -258,11 +258,13 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                  'kv_slots':sum(len(item.plan.slot_sources) for item in batch),'status':'running'}
             rows.append(row)
             started=time.monotonic()
-            phase='forward'
+            phase='retained-gradient-allocation' if retained_gradients else 'forward'
+            host=None
             try:
                 if retained_gradients:
                     for _,parameter in named:
                         if parameter.requires_grad:parameter.grad=torch.zeros_like(parameter)
+                phase='forward'
                 with _HostPeak() as host:
                     from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
                     if cotangent_mode == 'plain':
@@ -293,7 +295,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                 row.update(status='passed',loss=float(loss.detach()),gradients=dict(observed),
                     host_peak=host.peak)
             except torch.cuda.OutOfMemoryError as error:
-                row.update(status='out_of_memory',error=str(error),host_peak=host.peak,
+                row.update(status='out_of_memory',error=str(error),host_peak=host.peak if host is not None else None,
                     failure_phase=phase,failure_traceback=traceback.format_exc())
                 hook=getattr(model.port,'activation_checkpoint',None)
                 if callable(getattr(hook,'snapshot',None)):
