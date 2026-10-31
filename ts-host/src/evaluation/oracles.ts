@@ -3,6 +3,7 @@ import { canonical, jsonStringRecordCanonical } from '../oracle-kit/json-record.
 import { decimalForms } from '../oracle-kit/decimal.js';
 import { assertKnownComparator, recordComparator } from '../oracle-kit/oracle-registry.js';
 import { ANSWER_SET_NORMALIZATIONS, answerListEqual, numericClose, qaAliasMapScore, resultSetEqual } from './answer-sets.js';
+import { PUZZLE_SOLUTION_NORMALIZATIONS, puzzleSolves } from './puzzle-solutions.js';
 export { jsonStringRecordCanonical };
 /** Answer checks used by generated and dataset-backed teacher cases. */
 export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | 'constraints';
@@ -22,7 +23,7 @@ export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknow
   radix_fields?: Array<{ key: string; base: number }>;
   rubric?: string; context?: unknown; [key: string]: unknown };
 const BUILTIN_NORMALIZATIONS = ['qa', 'qa-string-map', 'named-tree', 'json-string-record', 'semantic-structured',
-  ...ANSWER_SET_NORMALIZATIONS] as const;
+  ...ANSWER_SET_NORMALIZATIONS, ...PUZZLE_SOLUTION_NORMALIZATIONS] as const;
 /** Apply only explicitly declared unordered array paths; object keys are already order-free. */
 export function declaredStructuralCanonical(value: unknown, unorderedPaths: string[], prosePaths: string[] = [],
   ignoreProse = false): string | null {
@@ -778,6 +779,9 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
     return { accepted: candidates.some(candidate => numericClose(actual, candidate, options)), level,
       comparison_version: 'numeric-tolerance/1' };
   }
+  // `expected` is the puzzle instance; any answer that solves it is accepted (evaluation/puzzle-solutions.ts).
+  if (level === 'normalized' && spec.normalization === 'puzzle-solution')
+    return { accepted: puzzleSolves(actual, expected, spec.puzzle), level, comparison_version: 'puzzle-solution/1' };
   if (level === 'normalized' && spec.normalization === 'answer-list')
     return { accepted: candidates.some(candidate => answerListEqual(actual, candidate)), level, comparison_version: 'answer-list/1' };
   if (level === 'normalized' && spec.normalization === 'qa-alias-map') {
