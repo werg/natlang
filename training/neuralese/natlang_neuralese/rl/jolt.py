@@ -201,6 +201,7 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
             attempt_feedback=group_feedback(case, group, rollout.get('sample')))
         descriptors = {item['name']: item for item in graph_invocations(replay, turns, root_calls=root_calls(rollout, turns))}
         by_turn = {turn.get('graph_turn'): turn for turn in turns}
+        text_owner = {write['node']: turn['graph_turn'] for turn in turns for write in turn.get('text_result_writes',[])}
         blocks, telemetry = {}, {'blocks': 0, 'writer_blocks': 0, 'text_fallbacks': 0, 'verbatim_reference': 0,
                                  'fallback_reasons': []}
         for name, turn in by_turn.items():
@@ -217,6 +218,7 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
                 telemetry['fallback_reasons'].append(block.receipt['fallback'])
             elif block.state_id is not None:
                 writer, _, _ = writer_span(replay, block)
+                writer = text_owner.get(writer, writer)
                 writer_saw(used, '\n'.join(message['content'] for message in by_turn[writer].get('messages') or []
                                           if isinstance(message.get('content'), str)))
                 telemetry['writer_blocks'] += 1
@@ -320,6 +322,8 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
     from .privileged_scoring import student_form, teacher_form, writer_span
     role = check_episode_guidance(rollout, turns)
     flagged = policy_turns(turns)
+    text_owner = {write['node']: turn['graph_turn'] for turn in turns for write in turn.get('text_result_writes',[])}
+    flagged_graph = flagged | {node for node, owner in text_owner.items() if owner in flagged}
     try:
         if source is None:
             raise CustodyError('no privileged source is available to this learner')
@@ -342,7 +346,7 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
                 raise CustodyError('no recorded guidance fits any invocation of this student episode')
             twin = teacher_form(replay, blocks)
         writers = {writer_span(replay, block)[0] for block in blocks.values() if block.state_id is not None}
-        if not writers <= flagged:
+        if not writers <= flagged_graph:
             raise ValueError('guidance was imported from a turn not recorded as the guidance policy')
     except (CustodyError, ValueError) as error:
         if role == 'teacher':
@@ -350,7 +354,7 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
         return _without(replay, graph, flagged), {'role': role, 'privileged': None, 'refusal': str(error),
                                                   'policy_turns': sorted(flagged)}
     suffix = PRIVILEGED_SUFFIX[role]
-    renamed = _renamed([node for node in twin.plan.invocations if node.name not in flagged], suffix)
+    renamed = _renamed([node for node in twin.plan.invocations if node.name not in flagged_graph], suffix)
     used = {edge.source for node in replay.plan.invocations for edge in node.imports}
     external_sizes = {name: len(state.token_ids) for name, state in replay.external_blocks.items() if name in used}
     combined = compile_graph((*replay.plan.invocations, *renamed), external_sizes=external_sizes)
