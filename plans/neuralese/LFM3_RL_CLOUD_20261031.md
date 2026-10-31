@@ -113,6 +113,25 @@ sha256 and must be dropped (`null` override) or rebound for a new file.
 - The exporter GETs whole checkpoints (15 GB, ~25 min each at the DGX downlink); with four lineages it verifies the
   newest export per lineage and skips superseded ones rather than queueing every round.
 
-## Smoke (2026-10-31)
+## Blobs travel as parts
 
-Results are recorded below once the run completes.
+Every blob (seed checkpoint, export checkpoint, archives) is stored as 1 GiB parts, each its own private run file
+`blobs/<sha256>.pNNNN` with its own sha256; a failed PUT or GET repeats one part. The first single-object 9.5 GB seed
+PUT over the DGX uplink (~3 MB/s) failed after a full pass and restarted from zero.
+
+## Status 2026-10-31
+
+- GPU smoke BLOCKED: all four new accounts refuse GPU sandboxes (`CWSANDBOX_GPU_NOT_ALLOWED`, "this organization is
+  not entitled to create GPU sandboxes"; not a quota error). The owner/CoreWeave must enable GPU entitlement.
+- `rl_cloud_autopilot.py` (ledger service `rl-cloud-autopilot-N`) probes one account per hour with a minimal GPU
+  create (stopped at once); on the first entitled account it runs the GPU smoke (`smoke-jolt`, one round), and when
+  that export is verified on DGX it seeds and launches `jolt-c1`, `sd-c1`, `jolt-c2`, `sd-c2` across the entitled
+  accounts, with a coord note. A failed smoke stops it with an urgent coord alert.
+- The continuation lineages `jolt-r1c`/`sd-r1c` (DGX lineages' newest trained parents, fresh controller history) are
+  in the run file but launch only on the supervisor's decision (RL eval lift); their 15 GB parents upload as parts.
+- CPU pipeline check (cw2/cw3 CPU sandboxes, 4 CPU/16Gi): bundle push 296 MB in ~4 min (~1.2 MB/s, 4 workers);
+  HF base and inputs fetched and verified; ts-host npm ci + build 44 s (after fixing both stale package-lock.json
+  files on main, which made `npm ci` refuse); SGLang fork venv from the x86_64 lock + Rust radix-tree core 237 s;
+  runtime 27 s; `ProtectedWorlds.load` + learner/controller imports on NGC torch 2.14.0a0 and the fork's LFM3 imports
+  pass on x86_64. Fixed on the way: bootstrap apt install of zstd hung 11 min (now bounded; Python zstandard
+  fallback), the fork's editable install needs cargo (rustup minimal, `SGLANG_BUILD_RUST_EXTS=mem_cache`).
