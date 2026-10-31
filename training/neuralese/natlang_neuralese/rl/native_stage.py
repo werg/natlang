@@ -243,6 +243,7 @@ def _admit_and_train(args,trainer):
         'omissions':{'unscored':[{'task_id':row.get('task_id'),'sample':row.get('sample')} for row in rows if row.get('reward') is None],
                      **({'deferred_long_graphs':deferred} if deferred is not None else {})},
         'episodes': len(graphs), 'sampled_tokens': sum(len(row['actions']) for row in objective['rows'].values()),
+        'neuralese_bonus_episodes': sum(bool(row.get('neuralese_bonus')) for row in objective['rows'].values()),
         'native_graphs_sha256': sha256_file_hex_cached(graph_path),
         'objective_sha256': sha256_file_hex_cached(objective_path), 'execution': 'one-packed-graph-forward'})
     if args.coefficient_policy is not None:

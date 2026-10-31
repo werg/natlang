@@ -16,3 +16,10 @@ def group_advantages(rewards: list[float | None], eps: float = 1e-6) -> tuple[li
         return [None if r is None else 0.0 for r in rewards], {"scored": len(scored), "spread": False, "mean": mean}
     return [None if r is None else (r - mean) / (std + eps) for r in rewards], \
         {"scored": len(scored), "spread": True, "mean": mean, "std": std}
+
+
+def rollout_return(rollout: dict) -> float:
+    """An admitted episode's return: its task-outcome ``quality`` plus any recorded Neuralese-use bonus
+    (rl.task_rollouts.score). ``quality`` alone stays the success signal."""
+    reward = rollout['reward']
+    return float(reward['quality']) + float(reward.get('neuralese_bonus') or 0.)

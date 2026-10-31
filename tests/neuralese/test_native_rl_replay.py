@@ -220,3 +220,60 @@ def test_v2_forced_template_inputs_are_replayed_without_invented_policy_actions(
     consumer = torch.tensor([i for i, action in enumerate(replay.actions) if action['turn'] == 'consumer'])
     (-logps[consumer].mean()).backward()
     assert model.adapter.up.weight.grad.abs().sum() > 0
+
+
+def test_self_distillation_prefers_successful_neuralese_using_episodes(tmp_path):
+    import json
+    from natlang_neuralese.rl.native_replay import prepare_objective, NativePolicyObjective
+    from natlang_neuralese.data.native_graph import parse_graph
+    from test_rl_episode_graph import attach_execution_graph
+    model, roles, identity, _, block, turns = actor_rollout('lfm')
+    raw_turns = [{'messages': [], 'target': {}, 'invocation_id': turn['graph_turn'],
+                  'sampling': turn['sampling'], 'replay': {'raw_calls_retained': True}} for turn in turns]
+    rewards = [{'quality': 1, 'neuralese_bonus': .1}, {'quality': 1}, {'quality': 0}]
+    episodes = [{'task_id': 'train-task', 'sample': sample, 'split': 'train', 'group': 'g', 'reward': reward,
+                 'policy': {'checkpoint_sha256': identity['checkpoint_sha256']}, 'turns': copy.deepcopy(raw_turns)}
+                for sample, reward in enumerate(rewards)]
+    attach_execution_graph(episodes)
+    graphs, spec = prepare_objective(episodes, identity=identity, roles=roles, fetch_block=lambda key: block,
+                                     mode='rft')
+    rows = list(spec['rows'].values())
+    assert len(graphs) == 2  # both correct episodes stay eligible; the failure is not a target
+    assert [row.get('rft_weight') for row in rows] == [1.1, None]
+    assert [row.get('neuralese_bonus') for row in rows] == [.1, None]
+    spec_path = tmp_path / 'objective.json'
+    spec_path.write_text(json.dumps(spec))
+    objective = NativePolicyObjective(spec_path)
+    losses = []
+    for graph in graphs:
+        example = parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint'])
+        context = {'examples': [example], 'row_offsets': {example.id: {'physical_start': 0, 'external_names': {}}}}
+        with torch.no_grad():
+            loss, _ = objective(model, model(example.plan, retain_states=False), context)
+        losses.append(float(loss))
+    assert losses[0] == pytest.approx(1.1 * losses[1], rel=1e-5)
+    # A bonus is never accepted on a failed episode.
+    forged = copy.deepcopy(episodes[2]); forged['reward'] = {'quality': 0, 'neuralese_bonus': .1}
+    with pytest.raises(ValueError, match='bonus'):
+        prepare_objective([forged], identity=identity, roles=roles, fetch_block=lambda key: block, mode='rft')
+
+
+def test_outcome_stays_primary_in_normalized_grpo():
+    from natlang_neuralese.rl.native_replay import prepare_objective
+    from test_rl_episode_graph import attach_execution_graph
+    _, roles, identity, _, block, turns = actor_rollout('lfm')
+    raw_turns = [{'messages': [], 'target': {}, 'invocation_id': turn['graph_turn'],
+                  'sampling': turn['sampling'], 'replay': {'raw_calls_retained': True}} for turn in turns]
+    def group(rewards):
+        rows = [{'task_id': 'train-task', 'sample': sample, 'split': 'train', 'group': 'g', 'reward': reward,
+                 'policy': {'checkpoint_sha256': identity['checkpoint_sha256']}, 'turns': copy.deepcopy(raw_turns)}
+                for sample, reward in enumerate(rewards)]
+        return attach_execution_graph(rows)
+    options = dict(identity=identity, roles=roles, fetch_block=lambda key: block)
+    # A bonus difference alone (all correct) is no outcome spread for std-normalized GRPO.
+    graphs, _ = prepare_objective(group([{'quality': 1, 'neuralese_bonus': .1}, {'quality': 1}]), **options)
+    assert graphs == []
+    _, spec = prepare_objective(group([{'quality': 1, 'neuralese_bonus': .1}, {'quality': 1}, {'quality': 0}]),
+                                **options)
+    advantages = [row['advantage'] for row in spec['rows'].values()]
+    assert advantages[0] > advantages[1] > 0 > advantages[2]

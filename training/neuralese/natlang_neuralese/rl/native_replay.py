@@ -696,6 +696,10 @@ class NativePolicyObjective:
                     or any(not isinstance(name, str) or not name for name in names)
                     or len(names) != len(set(names))):
                 raise ValueError('native policy objective needs its complete admitted episode-turn inventory')
+            weight = row.get('rft_weight')
+            if weight is not None and (self.spec['mode'] != 'rft' or type(weight) not in (int, float)
+                                       or not 1 < weight <= 2):
+                raise ValueError('native policy objective rft_weight is a self-distillation return in (1, 2]')
         self.behavior_policy=self.spec.get('behavior_policy') if self.spec['schema']=='natlang.native-policy-objective/2' else None
         if self.spec['schema']=='natlang.native-policy-objective/2':
             self.identity=self.spec['base_native_identity']
@@ -997,6 +1001,8 @@ class NativePolicyObjective:
                 if len(jolt_parts) > parts_before:
                     jolt_parts[-1]['kl_sum'] += kl_sum
                     jolt_parts[-1]['positions'] += len(decisions)
+            if self.spec['mode'] == 'rft' and 'rft_weight' in row:
+                terms = terms * float(row['rft_weight'])
             losses.append(terms.sum()); count += len(actions) + len(decisions)
         if count == 0:
             raise ValueError('native objective batch has no actual sampled actions')
@@ -1050,6 +1056,9 @@ def _require_scored_training_episode(rollout, identity,*,actors=None):
             or type(quality) not in (int, float) or not 0 <= quality <= 1
             or actor != identity['checkpoint_sha256'] and actor not in (actors or {}).get('actors', {})):
         raise ValueError('native RL requires exact scored train-only actor episodes')
+    bonus = rollout['reward'].get('neuralese_bonus')
+    if bonus is not None and (type(bonus) not in (int, float) or not 0 < bonus <= 1 or quality != 1):
+        raise ValueError('native RL Neuralese-use bonus belongs only to correct episodes and lies in (0, 1]')
     if not rollout.get('task_id') or not rollout.get('turns') or any(
             not (turn.get('replay') or {}).get('raw_calls_retained') for turn in rollout['turns']):
         raise ValueError('native RL episode lacks task identity or exact raw-call replay')
@@ -1097,7 +1106,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex
     from .episode_graph import whole_episode_turns
-    from .rollout_math import group_advantages
+    from .rollout_math import group_advantages, rollout_return
     from ..serve.store import native_state_id
     if behavior_policy is not None:
         validate_invocation_behavior_policy(behavior_policy,identity)
@@ -1125,12 +1134,17 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     graphs, objective_rows = [], {}
     adapter_binding, binding_seen = None, False
     for members in grouped.values():
+        # Returns are the task outcome plus any recorded Neuralese-use bonus (only ever on correct episodes).
+        # The outcome stays primary: std-normalized GRPO admits a group only for real outcome spread, so a
+        # bonus difference alone never becomes a full-scale normalized advantage.
+        returns = [rollout_return(row) for row in members]
         advantages, stats = group_advantages([row['reward']['quality'] for row in members])
+        if stats['spread']:
+            advantages, _ = group_advantages(returns)
         if jolt is not None:
             # JOLT+: returns minus the group mean; the dense self-teaching term needs no spread.
-            qualities = [row['reward']['quality'] for row in members]
-            mean = sum(qualities) / len(qualities)
-            advantages = [quality - mean if len(qualities) > 1 else 0. for quality in qualities]
+            mean = sum(returns) / len(returns)
+            advantages = [value - mean if len(returns) > 1 else 0. for value in returns]
         elif mode == 'grpo' and not stats['spread']:
             continue
         for rollout, advantage in zip(members, advantages):
@@ -1189,6 +1203,12 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 **({'decision_actions': decisions,
                     'graph_nodes': [node.name for node in replay.plan.invocations]} if decisions else {}),
                 'actions': actions, 'advantage': float(advantage or 0.),
+                # Self-distillation prefers successful Neuralese-using episodes: their sampled-output CE is
+                # weighted by the episode return (1 + bonus); other correct episodes keep weight 1.
+                **({'neuralese_bonus': rollout['reward']['neuralese_bonus']}
+                   if rollout['reward'].get('neuralese_bonus') else {}),
+                **({'rft_weight': rollout_return(rollout)}
+                   if mode == 'rft' and rollout['reward'].get('neuralese_bonus') else {}),
                 **({'jolt': jolt_row} if jolt_row is not None else {}),
                 **({'protocol_failures':replay.protocol_failures} if replay.protocol_failures else {}),
                 'external_consumption_receipts': replay.external_receipts or {},

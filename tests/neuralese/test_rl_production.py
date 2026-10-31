@@ -508,6 +508,18 @@ def test_resolve_collection_binding_keeps_recorded_teacher_attempts():
     assert production.resolve_collection_binding(base, base, 1, 'crisp') == (base, 0)
 
 
+def test_neuralese_use_bonus_is_bound_on_new_collections_and_recorded_ones_keep_their_behaviour():
+    from natlang_neuralese.rl.task_rollouts import DEFAULT_NEURALESE_USE_BONUS, neuralese_use_bonus
+    assert neuralese_use_bonus(None) == DEFAULT_NEURALESE_USE_BONUS == 0.1 and neuralese_use_bonus(0) == 0.
+    current = {'cases_sha256': 'a', 'neuralese_use_bonus': 0.1}
+    assert production.resolve_neuralese_bonus(None, current) == (current, 0.1)
+    assert production.resolve_neuralese_bonus(current, current) == (current, 0.1)
+    # An in-flight collection bound before the bonus existed keeps its recorded (bonus-free) behaviour.
+    assert production.resolve_neuralese_bonus({'cases_sha256': 'a'}, current) == ({'cases_sha256': 'a'}, 0.)
+    opted_out = {'cases_sha256': 'a', 'neuralese_use_bonus': 0.}
+    assert production.resolve_neuralese_bonus(opted_out, opted_out) == (opted_out, 0.)
+
+
 def test_resume_preflight_unbound_round_writes_nothing_outside_scratch(tmp_path):
     out = tmp_path / 'lineage'
     (out / 'round-000003').mkdir(parents=True)

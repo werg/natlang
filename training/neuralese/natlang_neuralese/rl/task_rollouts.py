@@ -27,6 +27,49 @@ from .rollout_math import group_advantages
 from ..common.task_roots import student_root_row, authored_root_row
 
 UNSCORED_OUTCOMES = {"infrastructure_error", "unresolved"}
+# Owner 2026-10-31: reward Neuralese use. A correct student episode whose captured execution graph passes native
+# state between calls (a real producer export that a consumer actually imported) earns this bonus on top of the
+# success reward (1.0); outcome stays primary and failed episodes never earn it. 0 is the explicit opt-out.
+DEFAULT_NEURALESE_USE_BONUS = 0.1
+
+
+def neuralese_use_bonus(value: Any) -> float:
+    """The configured bonus (None means the default); finite and nonnegative, at most the success reward."""
+    value = DEFAULT_NEURALESE_USE_BONUS if value is None else value
+    if type(value) not in (int, float) or not 0 <= value <= 1:
+        raise ValueError("neuralese_use_bonus must be a number in [0, 1] (0 opts out)")
+    return float(value)
+
+
+def neuralese_exchanges(rollout: dict[str, Any]) -> int:
+    """Count the episode's real between-call Neuralese edges from its captured graph, never from text or markers.
+
+    An edge is a ``block_read`` whose one exact input is an in-episode ``block_write`` of the same state, made by a
+    model turn of a different invocation. ``validate_rollout_graph`` first binds every graph write/read to the
+    turns' actual captured state exports (``sampling.writes``) and native-state imports (``sampling.prompt``), so a
+    read with no captured import, or an import of an external/older state, is not an exchange. An episode whose
+    graph or capture does not validate counts zero."""
+    from .episode_graph import validate_rollout_graph
+    try:
+        _, nodes = validate_rollout_graph(rollout)
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return 0
+    def invocation(turn: Any) -> Any:
+        event = nodes.get(turn) or {}
+        return event.get("call_id") or (turn.rsplit("#turn", 1)[0] if isinstance(turn, str) else None)
+    count = 0
+    for event in nodes.values():
+        if event.get("kind") != "block_read":
+            continue
+        sources = [edge.get("node") for edge in event.get("inputs") or []
+                   if isinstance(edge, dict) and edge.get("block") == event.get("block")]
+        writer = nodes.get(sources[0]) if len(sources) == 1 else None
+        if (writer is None or writer.get("kind") != "block_write" or writer.get("block") != event.get("block")
+                or writer.get("turn") == event.get("turn")):
+            continue
+        if invocation(writer.get("turn")) != invocation(event.get("turn")):
+            count += 1
+    return count
 
 
 def reward_of(outcome: str, finish: dict[str, Any] | None = None) -> float | None:
@@ -372,8 +415,14 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
             "source_cases": str(args.cases), "ids": [row["id"] for row in selected]}
 
 
-def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str, Any]:
-    """Classify every rollout; with `emit`, also write `natlang.rollout/1` records for `grpo.py round`."""
+def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
+          neuralese_bonus: float | None = None) -> dict[str, Any]:
+    """Classify every rollout; with `emit`, also write `natlang.rollout/1` records for `grpo.py round`.
+
+    ``neuralese_bonus`` (None: DEFAULT_NEURALESE_USE_BONUS; 0 opts out) is added as ``reward.neuralese_bonus`` to a
+    successful student episode with at least one real between-call Neuralese edge (`neuralese_exchanges`). The
+    ``quality`` field stays the binary task outcome; learners use ``rollout_math.rollout_return``."""
+    bonus = neuralese_use_bonus(neuralese_bonus)
     run_dir = run_dir.resolve()
     emitted: list[dict[str, Any]] = []
     packet_path = run_dir / "packet.jsonl"
@@ -409,6 +458,14 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
             (finishes.get(entry["key"]) or {}).get("resource_limit_reason") == "model_request_budget" else None
         task = packet[entry["index"]]
         detail = ((result or {}).get("outcome") or {}).get("detail") if result else None
+        turns = budget_prefix["turns"] if budget_prefix else rollout_turns(result)
+        execution_graph = budget_prefix["execution_graph"] if budget_prefix else \
+            copy.deepcopy(((result or {}).get("outcome") or {}).get("execution_graph") or [])
+        exchanges = neuralese_exchanges({"turns": turns, "execution_graph": execution_graph}) if turns else 0
+        student = entry.get("jolt_role", "student") == "student"
+        # Privileged JOLT+ teacher attempts import harness-placed guidance; only the student policy's own
+        # between-call state passing is rewarded.
+        episode_bonus = bonus if student and reward == 1.0 and exchanges > 0 and bonus > 0 else 0.
         if emit is not None:
             training_reward = reward
             if result is None and reward is not None and budget_prefix is None:
@@ -422,11 +479,10 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
                             "policy": {"temperature": entry.get("temperature"),
                                 "checkpoint_sha256": preparation.get("policy_checkpoint_sha256"),
                                 "endpoint": entry.get("rl_endpoint")},
-                            "turns": budget_prefix["turns"] if budget_prefix else rollout_turns(result),
-                            "execution_graph": budget_prefix["execution_graph"] if budget_prefix else
-                                copy.deepcopy(((result or {}).get("outcome") or {}).get("execution_graph") or []),
+                            "turns": turns, "execution_graph": execution_graph,
                             "outcome": outcome,
-                            "reward": None if training_reward is None else {"quality": training_reward},
+                            "reward": None if training_reward is None else {"quality": training_reward,
+                                **({"neuralese_bonus": episode_bonus} if episode_bonus else {})},
                             "unscored": ("budget_prefix_capture_unavailable" if result is None and reward is not None and
                                          budget_prefix is None else outcome if reward is None else None),
                             **({"budget_termination_evidence": budget_prefix["evidence"]} if budget_prefix else {})})
@@ -434,6 +490,8 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
                          "sample": entry["sample"], "seed": entry["seed"], "outcome": outcome,
                          "reward": reward, "detail": detail if isinstance(detail, str) else None,
                          "finish_status": (finishes.get(entry["key"]) or {}).get("status"),
+                         "neuralese_exchanges": exchanges,
+                         **({"neuralese_bonus": episode_bonus} if episode_bonus else {}),
                          **({"jolt_role": entry["jolt_role"]} if "jolt_role" in entry else {})})
     groups = []
     for index, task in enumerate(packet):
@@ -460,13 +518,29 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
               "rollouts": len(rollouts), "outcome_counts": counts,
               "scored": sum(r["reward"] is not None for r in rollouts),
               "successes": sum(r["reward"] == 1.0 for r in rollouts),
-              "groups_with_spread": sum(g["spread"] for g in groups), "groups": groups}
+              "groups_with_spread": sum(g["spread"] for g in groups),
+              "neuralese": neuralese_metrics(rollouts, bonus), "groups": groups}
     (run_dir / "rewards.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rollouts), encoding="utf-8")
     if emit is not None:
         emit.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in emitted), encoding="utf-8")
         report["emitted_rollouts"] = str(emit)
     (run_dir / "score.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
+
+
+def neuralese_metrics(rollouts: list[dict[str, Any]], bonus: float) -> dict[str, Any]:
+    """Per-round Neuralese-use telemetry over scored student episodes (teacher attempts are excluded)."""
+    scored = [r for r in rollouts if r["reward"] is not None and r.get("jolt_role", "student") == "student"]
+    correct = [r for r in scored if r["reward"] == 1.0]
+    using = [r for r in scored if r.get("neuralese_exchanges", 0) > 0]
+    correct_using = [r for r in correct if r.get("neuralese_exchanges", 0) > 0]
+    awarded = [r.get("neuralese_bonus", 0.) for r in rollouts if r.get("neuralese_bonus")]
+    return {"bonus": bonus, "bonus_episodes": len(awarded), "bonus_total": sum(awarded),
+            "scored_episodes": len(scored), "episodes_using_neuralese": len(using),
+            "neuralese_use_rate": len(using) / len(scored) if scored else 0.,
+            "correct_episodes": len(correct), "correct_using_neuralese": len(correct_using),
+            "correct_neuralese_rate": len(correct_using) / len(correct) if correct else 0.,
+            "exchanges": sum(r.get("neuralese_exchanges", 0) for r in scored)}
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -492,8 +566,12 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--run-dir", type=Path, required=True)
     s.add_argument("--emit-rollouts", type=Path, default=None, help="write natlang.rollout/1 records here")
     s.add_argument("--round", type=int, default=0)
+    s.add_argument("--neuralese-use-bonus", type=float, default=None,
+                   help=f"bonus for correct episodes that pass Neuralese state between calls "
+                        f"(default {DEFAULT_NEURALESE_USE_BONUS}; 0 opts out)")
     args = parser.parse_args(argv)
-    result = prepare(args) if args.command == "prepare" else score(args.run_dir, args.emit_rollouts, args.round)
+    result = prepare(args) if args.command == "prepare" else score(args.run_dir, args.emit_rollouts, args.round,
+                                                                   args.neuralese_use_bonus)
     print(json.dumps(result, indent=2))
 
 

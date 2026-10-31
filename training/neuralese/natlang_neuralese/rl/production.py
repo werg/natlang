@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 from ..common.jsonio import read_jsonl, write_json_durable
 from ..common.paths import root
-from .task_rollouts import prepare, score
+from .task_rollouts import prepare, score, neuralese_use_bonus as bonus_setting
 
 
 def invalidate_checkpoint_readiness(state, checkpoint, *, reason):
@@ -432,7 +432,7 @@ def bind_collection_prompt(entries, mode):
 def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root_mode, runtime, seed_base,
                        neuralese_server, case_seconds, max_model_requests, max_turns, expected_native=None,
                        behavior_top_k=None, system_prompt=None, prompt_rendering=None, guidance_stage=None,
-                       coefficient_policy=None, context_tokens=None):
+                       coefficient_policy=None, context_tokens=None, neuralese_use_bonus=None):
     """The exact provenance a collection binds (no side effects): cases, policy, sampling, runtime and actor."""
     from ..common.hashing import sha256_file_hex, sha256_hex
     runtime = Path(runtime or root('repo') / 'ts-host')
@@ -445,6 +445,7 @@ def collection_binding(*, cases, endpoints, policy_id, rows, offset, group, root
         'endpoints': endpoints, 'neuralese_server': neuralese_server,
         **({'prompt_rendering':prompt_rendering} if prompt_rendering is not None else {}),
         **({'context_tokens': context_tokens} if context_tokens is not None else {}),
+        **({'neuralese_use_bonus': neuralese_use_bonus} if neuralese_use_bonus is not None else {}),
         'runtime': {str(p.relative_to(runtime)): sha256_file_hex(p)
                     for p in sorted((runtime / 'dist').rglob('*.js'))},
         'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py'),
@@ -474,6 +475,14 @@ def resolve_collection_binding(recorded, binding, teacher_attempts, teacher_plan
     return binding, teacher_attempts
 
 
+def resolve_neuralese_bonus(recorded, binding):
+    """(binding, bonus): a collection bound before the Neuralese-use bonus existed keeps its recorded
+    behaviour (no bonus); every new collection binds and applies its configured bonus."""
+    if recorded is not None and 'neuralese_use_bonus' not in recorded:
+        return {k: v for k, v in binding.items() if k != 'neuralese_use_bonus'}, 0.
+    return binding, binding.get('neuralese_use_bonus', 0.)
+
+
 def _legacy_collection_binding(recorded):
     """Bindings written before the semantic-adapter route was removed carry its always-null actor field;
     a null value binds nothing, so it is equal to the field's absence."""
@@ -487,7 +496,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
             behavior_top_k=None, teacher_attempts=0, teacher_plan='nl',
-            system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None):
+            system_prompt=None, prompt_rendering=None, guidance_stage=None, context_tokens=None,
+            neuralese_use_bonus=None):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
     ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
@@ -498,7 +508,9 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     guidance measured by the memetic learner); it is bound by digest into the collection binding.
     ``context_tokens`` is the agent's context budget per request (the actor's served window); None keeps the
     collector's 16384 default. The agent compacts its history at three quarters of it, so a budget far below the
-    served window forces compaction long before the model needs it."""
+    served window forces compaction long before the model needs it.
+    ``neuralese_use_bonus`` (None: task_rollouts.DEFAULT_NEURALESE_USE_BONUS; 0 opts out) is bound into the
+    collection binding and added to correct student episodes that pass Neuralese state between calls."""
     if prompt_rendering not in (None,'full'):
         raise ValueError('native on-policy collection requires the full prompt contract')
     if guidance_stage not in (None,'backbone'):
@@ -518,12 +530,13 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         case_seconds=case_seconds, max_model_requests=max_model_requests, max_turns=max_turns,
         expected_native=expected_native, behavior_top_k=behavior_top_k, system_prompt=system_prompt,
         prompt_rendering=prompt_rendering, guidance_stage=guidance_stage, coefficient_policy=coefficient_policy,
-        context_tokens=context_tokens)
+        context_tokens=context_tokens, neuralese_use_bonus=bonus_setting(neuralese_use_bonus))
     coefficient_runtime = (binding.get('coefficient_policy') or {}).get('runtime')
     if coefficient_policy is not None:
         coefficient_policy = Path(coefficient_policy).resolve(strict=True)
     receipt = out / 'collection-binding.json'
     recorded = json.loads(receipt.read_text()) if receipt.exists() else None
+    binding, bonus = resolve_neuralese_bonus(recorded, binding)
     binding, teacher_attempts = resolve_collection_binding(recorded, binding, teacher_attempts, teacher_plan)
     if recorded is not None:
         if _legacy_collection_binding(recorded) != binding:
@@ -634,7 +647,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         if teacher_attempts and not (control and control.stop.requested):
             from .jolt import teacher_entries
             write_journal_and_queue()
-            score(out, out / 'student-rollouts.jsonl')
+            score(out, out / 'student-rollouts.jsonl', neuralese_bonus=bonus)
             from .jolt import plan_command
             teachers = teacher_entries(entries, list(read_jsonl(out / 'student-rollouts.jsonl')),
                                        cases=Path(cases), config=config, out=out, attempts=teacher_attempts,
@@ -660,7 +673,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         # retire the actor and lose newly produced, unscored partial artifacts.
         retained_artifacts()
     write_journal_and_queue()
-    report = score(out, out / 'rollouts.jsonl')
+    report = score(out, out / 'rollouts.jsonl', neuralese_bonus=bonus)
     if teacher_attempts:
         report['jolt_teacher_attempts'] = {'requested_per_group': teacher_attempts,
                                            'entries': len(teachers['entries']), 'refusal': teachers['refusal'],
@@ -1045,7 +1058,8 @@ def prepare_round_collection(config, state, round_dir, selected_path, selection,
         **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
         teacher_attempts=teacher_attempts, teacher_plan=config.get('jolt_teacher_plan', 'nl'),
         guidance_stage=config.get('jolt_guidance_stage'), prompt_rendering=config.get('prompt_rendering'),
-        context_tokens=config.get('context_tokens'))
+        context_tokens=config.get('context_tokens'),
+        neuralese_use_bonus=bonus_setting(config.get('neuralese_use_bonus')))
     return config, values, policy, policy_loss, expected_native, kwargs
 
 
@@ -1147,8 +1161,9 @@ def resume_preflight(config_path, scratch):
     binding = collection_binding(**{key: kwargs[key] for key in ('cases', 'endpoints', 'policy_id', 'rows',
         'offset', 'group', 'root_mode', 'runtime', 'seed_base', 'neuralese_server', 'case_seconds',
         'max_model_requests', 'max_turns', 'behavior_top_k', 'prompt_rendering', 'guidance_stage',
-        'coefficient_policy', 'context_tokens') if key in kwargs}, expected_native=expected_native)
+        'coefficient_policy', 'context_tokens', 'neuralese_use_bonus') if key in kwargs}, expected_native=expected_native)
     recorded = json.loads(receipt.read_text())
+    binding, _ = resolve_neuralese_bonus(recorded, binding)
     binding, _ = resolve_collection_binding(recorded, binding, kwargs['teacher_attempts'], kwargs['teacher_plan'])
     differences = _binding_differences(_legacy_collection_binding(recorded), binding)
     report['collection'] = {'ok': not differences, 'differences': differences}
@@ -1679,6 +1694,7 @@ def configure_native(args):
         'endpoints': [endpoint], 'rows_per_round': 32, 'group': 4, 'workers': 4,
         'task_curriculum': DEFAULT_TASK_CURRICULUM.copy(),
         'neuralese_server': True, 'prompt_rendering': 'full', 'trainer_parameters': parameters,
+        'neuralese_use_bonus': bonus_setting(None),
         'production_recipe': str(args.production_recipe.resolve()), 'production_stage': args.production_stage,
         'actor_command': [python, str(actor_repo/'scripts/neuralese_data/serve_native_checkpoint.py'),
             '--store-dir', '{out}/actor-store',

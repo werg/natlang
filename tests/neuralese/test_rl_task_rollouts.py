@@ -387,3 +387,86 @@ def test_native_sampling_receipt_and_native_tool_parts_survive_rollout_emission(
     assert turn["sampling"] == receipt
     assert turn["target"]["content"] == result["trajectory"][0]["assistant"]["content"]
     assert turn["target"]["tool_calls"] == [raw_call]
+
+
+def _neuralese_result(*, accepted, consumer_imports=True, external_writer=False, marker_text=False):
+    """A collector result with a producer call and a consumer call; the consumer optionally imports its state."""
+    def step(call, sampling, content="ok"):
+        return {"phase": "action", "invocation_id": call, "context": [{"role": "user", "content": "q"}],
+                "assistant": {"content": content, "calls": []},
+                "model_response": {"raw_calls": [], "rl_sampling": sampling}}
+    producer = {"prompt": [{"kind": "tokens", "token_ids": [7], "producing": [False]}],
+                "writes": [{"state_id": "state"}]}
+    consumer = {"prompt": [{"kind": "tokens", "token_ids": [8], "producing": [False]},
+                           *([{"kind": "native_state", "id": "state"}] if consumer_imports else [])],
+                "writes": []}
+    events = [{"kind": "model_turn", "node": "producer#turn1", "call_id": "producer", "inputs": []},
+              {"kind": "model_turn", "node": "consumer#turn1", "call_id": "consumer", "inputs": []},
+              {"kind": "block_write", "node": "writer", "turn": "producer#turn1", "block": "state", "inputs": []}]
+    if consumer_imports:
+        events.append({"kind": "block_read", "node": "reader", "turn": "consumer#turn1", "block": "state",
+                       "inputs": [{"node": "older-outside-writer" if external_writer else "writer", "block": "state"}]})
+    text = "use state here" if marker_text else "ok"
+    outcome = ({"status": "done", "accepted": True} if accepted else
+               {"status": "failed", "detail": "model_incomplete: terminated_without_result"})
+    return {"trajectory": [step("producer", producer), step("consumer", consumer, text)],
+            "outcome": {**outcome, "execution_graph": events}}
+
+
+def _score_results(tmp_path, results, roles=None, **options):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    packet = [student_root_row(authored_root_row(_row()))]
+    (tmp_path / "packet.jsonl").write_text("".join(json.dumps(r) + "\n" for r in packet))
+    (tmp_path / "preparation.json").write_text(json.dumps({"root_mode": "student"}))
+    entries = build_queue(tmp_path / "packet.jsonl", 1, len(results), tmp_path, temperature=1.0, case_seconds=60,
+                          max_model_requests=8, max_turns=4, seed_base=0)
+    for entry, role in zip(entries, roles or []):
+        if role:
+            entry["jolt_role"] = role
+    (tmp_path / "queue.jsonl").write_text("".join(json.dumps(e) + "\n" for e in entries))
+    for entry, result in zip(entries, results):
+        output = tmp_path / entry["output"]
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(result) + "\n")
+    report = score(tmp_path, tmp_path / "rollouts.jsonl", **options)
+    from natlang_neuralese.eval.task_packet import read_jsonl
+    return report, read_jsonl(tmp_path / "rollouts.jsonl")
+
+
+def test_neuralese_bonus_only_for_correct_episodes_with_a_real_producer_consumer_import(tmp_path):
+    from natlang_neuralese.rl.rollout_math import rollout_return
+    plain = {"trajectory": [{"phase": "action", "invocation_id": "root", "context": [{"role": "user", "content": "q"}],
+                             "assistant": {"content": "ok", "calls": []}, "model_response": {"raw_calls": []}}],
+             "outcome": {"status": "done", "accepted": True}}
+    report, rows = _score_results(tmp_path, [
+        _neuralese_result(accepted=True),                       # correct + real exchange: bonus
+        _neuralese_result(accepted=False),                      # failed + real exchange: never a bonus
+        plain,                                                  # correct without Neuralese: rewarded, no bonus
+        _neuralese_result(accepted=True, consumer_imports=False, marker_text=True),  # markers, no import
+        _neuralese_result(accepted=True, external_writer=True),  # import of an older outside state
+    ])
+    assert [row["outcome"] for row in rows] == ["task_success", "model_incomplete", "task_success",
+                                                "task_success", "task_success"]
+    assert rows[0]["reward"] == {"quality": 1.0, "neuralese_bonus": 0.1}
+    assert rows[1]["reward"] == {"quality": 0.0}
+    assert rows[2]["reward"] == {"quality": 1.0}
+    assert rows[3]["reward"] == {"quality": 1.0}
+    assert rows[4]["reward"] == {"quality": 1.0}
+    assert [rollout_return(row) for row in rows] == [1.1, 0.0, 1.0, 1.0, 1.0]
+    metrics = report["neuralese"]
+    assert metrics["bonus"] == 0.1 and metrics["bonus_episodes"] == 1 and metrics["bonus_total"] == 0.1
+    assert metrics["correct_episodes"] == 4 and metrics["correct_using_neuralese"] == 1
+    assert metrics["correct_neuralese_rate"] == 0.25
+    assert metrics["episodes_using_neuralese"] == 2 and metrics["neuralese_use_rate"] == 0.4
+    assert report["groups"][0]["route"] == "grpo"  # curriculum routes stay on the task outcome
+
+
+def test_neuralese_bonus_opt_out_and_teacher_attempts_get_none(tmp_path):
+    report, rows = _score_results(tmp_path / "off", [_neuralese_result(accepted=True)] * 2, neuralese_bonus=0)
+    assert all(row["reward"] == {"quality": 1.0} for row in rows) and report["neuralese"]["bonus_episodes"] == 0
+    assert report["neuralese"]["correct_using_neuralese"] == 2
+    report, rows = _score_results(tmp_path / "teacher", [_neuralese_result(accepted=True)] * 2,
+                                  roles=[None, "teacher"])
+    assert rows[0]["reward"] == {"quality": 1.0, "neuralese_bonus": 0.1} and rows[1]["reward"] == {"quality": 1.0}
+    with pytest.raises(ValueError, match="neuralese_use_bonus"):
+        _score_results(tmp_path / "bad", [_neuralese_result(accepted=True)] * 2, neuralese_bonus=-0.1)
