@@ -296,7 +296,10 @@ export class Iteration<T> {
           throw new RangeError('iteration measure must be a nonnegative safe integer');
         return remaining;
       } catch (error) {
-        throw new IterationStepError(`iteration measure failed: ${(error as Error)?.message ?? error}`, state, trajectory as never, error);
+        const hint = typeof value === 'function' && value === this.step
+          ? ' The initial state is the step callable itself. For step.iterateOn(initialState, ...fixedArgs), ' +
+            'omit the step from the arguments; only the free form iterateOn(step, initialState, ...fixedArgs) passes it explicitly.' : '';
+        throw new IterationStepError(`iteration measure failed: ${(error as Error)?.message ?? error}${hint}`, state, trajectory as never, error);
       }
     };
     let remaining: number | undefined;

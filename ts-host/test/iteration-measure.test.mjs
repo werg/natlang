@@ -6,6 +6,18 @@ import { Folder, APPLY_TO_FOLDER } from '../dist/native/scoped-fs.js';
 
 const run = fn => createNatlangRuntime().run(fn);
 
+test('a duplicated callable seed explains method versus free iterateOn arguments', async () => {
+  const step = state => ({ remaining: state.remaining - 1 });
+  await assert.rejects(() => run(() => iterateOn(step, step, { remaining: 2 })
+    .withMeasure(state => state.remaining).until(state => state.remaining === 0)), error => {
+    assert.ok(error instanceof IterationStepError);
+    assert.match(error.message, /initial state is the step callable itself/);
+    assert.match(error.message, /step\.iterateOn\(initialState, \.\.\.fixedArgs\)/);
+    assert.equal(error.lastState, step);
+    return true;
+  });
+});
+
 test('a decreasing measure and semantic review cooperate without replenishing remaining work', async () => {
   let reviews = 0;
   await assert.rejects(() => run(() => iterateOn(n => n - 1, 12)
