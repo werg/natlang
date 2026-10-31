@@ -3,6 +3,7 @@ import json
 import multiprocessing as mp
 import socket
 import time
+import traceback
 
 import torch
 from natlang_neuralese.train.diloco.coordinator import initialize_coordinator, serve_coordinator, _metadata
@@ -10,6 +11,18 @@ from natlang_neuralese.train.diloco.protocol import TensorSurface
 from natlang_neuralese.train.diloco.worker import DilocoLearner, DilocoSettings, Transport
 
 TOKEN='test-token-'+'x'*32
+# A request can consume its entire five-second transport timeout before its
+# future finishes unwinding. Allow durable queue I/O and that unwind before
+# declaring the checkpoint boundary unavailable on a loaded training host.
+QUIESCE_SECONDS=20
+
+
+def _quiesce(learner):
+    assert learner.quiesce_for_checkpoint(timeout_seconds=QUIESCE_SECONDS), {
+        'last_error':learner.last_error,
+        'pending':list(learner.pending),
+        'downloads':list(learner.downloads),
+    }
 
 
 def _worker(conn, worker, url, directory, restored):
@@ -40,26 +53,33 @@ def _worker(conn, worker, url, directory, restored):
                 optimizer.zero_grad();(model.weight * torch.rand_like(model.weight)).sum().backward();optimizer.step()
                 exposure+=1;learner.after_step(tokens=3);conn.send(('step',exposure,learner.local_steps))
             elif command in ('queue0','queue1'):
-                learner._queue(int(command[-1]));assert learner.quiesce_for_checkpoint(timeout_seconds=5);conn.send(('queued',))
+                learner._queue(int(command[-1]));_quiesce(learner);conn.send(('queued',))
             elif command=='settle':
-                assert learner.quiesce_for_checkpoint(timeout_seconds=5)
+                _quiesce(learner)
                 assert learner._collect_uploads(learner.local_steps)==0 and not learner.pending
                 conn.send(('settled',))
             elif command=='checkpoint':
-                assert learner.quiesce_for_checkpoint(timeout_seconds=5)
+                _quiesce(learner)
                 saved={'model':model.state_dict(),'optimizer':optimizer.state_dict(),'rng':torch.get_rng_state(),
                        'exposure':exposure,'diloco':learner.state_dict()}
                 path=directory/'checkpoint.pt';torch.save(saved,path)
                 conn.send(('checkpoint',str(path)))
             elif command=='close':
                 learner.close();conn.send(('closed',));return
+    except BaseException:
+        # Send the cause before process teardown, so parent cleanup cannot
+        # erase a slow-I/O assertion behind an uninformative pipe EOF.
+        conn.send(('worker-error',traceback.format_exc()))
+        raise
     finally:conn.close()
 
 
 def _call(conn, command):
     conn.send(command)
-    assert conn.poll(20), command
-    return conn.recv()
+    assert conn.poll(QUIESCE_SECONDS+25), command
+    result=conn.recv()
+    assert result[0]!='worker-error', result[1]
+    return result
 
 
 def _wait_status(transport, predicate):
