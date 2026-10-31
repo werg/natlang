@@ -254,7 +254,8 @@ def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, 
     record={'schema':'natlang.native-oversize-live-capacity/1','global_step':global_step,
             'parent_checkpoint_sha256':checkpoint_sha256,'source':binding(source_path),
             'baseline':baseline,'model_boundary':'current-live-model-before-update',
-            'capacity':report,'passed':report['passed'],'optimizer_updates':0,'earned_exposure':0}
+            'capacity':report,'passed':report['passed'],'optimizer_updates':0,'earned_exposure':0,
+            'scope':'whole-graph forward/backward with retained gradients; excludes optimizer-step workspace'}
     path=Path(args.out)/'oversize-capacity'/(canonical_json_sha256_hex(record)+'.json')
     path.parent.mkdir(parents=True,exist_ok=True)
     if not path.exists():write_json_durable(path,record)
