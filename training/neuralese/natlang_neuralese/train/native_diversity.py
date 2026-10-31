@@ -93,8 +93,11 @@ def cohort_head_merge(entries,batches,cohorts,*,priority_ids=(),focus_ids=(),bat
     def key(visit,indices):
         row=entries[indices[0]]
         return visit,scheduling_rank(row),bool(any(entries[i]['id'] in priorities for i in indices))
+    focused_seen=set()
     for position,(visit,indices,end) in enumerate(batches):
-        if any(entries[i]['id'] in focus for i in indices):
+        present={entries[i]['id'] for i in indices} & focus
+        if present-focused_seen:
+            focused_seen.update(present)
             slots.append((position,visit,None,indices,end));continue
         k=key(visit,indices);slots.append((position,visit,k,None,end));queues=groups.setdefault(k,{})
         for index in indices:queues.setdefault(cohorts[index],deque()).append((position,index))
@@ -133,8 +136,13 @@ def cohort_head_merge(entries,batches,cohorts,*,priority_ids=(),focus_ids=(),bat
         if not consumed:raise ValueError('cohort-head merge cannot make progress')
     # Reapply the existing four-fast/one-debt cycle after repacking changes
     # the number of batches. Focus remains an explicit leading obligation.
-    focused=[b for b in result if any(entries[i]['id'] in focus for i in b[1])]
-    other=[b for b in result if not any(entries[i]['id'] in focus for i in b[1])]
+    focused=[];other=[];focused_seen=set()
+    for batch in result:
+        present={entries[i]['id'] for i in batch[1]} & focus
+        if present-focused_seen:
+            focused.append(batch);focused_seen.update(present)
+        else:
+            other.append(batch)
     fast=[b for b in other if entries[b[1][0]].get('communication') or entries[b[1][0]].get('training_priority',0)>0]
     debt=[b for b in other if not entries[b[1][0]].get('communication') and entries[b[1][0]].get('training_priority',0)==0]
     if fast and debt:
@@ -160,12 +168,14 @@ def sustained_communication_interleave(entries, batches, *, focus_ids=(), schedu
     """
     focus = set(focus_ids or ())
     focused, comm, urgent, debt = [], [], [], []
+    focused_seen=set()
     for batch in batches:
         indices = batch[1]
         if not indices:
             raise ValueError('sustained interleave received an empty batch')
-        if any(entries[i]['id'] in focus for i in indices):
-            focused.append(batch)
+        present={entries[i]['id'] for i in indices} & focus
+        if present-focused_seen:
+            focused.append(batch);focused_seen.update(present)
         elif entries[indices[0]].get('communication'):
             if not all(entries[i].get('communication') for i in indices):
                 raise ValueError('sustained interleave requires homogeneous communication batches')

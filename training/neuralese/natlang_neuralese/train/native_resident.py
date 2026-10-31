@@ -333,6 +333,15 @@ def same_geometry_identity(previous, current):
         if (isinstance(model,dict) and 'history_reasoning_policy' in model
                 and model['history_reasoning_policy'] != 'keep'):
             return False
+    before = previous.get('model_config') if isinstance(previous, dict) else None
+    after = current.get('model_config') if isinstance(current, dict) else None
+    restore_changed = isinstance(before, dict) and isinstance(after, dict) and before.get('base_restore') != after.get('base_restore')
+    if restore_changed:
+        from ..model.native_precision import base_restore_transition
+        try:
+            base_restore_transition(before, after)
+        except ValueError:
+            return False
     def explicit(value):
         if not isinstance(value,dict):return value
         result=dict(value)
@@ -340,6 +349,7 @@ def same_geometry_identity(previous, current):
             result['model_config']=dict(value['model_config'])
             result['model_config'].setdefault('native_attention_precision','ieee')
             result['model_config'].pop('history_reasoning_policy',None)
+            if restore_changed:result['model_config'].pop('base_restore',None)
         return result
     return explicit(previous)==explicit(current)
 
@@ -1612,7 +1622,7 @@ class ResidentAdoption:
                     raise ValueError('resident restart lost actual carried withdrawal history')
                 write_json(initial, {**prior, 'owner': process_owner(), 'withdrawal_history':self.withdrawal_history})
         self.initial = json.loads((self.directory/'initial.json').read_text())
-        if self.initial.get('geometry_identity') != geometry_identity:
+        if not same_geometry_identity(self.initial.get('geometry_identity'), geometry_identity):
             raise ValueError('resident geometry identity changed; use drained runtime handoff')
         actual = self.plan['stage_inputs'][stage_id]
         if (actual['native_graphs']['sha256'] != train.file_sha256

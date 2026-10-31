@@ -3854,7 +3854,7 @@ def _main(argv=None, *, requested_refresh):
                     'physical_forward_tokens': physical_tokens,
                     'physical_prefix_savings': batch_tokens - physical_tokens,
                     'activation_dtype': str(model.port.embedding_weight.dtype),
-                    'ordinary_loss_normalization': batch[0].loss_normalization if batch else None,
+                    'ordinary_loss_normalization': getattr(batch[0], 'loss_normalization', 'graph') if batch else None,
                     'communication_prefixes_enabled': _communication_prefix_allowed(backend, precision_pass),
                     'readout_forward_rows': details[0]['readout_forward_rows'],
                     'readout_original_rows': details[0]['readout_original_rows'],

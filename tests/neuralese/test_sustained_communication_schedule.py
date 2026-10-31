@@ -19,3 +19,17 @@ def test_sustains_communication_and_preserves_batches_on_resume():
         for visit in {v for v, _, _ in result}:
             positions = [n for n, (v, _, _) in enumerate(result) if v == visit]
             assert [n for n in positions if result[n][2]] == [positions[-1]]
+
+
+def test_focused_communication_promotes_one_visit_and_spreads_remaining():
+    from natlang_neuralese.train.native_diversity import cohort_head_merge
+    entries=[{'id':'new','communication':True,'training_priority':1,'forward_tokens':100,'groups':[]},
+             {'id':'ordinary','communication':False,'training_priority':0,'forward_tokens':1,'groups':[]}]
+    batches=[(visit,[0],False) for visit in range(7)] + [(visit,[1],False) for visit in range(20)]
+    merged=cohort_head_merge(entries,batches,['comm','ordinary'],focus_ids={'new'},batch_tokens=10,batch_graphs=1)
+    actual=sustained_communication_interleave(entries,merged,focus_ids={'new'})
+    assert actual[0][1]==[0]
+    assert sum(batch[1]==[0] for batch in actual)==7
+    assert any(batch[1]==[1] for batch in actual[1:5])
+    assert any(batch[1]==[0] for batch in actual[-8:])
+    assert sorted((visit,tuple(indices)) for visit,indices,_ in actual)==sorted((visit,tuple(indices)) for visit,indices,_ in batches)
