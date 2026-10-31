@@ -132,7 +132,8 @@ def test_gate_failure_before_update_preserves_durable_checkpoint(tmp_path, monke
     assert before['training']['exposure_counts']==after['training']['exposure_counts']
 
 
-def test_retained_capacity_keeps_accumulated_gradients_during_backward():
+@pytest.mark.parametrize('mode', ['plain', 'vjp'])
+def test_retained_capacity_keeps_accumulated_gradients_during_backward(mode):
     from test_shared_state import tiny
     from test_native_optimizer_checkpointing import examples
     from natlang_neuralese.model.shared_state import SharedStateModel
@@ -143,7 +144,7 @@ def test_retained_capacity_keeps_accumulated_gradients_during_backward():
     params=[p for _,p in optimizer._native_named_parameters if p.requires_grad]
     counts=[]
     result=qualify_capacity(model,optimizer,examples()[:1],checkpoint_sha256='a'*64,source_binding={},
-        cotangent_mode='plain',retained_gradients=True,
+        cotangent_mode=mode,retained_gradients=True,
         gradient_observer=lambda name,gradient:counts.append(sum(p.grad is not None for p in params)))
     assert result['passed'] and not result['gradients_released_per_parameter']
     assert counts and min(counts)==len(params)
