@@ -89,32 +89,3 @@ class FusedRMSNorm(torch.autograd.Function):
 
 def fused_rms_norm(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
     return FusedRMSNorm.apply(x, weight, eps)
-
-
-@triton.jit
-def _stored_norm_input_kernel(x_ptr, grad_ptr, weight_ptr, dx_ptr, columns, eps, BLOCK: tl.constexpr):
-    row = tl.program_id(0).to(tl.int64)
-    col = tl.arange(0, BLOCK)
-    mask = col < columns
-    x = tl.load(x_ptr + row * columns + col, mask=mask, other=0).to(tl.float32)
-    grad = tl.load(grad_ptr + row * columns + col, mask=mask, other=0).to(tl.float32)
-    weight = tl.load(weight_ptr + col, mask=mask, other=0).to(tl.float32)
-    inv = tl.rsqrt(tl.sum(x * x, 0) / columns + eps)
-    dy = (grad * weight).to(dx_ptr.dtype.element_ty).to(tl.float32)
-    dot = tl.sum(dy * x, 0) / columns
-    dx = (dy - x * (inv * inv) * dot) * inv
-    tl.store(dx_ptr + row * columns + col, dx, mask=mask)
-
-
-def stored_norm_input_gradient(x: torch.Tensor, gradient: torch.Tensor, weight: torch.Tensor, eps: float):
-    """One independent FP32 reduction per token, with BF16 carrier casts."""
-    columns = x.shape[-1]
-    rows = x.reshape(-1, columns).contiguous()
-    grad = gradient.reshape(-1, columns).contiguous()
-    w = weight.contiguous()
-    output = torch.empty_like(rows)
-    block = triton.next_power_of_2(columns)
-    if rows.shape[0]:
-        _stored_norm_input_kernel[(rows.shape[0],)](rows, grad, w, output, columns, eps, BLOCK=block,
-            num_warps=min(16, max(1, block // 256)), enable_fp_fusion=False)
-    return output.reshape(x.shape)

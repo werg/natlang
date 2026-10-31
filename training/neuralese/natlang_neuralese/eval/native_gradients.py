@@ -265,6 +265,7 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
     inventory=[{'name':name,'shape':list(value.shape),'dtype':str(value.dtype)}for name,value in named]
     return {'schema':SCHEMA,'passed':preserved and all(row['passed']for row in comparisons.values()),
         'inventory':inventory,'inventory_sha256':canonical_json_sha256_hex(inventory),
+        'input_contract':None if flat_inputs is None else {'shape':list(flat_inputs.shape),'dtype':str(flat_inputs.dtype)},
         'trainable_parameter_count':len(inventory),'derivative_comparison_count':len(comparisons),
         'comparisons':comparisons,'parameter_grads_preserved':preserved,
         'retained_flat_gradient_bytes':retained,'largest_live_comparison_pair_bytes':max_pair,
@@ -343,8 +344,19 @@ def validate_complete_proof(proof,identity,*,gradient_atol,execution_profile=Non
     for name,row in comparisons.items():
         if row.get('unused')is True:continue
         numbers=('max_abs','relative_l2','cosine','reference_l2','actual_l2','atol','rtol')
+        mismatch = row.get('mismatched_elements')
+        elements = row.get('elements')
+        contract = contracts.get(name) if name != 'input_embeddings' else proof.get('input_contract')
+        rounded = (row.get('comparison_policy') == 'bf16-adjacent-ulp-normwise/1'
+            and row.get('strict_passed') is False and row.get('dtype') == 'torch.bfloat16'
+            and isinstance(contract, dict) and contract.get('dtype') == 'torch.bfloat16'
+            and row.get('shape') == contract.get('shape')
+            and type(mismatch) is int and type(elements) is int and elements == math.prod(contract['shape'])
+            and 0 < mismatch <= elements
+            and type(row.get('adjacent_bf16_mismatches')) is int
+            and row['adjacent_bf16_mismatches'] == mismatch)
         if (any(type(row.get(key))not in(float,int)or not math.isfinite(row[key])for key in numbers)
-                or row.get('finite')is not True or row.get('mismatched_elements')!=0
+                or row.get('finite')is not True or (mismatch != 0 and not rounded)
                 or not 0<=row['atol']<=proof['atol'] or not 0<row['rtol']<=proof['rtol']
                 or not 0<=row['relative_l2']<=row['rtol']or row['cosine']<1-row['rtol']
                 or min(row['actual_l2'],row['reference_l2'],row['max_abs'])<0

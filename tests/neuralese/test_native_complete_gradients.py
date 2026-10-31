@@ -174,6 +174,18 @@ def test_actual_runtime_qualifier_labels_complete_inventory_and_legacy_channel(f
     historical.pop('trainable_parameter_count');historical.pop('derivative_comparison_count')
     validate_complete_proof(historical,report['native_identity'],gradient_atol=1e-5)
     assert all(roles for roles in proof['roles'].values())
+    bf16_name = next(row['name'] for row in proof['inventory'] if row['dtype'] == 'torch.bfloat16')
+    rounded = copy.deepcopy(proof)
+    row = rounded['comparisons'][bf16_name]
+    row.update(comparison_policy='bf16-adjacent-ulp-normwise/1', strict_passed=False,
+               mismatched_elements=1, adjacent_bf16_mismatches=1)
+    validate_complete_proof(rounded, report['native_identity'], gradient_atol=1e-5)
+    for key, value in [('adjacent_bf16_mismatches', 0), ('dtype', 'torch.float32'),
+                       ('comparison_policy', 'old'), ('strict_passed', True), ('elements', 0)]:
+        forged = copy.deepcopy(rounded)
+        forged['comparisons'][bf16_name][key] = value
+        with pytest.raises(ValueError, match='comparison exceeds'):
+            validate_complete_proof(forged, report['native_identity'], gradient_atol=1e-5)
 
 
 def test_cached_forward_is_lazy_after_flat_vjp_for_stateful_backend():

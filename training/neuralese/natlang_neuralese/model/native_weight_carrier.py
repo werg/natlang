@@ -1165,8 +1165,24 @@ class _TorchStoredRMSNorm(torch.autograd.Function):
         dw, anchor_grads = _stored_norm_gain_gradient(x, products, ctx.partitions,
             ctx.parameter, ctx.anchors, ctx.scope)
         if x.is_cuda and x.dtype == gradient.dtype == torch.bfloat16 and not torch.is_grad_enabled():
-            from ..maple.norm_kernels import stored_norm_input_gradient
-            dx = stored_norm_input_gradient(x, gradient, weight, ctx.eps)
+            # Keep token-local reduction geometry fixed across flat and cached
+            # graphs. CUDA reductions can otherwise round differently when the
+            # same rows arrive in differently sized invocations.
+            rows = x.reshape(-1, x.shape[-1])
+            grads = gradient.reshape(-1, gradient.shape[-1])
+            pieces = []
+            for start in range(0, rows.shape[0], 128):
+                part, incoming = rows[start:start + 128], grads[start:start + 128]
+                count = part.shape[0]
+                if count < 128:
+                    part = F.pad(part, (0, 0, 0, 128 - count))
+                    incoming = F.pad(incoming, (0, 0, 0, 128 - count))
+                value = part.float()
+                inv = torch.rsqrt(value.square().mean(dim=-1, keepdim=True) + ctx.eps)
+                dy = (incoming * weight).to(x.dtype).float()
+                result = (dy - value * inv.square() * (dy * value).mean(dim=-1, keepdim=True)) * inv
+                pieces.append(result[:count].to(x.dtype))
+            dx = torch.cat(pieces, dim=0).reshape(x.shape)
         else:
             dy = (gradient * weight).to(x.dtype).float()
             dx = ((dy - xf * inverse.square() * (dy * xf).mean(dim=-1, keepdim=True)) * inverse).to(x.dtype)
