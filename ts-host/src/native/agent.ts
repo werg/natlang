@@ -212,7 +212,7 @@ export function collapseHistory(messages: Record<string, unknown>[], keptStart: 
 }
 
 
-function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> {
+export function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> {
   if (depth > 5) return {};
   const resolved = env.resolve(type);
   if (resolved.kind === 'refined' || resolved.kind === 'untrusted') return schemaOf(resolved.base, env, depth);

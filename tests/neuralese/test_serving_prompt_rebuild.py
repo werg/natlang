@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "training" / "neuralese"))
+import natlang_neuralese.data.serving_prompt as serving_prompt  # noqa: E402
 from natlang_neuralese.data.serving_prompt import load_surface, serving_messages  # noqa: E402
 
 SURFACE = load_surface()
@@ -21,7 +22,8 @@ def call(system, tools=None, extra=()):
             {"role": "user", "content": "You are inside this call: f(): number"}, *extra], tools
 
 
-def test_collector_and_runtime_prompts_replace_recorded_runtime_prose():
+def test_collector_and_runtime_prompts_replace_recorded_runtime_prose(monkeypatch):
+    monkeypatch.setattr(serving_prompt, "RETURN_SCHEMAS", lambda user: ({"type": "number"}, None))
     old = historical("interpreter")
     guidance = "\n\nProgram guidance: prefer the newest record."
     system = old + historical("generation-guidance") + guidance
@@ -31,11 +33,37 @@ def test_collector_and_runtime_prompts_replace_recorded_runtime_prose():
         assert messages[0]["content"] == SURFACE["bases"][entry]["default"] + guidance
         assert [t["function"]["name"] for t in tools] == ["eval", "read_page", "read_code", "compact_history",
                                                          "return_result"]
-        assert report["return_schema"] == "untyped"
+        assert report["return_schema"] == "derived"
+        assert tools[-1]["function"]["parameters"]["properties"]["value"]["type"] == "number"
         assert messages[1:] == call(system)[0][1:]
 
 
-def test_surface_follows_depth_limit_own_code_and_folder():
+def test_underivable_return_schema_keeps_the_recording(monkeypatch):
+    monkeypatch.setattr(serving_prompt, "RETURN_SCHEMAS", lambda user: (None, "unknown type"))
+    recorded = call(CURRENT["interpreter"]["text"])
+    messages, tools, report = serving_messages(*recorded, surface=SURFACE)
+    assert report["mode"] == "recorded" and report["reason"] == "return schema unavailable"
+    assert (messages, tools) == recorded
+
+
+def test_return_schemas_bridge_matches_ts_host(tmp_path):
+    import os
+    dist = os.environ.get("NATLANG_TS_DIST") or str(ROOT / "ts-host" / "dist")
+    agent = Path(dist) / "native" / "agent.js"
+    import shutil
+    if not shutil.which("node") or not agent.exists() or "export function schemaOf" not in agent.read_text():
+        import pytest
+        pytest.skip("needs a ts-host build that exports schemaOf")
+    bridge = serving_prompt._ReturnSchemas()
+    user = 'You are inside this call: route(ticket: Ticket): Destination\ntype Destination = "a" | "b";\n\nInstructions:\nx'
+    assert bridge(user) == ({"enum": ["a", "b"]}, None)
+    assert bridge("You are inside this call: f(): { n: number, tags: string[] }") == ({
+        "type": "object", "properties": {"n": {"type": "number"}, "tags": {"type": "array", "items": {"type": "string"}}},
+        "required": ["n", "tags"], "additionalProperties": False}, None)
+
+
+def test_surface_follows_depth_limit_own_code_and_folder(monkeypatch):
+    monkeypatch.setattr(serving_prompt, "RETURN_SCHEMAS", lambda user: ({"type": "number"}, None))
     system = CURRENT["interpreter/depth-limit"]["text"] + CURRENT["function-tools"]["text"] + \
         CURRENT["directory-reducer/editor/read-only/depth-limit"]["text"]
     messages, tools, report = serving_messages(*call(system), entry="runtime", surface=SURFACE)
@@ -59,7 +87,8 @@ def test_return_result_keeps_the_recorded_declared_type():
     assert list(value) == ["type", "description"]
 
 
-def test_other_calls_keep_their_recording():
+def test_other_calls_keep_their_recording(monkeypatch):
+    monkeypatch.setattr(serving_prompt, "RETURN_SCHEMAS", lambda user: ({"type": "number"}, None))
     harness = call("You are a coding agent.", [{"type": "function", "function": {"name": "bash"}}])
     assert serving_messages(*harness, surface=SURFACE)[2]["reason"] == "not a tool-loop call"
     assert serving_messages(*harness, surface=SURFACE)[:2] == harness

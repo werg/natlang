@@ -17,7 +17,8 @@ schemas of that surface (``NativeToolAgent.toolsScope``). ``serving_messages`` r
    verbatim in place.
 4. Tools become the surface's current schemas in the runtime's order. ``return_result`` keeps the recorded call's own
    declared-result fields of ``value`` (its type is the call's, never invented); a recorded call without tool schemas
-   gets the type-free value schema and is reported ``return_schema: untyped``.
+   gets ts-host's own schema of the declared result type in its opening (``ts-host/scripts/return-schemas.mjs``,
+   ``return_schema: derived``), or keeps its recording when that cannot be derived.
 
 A record that is not a tool-loop call (no interpreter piece: harness agents, decision readouts, predicates) or whose
 messages call a tool the current surface does not offer is returned unchanged with the reason; callers decide whether
@@ -175,6 +176,40 @@ def surface_tools(surface: dict, call: dict, recorded_tools) -> tuple[list, str]
     return tools, schema
 
 
+class _ReturnSchemas:
+    """ts-host's own return_result value schema (``schemaOf`` of the declared result type) for a call opening, from a
+    persistent ``ts-host/scripts/return-schemas.mjs`` child (one per process). ``NATLANG_TS_DIST`` names the ts-host
+    build (default ts-host/dist), ``NATLANG_NODE`` the node binary (default: node on PATH)."""
+    def __init__(self):
+        self.child, self.cache = None, {}
+
+    def __call__(self, user: str):
+        key = user.split('\n\nInstructions:', 1)[0]
+        if key not in self.cache:
+            import os
+            import shutil
+            import subprocess
+            if self.child is None or self.child.poll() is not None:
+                repo = Path(__file__).resolve().parents[4]
+                node = os.environ.get('NATLANG_NODE') or shutil.which('node')
+                if not node:
+                    raise RuntimeError('return schemas need node (NATLANG_NODE or PATH)')
+                dist = os.environ.get('NATLANG_TS_DIST') or str(repo / 'ts-host' / 'dist')
+                self.child = subprocess.Popen([node, str(repo / 'ts-host/scripts/return-schemas.mjs'), dist],
+                                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+            self.child.stdin.write(json.dumps({'user': key}) + '\n')
+            self.child.stdin.flush()
+            line = self.child.stdout.readline()
+            if not line:
+                raise RuntimeError('return-schemas child exited')
+            answer = json.loads(line)
+            self.cache[key] = answer.get('schema'), answer.get('error')
+        return self.cache[key]
+
+
+RETURN_SCHEMAS = _ReturnSchemas()
+
+
 def _called_tools(messages) -> set[str]:
     names = set()
     for message in messages:
@@ -200,6 +235,19 @@ def serving_messages(messages, tools, *, target=None, surface: dict | None = Non
     if call is None:
         return messages, tools, {**report, 'mode': 'recorded', 'reason': 'not a tool-loop call'}
     new_tools, return_schema = surface_tools(surface, call, tools)
+    if return_schema == 'untyped':
+        # Recorded without tool schemas: the value schema ts-host derives from the call's declared result type.
+        user = next((m.get('content') for m in messages if isinstance(m, dict) and m.get('role') == 'user'), None)
+        try:
+            schema, error = RETURN_SCHEMAS(user) if isinstance(user, str) else (None, 'no call opening')
+        except (OSError, RuntimeError, ValueError) as exc:
+            schema, error = None, f'{type(exc).__name__}: {exc}'
+        if schema is None:
+            return messages, tools, {**report, 'mode': 'recorded', 'reason': 'return schema unavailable',
+                                     'detail': str(error)[:200]}
+        value = new_tools[-1]['function']['parameters']['properties']['value']
+        new_tools[-1]['function']['parameters']['properties']['value'] = {**schema, 'description': value['description']}
+        return_schema = 'derived'
     offered = {t['function']['name'] for t in new_tools}
     missing = sorted(_called_tools(list(messages) + ([target] if isinstance(target, dict) else [])) - offered)
     if missing:
@@ -226,3 +274,14 @@ def serving_messages(messages, tools, *, target=None, surface: dict | None = Non
                    'recorded_system_sha256': hashlib.sha256(text.encode()).hexdigest(),
                    'serving_system_sha256': hashlib.sha256(out.encode()).hexdigest()})
     return [{**messages[0], 'content': out}, *messages[1:]], new_tools, report
+
+
+def program_header_messages(messages, *, surface: dict | None = None):
+    """ts-host's program-header rendering (``renderSystemPrompt``) of a rebuilt serving request: generic runtime prose
+    removed with the current and historical piece table, program declarations kept; an empty header has no system
+    turn. Tool schemas stay out of the prompt but still type the calls (``native_gold_packet``), as ts-host parses
+    header-mode calls against out-of-band schemas."""
+    from .prompt_rendering import apply_prompt_rendering
+    surface = surface or load_surface()
+    rendered, _ = apply_prompt_rendering(messages, None, 'program-header', surface['_bank'])
+    return rendered

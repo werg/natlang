@@ -1234,8 +1234,7 @@ def _render_shard_materialized(job):
                                                          require_independent_splits=False, prompt_rendering=mode,
                                                          target_reasoning=True,
                                                          writer_context_records=writer_context_records,
-                                                         serving_entry=_G.get('serving_entry') if mode == 'full'
-                                                         else None)
+                                                         serving_entry=_G.get('serving_entry'))
         for row, prov in zip(r, provenance):
             row['corpus'] = corpus
             row['prompt_rendering'] = mode
@@ -1255,8 +1254,8 @@ def _render_shard_materialized(job):
     kept_ph = []
     serving = _G.get('serving_entry') is not None
     if serving and not header_as_full and per_decision:
-        # The full view carries the current serving prompt, not the recorded one, so the strip derivation of the
-        # recorded prompt is not comparable; program-header rows are the renderer's own rendering of the recording.
+        # Both views render the current serving request (full: its prompt and schemas; program-header: ts-host's header
+        # of it), not the recording, so the strip derivation of the recorded prompt is not comparable.
         parity['serving_full_view_not_compared'] = len(rows.get('program-header', []))
     for full in ([] if header_as_full or not per_decision or serving else rows['full']):
         ph = by_id.get(full['id'])
@@ -2272,8 +2271,9 @@ def main(argv=None):
                    help='renderings to produce (e.g. whole-trajectory alone for long agent trajectories, where one '
                         'document per decision repeats the context)')
     p.add_argument('--serving-entry', choices=('collector', 'runtime', 'mix'),
-                   help='render the full and whole-trajectory views with the current ts-host serving prompt and tool '
-                        'schemas of this entry point (data/serving_prompt.py) instead of the recorded prompt; '
+                   help='render every view from the current ts-host serving request of this entry point '
+                        '(data/serving_prompt.py) instead of the recorded prompt: full and whole-trajectory show its '
+                        'system prompt and tool schemas, program-header its header with the schemas out of band; '
                         'collector = eval/RL/teacher collection, runtime = natlang run, mix = per record by '
                         'serving_prompt.ENTRY_SHARES')
     p.add_argument('--full-sample', type=float, default=0.05,
@@ -2532,9 +2532,9 @@ def main(argv=None):
             'selection': dict(counts),
             'renderings': list(a.renderings),
             **({'serving_prompt': {**_serving_binding(a.serving_entry),
-                                   'views': 'full and whole-trajectory documents carry the current ts-host serving '
-                                            'prompt and tool schemas (data/serving_prompt.py); program-header keeps '
-                                            'the recorded program header'}}
+                                   'views': 'every view renders the current ts-host serving request '
+                                            '(data/serving_prompt.py): full and whole-trajectory show its system prompt '
+                                            'and tool schemas, program-header its header with the schemas out of band'}}
                if a.serving_entry else {}),
             'full_sample': {'fraction': a.full_sample, 'programs': None if full_programs is None else len(full_programs),
                             'rule': 'full rendering only for a warm-up sample: per family the ceil(fraction*n) programs with '

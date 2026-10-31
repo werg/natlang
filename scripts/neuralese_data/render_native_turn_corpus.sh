@@ -30,6 +30,8 @@ NAME="render-$(basename "$OUT")-$(printf %s "$OUT" | sha1sum | cut -c1-10)"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 ERRLOG=$(mktemp "${TMPDIR:-/tmp}/render-stderr.XXXXXX")
 trap 'rm -f "$ERRLOG"' EXIT
+# --serving-entry derives return schemas with ts-host (scripts/return-schemas.mjs over NATLANG_TS_DIST, default
+# ts-host/dist, under the read-only repo mount) through the same mounted Node.
 # The image has no Node; candidate-selection admission runs scripts/verify_candidate_selection_packet.mjs (needs a
 # built ts-host/dist), so the host's Node binary is mounted in.
 NODE_BIN=$(readlink -f "$(command -v node || echo /home/werg/.local/bin/node)")
@@ -44,6 +46,7 @@ docker run --rm --name "$NAME" --network none --user "$(id -u):$(id -g)" --memor
   -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1 -e CUDA_VISIBLE_DEVICES= -e TOKENIZERS_PARALLELISM=false -e HOME=/tmp \
   -e "PYTHONPATH=$REPO:$REPO/training/neuralese" \
   -e PYTHONDONTWRITEBYTECODE=1 \
+  ${NATLANG_TS_DIST:+-e NATLANG_TS_DIST=$NATLANG_TS_DIST} \
   -v "$REPO:$REPO:ro" -v /mnt/external:/mnt/external:ro -v /home/werg/data:/home/werg/data:ro -v "$OUT:$OUT" \
   "${TOKENIZER_MOUNTS[@]}" \
   -w "$REPO" --entrypoint python3 natlang-neuralese:26.09 \
