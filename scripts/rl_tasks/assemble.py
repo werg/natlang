@@ -79,7 +79,11 @@ def interleave(groups):
                 order.append(fam[name].popleft())
                 if not fam[name]:
                     del fam[name]
-        queues[source] = collections.deque(order)
+        # A source can have no train rows after protection/custody filtering.
+        # Keep only nonempty work queues; the outer loop assumes each source
+        # has an item on every round.
+        if order:
+            queues[source] = collections.deque(order)
     out = []
     while queues:
         for source in sorted(list(queues)):

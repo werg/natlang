@@ -4,6 +4,7 @@ import sqlite3
 
 from scripts.rl_tasks.sources import reading, sql
 from scripts.rl_tasks.build_verified_successors import _guided_rows, _sql_rows
+from scripts.rl_tasks.assemble import interleave
 
 
 def test_sql_profile_distinguishes_simple_rows_from_compositional_queries():
@@ -153,3 +154,8 @@ def test_verified_guidance_variant_preserves_exact_world_and_answer(tmp_path):
     assert guided['semantics']['inputs'] == row['semantics']['inputs']
     assert guided['semantics']['expected'] == row['semantics']['expected']
     assert 'await nl(facts, question)' in guided['semantics']['files']['answer_from_facts.nl']
+
+
+def test_assembly_interleave_skips_sources_with_no_train_rows():
+    assert interleave({'empty-source': [], 'a': [{'id': 'a1'}, {'id': 'a2'}],
+                       'b': [{'id': 'b1'}]}) == [{'id': 'a1'}, {'id': 'b1'}, {'id': 'a2'}]
