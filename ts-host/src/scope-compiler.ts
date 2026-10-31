@@ -128,6 +128,14 @@ const read = __live.readNeuralese;
 const __natlang_output = (value: unknown) => { __live.finish(value); return null; };
 const __natlang_thenable = (value: any) => !!value && (typeof value === 'object' || typeof value === 'function') &&
   typeof value.then === 'function';
+// Eval owns async work started by its code. Attach a rejection observer without replacing the
+// promise: callers that await it still receive the original rejection and identity checks keep
+// working, while a deliberately dropped authored async call cannot become a process-level
+// unhandled rejection (notably when a later guarded recursive call rejects).
+const __natlang_own = <T>(value: T): T => {
+  if (value instanceof Promise) void value.catch(() => {});
+  return value;
+};
 const __natlang_pending = (value: any, depth = 0): boolean => __natlang_thenable(value) || depth < 4 &&
   (Array.isArray(value) || __natlang_plain(value)) && Object.values(value).some(item => __natlang_pending(item, depth + 1));
 // What an eval leaves unawaited (a promise, or data holding promises) is awaited before it is kept, as \`await\` would.
@@ -1131,6 +1139,11 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         primitive.push({ ...at, text: `({ $neuralese: { type: ${JSON.stringify(literal.type)}, id: ${JSON.stringify(literal.id)}${literal.stopGradient?', stop_gradient: true':''}${literal.sourceOccurrence?', source_occurrence: '+JSON.stringify(literal.sourceOccurrence):''} } })` });
         return;
       }
+    }
+    if (ts.isCallExpression(node)) {
+      const at = rel(node);
+      primitive.push({ start: at.start, end: at.start, text: '__natlang_own((' },
+        { start: at.end, end: at.end, text: '))' });
     }
     // A call of a function with a representation-generic result runs the instance its expected type picked.
     const instance = ts.isCallExpression(node) ? instantiationAt.get(`${rel(node).start}:${rel(node).end}`) : undefined;

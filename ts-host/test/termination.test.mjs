@@ -62,6 +62,22 @@ test('unawaited recursion cannot starve the event loop or outlive the call', asy
   }
 });
 
+test('owned async promises keep awaited rejection and async default-parameter semantics', async () => {
+  const awaited = await evalCase({ code:
+    'const o = { w: async (f: any, value = 1): Promise<number> => { await null; return f(f, value); } }; ' +
+    'try { await o.w(o.w); return "missing rejection"; } catch (error) { return String(error).includes("smaller argument") ? "rejected" : "wrong error"; }' });
+  assert.equal(awaited.ok, 'rejected');
+
+  // A throw while evaluating a native async function's default parameter is still a rejected
+  // promise, rather than becoming a synchronous exception at the call site.
+  const defaultParameter = await evalCase({ code:
+    'const f = async (value = (() => { throw new Error("default failed"); })()) => value; ' +
+    'let returned = false; let pending; try { pending = f(); returned = true; } catch { return "threw synchronously"; } ' +
+    'let answer; try { await pending; answer = "missing rejection"; } catch (error) { answer = returned && error.message === "default failed" ? "rejected asynchronously" : "wrong error"; } ' +
+    'pending = undefined; return answer;' });
+  assert.equal(defaultParameter.ok, 'rejected asynchronously');
+});
+
 test('setInterval is not available; timers end with their call', async () => {
   const interval = await evalCase({ code: 'setInterval(() => counter.tick(), 5); return "scheduled";' });
   assert.match(interval.error, /setInterval` is not available here; repeat with `iterateOn/);
