@@ -1,5 +1,34 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Supervision and genuinely diverse Luna generation (owner, 2026-10-31)
+
+Codex resumes supervision from `plans/neuralese/SUPERVISION_HANDOFF_20261031.md`.
+Resume Luna dataset and trajectory generation with **up to six concurrent Luna
+workers**. This supersedes the one-worker cap and the LFM3 prohibition on new
+teacher generation below. Engineering and generation actors retain their actual
+provenance; teacher trajectories are not on-policy student rollouts.
+
+The owner explicitly requires **real diversity, not renaming**. New names,
+domains, seeds, prompt views and shuffled records do not establish new task
+families. Generate codebases with different computational problems, algorithms,
+call graphs, state/effect semantics, interfaces and failure modes. Include actual
+repository investigation, behavioral repair/implementation, evidence reasoning,
+constraint planning and changing-state control. Prefer complete executable
+applications and independently checked task outcomes over scaffold volume.
+
+Measure repetition of normalized code, instructions, targets and graph structure
+across packages and in the actual admitted mixture; retain semantic review since
+syntax differences alone do not prove behavioral diversity. Loading a package is
+not proof that a behavioral repair or implementation works. Preserve related-world
+split custody, protected evaluation inputs, actual teacher identity, full execution
+graphs and exact verifier evidence. Admit useful verified additions promptly;
+never convert task counts, loader checks or teacher artifacts into capability claims.
+
+Owner clarification: use diverse datasets to build substantial Natlang codebases,
+then generate several different calls/tasks against each codebase. The reusable
+application, its meaningful internal APIs and state, and its multiple operations
+are the unit of generation. A generic dataset-answer wrapper is insufficient.
+
 ## LFM3 rollback and comprehensive fresh restart (owner, 2026-10-29)
 
 The suspect trained LFM3 lineage is for diagnostics only. All four learners were
