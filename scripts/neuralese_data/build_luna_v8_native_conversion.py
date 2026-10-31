@@ -8,17 +8,13 @@ raw Luna trajectory or promote its judged oracle to exact.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
+import sys
 
-
-def canonical(value):
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-
-
-def sha(data):
-    return hashlib.sha256(data).hexdigest()
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training/neuralese"))
+from natlang_neuralese.common.hashing import sha256_hex
+from natlang_neuralese.common.jsonio import canonical_json_bytes
 
 
 def read_json(path):
@@ -80,12 +76,12 @@ def build(raw_path, decision_path, package_source_path, plan_path, runtime_path,
         seen.add(index)
         turn = raw["trajectory"][index]
         messages = turn.get("context")
-        if not isinstance(messages, list) or sha(canonical(messages)) != provider.get("student_context_sha256"):
+        if not isinstance(messages, list) or sha256_hex(canonical_json_bytes(messages)) != provider.get("student_context_sha256"):
             raise ValueError("source turn context differs from the captured student prompt digest")
         item = json.loads(json.dumps(record, ensure_ascii=False))
         item["messages"] = messages
         item["native_source_conversion"] = {"source_messages": messages,
-            "source_messages_sha256": sha(canonical(messages)), "source_target_present": True,
+            "source_messages_sha256": sha256_hex(canonical_json_bytes(messages)), "source_target_present": True,
             "source_target": record.get("target"), "source_neuralese_conversion_present": False}
         receipts = source_ref.get("provider_expanded_read_contexts") or []
         if receipts:
@@ -113,35 +109,35 @@ def build(raw_path, decision_path, package_source_path, plan_path, runtime_path,
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     converted_path = output_dir / "converted-decisions.jsonl"
-    data = b"".join(canonical(item) + b"\n" for item in converted)
+    data = b"".join(canonical_json_bytes(item) + b"\n" for item in converted)
     converted_path.write_bytes(data)
     audit = {"schema": "natlang.luna-v8-provider-native-ingestion-audit/1",
-        "raw_results": {"path": str(Path(raw_path).resolve()), "sha256": sha(raw_bytes)},
-        "python_corpus_conversion": {"path": str(converted_path.resolve()), "sha256": sha(data)},
-        "plan": {"path": str(Path(plan_path).resolve()), "sha256": sha(Path(plan_path).read_bytes())},
+        "raw_results": {"path": str(Path(raw_path).resolve()), "sha256": sha256_hex(raw_bytes)},
+        "python_corpus_conversion": {"path": str(converted_path.resolve()), "sha256": sha256_hex(data)},
+        "plan": {"path": str(Path(plan_path).resolve()), "sha256": sha256_hex(Path(plan_path).read_bytes())},
         "runtime": {"path": str(Path(runtime_path).resolve()),
-            "receipt_sha256": sha((Path(runtime_path) / "frozen-runtime.json").read_bytes())},
+            "receipt_sha256": sha256_hex((Path(runtime_path) / "frozen-runtime.json").read_bytes())},
         "provider_source_manifest": {"path": str(Path(package_source_path).resolve()),
-            "sha256": sha(Path(package_source_path).read_bytes())},
+            "sha256": sha256_hex(Path(package_source_path).read_bytes())},
         "source_regrade": {"path": regrade["projection"]["path"],
             "sha256": regrade["projection"]["sha256"],
             "sol_qualification_path": regrade["proof"]["path"],
             "sol_qualification_sha256": regrade["proof"]["sha256"]},
         "decision_cache": {"path": str(Path(decision_path).resolve()),
-            "sha256": sha(Path(decision_path).read_bytes())},
+            "sha256": sha256_hex(Path(decision_path).read_bytes())},
         "conversion_builder": {"path": str(Path(__file__).resolve()),
-            "sha256": sha(Path(__file__).read_bytes())},
+            "sha256": sha256_hex(Path(__file__).read_bytes())},
         "source_code": [{"path": str((repo_root / path).resolve()),
-            "sha256": sha((repo_root / path).read_bytes())} for path in source_code_files],
+            "sha256": sha256_hex((repo_root / path).read_bytes())} for path in source_code_files],
         "task_id": raw["id"], "trajectory_count": len(raw["trajectory"]),
         "converted_decision_count": len(converted),
         "approved_decision_count": sum(bool((item.get("training_admission") or {}).get("approved"))
                                          for item in converted),
         "oracle_level": "judged", "exact_oracle_claimed": False}
     audit_path = output_dir / "ingestion-audit.json"
-    audit_path.write_bytes(canonical(audit) + b"\n")
+    audit_path.write_bytes(canonical_json_bytes(audit) + b"\n")
     print(json.dumps({"audit": str(audit_path), "converted": str(converted_path),
-        "audit_sha256": sha(audit_path.read_bytes()), "converted_sha256": sha(data),
+        "audit_sha256": sha256_hex(audit_path.read_bytes()), "converted_sha256": sha256_hex(data),
         "trajectory_count": len(raw["trajectory"]), "converted_decisions": len(converted),
         "approved_decisions": audit["approved_decision_count"]}, indent=2))
 

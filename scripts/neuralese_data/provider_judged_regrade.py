@@ -19,10 +19,6 @@ from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_f
 SCHEMA = 'natlang.provider-judged-outcome-regrade/1'
 
 
-def canonical_sha(value) -> str:
-    return canonical_json_sha256_hex(value)
-
-
 def _read_jsonl(path: Path, row_id: str) -> dict:
     found = []
     for line in path.read_text(encoding='utf-8').splitlines():
@@ -114,11 +110,11 @@ def project(raw_row: dict, program_row: dict, source_worlds: Path, qualification
     source_world = _read_jsonl(source_worlds, qualification['source_world_id'])
     if (sha256_file_hex(source_worlds) != qualification.get('source_world_sha256')
             or source_world.get('source_groups') != qualification.get('source_groups')
-            or canonical_sha(program.get('semantics', {}).get('folder_files')) !=
-               canonical_sha(source_world.get('folder_files'))
-            or canonical_sha(program.get('semantics', {}).get('expected_files')) !=
-               canonical_sha(source_world.get('expected_files'))
-            or canonical_sha(program) != canonical_sha(program_row)):
+            or canonical_json_sha256_hex(program.get('semantics', {}).get('folder_files')) !=
+               canonical_json_sha256_hex(source_world.get('folder_files'))
+            or canonical_json_sha256_hex(program.get('semantics', {}).get('expected_files')) !=
+               canonical_json_sha256_hex(source_world.get('expected_files'))
+            or canonical_json_sha256_hex(program) != canonical_json_sha256_hex(program_row)):
         raise ValueError('source-world rubric, folder, expected output, and selected program do not agree')
     files_spec = source_world.get('files_oracle')
     if not isinstance(files_spec, dict):
@@ -174,7 +170,7 @@ def project(raw_row: dict, program_row: dict, source_worlds: Path, qualification
             or manifest.get('range') != {'start': claim_index, 'count': 1}
             or manifest.get('model') != plan.get('model_id')):
         raise ValueError('regrade is detached from the exact immutable v8 plan and claim')
-    old_outcome_sha = canonical_sha(original_outcome)
+    old_outcome_sha = canonical_json_sha256_hex(original_outcome)
     new_outcome = copy.deepcopy(original_outcome)
     new_outcome['checks'] = {**checks, 'files': True}
     new_outcome['files_check'] = mechanically
@@ -189,10 +185,10 @@ def project(raw_row: dict, program_row: dict, source_worlds: Path, qualification
         'result_manifest_sha256': sha256_file_hex(result_manifest_path),
         'source_worlds_path': str(source_worlds), 'source_worlds_sha256': sha256_file_hex(source_worlds),
         'source_world_id': source_world['id'], 'source_world_sha256': qualification['source_world_sha256'],
-        'task_id': program['id'], 'task_sha256': canonical_sha(program),
+        'task_id': program['id'], 'task_sha256': canonical_json_sha256_hex(program),
         'program_fields_preserved': True, 'raw_outcome_sha256': old_outcome_sha,
-        'effective_outcome': new_outcome, 'effective_outcome_sha256': canonical_sha(new_outcome),
-        'file_verdict_sha256': canonical_sha(mechanically),
+        'effective_outcome': new_outcome, 'effective_outcome_sha256': canonical_json_sha256_hex(new_outcome),
+        'file_verdict_sha256': canonical_json_sha256_hex(mechanically),
         'fresh_source_group_check': qualification['current_protection_preflight'],
         'judge_model': 'gpt-6-sol', 'judge_provider': 'openai-codex',
         'oracle_level': 'judged', 'exact_oracle_claimed': False}
@@ -209,18 +205,18 @@ def validate_projection(raw_row: dict, derived_row: dict, projection: dict) -> N
     if (not isinstance(raw_result_hash, str) or len(raw_result_hash) != 64
             or any(char not in '0123456789abcdef' for char in raw_result_hash)):
         raise ValueError('regrade raw result binding is malformed')
-    if projection.get('raw_outcome_sha256') != canonical_sha(raw_row.get('outcome')):
+    if projection.get('raw_outcome_sha256') != canonical_json_sha256_hex(raw_row.get('outcome')):
         raise ValueError('regrade changes or misbinds the original outcome')
-    if projection.get('effective_outcome_sha256') != canonical_sha(projection.get('effective_outcome')):
+    if projection.get('effective_outcome_sha256') != canonical_json_sha256_hex(projection.get('effective_outcome')):
         raise ValueError('regrade effective outcome hash is malformed')
     if projection.get('effective_outcome') != derived_row.get('outcome'):
         raise ValueError('derived row outcome differs from the explicit regrade projection')
-    if projection.get('task_sha256') != canonical_sha((raw_row.get('task') or {}).get('program_ir')):
+    if projection.get('task_sha256') != canonical_json_sha256_hex((raw_row.get('task') or {}).get('program_ir')):
         raise ValueError('regrade changes the original task/program hash')
     raw_comparison = copy.deepcopy(derived_row)
     raw_comparison.pop('source_regrade', None)
     raw_comparison['outcome'] = raw_row.get('outcome')
-    if canonical_sha(raw_comparison) != canonical_sha(raw_row):
+    if canonical_json_sha256_hex(raw_comparison) != canonical_json_sha256_hex(raw_row):
         raise ValueError('derived provider row changes fields outside its explicit outcome projection')
     if (derived_row.get('provenance') != raw_row.get('provenance')
             or derived_row.get('trajectory') != raw_row.get('trajectory')

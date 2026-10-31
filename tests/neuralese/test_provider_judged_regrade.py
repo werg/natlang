@@ -5,7 +5,8 @@ import json
 import pytest
 
 from scripts.neuralese_data.provider_campaign_source import ledger_dispatch_identity
-from scripts.neuralese_data.provider_judged_regrade import canonical_sha, validate_projection
+from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+from scripts.neuralese_data.provider_judged_regrade import validate_projection
 
 
 def sample():
@@ -26,10 +27,10 @@ def sample():
     projection = {
         'schema': 'natlang.provider-judged-outcome-regrade/1',
         'raw_result_sha256': 'a' * 64,
-        'raw_outcome_sha256': canonical_sha(raw['outcome']),
+        'raw_outcome_sha256': canonical_json_sha256_hex(raw['outcome']),
         'effective_outcome': effective,
-        'effective_outcome_sha256': canonical_sha(effective),
-        'task_sha256': canonical_sha(raw['task']['program_ir']),
+        'effective_outcome_sha256': canonical_json_sha256_hex(effective),
+        'task_sha256': canonical_json_sha256_hex(raw['task']['program_ir']),
     }
     derived = copy.deepcopy(raw)
     derived['outcome'] = effective
