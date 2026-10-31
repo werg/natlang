@@ -29,8 +29,8 @@ if [ ! -f "$ROOT/ir-raw/.done" ]; then
 fi
 # 2. protected-world custody on the exact program worlds
 if [ ! -f "$ROOT/ir/custody.json" ]; then
-  rm -rf "$ROOT/ir"
-  nice -n 15 "$PY" "$REPO/scripts/neuralese_data/broad_graph_cases.py" custody --ir "$ROOT/ir-raw" --out "$ROOT/ir" > "$ROOT/logs/custody.log" 2>&1
+  nice -n 15 "$PY" "$REPO/scripts/neuralese_data/broad_graph_cases.py" custody --ir "$ROOT/ir-raw" --out "$ROOT/ir" \
+    --workers "$WORKERS" >> "$ROOT/logs/custody.log" 2>&1
 fi
 # 3. reference replay (current serving prompt, tool schemas, opening declarations) per shard
 replay() {

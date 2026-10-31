@@ -904,32 +904,59 @@ def cmd_build(args):
     print(json.dumps({k: summary[k] for k in ('held_relation', 'cases', 'written')}))
 
 
-def cmd_custody(args):
-    """ProtectedWorlds.check on every train IR world; related worlds are omitted (never moved), test kept."""
-    sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+_PROTECTED = None
+
+
+def _custody_shard(task):
+    """Check one IR shard; writes the kept shard, its omissions and a done marker bound to the protection digest."""
+    global _PROTECTED
     from natlang_neuralese.common.custody import CustodyError, ProtectedWorlds
+    if _PROTECTED is None:
+        _PROTECTED = ProtectedWorlds.load()
+    shard, target = map(Path, task)
+    marker = target.with_suffix('.custody.json')
+    if marker.exists() and json.loads(marker.read_text())['protected_sha256'] == _PROTECTED.digest:
+        return json.loads(marker.read_text())['counts']
+    counts, kept, omissions = collections.Counter(), [], []
+    for line in open(shard):
+        record = json.loads(line)
+        if record['split'] == 'train':
+            try:
+                _PROTECTED.check(record)
+            except CustodyError as error:
+                omissions.append({'id': record['id'], 'source_ids': record['source_ids'], 'reason': str(error)})
+                counts[shard.parent.name + ':custody-omitted'] += 1
+                continue
+        kept.append(line if line.endswith('\n') else line + '\n')
+        counts[shard.parent.name + ':' + record['split']] += 1
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.with_suffix('.tmp').write_text(''.join(kept))
+    os.replace(target.with_suffix('.tmp'), target)
+    target.with_suffix('.omissions.tmp').write_text(''.join(json.dumps(row) + '\n' for row in omissions))
+    os.replace(target.with_suffix('.omissions.tmp'), target.with_suffix('.custody-omissions.jsonl'))
+    marker.write_text(json.dumps({'protected_sha256': _PROTECTED.digest, 'counts': dict(counts)}))
+    return dict(counts)
+
+
+def cmd_custody(args):
+    """ProtectedWorlds.check on every train IR world; related worlds are omitted (never moved), test kept.
+    Resumable per shard (done markers bound to the protection digest) and parallel over shards."""
+    from concurrent.futures import ProcessPoolExecutor
+    sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+    from natlang_neuralese.common.custody import ProtectedWorlds
     protected = ProtectedWorlds.load()
     ir, out = Path(args.ir), Path(args.out)
+    tasks = [(str(shard), str(out / shard.parent.name / shard.name)) for shard in sorted(ir.glob('*/*.ir.jsonl'))]
     counts = collections.Counter()
-    for shard in sorted(ir.glob('*/*.ir.jsonl')):
-        target = out / shard.parent.name / shard.name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        kept, omissions = [], []
-        for line in open(shard):
-            record = json.loads(line)
-            if record['split'] == 'train':
-                try:
-                    protected.check(record)
-                except CustodyError as error:
-                    omissions.append({'id': record['id'], 'source_ids': record['source_ids'], 'reason': str(error)})
-                    counts[shard.parent.name + ':custody-omitted'] += 1
-                    continue
-            kept.append(line if line.endswith('\n') else line + '\n')
-            counts[shard.parent.name + ':' + record['split']] += 1
-        target.write_text(''.join(kept))
-        with open(target.parent / 'custody-omissions.jsonl', 'a') as stream:
-            for row in omissions:
-                stream.write(json.dumps(row) + '\n')
+    with ProcessPoolExecutor(args.workers) as pool:
+        for done, shard_counts in enumerate(pool.map(_custody_shard, tasks), 1):
+            counts.update(shard_counts)
+            if done % 50 == 0:
+                print(f'custody {done}/{len(tasks)} shards', flush=True)
+    for source in sorted({Path(t).parent for _, t in tasks}):
+        with open(source / 'custody-omissions.jsonl', 'w') as stream:
+            for part in sorted(source.glob('*.custody-omissions.jsonl')):
+                stream.write(part.read_text())
     receipt = {'schema': 'natlang.broad-graph-custody/1', 'protected_sha256': protected.digest,
                'protected_sources': [json.loads(s) for s in protected.sources], 'counts': dict(counts)}
     (out / 'custody.json').write_text(json.dumps(receipt, indent=1) + '\n')
@@ -948,6 +975,7 @@ def main():
     c = sub.add_parser('custody')
     c.add_argument('--ir', required=True)
     c.add_argument('--out', required=True)
+    c.add_argument('--workers', type=int, default=4)
     args = parser.parse_args()
     {'build': cmd_build, 'custody': cmd_custody}[args.cmd](args)
 
