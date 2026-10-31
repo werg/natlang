@@ -222,25 +222,55 @@ def convert_unit(task):
     if chain['split'] == 'train' and any(set(row.get('source_ids') or []) & STATE['held_sources']
                                          for row in records.values()):
         return 'omission', 'train', {'trajectory': chain['trajectory'], 'reason': 'family-hold-source'}
-    kept_edges = [edge for edge in edges if edge_digest(edge) in plan['edges']]
-    writers = {edge['writer_record_id'] for edge in kept_edges}
-    keep = [rid for rid in chain['records'] if rid in plan['supervised'] or rid in writers]
-    if not any(rid in plan['supervised'] for rid in keep) and not kept_edges:
-        return 'omission', chain['split'], {'trajectory': chain['trajectory'], 'reason': 'no-supervised-decision-after-dedupe'}
-    sub = {**chain, 'records': keep, 'edges': len(kept_edges)}
-    sub_records = {rid: records[rid] for rid in keep}
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import source_occurrences, writer_payload
+    order = {rid: index for index, rid in enumerate(chain['records'])}
+    kept_edges, repairs = [], collections.Counter()
+    for edge in edges:
+        if edge_digest(edge) not in plan['edges']:
+            continue
+        writer, reader = records.get(edge['writer_record_id']), records.get(edge['reader_record_id'])
+        if writer is None or reader is None or order[edge['writer_record_id']] >= order[edge['reader_record_id']]:
+            repairs['edge-endpoint-order'] += 1; continue
+        try:  # the edge's own authentication; a failing edge leaves the chain, its decisions stay
+            body = writer_payload(writer, edge['write_name'], edge['body_sha256'])
+            source_occurrences(writer, reader, edge['write_name'], body, edge['body_sha256'],
+                               writer_occurrence_id=edge.get('writer_occurrence_id'),
+                               reader_occurrence_id=edge.get('reader_occurrence_id'))
+        except (ValueError, KeyError, TypeError) as error:
+            repairs['edge-unauthenticated: ' + str(error)[:60]] += 1; continue
+        kept_edges.append(edge)
     pieces = pieces_for(pieces_path)
+    dropped = set()
     graph, prompt, reason = None, None, None
-    for prompt in STATE['prompts']:
-        try:
-            graph = render(sub, sub_records, kept_edges, pieces, prompt)
-        except (ValueError, KeyError, TypeError, IndexError) as error:
-            reason = 'render-error: ' + str(error)[:240]; graph = None; break
-        if sum(len(node['token_ids']) for node in graph['nodes']) <= STATE['max_tokens']:
-            reason = None; break
-        reason, graph = 'graph-over-token-cap', None
+    for attempt in range(3):
+        current = [edge for edge in kept_edges if edge['writer_record_id'] not in dropped
+                   and edge['reader_record_id'] not in dropped]
+        writers = {edge['writer_record_id'] for edge in current}
+        keep = [rid for rid in chain['records'] if rid not in dropped and (rid in plan['supervised'] or rid in writers)]
+        if not keep or (not any(rid in plan['supervised'] for rid in keep) and not current):
+            return 'omission', chain['split'], {'trajectory': chain['trajectory'],
+                                                'reason': 'no-supervised-decision-after-dedupe'}
+        sub = {**chain, 'records': keep, 'edges': len(current)}
+        sub_records = {rid: records[rid] for rid in keep}
+        failed = None
+        for prompt in STATE['prompts']:
+            try:
+                graph = render(sub, sub_records, current, pieces, prompt)
+            except (ValueError, KeyError, TypeError, IndexError) as error:
+                graph, reason = None, 'render-error: ' + str(error)[:240]
+                # A decision the renderer cannot render leaves the chain with its edges; the rest is retried.
+                failed = set(re.findall(r'"id": "([^"]+)"', str(error))) & set(keep)
+                break
+            if sum(len(node['token_ids']) for node in graph['nodes']) <= STATE['max_tokens']:
+                reason = None; break
+            reason, graph = 'graph-over-token-cap', None
+        if graph is not None or not failed:
+            break
+        dropped |= failed
+        repairs['decision-unrenderable'] += len(failed)
     if graph is None:
         return 'omission', chain['split'], {'trajectory': chain['trajectory'], 'reason': reason}
+    kept_edges = current
     # Identical targets beyond the cap keep no weight; a kept producer keeps weight only on its exported span.
     names = {rid: f'n{index}' for index, rid in enumerate(keep)}
     for rid, node in zip(keep, graph['nodes']):
@@ -261,7 +291,8 @@ def convert_unit(task):
         'source_ids': first.get('source_ids'), 'decisions_in_source_chain': len(chain['records']),
         'decisions_kept': len(keep), 'edges_in_source_chain': len(edges), 'edges_kept': len(kept_edges),
         'decisions_without_weight': sum(rid not in plan['supervised'] for rid in keep),
-        'reader_cap': STATE['reader_cap'], 'target_cap': STATE['target_cap']}
+        'reader_cap': STATE['reader_cap'], 'target_cap': STATE['target_cap'],
+        'repairs': dict(repairs)}
     stats = {'nodes': len(graph['nodes']), 'tokens': sum(len(n['token_ids']) for n in graph['nodes']),
              'supervised_tokens': sum(1 for n in graph['nodes'] for w in n['target_weights'] if w > 0),
              'imports': sum(len(n['imports']) for n in graph['nodes']),
@@ -269,6 +300,7 @@ def convert_unit(task):
              'prefix_shared_tokens': packed[0].token_count if packed is not None else parsed.plan.token_count}
     if stats['supervised_tokens'] == 0:
         return 'omission', chain['split'], {'trajectory': chain['trajectory'], 'reason': 'no-weight-after-dedupe'}
+    stats.update({'repair:' + key: value for key, value in repairs.items()})
     return ('graph' if communicating else 'ordinary'), chain['split'], {'graph': graph, 'stats': stats,
             'family': graph['chain_conversion']['family'], 'prompt': prompt}
 
