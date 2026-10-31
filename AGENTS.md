@@ -16,6 +16,14 @@ and exact re-scoring history. Deterministic model request/token exhaustion remai
 an actual budget outcome. A protocol first-action match or mathematical gradient
 certificate does not establish complete task success or capability improvement.
 
+Keep staged-result notice construction and authenticated trajectory parsing in
+`native/staged-result.ts` aligned. An exact old historical notice may remain a
+supported input dialect, but a changed serving notice must not silently reject
+valid current completions. Status-only success still needs the real same-invocation
+staged action, exact output and terminal ledger custody. Task-level actual/expected
+judgment alone does not certify helper contracts: inspect the whole execution
+graph before admitting a teacher trajectory whose children have scoped duties.
+
 ## Rejected 2026-10-31 SFT branch (supervision finding)
 
 The first SD52-to-SFT72 continuation is diagnostic only, including its learned

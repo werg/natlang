@@ -4,6 +4,70 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Admission repair, recovery and throughput follow-through, 21:16 CET
+
+Current host staged-result wording no longer matched the materializer's old
+hardcoded notice. This rejected otherwise authenticated status-only completions.
+Commit db14a80c2 shares the notice between executing host and reader, preserves
+the exact recorded historical notice, and retains same-invocation/action/output
+custody.82 focused Node tests pass, including both notices and forged/unlinked
+negative controls. The runtime notice bytes themselves are unchanged, so this
+repair does not silently change the live actor's prompt or sampled policy.
+
+The remaining three recovery worktrees have now been removed after process and
+current-control checks, verified compact dirty/untracked archives and preserved
+`refs/recovery/20261031/*` refs. Receipt:
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/recovery-worktree-removal-20261031.json`.
+Applicable grouped-oracle custody was ported in416e3f881: an explicitly qualified
+source must bind its exact runtime, source rows, journal, successful reference and
+negative controls.17 focused CPU tests pass. This does not relabel the current
+broad source as having that separate qualification. Old shared-request readiness
+belonged to removed cross-model role exchange and was deliberately not restored.
+
+Independent Pop recovery now includes the following verified archives in addition
+to full checkpoint54. The runtime/control archive is112,916,207 bytes, SHA256
+`b1bed19971d28217ed7892cdaaff8d43b6ab6b4ed92de1913eb94a2503d37fd8`.
+The recursive current SFT/held/foundation source archive is536,208,372 bytes, SHA256
+`8d12071fb8ca8275952ddcfd860be5e2b14e3503fe376c5449d1fe9cc7d483c3`;
+all96 decompressed source payloads (539,534,474 bytes) passed independent readback.
+Receipts are `corrected54-runtime-controls-peer-export-receipt-20261031.json` and
+`corrected54-source-closure-peer-export-receipt-20261031.json` under `W/ops`.
+The source archive includes a verifier/source-map restoration helper without
+rewriting manifest identities. Full resumed-training recovery is not yet proven;
+Python/container environment, RL task assets and historical dependency checks
+remain distinct. Rejected intermediate70 was retired from Pop after current54
+readback and a fresh FD/mmap consumer scan; goodSD52/corrected53/54 remain there,
+and rejected72 remains on DGX. This restored space for the next useful full state.
+
+The dedicated actor omitted the prefix cache already default in ordinary serving.
+Commit874f1eaf7 wires it by default with a2GiB budget/256-token grid, binds cache
+configuration into serving identity, and counts actual processed prefill tokens.
+17 CPU tests pass. The current actor remains on its recorded runtime; actual54
+GPU warm/cold-grid/hybrid-state/import qualification is running on idle Pop under
+an8GiB Docker/ledger host limit. A transient SSH timeout was rechecked and did
+not justify abandoning that work. Do not infer GPU qualification from CPU tests.
+An observed15-second sample of the existing DGX actor measured65.87 aggregate
+decode tokens/s with12 active sequences; no prefill counter existed in that runtime.
+
+The v12 telecom trace is now pinned more precisely: within the same advance
+invocation, the account helper performed device effects outside its account-only
+contract, and advance computed `next` but did not finish it. The planner did not
+explicitly recommend finalizing at that point; earlier descriptions saying so
+were too broad. There is no demonstrated loop-state propagation bug. Both v12
+and the improved v13 run stopped at64 genuine provider requests (32 planning,
+32 action calls), not duplicate event counting. V13 reached a legitimate repair
+but did not finish the transition/root within that cap; neither is positive data.
+The next reviewed attempt budgets actual planning plus action requests. Sol's
+current task judgment receives only actual/expected root results, so an independent
+whole-graph helper-scope audit is required before positive admission.
+
+Strict teacher-mine audit has now parsed all7,261 rendered rows, rebound655
+communication chains and checked3,827 structured/inline edges with zero failures.
+A separate audit is checking exact assistant-text producer/source/occurrence
+custody rather than treating the first audit's skipped edges as verified. The
+post-run seal and actual source/recipe continuation remain unfinished. Current
+DGX RL collection continues; no completed round or new optimizer update is claimed.
+
 ## Corrected native runtime and actual RL collection, 21:00 CET
 
 The newest earned checkpoint remains global54, SHA256
