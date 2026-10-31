@@ -53,14 +53,19 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     from ..common.hashing import canonical_json_sha256_hex
 
     serving_config = native_prefill_configuration(device, prefill_tokens)
-    serving_config["identity_sha256"] = canonical_json_sha256_hex(
-        {key: value for key, value in serving_config.items() if key != "identity_sha256"})
-
     view_options = ({'actor_view':actor_view} if actor_view is not None else
                     {'transported_actor':transported_actor} if transported_actor is not None else {})
     model, tokenizer, roles, config, _state = load_native_checkpoint(
         checkpoint, base=base, device=device, dtype=dtype, participant=participant, allow_weights_only=True,
         **view_options)
+    # Native policy inference runs the stored master weights without an
+    # active inline QAT point. The SFT objective may sample other points;
+    # those training passes do not silently change the deployed policy.
+    serving_config['precision'] = {'schema':'natlang.native-policy-precision/1',
+        'weights':'checkpoint-master', 'inline_qat_point':'inactive',
+        'ordinary_precision':config.get('native_ordinary_precision'), 'model_dtype':config.get('dtype')}
+    serving_config['identity_sha256'] = canonical_json_sha256_hex(
+        {key:value for key,value in serving_config.items() if key != 'identity_sha256'})
     model.eval()
     for parameter in model.parameters():
         parameter.requires_grad_(False)
@@ -84,6 +89,8 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
         'checkpoint_sha256': checkpoint_sha256, 'communication': 'native-state',
         'native_identity': dict(identity),
         'history_reasoning': dict(tokenizer.natlang_history_reasoning),
+        'serving_precision':dict(serving_config['precision']),
+        'serving_config_sha256':serving_config['identity_sha256'],
         **({'native_participant': participant} if participant is not None else {})}
     if config.get('base_restore') is not None:
         engine.rl_policy_binding['base_restore'] = dict(config['base_restore'])

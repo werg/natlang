@@ -231,3 +231,20 @@ def test_init_ramp_floor_keeps_a_point_at_least_at_the_latents_lambda():
     assert run.active(0) == [('tern', 0.6)]
     with pytest.raises(ValueError, match='init_mix'):
         q.Quantization({**component(), 'init_mix': {'other': 0.5}})
+
+
+def test_inline_qat_bf16_pass_matches_unwrapped_master_weights():
+    import copy
+    torch.manual_seed(912)
+    model = Tiny()
+    serving = copy.deepcopy(model)
+    qat = q.Quantization(component())
+    qat.install(model, layer_count=2, inline=True)
+    inputs = torch.randn(3, 32)
+    master = serving.model.layers[0].feed_forward.w1(inputs)
+    with qat.context('bf16', 0.0):
+        trained = model.model.layers[0].feed_forward.w1(inputs)
+    assert torch.equal(trained, master)
+    with qat.context('q4', 1.0):
+        quantized = model.model.layers[0].feed_forward.w1(inputs)
+    assert not torch.equal(quantized, master)
