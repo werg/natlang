@@ -256,6 +256,13 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'launch_record': str(campaign_root / 'dispatch/launch.json'), 'authority': str(authority),
         'provider': 'openai-codex', 'model_id': 'gpt-6-luna', 'model_concurrency': 1,
         'slots': 6, 'execution_plans': True, 'reasoning_effort': 'low',
+        'resource_policy': {
+            'schema': 'natlang.teacher_execution_resource_policy/1',
+            'resumable': False, 'backfill': False,
+            'partial_execution_is_resumable': False,
+            'partial_execution_disposition': 'durable evidence only; no graph or simulator-state continuation',
+            'campaign_resume': 'explicit only for unclaimed cases; uncertain claims are terminalized',
+        },
         'prompt_rendering': 'full', 'text_neuralese_emulation': True,
         'max_transport_retries': 1, 'max_turns': 60, 'max_model_requests': 384,
         # Hosted teachers author text-backed Neuralese. Native student KV is
@@ -285,7 +292,11 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'operation_counts': dict(counts_operation),
         'world_group_counts': dict(counts_world), 'source_groups_preserved': True,
         'prompt_rendering': 'full', 'slots': 6, 'root_approved': False,
-        'dispatch_command_after_review': f'python3 scripts/run_reviewed_luna_dispatcher.py {output.resolve()} --sha256 {plan_sha}',
+        'dispatch_command_after_review': (
+            f'python3 scripts/memory_ledger.py run --unit {campaign_id} --budget-gb 2 --class collection '
+            f'--priority low --no-resumable -- python3 scripts/run_reviewed_luna_dispatcher.py '
+            f'{output.resolve()} --sha256 {plan_sha}'
+        ),
     }
 
 

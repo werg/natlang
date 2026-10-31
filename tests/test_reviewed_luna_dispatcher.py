@@ -57,6 +57,13 @@ def reviewed_plan(tmp_path):
         'model_id': 'gpt-6-luna',
         'model_concurrency': 1,
         'slots': 2,
+        'resource_policy': {
+            'schema': 'natlang.teacher_execution_resource_policy/1',
+            'resumable': False, 'backfill': False,
+            'partial_execution_is_resumable': False,
+            'partial_execution_disposition': 'durable evidence only; no graph or simulator-state continuation',
+            'campaign_resume': 'explicit only for unclaimed cases; uncertain claims are terminalized',
+        },
         'execution_plans': True,
         'reasoning_effort': 'low',
         'case_seconds': 120,
@@ -73,6 +80,7 @@ def reviewed_plan(tmp_path):
 def _mock_controls(monkeypatch):
     monkeypatch.setattr(dispatcher, '_authority_preflight', lambda identity: None)
     monkeypatch.setattr(dispatcher, '_authority_update', lambda identity, binding=None: None)
+    monkeypatch.setattr(dispatcher, '_require_nonresumable_ledger_claim', lambda *_args: None)
     monkeypatch.setattr(dispatcher.time, 'sleep', lambda seconds: None)
 
 
@@ -94,6 +102,42 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
     assert [row['index'] for row in identity['cases']] == [0, 1, 2]
     entry, *_ = dispatcher._claim_queue(plan, identity, 1, identity['cases'][0])
     assert entry['prompt_rendering'] == 'full'
+
+
+@pytest.mark.parametrize('policy', [None, {},
+    {'schema': 'natlang.teacher_execution_resource_policy/1', 'resumable': True,
+     'backfill': False, 'partial_execution_is_resumable': False},
+    {'schema': 'natlang.teacher_execution_resource_policy/1', 'resumable': False,
+     'backfill': True, 'partial_execution_is_resumable': False},
+    {'schema': 'natlang.teacher_execution_resource_policy/1', 'resumable': False,
+     'backfill': False, 'partial_execution_is_resumable': True}])
+def test_plan_requires_nonresumable_execution_policy(reviewed_plan, policy):
+    path, _, _, plan = reviewed_plan
+    plan['resource_policy'] = policy
+    path.write_text(json.dumps(plan, sort_keys=True))
+    with pytest.raises(ValueError, match='non-resumable execution'):
+        dispatcher.validate_plan(path, dispatcher.digest(path))
+
+
+def test_dispatch_claim_must_explicitly_disable_resumability(tmp_path, monkeypatch):
+    state_path = tmp_path / 'ledger.json'
+    unit = 'campaign-test.service'
+    monkeypatch.setenv('NATLANG_MEMORY_LEDGER', str(state_path))
+    monkeypatch.setenv('NATLANG_LEDGER_UNIT', unit)
+    import memory_ledger
+    monkeypatch.setattr(memory_ledger, 'STATE', str(state_path))
+    monkeypatch.setattr(dispatcher, 'memory_ledger', memory_ledger)
+    with pytest.raises(ValueError, match='no memory-ledger claim'):
+        dispatcher._require_nonresumable_ledger_claim('campaign-test')
+    state_path.write_text(json.dumps({'schema': 'natlang.memory-ledger/1', 'claims': {
+        unit: {'resumable': True, 'spec': {'resumable': True}}}, 'events': []}))
+    with pytest.raises(ValueError, match='--no-resumable'):
+        dispatcher._require_nonresumable_ledger_claim('campaign-test')
+    state_path.write_text(json.dumps({'schema': 'natlang.memory-ledger/1', 'claims': {
+        unit: {'resumable': False, 'spec': {'resumable': False}}}, 'events': []}))
+    with pytest.raises(ValueError, match='reviewed campaign unit'):
+        dispatcher._require_nonresumable_ledger_claim('other-campaign')
+    dispatcher._require_nonresumable_ledger_claim('campaign-test')
 
 
 def test_reviewed_runner_binds_spool_root(reviewed_plan, tmp_path):

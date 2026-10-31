@@ -28,6 +28,7 @@ from freeze_training_runtime import tree_identity
 from start_reviewed_generation_successor import atomic_json, digest
 from luna_source_inventory import verify as verify_luna_source_inventory
 from run_bonsai_queue import judge_arguments
+import memory_ledger
 
 
 RUNNER = (ROOT / 'scripts/run_bonsai_queue.py').resolve()
@@ -190,6 +191,14 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
         raise ValueError('Unsupported dispatcher plan schema')
     if plan.get('root_approved') is not True:
         raise ValueError('Dynamic dispatch requires explicit root approval')
+    resource_policy = plan.get('resource_policy')
+    if (not isinstance(resource_policy, dict) or
+            resource_policy.get('schema') != 'natlang.teacher_execution_resource_policy/1' or
+            resource_policy.get('resumable') is not False or
+            resource_policy.get('backfill') is not False or
+            resource_policy.get('partial_execution_is_resumable') is not False or
+            resource_policy.get('campaign_resume') != 'explicit only for unclaimed cases; uncertain claims are terminalized'):
+        raise ValueError('teacher plans must explicitly declare non-resumable execution and no automatic backfill')
     campaign_id = plan.get('campaign_id')
     if not isinstance(campaign_id, str) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]{2,100}', campaign_id):
         raise ValueError('Invalid campaign_id')
@@ -328,6 +337,7 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
                   'runtime_receipt_sha256': required_pins[str(receipt)],
                   'supervisor': str(supervisor), 'supervisor_sha256': required_pins[str(supervisor)],
                   'campaign_root': str(campaign_root), 'ledger': str(Path(plan['claim_ledger']).resolve()),
+                  'resource_policy': dict(resource_policy),
                   'journal_spool_root': str(spool_root),
                   'journal_spool_policy': {'schema': 'natlang.teacher_journal_spool_policy/1',
                     'per_case_bytes': 268435456, 'active_case_credits': 6, 'aggregate_bytes': 1610612736,
@@ -665,6 +675,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
     global _stop_requested
     _stop_requested = False
     plan, identity = validate_plan(plan_path, expected_sha256)
+    _require_nonresumable_ledger_claim(plan['campaign_id'])
     identity['identity_sha256'] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     root = Path(identity['campaign_root'])
     root.mkdir(parents=True, exist_ok=True)
@@ -823,6 +834,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                                                 'ledger': str(ledger)})
                     _authority_update(identity)
                     return 0
+
                 if active:
                     time.sleep(1)
                 elif next_case < len(cases) and not _stop_requested:
@@ -895,6 +907,28 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                                         'at': _now(), 'error': f'{type(error).__name__}: {error}',
                                         'ledger': str(ledger)})
             raise
+
+
+def _require_nonresumable_ledger_claim(campaign_id):
+    """Require the parent job to opt out of ledger preemption/backfill.
+
+    Persisting partial provider/service journals does not restore the active
+    execution graph or world state, so a guard restart would repeat effects.
+    """
+    unit = os.environ.get('NATLANG_LEDGER_UNIT')
+    if not isinstance(unit, str) or not unit.strip():
+        raise ValueError('teacher dispatcher must run inside memory_ledger with an explicit --no-resumable claim')
+    expected_unit = campaign_id if campaign_id.endswith('.service') else f'{campaign_id}.service'
+    if unit != expected_unit:
+        raise ValueError(f'teacher dispatcher ledger unit must be the reviewed campaign unit {expected_unit!r}')
+    with memory_ledger.ledger() as state:
+        claims = state.get('claims')
+        claim = claims.get(unit) if isinstance(claims, dict) else None
+        if not isinstance(claim, dict):
+            raise ValueError(f'teacher dispatcher has no memory-ledger claim for {unit!r}')
+        spec = claim.get('spec')
+        if claim.get('resumable') is not False or not isinstance(spec, dict) or spec.get('resumable') is not False:
+            raise ValueError(f'teacher dispatcher claim {unit!r} must be --no-resumable; execution graph/world state cannot resume')
 
 
 def main():

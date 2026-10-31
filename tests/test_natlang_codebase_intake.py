@@ -234,6 +234,9 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     assert report['status'] == 'prepared_unapproved'
     assert plan['root_approved'] is False
     assert plan['slots'] == 6 and plan['prompt_rendering'] == 'full'
+    assert plan['resource_policy']['resumable'] is False
+    assert plan['resource_policy']['backfill'] is False
+    assert '--no-resumable' in report['dispatch_command_after_review']
     assert len(plan['cases']) == 2 and len(calls) == len(rows)
     assert plan['source_inventory']['sha256']
     assert report['operation_counts'] == {'audit.nl': 1, 'reconcile.nl': 1}
