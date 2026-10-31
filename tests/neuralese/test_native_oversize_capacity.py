@@ -87,8 +87,8 @@ def test_capacity_with_real_inline_quantization_preserves_state():
     model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
     optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
     qat=Quantization(component());assert qat.install(model,inline=True)
-    before=copy.deepcopy(model.state_dict());state=copy.deepcopy(optimizer.state_dict());rng=torch.get_rng_state().clone()
+    before=copy.deepcopy(model.state_dict());state=copy.deepcopy(optimizer.state_dict());qat_state=copy.deepcopy(qat.state_dict());rng=torch.get_rng_state().clone()
     result=qualify_capacity(model,optimizer,examples()[:1],checkpoint_sha256='a'*64,source_binding={},
         cotangent_mode='plain',precision=(qat,'q4',0.5,1.5),production_packing=True)
     assert result['passed'] and result['qat_point']=={'point':'q4','mix':0.5,'loss_weight':1.5}
-    assert_exact(before,model.state_dict());assert_exact(state,optimizer.state_dict());assert torch.equal(rng,torch.get_rng_state())
+    assert_exact(before,model.state_dict());assert_exact(state,optimizer.state_dict());assert_exact(qat_state,qat.state_dict());assert torch.equal(rng,torch.get_rng_state())
