@@ -15,7 +15,7 @@ Stages (each resumable; run every stage under the memory ledger):
       --pieces the source is already converted (records + piece tables): conversion is skipped, edges are derived.
   e2e_mine.py convert --work DIR [--source NAME]
       convert each unconverted shard and keep the records of trajectories with at least one edge.
-  e2e_mine.py assemble --work DIR --id CORPUS_ID [--held-union DIR]
+      e2e_mine.py assemble --work DIR --id CORPUS_ID [--held-union DIR]
       merge all shard outputs: dedupe, split rules, piece conflicts, chains, per-family statistics.
 """
 from __future__ import annotations
@@ -31,6 +31,7 @@ from neuralese_data.decision_holds import load_decision_holds  # noqa: E402
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 from natlang_neuralese.common.jsonio import open_jsonl_text, iter_jsonl_rows  # noqa: E402
+from natlang_neuralese.common.custody import REGISTRY as PROTECTED_REGISTRY, ProtectedWorlds  # noqa: E402
 
 TS_HOST = Path(os.environ.get('E2E_MINE_TS_HOST', ROOT / 'ts-host'))
 LFM_TOKENIZER = resolve_str('repo', 'models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f')
@@ -82,10 +83,73 @@ def reviewed_trajectories(records, review_groups):
     blocked = collections.defaultdict(set)
     for record in records:
         if record.get('split') == 'train':
-            matched = set(record.get('source_groups') or []) & review_groups
+            program = ((record.get('task') or {}).get('program_ir') or {})
+            matched = (set(record.get('source_groups') or []) |
+                       set(program.get('source_groups') or [])) & review_groups
             if matched:
                 blocked[trajectory_of(record)].update(matched)
     return blocked
+
+
+def protected_trajectories(records, protected):
+    """Find whole train trajectories related to any identity in the current shared protection registry."""
+    blocked = collections.defaultdict(set)
+    for record in records:
+        if record.get('split') != 'train':
+            continue
+        program = ((record.get('task') or {}).get('program_ir') or {})
+        # The source program is the invocation world's stable identity. Merge in the authenticated
+        # record-level source custody before checking it, since native conversion stores those fields
+        # beside task.program_ir rather than inside it.
+        case = {**program,
+                'split': record.get('split'),
+                'source_ids': sorted(set(program.get('source_ids') or []) |
+                                     set(record.get('source_ids') or []) |
+                                     set(record.get('source_program_ids') or []) |
+                                     ({(record.get('source_ref') or {}).get('program_ir_id')}
+                                      if isinstance((record.get('source_ref') or {}).get('program_ir_id'), str) else set()) |
+                                     ({program['id']} if isinstance(program.get('id'), str) else set())),
+                'source_groups': sorted(set(program.get('source_groups') or []) |
+                                        set(record.get('source_groups') or []))}
+        kinds = protected.related(case)
+        if kinds:
+            blocked[trajectory_of(record)].update(kinds)
+    return blocked
+
+
+def load_current_protection():
+    return ProtectedWorlds.load()
+
+
+def current_protected_source_groups():
+    """Read declared source-group classes with exact hash checks, retaining quality-only provenance."""
+    registry_path = ROOT / PROTECTED_REGISTRY
+    registry_sha = sha256_file_hex(registry_path)
+    registry = json.loads(registry_path.read_text())
+    categories, bindings = {}, []
+    for source in registry.get('sources') or []:
+        if source.get('kind') != 'source-groups':
+            continue
+        if source.get('root'):
+            from natlang_neuralese.common.paths import resolve
+            path = Path(resolve(source['root'], source['path']))
+        else:
+            path = Path(source['path'])
+            if not path.is_absolute():
+                path = ROOT / path
+        before = sha256_file_hex(path)
+        if source.get('sha256') and source['sha256'] != before:
+            raise ValueError(f'current protected source groups differ from pinned digest: {source["id"]}')
+        for row in open_lines(path):
+            categories.setdefault(source['id'], set()).update(json.loads(row).get('source_groups') or [])
+        if sha256_file_hex(path) != before:
+            raise ValueError(f'current protected source groups changed during assembly: {source["id"]}')
+        bindings.append({'id': source['id'], 'path': str(path), 'sha256': before})
+    if 'quality-source-groups' not in categories:
+        raise ValueError('current ProtectedWorlds registry lacks its quality-only source groups')
+    if sha256_file_hex(registry_path) != registry_sha:
+        raise ValueError('current ProtectedWorlds registry changed while resolving quality groups')
+    return categories, bindings
 
 
 def trajectory_of(row):
@@ -413,7 +477,12 @@ def cmd_assemble(a):
     review_sha = registry_sha256()
     held_decisions, decision_bindings = load_decision_holds(getattr(a, 'decision_hold_ids', []))
     held_decision_flags = []
-    quality_groups, quality_bindings = set(), []
+    current_group_categories, current_group_bindings = current_protected_source_groups()
+    quality_groups = set(current_group_categories['quality-source-groups'])
+    nonquality_protected_groups = set().union(*(groups for source_id, groups in current_group_categories.items()
+                                                 if source_id != 'quality-source-groups'))
+    quality_bindings = [binding for binding in current_group_bindings
+                        if binding['id'] == 'quality-source-groups']
     for path in getattr(a, 'quarantine_reference', []):
         before = sha256_file_hex(path)
         for line in open_lines(path):
@@ -422,13 +491,17 @@ def cmd_assemble(a):
             raise ValueError(f'quality quarantine changed during snapshot: {path}')
         quality_bindings.append({'path': str(path), 'sha256': before})
     work = Path(a.work)
+    current_protection = load_current_protection()
+    protection_registry_path = ROOT / PROTECTED_REGISTRY
+    protection_registry_sha = sha256_file_hex(protection_registry_path)
     archived = sorted({*work.glob('*/archived-source.json'), *work.glob('archived-source.json')})
     if archived:
         raise ValueError('Restore archived mined sources and verify every recorded member before assembly: '
                          + ', '.join(str(path) for path in archived))
     out = Path(a.out_dir) / a.id if a.out_dir else Path(resolve_str('data_nvme', 'natlang-corpora', a.id))
     staged = out.with_name(out.name + '.building'); staged.mkdir(parents=True, exist_ok=True)
-    held_groups, held_bindings = held_union_groups(work, a.held_union)
+    held_groups, held_bindings = (held_union_groups(work, a.held_union) if a.held_union
+                                  else (set(), []))
     pieces, piece_conflicts = {}, set()
     shard_stems = sorted(Path(p[:-len('.stats.json')]) for p in glob.glob(str(work / '*' / 'shard-*.stats.json')))
     for stem in shard_stems:
@@ -463,7 +536,14 @@ def cmd_assemble(a):
             legacy_edge_repairs[str(stem.relative_to(work))] = repair
         reviewed = reviewed_trajectories(records.values(), review_groups)
         quarantined = reviewed_trajectories(records.values(), quality_groups)
-        protected = reviewed_trajectories(records.values(), held_groups)
+        held_protected = reviewed_trajectories(records.values(), held_groups)
+        current_protected_all = protected_trajectories(records.values(), current_protection)
+        current_nonquality_group_hits = reviewed_trajectories(records.values(), nonquality_protected_groups)
+        current_protected = {}
+        for trajectory, kinds in current_protected_all.items():
+            if (trajectory not in quarantined or trajectory in current_nonquality_group_hits
+                    or kinds - {'group', 'binding'}):
+                current_protected[trajectory] = kinds
         decision_held = collections.defaultdict(set)
         for rid, record in records.items():
             if rid not in held_decisions:
@@ -473,17 +553,28 @@ def cmd_assemble(a):
             else:
                 held_decision_flags.append({'id': rid, 'source': source, 'split': record.get('split')})
         keep_ids, drop = set(), {}
+        applicable = collections.defaultdict(set)
+        for trajectory, groups in quarantined.items():
+            applicable[trajectory].add('source_quality_quarantine_chain')
+        for trajectory, groups in held_protected.items():
+            applicable[trajectory].add('train_trajectory_shares_held_source_group')
+        for trajectory, kinds in current_protected.items():
+            applicable[trajectory].add('current_protected_worlds_custody')
+        for trajectory, ids in decision_held.items():
+            applicable[trajectory].add('native_decision_hold_chain')
+        for trajectory, groups in reviewed.items():
+            applicable[trajectory].add('source_review_pending_chain')
+        for trajectory in unresolved:
+            applicable[trajectory].add('unresolved_authentication_chain')
+        exclusion_priority = ('unresolved_authentication_chain', 'native_decision_hold_chain',
+                              'current_protected_worlds_custody', 'train_trajectory_shares_held_source_group',
+                              'source_quality_quarantine_chain', 'source_review_pending_chain')
         for rid, r in records.items():
-            if trajectory_of(r) in unresolved:
-                drop[rid] = 'unresolved_authentication_chain'; continue
-            if r.get('split') == 'train' and trajectory_of(r) in protected:
-                drop[rid] = 'train_trajectory_shares_held_source_group'; continue
-            if r.get('split') == 'train' and trajectory_of(r) in decision_held:
-                drop[rid] = 'native_decision_hold_chain'; continue
-            if r.get('split') == 'train' and trajectory_of(r) in quarantined:
-                drop[rid] = 'source_quality_quarantine_chain'; continue
-            if r.get('split') == 'train' and trajectory_of(r) in reviewed:
-                drop[rid] = 'source_review_pending_chain'; continue
+            trajectory = trajectory_of(r)
+            reasons = applicable.get(trajectory, set()) if r.get('split') == 'train' else set()
+            if reasons:
+                drop[rid] = next(reason for reason in exclusion_priority if reason in reasons)
+                continue
             if rid in seen_ids:
                 drop[rid] = 'duplicate_id_of_' + seen_ids[rid]; continue
             c = content_key(r)
@@ -513,8 +604,12 @@ def cmd_assemble(a):
         for rid, why in drop.items():
             groups = (quarantined if why == 'source_quality_quarantine_chain' else
                       reviewed if why == 'source_review_pending_chain' else
-                      protected if why == 'train_trajectory_shares_held_source_group' else None)
+                      held_protected if why == 'train_trajectory_shares_held_source_group' else None)
             detail = {'source_groups': sorted(groups[trajectory_of(records[rid])])} if groups is not None else {}
+            if why in exclusion_priority:
+                detail['applicable_exclusions'] = sorted(applicable[trajectory_of(records[rid])])
+            if trajectory_of(records[rid]) in current_protected_all:
+                detail['protected_identity_kinds'] = sorted(current_protected_all[trajectory_of(records[rid])])
             if why == 'unresolved_authentication_chain':
                 detail.update(authentication_failure_ids=sorted(unresolved[trajectory_of(records[rid])]),
                               required_conversion='restore authenticated producer/provider context for whole chain')
@@ -551,8 +646,16 @@ def cmd_assemble(a):
         'schema': 'natlang.neuralese-e2e-cohort/2', 'id': a.id,
         'format': 'natlang.teacher_training_turn.native/1 records (whole trajectories of every chain) + pieces + edges + chains, consumed by train/trajectories.py --records/--pieces; tokenizer-agnostic',
         'selection': 'every exact producer/import occurrence pair authenticated by the native-source-conversion/1 ledger; records retain every eligible full teacher trajectory for ordinary native SFT, with positional communication graphs as an additional view',
-        'exclusions': 'cross-split edges; train edges sharing a source group with a held document of the held union; duplicate ids (first source wins), exact duplicate content, piece version conflicts, conversion/authentication failures, all registered in omissions.jsonl',
+        'exclusions': 'current ProtectedWorlds-related whole train trajectories; optional legacy held-union source groups; native decision holds; quality quarantine; source review; cross-split edges; duplicate ids/content; piece conflicts; conversion/authentication failures, all registered in omissions.jsonl',
         'held_union': a.held_union, 'held_groups': len(held_groups), 'held_union_bindings': held_bindings,
+        'current_protected_worlds': {
+            'registry': PROTECTED_REGISTRY,
+            'registry_sha256': protection_registry_sha,
+            'protected_sha256': current_protection.digest,
+            'sources': [json.loads(item) for item in current_protection.sources],
+            'enforced_on': 'whole train trajectories via task.program_ir plus record source ids/groups; quality-only exclusions retain their distinct reason',
+        },
+        'current_protected_source_group_bindings': current_group_bindings,
         'piece_conflicts': sorted(piece_conflicts),
         'source_review_registry_sha256': review_sha,
         'native_decision_hold_bindings': decision_bindings,
@@ -568,6 +671,10 @@ def cmd_assemble(a):
         'files': {n: {'sha256': sha256_file_hex(staged / n), 'bytes': os.path.getsize(staged / n)}
                   for n in ('records.jsonl', 'pieces.jsonl', 'edges.jsonl', 'chains.jsonl', 'omissions.jsonl')},
     }
+    end_protection = load_current_protection()
+    if (sha256_file_hex(protection_registry_path) != protection_registry_sha
+            or end_protection.digest != current_protection.digest):
+        raise ValueError('current ProtectedWorlds registry or a protected source changed during assembly')
     json.dump(receipt, open(staged / 'receipt.json', 'w'), indent=1, sort_keys=True, default=dict)
     if out.exists():
         raise SystemExit(f'{out} exists; corpora are immutable')
@@ -1031,7 +1138,8 @@ def main():
     r = sub.add_parser('redo-failed'); r.add_argument('name'); r.add_argument('--work', required=True)
     m = sub.add_parser('assemble'); m.add_argument('--work', required=True); m.add_argument('--id', required=True)
     m.add_argument('--out-dir', help='parent directory of the corpus (default: data_nvme natlang-corpora); bulk corpora go to the HDD')
-    m.add_argument('--held-union', default=resolve_str('repo', 'runs/natlang-target-union-20261011-r3'))
+    m.add_argument('--held-union', default=None,
+                   help='optional additional legacy held-union directory; the current ProtectedWorlds registry is always enforced')
     m.add_argument('--quarantine-reference', action='append', type=Path, default=[],
                    help='canonical source-quality group witnesses; exclude whole affected train chains')
     m.add_argument('--decision-hold-ids', action='append', type=Path, default=[],

@@ -261,6 +261,38 @@ def test_held_union_cache_tracks_compressed_relocated_views_and_exact_bytes(tmp_
         module.held_union_groups(work, tmp_path / 'missing-union')
 
 
+def test_current_protection_blocks_reserved_source_group_at_whole_trajectory_scope():
+    path = Path(__file__).resolve().parents[1] / 'scripts/neuralese_data/e2e_mine.py'
+    spec = importlib.util.spec_from_file_location('e2e_current_protection_test', path)
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    custody_path = Path(__file__).resolve().parents[1] / 'training/neuralese'
+    import sys
+    sys.path.insert(0, str(custody_path))
+    from natlang_neuralese.common.custody import ProtectedWorlds
+    reserved = '2wiki-q:00310dc8094611ebbdaeac1f6bf848b6'
+    program = {'id': 'ordinary-program', 'family': 'ordinary', 'semantics': {
+        'root': 'main.nl', 'files': {'main.nl': 'program body'}, 'inputs': {'request': 'x'}}}
+    protected = ProtectedWorlds.from_cases({'reserved-v4': ('a' * 64, [
+        {'id': 'held-row', 'split': 'test', 'family': 'held', 'source_groups': [reserved],
+         'semantics': {'root': 'held.nl', 'files': {'held.nl': 'held'}, 'inputs': {}}},
+        {'id': 'held-source-ref', 'split': 'test', 'family': 'held', 'source_ids': ['upstream-program-id'],
+         'semantics': {'root': 'other.nl', 'files': {'other.nl': 'other'}, 'inputs': {}}}])})
+    rows = [
+        {'id': 'trajectory:0', 'split': 'train', 'source_ref': {'trajectory_id': 'trajectory'},
+         'source_groups': ['ordinary-group'], 'task': {'program_ir': program}},
+        {'id': 'trajectory:1', 'split': 'train', 'source_ref': {'trajectory_id': 'trajectory'},
+         'source_groups': [reserved], 'task': {'program_ir': program}},
+        {'id': 'clean:0', 'split': 'train', 'source_ref': {'trajectory_id': 'clean'},
+         'source_groups': ['clean-group'], 'task': {'program_ir': {**program, 'id': 'clean-program'}}},
+        {'id': 'ref-match:0', 'split': 'train', 'source_ref': {'trajectory_id': 'ref-match',
+                                                                 'program_ir_id': 'upstream-program-id'},
+         'source_groups': ['another-clean-group'], 'task': {'program_ir': {**program, 'id': 'new-local-program'}}},
+    ]
+    result = module.protected_trajectories(rows, protected)
+    assert set(result) == {'trajectory', 'ref-match'}
+    assert 'group' in result['trajectory']
+
+
 def test_extract_chains_preserves_exact_complete_source_rows_and_proves_membership(tmp_path):
     import hashlib
     from types import SimpleNamespace
@@ -376,13 +408,22 @@ def test_extract_chains_verifies_parent_hash_even_when_file_size_is_unchanged(tm
     assert not (tmp_path/'bad').exists()
 
 
-@pytest.mark.parametrize('hold_kind', ['quality', 'decision', 'held-group', 'authentication'])
+@pytest.mark.parametrize('hold_kind', ['quality', 'decision', 'held-group', 'current-reserved', 'quality-and-reserved', 'authentication'])
 def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_path, monkeypatch, hold_kind):
     from types import SimpleNamespace
     spec = importlib.util.spec_from_file_location('e2e_assemble_quality_test', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     monkeypatch.setattr(module, 'pending_unpinned_source_groups', lambda: set())
     monkeypatch.setattr(module, 'registry_sha256', lambda: 'a' * 64)
+    def current_related(case):
+        return ['group'] if set(case.get('source_groups', [])) & {'current:reserved', 'quality:bad'} else []
+    monkeypatch.setattr(module, 'load_current_protection', lambda: type('TestProtected', (), {
+        'related': staticmethod(current_related), 'digest': 'd' * 64, 'sources': ()})())
+    monkeypatch.setattr(module, 'current_protected_source_groups', lambda: ({
+        'quality-source-groups': {'quality:bad'},
+        'lfm3-joint-v4-complete-reserved-worlds-20261031': {'current:reserved'},
+    }, [{'id': 'quality-source-groups', 'sha256': 'e' * 64},
+        {'id': 'lfm3-joint-v4-complete-reserved-worlds-20261031', 'sha256': 'f' * 64}]))
     monkeypatch.setattr(module, 'held_union_groups', lambda *args:
                         ({'quality:bad'} if hold_kind == 'held-group' else set(), [{'sha256': 'b' * 64}]))
     work = tmp_path / 'work'; source = work / 'fixture'; source.mkdir(parents=True)
@@ -390,9 +431,14 @@ def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_pa
     for name, split in [('bad', 'train'), ('good', 'train'), ('held', 'test')]:
         ids = [name + ':0', name + ':1', name + ':2']
         for i, rid in enumerate(ids):
+            groups = ['quality:bad'] if name != 'good' and i == 2 else [name]
+            if hold_kind == 'current-reserved' and name == 'bad' and i == 2:
+                groups = ['current:reserved']
+            if hold_kind == 'quality-and-reserved' and name == 'bad' and i == 2:
+                groups = ['quality:bad', 'current:reserved']
             records.append({'id': rid, 'split': split, 'source_ref': {'trajectory_id': name},
                             # Only a non-endpoint context record carries the held source.
-                            'source_groups': ['quality:bad'] if name != 'good' and i == 2 else [name],
+                            'source_groups': groups,
                             'target': {'role': 'assistant', 'content': rid}, 'family': 'fixture'})
         edges.append({'trajectory': name, 'split': split, 'writer_split': split,
                       'writer_record_id': ids[0], 'reader_record_id': ids[1],
@@ -424,15 +470,28 @@ def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_pa
     assert {r['id'] for r in omissions} == {'bad:0', 'bad:1', 'bad:2'}
     reason = {'quality': 'source_quality_quarantine_chain', 'decision': 'native_decision_hold_chain',
               'held-group': 'train_trajectory_shares_held_source_group',
+              'current-reserved': 'current_protected_worlds_custody',
+              'quality-and-reserved': 'current_protected_worlds_custody',
               'authentication': 'unresolved_authentication_chain'}[hold_kind]
     assert all(r['reason'] == reason for r in omissions if r['stage'] == 'assemble')
+    if hold_kind == 'current-reserved':
+        assert all(r['protected_identity_kinds'] == ['group'] for r in omissions if r['stage'] == 'assemble')
+    if hold_kind == 'quality':
+        assert all(r['applicable_exclusions'] == ['source_quality_quarantine_chain']
+                   for r in omissions if r['stage'] == 'assemble')
+    if hold_kind == 'quality-and-reserved':
+        assert all(r['applicable_exclusions'] == ['current_protected_worlds_custody',
+                                                  'source_quality_quarantine_chain']
+                   for r in omissions if r['stage'] == 'assemble')
     if hold_kind == 'authentication':
         assert len(omissions) == 4
         assert all(r['authentication_failure_ids'] == ['bad:2'] for r in omissions if r['stage'] == 'assemble')
     receipt = json.loads((out / 'receipt.json').read_text())
     assert receipt['totals']['edges'] == 2
+    assert receipt['current_protected_worlds']['protected_sha256'] == 'd' * 64
     if hold_kind == 'quality':
-        assert receipt['source_quality_quarantine_bindings'][0]['sha256'] == module.sha256_file_hex(witness)
+        assert module.sha256_file_hex(witness) in {
+            item['sha256'] for item in receipt['source_quality_quarantine_bindings']}
     elif hold_kind == 'decision':
         assert all(r['decision_ids'] == ['bad:0'] for r in omissions)
         assert receipt['native_decision_hold_bindings'][0]['sha256'] == module.sha256_file_hex(decision_witness)
