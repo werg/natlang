@@ -48,6 +48,17 @@ def test_duplicate_case_identity_is_not_extra_generation_supply():
         select_balanced_train([row, dict(row)], max_cases=2, seed=1, protected=Protection())
 
 
+def test_judged_train_rows_require_explicit_distinct_judge_opt_in():
+    row = case('app', 'reconcile.nl', 1)
+    row['semantics']['oracle'] = {'level': 'judged', 'rubric': 'Assess the source-grounded interpretation.'}
+    with pytest.raises(ValueError, match='judged row is mixed into the exact source'):
+        select_balanced_train([row], max_cases=1, seed=1, protected=Protection())
+    selected, receipts = select_balanced_train([row], max_cases=1, seed=1,
+                                               protected=Protection(), include_judged=True)
+    assert selected == [row]
+    assert len(receipts) == 1
+
+
 def test_codebase_intake_preserves_domain_without_breaking_collector_schema(tmp_path):
     from test_natlang_codebase_intake import _package
     from scripts.rl_tasks.intake_natlang_codebase import intake

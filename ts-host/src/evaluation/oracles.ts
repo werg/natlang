@@ -536,7 +536,7 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
     return { accepted: !errors.length && score >= threshold, score, passed, items, failed, errors, pending, quality_version: DATA_QUALITY_VERSION };
   }
   for (const path of paths) {
-    const got = actual[path], want = expected[path];
+    const got = actual[path], want = expected[path], before = input[path];
     // Read-only source corruption and unexpected output are contract failures, never diluted by many report rows.
     if (want === input[path] && got !== want || want === undefined && got !== undefined) errors.push(`unexpected_change:${path}`);
     if (got === undefined || want === undefined) { item(path, got === want); continue; }
@@ -608,9 +608,15 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
         item(path, agreement(counts, countLines(want)) >= threshold);
       }
       catch (error) { errors.push(`${path}:${(error as Error).message}`); item(path, false); }
-    } else if (compare === 'rewrite' && input[path] !== undefined) {
-      const validShape = front(got) === front(input[path]!) && front(got) === front(want);
-      const referenceMatch = [want, ...(spec.alternates?.[path] ?? [])].some(candidate => body(got).trim() === body(candidate).trim());
+    } else if (compare === 'rewrite' && typeof want === 'string') {
+      // A rewrite may create a new expected file. In that case there is no
+      // input front matter to preserve, but the candidate must still match
+      // the reference's front matter and be judged against the exact output
+      // path. Unexpected extra files (want === undefined) remain exact fails.
+      const validShape = got !== undefined && front(got) === front(want) &&
+        (before === undefined || front(got) === front(before));
+      const referenceMatch = got !== undefined && [want, ...(spec.alternates?.[path] ?? [])]
+        .some(candidate => body(got).trim() === body(candidate).trim());
       if (validShape && !referenceMatch && (!judgments[path] || judgments[path]?.needs_review)) pending.push(`unverified_rewrite:${path}`);
       item(path, validShape && (referenceMatch || judgments[path]?.accepted === true && !judgments[path]?.needs_review));
     } else item(path, got === want);
@@ -660,11 +666,15 @@ export async function checkFilesWithJudge(actual: Record<string, string>, expect
       }
       continue;
     }
-    if (actual[path] === undefined || input[path] === undefined || expected[path] === input[path] ||
-        front(actual[path]!) !== front(input[path]!)) continue;
+    if (actual[path] === undefined || expected[path] === input[path] ||
+        (input[path] !== undefined && front(actual[path]!) !== front(input[path]!)) ||
+        front(actual[path]!) !== front(expected[path]!)) continue;
     if ([expected[path]!, ...(spec.alternates?.[path] ?? [])].some(value => body(actual[path]!).trim() === body(value).trim())) continue;
-    judgments[path] = await judge({ actual: { original: body(input[path]!), revised: body(actual[path]!) },
-      expected: { reference: body(expected[path]!) }, rubric: spec.rubric });
+    judgments[path] = await judge({ actual: {
+      original_exists: input[path] !== undefined,
+      original: input[path] === undefined ? null : body(input[path]),
+      revised: body(actual[path]!),
+    }, expected: { reference: body(expected[path]!) }, rubric: spec.rubric });
   }
   return checkFiles(actual, expected, input, spec, judgments);
 }

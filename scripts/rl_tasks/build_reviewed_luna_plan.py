@@ -48,11 +48,27 @@ def _rows(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _verify_rows(source: Path, verification_path: Path) -> tuple[list[dict], dict]:
+def _verify_rows(source: Path, verification_path: Path, *, intake_receipt: dict | None = None) -> tuple[list[dict], dict]:
     rows = _rows(source)
     if not rows:
         raise ValueError('verified source has no cases')
     verification = json.loads(verification_path.read_text(encoding='utf-8'))
+    levels = [row.get('semantics', {}).get('oracle') for row in rows]
+    judged_only = all(value == 'judged' or isinstance(value, dict) and value.get('level') == 'judged'
+                      for value in levels)
+    if verification.get('schema') == 'natlang.judged-source-qualification/1':
+        if (not judged_only or not isinstance(intake_receipt, dict) or
+                verification.get('cases_sha256') != _sha(source) or
+                verification.get('judged_cases_path') != str(source.resolve()) or
+                verification.get('judged_cases_sha256') != intake_receipt.get('judged_cases_sha256') or
+                verification.get('intake_receipt_sha256') != hashlib.sha256(
+                    json.dumps(intake_receipt, sort_keys=True, separators=(',', ':')).encode()).hexdigest() or
+                verification.get('behaviorally_verified') is not False or
+                intake_receipt.get('judged_cases_path') != str(source.resolve()) or
+                intake_receipt.get('judged_cases_sha256') != _sha(source) or
+                intake_receipt.get('admission_eligible') is not True):
+            raise ValueError('judged source qualification does not bind its source and cleared intake receipt')
+        return rows, verification
     if verification.get('schema') != 'natlang.broad-rl-case-verification/1':
         raise ValueError('unsupported source verification receipt')
     if verification.get('cases_sha256') != _sha(source):
@@ -80,14 +96,15 @@ def _program_id(row: dict) -> str:
 
 
 def select_balanced_train(rows: list[dict], *, max_cases: int, seed: int,
-                          protected: ProtectedWorlds) -> tuple[list[dict], list[dict]]:
+                          protected: ProtectedWorlds,
+                          include_judged: bool = False) -> tuple[list[dict], list[dict]]:
     candidates, receipts, seen_ids = [], [], set()
     for row in rows:
         if row.get('split') != 'train':
             continue
         oracle = row.get('semantics', {}).get('oracle', 'exact')
         level = oracle if isinstance(oracle, str) else oracle.get('level') if isinstance(oracle, dict) else None
-        if level == 'judged':
+        if level == 'judged' and not include_judged:
             raise ValueError(f'judged row is mixed into the exact source: {row.get("id")}')
         if row.get('id') in seen_ids:
             raise ValueError(f'duplicate training case identity: {row.get("id")}')
@@ -154,6 +171,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
                selected_source: Path, protection_receipt: Path, max_cases: int = 42,
                seed: int = 20261031, intake_receipt: Path | None = None,
                diversity_manifest: Path | None = None,
+               judge_model: dict[str, str] | None = None,
                protected: ProtectedWorlds | None = None) -> dict:
     source = source.resolve(strict=True)
     verification = verification.resolve(strict=True)
@@ -170,12 +188,22 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         raise ValueError('campaign root must be below this checkout runs/')
     if campaign_root.exists():
         raise ValueError(f'campaign root already exists: {campaign_root}')
-    rows, verify_record = _verify_rows(source, verification)
     intake_record = json.loads(intake_receipt.read_text(encoding='utf-8')) if intake_receipt else None
+    rows, verify_record = _verify_rows(source, verification, intake_receipt=intake_record)
     if intake_record and not intake_record.get('admission_eligible'):
         raise ValueError('codebase dataset has an unresolved rights hold')
     protected = protected or ProtectedWorlds.load()
-    selected, selected_receipts = select_balanced_train(rows, max_cases=max_cases, seed=seed, protected=protected)
+    judged_train = [row for row in rows if row.get('split') == 'train' and
+                    (row.get('semantics', {}).get('oracle') == 'judged' or
+                     isinstance(row.get('semantics', {}).get('oracle'), dict) and
+                     row['semantics']['oracle'].get('level') == 'judged')]
+    if judged_train and judge_model is None:
+        raise ValueError('judged train rows require an explicit independent judge_model')
+    if judge_model is not None:
+        run_bonsai_queue.judge_arguments({'judge_model': judge_model}, 'gpt-6-luna')
+    selected, selected_receipts = select_balanced_train(
+        rows, max_cases=max_cases, seed=seed, protected=protected,
+        include_judged=judge_model is not None)
     selected_source.parent.mkdir(parents=True, exist_ok=True)
     selected_source.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in selected), encoding='utf-8')
     cases = [{'index': index, 'seed': int(hashlib.sha256(f'{campaign_id}|{seed}|{row["id"]}'.encode()).hexdigest()[:8], 16)}
@@ -226,6 +254,8 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'context_tokens': 32768, 'case_seconds': 1800, 'min_free_mib': 40960,
         'cases': cases,
     }
+    if judge_model is not None:
+        plan['judge_model'] = judge_model
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(plan, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf-8')
     plan_sha = _sha(output)
@@ -236,7 +266,10 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'schema': 'natlang.luna-six-slot-plan-preparation/1', 'status': 'prepared_unapproved',
         'plan': str(output.resolve()), 'plan_sha256': plan_sha,
         'case_source': str(selected_source.resolve()), 'case_source_sha256': _sha(selected_source),
-        'verification': {'path': str(verification), 'sha256': _sha(verification), 'source_sha256': verify_record['cases_sha256']},
+        'verification': {'path': str(verification), 'sha256': _sha(verification),
+                         'source_sha256': verify_record['cases_sha256'],
+                         'mode': verify_record.get('schema'),
+                         'behaviorally_verified': verify_record.get('behaviorally_verified', True)},
         'protected_worlds_digest': protected.digest, 'checked_train_rows': protection_record['checked_train_rows'],
         'selected_rows': len(selected), 'program_counts': dict(counts_program),
         'rows_with_unknown_codebase': counts_program.get('__unknown_codebase__', 0),
@@ -261,16 +294,28 @@ def main() -> None:
     parser.add_argument('--protection-receipt', type=Path, required=True)
     parser.add_argument('--intake-receipt', type=Path)
     parser.add_argument('--diversity-manifest', type=Path)
+    parser.add_argument('--judge-model-id', help='distinct independent judge for judged train rows')
+    judge_transport = parser.add_mutually_exclusive_group()
+    judge_transport.add_argument('--judge-provider')
+    judge_transport.add_argument('--judge-server')
     parser.add_argument('--max-cases', type=int, default=42)
     parser.add_argument('--seed', type=int, default=20261031)
     args = parser.parse_args()
+    if (args.judge_provider or args.judge_server) and not args.judge_model_id:
+        parser.error('--judge-provider/--judge-server require --judge-model-id')
+    if args.judge_model_id and not (args.judge_provider or args.judge_server):
+        parser.error('--judge-model-id requires exactly one judge transport')
     receipt = build_plan(source=args.source, verification=args.verification, runtime=args.runtime,
                          authority=args.authority, campaign_id=args.campaign_id,
                          campaign_root=args.campaign_root, output=args.output,
                          inventory_output=args.inventory_output, selected_source=args.selected_source,
                          protection_receipt=args.protection_receipt, max_cases=args.max_cases,
                          seed=args.seed, intake_receipt=args.intake_receipt,
-                         diversity_manifest=args.diversity_manifest)
+                         diversity_manifest=args.diversity_manifest,
+                         judge_model=({'model_id': args.judge_model_id,
+                                       **({'provider': args.judge_provider} if args.judge_provider else {}),
+                                       **({'server': args.judge_server} if args.judge_server else {})}
+                                      if args.judge_model_id else None))
     print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
 
 

@@ -118,6 +118,27 @@ test('rewrites accept reference alternatives or a recorded external rubric verdi
   assert.equal(checkFileReturn(1, input, input, spec), false);
 });
 
+test('rewrite judges see newly created expected files and exact missing-path effects', async () => {
+  const expected = { 'reports/HDFS-window-05.json': '{"windowId":"HDFS-window-05","findings":[]}' };
+  const actual = { 'reports/HDFS-window-05.json': '{ "findings": [{"lineIds":[292]}], "windowId":"HDFS-window-05" }' };
+  let requestSeen;
+  const graded = await checkFilesWithJudge(actual, expected, {}, {
+    compare: 'rewrite', rubric: 'Keep the report source-grounded and preserve the exact requested file path.',
+  }, async request => {
+    requestSeen = request;
+    return { accepted: true, verdict: 'The new report includes the required source line.' };
+  });
+  assert.equal(graded.accepted, true);
+  assert.equal(requestSeen.actual.original_exists, false);
+  assert.equal(requestSeen.actual.original, null);
+  assert.equal(requestSeen.actual.revised, actual['reports/HDFS-window-05.json']);
+  assert.equal(requestSeen.expected.reference, expected['reports/HDFS-window-05.json']);
+  assert.equal(graded.judgments['reports/HDFS-window-05.json'].accepted, true);
+
+  assert.equal(checkFiles({ 'unexpected.json': '{}' }, {}, {}, { compare: 'rewrite', rubric: 'Review outputs.' }).accepted, false);
+  assert.equal(checkFiles({}, {}, { 'obsolete.json': '{}' }, { compare: 'rewrite', rubric: 'Review outputs.' }).accepted, true);
+});
+
 test('count reports reject ignored garbage, negatives and duplicate labels; invalid agreement fails closed', async () => {
   for (const text of ['a: 1\nignored', 'a: -1', 'a: 1\na: 1'])
     assert.equal(checkFiles({ 'INDEX.md': text }, { 'INDEX.md': 'a: 1' }, {}, { compare: 'counts' }).accepted, false);

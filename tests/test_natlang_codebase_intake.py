@@ -198,7 +198,18 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     for folder in ('dist', 'scripts', 'src'):
         (runtime / folder).mkdir(parents=True, exist_ok=True)
         (runtime / folder / 'runtime.js').write_text('// runtime fixture\n')
-    (runtime / 'frozen-runtime.json').write_text(json.dumps({'files': plan_builder.tree_identity(runtime)}))
+    teacher = runtime / 'dist' / 'teacher'
+    teacher.mkdir(parents=True, exist_ok=True)
+    cli = teacher / 'cli.js'
+    collector = teacher / 'collector.js'
+    cli.write_text("console.log('--text-neuralese-emulation');\n")
+    collector.write_text('// frozen collector fixture\n')
+    build = {'mode': 'explicit_compiled_dist', 'compiled_dist_files': {
+        'teacher/cli.js': hashlib.sha256(cli.read_bytes()).hexdigest(),
+        'teacher/collector.js': hashlib.sha256(collector.read_bytes()).hexdigest(),
+    }}
+    (runtime / 'frozen-runtime.json').write_text(json.dumps({
+        'build': build, 'files': plan_builder.tree_identity(runtime)}))
     authority = tmp_path / 'authority.json'
     authority.write_text('{}\n')
     intake_receipt = tmp_path / 'intake.json'

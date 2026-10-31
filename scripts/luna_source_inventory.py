@@ -53,8 +53,13 @@ def inventory(source: Path, cases: list[dict[str, Any]]) -> dict[str, Any]:
         if not isinstance(curriculum, dict):
             raise ValueError(f"source row {index} has malformed curriculum metadata")
         reference = curriculum.get("reference")
+        # The codebase intake emits an empty curriculum reference when a world has
+        # no hand-authored trajectory. Such rows still bind their actual native
+        # package below; an empty list is not a malformed or missing codebase.
+        if isinstance(reference, dict) and reference.get("root") == []:
+            reference = None
         program = reference.get("root") if isinstance(reference, dict) else None
-        if "reference" not in curriculum:
+        if reference is None:
             semantics = row.get("semantics") or {}
             root, project = semantics.get("root"), semantics.get("files")
             if (row.get('version') != 'natlang.program/2'

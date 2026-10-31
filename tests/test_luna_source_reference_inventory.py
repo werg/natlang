@@ -81,7 +81,7 @@ def test_authored_native_project_is_bound_without_inventing_a_reference(tmp_path
         with pytest.raises(ValueError, match='complete native source project'):
             inventory(path, cases)
     changed = json.loads(json.dumps(row))
-    changed['curriculum']['reference'] = {}
+    changed['curriculum']['reference'] = {'root': []}
     path.write_text(json.dumps(changed) + '\n')
-    with pytest.raises(ValueError, match='canonical root program'):
-        inventory(path, cases)
+    empty_reference = inventory(path, cases)['entries'][0]
+    assert empty_reference['root_source_format'] == 'native-project-v1'
