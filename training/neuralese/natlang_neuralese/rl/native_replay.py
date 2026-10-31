@@ -1056,8 +1056,13 @@ class NativePolicyObjective:
             probe=os.environ.get('NATLANG_POLICY_LOGPROB_RECEIPT')
             if probe and actions and not getattr(self,'_behavior_logprob_probe_done',False):
                 from pathlib import Path
-                if Path(probe).exists():raise ValueError('policy logprob probe destination already exists')
-                behavior_logprob_probe(model,hidden,actions,graph_id=example.id,policy=self.identity,destination=probe)
+                if Path(probe).exists():
+                    import json
+                    saved=json.loads(Path(probe).read_text())
+                    if saved.get('schema')!='natlang.native-policy-behavior-logprob-probe/1' or saved.get('policy')!=self.identity:
+                        raise ValueError('policy logprob probe destination belongs to a different policy')
+                else:
+                    behavior_logprob_probe(model,hidden,actions,graph_id=example.id,policy=self.identity,destination=probe)
                 self._behavior_logprob_probe_done=True
             parts_before = len(jolt_parts)
             if not actions:
