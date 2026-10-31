@@ -4,6 +4,38 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Cleanup and supervision observation, 19:11 CET
+
+Owner-approved `/home/werg/megatoken-runs` deletion is complete: measured
+free-space gain was 95,022,338,048 bytes (88.5 GiB). Thirteen clean integrated
+recovery worktrees and redundant raw/extracted restore staging were removed.
+Three remaining recovery checkouts contain unintegrated commits or edits and
+remain preserved for review. A further 1,234,894,848 allocated bytes of inactive
+row indexes and llama build outputs were removed. The historical 4,238,110,720
+byte standalone recovery tar was replaced by a 3,437,376,282 byte zstd archive;
+full decompression reproduces its original SHA256. Original receipts remain
+historical; the new transport/cleanup receipts are in `W/ops/`, where
+`W=/home/werg/data/lfm3-rl-dgx-20261029`. Root free space was 96 GiB at19:10.
+No live checkpoint reserve inodes were removed.
+
+Corrected SFT53 is durable but not advancing while Terra diagnoses complete-
+gradient law differences. Symmetric CUDA dX candidate6804629da passes tiny
+cross-carrier/negative controls but full SD52 still fails185/289; runtime-prefix
+changes are a confound, so this is not production qualification. SD53 comparison
+and actual path/geometry diagnosis continue. No further SGD is authorized on
+an unqualified implementation; rejected old72 remains diagnostic only.
+
+The broad teacher-mine assembly reached10.16GB records. Its15-minute exclusive
+HDD window improved progress materially; the19:09:52 automatic thaw succeeded.
+Renewed shared-disk congestion is being corrected with an explicit serial heavy-
+I/O queue and bounded automatic thaw, rather than leaving useful processes
+fighting over the drive. No partial source has been admitted.
+
+Main pushed through edcad5072 after quick checks passed. Focused tuning tests14/14
+and corrected interpreter input-repair check passed. Full interpreter tests then
+exposed four interactions with c863a1b9c promise ownership; Luna C is fixing them
+before generation uses that runtime. Do not claim the broad suite is green.
+
 ## Follow-up observation, 18:57 CET
 
 The rejected SFT72 branch is diagnostic only. Exact controlled same-engine,
