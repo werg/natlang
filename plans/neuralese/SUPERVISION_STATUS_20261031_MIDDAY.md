@@ -4,6 +4,59 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Follow-up observation, 13:06 CET
+
+The actual SD52 CUDA bridge proof now exists:
+`/home/werg/data/luna-deep-codebases-20261031/campaign-v6-c/native-bridge-v1/qualification.json`.
+One authenticated Luna host-text encoder and one teacher-forced consumer have135
+supervised target tokens; actual backward reaches writer embeddings, consumer
+embeddings, native input adapter and backbone. This qualifies that specific
+single-input path, not all episodes or multi-input support. C is generalizing it
+and closing the remaining source/inference/training integration gaps.
+
+Root fixed a separate admission bug: the TypeScript collector hashes program keys
+with `localeCompare`, whereas Python canonical JSON uses Unicode codepoint order.
+The authenticated frozen collector now verifies its own wire digests; internal
+Python packet hashes retain their declared convention.17targeted tests passed,
+including actual Node ordering and tampered-content checks. Two accepted deep
+ordinary Luna trajectories now convert to38 LFM3 graphs/270,051tokens, exact train
+hash578b7f767b88583df0a59235524566cab17bcaa676ba2008be3b46af5e6b31b2.
+Receipt is under
+`/mnt/external/natlang-lfm3-data-20261028/luna-deep-inspection-v5-20261031-v1`.
+Their positive idiom scores are in
+`runs/lfm3-mixture/scores/idiom-717f2f18e004/teacher-twins/57878bc9f1914886.jsonl.zst`.
+Terra's improved successor includes them subject to complete current connected
+protection closure. Root is waiting for the actual retained count before final
+registry admission. Direct converter receipts were also silently skipped by the
+recipe discovery code; that schema/model check is fixed and its targeted test
+passes. Main pushed through60c09ba80, including these fixes and quick checks.
+
+The13-turn independently regraded ordinary inspection trajectory is being rendered
+by live `luna-c-regrade-full-render-1031`; wrapper revalidates exact original case,
+SQLite oracle proof, derived row and conversion/admission bindings first. Original
+rejection is preserved. Output is staged externally under
+`natlang-lfm3-data-20261028/luna-inspection-regrade-489-full-20261031-v1`.
+Rendering/graph conversion, full protection and actual admission remain required.
+
+Pop requalified all1,471 repair rows against its rebuilt current runtime:
+1,471reference passes,4,396negative controls, zero wrong accepted/errors.
+Full7,608-case successor verification is running; do not infer full completion from
+partial passes. Pop's earlier stale compiled runtime lacked codebase-check.js;
+DGX runtimes7b and570 both contain and import that checker, so that specific stale
+Pop defect does not explain the SD52 model failures. The repair return contract
+and caller/file guidance have separate explicit corrections. Pop lacks some
+registered held inputs, so final protection/assembly runs on DGX rather than
+weakening protection or copying the whole held registry unnecessarily.
+
+Base v4 all82,773graph prompt/effective-target verification passed; its geometry
+and expanded successor closure/CE/geometry are still being completed. The armed
+`lfm3-v4-auto-launch3` watcher starts earned joint SFT automatically after exact
+qualification, named Natlang actor/bridge idleness and ledger admission. It checks
+again inside the admitted100GiB unit and under the shared update lock immediately
+before the trainer. Other projects' GPU PIDs alone do not block it. Full SFT has
+not yet advanced beyond the SD52 parent. Joint source obligations remain intact;
+20updates is a behavior/recipe refresh window, not completion of the stage.
+
 ## Latest observation, 12:53 CET (supersedes the historical snapshot below)
 
 SD round9 finished at global52; actual full parent is
