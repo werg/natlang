@@ -7,7 +7,7 @@ import {execFileSync} from 'node:child_process';
 import {OperationJournal,Folder} from '../dist/index.js';
 import {fingerprint} from '../dist/adaptation/identity.js';
 import {AUTHORED_IMPROVER} from '../dist/improvement/authored-source.js';
-import {compileVirtualProject} from '../dist/runtime/virtual-project.js';
+import {compileVirtualProject} from '../dist/index.js';
 import * as runtime from '../dist/runtime/node.js';
 import {gepaModule} from '../dist/gepa/index.js';
 

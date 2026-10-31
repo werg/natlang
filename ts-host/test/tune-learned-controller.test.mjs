@@ -4,8 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readLearnedSettings } from '../dist/tune/learned.js';
-import '../dist/runtime/node.js';
-import { runInFrame } from '../dist/runtime/context.js';
+import { createNatlangRuntime } from '../dist/runtime/node.js';
 import { decodeNativeState, MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { nativeStateFixture } from './fixtures/native-state.mjs';
 import { nativeBridge } from '../../applications/learned-optimizer/native-bridge.mjs';
@@ -27,7 +26,8 @@ test('controller evidence crosses into the optimizer with its verified native id
   const requests = [], python = { request: async request => { requests.push(request); } };
   const repository = new URL('../..', import.meta.url).pathname;
   const bridge = nativeBridge(repository, python, '/plan', '/out');
-  await runInFrame({ task: { runtime: { options: { neuralese: { store } } } }, chain: [] },
+  const runtime = createNatlangRuntime({ calls: false, neuralese: { store } });
+  await runtime.run(
     () => bridge([{ binding: 'b', digest: { $neuralese: { id: state.id } } }]));
   assert.equal(requests[0].op, 'import-artifacts');
   assert.equal(decodeNativeState(Buffer.from(requests[0].artifacts[0].bytes, 'base64')).id, state.id);

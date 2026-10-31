@@ -16,7 +16,7 @@ import * as gepa from '../dist/gepa/index.js';
 import { frontierParents, memberOf, meanBetter } from '../dist/optimization/strategies/gepa.js';
 import { AUTHORED_IMPROVER } from '../dist/improvement/authored-source.js';
 import { builtinModule } from '../dist/runtime/modules.js';
-import '../dist/runtime/node.js';
+import { nodePlatform } from '../dist/runtime/node.js';
 
 const populations = [
   { cases: ['a', 'b', 'c'], quality: { base: [0.2, 0.5, 0.1], x: [0.9, 0.1, 0.1], y: [0.9, 0.5, 0.0], z: [0.1, 0.1, 0.1] } },
@@ -118,7 +118,7 @@ test('the engine comparison is the shared one: eligibility, quality, then the de
 });
 
 test('the application reaches the module as natlang:gepa and holds no second copy', () => {
-  assert.equal(builtinModule('natlang:gepa'), gepa.gepaModule);
+  assert.equal(builtinModule(nodePlatform(), 'natlang:gepa'), gepa.gepaModule);
   for (const name of ['improveStep/parents.ts', 'improveStep/selection.ts', 'improveStep/rewriteProgram.nl', 'improveStep/rewriteProgram/bookkeeping.ts'])
     assert.equal(AUTHORED_IMPROVER[name], undefined, `${name} is gone`);
   const typescript = Object.entries(AUTHORED_IMPROVER).filter(([name]) => name.endsWith('.ts'));
