@@ -3708,6 +3708,11 @@ def _main(argv=None, *, requested_refresh):
                 raise
             batches_left -= len(fetched)
             micro_batches = [item[3] for item in fetched]
+            # A detached full-state checkpoint can overlap the qualified
+            # ordinary workload, but not an as-yet-unqualified oversized
+            # graph. Drain before calibration, its capacity gate, or forward.
+            from .native_packed_capacity import checkpoint_overlap_barrier
+            oversized_update = checkpoint_overlap_barrier(policy, micro_batches, oversize_limits)
             indices = [index for item in fetched for index in item[1]]
             pass_end = any(item[2] for item in fetched)
             batch = [example for micro in micro_batches for example in micro]
@@ -4013,7 +4018,7 @@ def _main(argv=None, *, requested_refresh):
                       rng=capture_training_rng_state(args.device), metrics=metrics,
                       architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
                       fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress,
-                      async_allowed=(args.async_checkpoint and step < total_end and not policy.signaled
+                      async_allowed=(args.async_checkpoint and not oversized_update and step < total_end and not policy.signaled
                           and not relative_refresh_due and not requested_refresh.requested
                           and not (args.refresh_after_updates is None
                               and args.refresh_at_checkpoint and due_checkpoint)))

@@ -172,3 +172,21 @@ def test_retained_gradient_allocation_oom_is_reported_without_update(monkeypatch
     assert not result['passed'] and result['optimizer_updates']==0
     assert result['cases'][0]['failure_phase']=='retained-gradient-allocation'
     assert all(p.grad is None for p in model.parameters())
+
+
+def test_oversize_checkpoint_barrier_drains_before_forward_and_leaves_ordinary_async():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.native_packed_capacity import checkpoint_overlap_barrier
+    class Policy:
+        def __init__(self): self.drains = 0
+        def drain_async(self): self.drains += 1
+    def graph(tokens, slots):
+        return SimpleNamespace(plan=SimpleNamespace(token_count=tokens, slot_sources=range(slots)))
+    policy = Policy()
+    baseline = {'forward_tokens': 100, 'kv_slots': 120}
+    assert not checkpoint_overlap_barrier(policy, [[graph(100, 120)]], baseline)
+    assert policy.drains == 0
+    assert checkpoint_overlap_barrier(policy, [[graph(101, 120)]], baseline)
+    assert policy.drains == 1
+    assert checkpoint_overlap_barrier(policy, [[graph(90, 121)]], baseline)
+    assert policy.drains == 2

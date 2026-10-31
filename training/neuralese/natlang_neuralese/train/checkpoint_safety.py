@@ -565,12 +565,27 @@ def native_async_snapshot_headroom(state, optimizer, *, margin=1.15, available_m
     overhead = max(16 * 1024 * 1024, parameter_count * 1024)
     size_bound = int(math.ceil((payload + max(0, lazy_slots-current_slots) + overhead) * margin))
     available = available_system_memory_bytes()
-    required = int(math.ceil(size_bound * available_margin))
+    # Leave room for the measured device high-water mark to recur after this
+    # boundary, plus 25% margin. CUDA allocations can share physical memory
+    # with host snapshots; a boundary-only host check misses that growth.
+    device_peak = device_reserved = device_growth = 0
+    if torch.cuda.is_initialized():
+        device_peak = int(torch.cuda.max_memory_reserved())
+        device_reserved = int(torch.cuda.memory_reserved())
+        if device_peak <= 0:
+            return {'eligible': False, 'reason': 'device_peak_unmeasured',
+                    'available_host_bytes': available, 'snapshot_size_bound_bytes': size_bound,
+                    'required_headroom_bytes': None}
+        device_growth = max(0, math.ceil(device_peak * 1.25) - device_reserved)
+    required = int(math.ceil(size_bound * available_margin)) + device_growth
     return {'eligible': available is not None and available >= required,
             'available_host_bytes': available, 'snapshot_size_bound_bytes': size_bound,
             'required_headroom_bytes': required, 'state_tensor_bytes': payload,
             'lazy_optimizer_bytes': max(0, lazy_slots-current_slots),
-            'available_margin': available_margin, 'size_margin': margin}
+            'available_margin': available_margin, 'size_margin': margin,
+            'device_peak_reserved_bytes': device_peak, 'device_reserved_bytes': device_reserved,
+            'future_device_growth_allowance_bytes': device_growth,
+            'future_device_peak_margin': 1.25 if device_peak else None}
 
 
 def _state_tensor_bytes(value):

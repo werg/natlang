@@ -201,7 +201,7 @@ def test_native_trainer_drains_on_update_and_schedule_close_errors_without_savin
     monkeypatch.setattr(trainer.CheckpointPolicy,'drain_async',observed_drain)
     argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
         '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
-        '--epochs','3','--eval-every','1','--checkpoint-every','1','--task-eval-every','0',
+        '--epochs','3','--batch-tokens','16','--eval-every','1','--checkpoint-every','1','--task-eval-every','0',
         '--async-checkpoint','--out',str(tmp_path/'run')]
     if explicit_refresh_updates is not None:
         argv += ['--refresh-at-checkpoint', '--refresh-after-updates', str(explicit_refresh_updates)]
@@ -444,3 +444,20 @@ def test_failed_reserved_writer_recovers_newer_full_state_in_spare(tmp_path, mon
     saved = torch.load(policy.slot, weights_only=False)
     assert saved['step'] == 5 and saved['training']['exposure_counts']['graph'] == 5
     assert calls == [4]
+
+
+def test_async_admission_reserves_measured_future_device_growth(monkeypatch):
+    from natlang_neuralese.train import trajectory_state
+    from natlang_neuralese.train.checkpoint_safety import native_async_snapshot_headroom
+    monkeypatch.setattr(torch.cuda, 'is_initialized', lambda: True)
+    monkeypatch.setattr(torch.cuda, 'max_memory_reserved', lambda: 1000)
+    monkeypatch.setattr(torch.cuda, 'memory_reserved', lambda: 500)
+    optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
+    state = {'model': torch.ones(2)}
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 40)
+    result = native_async_snapshot_headroom(state, optimizer)
+    assert result['future_device_growth_allowance_bytes'] == 750
+    assert result['required_headroom_bytes'] > result['snapshot_size_bound_bytes'] + 750
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes',
+                        lambda: result['required_headroom_bytes'] - 1)
+    assert not native_async_snapshot_headroom(state, optimizer)['eligible']

@@ -225,6 +225,21 @@ def oversize_baseline(source, prior_geometry, *, fallback_tokens, current_geomet
             'geometry':dict(prior_geometry),'prefix_rows':len(values)}
 
 
+def oversized_batches(micro_batches, baseline):
+    """Return actual complete microbatches exceeding the authenticated baseline."""
+    return [batch for batch in micro_batches
+            if sum(example.plan.token_count for example in batch) > baseline['forward_tokens']
+            or sum(len(example.plan.slot_sources) for example in batch) > baseline['kv_slots']]
+
+
+def checkpoint_overlap_barrier(policy, micro_batches, baseline):
+    """Finish a detached checkpoint before an unqualified oversized update."""
+    oversized = bool(oversized_batches(micro_batches, baseline))
+    if oversized:
+        policy.drain_async()
+    return oversized
+
+
 def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, precision,
                              source_path, checkpoint_sha256, global_step, baseline,
                              objective=None, objective_binding=None):
@@ -235,12 +250,7 @@ def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, 
     from .native_resident import binding
     if (objective is None) != (objective_binding is None):
         raise ValueError('oversize capacity needs the actual objective and its bound identity together')
-    batches=[]
-    for batch in micro_batches:
-        tokens=sum(example.plan.token_count for example in batch)
-        slots=sum(len(example.plan.slot_sources) for example in batch)
-        if tokens>baseline['forward_tokens'] or slots>baseline['kv_slots']:
-            batches.append(batch)
+    batches=oversized_batches(micro_batches, baseline)
     if not batches:return None
     named=getattr(optimizer,'_native_named_parameters',list(model.named_parameters()))
     prior={id(parameter):(parameter,parameter.grad) for _,parameter in named if parameter.grad is not None}
