@@ -4,6 +4,54 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Verified corrections and current transition, 22:43 CET
+
+Reduced-precision BF16 GEMM reduction was a real native-policy defect: equal
+inputs diverged under different row geometries. Shared inference and training
+now default to FP32 accumulation (`0f63633b8`, `1496770fd`). Checkpoint54 long
+forward/backward qualification passed with zero forward and CE difference,
+covering the full 288-parameter inventory. Receipt:
+`runs/lfm3-sft-successors/joint-v4-restart52-20261031/long-law-bf16-accum-result.json`.
+This proves numerical qualification, not task capability lift. Old reduced-BF16
+rollouts are preserved as historical evidence and are not current-policy data.
+
+The replacement actor collected 46 scored episodes before cooperative draining.
+An authenticated amendment selects six complete six-sample groups (36 episodes,
+25 successful, one mixed-outcome group); partial groups remain uncredited and the
+breadth cursor stays57. Implementation475f8ba3e passed9 focused tests and an actual
+artifact projection check. The checkpoint54 learner continuation is queued under
+`lfm3-amended54-onpolicy`; queueing is not an optimizer update. Terra owns launch,
+update verification and prompt adoption of the CPU-qualified7,211-row source
+append, including fresh physical-capacity checks. The source append is not yet
+claimed as trained. Subsequent collection units should be smaller while retaining
+all curriculum and SFT obligations. Root capacity reporting now matches actual
+BF16 prefix sharing;7f3be826a passed8 CPU tests with1 GPU-specific skip.
+
+Independent source recovery now requires both the original source archive and
+its logical-feature supplement, not the original96-file archive alone. Actual
+Pop restoration verifies all98 payloads and96 manifest routes. Receipt:
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/corrected54-source-restore-v2-receipt-20261031.json`.
+The earlier runtime/control export predates the current149 runtime; exporting
+current controls remains unfinished. Checkpoint54 itself has verified Pop recovery.
+
+The telecom teacher was executing a stale frozen runtime despite current local
+tests. Executable capability probes now reject that mismatch before API use.
+The fresh-runtime attempt was stopped after94 provider requests: read-only
+investigation performed writes, repeated state transitions occurred and receipt
+handoffs failed. No positive teacher trajectory is admitted from it. C owns
+method-scoped capabilities and deterministic state/receipt orchestration before
+another one-worker teacher attempt. Broader-source repair34 has19 newly repaired
+communication rows beyond the15 already staged; independent admission remains
+necessary and must not delay the ready append.
+
+Megatoken deletion released88.5GiB. Abandoned recovery worktrees are removed with
+unique edits archived and Git recovery refs retained. The remaining approximately
+19GiB historical recovery workspace is being checksum-verified onto the external
+drive by `recovery-workspace-relocate-1031.service`; its original path will become
+a symlink only after a zero-difference check. Do not claim completion without
+`ops/recovery-workspace-relocation-20261031.json`. Live checkpoint slots and held
+sources are preserved.
+
 ## Admission repair, recovery and throughput follow-through, 21:16 CET
 
 Current host staged-result wording no longer matched the materializer's old
