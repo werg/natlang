@@ -285,7 +285,7 @@ def late_receipt_status(item: dict, queue: dict) -> str | None:
         from student_tokenizers import model_id
         for view in graph_views(item):
             receipt = load(out / 'native-graphs' / view / 'receipt.json')
-            source = view_file(out, view, queue['student'])
+            source = serving_view_file(item, view, queue['student'])
             if (source is None or receipt.get('model_id') != model_id(queue['student'])
                     or Path(receipt['source']['path']).resolve() != source.resolve()
                     or sha256_file_hex(source) != receipt['source']['sha256']):
@@ -342,6 +342,17 @@ def launch(args):
                        f'--queue {Path(args.queue).resolve()} --id {item["id"]} > {logs}/{unit}.log 2>&1']
                 subprocess.run(cmd, check=True, capture_output=True)
                 item.update(status='verifying', verify_unit=unit, verify_log=f'{logs}/{unit}.log')
+                slots -= 1
+            elif item['status'] == 'verify-failed' and not item.get('subset_unit') and subset_eligible(
+                    load(REPO / item['out'] / 'student-verification.json'), item):
+                unit = short_unit('lfm3-data-s', item['id']) + f'-{int(time.time()) % 100000}'
+                cmd = ['python3', str(LEDGER), 'run', '--unit', unit, '--budget-gb', str(args.verify_budget_gb),
+                       '--priority', args.priority, '--resumable', '--wait', '86400', '--detach', '--workdir', str(REPO),
+                       '--', 'bash', '-c',
+                       f'PYTHONPATH={PYTHONPATH} nice -n 10 {VENV_PY} {Path(__file__).resolve()} subset '
+                       f'--queue {Path(args.queue).resolve()} --id {item["id"]} > {logs}/{unit}.log 2>&1']
+                subprocess.run(cmd, check=True, capture_output=True)
+                item.update(status='verifying', verify_unit=unit, subset_unit=unit, verify_log=f'{logs}/{unit}.log')
                 slots -= 1
             elif item['status'] == 'verified' and graph_views(item):
                 unit = short_unit('lfm3-data-g', item['id']) + f'-{int(time.time()) % 100000}'
@@ -401,7 +412,7 @@ def graph_script(item: dict, student: str) -> Path:
     out = REPO / item['out']
     lines = ['set -euo pipefail', f'cd {REPO}', f'export PYTHONPATH={PYTHONPATH}']
     for view in graph_views(item):
-        source = view_file(out, view, student)
+        source = serving_view_file(item, view, student)
         target = out / 'native-graphs' / view
         lines.append(f'if [ ! -f {target}/receipt.json ]; then rm -rf {target}; '
                      f'{VENV_PY} scripts/neuralese_data/build_native_graph_text_corpus.py --source {source} '
@@ -562,6 +573,9 @@ def verify(args):
             report['problems'].append('supervised targets that do not parse back to their source calls')
     else:
         report['target_parse'] = 'not checked (parts render: sources are streamed part inputs)'
+    if subset_eligible(report, item):
+        report['exact_subset'] = write_exact_subset(item, queue, report)
+        report['problems'] = []
     report['passed'] = not report['problems']
     # The same document set per view (row order follows the shard count and is not training-relevant).
     report['identical_documents'] = all(not v.get('only_reference') and not v.get('only_student')
@@ -571,6 +585,100 @@ def verify(args):
 
 
 # ----------------------------------------------------------------------------------------------------------- entry
+
+# ---------------------------------------------------------------------------------------------- per-document subset
+# A render whose only verification problems are documents whose split or source groups changed against the reference
+# (typically held protection that widened since the reference render) is used per document instead of being rejected
+# whole: the exact subset keeps every document whose identity (id, split, source groups, source record ids) equals a
+# reference document, and drops train documents that share a source group with any held document of either render.
+# The dropped ids are recorded. Mixture building still applies the complete current protection union.
+
+SUBSET_DIR = 'exact-subset'
+SUBSET_PROBLEM = re.compile(r'^[a-z-]+: split_or_group_changed \d+$')
+
+
+def subset_eligible(report: dict, item: dict) -> bool:
+    """Only split/group changes, and every checked supervised target parses back to its source call."""
+    if not report.get('problems') or not all(SUBSET_PROBLEM.match(p) for p in report['problems']):
+        return False
+    parse = report.get('target_parse')
+    if isinstance(parse, dict):
+        return not any(k.endswith(':differ') or k.endswith(':source_missing') for k in parse)
+    # Parts renders stream their part inputs; their verification never checks targets (as for passed parts renders).
+    return item['kind'] == 'parts' and isinstance(parse, str) and parse.startswith('not checked (parts render')
+
+
+def subset_file(out: Path, view: str, student: str) -> Path:
+    return out / SUBSET_DIR / view / student / 'text-data.jsonl.zst'
+
+
+def write_exact_subset(item: dict, queue: dict, report: dict) -> dict:
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    from natlang_neuralese.common.jsonio import iter_jsonl_rows, write_jsonl_text
+    student, reference = queue['student'], queue['reference']
+    new, old = REPO / item['out'], REPO / item['path']
+    views = [v for v in item['views'] if view_file(old, v, reference) and view_file(new, v, student)]
+    held, refs = set(), {}
+    for view in views:
+        refs[view] = set()
+        for _, row in iter_jsonl_rows(view_file(old, view, reference)):
+            refs[view].add(identity(row))
+            if row['split'] != 'train':
+                held.update(row.get('source_groups') or ())
+        for _, row in iter_jsonl_rows(view_file(new, view, student), split='test'):
+            held.update(row.get('source_groups') or ())
+    result = {}
+    for view in views:
+        target = subset_file(new, view, student)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_name('.tmp-' + target.name)
+        counts, excluded, groups = collections.Counter(), [], {'train': set(), 'test': set()}
+        with write_jsonl_text(tmp) as stream:
+            for line, row in iter_jsonl_rows(view_file(new, view, student)):
+                if identity(row) not in refs[view]:
+                    counts['excluded_nonidentical'] += 1
+                    excluded.append(row['id'])
+                elif row['split'] == 'train' and set(row.get('source_groups') or ()) & held:
+                    counts['excluded_held_group'] += 1
+                    excluded.append(row['id'])
+                else:
+                    stream.write(line if line.endswith('\n') else line + '\n')
+                    counts[row['split']] += 1
+                    groups.setdefault(row['split'], set()).update(row.get('source_groups') or ())
+        if groups['train'] & groups['test']:
+            tmp.unlink()
+            raise ValueError(f'{item["id"]} {view}: exact subset still has train/held group overlap')
+        tmp.replace(target)
+        result[view] = {'file': str(target.relative_to(new)), 'sha256': sha256_file_hex(target),
+                        'documents': counts['train'] + counts['test'], 'counts': dict(counts),
+                        'excluded_ids': excluded}
+    return {'schema': 'natlang.exact-rerender-subset/2', 'resolved_problems': list(report['problems']),
+            'policy': 'keep documents identical to the reference (id, split, source groups, source record ids); drop '
+                      'train documents sharing a source group with any held document of either render',
+            'views': result}
+
+
+def subset(args):
+    """Write the exact subset of a verify-failed render whose report is subset-eligible; marks the report passed."""
+    queue = load(args.queue)
+    item = queue['items'][args.id]
+    path = REPO / item['out'] / 'student-verification.json'
+    report = load(path)
+    if not subset_eligible(report, item):
+        raise SystemExit(f'{args.id}: verification problems are not limited to split/group changes')
+    report['exact_subset'] = write_exact_subset(item, queue, report)
+    report['problems'] = []
+    report['passed'] = True
+    save(path, report)
+    print(json.dumps({'id': args.id, 'exact_subset': {v: s['counts'] for v, s in report['exact_subset']['views'].items()}}))
+
+
+def serving_view_file(item: dict, view: str, student: str) -> Path | None:
+    """The file a render's graphs and registration use: its exact subset when one was written, else the render."""
+    out = REPO / item['out']
+    path = subset_file(out, view, student)
+    return path if path.exists() else view_file(out, view, student)
+
 
 def entry(args):
     queue = load(args.queue)
@@ -597,6 +705,9 @@ def registry_entry(item: dict, student: str) -> dict:
         if 'text_data_sha256' not in renders[view][tok]:
             path = view_file(out, view, tok)
             renders[view][tok].update(text_data_file=path.name, text_data_sha256=sha256_file_hex(path))
+        subset_view = (verification.get('exact_subset') or {}).get('views', {}).get(view)
+        if subset_view:  # training uses the exact subset (per-document verification), not the whole render
+            renders[view][tok]['exact_subset'] = {k: subset_view[k] for k in ('file', 'sha256', 'documents', 'counts')}
     keep = ('source_class', 'split', 'license', 'license_provenance', 'training_admission_reason')
     new = {'id': item['new_id'], 'owner': 'dgx', 'path': item['out'],
            'include': ['receipt.json', 'student-verification.json', 'render-policy-binding.json', 'parts.json',
@@ -604,7 +715,7 @@ def registry_entry(item: dict, student: str) -> dict:
                        'selection-omissions.jsonl', 'render-omissions/*/*', 'parts/*/receipt.json',
                        'parts/*/render-policy-binding.json', 'parts/*/*.jsonl', 'parts/*/*/*/omissions.jsonl',
                        'parts/*/*/*/omissions.jsonl.zst', 'parts/*/render-omissions/*/omissions.jsonl',
-                       'native-graphs.sh', 'native-graphs/*/receipt.json', 'native-graphs/*/*/native-graphs.jsonl.zst'],
+                       'native-graphs.sh', 'native-graphs/*/receipt.json', 'exact-subset/*/*/text-data.jsonl.zst', 'native-graphs/*/*/native-graphs.jsonl.zst'],
            **{k: source[k] for k in keep if k in source},
            'admission': (f'{student} render of the registered render {item["id"]} (scripts/neuralese_data/'
                          f'student_rerender.py: its receipt\'s exact selection arguments, {student} tokenizer only); '
@@ -617,7 +728,12 @@ def registry_entry(item: dict, student: str) -> dict:
                                 'views': {v: {k: s.get(k) for k in ('documents', 'reference_documents', 'same_order',
                                                                     'only_reference', 'only_student')}
                                           for v, s in verification['views'].items()},
-                                'target_parse': verification.get('target_parse')}}
+                                'target_parse': verification.get('target_parse'),
+                                **({'exact_subset': {'policy': verification['exact_subset']['policy'],
+                                                     'resolved_problems': verification['exact_subset']['resolved_problems'],
+                                                     'excluded': {v: len(x['excluded_ids']) for v, x in
+                                                                  verification['exact_subset']['views'].items()}}}
+                                   if verification.get('exact_subset') else {})}}
     graphs = {}
     for view in graph_views(item):
         path = out / 'native-graphs' / view / 'receipt.json'
@@ -700,6 +816,9 @@ def main():
     p = sub.add_parser('verify')
     p.add_argument('--queue', required=True)
     p.add_argument('--id', required=True)
+    p = sub.add_parser('subset')
+    p.add_argument('--queue', required=True)
+    p.add_argument('--id', required=True)
     p = sub.add_parser('entry')
     p.add_argument('--queue', required=True)
     p.add_argument('--id', required=True)
@@ -707,7 +826,7 @@ def main():
     p.add_argument('--queue', required=True)
     p.add_argument('--limit', type=int)
     args = ap.parse_args()
-    {'plan': plan, 'launch': launch, 'status': status, 'verify': verify, 'entry': entry,
+    {'plan': plan, 'launch': launch, 'status': status, 'verify': verify, 'entry': entry, 'subset': subset,
      'register': register_graphed}[args.cmd](args)
 
 
