@@ -154,7 +154,7 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
                 or len(prior_contract) != 1 or checked(prior_contract[0]) != checked(old['native_graphs'])
                 or prior_contract[0]['sha256'] != old['native_graphs']['sha256']):
             raise ValueError('resident CE prior inventory correction does not bind the actual quarantine transition')
-    elif correction is not None:
+    elif correction is not None and correction != a.get('prior_inventory_correction'):
         raise ValueError('resident CE prior inventory correction is not applicable')
     top_inventory = b.get('inventory')
     if top_inventory is not None and (len(top_inventory) != 1 or

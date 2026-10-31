@@ -388,3 +388,18 @@ def test_prior_inventory_repair_requires_exact_quarantine_and_family_custody(tmp
         with pytest.raises(ValueError):extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
     bad=copy.deepcopy(b);bad['prior_inventory_correction']['quality_receipt']['sha256']='0'*64;bind_new(bad)
     with pytest.raises(ValueError):extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
+
+
+def test_inherited_inventory_repair_remains_history_in_later_append(tmp_path):
+    paths, old, new = fixture(tmp_path)
+    a=json.loads(paths['old_ce'].read_text());b=json.loads(paths['new_ce'].read_text())
+    history={'schema':'natlang.resident-ce-prior-inventory-correction/1','prior_policy_sha256':'a'*64}
+    a['prior_inventory_correction']=history;b['prior_inventory_correction']=history
+    write_json(paths['old_ce'],a);write_json(paths['new_ce'],b)
+    old['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['old_ce']),'binding':'ce'}
+    new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+    assert extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'])
+    b['prior_inventory_correction']={**history,'prior_policy_sha256':'b'*64};write_json(paths['new_ce'],b)
+    new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+    with pytest.raises(ValueError,match='not applicable'):
+        extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'])
