@@ -77,3 +77,41 @@ def test_recipe_dependency_walk_captures_a_map_created_after_identity_walk(tmp_p
     monkeypatch.setattr(recipe,'native_source_dependencies',changed)
     paths={item['path']for item in native_graph_bindings(reference)}
     assert {str(mapping),str(staged),str(payload)} <= paths
+
+
+def test_nested_logical_family_features_survive_staged_recovery(tmp_path):
+    payload = tmp_path/'pairs.jsonl'; payload.write_text('exact payload')
+    feature = tmp_path/'features.jsonl'; feature.write_text('{"family":"actual-program"}\n')
+    inner = tmp_path/'inner.json'
+    header(inner, payload, str(payload))
+    value = json.loads(inner.read_text())
+    value['logical_family_features'] = [bind(feature)]
+    inner.write_text(json.dumps(value))
+    outer = tmp_path/'outer.json'
+    outer.write_text(json.dumps({'schema':'natlang.native-graph-sources/1', 'sources':[
+        {'kind':'native-graphs','path':str(inner),'sha256':sha256_file_hex(inner)}]}))
+    staged = tmp_path/'staged'; staged.mkdir()
+    for source in (outer, inner, payload, feature):
+        (staged/source.name).write_bytes(source.read_bytes())
+    mapping = staged/'.natlang-source-map.json'
+    mapping.write_text(json.dumps({'schema':'natlang.staged-source-map/1',
+        'paths':{str(source):str(staged/source.name) for source in (outer, inner, payload, feature)}}))
+    # Prove the recovered headers resolve their feature payload without the originals.
+    for source in (outer, inner, payload, feature): source.unlink()
+    paths = {item['path'] for item in native_graph_bindings(bind(staged/'outer.json'))}
+    assert paths == {str(staged/name) for name in ('outer.json','inner.json','pairs.jsonl','features.jsonl',
+                                                 '.natlang-source-map.json')}
+
+
+@pytest.mark.parametrize('change', ['hash', 'bytes', 'binding'])
+def test_feature_dependency_rejects_incomplete_or_corrupted_custody(tmp_path, change):
+    payload = tmp_path/'pairs.jsonl'; payload.write_text('payload')
+    feature = tmp_path/'features.jsonl'; feature.write_text('feature payload')
+    manifest = tmp_path/'source.json'; header(manifest, payload, str(payload))
+    value = json.loads(manifest.read_text()); reference = bind(feature)
+    if change == 'hash': reference['sha256'] = '0'*64
+    elif change == 'bytes': reference['bytes'] += 1
+    else: reference.pop('sha256')
+    value['logical_family_features'] = [reference]; manifest.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match='logical family feature'):
+        native_graph_bindings(bind(manifest))

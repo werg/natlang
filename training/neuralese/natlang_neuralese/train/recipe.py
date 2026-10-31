@@ -309,6 +309,25 @@ def native_source_dependencies(path, *, parents=(), source_route=None):
     if path in parents or not manifest.get('sources'):
         raise ValueError('native graph manifest is empty or cyclic')
     dependencies = {}
+    features = manifest.get('logical_family_features', [])
+    if not isinstance(features, list):
+        raise ValueError('native graph logical family features must be a binding list')
+    for feature in features:
+        if (not isinstance(feature, dict) or not isinstance(feature.get('path'), str)
+                or not feature['path'] or not isinstance(feature.get('sha256'), str)
+                or not re.fullmatch(r'[0-9a-f]{64}', feature['sha256'])):
+            raise ValueError('native graph logical family feature needs an exact path/hash binding')
+        child = Path(feature['path'])
+        child = child if child.is_absolute() else path.parent / child
+        from ..data.native_source_tree import _staged_path
+        child = (source_route or _staged_path)(path, child)
+        child = child.resolve()
+        digest = sha(child)
+        if digest != feature['sha256']:
+            raise ValueError('native graph logical family feature content hash mismatch: ' + str(child))
+        if 'bytes' in feature and child.stat().st_size != feature['bytes']:
+            raise ValueError('native graph logical family feature byte count mismatch: ' + str(child))
+        dependencies[str(child)] = digest
     for source in manifest['sources']:
         if source.get('kind') not in {'native-graphs', 'semantic-pairs'}:
             raise ValueError('native graph manifest source kind must be explicit')
