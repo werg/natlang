@@ -741006,7 +741006,7 @@
         "lfm3/test/native-graphs.jsonl.zst"
       ],
       "source_class": "verified-provider-teacher-positive-native-full-trajectory",
-      "split": "Train only; all 114 source task groups were checked against current held/quality/pending protection; the 53 application worlds are a subset of the 60 train applications in the design-brief gate/workflow packet, with no dev/confirmation overlap; empty held views.",
+      "split": "Train only; all 114 source trajectories were checked against current held/quality/pending protection; their 53 application worlds are a subset of the 60 train applications in the design-brief gate/workflow packet, with no dev/confirmation overlap; empty held views.",
       "license_provenance": "Owner-authorized project-collected openai-codex/gpt-6-luna trajectories; original teacher actor/runtime/source record hashes retained; provider weight revision unavailable.",
       "admission": "LFM3 full-prompt student twin of the exact Luna teacher trajectories, re-rendered from source records with the current parser. 288 rows, 0 twin omissions; exact teacher raw tool calls, token decode and groups checked. No student capability or exposure claim.",
       "training_admission": true,
