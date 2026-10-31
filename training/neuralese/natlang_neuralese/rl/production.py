@@ -42,7 +42,7 @@ def commit_no_signal_round(state, *, report_path, rollouts_path, policy_id, poli
     state.update(round=state['round']+1,offset=next_offset,phase='collect',production_complete=False,
                  collection_attempt=0,group_stats=[])
     for key in ('active_update_round','update_mode','update_rollouts','update_stages',
-                'update_coefficient_policy','update_policy_loss'):
+                'update_coefficient_policy','update_policy_loss','update_amendment_proof'):
         state.pop(key,None)
     return state
 
@@ -67,11 +67,24 @@ def invalidate_checkpoint_readiness(state, checkpoint, *, reason):
     return state
 
 
+def verify_amended_rollout(reference, *, round_directory, rollout_path):
+    """Authenticate a projected rollout outside the original round directory."""
+    from ..train.native_readiness import _bound
+    if not isinstance(reference,dict):
+        raise ValueError('external rollout projection lacks an authenticated amendment')
+    proof_path=_bound(reference);proof=json.loads(proof_path.read_text());filtered=proof.get('filtered_rollouts') or {}
+    if (proof.get('schema')!='natlang.amended-collection-continuation/1'
+            or proof.get('out')!=str(round_directory) or _bound(filtered)!=rollout_path
+            or filtered.get('bytes')!=rollout_path.stat().st_size):
+        raise ValueError('external rollout projection differs from its exact amendment')
+    return proof
+
+
 def complete_update_audit(state, *, checkpoint):
     """Move the active round marker to an audit record only at round commit."""
     from ..common.hashing import sha256_file_hex_cached
     active = {key: state[key] for key in ('active_update_round', 'update_mode', 'update_rollouts',
-        'update_stages', 'update_coefficient_policy', 'update_policy_loss') if key in state}
+        'update_stages', 'update_coefficient_policy', 'update_policy_loss', 'update_amendment_proof') if key in state}
     if not active:
         return state
     from ..train.native_readiness import _bound
@@ -203,8 +216,11 @@ def complete_update_audit(state, *, checkpoint):
             raise ValueError('completed whole-graph update report does not bind its exact published checkpoint')
     rollout_path = Path(str(active.get('update_rollouts', '')))
     rollout_path=rollout_path.resolve(strict=True)
-    if not rollout_path.is_file()or round_directory not in rollout_path.parents:
+    if not rollout_path.is_file():
         raise ValueError('completed whole-graph update lacks its exact active round rollout source')
+    amendment=active.get('update_amendment_proof')
+    if round_directory not in rollout_path.parents:
+        verify_amended_rollout(amendment,round_directory=round_directory,rollout_path=rollout_path)
     rollouts={'path':str(rollout_path),'sha256':sha256_file_hex_cached(rollout_path),
         'bytes':rollout_path.stat().st_size}
     record = {'schema': 'natlang.rl-production-completed-update/1', 'round': max(0, state.get('round', 0)-1),
@@ -212,6 +228,7 @@ def complete_update_audit(state, *, checkpoint):
         'rollouts': rollouts, 'stages': active.get('update_stages'),
         'coefficient_policy': active.get('update_coefficient_policy'), 'checkpoint': checkpoint,
         **({'policy_loss': active['update_policy_loss']} if 'update_policy_loss' in active else {}),
+        **({'amendment_proof': amendment} if amendment is not None else {}),
         'completion_report':report_binding,
         **({'operation_receipt':operation_receipt} if operation_receipt is not None else {})}
     history = state.setdefault('completed_update_history', [])
@@ -219,7 +236,7 @@ def complete_update_audit(state, *, checkpoint):
         history.append(record)
     state['last_completed_update'] = record
     for key in ('active_update_round', 'update_mode', 'update_rollouts', 'update_stages',
-            'update_coefficient_policy', 'update_policy_loss'):
+            'update_coefficient_policy', 'update_policy_loss', 'update_amendment_proof'):
         state.pop(key, None)
     return state
 
@@ -1475,6 +1492,8 @@ def run(config_path, *, rounds=None, stop=None):
                 state['update_coefficient_policy']={'path':values['coefficient_policy'],'sha256':values['coefficient_policy_sha256']}
             state.update(phase='updating', update_mode=mode, active_update_round=str(round_dir),
                          update_rollouts=values['rollouts'], update_stages=rft_stages)
+            if amended_groups is not None:
+                state['update_amendment_proof']=config['amended_collection_continuations'][str(round_dir.resolve())]
             if policy_loss is not None:
                 state['update_policy_loss'] = policy_loss
             else:

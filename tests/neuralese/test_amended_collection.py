@@ -106,3 +106,17 @@ def test_no_signal_round_advances_collection_without_training_credit(tmp_path):
     commit_no_signal_round(state,report_path=report,rollouts_path=rollout,policy_id=policy,policy_loss=loss,next_offset=58)
     assert state['round']==11 and state['offset']==58 and state['trained_rounds']==7 and state['checkpoint']==str(parent)
     assert state['no_signal_history'][0]['optimizer_updates']==0 and 'active_update_round' not in state
+
+
+def test_completed_update_accepts_only_exact_amendment_projection(tmp_path):
+    from natlang_neuralese.rl.production import verify_amended_rollout
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    round_dir=tmp_path/'round';round_dir.mkdir();projection=tmp_path/'projection';projection.write_text('sample')
+    def bind(path):return {'path':str(path),'sha256':sha256_file_hex(path),'bytes':path.stat().st_size}
+    proof=tmp_path/'proof.json';proof.write_text(json.dumps({'schema':'natlang.amended-collection-continuation/1',
+        'out':str(round_dir),'filtered_rollouts':bind(projection)}));ref=bind(proof)
+    assert verify_amended_rollout(ref,round_directory=round_dir,rollout_path=projection)['out']==str(round_dir)
+    with pytest.raises(ValueError,match='authenticated amendment'):
+        verify_amended_rollout(None,round_directory=round_dir,rollout_path=projection)
+    projection.write_text('tamper')
+    with pytest.raises(ValueError):verify_amended_rollout(ref,round_directory=round_dir,rollout_path=projection)
