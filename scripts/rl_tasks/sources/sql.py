@@ -16,10 +16,10 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from ..common import make_case, pick
+from ..common import ARCHIVE_RAW, BUILD_ASSETS, TASK_ASSETS, make_case, pick
 
-RAW = Path('/mnt/external/sdkb-archive/raw/agentic-20260927')
-ASSET_ROOT = '/home/werg/natlang/runs/natlang-rl-broad-external-20261031/assets'
+RAW = ARCHIVE_RAW / 'agentic-20260927'
+ASSET_ROOT = TASK_ASSETS
 ROW_TYPE = '(string | number | null)[][]'
 INSTRUCTIONS = [
     'Answer question from the database in db. Return the result as a table: one array per row, holding exactly the '
@@ -161,7 +161,7 @@ def _build(source, items, db_dir_of, per_db, out_assets, upstream, revision, see
     return out
 
 
-def spider(out_assets='/home/werg/data/broad-rl-tasks-20261031/assets', per_db=8, seed=20261031):
+def spider(out_assets=BUILD_ASSETS, per_db=8, seed=20261031):
     base = RAW / 'spider/official/spider_data'
     train = json.load(open(base / 'train_spider.json')) + json.load(open(base / 'train_others.json'))
     dev = json.load(open(base / 'dev.json'))
@@ -177,7 +177,7 @@ def spider(out_assets='/home/werg/data/broad-rl-tasks-20261031/assets', per_db=8
     return _build('spider', items, db_dir, per_db, Path(out_assets), 'spider', 'spider_data.zip-00636695', seed)
 
 
-def bird(out_assets='/home/werg/data/broad-rl-tasks-20261031/assets', per_db=40, seed=20261031):
+def bird(out_assets=BUILD_ASSETS, per_db=40, seed=20261031):
     train = json.load(open(RAW / 'bird/train/train.json'))
     dev = json.load(open(RAW / 'bird/dev_20240627/dev.json'))
     items = [('train', r['db_id'], r['question'], r['SQL'], r.get('evidence') or '', None, f'train-{i}')

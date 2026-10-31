@@ -11,9 +11,9 @@ import json
 import math
 import random
 
-from ..common import make_case, pick
+from ..common import SOURCES_DIR, make_case, pick
 
-BASE = '/home/werg/data/external-rl-sources'
+BASE = SOURCES_DIR
 INSTRUCTIONS = [
     'Implement the exported function in app.ts so that it does what task describes. Python-style values map to '
     'TypeScript as: lists and tuples are arrays, dicts are objects, None is null. Keep the export name and parameters.',

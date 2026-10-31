@@ -11,9 +11,9 @@ import json
 import random
 from pathlib import Path
 
-from ..common import make_case, pick, distinct_wrong
+from ..common import ARCHIVE_RAW, distinct_wrong, make_case, pick
 
-KK = Path('/mnt/external/sdkb-archive/raw/worlds-20260927/knights-and-knaves')
+KK = ARCHIVE_RAW / 'worlds-20260927/knights-and-knaves'
 KK_INSTRUCTIONS = [
     'Every inhabitant in puzzle is either a knight, who always tells the truth, or a knave, who always lies. Work out '
     'who is which. Return a record mapping each name in names to "knight" or "knave".',

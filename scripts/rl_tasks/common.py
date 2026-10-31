@@ -9,17 +9,28 @@ must be rejected, alternative gold forms that must be accepted).
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex  # noqa: E402
+from natlang_neuralese.common.paths import resolve, resolve_str  # noqa: E402
 
 CURRICULUM_VERSION = 'natlang.inline_curriculum/1'
 BUILDER = 'natlang.broad_external_rl_tasks/1'
 SPLITS = ('train', 'dev', 'confirmation')
+# Logical locations (common.paths roots): downloaded sources, the raw archive, the build's asset copy and the
+# registered task source's assets (the default a case's service reads; NATLANG_RL_TASK_ASSETS overrides it).
+SOURCES_DIR = resolve_str('data_nvme', 'external-rl-sources')
+ARCHIVE_RAW = resolve('archive', 'raw')
+BUILD_ASSETS = resolve_str('data_nvme', 'broad-rl-tasks-20261031', 'assets')
+TASK_ASSETS = resolve_str('repo', 'runs', 'natlang-rl-broad-external-20261031', 'assets')
 
 
-def sha(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
+def text_digest(text: str) -> str:
+    return sha256_hex(text.encode())
 
 
 def slug(text: str, limit: int = 60) -> str:
@@ -28,14 +39,14 @@ def slug(text: str, limit: int = 60) -> str:
 
 def pick(options, key: str):
     """Deterministic choice among phrasings, keyed by the split unit so related items share one phrasing."""
-    return options[int(sha(key)[:8], 16) % len(options)]
+    return options[int(text_digest(key)[:8], 16) % len(options)]
 
 
 def unit_split(unit: str, upstream_split: str, *, salt: str = 'broad-rl-20261031') -> str:
     """Split of one split unit (document/db/repo group). Upstream evaluation splits become our held dev and
     confirmation halves; upstream train units stay train except a 3% dev/confirmation carve-out for sources
     without an upstream evaluation split."""
-    bucket = int(sha(salt + '|' + unit)[:8], 16) % 100
+    bucket = int(text_digest(salt + '|' + unit)[:8], 16) % 100
     if upstream_split in ('validation', 'dev', 'test', 'eval'):
         return 'dev' if bucket < 50 else 'confirmation'
     if upstream_split == 'train-carve':
@@ -78,7 +89,7 @@ def make_case(*, source: str, family: str, shape: str, upstream: str, upstream_i
         instruction = instruction.rstrip() + '\n\n' + neuralese['root_note'].strip()
         extra_files = {**(extra_files or {}), f'{root_name}/{neuralese["helper"]}.nl':
                        nl_file(neuralese['args'], neuralese['returns'], neuralese['instruction'])}
-    case_id = f'ext:{source}:{slug(shape, 40)}:{slug(upstream_id, 80)}:{sha(upstream_id + shape + framing)[:8]}'
+    case_id = f'ext:{source}:{slug(shape, 40)}:{slug(upstream_id, 80)}:{text_digest(upstream_id + shape + framing)[:8]}'
     root = f'{root_name}.nl'
     files = {root: nl_file(args, returns, instruction)}
     files.update(extra_files or {})
@@ -109,8 +120,8 @@ def make_case(*, source: str, family: str, shape: str, upstream: str, upstream_i
                    **({'difficulty': difficulty} if difficulty is not None else {})},
             'external': {'source': source, 'upstream': upstream, 'upstream_id': upstream_id,
                          'upstream_split': upstream_split, 'unit': unit, 'shape': shape,
-                         'instruction_sha256': sha(instruction)[:16],
-                         'instruction_id': instruction_id or sha(instruction)[:12],
+                         'instruction_sha256': text_digest(instruction)[:16],
+                         'instruction_id': instruction_id or text_digest(instruction)[:12],
                          'neuralese_room': neuralese_room, 'framing': framing,
                          'checks': {'wrong_answers': wrong or [], 'alias_answers': aliases or []}},
         },

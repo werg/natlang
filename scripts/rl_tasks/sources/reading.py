@@ -8,9 +8,9 @@ import random
 import re
 from collections import defaultdict
 
-from ..common import distinct_wrong, make_case, pick, sha
+from ..common import SOURCES_DIR, distinct_wrong, make_case, pick, text_digest
 
-BASE = '/home/werg/data/external-rl-sources'
+BASE = SOURCES_DIR
 
 
 def _rows(path):
@@ -43,7 +43,7 @@ def squad(cap_train=700, cap_eval=80, per_case=4, seed=20261031):
         for r in _rows(f'{BASE}/squad_v1.1/{path}.jsonl'):
             by_context[r['context']].append(r)
             title_of[r['context']] = r['title']
-        contexts = sorted(by_context, key=lambda c: sha(c))
+        contexts = sorted(by_context, key=lambda c: text_digest(c))
         random.Random(seed).shuffle(contexts)
         pool = [r['answers']['text'][0] for c in contexts[:3000] for r in by_context[c]]
         for context in contexts[:cap]:
@@ -58,13 +58,13 @@ def squad(cap_train=700, cap_eval=80, per_case=4, seed=20261031):
             keys = list(first)
             swapped[keys[0]], swapped[keys[1]] = first[keys[1]], first[keys[0]]
             other = dict(first)
-            other[keys[-1]] = distinct_wrong(first[keys[-1]], pool[int(sha(context)[:6], 16) % 1000:], 1)[0]
+            other[keys[-1]] = distinct_wrong(first[keys[-1]], pool[int(text_digest(context)[:6], 16) % 1000:], 1)[0]
             wrong = [w for w in (swapped, other) if w != first]
             aliases = [first]
             alt = {k: (v[1] if len(v) > 1 else v[0]) for k, v in gold.items()}
             if alt != first:
                 aliases.append(alt)
-            unit = f'squad-ctx:{sha(context)[:16]}'
+            unit = f'squad-ctx:{text_digest(context)[:16]}'
             out.append(make_case(
                 source='squad', family='article_multi_qa', shape=f'squad-{len(qs)}q', upstream='rajpurkar/squad',
                 upstream_id=','.join(q['id'] for q in qs), upstream_split=split, unit=unit,
@@ -159,13 +159,13 @@ QUALITY_NEURALESE = {
 def quality(cap_train=1200, cap_eval=150, seed=20261031):
     out = []
     for split, cap in (('train', cap_train), ('validation', cap_eval * 2)):
-        rows = list({(sha(r['article']), r['question'].strip()): r for r in _rows(f'{BASE}/quality/{split}.jsonl')}.values())
+        rows = list({(text_digest(r['article']), r['question'].strip()): r for r in _rows(f'{BASE}/quality/{split}.jsonl')}.values())
         random.Random(seed).shuffle(rows)
         for r in rows[:cap]:
             options = {LETTERS[i]: o for i, o in enumerate(r['options'])}
             gold = LETTERS[r['answer']]
-            unit = f'quality-article:{sha(r["article"])[:16]}'
-            qid = f'{unit}:{sha(r["question"])[:10]}'
+            unit = f'quality-article:{text_digest(r["article"])[:16]}'
+            qid = f'{unit}:{text_digest(r["question"])[:10]}'
             out.append(make_case(
                 source='quality', family='long_article_mcq', shape=f'quality-{"hard" if r["hard"] else "easy"}',
                 upstream='emozilla/quality', upstream_id=qid, upstream_split=split, unit=unit, groups=[unit],
@@ -206,7 +206,7 @@ def babi(per_task=70, eval_per_task=8, seed=20261031):
                 unit = f'babi:{r["story_id"]}'
                 out.append(make_case(
                     source='babi', family=f'task{int(task):02d}', shape=f'babi-{r["task_name"]}', upstream='facebook/babi_qa',
-                    upstream_id=f'{r["story_id"]}:{sha(r["question"])[:8]}', upstream_split='validation' if split == 'test' else 'train',
+                    upstream_id=f'{r["story_id"]}:{text_digest(r["question"])[:8]}', upstream_split='validation' if split == 'test' else 'train',
                     unit=unit, groups=[unit], root_name='answer_from_facts', args={'facts': 'string[]', 'question': 'string'},
                     returns='string', instruction=pick(BABI_INSTRUCTIONS, unit),
                     inputs={'facts': facts, 'question': r['question']}, expected=r['answer'], oracle='normalized',

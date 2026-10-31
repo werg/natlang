@@ -13,10 +13,10 @@ import os
 import random
 from pathlib import Path
 
-from ..common import make_case, pick, distinct_wrong
+from ..common import BUILD_ASSETS, SOURCES_DIR, TASK_ASSETS, distinct_wrong, make_case, pick
 
-BASE = '/home/werg/data/external-rl-sources'
-ASSET_ROOT = '/home/werg/natlang/runs/natlang-rl-broad-external-20261031/assets'
+BASE = SOURCES_DIR
+ASSET_ROOT = TASK_ASSETS
 
 WTQ_INSTRUCTIONS = [
     'Answer question from table. Return the answer as a list of values (one item for a single answer), each copied '
@@ -125,7 +125,7 @@ export function rows(start: number, size: number): unknown[][] {{ return load().
 '''
 
 
-def databench(out_assets='/home/werg/data/broad-rl-tasks-20261031/assets', max_full_rows=20000, seed=20261031):
+def databench(out_assets=BUILD_ASSETS, max_full_rows=20000, seed=20261031):
     import pyarrow.parquet as pq
     out = []
     for directory in sorted(glob.glob(f'{BASE}/databench/files/data/*_*')):

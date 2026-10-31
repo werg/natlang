@@ -7,9 +7,9 @@ import json
 import random
 import re
 
-from ..common import make_case, pick, sha
+from ..common import SOURCES_DIR, make_case, pick, text_digest
 
-BASE = '/home/werg/data/external-rl-sources'
+BASE = SOURCES_DIR
 
 WORD_INSTRUCTIONS = [
     'Solve problem. Compute every quantity exactly in eval rather than by mental arithmetic, and return the final '
@@ -38,7 +38,7 @@ def gsm8k(cap_train=1500, cap_eval=150, seed=20261031):
             if gold is None:
                 continue
             steps = r['answer'].count('<<')
-            unit = f'gsm8k:{sha(r["question"])[:16]}'
+            unit = f'gsm8k:{text_digest(r["question"])[:16]}'
             out.append(make_case(
                 source='gsm8k', family='word_problem', shape=f'gsm8k-{min(steps, 6)}steps', upstream='openai/gsm8k',
                 upstream_id=unit.split(':', 1)[1], upstream_split='validation' if split == 'test' else 'train', unit=unit,
@@ -78,7 +78,7 @@ def math(cap_train=1200, cap_eval=150, seed=20261031):
             if gold is None:
                 continue
             level = int(re.sub(r'\D', '', r['level']) or 3)
-            unit = f'math:{sha(r["problem"])[:16]}'
+            unit = f'math:{text_digest(r["problem"])[:16]}'
             out.append(make_case(
                 source='math', family=f'competition_{r["type"].lower().replace(" ", "_").replace("&", "and")}',
                 shape=f'math-level{level}', upstream='EleutherAI/hendrycks_math', upstream_id=unit.split(':', 1)[1],
@@ -129,11 +129,81 @@ def finqa(cap_train=1500, cap_eval=150, seed=20261031):
                 args={'question': 'string', 'text': 'string[]', 'table': 'string[][]'}, returns='number',
                 instruction=pick(FINQA_INSTRUCTIONS, r['id']),
                 inputs={'question': qa['question'], 'text': text, 'table': r['table_ori']}, expected=value,
-                oracle={'level': 'normalized', 'normalization': 'numeric-tolerance', 'tolerance': 5e-3,
-                        'percent_equivalent': True, 'alternates': [stated]},
+                oracle=({'level': 'normalized', 'alternates': [stated]} if float(value).is_integer() and
+                        isinstance(stated, int) and stated == value else
+                        {'level': 'normalized', 'normalization': 'numeric-tolerance', 'tolerance': 5e-3,
+                         'percent_equivalent': True, 'alternates': [stated]}),
                 level=min(3, len(qa.get('steps') or [])), license_='MIT', domain='relational',
                 wrong=[value * 1.5 + 1, -value - 1], aliases=[stated], revision=''))
             n += 1
+            if n >= cap:
+                break
+    return out
+
+
+TATQA_INSTRUCTIONS = [
+    'Answer question from the annual-report excerpt: table holds its table rows and paragraphs its text. Compute '
+    'arithmetic answers exactly in eval. Give numbers in the units the report uses (for example 12.5 for 12.5%, or 840.4 '
+    'for $840.4 million when amounts are in millions), and text answers as the words from the report.',
+    'question is about a company report given as table and paragraphs. Find or calculate the answer in code and '
+    'return it: a number in the report\'s own units, the exact text span, or a list of spans when several items '
+    'are asked for.',
+]
+
+
+def _tatqa_number(text):
+    t = str(text).replace(',', '').replace('$', '').replace('%', '').strip()
+    if t.startswith('(') and t.endswith(')'):
+        t = '-' + t[1:-1]
+    return _plain_number(t)
+
+
+def tatqa(cap_train=1500, cap_eval=150, seed=20261031):
+    import ast
+    out = []
+    for split, path in (('train', 'train'), ('validation', 'dev'), ('validation', 'test_gold')):
+        contexts = [json.loads(line) for line in open(f'{BASE}/tatqa/{path}.jsonl')]
+        random.Random(seed).shuffle(contexts)
+        n, cap = 0, cap_train if split == 'train' else cap_eval
+        for ctx in contexts:
+            unit = f'tatqa:context:{ctx["table"]["uid"]}'
+            table = ctx['table']['table']
+            paragraphs = [p['text'] for p in sorted(ctx['paragraphs'], key=lambda p: int(p['order']))]
+            for q in ctx['questions'][:3]:
+                answer, kind = q['answer'], q['answer_type']
+                if isinstance(answer, str) and answer.startswith('['):
+                    answer = ast.literal_eval(answer)
+                if kind in ('arithmetic', 'count') or (kind == 'span' and isinstance(answer, list) and len(answer) == 1
+                                                       and _tatqa_number(answer[0]) is not None):
+                    value = _tatqa_number(answer[0] if isinstance(answer, list) else answer)
+                    if value is None:
+                        continue
+                    if isinstance(value, float):
+                        value = round(value, 4)
+                    returns, expected = 'number', value
+                    oracle = {'level': 'normalized', 'normalization': 'numeric-tolerance', 'tolerance': 1e-6,
+                              'abs_tolerance': 0.006}
+                    wrong, aliases = [value * 1.1 + 1, -value - 1], [float(value)]
+                elif kind == 'span' and isinstance(answer, list) and len(answer) == 1 and len(answer[0].split()) <= 8:
+                    returns, expected = 'string', answer[0]
+                    oracle = {'level': 'span', 'normalization': 'qa', 'threshold': 0.8}
+                    others = [p for p in paragraphs if p and answer[0] not in p][:1]
+                    wrong, aliases = ([others[0][:80]] if others else []) + ['none'], [answer[0].lower()]
+                elif kind == 'multi-span' and isinstance(answer, list) and len(answer) > 1:
+                    returns, expected = 'string[]', answer
+                    oracle = {'level': 'normalized', 'normalization': 'answer-list'}
+                    wrong, aliases = [answer[:-1], answer + ['Total']], [list(reversed(answer))]
+                else:
+                    continue
+                out.append(make_case(
+                    source='tatqa', family=f'report_qa_{kind.replace("-", "_")}', shape=f'tatqa-{kind}-{q["answer_from"]}',
+                    upstream='NExTplusplus/TAT-QA', upstream_id=q['uid'], upstream_split=split, unit=unit, groups=[unit],
+                    root_name='answer_from_report', args={'question': 'string', 'table': 'string[][]', 'paragraphs': 'string[]'},
+                    returns=returns, instruction=pick(TATQA_INSTRUCTIONS, q['uid']),
+                    inputs={'question': q['question'], 'table': table, 'paragraphs': paragraphs}, expected=expected,
+                    oracle=oracle, level=2 if kind == 'arithmetic' else 1, license_='MIT', domain='relational',
+                    wrong=wrong, aliases=aliases, revision='', difficulty=q.get('scale') or None))
+                n += 1
             if n >= cap:
                 break
     return out

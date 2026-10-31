@@ -19,3 +19,6 @@ finqa numeric:finqa
 mbpp code:mbpp
 wikitablequestions tables:wtq
 databench tables:databench
+tatqa numeric:tatqa
+hybridqa multihop:hybridqa
+triviaqa multihop:triviaqa

@@ -11,9 +11,9 @@ import random
 import re
 from pathlib import Path
 
-from ..common import make_case, pick
+from ..common import ARCHIVE_RAW, make_case, pick
 
-RAW = Path('/mnt/external/sdkb-archive/raw/agentic-20260927/xlam-function-calling-60k/xlam_function_calling_60k.json')
+RAW = ARCHIVE_RAW / 'agentic-20260927/xlam-function-calling-60k/xlam_function_calling_60k.json'
 INSTRUCTIONS = [
     'Carry out request by calling the functions of the api service that it needs, with the arguments it specifies. '
     'Return the values those calls return, in the order you made the calls.',
@@ -51,15 +51,19 @@ function canon(value: unknown): unknown {
   if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canon((value as any)[key])]));
   return value;
 }
+function coerce(param: { kind: string }, value: unknown): unknown {
+  if (param.kind === 'number' && typeof value === 'string' && /^[+-]?\\d+(\\.\\d+)?$/.test(value.trim())) return Number(value);
+  if (param.kind === 'boolean' && typeof value === 'string' && /^(true|false)$/i.test(value)) return value.toLowerCase() === 'true';
+  return value;
+}
 function receipt(name: string, spec: Spec, args: Record<string, unknown> = {}): string {
   const kept: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(args ?? {})) {
     const param = spec[key];
-    let value: unknown = raw;
-    if (param && param.kind === 'number' && typeof value === 'string' && /^[+-]?\\d+(\\.\\d+)?$/.test(value.trim())) value = Number(value);
-    if (param && param.kind === 'boolean' && typeof value === 'string' && /^(true|false)$/i.test(value)) value = value.toLowerCase() === 'true';
+    const value = param ? coerce(param, raw) : raw;
     if (param && (value === '' || value === null || value === undefined) && param.optional) continue;
-    if (param && param.default !== '' && param.default !== null && JSON.stringify(canon(value)) === JSON.stringify(canon(param.default))) continue;
+    if (param && param.default !== '' && param.default !== null && [param.default, coerce(param, param.default)]
+      .some(d => JSON.stringify(canon(value)) === JSON.stringify(canon(d)))) continue;
     kept[key] = value;
   }
   const text = name + JSON.stringify(canon(kept));
@@ -115,6 +119,13 @@ def xlam(cap_train=1500, cap_eval=150, seed=20261031):
             wrong_sets.append([{'name': sibling['name'], 'arguments': {}}] + answers[1:])
         if len(answers) > 1:
             wrong_sets.append(answers[:-1])
+        if first.get('arguments'):
+            key = sorted(first['arguments'])[0]
+            value = first['arguments'][key]
+            changed = (not value) if isinstance(value, bool) else value + 1 if isinstance(value, (int, float)) else \
+                str(value) + 'x' if isinstance(value, str) else None
+            if changed is not None:
+                wrong_sets.append([{'name': first['name'], 'arguments': {**first['arguments'], key: changed}}] + answers[1:])
         # Alternative correct forms: numbers given as strings, explicit defaults.
         alias = []
         for a in answers:
