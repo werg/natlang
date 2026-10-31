@@ -306,14 +306,25 @@ def convert_unit(task):
 
 
 class Writer:
-    def __init__(self, out):
-        self.out, self.files, self.counts = out, {}, collections.Counter()
+    """Append-only .jsonl.tmp streams that a resumed run truncates back to its last committed offsets."""
+    def __init__(self, out, resume=None):
+        self.out, self.files, self.counts = out, {}, collections.Counter((resume or {}).get('counts', {}))
+        for name, offset in (resume or {}).get('offsets', {}).items():
+            stream = open(self.out / f'{name}.jsonl.tmp', 'r+')
+            stream.truncate(offset); stream.seek(offset)
+            self.files[name] = stream
 
     def write(self, name, row):
         if name not in self.files:
             self.files[name] = open(self.out / f'{name}.jsonl.tmp', 'w')
         self.files[name].write(json.dumps(row, ensure_ascii=False, separators=(',', ':')) + '\n')
         self.counts[name] += 1
+
+    def commit(self):
+        """Flush every stream; returns the offsets/counts a resumed run restores."""
+        for stream in self.files.values():
+            stream.flush(); os.fsync(stream.fileno())
+        return {'offsets': {name: stream.tell() for name, stream in self.files.items()}, 'counts': dict(self.counts)}
 
     def finish(self):
         bindings = {}
@@ -357,6 +368,7 @@ def main():
     parser.add_argument('--cap-state', type=Path,
                         help='JSON counters shared by successive runs, so the caps are global across tranches')
     parser.add_argument('--workers', type=int, default=4)
+    parser.add_argument('--batch-chains', type=int, default=512, help='chains per committed (resumable) batch')
     parser.add_argument('--protection', type=Path, default=PROTECTION)
     parser.add_argument('--exclude-families', type=lambda v: set(v.split(',')), default=set(),
                         help='record families excluded from training (e.g. graded by a since-repaired oracle)')
@@ -396,15 +408,20 @@ def main():
     config = {'serving_entry': serving_entry, 'binding': binding, 'excluded_families': excluded, 'held_sources': held_sources, 'prompts': prompts, 'max_tokens': args.max_tokens, 'holds': holds,
               'blocked': protection['held'] | protection['quality'] | protection['pending'],
               'reader_cap': args.reader_cap, 'target_cap': args.target_cap}
-    writer, omissions, totals = Writer(args.out), Writer(args.out), collections.Counter()
-    families = collections.defaultdict(collections.Counter)
+    families, totals = collections.defaultdict(collections.Counter), collections.Counter()
     with ProcessPoolExecutor(args.workers, initializer=init_worker, initargs=(config,)) as pool:
         # Phase 1: target identities; caps are decided in input order (deterministic, worker-independent).
         target_count, body_count = collections.Counter(), collections.Counter()
+        # Shared caps count every OTHER output's kept targets/payloads; this output's own earlier
+        # (e.g. preempted) attempt is replaced, so a rerun never double-counts against itself.
+        run_key, runs = str(args.out.resolve()), {}
         if args.cap_state and args.cap_state.exists():
-            state = json.loads(args.cap_state.read_text())
-            target_count.update(state['targets'])
-            body_count.update({(computed == 'computed', body): n for computed, body, n in state['bodies']})
+            runs = json.loads(args.cap_state.read_text())['runs']
+            for key, state in runs.items():
+                if key != run_key:
+                    target_count.update(state['targets'])
+                    body_count.update({(computed == 'computed', body): n for computed, body, n in state['bodies']})
+        before_targets, before_bodies = collections.Counter(target_count), collections.Counter(body_count)
         cap_state_before = {'targets': sum(target_count.values()), 'bodies': sum(body_count.values())}
         plans = []
         for unit, shas in zip(units, pool.map(target_shas, units, chunksize=8)):
@@ -429,23 +446,52 @@ def main():
         totals['distinct_payloads_kept'] = len({body for _, body in body_count})
         if args.cap_state:
             tmp = args.cap_state.with_suffix('.tmp')
-            tmp.write_text(json.dumps({'targets': target_count, 'bodies': [
-                ['computed' if computed else 'constant', body, n] for (computed, body), n in body_count.items()]}))
+            runs[run_key] = {'targets': target_count - before_targets, 'bodies': [
+                ['computed' if computed else 'constant', body, n] for (computed, body), n in (body_count - before_bodies).items()]}
+            tmp.write_text(json.dumps({'schema': 'natlang.chain-graph-cap-state/2', 'runs': runs}))
             os.replace(tmp, args.cap_state)
+        # Phase 2 runs in bounded batches committed to progress.json, so a kill resumes after the last batch.
+        # Phase 1 is deterministic (other outputs' cap-state only), so the plans identity must match to resume.
+        plans_sha = canonical_json_sha256_hex({'binding': binding, 'args': {k: str(v) for k, v in sorted(vars(args).items()) if k not in ('workers', 'batch_chains')},
+                                               'plans': [{'supervised': sorted(p['supervised']), 'edges': sorted(p['edges'])} for p in plans]})
+        progress_path = args.out / 'progress.json'
+        progress = json.loads(progress_path.read_text()) if progress_path.exists() else None
+        if progress and progress['plans_sha256'] != plans_sha:
+            print('progress belongs to different plans; restarting this output', flush=True)
+            progress = None
+        if not progress:
+            for stale in args.out.glob('*.jsonl.tmp'):
+                stale.unlink()
+        writer = Writer(args.out, progress and progress['graphs'])
+        omissions = Writer(args.out, progress and progress['omissions'])
+        done = progress['done'] if progress else 0
+        if progress:
+            totals.update({key: value for key, value in progress['totals'].items() if not key.startswith('distinct_')})
+            for family, counts in progress['families'].items():
+                families[family].update(counts)
+            print(f'resuming after {done}/{len(units)} chains', flush=True)
         tasks = [(*unit, plan) for unit, plan in zip(units, plans)]
-        for kind, split, value in pool.map(convert_unit, tasks, chunksize=4):
-            if kind == 'omission':
-                totals['omitted:' + value['reason'].split(':')[0]] += 1
-                omissions.write('omissions', value)
-                continue
-            name = f'{"graphs" if kind == "graph" else "ordinary"}-{split}'
-            writer.write(name, value['graph'])
-            totals[name] += 1
-            totals[f'prompt:{value["prompt"]}'] += 1
-            for key, number in value['stats'].items():
-                totals[f'{name}:{key}'] += number
-            families[value['family']][name] += 1
-            families[value['family']][f'{name}:imports'] += value['stats']['imports']
+        while done < len(tasks):
+            batch = tasks[done:done + args.batch_chains]
+            for kind, split, value in pool.map(convert_unit, batch, chunksize=4):
+                if kind == 'omission':
+                    totals['omitted:' + value['reason'].split(':')[0]] += 1
+                    omissions.write('omissions', value)
+                    continue
+                name = f'{"graphs" if kind == "graph" else "ordinary"}-{split}'
+                writer.write(name, value['graph'])
+                totals[name] += 1
+                totals[f'prompt:{value["prompt"]}'] += 1
+                for key, number in value['stats'].items():
+                    totals[f'{name}:{key}'] += number
+                families[value['family']][name] += 1
+                families[value['family']][f'{name}:imports'] += value['stats']['imports']
+            done += len(batch)
+            state = {'plans_sha256': plans_sha, 'done': done, 'graphs': writer.commit(), 'omissions': omissions.commit(),
+                     'totals': dict(totals), 'families': {k: dict(v) for k, v in families.items()}}
+            progress_path.with_suffix('.tmp').write_text(json.dumps(state))
+            os.replace(progress_path.with_suffix('.tmp'), progress_path)
+            print(f'committed {done}/{len(tasks)} chains', flush=True)
     files = writer.finish()
     omission_files = omissions.finish()
     if any(sha256_file_hex(ROOT / path) != digest for path, digest in code.items()):
@@ -459,6 +505,7 @@ def main():
                'code': code, 'totals': dict(totals), 'families': {k: dict(v) for k, v in sorted(families.items())},
                'files': files, 'omissions': omission_files}
     (args.out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
+    (args.out / 'progress.json').unlink(missing_ok=True)
     print(json.dumps({'totals': dict(totals)}))
 
 

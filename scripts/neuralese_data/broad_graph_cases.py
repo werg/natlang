@@ -827,28 +827,22 @@ def source_review_holds():
     return holds
 
 
-def close(cases):
-    """Union-find over groups: every component on one split (test wins)."""
-    parent = list(range(len(cases)))
-    def find(i):
-        while parent[i] != i:
-            parent[i] = parent[parent[i]]; i = parent[i]
-        return i
-    first = {}
-    for i, case in enumerate(cases):
-        for group in case['groups']:
-            if group in first:
-                a, b = find(i), find(first[group])
-                if a != b:
-                    parent[a] = b
-            else:
-                first[group] = i
-    test_roots = {find(i) for i, case in enumerate(cases) if case['split'] == 'test'}
-    moved = 0
-    for i, case in enumerate(cases):
-        if case['split'] == 'train' and find(i) in test_roots:
-            case['split'] = 'test'; case['split_reason'] = 'closed-with-test-component'; moved += 1
-    return moved
+def close(cases, test_cap):
+    """Hold at most ``test_cap`` test cases per source; drop every train case sharing a group with a kept test case.
+
+    Transitive closure over shared Wikipedia paragraphs, tool schemas and databases merges most of a source into one
+    component, so it is not used: the held graphs are what must stay unrelated to training. Upstream test cases beyond
+    the cap are not written (they never train). Returns (kept cases, dropped-train count, dropped-test count)."""
+    tests = sorted((c for c in cases if c['split'] == 'test'), key=lambda c: text_sha('broad-graph-select:' + c['id']))
+    per, kept_tests = collections.Counter(), []
+    for case in tests:
+        per[case['source']] += 1
+        if per[case['source']] <= test_cap:
+            kept_tests.append(case)
+    held = {group for case in kept_tests for group in case['groups']}
+    train = [c for c in cases if c['split'] == 'train']
+    kept_train = [c for c in train if not held & set(c['groups'])]
+    return kept_train + kept_tests, len(train) - len(kept_train), len(tests) - len(kept_tests)
 
 
 def cmd_build(args):
@@ -856,7 +850,7 @@ def cmd_build(args):
     holds = source_review_holds()
     s1 = json.load(open(S1_GROUPS))
     sources = args.sources.split(',') if args.sources else list(ADAPTERS)
-    selected, report = [], {}
+    selected, report, train_caps = [], {}, {}
     for source in sources:
         omitted, candidates = collections.Counter(), {'train': [], 'test': []}
         for case, reason in ADAPTERS[source](holds):
@@ -870,36 +864,44 @@ def cmd_build(args):
                 omitted['s1-has-upstream-test-world-in-train'] += 1; continue
             candidates[case['split']].append(case)
         caps = {'train': args.train_cap.get(source, args.default_train_cap), 'test': args.test_cap}
+        train_caps[source] = caps['train']
         for split, items in candidates.items():
             items.sort(key=lambda c: text_sha('broad-graph-select:' + c['id']))
-            if len(items) > caps[split]:
-                omitted[f'{split}-cap'] += len(items) - caps[split]
-            selected.extend(items[:caps[split]])
+            # train: 30% headroom over the cap for cases dropped as related to a held case; trimmed after closure
+            cap = int(caps[split] * 1.3) if split == 'train' else len(items)
+            if len(items) > cap:
+                omitted[f'{split}-cap'] += len(items) - cap
+            selected.extend(items[:cap])
         report[source] = {'candidates': {k: len(v) for k, v in candidates.items()}, 'omitted': dict(omitted)}
         print(json.dumps({'source': source, **report[source]}), flush=True)
-    moved = close(selected)
+    kept, dropped_train, dropped_test = close(selected, args.test_cap)
+    dropped_by = collections.Counter(c['source'] for c in selected if c['split'] == 'train') - \
+        collections.Counter(c['source'] for c in kept if c['split'] == 'train')
+    for source, n in dropped_by.items():
+        report[source]['omitted']['train-related-to-held-case'] = n
     final = collections.Counter((c['source'], c['split']) for c in selected)
-    # Test cases are held evaluation graphs only: cap them after closure (dropping them never trains anything).
-    kept, per = [], collections.Counter()
-    for case in sorted(selected, key=lambda c: text_sha('broad-graph-select:' + c['id'])):
-        if case['split'] == 'test':
+    trimmed, per = [], collections.Counter()
+    for case in sorted(kept, key=lambda c: text_sha('broad-graph-select:' + c['id'])):
+        if case['split'] == 'train':
             per[case['source']] += 1
-            if per[case['source']] > args.test_cap:
-                report[case['source']]['omitted']['test-cap-after-closure'] = \
-                    report[case['source']]['omitted'].get('test-cap-after-closure', 0) + 1
+            if per[case['source']] > train_caps[case['source']]:
+                report[case['source']]['omitted']['train-cap-after-held-relation'] = \
+                    report[case['source']]['omitted'].get('train-cap-after-held-relation', 0) + 1
                 continue
-        kept.append(case)
+        trimmed.append(case)
+    kept = trimmed
     kept.sort(key=lambda c: (c['source'], text_sha('broad-graph-order:' + c['id'])))
     with open(out / 'cases.jsonl', 'w') as stream:
         for case in kept:
             stream.write(json.dumps(case, ensure_ascii=False, separators=(',', ':')) + '\n')
-    summary = {'schema': 'natlang.broad-graph-cases-build/1', 'sources': report, 'closure_moved_to_test': moved,
+    summary = {'schema': 'natlang.broad-graph-cases-build/1', 'sources': report,
+               'held_relation': {'dropped_train': dropped_train, 'unwritten_test_over_cap': dropped_test},
                'after_closure': {f'{s}:{k}': v for (s, k), v in sorted(final.items())},
                'written': dict(collections.Counter(f'{c["source"]}:{c["split"]}' for c in kept)),
                'cases': len(kept), 'builder': file_binding(__file__),
                's1_group_index': {'path': str(S1_GROUPS), 'entries': len(s1)}}
     (out / 'cases-build.json').write_text(json.dumps(summary, indent=1) + '\n')
-    print(json.dumps({k: summary[k] for k in ('closure_moved_to_test', 'cases', 'written')}))
+    print(json.dumps({k: summary[k] for k in ('held_relation', 'cases', 'written')}))
 
 
 def cmd_custody(args):

@@ -50,13 +50,18 @@ def test_make_case_declares_distinct_functions_and_document_groups():
     assert case['view']['name'] in case['root']['instructions_root']
 
 
-def test_close_moves_whole_component_to_test():
+def test_close_keeps_capped_held_cases_and_drops_related_train():
     a = _case('hotpotqa', 'train', ['wiki:A'])
     c = _case('squad', 'train', ['wiki:A', 'wiki:B'])
     t = _case('2wiki', 'test', ['wiki:B'])
+    t2 = _case('2wiki', 'test', ['wiki:C'])
     other = _case('xlam', 'train', ['tool-schema:z'])
-    assert b.close([a, c, t, other]) == 2
-    assert (a['split'], c['split'], t['split'], other['split']) == ('test', 'test', 'test', 'train')
+    kept, dropped_train, dropped_test = b.close([a, c, t, t2, other], test_cap=1)
+    ids = {case['id'] for case in kept}
+    assert dropped_test == 1 and len([k for k in kept if k['split'] == 'test']) == 1
+    held = next(k for k in kept if k['split'] == 'test')
+    assert all(not set(k['groups']) & set(held['groups']) for k in kept if k['split'] == 'train')
+    assert other['id'] in ids and a['id'] in ids
 
 
 def test_kinds_keep_none_lines_above_edge_minimum():
