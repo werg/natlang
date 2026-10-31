@@ -1075,6 +1075,41 @@ def test_joint_unknown_result_occurrence_derives_only_exact_original_json_target
             occurrence=occurrence, role_markers=ROLE_MARKERS, tokenizer_sha256='f' * 64,
             source_records=[wrong_function, reader])
 
+    # The legacy descriptor path is independently checked after decoding the
+    # exact JSON argument. It must stay rooted at target/tool_calls/<n>/function,
+    # and the call must still be return_result.
+    descriptor_writer = {'id': 'writer-descriptor', 'target': {'role': 'assistant', 'content': '',
+        'tool_calls': [{'id': 'call', 'type': 'function', 'function': {'name': 'return_result',
+            'arguments': json.dumps({'status': 'success', 'value': {
+                '$write': {'name': write_name, 'type': 'Neuralese<unknown>', 'source': body}}},
+                separators=(',', ':'))}}]}}
+    descriptor_occurrence = pairs.source_occurrences(descriptor_writer, reader, write_name, body, body_sha)
+    exact = pairs.pair_derivations(descriptor_writer, reader, {}, tokenizer=None, payload=body,
+        occurrence=descriptor_occurrence, role_markers=ROLE_MARKERS, tokenizer_sha256='f' * 64,
+        source_records=[descriptor_writer, reader])
+    assert exact[descriptor_writer['id']]['producer_span'] == {'call_index': 0, 'argument_path': ['value'],
+        'body': body, 'payload_sha256': body_sha, 'value_type': 'unknown'}
+
+    for path in (
+        '/target/metadata/tool_calls/0/function/arguments<json>/value/$write',
+        '/target/tool_calls/0/function/metadata/arguments<json>/value/$write',
+        '/target/tool_calls/0/function/arguments/metadata<json>/value/$write',
+    ):
+        bad = copy.deepcopy(descriptor_occurrence)
+        bad['writer_json_pointer'] = path
+        with pytest.raises(ValueError, match='producer'):
+            pairs.pair_derivations(descriptor_writer, reader, {}, tokenizer=None, payload=body,
+                occurrence=bad, role_markers=ROLE_MARKERS, tokenizer_sha256='f' * 64,
+                source_records=[descriptor_writer, reader])
+
+    non_result = copy.deepcopy(descriptor_writer)
+    non_result['target']['tool_calls'][0]['function']['name'] = 'inspect'
+    non_result_occurrence = pairs.source_occurrences(non_result, reader, write_name, body, body_sha)
+    with pytest.raises(ValueError, match='return_result'):
+        pairs.pair_derivations(non_result, reader, {}, tokenizer=None, payload=body,
+            occurrence=non_result_occurrence, role_markers=ROLE_MARKERS, tokenizer_sha256='f' * 64,
+            source_records=[non_result, reader])
+
 
 def test_inline_producer_span_preserves_escaped_eval_target_and_uses_raw_source_tokens():
     import hashlib

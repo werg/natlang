@@ -883,14 +883,19 @@ def pair_derivations(writer_record, reader_record, pieces, *, tokenizer, payload
                 and not inline_path):
             json_index = next((index for index, part in enumerate(pointer_parts)
                                if part.endswith('<json>')), None)
-            if json_index is None or pointer_parts[json_index][:-6] != 'arguments':
-                raise ValueError('structured producer is not bound inside exact tool arguments')
+            if (json_index != 4 or len(pointer_parts) < 6
+                    or pointer_parts[:2] != ['target', 'tool_calls']
+                    or not pointer_parts[2].isdigit()
+                    or pointer_parts[3] != 'function'
+                    or pointer_parts[4] != 'arguments<json>'):
+                raise ValueError('structured producer is not bound inside exact return-result tool arguments')
             try:
-                call_index = pointer_parts[pointer_parts.index('tool_calls') + 1]
-                if not call_index.isdigit() or pointer_parts[json_index - 1] != 'function':
+                call_index = pointer_parts[2]
+                function = writer_record['target']['tool_calls'][int(call_index)]['function']
+                if function.get('name') != 'return_result':
                     raise ValueError
-            except (ValueError, IndexError) as exc:
-                raise ValueError('structured producer tool-call path is malformed') from exc
+            except (KeyError, TypeError, ValueError, IndexError) as exc:
+                raise ValueError('structured producer is not bound to a return_result call') from exc
             argument_path = pointer_parts[json_index + 1:-1]
             if not argument_path:
                 raise ValueError('structured producer value path is empty')
