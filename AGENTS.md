@@ -416,7 +416,10 @@ exports retain the actual producer and every consumer import at their recorded
 positions, with gradients through those dependencies. Retain text and tokenizer
 provenance for re-encoding when the executing checkpoint changes; reuse compatible
 state efficiently across repeated and concurrent calls. Guidance authoring keeps
-exact actor provenance.
+exact actor provenance. The model being trained authors its own memetic guidance,
+helped by JOLT+ privileged context (the same actor and checkpoint with verified
+case facts); external teachers supply codebases and verified trajectories, not
+guidance (owner, 2026-10-31).
 
 The system has no deployed-user backward-compatibility requirement. Remove legacy
 memetic adapters and flat soft-block fallbacks, migrate their current callers and
