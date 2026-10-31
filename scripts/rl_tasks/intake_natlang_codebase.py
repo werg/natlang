@@ -23,7 +23,7 @@ if str(REPO) not in sys.path:
 
 from scripts.rl_tasks.common import jsonl_write, slug, text_digest
 from scripts.rl_tasks.audit_natlang_packages import audit
-from scripts.rl_tasks.codebase_services import load_external_services
+from scripts.rl_tasks.codebase_services import load_external_services, bind_world_services
 
 
 def _sha(value: bytes) -> str:
@@ -186,7 +186,7 @@ def _worlds(root: Path, metadata: dict) -> list[dict]:
 
 def _make_cases(program_id: str, package_revision: str, package: dict[str, str], metadata: dict,
                 worlds: list[dict], external_services: dict[str, str],
-                service_bindings: dict[str, dict[str, str]]) -> list[dict]:
+                service_bindings: dict[str, dict[str, str]], world_services: dict[str, dict[str, str]] | None = None) -> list[dict]:
     dataset = metadata.get('dataset')
     required_dataset = ('identity', 'revision', 'license', 'source_uri', 'artifact_path', 'artifact_sha256',
                         'provenance_path', 'provenance_sha256', 'license_evidence_path', 'license_evidence_sha256')
@@ -284,7 +284,7 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
                           'oracle': 'exact' if oracle == 'exact' else oracle},
         }
         if external_services:
-            case['semantics']['services'] = external_services
+            case['semantics']['services'] = {**external_services, **(world_services or {}).get(row['id'], {})}
         for field in ('folder_files', 'expected_files'):
             if field in row:
                 case['semantics'][field] = row[field]
@@ -307,10 +307,15 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
     files = _project(package_root, metadata)
     external_services, service_bindings = load_external_services(package_root, metadata)
     world_rows = _worlds(package_root, metadata)
+    world_services = bind_world_services(package_root, metadata, external_services, service_bindings)
+    fixture_aliases = {alias for alias, binding in service_bindings.items() if 'fixtures_path' in binding}
+    if fixture_aliases and (set(world_services) != {row['id'] for row in world_rows} or
+                           any(set(bound) != fixture_aliases for bound in world_services.values())):
+        raise ValueError('fixture-bound services must cover exactly all admitted worlds')
     service_set_sha = _sha(json.dumps(service_bindings, sort_keys=True, separators=(',', ':')).encode())
     package_revision = metadata['source_revision'] + (f'+services:{service_set_sha}' if service_bindings else '')
     cases = _make_cases(metadata['program_id'], package_revision, files, metadata, world_rows,
-                        external_services, service_bindings)
+                        external_services, service_bindings, world_services)
     output.parent.mkdir(parents=True, exist_ok=True)
     exact_cases = [case for case in cases if case['semantics']['oracle'] == 'exact']
     judged_cases = [case for case in cases if isinstance(case['semantics']['oracle'], dict)]

@@ -255,3 +255,26 @@ def test_intake_folder_files_and_verifier_targets(tmp_path):
     path.write_text(json.dumps(row) + '\n')
     with pytest.raises(ValueError, match='expected_files requires folder_files'):
         intake(package, output=out)
+
+
+def test_intake_binds_hidden_world_services_and_checks_fixture_hash(tmp_path):
+    package, root = _package(tmp_path)
+    source = root / 'service.ts'
+    source.write_text('const data = /*__NATLANG_WORLD_FIXTURE__*/; export function read(): string { return data.value; }')
+    fixture = root / 'service-worlds.jsonl'
+    fixture.write_text(''.join(json.dumps({'id': key, 'fixture': {'value': val}}) + '\n' for key, val in [('case-1', 'private-a'), ('case-2', 'private-b')]))
+    metadata_path = root / 'metadata.json'
+    metadata = json.loads(metadata_path.read_text())
+    metadata['external_services'] = {'store': {'source_path': source.name, 'source_sha256': hashlib.sha256(source.read_bytes()).hexdigest(), 'fixtures_path': fixture.name, 'fixtures_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest()}}
+    metadata_path.write_text(json.dumps(metadata))
+    out = tmp_path / 'out.jsonl'
+    intake(package, output=out)
+    a = json.loads(out.read_text())
+    b = json.loads((tmp_path / 'out.judged.jsonl').read_text())
+    assert 'private-a' in a['semantics']['services']['store']
+    assert 'private-b' not in a['semantics']['services']['store']
+    assert 'private-b' in b['semantics']['services']['store']
+    assert 'private-a' not in json.dumps(a['semantics']['files'])
+    fixture.write_text(fixture.read_text() + '\n')
+    with pytest.raises(ValueError, match='fixture hash mismatch'):
+        intake(package, output=out)

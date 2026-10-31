@@ -7,6 +7,7 @@ model-visible namespace with ts-host/native/external.ts.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -61,3 +62,40 @@ def load_external_services(package_root: Path, metadata: dict[str, Any]) -> tupl
         services[alias] = source
         bindings[alias] = {'source_path': source_path, 'source_sha256': actual_sha}
     return services, bindings
+
+
+def bind_world_services(package_root: Path, metadata: dict[str, Any], services: dict[str, str],
+                        bindings: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    """Bind hidden JSON fixtures into trusted host source, keyed by exact world ID."""
+    root = package_root.parent.resolve(strict=True)
+    result: dict[str, dict[str, str]] = {}
+    for alias, declaration in metadata.get('external_services', {}).items():
+        if 'fixtures_path' not in declaration:
+            continue
+        path = declaration['fixtures_path']
+        digest = declaration.get('fixtures_sha256')
+        if (not isinstance(path, str) or not path or path.startswith('/') or '\\' in path
+                or any(part in {'', '.', '..'} for part in path.split('/')) or path.startswith('package/')
+                or not isinstance(digest, str) or not _SHA256.fullmatch(digest)):
+            raise ValueError(f'invalid fixture binding for {alias}')
+        file = root / path
+        if file.is_symlink() or not file.is_file() or not file.resolve().is_relative_to(root):
+            raise ValueError(f'unsafe fixture binding for {alias}')
+        raw = file.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != digest:
+            raise ValueError(f'fixture hash mismatch for {alias}')
+        marker = '/*__NATLANG_WORLD_FIXTURE__*/'
+        if services[alias].count(marker) != 1:
+            raise ValueError(f'{alias} must contain exactly one fixture marker')
+        bindings[alias].update(fixtures_path=path, fixtures_sha256=digest)
+        seen = set()
+        for line in raw.decode('utf-8').splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict) or not isinstance(row.get('id'), str) or not row['id'] or 'fixture' not in row or row['id'] in seen:
+                raise ValueError(f'invalid or duplicate fixture world for {alias}')
+            seen.add(row['id'])
+            source = services[alias].replace(marker, json.dumps(row['fixture'], ensure_ascii=True, separators=(',', ':')))
+            result.setdefault(row['id'], {})[alias] = source
+    return result
