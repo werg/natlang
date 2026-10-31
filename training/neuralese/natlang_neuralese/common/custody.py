@@ -25,6 +25,7 @@ Units (all crisp: exact verifiers of what the stages produce):
 """
 from __future__ import annotations
 
+import functools
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -168,8 +169,8 @@ class ProtectedWorlds:
     identities: frozenset
     sources: tuple  # canonical JSON receipts of the loaded sources
 
-    @property
-    def digest(self):
+    @functools.cached_property
+    def digest(self):  # immutable: hashing ~150k identities on every check() cost 0.2 s per case
         return canonical_json_sha256_hex({'sources': list(self.sources),
                                           'identities': sorted(map(list, self.identities))})
 
