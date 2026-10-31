@@ -29,7 +29,8 @@ set -uo pipefail
 WORK=${NATLANG_CW_WORK:-/work}
 export NATLANG_REPO=${NATLANG_REPO:-/home/werg/natlang}
 log() { printf '{"bootstrap":"%s","job":"%s","at":"%s"%s}\n' "$1" "${NATLANG_CW_JOB:-}" "$(date -u +%FT%TZ)" "${2:+,$2}"; }
-die() { log failed "\"step\":\"$1\""; exit 0; }  # exit 0: see the end of this file
+# NATLANG_CW_HOLD_ON_FAILURE seconds: keep a failed sandbox (and its logs/files) readable before it completes.
+die() { log failed "\"step\":\"$1\""; sleep "${NATLANG_CW_HOLD_ON_FAILURE:-0}"; exit 0; }  # exit 0: see the end of this file
 
 log start "\"sandbox\":\"${CW_SANDBOX_ID:-}\""
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>/dev/null | sed 's/^/gpu: /'

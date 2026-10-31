@@ -425,11 +425,28 @@ def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=Fal
                                                   'launched': time.time(), 'job': job['id'],
                                                   'parent_seq': record['seq']}
         store_json(hub(run) / 'run-state.json', state)
-    entry = cwctl.launch(job, False, True, None, Path(state['bundle']), secrets=secrets, on_created=created,
-                         account=account)
+    def created_and_followed(sandbox_id):
+        created(sandbox_id)
+        follow_logs(run, sandbox_id)
+    entry = cwctl.launch(job, False, True, None, Path(state['bundle']), secrets=secrets,
+                         on_created=created_and_followed, account=account)
     note(run, f'{name} launched in {entry["sandbox_id"]} ({account}: {reason}) from export {record["seq"]} '
               f'(trained_rounds {record["trained_rounds"]}), job {job["id"]}')
     return entry
+
+
+def follow_logs(run, sandbox_id):
+    """The sandbox's main-process log, followed into ROOT/.cloud/logs/<id>.log by a ledger service (a completed
+    sandbox's log stream is gone, so it must be captured while it runs)."""
+    logs = hub(run) / 'logs'
+    logs.mkdir(parents=True, exist_ok=True)
+    cw = f'{sys.executable} {HERE / "cwctl.py"}'
+    command = (f'while true; do {cw} logs {sandbox_id} --follow >> {logs / sandbox_id}.log 2>&1; '
+               f'{cw} get {sandbox_id} 2>/dev/null | grep -qE "STATUS +(completed|failed|terminated)" && break; '
+               f'sleep 20; done')
+    subprocess.run(['/usr/bin/python3', str(REPO / 'scripts' / 'memory_ledger.py'), 'run', '--unit',
+                    f'rl-cloud-logs-{sandbox_id[:8]}', '--budget-gb', '1', '--class', 'service', '--priority', 'medium',
+                    '--wait', '300', '--detach', '--', '/bin/sh', '-c', command], capture_output=True)
 
 
 def deliver_parent(run, name):

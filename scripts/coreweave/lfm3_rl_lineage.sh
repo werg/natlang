@@ -26,6 +26,8 @@ L=$ROOT/$LINEAGE; E=$ROOT/.exports/$LINEAGE; R=$ROOT/runtime; WORK=${NATLANG_CW_
 OUT=$ROOT/.sandbox/$LINEAGE; mkdir -p "$OUT" "$E"
 exec > >(tee -a "$OUT/driver.log") 2>&1
 HELPER="$NATLANG_REPO/scripts/coreweave/rl_cloud_sandbox.py"
+# A failed driver keeps the sandbox readable for NATLANG_CW_HOLD_ON_FAILURE seconds (logs, files) before it completes.
+trap 'rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 143 ]; then sleep "${NATLANG_CW_HOLD_ON_FAILURE:-0}"; fi' EXIT
 log() { echo "{\"at\":\"$(date -u +%FT%TZ)\",\"lineage\":\"$LINEAGE\",$1}"; }
 t0=$(date +%s); since() { echo $(( $(date +%s) - $1 )); }
 { echo "== $(date -u +%FT%TZ) sandbox ${CW_SANDBOX_ID:-}"; nvidia-smi --query-gpu=name,memory.total,driver_version,compute_cap --format=csv
