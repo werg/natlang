@@ -43,8 +43,9 @@ Authoritative logs (read these first, newest at the bottom):
   line "runner ... restarted as lfm3-rl-par-10"). Manual equivalent: stop the runner unit, relaunch with
   `python3 scripts/memory_ledger.py run --unit lfm3-rl-par-N --budget-gb 100 --priority high --wait 3600 --detach -- /usr/bin/bash -c "exec $W/scripts/alt_par.sh 6 > $W/logs/par-N.log 2>&1"` and update `ops/runner-unit`.
 - Runtimes (immutable git-archive copies, `scripts/build_runtime.sh COMMIT /abs/path/FROM_RUNTIME`):
-  `runtime-5b9a0a6c5` (jolt r6, bound), `runtime-afb13bb47` (sd fallback), `runtime-cd5416516` (current main fixes:
-  put_bytes resume, typed-text-result deferral). Both lineages have `pending-switch.json` → `runtime-cd5416516`
+  `runtime-5b9a0a6c5` (jolt r6, bound), `runtime-6e756f19e` (sd r8 attempt-1 was collected on it — keep until that round
+  trains), `runtime-afb13bb47`, `runtime-cd5416516`, `runtime-d6ccac819` (main with put_bytes resume, typed-text-result
+  deferral and the prep-speed fixes db204a9aa/22eb6a8ed). Both lineages have `pending-switch.json` → `runtime-d6ccac819`
   + v2 cases, 16 rows/round, 32768 context. Switching: `scripts/cutover.sh RUNTIME 'CONFIG_JSON'` (preflight per
   lineage; a bound round that fails preflight finishes on its old runtime).
 - Bugs fixed this session (all on main): put_bytes removed by 23627b32f broke resume (afb13bb47); uncaptured
@@ -274,5 +275,7 @@ explicit stop-gradient external origin with its exact consumer bindings.
   for deletion must not traverse into the archive (I deleted the archived base GGUF that way; regenerated via
   `claude-regen-base-gguf-1` to `/mnt/external/natlang-development-data/archive/data/lfm3-eval/LFM3-1.7B-BF16.gguf`
   — verify it completed).
+- A runtime is in use while any unfinished round was collected on it (resume preflight resolves it), not only
+  while a lineage's controller-runtime names it. I deleted runtime-6e756f19e too early and had to rebuild it.
 - Never edit a running bash script in place (restart it). `build_runtime.sh` second arg is a runtime *path*.
 - py-spy needs sudo here; use timing logs/cProfile.
