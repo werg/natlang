@@ -8,10 +8,11 @@ export { trajectoryTurn } from '../runtime/trajectory.js';
 import { nativeStateRuntimeOptions } from '../model/native-state-client.js';
 import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';
 import { createHash, randomUUID } from 'node:crypto';
+import { acquireJournalSpool, type JournalSpool } from './journal-spool.js';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rateLimited, transportFailure, retryWaitMs, retryAfterMs, providerFinishReason, providerRequestRetryable } from './retry.js';
-import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { mkdir, open, readFile, readdir, rename, stat, unlink } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { archiveNeuraleseReplyArtifacts, HttpNeuraleseStore, neuraleseServerModelTurn } from '../model/neuralese-server.js';
@@ -129,6 +130,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   /** A separately identified model for rubric-backed `judged` oracles. */
   judgeModel?: { modelId: string; endpoint?: string; provider?: string; piOptions?: Record<string, unknown> } };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
+  /** Bounded local durable journal root; completed artifacts are hash-verified into jobs before the spool is retired. */
+  journalSpoolRoot?: string;
   /** Immutable bytes parsed by the CLI; absent custom callers cannot attest source-bound errors. */
   sourceSha256?: string;
   /** Optional low-sensitivity live state for diagnosing an idle, unresolved collection. */
@@ -1175,20 +1178,27 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         parentSignal: providerParentSignal(), call: actionSignal => grade(actionSignal) }) : grade(providerParentSignal());
     } : undefined;
     const trajectory: Record<string, unknown>[] = [];
-    const partialPath = join(config.jobs, `${jobKey(item)}.partial.json`);
-    const saved = await loadPartial(partialPath, item, expected);
+    const externalPartialPath = join(config.jobs, `${jobKey(item)}.partial.json`);
+    const spool: JournalSpool | undefined = config.journalSpoolRoot ? await acquireJournalSpool(config.journalSpoolRoot,
+      `${resolve(config.jobs)}:${jobKey(item)}`) : undefined;
+    const partialPath = spool ? join(spool.directory, basename(externalPartialPath)) : externalPartialPath;
+    const savedLocal = await loadPartial(partialPath, item, expected);
+    const savedExternal = savedLocal ? undefined : await loadPartial(externalPartialPath, item, expected);
+    const saved = savedLocal ?? savedExternal;
     const partial: PartialJob = saved ?? { version: TEACHER_PARTIAL_VERSION,
       program_id: item.record.id, provenance: structuredClone(expected), turns: [] };
+    if (spool && savedExternal) await spool.assertCapacity(Buffer.byteLength(JSON.stringify(savedExternal)) + 1);
     partial.execution_attempt_id ??= randomUUID();
     // Save the attempt namespace before any provider/runtime work. A resume keeps this ID,
     // while a fresh execution after a completed job receives a new one.
+    if (spool) await spool.assertCapacity(Buffer.byteLength(JSON.stringify(partial)) + 8192);
     await writeAtomic(partialPath, JSON.stringify(partial) + '\n');
     partial.request_starts ??= [];
     partial.request_attempt_ids ??= [];
     if (!partial.request_attempt_ids.includes(evidenceAttemptId)) partial.request_attempt_ids.push(evidenceAttemptId);
     requestTelemetry.attempt_ids = partial.request_attempt_ids;
     requestTelemetry.starts = partial.request_starts;
-    const evidencePath = join(config.jobs, `${basename(partialPath)}.evidence-${evidenceAttemptId}.jsonl`);
+    const evidencePath = join(spool?.directory ?? config.jobs, `${basename(partialPath)}.evidence-${evidenceAttemptId}.jsonl`);
     let evidenceHash = createHash('sha256'), evidenceRecords = 0, evidenceBytes = 0;
     let evidenceManifest: PartialEvidenceSnapshot | undefined;
     // Journaled responses are replayed by their exact request, not by position: the child calls of one eval run
@@ -1198,40 +1208,66 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let journalWrites = Promise.resolve();
     for (const turn of partial.turns) unused.set(turn.request_sha256, [...unused.get(turn.request_sha256) ?? [], turn]);
     const appendEvidence = (records: Iterable<Record<string, unknown>>, status?: PartialEvidenceSnapshot['status']) => {
+      const enqueuedAt = process.hrtime.bigint();
       journalWrites = journalWrites.then(async () => {
+        const startedAt = process.hrtime.bigint();
+        const recordKinds: string[] = [];
+        const evidenceBytesBefore = evidenceBytes;
         if (!evidenceHandle) {
-          await mkdir(config.jobs, { recursive: true });
+          await mkdir(spool?.directory ?? config.jobs, { recursive: true });
           evidenceHandle = await open(evidencePath, 'wx');
           evidenceManifest = { schema: 'natlang.teacher_partial_evidence/1', path: basename(evidencePath),
             attempt_id: evidenceAttemptId, status: 'in_progress', records: 0, bytes: 0,
             sha256: createHash('sha256').digest('hex') };
           (partial.evidence_snapshots ??= []).push(evidenceManifest);
         }
+        const journalLines: string[] = [];
         for (const payload of records) {
+          recordKinds.push(typeof payload.kind === 'string' ? payload.kind : 'unknown');
+          const sequence = evidenceRecords + journalLines.length;
           const base = { version: PARTIAL_EVIDENCE_RECORD_VERSION, attempt_id: evidenceAttemptId,
-            sequence: evidenceRecords, payload };
+            sequence, payload };
           const body = JSON.stringify(base);
           const record = Buffer.byteLength(body) <= MAX_PARTIAL_EVIDENCE_RECORD_BYTES ?
             { ...base, record_sha256: sha256(canonical(base)) } : {
-              version: PARTIAL_EVIDENCE_RECORD_VERSION, attempt_id: evidenceAttemptId, sequence: evidenceRecords,
+              version: PARTIAL_EVIDENCE_RECORD_VERSION, attempt_id: evidenceAttemptId, sequence,
               payload: { kind: 'record_omitted', reason: 'record_exceeded_byte_limit', bytes: Buffer.byteLength(body),
                 payload_sha256: sha256(body), original_kind: payload.kind ?? null },
               record_sha256: sha256(canonical({ version: PARTIAL_EVIDENCE_RECORD_VERSION,
-                attempt_id: evidenceAttemptId, sequence: evidenceRecords,
+                attempt_id: evidenceAttemptId, sequence,
                 payload: { kind: 'record_omitted', reason: 'record_exceeded_byte_limit', bytes: Buffer.byteLength(body),
                   payload_sha256: sha256(body), original_kind: payload.kind ?? null } })) };
           const line = JSON.stringify(record) + '\n';
+          journalLines.push(line);
+        }
+        if (status) evidenceManifest!.status = status;
+        const capacityDocument = JSON.stringify(partial) + '\n';
+        if (spool) await spool.assertCapacity(journalLines.reduce((n, line) => n + Buffer.byteLength(line), 0) +
+          Buffer.byteLength(capacityDocument) * 2 + 4096);
+        for (const line of journalLines) {
           await evidenceHandle.writeFile(line);
           evidenceHash.update(line);
           evidenceBytes += Buffer.byteLength(line);
           evidenceRecords++;
         }
+        const evidenceSyncStartedAt = process.hrtime.bigint();
         await evidenceHandle.sync();
+        const evidenceSyncMs = Number(process.hrtime.bigint() - evidenceSyncStartedAt) / 1e6;
         evidenceManifest!.records = evidenceRecords;
         evidenceManifest!.bytes = evidenceBytes;
         evidenceManifest!.sha256 = evidenceHash.copy().digest('hex');
-        if (status) evidenceManifest!.status = status;
-        await writeAtomic(partialPath, JSON.stringify(partial) + '\n');
+        const partialDocument = JSON.stringify(partial) + '\n';
+        const partialSnapshotStartedAt = process.hrtime.bigint();
+        await writeAtomic(partialPath, partialDocument);
+        const partialSnapshotMs = Number(process.hrtime.bigint() - partialSnapshotStartedAt) / 1e6;
+        process.stderr.write(`${JSON.stringify({ event: 'teacher_partial_evidence_persist', attempt_id: evidenceAttemptId,
+          ...(spool ? { journal_spool_case_identity_sha256: spool.caseIdentitySha256,
+            journal_spool_case_limit_bytes: 268435456 } : {}),
+          record_kinds: recordKinds, record_count: recordKinds.length, evidence_append_bytes: evidenceBytes - evidenceBytesBefore,
+          evidence_bytes: evidenceBytes, evidence_sync_ms: Number(evidenceSyncMs.toFixed(3)),
+          partial_snapshot_bytes: Buffer.byteLength(partialDocument), partial_snapshot_ms: Number(partialSnapshotMs.toFixed(3)),
+          journal_queue_wait_ms: Number((Number(startedAt - enqueuedAt) / 1e6).toFixed(3)),
+          total_ms: Number((Number(process.hrtime.bigint() - enqueuedAt) / 1e6).toFixed(3)) })}\n`);
       });
       return journalWrites;
     };
@@ -1450,9 +1486,22 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       traceEvents.map(event => JSON.stringify(event)).join('\n') + '\n');
     await journalWrites;
     await evidenceHandle?.close(); evidenceHandle = undefined;
-    for (const snapshot of partial.evidence_snapshots ?? []) if (basename(snapshot.path) === snapshot.path)
-      await removeIfPresent(join(config.jobs, snapshot.path));
-    await removeIfPresent(partialPath);
+    if (spool) {
+      const publication: Array<{ source: string; destination: string; sha256: string }> = [];
+      const partialBytes = await readFile(partialPath);
+      publication.push({ source: partialPath, destination: externalPartialPath, sha256: sha256(partialBytes) });
+      for (const snapshot of partial.evidence_snapshots ?? []) if (basename(snapshot.path) === snapshot.path) {
+        const sourcePath = join(spool.directory, snapshot.path);
+        try { await stat(sourcePath); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error; }
+        publication.push({ source: sourcePath, destination: join(config.jobs, snapshot.path), sha256: snapshot.sha256 });
+      }
+      await spool.publish(publication);
+    } else {
+      for (const snapshot of partial.evidence_snapshots ?? []) if (basename(snapshot.path) === snapshot.path)
+        await removeIfPresent(join(config.jobs, snapshot.path));
+      await removeIfPresent(partialPath);
+    }
     return row;
     } finally {
       await Promise.all([

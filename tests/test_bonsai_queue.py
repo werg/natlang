@@ -9,6 +9,17 @@ import pytest
 import scripts.run_bonsai_queue as queue_module
 from scripts.run_bonsai_queue import run_queue, local_decode_progress as read_local_decode_progress
 
+
+def test_journal_spool_root_is_bound_to_jobs_campaign():
+    from scripts.run_bonsai_queue import _approved_journal_spool_root
+    campaign = 'campaign-a'
+    jobs = '/mnt/external/natlang-luna-campaigns/' + campaign + '/slot-01/jobs'
+    approved = _approved_journal_spool_root(
+        queue_module.resolve_machine_path('data_nvme', 'natlang-teacher-journal-spool', campaign), jobs)
+    assert approved.endswith('/natlang-teacher-journal-spool/' + campaign)
+    with pytest.raises(ValueError, match='configured data_nvme'):
+        _approved_journal_spool_root('/tmp/unbound-spool', jobs)
+
 ROOT = Path(__file__).resolve().parents[1]
 TS_HOST = ROOT / 'ts-host'
 

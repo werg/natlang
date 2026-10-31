@@ -193,6 +193,10 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
     campaign_id = plan.get('campaign_id')
     if not isinstance(campaign_id, str) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]{2,100}', campaign_id):
         raise ValueError('Invalid campaign_id')
+    default_spool_root = machine_resolve('data_nvme', 'natlang-teacher-journal-spool', campaign_id).expanduser().resolve(strict=False)
+    spool_root = Path(plan.get('journal_spool_root', default_spool_root)).expanduser().resolve(strict=False)
+    if spool_root != default_spool_root:
+        raise ValueError('journal_spool_root must be the campaign-specific directory under configured data_nvme/natlang-teacher-journal-spool')
     if plan.get('provider') != 'openai-codex' or plan.get('model_id') != 'gpt-6-luna':
         raise ValueError('This dispatcher is limited to reviewed Luna requests')
     if plan.get('model_concurrency') != 1:
@@ -319,6 +323,10 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
                   'runtime_receipt_sha256': required_pins[str(receipt)],
                   'supervisor': str(supervisor), 'supervisor_sha256': required_pins[str(supervisor)],
                   'campaign_root': str(campaign_root), 'ledger': str(Path(plan['claim_ledger']).resolve()),
+                  'journal_spool_root': str(spool_root),
+                  'journal_spool_policy': {'schema': 'natlang.teacher_journal_spool_policy/1',
+                    'per_case_bytes': 268435456, 'active_case_credits': 6, 'aggregate_bytes': 1610612736,
+                    'publication': 'fsync+sha256-verified into external jobs directory before local retirement'},
                   'storage_root': str(storage_root),
                   'launch_record': str(Path(plan['launch_record']).resolve()),
                   'authority': str(authority), 'slots': slots,
@@ -639,6 +647,8 @@ def _runner_command(plan, entry, queue, journal):
                '--model-id', 'gpt-6-luna', '--model-concurrency', '1', '--execution-plans',
                '--reasoning-effort', plan.get('reasoning_effort', 'low'),
                '--min-free-mib', str(plan.get('min_free_mib', 1024))]
+    command += ['--journal-spool-root', str(Path(plan.get('journal_spool_root',
+        machine_resolve('data_nvme', 'natlang-teacher-journal-spool', plan['campaign_id']))).resolve())]
     if plan.get('provider_request_config'):
         command += ['--provider-request-config', str(Path(plan['provider_request_config']).resolve())]
     return command

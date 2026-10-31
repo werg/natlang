@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -103,6 +103,42 @@ test('collector applies the per-action cap without planning and pins it in prove
     const row = JSON.parse((await readFile(options.output, 'utf8')).trim());
     assert.equal(row.provenance.action_max_tokens, 4096);
     assert.equal(row.outcome.accepted, true);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('collector publishes completed local journal to JOBS_DIR with exact hashes before retiring spool', async () => {
+  const server = createServer((request, response) => {
+    let body = '';
+    request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [
+        { id: 'done', type: 'function', function: { name: 'return_result',
+          arguments: JSON.stringify({ status: 'success', value: 1 }) } }] } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2 } }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-spooled-collector-'));
+  try {
+    const item = { index: 0, record: record('spooled-journal') };
+    const options = { ...config(dir), workers: 1, journalSpoolRoot: join(dir, 'spool'),
+      endpoint: `http://127.0.0.1:${server.address().port}`, maxTurns: 2, transportRetries: 0,
+      toolSurfaceSha256: await defaultToolSurfaceHash() };
+    const result = await collectBatch([item], options, nativeJobRunner(options));
+    assert.equal(result.completed, 1);
+    const files = await readdir(options.jobs);
+    const partialName = files.find(name => name.endsWith('.partial.json'));
+    assert.ok(partialName, 'the complete partial snapshot is published before the outer result writer runs');
+    const partial = JSON.parse(await readFile(join(options.jobs, partialName), 'utf8'));
+    assert.ok(partial.evidence_snapshots.length > 0);
+    for (const snapshot of partial.evidence_snapshots) {
+      const bytes = await readFile(join(options.jobs, snapshot.path));
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), snapshot.sha256);
+      assert.equal(bytes.length, snapshot.bytes);
+    }
+    assert.deepEqual(await readdir(join(options.journalSpoolRoot, '.leases')), []);
+    assert.deepEqual(await readdir(join(options.journalSpoolRoot, 'cases')), []);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 

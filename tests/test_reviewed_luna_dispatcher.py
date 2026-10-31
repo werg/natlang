@@ -34,6 +34,7 @@ def reviewed_plan(tmp_path):
         'schema': 'natlang.reviewed_luna_dispatch_plan/1',
         'root_approved': True,
         'campaign_id': 'dispatch-test-v1',
+        'journal_spool_root': str(dispatcher.machine_resolve('data_nvme', 'natlang-teacher-journal-spool', 'dispatch-test-v1')),
         'cwd': str(ROOT),
         'supervisor': str(dispatcher.RUNNER),
         'dispatcher_sha256': dispatcher.digest(dispatcher.DISPATCHER),
@@ -86,9 +87,29 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
     assert plan['campaign_id'] == identity['campaign_id']
     assert identity['runtime_receipt_sha256'] == plan['runtime_receipt_sha256']
     assert identity['max_transport_retries'] == 0
+    assert identity['journal_spool_root'] == str(dispatcher.machine_resolve(
+        'data_nvme', 'natlang-teacher-journal-spool', plan['campaign_id']).resolve())
+    assert identity['journal_spool_policy']['per_case_bytes'] == 256 * 1024 * 1024
+    assert identity['journal_spool_policy']['active_case_credits'] == 6
     assert [row['index'] for row in identity['cases']] == [0, 1, 2]
     entry, *_ = dispatcher._claim_queue(plan, identity, 1, identity['cases'][0])
     assert entry['prompt_rendering'] == 'full'
+
+
+def test_reviewed_runner_binds_spool_root(reviewed_plan, tmp_path):
+    plan_path, plan_sha, campaign_root, raw = reviewed_plan
+    plan, identity = dispatcher.validate_plan(plan_path, plan_sha)
+    entry, queue, _, journal, _, _ = dispatcher._claim_queue(plan, identity, 1, identity['cases'][0])
+    command = dispatcher._runner_command(plan, entry, queue, journal)
+    assert command[command.index('--journal-spool-root') + 1] == identity['journal_spool_root']
+
+
+def test_reviewed_plan_rejects_spool_outside_configured_root(reviewed_plan):
+    plan_path, _, _, plan = reviewed_plan
+    plan['journal_spool_root'] = str(ROOT / 'runs' / 'unbounded-spool')
+    plan_path.write_text(json.dumps(plan, sort_keys=True))
+    with pytest.raises(ValueError, match='campaign-specific directory'):
+        dispatcher.validate_plan(plan_path, dispatcher.digest(plan_path))
 
 
 def test_external_campaign_root_is_allowlisted_and_bound_to_its_filesystem(reviewed_plan):

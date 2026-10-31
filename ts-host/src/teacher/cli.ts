@@ -67,6 +67,7 @@ async function main(): Promise<void> {
       '         --reuse-surfaces HASH[,HASH...]  (earlier tool surfaces declared equivalent for reuse)\n' +
       '         --drain-file PATH  (stop admitting new cases when present; let active cases finish)\n' +
       '         --case-events-file PATH  (append-only per-case lease and terminal journal)\n' +
+      '         --journal-spool-root PATH  (bounded local crash-recoverable journal; publish verified files to JOBS_DIR)\n' +
       '         --final-export-only  (write merged output at final flush; per-case result files remain live)\n' +
       '         --kv-tokens N  (the server\'s shared KV buffer; requests wait to fit, default 53248, 0 = off)\n');
     return;
@@ -74,6 +75,11 @@ async function main(): Promise<void> {
   if (positionals.length !== 3 || !flags.get('--model-id') || !flags.get('--root-seed'))
     throw new Error('usage: collect-teacher-batch IR JOBS OUT --model-id ID --root-seed N [--limit 10 --workers 6]');
   const [ir, jobs, output] = positionals.map(value => resolve(value)) as [string, string, string];
+  if (flags.has('--journal-spool-root')) {
+    const approved = process.env.NATLANG_TEACHER_JOURNAL_SPOOL_ROOT;
+    if (!approved || resolve(flags.get('--journal-spool-root')!) !== resolve(approved))
+      throw new Error('--journal-spool-root must match the caller-approved campaign storage binding');
+  }
   // --approach-guide appends the schematic of how calls usually go (native/prompt.ts APPROACH_PROMPT).
   const systemPrompt = (flags.has('--system-file') ? await readFile(resolve(flags.get('--system-file')!), 'utf8') : defaultSystemPrompt) +
     (flags.has('--approach-guide') ? APPROACH_PROMPT : '');
@@ -116,7 +122,8 @@ async function main(): Promise<void> {
   if(adapterPath){const path=resolve(adapterPath),loaded=(await import(pathToFileURL(path).href)).default;
     if(!loaded||typeof loaded.identity!=='string'||typeof loaded.run!=='function')throw Error('execution adapter must export default {identity,run}');
     execution={identity:loaded.identity+':'+sha256(await readFile(path)),run:loaded.run};}
-  const config: CollectorConfig = { jobs, output, ...(execution?{execution}:{}), modelId: flags.get('--model-id')!,
+  const config: CollectorConfig = { jobs, output, ...(execution?{execution}:{}),
+    ...(flags.has('--journal-spool-root') ? { journalSpoolRoot: resolve(flags.get('--journal-spool-root')!) } : {}), modelId: flags.get('--model-id')!,
     rootSeed: integer(flags, '--root-seed', 0), workers: integer(flags, '--workers', 6),
     contextTokens: integer(flags, '--context-tokens', 16384),
     ...(promptRendering ? { promptRendering: promptRendering as PromptRendering } : {}),

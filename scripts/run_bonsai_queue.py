@@ -23,6 +23,7 @@ import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
+from natlang_neuralese.common.paths import resolve as resolve_machine_path  # noqa: E402
 
 
 OUTPUT_ACCOUNTING_VERSION = 'natlang.supervisor_output_accounting/2'
@@ -48,6 +49,17 @@ def judge_arguments(entry, teacher_model_id):
     if len(transports) != 1 or not isinstance(judge[transports[0]], str) or not judge[transports[0]].strip():
         raise ValueError('judge_model requires exactly one nonempty provider or server')
     return ['--judge-model-id', judge['model_id'], '--judge-' + transports[0], judge[transports[0]]]
+
+
+def _approved_journal_spool_root(spool_root, jobs_dir):
+    """Bind local hot journals to the configured NVMe campaign namespace."""
+    jobs = Path(jobs_dir).expanduser().resolve()
+    campaign_id = jobs.parent.parent.name
+    expected = resolve_machine_path('data_nvme', 'natlang-teacher-journal-spool', campaign_id).expanduser().resolve()
+    actual = Path(spool_root).expanduser().resolve()
+    if actual != expected:
+        raise ValueError('journal spool root is not the configured data_nvme campaign directory')
+    return str(actual)
 
 
 def jsonl_lines(path):
@@ -598,7 +610,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
               no_observation_seconds=0, max_batch_cases=5, provider_request_config=None,
               server=None, chat_completions_url=None, api_key_env=None, chat_request_config=None,
-              identical_turn_limit=0, neuralese_server=False, drain_file=None, teacher_identity=None):
+              identical_turn_limit=0, neuralese_server=False, drain_file=None, teacher_identity=None,
+              journal_spool_root=None):
     if provider and (server or chat_completions_url or api_key_env):
         raise ValueError('Pi provider and external HTTP controls are mutually exclusive')
     if (chat_completions_url or api_key_env) and not server:
@@ -616,6 +629,11 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     if model_concurrency is None:
         model_concurrency = 1 if remote else 4
     queue, journal, runtime = map(Path, (queue, journal, runtime))
+    if journal_spool_root is not None:
+        first_entry = next((json.loads(line) for line in jsonl_lines(queue) if line.strip()), None)
+        if not first_entry or not isinstance(first_entry.get('jobs'), str):
+            raise ValueError('journal spool needs a source-bound queue jobs directory')
+        journal_spool_root = _approved_journal_spool_root(journal_spool_root, first_entry['jobs'])
     if provider_request_config is not None:
         if not provider:
             raise ValueError('provider request config requires an explicit provider')
@@ -725,6 +743,9 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                    '--root-seed', str(entry['seed']), '--workers', str(count), '--max-turns', str(max_turns),
                    '--model-concurrency', str(model_concurrency), '--max-model-requests', str(entry.get('max_model_requests', 128)),
                    '--transport-retries', str(transport_retries), '--file-tools', entry.get('surface', 'all')]
+        spool_root = entry.get('journal_spool_root', journal_spool_root)
+        if spool_root is not None:
+            command += ['--journal-spool-root', str(Path(spool_root).resolve())]
         command += judge_arguments(entry, model_id)
         if 'prompt_rendering' in entry:
             if entry['prompt_rendering'] not in ('full', 'program-header'):
@@ -810,7 +831,10 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 'budget_semantics': 'collection_resource_limit; not a language deadline or model-negative label',
                 **({'teacher_identity':teacher_proof} if teacher_proof is not None else {})})
         with Path(entry['log']).open('a') as log:
-            child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+            child_env = os.environ.copy()
+            if journal_spool_root is not None:
+                child_env['NATLANG_TEACHER_JOURNAL_SPOOL_ROOT'] = str(journal_spool_root)
+            child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=child_env)
             try:
                 for tick in range(math.ceil(case_seconds / repetition_poll_seconds)):
                     remaining = case_seconds - (time.monotonic() - start)
@@ -990,6 +1014,8 @@ if __name__ == '__main__':
     parser.add_argument('--max-batch-cases', type=int, default=5, help='explicit local queue batch ceiling; request concurrency remains separate')
     parser.add_argument('--teacher-identity', type=Path, help='verify immutable actual teacher actor and engine process identity before each case')
     parser.add_argument('--drain-file', type=Path, help='finish the active case, then stop before another case with a durable unstarted frontier')
+    parser.add_argument('--journal-spool-root', type=Path,
+                        help='bounded local durable journal root; completed journal files are hash-verified into JOBS_DIR')
     parser.add_argument('--execution-plans', action='store_true')
     parser.add_argument('--reasoning-effort', default='low')
     args = parser.parse_args()
@@ -1012,4 +1038,5 @@ if __name__ == '__main__':
               args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
               args.no_observation_seconds, args.max_batch_cases, args.provider_request_config,
               args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config,
-              args.identical_turn_limit, args.neuralese_server, args.drain_file, args.teacher_identity))
+              args.identical_turn_limit, args.neuralese_server, args.drain_file, args.teacher_identity,
+              args.journal_spool_root))
