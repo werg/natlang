@@ -363,8 +363,11 @@ def fork_inputs(run, code_sha):
                             '--no-header', '-o', f'{lock}.partial'], check=True)
         os.replace(f'{lock}.partial', lock)
     runs = inputs / 'runtime-runs'
+    target = Path(run['template_runtime']) / 'runs'
+    if runs.is_symlink() and Path(os.readlink(runs)) != target:
+        runs.unlink()  # the run moved to a newer template runtime (its held packets are the custody inputs)
     if not runs.exists():
-        runs.symlink_to(Path(run['template_runtime']) / 'runs')
+        runs.symlink_to(target)
     return [str(tar), str(lock), str(runs)]
 
 
