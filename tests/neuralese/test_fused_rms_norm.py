@@ -64,3 +64,22 @@ def test_rms_norm_module_uses_the_kernel_and_checkpoint_recompute_is_exact(monke
     recomputed = checkpoint(lambda v: norm(v), x, use_reentrant=False).float().square().sum()
     (dx_checkpoint,) = torch.autograd.grad(recomputed, x)
     assert torch.equal(dx_direct, dx_checkpoint)  # deterministic: the recompute replays the same kernel
+
+@pytest.mark.parametrize('first,second', [(18, 14), (129, 14), (129, 150), (255, 257), (511, 17)])
+@pytest.mark.parametrize('weight_dtype', [torch.bfloat16, torch.float32])
+def test_stored_norm_input_gradient_is_row_geometry_invariant(first, second, weight_dtype):
+    from natlang_neuralese.maple.norm_kernels import stored_norm_input_gradient
+    torch.manual_seed(first * 1000 + second)
+    x = torch.randn(1, first + second, 2048, device='cuda').bfloat16()
+    grad = torch.randn_like(x)
+    weight = (torch.rand(2048, device='cuda') + .5).to(weight_dtype)
+    full = stored_norm_input_gradient(x, grad, weight, 1e-5)
+    split = torch.cat((stored_norm_input_gradient(x[:, :first], grad[:, :first], weight, 1e-5),
+                       stored_norm_input_gradient(x[:, first:], grad[:, first:], weight, 1e-5)), dim=1)
+    assert torch.equal(full, split)
+    xf = x.float()
+    inverse = torch.rsqrt(xf.square().mean(-1, keepdim=True) + 1e-5)
+    dy = (grad * weight).to(x.dtype).float()
+    eager = ((dy - xf * inverse.square() * (dy * xf).mean(-1, keepdim=True)) * inverse).to(x.dtype)
+    # Different FP32 reduction order may straddle a BF16 rounding boundary.
+    torch.testing.assert_close(full.float(), eager.float(), atol=1e-5, rtol=.008)

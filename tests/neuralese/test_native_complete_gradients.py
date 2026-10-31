@@ -225,3 +225,17 @@ def test_complete_gradient_check_rejects_disconnected_import_with_same_forward()
     result = compare_complete_gradients(a_loss, b_loss, named, a_input, b_input, atol=1e-5, rtol=1e-4)
     assert result['passed'] is False
     assert any(not row['passed'] for row in result['comparisons'].values())
+
+
+def test_bf16_complete_gradient_policy_accepts_only_adjacent_rounding_within_norm_bound():
+    from natlang_neuralese.eval.native_gradients import gradient_metrics
+    expected = torch.ones(16384, dtype=torch.bfloat16)
+    actual = expected.clone()
+    actual[0] = torch.nextafter(expected[0], torch.tensor(float('inf'), dtype=torch.bfloat16))
+    result = gradient_metrics(actual, expected, atol=1e-5, rtol=1e-4)
+    assert result['passed'] and not result['strict_passed']
+    assert result['adjacent_bf16_mismatches'] == result['mismatched_elements'] == 1
+    actual[0] = torch.nextafter(actual[0], torch.tensor(float('inf'), dtype=torch.bfloat16))
+    assert not gradient_metrics(actual, expected, atol=1e-5, rtol=1e-4)['passed']
+    actual = torch.nextafter(expected, torch.full_like(expected, float('inf')))
+    assert not gradient_metrics(actual, expected, atol=1e-5, rtol=1e-4)['passed']

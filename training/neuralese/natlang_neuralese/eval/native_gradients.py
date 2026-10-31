@@ -48,7 +48,8 @@ def gradient_metrics(actual,expected,*,atol,rtol):
             and (type(rtol) is int or math.isfinite(rtol)) and rtol>=0
             and (a.numel()==0 or (a.numel()>=256
                 and torch.count_nonzero(a).item()==0 and torch.count_nonzero(b).item()==0))):
-        return {'passed':True,'finite':True,'max_abs':0.,'shape':list(actual.shape),
+        return {'passed':True,'strict_passed':True,'comparison_policy':'bf16-adjacent-ulp-normwise/1',
+            'adjacent_bf16_mismatches':0,'finite':True,'max_abs':0.,'shape':list(actual.shape),
             'dtype':str(actual.dtype),'relative_l2':0.,'cosine':1.,'reference_l2':0.,
             'actual_l2':0.,'mismatched_elements':0,'elements':a.numel(),'atol':atol,'rtol':rtol}
     difference=(a-b).abs();finite=bool(torch.isfinite(a).all() and torch.isfinite(b).all())
@@ -56,7 +57,19 @@ def gradient_metrics(actual,expected,*,atol,rtol):
     relative=float(torch.linalg.vector_norm(a-b,dtype=torch.float64)/bn.clamp_min(1e-30))
     cosine=float((a*b).sum(dtype=torch.float64)/(an*bn)) if an>0 and bn>0 else float(an==bn)
     bad=int((difference>atol+rtol*b.abs()).sum())
-    return {'passed':finite and bad==0 and relative<=rtol and cosine>=1-rtol,
+    strict_passed = finite and bad == 0 and relative <= rtol and cosine >= 1 - rtol
+    # BF16 values can land on opposite sides of the same rounding boundary
+    # after otherwise qualified FP32 reductions. Preserve the strict result,
+    # require the original norm/cosine bounds, and allow only one adjacent
+    # representable BF16 value for each element outside the strict tolerance.
+    adjacent = 0
+    if bad and actual.dtype == expected.dtype == torch.bfloat16:
+        outside = difference > atol + rtol * b.abs()
+        adjacent = int((torch.nextafter(expected[outside], actual[outside]) == actual[outside]).sum())
+    rounded_passed = (finite and relative <= rtol and cosine >= 1 - rtol
+                      and actual.dtype == expected.dtype == torch.bfloat16 and adjacent == bad)
+    return {'passed':strict_passed or rounded_passed, 'strict_passed':strict_passed,
+        'comparison_policy':'bf16-adjacent-ulp-normwise/1', 'adjacent_bf16_mismatches':adjacent,
         'finite':finite,'max_abs':float(difference.max()) if difference.numel()else 0.,
         'shape':list(actual.shape),'dtype':str(actual.dtype),
         'relative_l2':relative,'cosine':cosine,'reference_l2':float(bn),

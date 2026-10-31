@@ -1164,9 +1164,13 @@ class _TorchStoredRMSNorm(torch.autograd.Function):
         products = gradient.float() * normalized.float()
         dw, anchor_grads = _stored_norm_gain_gradient(x, products, ctx.partitions,
             ctx.parameter, ctx.anchors, ctx.scope)
-        dy = (gradient * weight).to(x.dtype).float()
-        dx = (dy - xf * inverse.square() * (dy * xf).mean(dim=-1, keepdim=True)) * inverse
-        return dx.to(x.dtype), dw, None, None, None, *anchor_grads
+        if x.is_cuda and x.dtype == gradient.dtype == torch.bfloat16 and not torch.is_grad_enabled():
+            from ..maple.norm_kernels import stored_norm_input_gradient
+            dx = stored_norm_input_gradient(x, gradient, weight, ctx.eps)
+        else:
+            dy = (gradient * weight).to(x.dtype).float()
+            dx = ((dy - xf * inverse.square() * (dy * xf).mean(dim=-1, keepdim=True)) * inverse).to(x.dtype)
+        return dx, dw, None, None, None, *anchor_grads
 
 
 class _TorchStoredConv1d(torch.autograd.Function):
