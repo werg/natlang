@@ -975,6 +975,16 @@ def escalation(pending, now, available, emergency, active):
     return 'wait'
 
 
+def graceful_stop_pending(pending):
+    """Whether a victim is still writing checkpoint state under its graceful-stop deadline.
+
+    A victim that has already received SIGKILL no longer needs to serialize with a
+    second preemption. Keep watching and sweeping that unit, but let the guard
+    remeasure actual headroom and continue making progress for the queue head.
+    """
+    return any(not item.get('killed') for item in pending.values())
+
+
 def unit_containers(unit, command=None, extra=(), cgroup=None):
     """Every docker container a unit runs: named by its command, recorded at launch (``run --container``), named in the
     command line of a docker client inside its cgroup (a wrapper script's ``docker run --rm --name X``), or named like the
@@ -1196,13 +1206,13 @@ def guard(args):
                     state['claims'][name]['budget'] = raised
                     state['events'].append({'time': time.time(), 'event': 'budget raised', 'unit': name,
                                             'used': claim['used'], 'budget': raised, 'available': available})
-            if pending:
+            if graceful_stop_pending(pending):
                 # One graceful stop at a time: while a victim checkpoints, the guard watches it instead of picking
                 # another (cache release above continues).
                 unit, reason = None, None
             to_launch = None
             queue = waiting_order(state)
-            if queue and not pending:
+            if queue and not graceful_stop_pending(pending):
                 head, wanted = queue[0]
                 backfill = None
                 if not unit and not fits(free, wanted['budget'], wanted['reserve']) and cuda_fits_entry(wanted, cuda_free):

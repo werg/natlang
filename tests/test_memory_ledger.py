@@ -326,6 +326,15 @@ def test_a_guard_stop_waits_out_the_victims_grace_and_kills_only_in_an_emergency
     assert ledger.escalation(pending, 500.0, 2 * GIB, emergency, active=False) == 'done'  # it exited
 
 
+def test_killed_pending_stop_does_not_block_the_next_preemption():
+    assert ledger.graceful_stop_pending({'checkpointing.service': {'deadline': 1000.0}})
+    assert not ledger.graceful_stop_pending({'killed.service': {'deadline': 1000.0, 'killed': True}})
+    assert ledger.graceful_stop_pending({
+        'killed.service': {'deadline': 1000.0, 'killed': True},
+        'checkpointing.service': {'deadline': 1000.0},
+    })
+
+
 def test_the_guard_signals_one_victim_then_watches_it_without_stopping_another(monkeypatch, tmp_path):
     import json
     import types
