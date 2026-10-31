@@ -26,7 +26,7 @@ The spec (stage parameter ``task_eval``, JSON):
   min_successes   absolute floor on the final evaluation's task successes (default 0)
   reference_successes  the line's base model's successes on this subset under its native rendering
   noise_successes  declared run-to-run noise of the success count on this subset (from repeat runs)
-  noise_repeats   runs of the stage's first evaluation (default 2): their spread is the measured noise; the bar
+  noise_repeats   runs of the stage's first evaluation (default 1); explicit repeat runs measure noise; the bar
                   uses the larger of the declared and the measured noise
   temperature     sampling temperature the collector sends (default 0: the server's greedy argmax). Greedy is not
                   deterministic on a batching server: llama.cpp picks matmul kernels by batch size, so a reply depends
@@ -186,7 +186,7 @@ def parse_task_eval(value):
             any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in cases)):
         raise ValueError('task_eval.cases must be distinct nonnegative row indices')
     for key, default in (('case_seconds', 7200), ('max_model_requests', 128), ('max_turns', 160), ('workers', 8),
-                         ('min_successes', 0), ('noise_successes', 0), ('noise_repeats', 2),
+                         ('min_successes', 0), ('noise_successes', 0), ('noise_repeats', 1),
                          ('max_consecutive_failures', 3), ('identical_turn_limit', 0),
                          ('min_free_mib', 0)):
         spec.setdefault(key, default)
@@ -491,8 +491,8 @@ class TaskEval:
         # Noise from repeat runs (coordinator 2026-10-12): the first evaluation of a stage runs the same model again
         # (noise_repeats total runs); the spread of the success counts is this stage's measured noise.
         repeats, repeat_noise = [], None
-        if eligible and self.measured_noise() is None and self.spec.get('noise_repeats', 2) > 1:
-            for index in range(1, self.spec.get('noise_repeats', 2)):
+        if eligible and self.measured_noise() is None and self.spec.get('noise_repeats', 1) > 1:
+            for index in range(1, self.spec.get('noise_repeats', 1)):
                 if self.operational_stop_requested(): break
                 again, again_codes = self._execute(run.with_name(run.name + f'-repeat{index}'), index)
                 if accounted(again):

@@ -62,6 +62,26 @@ def test_previous_evaluation_and_regression_are_read_from_the_stage_log(tmp_path
     assert evaluator.previous(100) is None
 
 
+def test_default_evaluation_executes_once_and_does_not_invent_measured_noise(tmp_path):
+    from natlang_neuralese.eval.task_cadence import TaskEval
+    evaluator = TaskEval.__new__(TaskEval)
+    evaluator.spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0]})
+    evaluator.out, evaluator.root, evaluator.rows = tmp_path, tmp_path / 'task-eval', [{}]
+    evaluator.prompt_rendering = 'full'
+    calls = []
+    def execute(run, repeat=0):
+        run.mkdir(parents=True, exist_ok=True)
+        calls.append(run.name)
+        return {'task_successes': 1, 'task_success_rate': 1., 'complete': True, 'eligible_for_best': True,
+                'cases': [], 'cases_expected': 1,
+                'outcome_counts': {'task_success': 1, 'infrastructure_error': 0,
+                                   'unresolved': 0, 'semantic_mismatch': 0}}, [0]
+    evaluator._execute = execute
+    result = evaluator.run(10)
+    assert calls == ['step-0000010']
+    assert result['repeat_noise'] is None and result['repeat_successes'] is None
+
+
 def test_the_first_evaluation_repeats_to_measure_noise_and_later_ones_reuse_it(tmp_path):
     from natlang_neuralese.eval.task_cadence import TaskEval
     spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'noise_repeats': 3})
