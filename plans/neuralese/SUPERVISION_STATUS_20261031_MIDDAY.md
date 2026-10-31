@@ -4,6 +4,24 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Storage cleanup completed, 23:05 CET
+
+Megatoken state is deleted (88.5GiB released at deletion). Recovery duplicates,
+derived caches and abandoned worktrees were removed; unique worktree edits and
+Git recovery refs remain preserved. The remaining historical recovery workspace
+(18.4GiB of tree allocation, including possibly shared inodes) is now on the
+external drive at `/mnt/external/natlang-recovery-archive/claude-recovery-20261028`.
+Its original internal path is a symlink; the original internal directory is gone.
+The successful rsync transfer verified reconstructed files with whole-file
+checksums; a final metadata/completeness scan returned zero differences. The
+redundant second checksum reread was stopped because the drive was slow. No
+active writers were found before cutover. Corrected receipt, distinguishing tree
+allocation from actual free-space release:
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/recovery-workspace-relocation-v2-20261031.json`.
+Internal free space measured61GiB immediately after completion; concurrent
+checkpoint reservation/writes mean it is not the sum of cleanup sizes. Temporary
+conversion freezes had automatic thaw backstops and are no longer in effect.
+
 ## Verified corrections and current transition, 22:43 CET
 
 Reduced-precision BF16 GEMM reduction was a real native-policy defect: equal
