@@ -2803,6 +2803,7 @@ def _main(argv=None, *, requested_refresh):
     prior_policy_capacity = ((resume or {}).get('options') or {}).get('policy_capacity')
     prior_packed_capacity = ((resume or {}).get('options') or {}).get('sft_packed_capacity') or {}
     prior_oversize_baseline = ((resume or {}).get('options') or {}).get('oversize_capacity_baseline')
+    prior_oversize_history = list(((resume or {}).get('options') or {}).get('oversize_capacity_history') or [])
     admission_record = ((resume or saved_training).get('options') or {}).get('_pending_source_admission')
     prior_foundations = set((resume or {}).get('completed_foundations') or
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('completed_foundations') or [])
@@ -3279,6 +3280,7 @@ def _main(argv=None, *, requested_refresh):
     oversize_limits = oversize_baseline(train, prior_geometry, fallback_tokens=args.batch_tokens,
         current_geometry=json.loads(args.sft_packed_geometry) if args.sft_packed_geometry else None)
     checkpoint_options['oversize_capacity_baseline'] = oversize_limits
+    checkpoint_options['oversize_capacity_history'] = prior_oversize_history
     # A policy round samples the unquantized actor, while QAT is retained for
     # the continuing SFT lineage. Carry the pending refresh across resumes.
     policy_qat_refresh = saved_quantization_options.get('policy_qat_refresh_required')
@@ -3740,6 +3742,8 @@ def _main(argv=None, *, requested_refresh):
                     global_step=global_step, baseline=oversize_limits)
             except BaseException:
                 cursor = previous_cursor
+                if warmup is not None: warmup.restore()
+                if anneal is not None: anneal.restore()
                 restore_training_rng_state(fetch_rng, args.device)
                 raise
             if oversize_proof is not None:
