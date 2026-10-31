@@ -142,7 +142,7 @@ def _cas_put_archive(cas, base, members):
 
 
 def stage(lineage, exports):
-    # The logical (DGX) path, never resolved: in a sandbox /home/werg is a symlink onto the scratch volume, and the
+    # The logical (DGX) path, never resolved: in a sandbox the DGX home root is a symlink onto the scratch volume, and the
     # export names the paths the DGX hub copy and a resumed sandbox use.
     lineage, exports = Path(os.path.abspath(lineage)), Path(exports)
     cas = exports / 'cas'
