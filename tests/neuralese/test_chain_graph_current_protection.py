@@ -8,18 +8,22 @@ import pytest
 
 def test_render_continuation_retries_only_unattempted_overcap_ids_and_preserves_other_omissions():
     import json
-    from scripts.neuralese_data.build_chain_graphs import split_overcap_retry_rows
+    from scripts.neuralese_data.build_chain_graphs import split_render_retry_rows
 
     rows = [
         {'trajectory': 'large-a', 'reason': 'graph-over-token-cap'},
         {'trajectory': 'large-b', 'reason': 'graph-over-token-cap'},
+        {'trajectory': 'recoverable-unknown',
+         'reason': 'render-error: producer occurrence is not the exact authenticated payload value'},
         {'trajectory': 'bad-source', 'reason': 'render-error: source writer is unauthenticated'},
         {'trajectory': 'protected', 'reason': 'current_protected_worlds_custody'},
     ]
     committed = b''.join(json.dumps(row, separators=(',', ':')).encode() + b'\n' for row in rows)
-    retained, retry_ids = split_overcap_retry_rows(committed, {'large-b'})
-    assert retry_ids == ['large-a']
-    assert retained == rows[1:]
+    retained, retry_ids, reasons = split_render_retry_rows(committed, {'large-b'}, {'recoverable-unknown'})
+    assert retry_ids == ['large-a', 'recoverable-unknown']
+    assert reasons == {'graph-over-token-cap': 1,
+                       'render-error: producer occurrence is not the exact authenticated payload value': 1}
+    assert retained == [rows[1], rows[3], rows[4]]
 
 
 def test_render_continuation_policy_does_not_change_immutable_dedupe_plan_arguments():
@@ -27,9 +31,11 @@ def test_render_continuation_policy_does_not_change_immutable_dedupe_plan_argume
     from scripts.neuralese_data.build_chain_graphs import render_plan_arguments
 
     original = Namespace(max_tokens=64000, reader_cap=64, target_cap=64,
-                         continuation_max_tokens=None, workers=4, batch_chains=512)
+                         continuation_max_tokens=None, continuation_old_code_fingerprint=None,
+                         workers=4, batch_chains=512)
     continued = Namespace(max_tokens=64000, reader_cap=64, target_cap=64,
-                          continuation_max_tokens=335000, workers=2, batch_chains=128)
+                          continuation_max_tokens=335000, continuation_old_code_fingerprint='a' * 64,
+                          workers=2, batch_chains=128)
     assert render_plan_arguments(original) == render_plan_arguments(continued)
 
 

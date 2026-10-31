@@ -442,6 +442,34 @@ def source_occurrences(writer_record, reader_record, write_name, body, expected_
             'transform': 'static-shared-producer-multi-read' if len(readers) > 1 else 'static-exact-read'}
 
 
+def structured_unknown_result_span(writer_record, occurrence, payload):
+    """Return a span only for an exact authenticated unknown-typed JSON value in return_result args."""
+    if occurrence.get('writer_source_kind') != 'Neuralese<unknown>':
+        return None
+    parts = [part.replace('~1', '/').replace('~0', '~')
+             for part in occurrence['writer_json_pointer'].split('/')[1:]]
+    json_index = next((index for index, part in enumerate(parts) if part.endswith('<json>')), None)
+    try:
+        call_index = parts[2]
+        if (len(parts) < 6 or parts[:2] != ['target', 'tool_calls'] or not call_index.isdigit()
+                or parts[3] != 'function' or json_index != 4 or parts[4] != 'arguments<json>'
+                or json_index + 1 >= len(parts)):
+            raise ValueError
+        function = writer_record['target']['tool_calls'][int(call_index)]['function']
+        if function.get('name') != 'return_result':
+            raise ValueError
+        value = json.loads(function['arguments'])
+        for part in parts[json_index + 1:]:
+            value = value[int(part)] if isinstance(value, list) else value[part]
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError('structured source producer is not bound inside the exact result target') from exc
+    exact_json = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+    if exact_json != payload or sha256_bytes(exact_json.encode()) != occurrence.get('payload_sha256'):
+        raise ValueError('structured source producer differs from its exact authenticated target value')
+    return {'call_index': int(call_index), 'argument_path': parts[json_index + 1:],
+            'body': exact_json, 'payload_sha256': occurrence['payload_sha256'], 'value_type': 'unknown'}
+
+
 def reader_has_payload(record, write_name, body, expected_sha):
     metadata = record.get('native_source_conversion') or {}
     matches = [item for item in metadata.get('occurrences', [])
@@ -870,35 +898,7 @@ def pair_derivations(writer_record, reader_record, pieces, *, tokenizer, payload
                 'body': payload, 'payload_sha256': occurrence['payload_sha256'],
                 'value_type': ('unknown' if source_descriptor.get('type') == 'Neuralese<unknown>' else 'string')}
         elif writer_source_kind == 'Neuralese<unknown>':
-            # The authenticated source converter can bind a structured return
-            # value directly at its JSON pointer rather than leaving an
-            # explicit `$write` descriptor in the final assistant target. In
-            # that representation the pointer itself is the typed witness;
-            # admit it only when it resolves inside the exact return_result
-            # arguments and compact JSON is byte-for-byte the source payload.
-            json_index = next((index for index, part in enumerate(pointer_parts)
-                               if part.endswith('<json>')), None)
-            try:
-                call_index = pointer_parts[pointer_parts.index('tool_calls') + 1]
-                if (json_index != 4 or pointer_parts[:2] != ['target', 'tool_calls']
-                        or not call_index.isdigit() or pointer_parts[3] != 'function'
-                        or pointer_parts[4] != 'arguments<json>'
-                        or json_index + 1 >= len(pointer_parts)):
-                    raise ValueError
-                function = writer_record['target']['tool_calls'][int(call_index)]['function']
-                if function.get('name') != 'return_result':
-                    raise ValueError
-                arguments = json.loads(function['arguments'])
-                value = arguments
-                for part in pointer_parts[json_index + 1:]:
-                    value = value[int(part)] if isinstance(value, list) else value[part]
-            except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                raise ValueError('structured source producer is not bound inside the exact result target') from exc
-            exact_json = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
-            if exact_json != payload or sha256_bytes(exact_json.encode()) != occurrence['payload_sha256']:
-                raise ValueError('structured source producer differs from its exact authenticated target value')
-            writer_target_span = {'call_index': int(call_index), 'argument_path': pointer_parts[json_index + 1:],
-                'body': payload, 'payload_sha256': occurrence['payload_sha256'], 'value_type': 'unknown'}
+            writer_target_span = structured_unknown_result_span(writer_record, occurrence, payload)
         elif (isinstance(source_descriptor, dict)
                 and source_descriptor.get('type') == 'Neuralese<string>'
                 and inline_path):

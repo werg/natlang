@@ -75,21 +75,59 @@ def render_plan_arguments(args):
     """Arguments that alter target/edge dedupe, excluding render-only continuation policy."""
     return {key: str(sorted(value) if isinstance(value, (set, frozenset)) else value)
             for key, value in sorted(vars(args).items())
-            if key not in ('workers', 'batch_chains', 'continuation_max_tokens')}
+            if key not in ('workers', 'batch_chains', 'continuation_max_tokens',
+                           'continuation_old_code_fingerprint')}
 
 
-def split_overcap_retry_rows(committed_bytes, attempted):
-    """Separate only exact over-cap omissions eligible for a recorded render continuation."""
+def split_render_retry_rows(committed_bytes, attempted, recoverable_unknown_trajectories):
+    """Separate only over-cap or source-proved unknown-JSON omissions for render continuation."""
     rows = [json.loads(line) for line in committed_bytes.splitlines() if line]
-    retry = [row for row in rows if row.get('reason') == 'graph-over-token-cap'
-             and row.get('trajectory') not in attempted]
+    def eligible(row):
+        reason = row.get('reason', '')
+        trajectory = row.get('trajectory')
+        recoverable_reason = (reason in {
+            'render-error: producer occurrence is not the exact authenticated payload value',
+            'render-error: source writer requires a jointly renderable authenticated producer span'}
+            and trajectory in recoverable_unknown_trajectories)
+        return (reason == 'graph-over-token-cap' or recoverable_reason) and trajectory not in attempted
+    retry = [row for row in rows if eligible(row)]
     retry_ids = [row.get('trajectory') for row in retry]
     if any(not isinstance(trajectory, str) or not trajectory for trajectory in retry_ids):
         raise ValueError('over-cap omission lacks an exact trajectory identity')
     retry_set = set(retry_ids)
-    retained = [row for row in rows if not (row.get('reason') == 'graph-over-token-cap'
-                and row.get('trajectory') in retry_set)]
-    return retained, retry_ids
+    retained = [row for row in rows if not eligible(row)]
+    reason_counts = {}
+    for row in retry:
+        reason = row['reason']
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+    return retained, retry_ids, reason_counts
+
+
+def has_recoverable_unknown_result(task, plan):
+    """Confirm a committed chain has a selected exact JSON-value producer span supported by the new renderer."""
+    chain, locations, edges, _pieces_path, _plan = task
+    if locations is None:
+        return False
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import (
+        source_occurrences, structured_unknown_result_span, writer_payload,
+    )
+    records = read_records(locations)
+    for edge in edges:
+        if edge_digest(edge) not in plan['edges']:
+            continue
+        writer, reader = records.get(edge['writer_record_id']), records.get(edge['reader_record_id'])
+        if writer is None or reader is None:
+            continue
+        try:
+            body = writer_payload(writer, edge['write_name'], edge['body_sha256'])
+            occurrence = source_occurrences(writer, reader, edge['write_name'], body, edge['body_sha256'],
+                writer_occurrence_id=edge.get('writer_occurrence_id'),
+                reader_occurrence_id=edge.get('reader_occurrence_id'))
+            structured_unknown_result_span(writer, occurrence, body)
+        except (ValueError, KeyError, TypeError):
+            continue
+        return True
+    return False
 
 
 def decision_index(record_id):
@@ -463,6 +501,8 @@ def main():
     parser.add_argument('--continuation-max-tokens', type=int,
                         help='resume a committed build with this higher render cap; retries prior over-cap chains '
                              'from the immutable all-chain dedupe plan before processing remaining chains')
+    parser.add_argument('--continuation-old-code-fingerprint',
+                        help='aggregate SHA256 for the exact renderer code used by the predecessor run')
     parser.add_argument('--reader-cap', type=int, default=64)
     parser.add_argument('--result-reader-cap', type=int, default=512,
                         help='reader cap per payload of computed child results (--computed-kinds)')
@@ -492,6 +532,7 @@ def main():
                                                if source_id != 'quality-source-groups'))
     holds, hold_bindings = load_decision_holds(sorted((ROOT / 'training/decision-holds').glob('*.jsonl')))
     code = {path: sha256_file_hex(ROOT / path) for path in CODE}
+    code_fingerprint = hashlib.sha256(''.join(code[path] for path in sorted(code)).encode()).hexdigest()
     global STATE_INDEX_CACHE
     STATE_INDEX_CACHE = args.index_cache
     if args.corpus:
@@ -596,6 +637,9 @@ def main():
         # committed output and all original plan decisions. The continuation
         # cursor is committed with output offsets after each bounded batch.
         if progress and args.continuation_max_tokens and not progress.get('render_continuation'):
+            if (not args.continuation_old_code_fingerprint or not re.fullmatch(
+                    r'[0-9a-f]{64}', args.continuation_old_code_fingerprint)):
+                raise ValueError('render continuation requires the predecessor renderer code fingerprint')
             attempted = {trajectory for item in progress.get('render_continuation_history', [])
                          for trajectory in item.get('retried_trajectories', [])}
             omission_path = args.out / 'omissions.jsonl.tmp'
@@ -604,7 +648,20 @@ def main():
                 committed = stream.read(old_offset)
             if len(committed) != old_offset:
                 raise ValueError('committed omission stream is shorter than its progress offset')
-            retained, retry_ids = split_overcap_retry_rows(committed, attempted)
+            committed_rows = [json.loads(line) for line in committed.splitlines() if line]
+            candidate_ids = {row.get('trajectory') for row in committed_rows
+                if row.get('reason') in {
+                    'render-error: producer occurrence is not the exact authenticated payload value',
+                    'render-error: source writer requires a jointly renderable authenticated producer span'}
+                and row.get('trajectory') not in attempted}
+            unit_by_id = {unit[0]['trajectory']: (unit, plan) for unit, plan in zip(units, plans)}
+            recoverable_unknown = set()
+            for trajectory in candidate_ids:
+                item = unit_by_id.get(trajectory)
+                if item and has_recoverable_unknown_result((*item[0], item[1]), item[1]):
+                    recoverable_unknown.add(trajectory)
+            retained, retry_ids, retry_reasons = split_render_retry_rows(
+                committed, attempted, recoverable_unknown)
             if retry_ids:
                 tmp = omission_path.with_suffix('.retry.tmp')
                 with tmp.open('wb') as stream:
@@ -615,15 +672,24 @@ def main():
                 retained_bytes = omission_path.stat().st_size
                 progress['omissions'] = {'offsets': {'omissions': retained_bytes},
                                          'counts': {'omissions': len(retained)}}
-                progress['totals']['omitted:graph-over-token-cap'] = max(
-                    0, progress['totals'].get('omitted:graph-over-token-cap', 0) - len(retry_ids))
+                for reason, count in retry_reasons.items():
+                    key = 'omitted:' + reason.split(':', 1)[0]
+                    progress['totals'][key] = max(0, progress['totals'].get(key, 0) - count)
                 progress['render_continuation'] = {'schema': 'natlang.chain-render-continuation/1',
                     'old_max_tokens': args.max_tokens, 'new_max_tokens': effective_max_tokens,
+                    'old_code_fingerprint': args.continuation_old_code_fingerprint,
+                    'new_code_fingerprint': code_fingerprint, 'retry_reasons': retry_reasons,
                     'retried_trajectories': retry_ids, 'cursor': 0}
                 progress_path.with_suffix('.tmp').write_text(json.dumps(progress))
                 os.replace(progress_path.with_suffix('.tmp'), progress_path)
             elif progress.get('render_continuation_history'):
                 progress['render_continuation'] = None
+        if progress and progress.get('render_continuation'):
+            continuation = progress['render_continuation']
+            if (not args.continuation_max_tokens or effective_max_tokens != continuation['new_max_tokens']
+                    or code_fingerprint != continuation.get('new_code_fingerprint')
+                    or args.continuation_old_code_fingerprint != continuation.get('old_code_fingerprint')):
+                raise ValueError('resumed render continuation differs from its committed code or cap transition')
         writer = Writer(args.out, progress and progress['graphs'])
         omissions = Writer(args.out, progress and progress['omissions'])
         done = progress['done'] if progress else 0
@@ -670,6 +736,9 @@ def main():
             history = list(progress.get('render_continuation_history', []))
             history.append({'schema': continuation['schema'], 'old_max_tokens': continuation['old_max_tokens'],
                 'new_max_tokens': continuation['new_max_tokens'],
+                'old_code_fingerprint': continuation['old_code_fingerprint'],
+                'new_code_fingerprint': continuation['new_code_fingerprint'],
+                'retry_reasons': continuation.get('retry_reasons', {}),
                 'retried_trajectories': continuation['retried_trajectories'],
                 'retried_count': len(continuation['retried_trajectories'])})
             progress = {'plans_sha256': plans_sha, 'done': done, 'graphs': writer.commit(),
