@@ -1724,7 +1724,9 @@ def main(argv=None):
     from .loop import StopSignal
     requested_refresh = StopSignal().install((signal.SIGUSR2,))
     try:
-        return _main(argv, requested_refresh=requested_refresh)
+        from .native_diagnostics import learner_stack_signal
+        with learner_stack_signal():
+            return _main(argv, requested_refresh=requested_refresh)
     finally:
         requested_refresh.restore()
 
@@ -3268,10 +3270,12 @@ def _main(argv=None, *, requested_refresh):
         if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
     cold_packed_geometry = None
     if objective is not None and not mandatory_objective:
+        print(json.dumps({'kind':'native_phase','phase':'policy_capacity_start','global_step':global_step}),flush=True)
         from ..eval.native_memory import qualify_policy_objective
         checkpoint_options['policy_capacity']=qualify_policy_objective(model,optimizer,train,objective,args,config,
             backend=backend,checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot),
             pending_batches=pending_batches,prior_proof=prior_policy_capacity)
+    print(json.dumps({'kind':'native_phase','phase':'capacity_complete','global_step':global_step}),flush=True)
     target_rows = sum(required_visits.values())
     total_end = step + accumulated_updates(len(pending_batches), args.accumulate_batches)
     batches_left = len(pending_batches)
@@ -3693,7 +3697,9 @@ def _main(argv=None, *, requested_refresh):
             fetch_rng = capture_training_rng_state(args.device)
             previous_cursor = cursor
             try:
+                print(json.dumps({'kind':'native_phase','phase':'fetch_start','global_step':global_step}),flush=True)
                 fetched = [next(schedule) for _ in range(min(args.accumulate_batches, batches_left))]
+                print(json.dumps({'kind':'native_phase','phase':'fetch_complete','global_step':global_step,'micro_batches':len(fetched)}),flush=True)
             except Exception as error:
                 # The previous update and its exposure are complete. The next
                 # batch has not reached native_training_update and earns nothing.
@@ -3774,6 +3780,7 @@ def _main(argv=None, *, requested_refresh):
             if diloco is not None and not diloco.await_update_capacity(stop_requested=lambda: policy.signaled):
                 break
             exception_boundary_safe = False
+            print(json.dumps({'kind':'native_phase','phase':'update_start','global_step':global_step}),flush=True)
             try:
                 if logit_probe is not None:
                     from ..model.attention_probe import probing
