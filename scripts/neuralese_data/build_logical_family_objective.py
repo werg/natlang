@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import argparse
 import collections
+from concurrent.futures import ProcessPoolExecutor
+from collections import deque
 import io
 import json
 import re
@@ -142,6 +144,37 @@ def _leaf_mass(item):
     return index, out
 
 
+def _chunk_masses(lines):
+    from natlang_neuralese.train.own_output_supervision import graph_weights
+    output=[]
+    for line in lines:
+        row=json.loads(line)
+        weights,_=graph_weights(row,_OBJECTIVE)
+        output.append((row['id'],float(sum(weights))))
+    return output
+
+
+def _large_leaf_mass(index, source, policy_path, workers):
+    """Bounded ordered CPU work for large leaves, with exact leaf custody."""
+    import zstandard
+    path=Path(source['path'])
+    if sha256_file_hex(path)!=source['sha256']:raise ValueError(f'leaf changed: {path}')
+    result=[];pending=deque()
+    with ProcessPoolExecutor(max_workers=workers,initializer=_init,initargs=(str(policy_path),)) as pool:
+        with path.open('rb') as fh:
+            raw=zstandard.ZstdDecompressor().stream_reader(fh) if path.suffix=='.zst' else fh
+            chunk=[]
+            for line in io.TextIOWrapper(raw,encoding='utf8'):
+                if not line.strip():continue
+                chunk.append(line)
+                if len(chunk)==16:
+                    pending.append(pool.submit(_chunk_masses,chunk));chunk=[]
+                    if len(pending)>=8:result.extend(pending.popleft().result())
+            if chunk:pending.append(pool.submit(_chunk_masses,chunk))
+            while pending:result.extend(pending.popleft().result())
+    if sha256_file_hex(path)!=source['sha256']:raise ValueError(f'leaf changed while scanning: {path}')
+    return index,result
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--train', required=True, help='mixture train-sources.json')
@@ -166,7 +199,8 @@ def main():
     train_ids = {entry['id'] for entry in train.entries}
     if set(overrides) - train_ids:
         raise ValueError('logical family features name rows absent from the exact train source')
-    families = [overrides.get(entry['id'], family_of(path))
+    families = [('native-communication' if entry.get('communication') else
+                 overrides[entry['id']] if entry['id'] in overrides else family_of(path))
                 for entry, path in zip(train.entries, leaf_paths(train))]
     rows = [{'id': e['id'], 'binding': e['binding'], 'family': f} for e, f in zip(train.entries, families)]
     (out / 'families.json').write_bytes(json.dumps({'schema': 'natlang.logical-family-map/1',
@@ -183,9 +217,15 @@ def main():
     if any(s.get('kind') != 'native-graphs' for s in leaves):
         raise ValueError('census reads flat native-graph manifests only')
     results = {}
+    indexed=list(enumerate(leaves))
+    large=[item for item in indexed if Path(item[1]['path']).stat().st_size >= 32*1024*1024]
+    small=[item for item in indexed if item not in large]
     with Pool(args.workers, initializer=_init, initargs=(str(out / 'census-policy.json'),)) as pool:
-        for index, masses in pool.imap_unordered(_leaf_mass, list(enumerate(leaves))):
+        for index, masses in pool.imap_unordered(_leaf_mass, small):
             results[index] = masses
+    for index,source in large:
+        index,masses=_large_leaf_mass(index,source,out / 'census-policy.json',min(args.workers,4))
+        results[index]=masses
     masses = [m for i in range(len(leaves)) for m in results[i]]
     if [m[0] for m in masses] != [r['id'] for r in rows]:
         raise ValueError('census row order differs from the family map')
