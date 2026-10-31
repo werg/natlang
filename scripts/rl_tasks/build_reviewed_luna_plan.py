@@ -306,6 +306,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
     artifacts = [dispatcher_path, supervisor_path, source, verification, selected_source, inventory_output,
                  runtime_receipt, ROOT / REGISTRY, ROOT / 'training/neuralese/natlang_neuralese/common/custody.py',
                  Path(__file__).resolve(), Path(__file__).with_name('intake_natlang_codebase.py'),
+                 Path(__file__).with_name('execution_adapter.py'),
                  Path(__file__).with_name('audit_natlang_packages.py'), verification.parent / 'verification.json',
                  protection_receipt]
     if intake_receipt:
@@ -322,6 +323,10 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         for adapter_path, expected_sha in _intake_execution_adapter_bindings(intake_record):
             if artifact_hashes.get(str(adapter_path)) != expected_sha:
                 raise ValueError(f'Execution adapter changed while the reviewed plan was being assembled: {adapter_path}')
+    intake_binding = None
+    if intake_receipt:
+        intake_path = intake_receipt.resolve(strict=True)
+        intake_binding = {'path': str(intake_path), 'sha256': _sha(intake_path)}
     plan = {
         'schema': 'natlang.reviewed_luna_dispatch_plan/2', 'root_approved': False,
         'campaign_id': campaign_id, 'cwd': str(ROOT), 'supervisor': str(supervisor_path),
@@ -330,6 +335,8 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'source': str(selected_source.resolve()), 'source_sha256': artifact_hashes[str(selected_source.resolve())],
         'runtime': str(runtime), 'runtime_receipt_sha256': artifact_hashes[str(runtime_receipt.resolve(strict=True))],
         'artifact_hashes': artifact_hashes,
+        'intake_receipt_binding': intake_binding,
+        'execution_adapter_bindings': (intake_record or {}).get('execution_adapter_bindings', []),
         'execution_adapter_trees': _intake_execution_adapter_trees(intake_record),
         'source_inventory': {'path': str(inventory_output.resolve()), 'sha256': artifact_hashes[str(inventory_output.resolve())]},
         'campaign_root': str(campaign_root), 'claim_ledger': str(campaign_root / 'dispatch/claims.jsonl'),

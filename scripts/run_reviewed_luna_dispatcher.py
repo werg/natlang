@@ -236,6 +236,8 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
     required_pins = {str(DISPATCHER): plan.get('dispatcher_sha256'),
                      str(source): plan.get('source_sha256'),
                      str(supervisor): plan.get('supervisor_sha256'),
+                     str(ROOT / 'scripts/rl_tasks/execution_adapter.py'): pins.get(
+                         str(ROOT / 'scripts/rl_tasks/execution_adapter.py')),
                      str(receipt): plan.get('runtime_receipt_sha256')}
     for path, expected in required_pins.items():
         if not isinstance(expected, str) or pins.get(path) != expected or digest_fn(path) != expected:
@@ -243,7 +245,35 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
     for path, expected in pins.items():
         if digest_fn(path) != expected:
             raise ValueError(f'Reviewed artifact changed: {path}')
+    intake_binding = plan.get('intake_receipt_binding')
+    adapter_bindings = plan.get('execution_adapter_bindings', [])
     adapter_trees = plan.get('execution_adapter_trees', [])
+    if intake_binding is not None:
+        if not isinstance(intake_binding, dict):
+            raise ValueError('invalid intake receipt binding')
+        intake_path = Path(intake_binding.get('path', '')).expanduser().resolve(strict=True)
+        intake_sha = intake_binding.get('sha256')
+        if pins.get(str(intake_path)) != intake_sha or digest_fn(intake_path) != intake_sha:
+            raise ValueError('codebase intake receipt is not pinned by the reviewed plan')
+        intake_record = json.loads(intake_path.read_text(encoding='utf-8'))
+        if (adapter_bindings != intake_record.get('execution_adapter_bindings', []) or
+                not isinstance(adapter_trees, list)):
+            raise ValueError('reviewed execution adapter declarations differ from authenticated intake')
+        intake_trees = intake_record.get('execution_adapter_trees', [])
+        expected_trees = [{key: tree[key] for key in
+                           ('name', 'root', 'manifest_path', 'manifest_sha256', 'tree_sha256', 'file_count', 'total_bytes')}
+                          for tree in intake_trees]
+        if adapter_trees != expected_trees:
+            raise ValueError('reviewed runtime dependency trees differ from authenticated intake')
+        for binding in adapter_bindings:
+            if not isinstance(binding, dict):
+                raise ValueError('invalid reviewed execution adapter path binding')
+            path = Path(binding.get('path', '')).expanduser().resolve(strict=True)
+            expected = binding.get('sha256')
+            if pins.get(str(path)) != expected or digest_fn(path) != expected:
+                raise ValueError(f'Reviewed execution adapter changed: {path}')
+    elif adapter_bindings or adapter_trees:
+        raise ValueError('execution adapter pins cannot be used without an authenticated intake receipt')
     if not isinstance(adapter_trees, list):
         raise ValueError('execution_adapter_trees must be a list')
     for record in adapter_trees:

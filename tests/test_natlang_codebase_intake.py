@@ -377,6 +377,11 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     runtime_module.write_text('value = 2\n')
     with pytest.raises(ValueError, match='runtime dependency file is missing or changed'):
         dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
+    runtime_module.write_text('value = 1\n')
+    reviewed.pop('execution_adapter_bindings')
+    reviewed_path.write_text(json.dumps(reviewed, sort_keys=True))
+    with pytest.raises(ValueError, match='declarations differ from authenticated intake'):
+        dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
 
 
 def test_intake_folder_files_and_verifier_targets(tmp_path):
