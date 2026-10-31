@@ -132,7 +132,7 @@ class CheckpointPolicy:
         """Secure the next rolling checkpoint before advancing the optimizer."""
         from .checkpoint_safety import (PersistentCheckpointReservation, checkpoint_size_upper_bound,
                                         optimizer_state_size_upper_bound, save_with_space_retry)
-        self.drain_async()
+        self.check_async()
         if self._persistent_reservation is None:
             self._persistent_reservation = PersistentCheckpointReservation(self.slot)
         lazy = optimizer_state_size_upper_bound(optimizer, lazy=True)
@@ -240,8 +240,9 @@ class CheckpointPolicy:
                     f'{type(writer_error).__name__}: {writer_error}')
                 recovery_error.add_note(f'last known durable checkpoint path: {self.slot}')
                 raise
-        if self._async_writer is not None and async_allowed and self._persistent_reservation is None:
-            self._require_disk_headroom(self.slot)
+        if self._async_writer is not None and async_allowed:
+            if self._persistent_reservation is None:
+                self._require_disk_headroom(self.slot)
             if async_optimizer is None:
                 admission = {'eligible':False,'reason':'optimizer_bound_unavailable',
                     'available_host_bytes':None,'snapshot_size_bound_bytes':None,
@@ -255,6 +256,17 @@ class CheckpointPolicy:
                         'error':str(error)[:1000],'available_host_bytes':None,
                         'snapshot_size_bound_bytes':None,'required_headroom_bytes':None}
             if admission.get('eligible'):
+                reserved_writer = self._persistent_reservation
+                spare = None
+                if reserved_writer is not None:
+                    from .checkpoint_safety import PersistentCheckpointReservation, save_with_space_retry
+                    suffix = '' if reserved_writer.pending.name.endswith('.alternate.reserved-pending') else '.alternate'
+                    spare = PersistentCheckpointReservation(self.slot, slot_suffix=suffix, shared_lock=reserved_writer)
+                    try:
+                        save_with_space_retry(lambda: spare.acquire(reserved_writer.bound))
+                    except BaseException:
+                        spare.close()
+                        raise
                 self._record_async_admission(state, admission, 'background')
                 event = {'time':time.time(),'path':str(self.slot),'bytes':None,
                     'previous_preserved_until_replace':True,'async_pending':True,
@@ -267,10 +279,14 @@ class CheckpointPolicy:
                     event['async_pending'] = False
                     self._after_save(snapshot, event, metric=metric, higher_is_better=higher_is_better)
                 try:
-                    self._async_writer.submit(self.slot,state,after_write=after_write)
+                    self._async_writer.submit(self.slot,state,after_write=after_write, reservation=reserved_writer)
+                    if spare is not None:
+                        self._persistent_reservation = spare
                     self.last_saved_monotonic = time.monotonic()
                     return event
                 except BaseException as error:
+                    if spare is not None:
+                        spare.close()
                     # Snapshot allocation/startup or an overlapped writer may
                     # fail. Commit the exact current state synchronously before
                     # allowing the caller to continue.

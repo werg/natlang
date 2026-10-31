@@ -412,18 +412,24 @@ class AsyncAtomicCheckpointWriter:
         if thread is not None:
             self._finish(thread)
 
-    def submit(self, path, state, *, after_write=None, wait=False):
+    def submit(self, path, state, *, after_write=None, wait=False, reservation=None):
         self.drain()
         snapshot = immutable_cpu_snapshot(state)
 
         def write():
             try:
-                atomic_checkpoint(path, snapshot)
+                if reservation is None:
+                    atomic_checkpoint(path, snapshot)
+                else:
+                    atomic_checkpoint(path, snapshot, reservation=reservation)
                 if after_write is not None:
                     after_write(snapshot)
             except BaseException as error:
                 with self._lock:
                     self._error = error
+            finally:
+                if reservation is not None:
+                    reservation.close()
 
         thread = threading.Thread(target=write, name='neuralese-checkpoint-writer', daemon=False)
         self._thread = thread

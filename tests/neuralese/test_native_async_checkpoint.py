@@ -166,11 +166,11 @@ def test_native_trainer_drains_on_update_and_schedule_close_errors_without_savin
     entered,release=threading.Event(),threading.Event()
     writes=[]
     real_write=trajectory_state.atomic_checkpoint
-    def held_write(path,state):
+    def held_write(path,state,**kwargs):
         writes.append(state['step'])
         entered.set()
         if not release.wait(10):raise TimeoutError('trainer exit test did not release async writer')
-        return real_write(path,state)
+        return real_write(path,state,**kwargs)
     monkeypatch.setattr(trajectory_state,'atomic_checkpoint',held_write)
     monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<50)
     original_update=trainer.native_training_update
@@ -311,3 +311,39 @@ def test_forced_sync_save_and_finalize_drain_writer_before_consumption(tmp_path,
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
+
+
+def test_reserved_background_write_retains_separate_next_slot(tmp_path, monkeypatch):
+    from natlang_neuralese.train import trajectory_state
+    entered, release = threading.Event(), threading.Event()
+    original = trajectory_state.atomic_checkpoint
+    def delayed(path, state, **kwargs):
+        entered.set()
+        assert release.wait(10)
+        return original(path, state, **kwargs)
+    monkeypatch.setattr(trajectory_state, 'atomic_checkpoint', delayed)
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)
+    optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
+    state = {'step': 1, 'training': {'optimizer': optimizer.state_dict(), 'rng': {},
+                                    'exposure_counts': {'graph': 1}, 'options': {}}}
+    policy = CheckpointPolicy(tmp_path, async_checkpoint=True)
+    policy.reserve_next(state, optimizer)
+    first = policy._persistent_reservation
+    event = policy.save(state, async_allowed=True, async_optimizer=optimizer)
+    assert event['async_pending'] and entered.wait(5)
+    second = policy._persistent_reservation
+    assert first.pending != second.pending
+    assert first.pending.stat().st_ino != second.pending.stat().st_ino
+    policy.reserve_next(state, optimizer)
+    state['training']['exposure_counts']['graph'] = 2
+    release.set()
+    policy.drain_async()
+    assert torch.load(policy.slot, weights_only=False)['training']['exposure_counts']['graph'] == 1
+    assert second.pending.exists() and second.bound > 0
+    from natlang_neuralese.train.checkpoint_safety import checkpoint_target_lock
+    with pytest.raises(BlockingIOError):
+        with checkpoint_target_lock(policy.slot):
+            pass
+    second.close()
+    with checkpoint_target_lock(policy.slot):
+        pass

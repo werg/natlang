@@ -258,14 +258,18 @@ class PersistentCheckpointReservation:
     inode and its identity receipt for the next owner to validate and reuse.
     A receipt never authorizes modifying the previously committed target.
     """
-    def __init__(self, target, *, transfer_bytes=None, minimum_free_bytes=None):
+    def __init__(self, target, *, transfer_bytes=None, minimum_free_bytes=None, slot_suffix='', shared_lock=None):
         self.target = Path(target)
-        self.pending = self.target.with_name(self.target.name + '.reserved-pending')
-        self.receipt = self.target.with_name(self.target.name + '.reservation.json')
+        if slot_suffix not in ('', '.alternate'):
+            raise ValueError('invalid checkpoint reservation slot')
+        self.pending = self.target.with_name(self.target.name + slot_suffix + '.reserved-pending')
+        self.receipt = self.target.with_name(self.target.name + slot_suffix + '.reservation.json')
         self.lock = self.target.with_name(self.target.name + '.reservation.lock')
         self.transfer_bytes = transfer_bytes
         self.minimum_free_bytes = minimum_free_bytes
-        self._lock_fd = None
+        if shared_lock is not None and (shared_lock.target != self.target or shared_lock._lock_fd is None):
+            raise CheckpointReserveError('shared checkpoint lock must be live and target the same slot')
+        self._lock_fd = os.dup(shared_lock._lock_fd) if shared_lock is not None else None
         self._fd = None
         self.bound = 0
         self._allocated_bound = 0
@@ -402,7 +406,8 @@ class PersistentCheckpointReservation:
             os.close(self._fd)
             self._fd = None
         if self._lock_fd is not None:
-            fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+            # Duplicated descriptors share one flock ownership. Explicitly
+            # unlocking here would also unlock a still-live sibling slot.
             os.close(self._lock_fd)
             self._lock_fd = None
         self.bound = 0
