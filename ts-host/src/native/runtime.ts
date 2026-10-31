@@ -48,7 +48,8 @@ const SELF_CALL_ADVICE = 'Do what its instructions ask here. For a judgment, dec
   'return_result; use eval only for exact work the instructions need.';
 
 /** Detect the unsupported pattern of wrapping a computed value in marker strings. Static marker literals remain valid. */
-function computedNeuraleseMarkerConcatenation(code: string): ts.Node | undefined {
+function computedNeuraleseMarkerConcatenation(code: string, codebase: Record<string, ItemRecord>, isNeuraleseType: (source: string) => boolean,
+  neuraleseResult: boolean): ts.Node | undefined {
   const source = ts.createSourceFile('natlang-eval.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const partsOf = (expression: ts.Expression): ts.Expression[] => ts.isBinaryExpression(expression) &&
     expression.operatorToken.kind === ts.SyntaxKind.PlusToken ? [...partsOf(expression.left), ...partsOf(expression.right)] : [expression];
@@ -65,12 +66,57 @@ function computedNeuraleseMarkerConcatenation(code: string): ts.Node | undefined
       !(ts.isNoSubstitutionTemplateLiteral(part)));
     return hasOpen && hasClose && hasComputedPart;
   };
+  const expressionPath = (expression: ts.Expression): string[] | undefined => {
+    if (ts.isIdentifier(expression)) return [expression.text];
+    if (ts.isPropertyAccessExpression(expression)) {
+      const base = expressionPath(expression.expression);
+      return base ? [...base, expression.name.text] : undefined;
+    }
+    return undefined;
+  };
+  const callableArgumentTypes = (expression: ts.Expression): string[] | undefined => {
+    const path = expressionPath(expression);
+    if (!path) return undefined;
+    let items: Record<string, ItemRecord> = codebase;
+    let item: ItemRecord | undefined;
+    for (let index = 0; index < path.length; index++) {
+      item = items[path[index]!];
+      if (!item) return undefined;
+      const next = path[index + 1];
+      if (item.kind === 'module' && next && item.exports[next]?.kind === 'function')
+        return Object.values(item.exports[next]!.args);
+      if (index + 1 === path.length) return item.kind === 'natlang' ? Object.values(item.args) : undefined;
+      items = item.codebase;
+    }
+    return undefined;
+  };
   let found: ts.Node | undefined;
+  const computedVariables = new Set<string>();
+  const collectComputedVariables = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && hasComputedMarker(node.initializer))
+      computedVariables.add(node.name.text);
+    ts.forEachChild(node, collectComputedVariables);
+  };
+  collectComputedVariables(source);
   const visit = (node: ts.Node) => {
     if (found) return;
-    if (ts.isReturnStatement(node) && node.expression && hasComputedMarker(node.expression)) {
+    if (ts.isReturnStatement(node) && node.expression && neuraleseResult &&
+        (hasComputedMarker(node.expression) || ts.isIdentifier(node.expression) && computedVariables.has(node.expression.text))) {
       found = node.expression;
       return;
+    }
+    if (ts.isVariableDeclaration(node) && node.type && isNeuraleseType(node.type.getText(source)) &&
+        node.initializer && hasComputedMarker(node.initializer)) {
+      found = node.initializer;
+      return;
+    }
+    if (ts.isCallExpression(node)) {
+      const parameters = callableArgumentTypes(node.expression);
+      for (const [index, argument] of node.arguments.entries()) if (parameters?.[index] && isNeuraleseType(parameters[index]!) &&
+          (hasComputedMarker(argument) || ts.isIdentifier(argument) && computedVariables.has(argument.text))) {
+        found = argument;
+        return;
+      }
     }
     ts.forEachChild(node, visit);
   };
@@ -1996,11 +2042,17 @@ export class NativeSession {
     if (!written.trim()) throw new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]);
     const declaredResult = this.lam.type.kind === 'lambda' ? this.env.resolve(this.lam.type.returns) : undefined;
     const neuraleseElement = declaredResult?.kind === 'neuralese' ? this.env.resolve(declaredResult.element) : undefined;
-    const isStructuredNeuraleseResult = !!neuraleseElement &&
-      !(neuraleseElement.kind === 'prim' && neuraleseElement.name === 'string');
-    if (isStructuredNeuraleseResult && computedNeuraleseMarkerConcatenation(written))
+    const isNeuraleseType = (source: string): boolean => {
+      try { return this.env.resolve(parseType(source)).kind === 'neuralese'; } catch { return false; }
+    };
+    const hasUnsupportedMarkerExpression = computedNeuraleseMarkerConcatenation(written, this.lam.codebase as Record<string, ItemRecord>, isNeuraleseType,
+      declaredResult?.kind === 'neuralese');
+    if (hasUnsupportedMarkerExpression && declaredResult?.kind === 'neuralese')
       throw new Reject([{ path: 'code', code: 'computed-neuralese-marker-concatenation',
-        expected: `This function returns ${formatType(declaredResult!)}. Marker bodies are literal and do not evaluate JavaScript concatenation. Return the complete ${formatType(neuraleseElement!)} value directly (for example, return result;) or return its JSON text without marker strings.` }]);
+        expected: `This function returns ${formatType(declaredResult)}. Marker bodies are literal and do not evaluate JavaScript concatenation. Return the computed value directly according to its declared type, without marker strings.` }]);
+    if (hasUnsupportedMarkerExpression)
+      throw new Reject([{ path: 'code', code: 'computed-neuralese-marker-concatenation',
+        expected: 'This argument is declared Neuralese<T>. Marker bodies are literal and do not evaluate JavaScript concatenation. Return the computed typed value directly, without marker strings.' }]);
     // Literals the model wrote are block markers in its text; compiled, each is a call the checker types from context.
     const code = desugarNlCalls(sourceWithLiteralCalls(written));
     const scopeBefore = this.scopeSnapshot(), traceMark = this.runtime.trace.events.length;
