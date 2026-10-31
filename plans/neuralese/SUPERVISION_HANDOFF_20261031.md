@@ -82,18 +82,39 @@ Authoritative logs (read these first, newest at the bottom):
 
 ## 2. Work in flight (helpers were Claude subagents of this session — they stop when it ends)
 Pick these up from their files/units, not from the agents:
-1. **Natlang codebase RL tasks (owner priority):** tasks that hand the model sizable *natlang* codebases — `nl`
-   lambdas, `.nl` functions with callable folders, directory reducers (`kind: directory-reducer`,
-   `folder.apply`), `natlang.d/`, iterateOn folder reducers — to run eval/read_code and per-file/per-item
-   `Neuralese<...>` child calls with fan-in; plus authoring/repairing natlang code judged by executed tests/oracles.
-   Sources: `codebases/`, `applications/`, skill assets, tuning/memetic oracle programs, generated variants.
-   Target 25–35% of RL rows; new source version, related worlds on one split. Builder work under
-   `scripts/rl_tasks/` (e.g. `ts_analyze.mjs`) and `/home/werg/data/broad-rl-tasks-20261031/`.
-2. **Broad RL v3:** builders committed (c6c18fa5c: TabFact, WikiSQL, MSR-SQA, ConvFinQA, MultiHiertt, ToolACE,
-   NESTFUL, tau-bench, APIGen-MT; 3ae1bf1fa multi-answer puzzle verifiers; 66a9b1374 >2^53 numbers → re-admit
-   55 DataBench cases). Verification units `broadrl-v3-*`. Plan/notes `plans/neuralese/BROAD_RL_TASKS_20261031.md`.
-   Not done: decontaminated big math sets; KodCode/verifiable-coding need a Python runner; measure live-model
-   false rejections of correct paraphrases from RL rejects.
+1. **Broad RL v3 + natlang codebase RL tasks (owner priority; Claude session 01WJvxPP handoff, 2026-10-31).**
+   - **Done (on main):** v2 `natlang-rl-broad-external-20261031-v2` registered (32,947 train; unchanged, lineages read
+     it). 66a9b1374 `number` accepts integers beyond 2^53. 3ae1bf1fa oracle `puzzle-solution`. Builders c6c18fa5c +
+     6d46e259f in `scripts/rl_tasks/` (`SOURCES` lists all). 6d46e259f adds `semantics.codebase_check`
+     (`ts-host/src/teacher/codebase-check.ts`, wired in collector: the edited natlang package must load with the
+     actual loader, other files byte-identical, signatures/uses/export headers preserved) and `sources/natcode.py`
+     (100 design-brief apps with their release split + codebases/ programs; explore tasks with the package as the
+     root's callable folder, Neuralese `read_function` helper on half; repair tasks = directory reducer over the
+     package with one planted load fault). RL runtimes: ts-host at 6d46e259f+.
+   - **Verified** (`/home/werg/data/broad-rl-tasks-20261031/build-v3/<source>/verified/`, kept/built): tabfact
+     1800/1800, wikisql 1798/1800, msr-sqa 1799/1800, convfinqa 1332/1800, multihiertt 1147/1800, toolace 1794/1800,
+     nestful 1342/1358, tau-retail 585/598 (382 train), tau-airline 27/46 (held only), apigen-mt-retail 1497/1500,
+     apigen-mt-airline 1245/1285, countdown 1500/1500, rg-multi-solution 2046/2320, databench (fixed runtime)
+     3030/3054, codebase-natlang (TS-module exploration) 1441/1441.
+   - **Running (ledger units):** `broadrl-v3-chain-f` (verifying codebase-py, 8,957 cases, secondary Python-package
+     exploration); `broadrl-v3-verify-natcode` (natlang-codebase, 7,608 cases, 6,458 train). Output:
+     `build-v3/<source>/verified/verification.json` (resumable via partial.jsonl); `journalctl --user -u <unit>`.
+   - **Next:** (a) check natlang-codebase verification: repair references must load and all wrong_code controls be
+     rejected; if explore cases fail to load, check the `explore_program/` `uses` prefix rewrite in natcode.py.
+     (b) assemble v3 into a new dir (v2 untouched), small ledger budget:
+     `.venv-neuralese/bin/python scripts/rl_tasks/assemble.py --build /home/werg/data/broad-rl-tasks-20261031/build
+     --build /home/werg/data/broad-rl-tasks-20261031/build-v3 --assets /home/werg/data/broad-rl-tasks-20261031/assets-v3
+     --out runs/natlang-rl-broad-external-20261031-v3 --cap-override reasoning-gym=4000,rg-multi-solution=2000,natlang-codebase=7000,codebase-py=2500
+     --exclude-ids <the v2 held-set exclusion JSON>`; then held-set union (`union_groups_fast.py` in that data dir)
+     and ProtectedWorlds; register cases, held packets and assets-v3 in `training/neuralese_corpora.json`.
+     `NATLANG_RL_TASK_ASSETS_V3` overrides the assets-v3 location.
+   - **Open:** codebase share with those caps ≈ 11k of ~50k train (~22%); reach 25-35% with more natlang-codebase
+     questions per package or lower caps elsewhere. rg-multi-solution: 274 n-queens cases had a control accepted
+     (dropped; inspect). codebase-natlang alias FN 6.9% (inspect the reversed-list alias). `.nl` authoring (missing
+     child) is judged by signature + load only, not by execution. Not built: the 180 train design-brief exact gates
+     (`/home/werg/data/luna-generation-20261026/design-briefs-pr4-review/packet-v3/`), directory reducers over
+     generated data folders, iterateOn folder reducers. Not converted: big math (decontaminate), KodCode
+     (Python runner), RLVR-IF. Notes: `plans/neuralese/BROAD_RL_TASKS_20261031.md` (v3 section).
 3. **Successor SFT mixture v4 / coverage repair** (Claude data-coverage agent; audit and full history in
    `plans/neuralese/LFM3_DATA_COVERAGE_AUDIT_20261031.md` sections 6+, build commands at its end).
    - **Done (on main):** register crash fix a08e9eae6; per-document exact subset incl. parts renders 892fb2986;
