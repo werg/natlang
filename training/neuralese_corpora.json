@@ -731379,6 +731379,2990 @@
       "license": "project-generated",
       "license_provenance": "Inherited unchanged from the parent rows (project-generated procedural worlds).",
       "note": "RL task source, not native SFT graph data. Supersedes the parent for RL scoring; the parent remains the exact predecessor of earlier selections (e.g. /home/werg/data/lfm3-rl-dgx-20261029/cases-v1)."
+    },
+    {
+      "id": "external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "license": "facts from the source rows",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "admission": "lfm3 render of the registered render external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render",
+        "external-expansion-agentic-coding-repeated-id-repair-20261014-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 10,
+                "supervised_tokens": 1245,
+                "tokens": 103414,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 941853,
+            "decoded_text_data_sha256": "58692dca1d51974e728ab433782b0f535f9a635123af96eb818c552c0da21e86",
+            "documents": 10,
+            "max_document_tokens": 14519,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "01e01b32a00ed046ddb3bcd5a1aeafd61c6cdbf44b8312c8f39dae9a5505b6c5"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 10,
+                "supervised_tokens": 1245,
+                "tokens": 60256,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 528124,
+            "decoded_text_data_sha256": "29e32d1d4f1064a9ec6228c05f722cbd4498736dab3c4d6defc4fc2bce28560f",
+            "documents": 10,
+            "max_document_tokens": 10649,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "37c5532d58cb2e3a85f8528c02ca22ffb63b3b71e90c0ec492890fe50b4c8d83"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 2080,
+                "documents": 5,
+                "opening_tokens": 734,
+                "supervised_tokens": 1302,
+                "tokens": 38638,
+                "tool_tokens": 35259
+              }
+            },
+            "decoded_text_data_bytes": 346290,
+            "decoded_text_data_sha256": "3453cf78eca8e63d11ce9bed5cfa66d545768bb8e9545e773eb462afe05e8071",
+            "documents": 5,
+            "max_document_tokens": 10649,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "a9d5b3e4f0ee1c04ba547dc1916fbdf481cd72d5206829e2b920922765f14a4a"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 10,
+            "reference_documents": 10,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 10,
+            "reference_documents": 10,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 5,
+            "reference_documents": 5,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": "not checked (parts render: sources are streamed part inputs)"
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 10,
+            "whole-trajectory": 5
+          },
+          "detail": {
+            "program-header": {
+              "train": 10,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 10,
+                  "bytes": 12554,
+                  "sha256": "7c2edc58b470f38206d41e5f9940c07fa6591493ae6064414e71cdb197cb87b7"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 5,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 5,
+                  "bytes": 14220,
+                  "sha256": "88ee0a6bd883d29f802bc6e1d957bec89e9633581ec7c22857d479cb04868a48"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      },
+      "render_policy_binding_sha256": "eb051d6c8f2efe9d5c4ba6f30c0cf2ea7a59096aafa211c595ca24991df63601"
+    },
+    {
+      "id": "external-expansion-agentsynth-native-20261015-v1-render-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/external-expansion-agentsynth-native-20261015-v1-render",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "license": "facts from the source rows",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "admission": "lfm3 render of the registered render external-expansion-agentsynth-native-20261015-v1-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "external-expansion-agentsynth-native-20261015-v1-render",
+        "external-expansion-agentsynth-native-20261015-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 110,
+                "supervised_tokens": 9460,
+                "tokens": 616635,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 6056751,
+            "decoded_text_data_sha256": "3bb8c696b9676cc8b7a67793cc5e8613bb787e5be78b865cf27b0ecf9e056bb2",
+            "documents": 110,
+            "max_document_tokens": 8252,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "19a36c1febb812ca3f91f75fd89d34cc7833079139da902219f84abefa2577dd"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2186,
+                "supervised_tokens": 191209,
+                "tokens": 2854745,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 30247865,
+            "decoded_text_data_sha256": "e003273203a90c1a3db4119dbca8728d9d567c509c80de5c2744f60637b925ab",
+            "documents": 2186,
+            "max_document_tokens": 2325,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "b320287f31bcdfbfc9ceb0eb5c8a989f86b17f38559853f2b1d2c6022fbb1acb"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 373926,
+                "documents": 1093,
+                "opening_tokens": 160626,
+                "supervised_tokens": 203680,
+                "tokens": 1637262,
+                "tool_tokens": 979347
+              }
+            },
+            "decoded_text_data_bytes": 19010310,
+            "decoded_text_data_sha256": "750f2072753ca19d580081b387df6faa32129e62ab7dbd45e0766e84b09fff50",
+            "documents": 1093,
+            "max_document_tokens": 2325,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "fc39f62c8df583c6b1c6d860fee6c1bdb06a9ddf36c99a73d6a198dda67f6f16"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "external-expansion-agentsynth-native-20261015-v1-render",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 110,
+            "reference_documents": 110,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 2186,
+            "reference_documents": 2186,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 1093,
+            "reference_documents": 1093,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": "not checked (parts render: sources are streamed part inputs)"
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 2186,
+            "whole-trajectory": 1093
+          },
+          "detail": {
+            "program-header": {
+              "train": 2186,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-agentsynth-native-20261015-v1-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 2186,
+                  "bytes": 355697,
+                  "sha256": "bcf2fee198848ce6813627f3642aaa3ee149681dffed19f4a56d50fb67af11bd"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-agentsynth-native-20261015-v1-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 1093,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-agentsynth-native-20261015-v1-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 1093,
+                  "bytes": 525084,
+                  "sha256": "286667a340639e21c4c1eca441f219427f5398bde818d545b7d9b82a29cce877"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-agentsynth-native-20261015-v1-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      },
+      "render_policy_binding_sha256": "6dce18ee297aac3492cdd779ba9a79a4883d18ee67fefa0d74cfee8126e8ec01"
+    },
+    {
+      "id": "external-expansion-codeagent-native-20261014-v1-render-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/external-expansion-codeagent-native-20261014-v1-render",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "license": "facts from the source rows",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "admission": "lfm3 render of the registered render external-expansion-codeagent-native-20261014-v1-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "external-expansion-codeagent-native-20261014-v1-render",
+        "external-expansion-codeagent-native-20261014-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "test": {
+                "assistant_tokens": 0,
+                "documents": 130,
+                "supervised_tokens": 286530,
+                "tokens": 1274684,
+                "tool_tokens": 0
+              },
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 7370,
+                "supervised_tokens": 10209498,
+                "tokens": 61096779,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 569787075,
+            "decoded_text_data_sha256": "527f49e1764382adab73d15fc959fc36c7af1dca3e5f6506e3209ecc237351c3",
+            "documents": 7500,
+            "max_document_tokens": 36484,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "1b1842c8daed9e94c5f479fc6e5a74af55841fc26344819f08ed3208ada1e874"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "test": {
+                "assistant_tokens": 0,
+                "documents": 2334,
+                "supervised_tokens": 4991569,
+                "tokens": 12812105,
+                "tool_tokens": 0
+              },
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 147506,
+                "supervised_tokens": 204883763,
+                "tokens": 587137447,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 5184318945,
+            "decoded_text_data_sha256": "9f6f353152ec92497f27cbb913aea3f4b0e3b97c8f02e6b44a2dc5684bfdeae8",
+            "documents": 149840,
+            "max_document_tokens": 36119,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "61822c1b71c65006d0fca19bc61b5a20fe9114c6b548fdef0183c6fc8c202ccd"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "test": {
+                "assistant_tokens": 5186737,
+                "documents": 1167,
+                "opening_tokens": 171576,
+                "supervised_tokens": 5004889,
+                "tokens": 10673461,
+                "tool_tokens": 5183496
+              },
+              "train": {
+                "assistant_tokens": 217200700,
+                "documents": 73753,
+                "opening_tokens": 10827114,
+                "supervised_tokens": 205724558,
+                "tokens": 480616403,
+                "tool_tokens": 244254646
+              }
+            },
+            "decoded_text_data_bytes": 4274001308,
+            "decoded_text_data_sha256": "8af0c44db684ce1f9890cbaa7e356f5dc7a97fb7ce41a5147c95f89b03519fc8",
+            "documents": 74920,
+            "max_document_tokens": 36119,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "98c2dea7265b7129c1b0a086f627b11a983bb45a81534b72a60e6a3209b1c84b"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "external-expansion-codeagent-native-20261014-v1-render",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 7500,
+            "reference_documents": 7500,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 149840,
+            "reference_documents": 149840,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 74920,
+            "reference_documents": 74920,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": "not checked (parts render: sources are streamed part inputs)"
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 149840,
+            "whole-trajectory": 74920
+          },
+          "detail": {
+            "program-header": {
+              "train": 147506,
+              "test": 2334,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-codeagent-native-20261014-v1-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 147506,
+                  "bytes": 182098561,
+                  "sha256": "ab5d036e37902863ec35626f1720576de4e25dc8331fedd1311aa7ba9b108935"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-codeagent-native-20261014-v1-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 2334,
+                  "bytes": 4096981,
+                  "sha256": "be4de0e0e2706db6d24d39364ca4893680775f67dbb5427de43abffe87c4f06d"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 73753,
+              "test": 1167,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-codeagent-native-20261014-v1-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 73753,
+                  "bytes": 205259152,
+                  "sha256": "16cf353f893471961c96cbb87f93a1401c1d20dc1c34f806b35db5439a612328"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-codeagent-native-20261014-v1-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 1167,
+                  "bytes": 4574122,
+                  "sha256": "4600722181923061ec97f2b065f6a6f8fa7e7542cd676b7eb4d89f2fdc2c884d"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      },
+      "render_policy_binding_sha256": "4a3a987718d811372c8c5b3858741f52d74134093cfcc24850a07ec1cf2bb90e"
+    },
+    {
+      "id": "external-expansion-deepdive-native-20261015-v1-render-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/external-expansion-deepdive-native-20261015-v1-render",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "license": "facts from the source rows",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "admission": "lfm3 render of the registered render external-expansion-deepdive-native-20261015-v1-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "external-expansion-deepdive-native-20261015-v1-render",
+        "external-expansion-deepdive-native-20261015-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 254,
+                "supervised_tokens": 88689,
+                "tokens": 3503339,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 32261814,
+            "decoded_text_data_sha256": "66b7e162f69a47cd7d9e2e58fe0df8e37dc35deba68bdb6626d0e0a2faa0df0b",
+            "documents": 254,
+            "max_document_tokens": 29304,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "f12107e0713e7a8ea14972eb6e2c88878291b59899bf4467dd1806a5c1e482c6"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 4826,
+                "supervised_tokens": 1522653,
+                "tokens": 41737016,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 378798362,
+            "decoded_text_data_sha256": "5ec6f33f120e45b2b455893c847680fe0f370bf71cae651c0d4b28a3093380e6",
+            "documents": 4826,
+            "max_document_tokens": 30698,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "7c5f51fd1b1eb1094b6e4683a8c6b57af2f5a2379896e8ccd65718366524bcae"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 1905790,
+                "documents": 2273,
+                "opening_tokens": 333850,
+                "supervised_tokens": 1549416,
+                "tokens": 23364659,
+                "tool_tokens": 20867756
+              }
+            },
+            "decoded_text_data_bytes": 216564378,
+            "decoded_text_data_sha256": "30269b7e00546ceb6ece109b6578ad66336a1f5845ae81a49559eb0f9e666c9d",
+            "documents": 2273,
+            "max_document_tokens": 30698,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "0b0674b96c4c1953969c8b70a294b95a7ee9dbdbacd7f4181538b547bf0eaf78"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "external-expansion-deepdive-native-20261015-v1-render",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 254,
+            "reference_documents": 254,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 4826,
+            "reference_documents": 4826,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 2273,
+            "reference_documents": 2273,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": "not checked (parts render: sources are streamed part inputs)"
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 4826,
+            "whole-trajectory": 2273
+          },
+          "detail": {
+            "program-header": {
+              "train": 4826,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepdive-native-20261015-v1-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 4826,
+                  "bytes": 13032234,
+                  "sha256": "4ec6214151d44070d6d2137a7e10c1ca855e011e6d39adc2e16f5b298ba3d8ac"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepdive-native-20261015-v1-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 2273,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepdive-native-20261015-v1-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 2273,
+                  "bytes": 13881067,
+                  "sha256": "1a6464b5094c2253991cb3ecc6821b9f93ff101bcf72a290e1d7fc97ef65a7fc"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepdive-native-20261015-v1-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      },
+      "render_policy_binding_sha256": "3e8680156fca6b9b2551c436f82a02d760c4c9e30c74dc36d399c58fa6c34a50"
+    },
+    {
+      "id": "external-expansion-deepdive-reference-qa-native-20261018-v1-render-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/external-expansion-deepdive-reference-qa-native-20261018-v1-render",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "license": "facts from the source rows",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "admission": "lfm3 render of the registered render external-expansion-deepdive-reference-qa-native-20261018-v1-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "external-expansion-deepdive-reference-qa-native-20261018-v1-render",
+        "external-expansion-deepdive-reference-qa-native-20261018-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 410,
+                "supervised_tokens": 25995,
+                "tokens": 2134021,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 20925543,
+            "decoded_text_data_sha256": "27ab73785a97fc4e26c7f76938d4d5f3f7a955e8f649cbbf65d7ab846a009047",
+            "documents": 410,
+            "max_document_tokens": 7928,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "4beb1da4c9b9d08efa9c82a86c4438a688d81dfd9ecb3e6fe5364b1e8dc47937"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 8024,
+                "supervised_tokens": 510164,
+                "tokens": 7147530,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 77598600,
+            "decoded_text_data_sha256": "1453614b97644d1c66ea4324ee775e3be7a5010d8891d3f663f79bdcf6854e46",
+            "documents": 8024,
+            "max_document_tokens": 2012,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "122bcee94657465896934c0da658568b61991d7b5f5c0a00a6c538f410fd6ef4"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 1180447,
+                "documents": 4012,
+                "opening_tokens": 589222,
+                "supervised_tokens": 555917,
+                "tokens": 4139863,
+                "tool_tokens": 1917057
+              }
+            },
+            "decoded_text_data_bytes": 53446497,
+            "decoded_text_data_sha256": "0516bbe5e548cd09ffe589cfcbcef534746ddc35bd56af0ef07ec5bd3ab532ae",
+            "documents": 4012,
+            "max_document_tokens": 2012,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "6744e220f563b53882c5515f3be60ff0ae5288d0535ed0a19f81de99c2a84d84"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "external-expansion-deepdive-reference-qa-native-20261018-v1-render",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 410,
+            "reference_documents": 410,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 8024,
+            "reference_documents": 8024,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 4012,
+            "reference_documents": 4012,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": "not checked (parts render: sources are streamed part inputs)"
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 8024,
+            "whole-trajectory": 4012
+          },
+          "detail": {
+            "program-header": {
+              "train": 8024,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepdive-reference-qa-native-20261018-v1-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 8024,
+                  "bytes": 2533821,
+                  "sha256": "84095d2bd0cf3aafee2c829bd5da3a77a60a67a764b9d0ce50fa96104d854d4c"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepdive-reference-qa-native-20261018-v1-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 4012,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepdive-reference-qa-native-20261018-v1-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 4012,
+                  "bytes": 3116122,
+                  "sha256": "4dcbab89c7ca2f2ddf9c9cfbf2ca470917390f46936b0d16b21b583631867ba8"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepdive-reference-qa-native-20261018-v1-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      },
+      "render_policy_binding_sha256": "53cacfa3713a4d4b430e969b5d37264d5eb8f591358f34c1c023aab9b188b04b"
+    },
+    {
+      "id": "external-expansion-deepnlp-native-20261015-v1-render-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/external-expansion-deepnlp-native-20261015-v1-render",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "license": "facts from the source rows",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "admission": "lfm3 render of the registered render external-expansion-deepnlp-native-20261015-v1-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "external-expansion-deepnlp-native-20261015-v1-render",
+        "external-expansion-deepnlp-native-20261015-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 10,
+                "supervised_tokens": 1192,
+                "tokens": 64385,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 638443,
+            "decoded_text_data_sha256": "9f34f41916a6f25cf80d20cbc7fc565bf8a0e3f1fd1a55ba4e57320b36cba79e",
+            "documents": 10,
+            "max_document_tokens": 8727,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "1530d3d4d1cd017367cdf48bd453b86613a60ef601ae40c885eb6894f9d8bdf8"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 30,
+                "supervised_tokens": 5110,
+                "tokens": 69002,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 691561,
+            "decoded_text_data_sha256": "34156a2a7438f0742e817c07268939e5c7c734de970c1a23d802fa3341de02be",
+            "documents": 30,
+            "max_document_tokens": 5049,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "41055e6629d19aa681101c2252f173c2dd572575c0f1697e04c12cd62b75a3a0"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 7615,
+                "documents": 15,
+                "opening_tokens": 2202,
+                "supervised_tokens": 5281,
+                "tokens": 39491,
+                "tool_tokens": 27979
+              }
+            },
+            "decoded_text_data_bytes": 414958,
+            "decoded_text_data_sha256": "ed4dfe1bc023436f6c22f97388de204b83c8232e2dfe1d7d48808108c150f51b",
+            "documents": 15,
+            "max_document_tokens": 5049,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "3717f8b582d37a27c8ef34c9aae99eb3590b4418969f825958f81ec1da845dbc"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "external-expansion-deepnlp-native-20261015-v1-render",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 10,
+            "reference_documents": 10,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 30,
+            "reference_documents": 30,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 15,
+            "reference_documents": 15,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": "not checked (parts render: sources are streamed part inputs)"
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 30,
+            "whole-trajectory": 15
+          },
+          "detail": {
+            "program-header": {
+              "train": 30,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepnlp-native-20261015-v1-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 30,
+                  "bytes": 19419,
+                  "sha256": "5067bd9d2fc78b9b80357158fb65ac23298615dfe5e8ce11f9ad2aebb348756b"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepnlp-native-20261015-v1-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 15,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepnlp-native-20261015-v1-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 15,
+                  "bytes": 22518,
+                  "sha256": "ee165c370bf6c75e316d656b1fff867a5f05c6f53e54690e828ebba18d078463"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-deepnlp-native-20261015-v1-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      },
+      "render_policy_binding_sha256": "042c793ea61b10bb27d32d7319f83df47cead616d7ed20512b20142cd1f45d43"
+    },
+    {
+      "id": "external-expansion-rightfit-native-20261015-v2-render-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/external-expansion-rightfit-native-20261015-v2-render",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "license": "facts from the source rows",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "admission": "lfm3 render of the registered render external-expansion-rightfit-native-20261015-v2-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "external-expansion-rightfit-native-20261015-v2-render",
+        "external-expansion-rightfit-native-20261015-v2"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 870,
+                "supervised_tokens": 361227,
+                "tokens": 11292019,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 100615583,
+            "decoded_text_data_sha256": "1b98a9ad21c65bf58c93b3f1cff41a6abdbd335560990d34b7bd5b859ea5198d",
+            "documents": 870,
+            "max_document_tokens": 47760,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "d714558c8116012aa478b85854eae20fe0a2d7c5520ab40ae2a254e27878ecad"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 17330,
+                "supervised_tokens": 8083506,
+                "tokens": 154204203,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 1324075575,
+            "decoded_text_data_sha256": "a740d26e2c03c6bc37aed10db2b9d404d6c51d59d8a38dfa9444308d83a5c104",
+            "documents": 17330,
+            "max_document_tokens": 51312,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "bf71244aefe8718a48b404a4d68b4aa784682c9de28b8ec5fb8fcb2f32c57b70"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 9476836,
+                "documents": 8288,
+                "opening_tokens": 1216852,
+                "supervised_tokens": 8180262,
+                "tokens": 89821282,
+                "tool_tokens": 78189688
+              }
+            },
+            "decoded_text_data_bytes": 784632546,
+            "decoded_text_data_sha256": "38bc3a9a60d0dc06bdd3ad2b9031a8a8c022e10633773f1b2ec39d2991f41c84",
+            "documents": 8288,
+            "max_document_tokens": 51312,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "585b26f1aaf139e2e7041fc40a18bbe81fa9e3d83a7fe66892aff2b3f5a31f35"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "external-expansion-rightfit-native-20261015-v2-render",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 870,
+            "reference_documents": 870,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 17330,
+            "reference_documents": 17330,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 8288,
+            "reference_documents": 8288,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": "not checked (parts render: sources are streamed part inputs)"
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 17330,
+            "whole-trajectory": 8288
+          },
+          "detail": {
+            "program-header": {
+              "train": 17330,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-rightfit-native-20261015-v2-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 17330,
+                  "bytes": 32237279,
+                  "sha256": "9b5c1a307d5228d9b0eb0f3255244e202fc7b883389775f5c4bdb576a9f920bc"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-rightfit-native-20261015-v2-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 8288,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/external-expansion-rightfit-native-20261015-v2-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 8288,
+                  "bytes": 35538825,
+                  "sha256": "a34ef125fd8193f3bfba52508eafab628e0a1c4dd7d0a030dc25b60c52ea031b"
+                },
+                {
+                  "path": "runs/lfm3-renders/external-expansion-rightfit-native-20261015-v2-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      },
+      "render_policy_binding_sha256": "59b140c27081d9d63f31274d6225e719afc5bccb23e41a8a92861c5b5c400485"
+    },
+    {
+      "id": "natlang-native-turns-luna-held-shapes-render-20261013-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-luna-held-shapes-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-luna-held-shapes-render-20261013-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-luna-held-shapes-render-20261013-v1",
+        "luna-held-shapes-native-turns-20261013-v1",
+        "luna-folder-recovery-native-turns-20261013-v1",
+        "luna-held-shapes-followon-native-turns-20261013-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 318,
+                "supervised_tokens": 34285,
+                "tokens": 2235953,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 21447130,
+            "decoded_text_data_sha256": "7ebfe9287d2e3bcbc871b004b8a4a70595c4c160a0b7c35557c2b8ba2d85303c",
+            "documents": 318,
+            "max_document_tokens": 13898,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "7a1e2664666717b575e26aa27c9a311c1492e36dee6134122683395d27633f30"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 7378,
+                "supervised_tokens": 788547,
+                "tokens": 18952782,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 182023874,
+            "decoded_text_data_sha256": "2f4b8d9e21c2a6f2ae6e8b95e618ac4839a30594b16266a85af8b69a0e01f7c3",
+            "documents": 7378,
+            "max_document_tokens": 11835,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "6571bfbcf70bba352ac03f9eaf54579e7cc9375568a89e91a5beb7e21057b1f0"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 2569384,
+                "documents": 3570,
+                "opening_tokens": 1682706,
+                "supervised_tokens": 886678,
+                "tokens": 8041536,
+                "tool_tokens": 1172747
+              }
+            },
+            "decoded_text_data_bytes": 80327147,
+            "decoded_text_data_sha256": "a3aa6917efe96fceb545b0be922e41b733d32116e412b1628550f0cd520030f6",
+            "documents": 3570,
+            "max_document_tokens": 11835,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "cf104d287aa666e853af039dd46c10e8847a4a4f49a0a25662d5ceb40c886968"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-luna-held-shapes-render-20261013-v1",
+        "student": "lfm3",
+        "identical_documents": false,
+        "views": {
+          "full": {
+            "documents": 318,
+            "reference_documents": 318,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 7378,
+            "reference_documents": 7382,
+            "same_order": 0,
+            "only_reference": 4,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 3570,
+            "reference_documents": 3570,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {
+          "full:exact": 318,
+          "program-header:exact": 7378
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 7378,
+            "whole-trajectory": 3570
+          },
+          "detail": {
+            "program-header": {
+              "train": 7378,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-held-shapes-render-20261013-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 7378,
+                  "bytes": 2663669,
+                  "sha256": "a6823c86880316815d36d472b4745e1057934bb3f175c1c397c4538759f2ea84"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-held-shapes-render-20261013-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 3570,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-held-shapes-render-20261013-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 3570,
+                  "bytes": 3112066,
+                  "sha256": "d347880296f62d93f6147b50645c5d934cfe711a4b6fef95babc8923d346e6bf"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-held-shapes-render-20261013-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-native-turns-luna-v19-children-render-20261012-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-luna-v19-children-render-20261012-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-luna-v19-children-render-20261012-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-luna-v19-children-render-20261012-v1",
+        "luna-v19-reviewed-static-decision-children-20261012-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 17,
+                "supervised_tokens": 2321,
+                "tokens": 100403,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 975429,
+            "decoded_text_data_sha256": "f9ea7668d0436ab646d445cf5a82218993323b8c71b29623b30c995ba6360b53",
+            "documents": 17,
+            "max_document_tokens": 6456,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "3199fbd5818d7dd9c117f117acdbd229fad5c77719947629deb77d439626a222"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 283,
+                "supervised_tokens": 30897,
+                "tokens": 515806,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 5154664,
+            "decoded_text_data_sha256": "2839fe82261610e7f73ccfc33c4ad23cd5532e15d6fb0bbf68343a17066594ac",
+            "documents": 283,
+            "max_document_tokens": 2751,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "97e4f5071e1b250e493d08d017f8f68d1a8b1a7c8f3a09cd91598f0d7cd8874f"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 128960,
+                "documents": 283,
+                "opening_tokens": 91522,
+                "supervised_tokens": 37438,
+                "tokens": 515806,
+                "tool_tokens": 50680
+              }
+            },
+            "decoded_text_data_bytes": 5347608,
+            "decoded_text_data_sha256": "91643b6619f07b8b14a117082610a1c655952d63fa7b914c0b39eedc450e12c7",
+            "documents": 283,
+            "max_document_tokens": 2751,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "bdb611f0638e0e4c261c8f54f7e9886c2c47f78f9b0c19bdb335376f80fa6e2f"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-luna-v19-children-render-20261012-v1",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 17,
+            "reference_documents": 17,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 283,
+            "reference_documents": 283,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 283,
+            "reference_documents": 283,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {
+          "full:exact": 17,
+          "program-header:exact": 283
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 283,
+            "whole-trajectory": 283
+          },
+          "detail": {
+            "program-header": {
+              "train": 283,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-v19-children-render-20261012-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 283,
+                  "bytes": 129769,
+                  "sha256": "b1c7d26abfcf7f4ab6413e3e4a635fa84cf9b6ea0bc061bc709cdf44818f6764"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-v19-children-render-20261012-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 283,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-v19-children-render-20261012-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 283,
+                  "bytes": 179696,
+                  "sha256": "54c9dca25a9c2b3c15cb99ccc0bfd360ee14e5c645cc56fd8eeababfe63476f8"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-v19-children-render-20261012-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-native-turns-luna-v21-clinc-render-20261012-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-luna-v21-clinc-render-20261012-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-luna-v21-clinc-render-20261012-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-luna-v21-clinc-render-20261012-v1",
+        "luna-v21-clinc-intent-exact-child-actions-20261012-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 7,
+                "supervised_tokens": 612,
+                "tokens": 44961,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 431324,
+            "decoded_text_data_sha256": "e86057e3147c1545afc7b0aab1b4ea9b4378515784adfa630f302b509b0b68dd",
+            "documents": 7,
+            "max_document_tokens": 6466,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "c4f98fd278d9b24db397cdc533c31b76a8349800e7cfe4c75b58bd0fd968a2c1"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 75,
+                "supervised_tokens": 7010,
+                "tokens": 194067,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 1845763,
+            "decoded_text_data_sha256": "9e2753bf4a73cdf317e1b2f57d06a168a7c6922ddfc5a12ada5a1dc91e6a4741",
+            "documents": 75,
+            "max_document_tokens": 3458,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "9e06c508f95acb7428fe485f0ecf1f305172d8713678377936a3ba8d12f90856"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 37149,
+                "documents": 75,
+                "opening_tokens": 29556,
+                "supervised_tokens": 7593,
+                "tokens": 194067,
+                "tool_tokens": 64534
+              }
+            },
+            "decoded_text_data_bytes": 1889113,
+            "decoded_text_data_sha256": "3a8d8234bd0df209f6f9da8952ea4f9c4bf5fa309a34ec00578e461ff5d1528c",
+            "documents": 75,
+            "max_document_tokens": 3458,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "ada74584a56c913172fea307c79b3f4eb96eb39f188abfdbbf25246eb9056f78"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-luna-v21-clinc-render-20261012-v1",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 7,
+            "reference_documents": 7,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 75,
+            "reference_documents": 75,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 75,
+            "reference_documents": 75,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {
+          "full:exact": 7,
+          "program-header:exact": 75
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 75,
+            "whole-trajectory": 75
+          },
+          "detail": {
+            "program-header": {
+              "train": 75,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-v21-clinc-render-20261012-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 75,
+                  "bytes": 29992,
+                  "sha256": "18efe9917ebb86c66e947a6a8a4ee37ba48cabf8ae83372ac102cabe44bdff44"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-v21-clinc-render-20261012-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 75,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-v21-clinc-render-20261012-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 75,
+                  "bytes": 43231,
+                  "sha256": "7d06aa8324a6c41f9404a5a5de0b973b73fd81e3ee5664f8467530aaa4a07aa5"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-v21-clinc-render-20261012-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-native-turns-luna-v24-clinc-render-20261012-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-luna-v24-clinc-render-20261012-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-luna-v24-clinc-render-20261012-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-luna-v24-clinc-render-20261012-v1",
+        "luna-v24-clinc-intent-reviewed-child-actions-20261012-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 19,
+                "supervised_tokens": 1706,
+                "tokens": 122552,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 1174728,
+            "decoded_text_data_sha256": "b3bff2e76a99cbee1d1bb0a13387e6698acffc5e6e9f4c61ca7e6bad922b5844",
+            "documents": 19,
+            "max_document_tokens": 6720,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "ac5bdfea07d6048b0fb2e6362f024722cf16823e00bdfa74a1d02c887af591ce"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 371,
+                "supervised_tokens": 34280,
+                "tokens": 984057,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 9327609,
+            "decoded_text_data_sha256": "15e038423b383a47a66450815b0eb5b1318002f52f143481ac9a8d99f618cb96",
+            "documents": 371,
+            "max_document_tokens": 4611,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "68f7eb2fa07641789e8c4634fb08a0753839beedcd0a38637a9555ac63b4008e"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-luna-v24-clinc-render-20261012-v1",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 19,
+            "reference_documents": 19,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 371,
+            "reference_documents": 371,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {
+          "full:exact": 19,
+          "program-header:exact": 371
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 371
+          },
+          "detail": {
+            "program-header": {
+              "train": 371,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-v24-clinc-render-20261012-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 371,
+                  "bytes": 133345,
+                  "sha256": "9a72eb9cd414debf05579fd09031641dd13626ce94232f4b705f1d19e79de2d9"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-luna-v24-clinc-render-20261012-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1",
+        "pop-static-folder-edit-large-s52027-native-20261013-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 388,
+                "supervised_tokens": 13219,
+                "tokens": 2074212,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 25536491,
+            "decoded_text_data_sha256": "90ac95f25e081a0ed0c696153de238784c6150a2363bf93551792c1ad68131b6",
+            "documents": 388,
+            "max_document_tokens": 8981,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "e38fc20630af865879132fcfb3b6ce1bc1904120c41149e65f839d3d10f52c15"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1732,
+                "supervised_tokens": 65482,
+                "tokens": 1738773,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 39400864,
+            "decoded_text_data_sha256": "35917b1e02e6c47c736c6e320dbb822dd78b66f52b6cbaa4b6890d4fc861310f",
+            "documents": 1732,
+            "max_document_tokens": 4625,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "85173c25561a5a72dd9e6c6f68376c24ad6e54079837ad6041e41a29feb28e24"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 550347,
+                "documents": 866,
+                "opening_tokens": 451912,
+                "supervised_tokens": 94060,
+                "tokens": 913780,
+                "tool_tokens": 147512
+              }
+            },
+            "decoded_text_data_bytes": 43589372,
+            "decoded_text_data_sha256": "ea6719da393c8c787ec8777daa86fe40a4ac8ab7b6699778038384b78fb93c4f",
+            "documents": 866,
+            "max_document_tokens": 4625,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "3a788b513d06b45981a3c09d938ccabc19d228094b8750a33b190cfe32e07659"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1",
+        "student": "lfm3",
+        "identical_documents": false,
+        "views": {
+          "full": {
+            "documents": 388,
+            "reference_documents": 388,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 1732,
+            "reference_documents": 1712,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 20
+          },
+          "whole-trajectory": {
+            "documents": 866,
+            "reference_documents": 856,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 10
+          }
+        },
+        "target_parse": {
+          "full:exact": 388,
+          "program-header:exact": 1732
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 1732,
+            "whole-trajectory": 866
+          },
+          "detail": {
+            "program-header": {
+              "train": 1732,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 1732,
+                  "bytes": 400516,
+                  "sha256": "3e53d37a4709c5575d449431082be43edc35b4f6453f4c6c8f4745a1738b604f"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 866,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 866,
+                  "bytes": 583035,
+                  "sha256": "bd14ca8bcb9c094dea5bf18c047ebabc006355a6bb056807f09fbc42ad1d5ef1"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-native-turns-pop-v43-static-render-20261011-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-pop-v43-static-render-20261011-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-pop-v43-static-render-20261011-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-pop-v43-static-render-20261011-v1",
+        "luna-v43-static-reference-controller-20261011-v2",
+        "static-inline-iterate-reference-20261011-v2",
+        "luna-v43-suffix69-native-child-sft-401-20261011-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 96,
+                "supervised_tokens": 5336,
+                "tokens": 584002,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 5520127,
+            "decoded_text_data_sha256": "62b829c75dcdc41028c19109c045b9f7fcdb94bc0732e10005b24136731ea11a",
+            "documents": 96,
+            "max_document_tokens": 9853,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "ae066c75ccc1a082fa06534062fc4842868f9406127733ae10d533d5c7d8cd08"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1761,
+                "supervised_tokens": 103833,
+                "tokens": 3384083,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 31943763,
+            "decoded_text_data_sha256": "b2d1109a33db735aec79341770dfd621fadac565e5c88cad768865b0a71987c8",
+            "documents": 1761,
+            "max_document_tokens": 3259,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "c3d719ab1b0491b1182f5d41dc378ffee48faeaee62c33fd396cf40de25af172"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 380782,
+                "documents": 1121,
+                "opening_tokens": 259218,
+                "supervised_tokens": 115890,
+                "tokens": 2342333,
+                "tool_tokens": 906259
+              }
+            },
+            "decoded_text_data_bytes": 23869863,
+            "decoded_text_data_sha256": "200f5c861bd13ff20d19e50d7912936d6195c48dca8393f1113bc85275a1bf3a",
+            "documents": 1121,
+            "max_document_tokens": 3259,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "4f9c3e55b04aac7820368b12887d55f5e50e02f110d9b68311adcd33898e09a2"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-pop-v43-static-render-20261011-v1",
+        "student": "lfm3",
+        "identical_documents": false,
+        "views": {
+          "full": {
+            "documents": 96,
+            "reference_documents": 96,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 1761,
+            "reference_documents": 1739,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 22
+          },
+          "whole-trajectory": {
+            "documents": 1121,
+            "reference_documents": 1112,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 9
+          }
+        },
+        "target_parse": {
+          "full:exact": 96,
+          "program-header:exact": 1761
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 1761,
+            "whole-trajectory": 1121
+          },
+          "detail": {
+            "program-header": {
+              "train": 1761,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-pop-v43-static-render-20261011-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 1761,
+                  "bytes": 453159,
+                  "sha256": "780832a4adb840d9a12f255627aba6ecb91d433e38f786349bb55e408f1a2ec8"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-pop-v43-static-render-20261011-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 1121,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-pop-v43-static-render-20261011-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 1121,
+                  "bytes": 685073,
+                  "sha256": "eb66d50d26bba85739f466ce18deb7a3ae0533e4afeb7d8a8378a22732036d2d"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-pop-v43-static-render-20261011-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "natlang-native-turns-refine-render-20261011-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/natlang-native-turns-refine-render-20261011-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render natlang-native-turns-refine-render-20261011-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "natlang-native-turns-refine-render-20261011-v1",
+        "refine-judge-exact-20261009-v1",
+        "refine-author-static-20261009-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 53,
+                "supervised_tokens": 5505,
+                "tokens": 16943,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 182932,
+            "decoded_text_data_sha256": "9ea8ade4e667086bba1325ec3f3e925a73d65a4e7dcf38b5ad8ac9c9bc1902e8",
+            "documents": 53,
+            "max_document_tokens": 4168,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "76453d4e0c4c6924dc33cbb8fb9f340fb7c227ad3340bf3a6bd5a16959a424fa"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1048,
+                "supervised_tokens": 47732,
+                "tokens": 214312,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 2616919,
+            "decoded_text_data_sha256": "84a201044e41109a871050ca2c39d39448300b3b883824583ff11588745b8256",
+            "documents": 1048,
+            "max_document_tokens": 4701,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "5264469f1019bde1e75c66237be0c24c8225a7f00d51fc3007cfc6f0fdfa1208"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 50876,
+                "documents": 1048,
+                "opening_tokens": 0,
+                "supervised_tokens": 50876,
+                "tokens": 214312,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 2945987,
+            "decoded_text_data_sha256": "cdb6ac4a076247ff3e3e224e15551cbb05fb9e55064880b7a42520eecfa148f4",
+            "documents": 1048,
+            "max_document_tokens": 4701,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "9ce0e256a20df7be50aff9efabdaa1ebc025e4e827202d61b2edd7b977b38ace"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "natlang-native-turns-refine-render-20261011-v1",
+        "student": "lfm3",
+        "identical_documents": false,
+        "views": {
+          "full": {
+            "documents": 53,
+            "reference_documents": 1048,
+            "same_order": 0,
+            "only_reference": 995,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 1048,
+            "reference_documents": 1048,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 1048,
+            "reference_documents": 1048,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {
+          "full:exact": 53,
+          "program-header:exact": 1048
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 1048,
+            "whole-trajectory": 1048
+          },
+          "detail": {
+            "program-header": {
+              "train": 1048,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-refine-render-20261011-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 1048,
+                  "bytes": 158259,
+                  "sha256": "f8d1b725cedd7194bc588152b30039c2fe52c80ae89d2e3c1b41d2a0190eccbb"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-refine-render-20261011-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 1048,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-refine-render-20261011-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 1048,
+                  "bytes": 278486,
+                  "sha256": "896cc85ee2911e21a68ca62fcf14874ac03f8025e92533437de8e5b0f106db30"
+                },
+                {
+                  "path": "runs/lfm3-renders/natlang-native-turns-refine-render-20261011-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "qad-student-root-recovery-s52052-render-20261014-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/qad-student-root-recovery-s52052-render-20261014-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render qad-student-root-recovery-s52052-render-20261014-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "qad-student-root-recovery-s52052-render-20261014-v1",
+        "qad-student-root-recovery-s52052-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 17,
+                "supervised_tokens": 1414,
+                "tokens": 112659,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 1084319,
+            "decoded_text_data_sha256": "93e529310ac4f40db52ade634e813edd29c6a5b7db4d4e56d12fea4d884767dd",
+            "documents": 17,
+            "max_document_tokens": 8021,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "72890970686b7ed656d64fc59bd3793e5324f674a71c3df9cf047e9dd9358a75"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 57,
+                "supervised_tokens": 6418,
+                "tokens": 127966,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 1243818,
+            "decoded_text_data_sha256": "b2d43103e18975a25eb97df7186e618fbd391664cbc98534fd3cb9b30bde71a8",
+            "documents": 57,
+            "max_document_tokens": 4486,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "de095ec9a56abbd11ff1ad7bb897a934d4ef5d698f56112b01bba26c7c63280b"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 24955,
+                "documents": 39,
+                "opening_tokens": 17041,
+                "supervised_tokens": 7914,
+                "tokens": 82234,
+                "tool_tokens": 10171
+              }
+            },
+            "decoded_text_data_bytes": 830454,
+            "decoded_text_data_sha256": "beeb748fd53b110d3e9c774875d9337934570b014c1a1d119b47b70e8c96cb2c",
+            "documents": 39,
+            "max_document_tokens": 4486,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "10676d1496610486cb1cb0e0462fa227c791db838e3632300597aa4dd54ef7d7"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "qad-student-root-recovery-s52052-render-20261014-v1",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 17,
+            "reference_documents": 17,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 57,
+            "reference_documents": 57,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 39,
+            "reference_documents": 39,
+            "same_order": 0,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {
+          "full:exact": 17,
+          "program-header:exact": 57
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 57,
+            "whole-trajectory": 39
+          },
+          "detail": {
+            "program-header": {
+              "train": 57,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/qad-student-root-recovery-s52052-render-20261014-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 57,
+                  "bytes": 31448,
+                  "sha256": "e6f91447592a503f8354867180cbf90715bc6e67f3f66e975aca525b274fca83"
+                },
+                {
+                  "path": "runs/lfm3-renders/qad-student-root-recovery-s52052-render-20261014-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 39,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/qad-student-root-recovery-s52052-render-20261014-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 39,
+                  "bytes": 37807,
+                  "sha256": "c0b5693984a848a4ca7396b1fbaac059294d5dce609162e2a19f82888bc4b2c9"
+                },
+                {
+                  "path": "runs/lfm3-renders/qad-student-root-recovery-s52052-render-20261014-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "sol-repair-pilot-s52106-s52113-render-20261015-v1-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-renders/sol-repair-pilot-s52106-s52113-render-20261015-v1",
+      "include": [
+        "receipt.json",
+        "student-verification.json",
+        "render-policy-binding.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/*/*",
+        "parts/*/receipt.json",
+        "parts/*/render-policy-binding.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl",
+        "native-graphs.sh",
+        "native-graphs/*/receipt.json",
+        "native-graphs/*/*/native-graphs.jsonl.zst"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "admission": "lfm3 render of the registered render sol-repair-pilot-s52106-s52113-render-20261015-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+      "training_admission": true,
+      "derived_from": [
+        "sol-repair-pilot-s52106-s52113-render-20261015-v1",
+        "sol-repair-pilot-s52106-s52113-curated-20261015-v1"
+      ],
+      "renders": {
+        "full": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 4,
+                "supervised_tokens": 335,
+                "tokens": 30541,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 297048,
+            "decoded_text_data_sha256": "9543ae368973f078206e692ad88ecd29641b63432e5779f233904ca6ecc150a4",
+            "documents": 4,
+            "max_document_tokens": 7914,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "4651eb5a0c14ff38912a629d0365dfe752967aeb4a4b9b4e181dcb88b859d232"
+          }
+        },
+        "program-header": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 18,
+                "supervised_tokens": 1491,
+                "tokens": 43448,
+                "tool_tokens": 0
+              }
+            },
+            "decoded_text_data_bytes": 423809,
+            "decoded_text_data_sha256": "ab3fb71edcc5d3b057a41368754f233b4114615e893a73a39ce2daaec0883207",
+            "documents": 18,
+            "max_document_tokens": 3870,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "9a27bb9bcd75b55a49925ec39341f84ac9bc8628c6f354695349495c56f4d8f1"
+          }
+        },
+        "whole-trajectory": {
+          "lfm3": {
+            "by_split": {
+              "train": {
+                "assistant_tokens": 9541,
+                "documents": 14,
+                "opening_tokens": 7120,
+                "supervised_tokens": 2421,
+                "tokens": 30083,
+                "tool_tokens": 3641
+              }
+            },
+            "decoded_text_data_bytes": 300216,
+            "decoded_text_data_sha256": "a6846e515931c8d759cc7c1b55afb22949d9f96cd3315d58eb098d8de096a5f6",
+            "documents": 14,
+            "max_document_tokens": 3870,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "8e18ead19f1bec7d36c4177d086d4b833104762be3b1aff8d36b1337fd225375"
+          }
+        }
+      },
+      "student_rerender": {
+        "reference_render": "sol-repair-pilot-s52106-s52113-render-20261015-v1",
+        "student": "lfm3",
+        "identical_documents": true,
+        "views": {
+          "full": {
+            "documents": 4,
+            "reference_documents": 4,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "program-header": {
+            "documents": 18,
+            "reference_documents": 18,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          },
+          "whole-trajectory": {
+            "documents": 14,
+            "reference_documents": 14,
+            "same_order": 1,
+            "only_reference": 0,
+            "only_student": 0
+          }
+        },
+        "target_parse": {
+          "full:exact": 4,
+          "program-header:exact": 18
+        }
+      },
+      "native_graph_views": {
+        "lfm3": {
+          "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+          "views": {
+            "program-header": 18,
+            "whole-trajectory": 14
+          },
+          "detail": {
+            "program-header": {
+              "train": 18,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/sol-repair-pilot-s52106-s52113-render-20261015-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+                  "rows": 18,
+                  "bytes": 10929,
+                  "sha256": "76516be7132d61603964193c867cd4d65df604afd4a496e558490b5fda8fbac0"
+                },
+                {
+                  "path": "runs/lfm3-renders/sol-repair-pilot-s52106-s52113-render-20261015-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            },
+            "whole-trajectory": {
+              "train": 14,
+              "test": 0,
+              "outputs": [
+                {
+                  "path": "runs/lfm3-renders/sol-repair-pilot-s52106-s52113-render-20261015-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+                  "rows": 14,
+                  "bytes": 13515,
+                  "sha256": "235a0643ace896fdf6a8e3a62bc46edcf805f76e1b6804f614b496e93d8123c1"
+                },
+                {
+                  "path": "runs/lfm3-renders/sol-repair-pilot-s52106-s52113-render-20261015-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+                  "rows": 0,
+                  "bytes": 13,
+                  "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+                }
+              ],
+              "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+              "role_token_ids": [
+                125033,
+                125034,
+                125035,
+                125036
+              ]
+            }
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
