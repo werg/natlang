@@ -111,6 +111,11 @@ they already started when the facts have changed or something better exists. Con
 
 ## Work lands on main, not in worktrees (owner, 2026-10-29)
 
+Shared-main commit hygiene: create new commits scoped to your own paths. Never
+amend, reset or rebase shared main while another strand can commit; HEAD may
+have changed since your last read. Reconcile divergent published history with
+a normal merge, preserving both strands, rather than force-pushing.
+
 No work may be lost or abandoned in worktrees: where possible, do work directly on main in the canonical checkout
 (stage only your own paths). A worktree is a short-lived tool, not a home for work: merge its commits to main
 promptly and remove it once its commits are on main and nothing live or recorded depends on it. Runs, tests and
