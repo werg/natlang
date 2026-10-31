@@ -75,11 +75,21 @@ def test_policy_max_backward_restores_optimizer_rng_all_parameters_and_reuses_pr
         assert all(p.grad is None for _,p in opt._native_named_parameters)
         again=qualify_policy_objective(model,opt,train,objective,args,config,backend=backend,
             checkpoint_sha256='b'*64,pending_batches=batches,prior_proof=ref)
-        assert again==ref and json.loads(Path(ref['path']).read_text())['parent_checkpoint_sha256']=='a'*64
+        assert again['authenticated_resume_checkpoint_sha256']=='b'*64
+        assert json.loads(Path(ref['path']).read_text())['parent_checkpoint_sha256']=='a'*64
+        from natlang_neuralese.train.native_packed_capacity import policy_capacity_baseline
+        from natlang_neuralese.train.native_resident import binding
+        carried=policy_capacity_baseline(again,checkpoint_sha256='b'*64,objective_binding=objective.binding(),
+            source_binding=binding(train.path),cotangent_mode='plain' if cotangent_backend=='plain' else 'vjp',
+            retained_gradients=getattr(args,'accumulate_batches',1)>1)
+        assert carried['proof_parent_checkpoint_sha256']=='a'*64 and carried['continuation_checkpoint_sha256']=='b'*64
         saved_bytes=Path(ref['path']).read_bytes();Path(ref['path']).unlink()
         portable=qualify_policy_objective(model,opt,train,objective,args,config,backend=backend,
             checkpoint_sha256='b'*64,pending_batches=batches,prior_proof=ref)
-        assert portable==ref
+        assert portable['authenticated_resume_checkpoint_sha256']=='b'*64
+        assert policy_capacity_baseline(portable,checkpoint_sha256='b'*64,objective_binding=objective.binding(),
+            source_binding=binding(train.path),cotangent_mode='plain' if cotangent_backend=='plain' else 'vjp',
+            retained_gradients=getattr(args,'accumulate_batches',1)>1)['proof_parent_checkpoint_sha256']=='a'*64
         bad=copy.deepcopy(ref);bad['proof']['passed']=False
         with pytest.raises(ValueError,match='payload changed'):
             qualify_policy_objective(model,opt,train,objective,args,config,backend=backend,

@@ -934,7 +934,9 @@ def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backe
             if previous['parent_checkpoint_sha256']!=checkpoint_sha256 and prior_proof is None:
                 raise ValueError('policy capacity proof lacks its authenticated saved continuation')
             return {**({'path':str(candidate.resolve()),'sha256':prior_proof['sha256']} if not candidate.exists() else binding(candidate)),
-                'proof':previous,'proof_sha256':digest(previous)}
+                'proof':previous,'proof_sha256':digest(previous),
+                **({'authenticated_resume_checkpoint_sha256':checkpoint_sha256}
+                   if prior_proof is not None and previous['parent_checkpoint_sha256']!=checkpoint_sha256 else {})}
     examples=[list(train.iter_indices(list(indices)))for indices in groups]
     result={'schema':'natlang.native-policy-capacity-proof/1',**scope,
         'parent_checkpoint_sha256':checkpoint_sha256,'passed':False,'optimizer_updates':0,
