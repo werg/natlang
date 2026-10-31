@@ -94,18 +94,102 @@ Pick these up from their files/units, not from the agents:
    55 DataBench cases). Verification units `broadrl-v3-*`. Plan/notes `plans/neuralese/BROAD_RL_TASKS_20261031.md`.
    Not done: decontaminated big math sets; KodCode/verifiable-coding need a Python runner; measure live-model
    false rejections of correct paraphrases from RL rejects.
-3. **Successor SFT mixture v4:** `plans/neuralese/LFM3_DATA_COVERAGE_AUDIT_20261031.md` (build commands at the end),
-   policy `training/neuralese/mixtures/lfm3-joint-sft-mixture-policy-v4.json`. Running low-priority: render queue
-   `lfm3-data-queue-loop5`, coding v2 (`lfm3-cov-coding-v2`, 12/repo), port records (`/tmp/cov-port-s4.sh` →
-   conversion of all 45 families), acquired sessions (`lfm3-cov-acq2-0/1` → `acquired-sessions-lfm3-20261031-v2`).
-   Defaults: `--serving-entry mix`, family loss shares 40/40/12/8 with cap 8. Open: D12 regrade hold; D24 exports
-   only on a CoreWeave `/work` volume; communication data far below its 40% share. native-sft-v13-r2 source was
-   recovered to `/mnt/external/natlang-lfm3-data-20261028/native-sft-v13-r2-recovered-20261031/`.
+3. **Successor SFT mixture v4 / coverage repair** (Claude data-coverage agent; audit and full history in
+   `plans/neuralese/LFM3_DATA_COVERAGE_AUDIT_20261031.md` sections 6+, build commands at its end).
+   - **Done (on main):** register crash fix a08e9eae6; per-document exact subset incl. parts renders 892fb2986;
+     reference-free verify 3e4263c2d; gemini registry reason dd0eac29f; un-awaited false positives 78e232aed;
+     policy v4 + builder (component carve, family caps 4%/cluster 24, one prompt view per decision, bounded
+     external-agent tier) d66f2ce5a; logical-family declared/1 objective from exact own-output census
+     (`build_logical_family_objective.py`, targets 40/40/12/8, true cap 8 with redistribution) a1dc24a4b+bb61df6fd;
+     refine-judge crisp labels verified a1dc24a4b; `--serving-entry mix` default + full-sample 1.0 for serving
+     renders bb61df6fd; prompt-view verify of every train leaf 86ef270e6; LFM3 acquired-session re-encode
+     (`convert_acquired_sessions_student.py`, follows the 5,526 admitted LFM2.5 receipts incl. history-keep;
+     LFM3-unrepresentable call names counted as render-pending) bb61df6fd; S3 subset resumable 9885d7c91.
+     ts-host/dist rebuilt at 5f8eae420 (schemaOf). Render queue: 92 renders registered + ~24 graphed awaiting the
+     loop's 30-min register pass.
+   - **Running (ledger, low):** `lfm3-data-queue-loop5` (render queue driver, `runs/lfm3-renders/queue.json`;
+     serving re-renders of v13-r2 [from the recovered source], static-s7k, Search/OWL, 10 gemini `-r2`);
+     `lfm3-cov-coding-v2` (coding sample per-repo 12 + render → queue item `swe-rebench-coding-mix-render-20261028-v2`;
+     then set the v1 item to a retired status: v2 is its superset); `lfm3-cov-acq2-0/1` (acquired sessions →
+     `/mnt/external/natlang-lfm3-data-20261028/acquired-sessions-lfm3-20261031-v2`, logs `convert-{0,1}.log` there,
+     resumable); `lfm3-cov-port-s4-chain` (S3 port-record subset at 100k/family into
+     `.../port-records-s4-20261031/records` [12/45 families done, resumes], then `port_record_calls.sh` →
+     `.../port-record-calls-s4-20261031`). No plain-bash drivers remain.
+   - **Remaining v4 build:** (a) rerun `build_lfm3_joint_sft.py score-renders` and `score-teachers` (scores dir
+     `runs/lfm3-mixture/scores/idiom-<sha12 of idiom_scores.py>`, currently `idiom-717f2f18e004`, 187 files) once the
+     renders above are graphed; (b) `convert_acquired_sessions_student.py summary --exports
+     /home/werg/data/acquired-sessions-lfm3-20261031-exports-v2.json --out-root .../acquired-sessions-lfm3-20261031-v2
+     --out S.json`, write its train outputs as a `--bounded` JSON list `{mix: external-agent, path, family: Dxx}`;
+     (c) register the port-record-calls-s4 corpus and render it with `student_rerender.py add` (serving mix;
+     single-shape template, downweight roots); (d) `build_lfm3_joint_sft.py build --out runs/lfm3-mixture/joint-sft-v4
+     --include-teachers --bounded <list>` (policy v4 default; runs prompt-view verify, CE, logical-family objective,
+     geometry, learner inputs); (e) protection-union check, registration/manifests, composition report by source
+     and task shape (target ≥ ~900k docs, ~360M supervised tokens).
+   - **Open holds/problems:** D12 oracle-regrade hold (6,713 rows, not relaxed); D24 acquired exports only on a
+     CoreWeave `/work` volume (blocked on cloud); communication own-output mass far below 40% (objective caps at 8,
+     depends on the Neuralese graph helper's builds); native-sft-v13-r2 original source lost — rows recovered to
+     `/mnt/external/natlang-lfm3-data-20261028/native-sft-v13-r2-recovered-20261031/` (`provenance.json`); keep
+     `stale-render-state-20261031/natlang-native-turns-v13-r2-render-20261011-v1` until that render registers.
+     External disk `sda` I/O pressure ~50% slows everything; an unbounded `bfs /` crawl was killed.
 4. **Broad Neuralese graphs:** `plans/neuralese/NEURALESE_BROAD_GRAPHS_20261031.md`; units `bgraph-*`
    (rest27 relaunched with 24 GB after 8 GB OOMs; big2 converter fixes; resumable phases 49b061636, 6a2e1e9a2).
 5. **Learner efficiency (cloud helper):** profile/cut the ~11-min single-core prep in `rl/native_stage.py`;
    train long graphs at lower peak without deferral (checkpoint-input file offload; exact gradient parity).
    GPU window result → `debug/gpu-window-1/result.json`.
+
+### 2a. Cloud RL and learner efficiency (state at handoff)
+**Cloud readiness.** Everything except GPU entitlement is in place and checked: the CPU pipeline check on cw3 passed
+(env build, runtime, custody, imports, parent fetch from W&B, export -> W&B -> DGX GET -> sha-verified hub copy).
+Run file `/home/werg/data/lfm3-rl-cloud/run.json` (v1 copy `run.v1-withdrawn.json`): lineages smoke-jolt,
+jolt-c1, sd-c1, jolt-c2, sd-c2 on broad source v2, all fresh from fresh-init `5ff07638`; jolt-r1c/sd-r1c are
+continuation entries not to launch unless the supervisor decides so. First steps once an account is entitled (the
+autopilot does 1 and 3 by itself and sends an urgent coord on entitlement and on smoke failure):
+1. Smoke: `rl_cloud.py launch RUN smoke-jolt --rounds 1` (autopilot, after a rebundle at HEAD); passed when its
+   export is DGX-verified (`rl_cloud.py status RUN`).
+2. SGLang GPU parity on the cloud GPU before trusting actor samples: `scripts/neuralese/check_sglang_lfm3*.py`,
+   producer/adapter/decide parity and actor capture against fork `8f2fd5894` (never run; DGX GPU was busy).
+3. Launch jolt-c1/sd-c1/jolt-c2/sd-c2 (autopilot balances accounts). Rebuild the bundle at a main commit that
+   contains the learner fixes below (db204a9aa, 22eb6a8ed) and runtime >= 542df3c08 (v2 checks, node:sqlite).
+
+**Exporter and blob retention.** `rl-cloud-export-4` GETs each lineage's newest export, verifies sha, keeps a hub
+copy, and runs `rl_cloud.py prune` each pass: it keeps the newest DGX-verified export per lineage and anything newer,
+seed blobs, current and cached inputs, and every blob committed in the last 24 h, and never a blob leased through
+`scripts/coreweave/retention_leases.py` (namespace `.cloud/standalone-*`; launches lease parent+inputs as
+`launch:<job>`, released on sandbox end). Intent is durable in `.cloud/rl-blob-retirement.json` before deletes;
+absence is checked against the full W&B listing (W&B `files(names=)` echoes absent names; deleting an absent file
+is an opaque internal error). The 24 h grace fixes a race that deleted the just-uploaded v1 cases blob (8e79f8eca).
+
+**Learner prep speed (done, on main).** cProfile of jolt-r1 r6 admission: `prepare_objective` 353 s for 72/83
+episodes (deepcopy of per-token captures 165 s, sampler top-k decode 66 s, compile_graph 42 s, duplicate canonical
+hash 32 s, parse_graph 29 s) -> 184 s (db204a9aa: one turn list + one hash per episode, pickle copies, numpy top-k
+validation). The objective (1.4 GB at the 120k cap, 2.8 GB at 180k: per-action base64 top-k) was parsed 4-5x and
+canonically re-hashed ~5x per update (`binding()`: ~38 s plus a second ~9 GB copy each) -> one parse per process
+shared by file hash, `binding()` = strict-stat file sha (db204a9aa, 22eb6a8ed); deferral runs in memory before a
+single write. Remaining host-side costs: compile_graph/parse_graph per episode (~70 s), top-k decode (~25 s),
+the objective's JSON size (a binary top-k sidecar would cut most of it), and the per-round read-only policy
+capacity check (130-500 s of GPU per case, up to 3-4 cases; could reuse a passed proof across rounds of equal
+runtime/geometry). The profiled run stopped at episode 72 on a JOLT custody mismatch caused by today's protected
+union change, not by the code. Not yet in a runtime: build one at main >= 22eb6a8ed.
+
+**Long-graph memory (measurement pending).** Approach: existing exact file storage of activation-checkpoint inputs
+(`--checkpoint-input-offload --checkpoint-input-offload-directory DIR`; CheckpointFileStore: fdatasync +
+FADV_DONTNEED per tensor, so no page-cache growth on unified memory). Estimate: layer checkpoint inputs are
+24 x tokens x 2048 x 2 B (~17.7 GB at 180k packed tokens) of the ~63 GB peak. GPU window script
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/gpu-window-command.sh` (inputs copied to `debug/gpu-window-1/inputs`;
+parent = current jolt-r1 checkpoint at run time, with the trainer's actor-identity check rebound for measurement
+only) runs the real trainer set-up on the largest packed r6 episode twice (device vs file offload) with production
+retained gradients, bitwise named-gradient + loss parity, CUDA/host peaks and time, no optimizer step; result with
+a `conclusions`/`verdict` block in `debug/gpu-window-1/result.json`, log `logs/gpu-window-1.log`. Needs >= 30 GB
+free NVMe (checked). If the verdict is ADOPT: set `checkpoint_input_offload: true` and
+`checkpoint_input_offload_directory` (NVMe scratch) in both lineages' learner trainer parameters, then raise
+`--max-graph-forward-tokens` by the measured headroom (fewer deferred episodes). Not started: smaller recompute
+peaks (sequence-chunked MLP in the checkpointed layer) if offload alone is not enough.
+
+**Open: text->state lowering.** Child calls declared `Neuralese<string>` that return computed text get a block
+written by the runtime writer (graph `block_write`, `source_kind: typed-text-result`, `producer: null`) that is not
+in the sampling capture. These episodes are now deferred whole (c1c929610/cd5416516; 6/96 in sd-r1 r8). The fix
+is either a differentiable text->state lowering in the whole-graph learner or recording the encoded state as an
+explicit stop-gradient external origin with its exact consumer bindings.
 
 ## 3. Owner-pending items
 - GPU entitlement for cw1..cw4 (blocks all cloud work).
