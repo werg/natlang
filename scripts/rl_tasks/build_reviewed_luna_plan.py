@@ -3,7 +3,7 @@
 
 The planner admits only train rows already present in a verifier-produced
 cases.jsonl, rechecks each candidate against current ProtectedWorlds, samples
-balanced operation × upstream-world cells, writes the exact row inventory,
+balanced codebase × operation × upstream-world cells, writes the exact row inventory,
 and emits an unapproved plan draft. A parent must review and approve it before
 the reviewed dispatcher can start any provider request.
 """
@@ -13,7 +13,7 @@ import argparse
 import hashlib
 import json
 import sys
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from pathlib import Path
 from typing import Any
 
@@ -71,12 +71,17 @@ def _primary_world_group(row: dict) -> str:
         raise ValueError(f'{row.get("id")}: complete source_groups are required')
     # The exact upstream group is kept in the row and plan inventory. This key
     # is only used to balance selection; it never rewrites group identities.
-    return groups[0]
+    return next((group for group in groups if not group.startswith(('codebase:', 'world:'))), groups[0])
+
+
+def _program_id(row: dict) -> str:
+    identifier = (row.get('curriculum', {}).get('external') or {}).get('program_id')
+    return identifier if isinstance(identifier, str) and identifier else '__unknown_codebase__'
 
 
 def select_balanced_train(rows: list[dict], *, max_cases: int, seed: int,
                           protected: ProtectedWorlds) -> tuple[list[dict], list[dict]]:
-    candidates, receipts = [], []
+    candidates, receipts, seen_ids = [], [], set()
     for row in rows:
         if row.get('split') != 'train':
             continue
@@ -84,46 +89,54 @@ def select_balanced_train(rows: list[dict], *, max_cases: int, seed: int,
         level = oracle if isinstance(oracle, str) else oracle.get('level') if isinstance(oracle, dict) else None
         if level == 'judged':
             raise ValueError(f'judged row is mixed into the exact source: {row.get("id")}')
+        if row.get('id') in seen_ids:
+            raise ValueError(f'duplicate training case identity: {row.get("id")}')
+        seen_ids.add(row.get('id'))
         receipt = protected.check(row)
         receipts.append({'case_id': row['id'], 'source_groups': row['source_groups'], 'receipt': receipt})
         operation = (row.get('curriculum', {}).get('external') or {}).get('operation')
         if not isinstance(operation, str) or not operation.endswith('.nl'):
             raise ValueError(f'{row.get("id")}: actual operation path is required')
-        candidates.append((operation, _primary_world_group(row), row))
+        candidates.append((_program_id(row), operation, _primary_world_group(row), row))
     if not candidates:
         raise ValueError('verified source has no train rows after split filtering')
     if max_cases < 1:
         raise ValueError('max_cases must be positive')
     max_cases = min(max_cases, len(candidates))
-    buckets: dict[tuple[str, str], list[dict]] = defaultdict(list)
-    for operation, group, row in candidates:
-        buckets[(operation, group)].append(row)
+    buckets: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
+    for program, operation, group, row in candidates:
+        buckets[(program, operation, group)].append(row)
     for key, bucket in buckets.items():
         bucket.sort(key=lambda row: hashlib.sha256(f'{seed}|{key}|{row["id"]}'.encode()).hexdigest())
-    operations = sorted({key[0] for key in buckets})
-    groups_by_operation = {op: sorted(group for candidate_op, group in buckets if candidate_op == op)
-                           for op in operations}
+    programs = sorted({key[0] for key in buckets})
+    operations = {program: deque(sorted({key[1] for key in buckets if key[0] == program}))
+                  for program in programs}
+    groups = {(program, operation): deque(sorted(key[2] for key in buckets
+              if key[:2] == (program, operation)))
+              for program in programs for operation in operations[program]}
+    positions: Counter[tuple[str, str, str]] = Counter()
     selected = []
-    group_positions = {operation: 0 for operation in operations}
-    bucket_positions: Counter[tuple[str, str]] = Counter()
+    # First rotate codebases, then each codebase's operations and upstream worlds.
+    # A package with many public roots must not drown out a different application.
     while len(selected) < max_cases:
         advanced = False
-        for operation in operations:
-            groups = groups_by_operation[operation]
-            start = group_positions[operation]
-            for offset in range(len(groups)):
-                position = (start + offset) % len(groups)
-                group = groups[position]
-                key = (operation, group)
-                bucket = buckets[key]
-                candidate_index = bucket_positions[key]
-                if candidate_index < len(bucket):
-                    selected.append(bucket[candidate_index])
-                    bucket_positions[key] += 1
-                    group_positions[operation] = (position + 1) % len(groups)
-                    advanced = True
-                    if len(selected) == max_cases:
+        for program in programs:
+            found = False
+            for _ in range(len(operations[program])):
+                operation = operations[program][0]
+                operations[program].rotate(-1)
+                worlds = groups[(program, operation)]
+                for _ in range(len(worlds)):
+                    group = worlds[0]
+                    worlds.rotate(-1)
+                    key = (program, operation, group)
+                    index = positions[key]
+                    if index < len(buckets[key]):
+                        selected.append(buckets[key][index])
+                        positions[key] += 1
+                        advanced = found = True
                         break
+                if found:
                     break
             if len(selected) == max_cases:
                 break
@@ -158,10 +171,6 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
     if campaign_root.exists():
         raise ValueError(f'campaign root already exists: {campaign_root}')
     rows, verify_record = _verify_rows(source, verification)
-    program_ids = {(row.get('curriculum', {}).get('external') or {}).get('program_id') for row in rows}
-    program_ids.discard(None)
-    if len(program_ids) > 1:
-        raise ValueError('one reviewed campaign source must name one first-class codebase')
     intake_record = json.loads(intake_receipt.read_text(encoding='utf-8')) if intake_receipt else None
     if intake_record and not intake_record.get('admission_eligible'):
         raise ValueError('codebase dataset has an unresolved rights hold')
@@ -210,14 +219,17 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'launch_record': str(campaign_root / 'dispatch/launch.json'), 'authority': str(authority),
         'provider': 'openai-codex', 'model_id': 'gpt-6-luna', 'model_concurrency': 1,
         'slots': 6, 'execution_plans': True, 'reasoning_effort': 'low',
-        'prompt_rendering': 'full', 'text_neuralese_emulation': False,
+        'prompt_rendering': 'full', 'text_neuralese_emulation': True,
         'max_transport_retries': 1, 'max_turns': 60, 'max_model_requests': 384,
-        'context_tokens': 32768, 'case_seconds': 1800, 'min_free_mib': 1024,
+        # Hosted teachers author text-backed Neuralese. Native student KV is
+        # reconstructed during graph conversion/training, never claimed here.
+        'context_tokens': 32768, 'case_seconds': 1800, 'min_free_mib': 40960,
         'cases': cases,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(plan, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf-8')
     plan_sha = _sha(output)
+    counts_program = Counter(_program_id(row) for row in selected)
     counts_operation = Counter((row['curriculum']['external']['operation'] for row in selected))
     counts_world = Counter(_primary_world_group(row) for row in selected)
     return {
@@ -226,7 +238,9 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'case_source': str(selected_source.resolve()), 'case_source_sha256': _sha(selected_source),
         'verification': {'path': str(verification), 'sha256': _sha(verification), 'source_sha256': verify_record['cases_sha256']},
         'protected_worlds_digest': protected.digest, 'checked_train_rows': protection_record['checked_train_rows'],
-        'selected_rows': len(selected), 'operation_counts': dict(counts_operation),
+        'selected_rows': len(selected), 'program_counts': dict(counts_program),
+        'rows_with_unknown_codebase': counts_program.get('__unknown_codebase__', 0),
+        'operation_counts': dict(counts_operation),
         'world_group_counts': dict(counts_world), 'source_groups_preserved': True,
         'prompt_rendering': 'full', 'slots': 6, 'root_approved': False,
         'dispatch_command_after_review': f'python3 scripts/run_reviewed_luna_dispatcher.py {output.resolve()} --sha256 {plan_sha}',

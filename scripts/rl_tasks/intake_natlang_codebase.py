@@ -74,7 +74,7 @@ def _project(package: Path, metadata: dict | None = None) -> dict[str, str]:
     for path in sorted(package.rglob('*')):
         if path.is_symlink():
             raise ValueError(f'symlink in package: {path}')
-        if not path.is_file() or path.suffix not in {'.nl', '.ts'} and path.name != 'natlang.json':
+        if not path.is_file() or path.name.endswith('.d.nl.ts') or path.suffix not in {'.nl', '.ts', '.mjs'} and path.name != 'natlang.json':
             continue
         rel = path.relative_to(package).as_posix()
         if rel.startswith('../') or '\\' in rel or any(part in {'.', '..'} for part in rel.split('/')):
@@ -191,6 +191,9 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
         raise ValueError('metadata.entity_model must declare entities and relations for this codebase')
     if not isinstance(workflows, list) or not workflows:
         raise ValueError('metadata.workflows must name the codebase workflows')
+    curriculum_domain = metadata.get('curriculum_domain', 'other')
+    if curriculum_domain not in {'logic', 'relational', 'actor', 'other', 'writing'}:
+        raise ValueError('metadata.curriculum_domain must be a supported collector domain')
     split_policy = metadata.get('split_policy', 'codebase')
     if split_policy not in {'codebase', 'world'}:
         raise ValueError("metadata.split_policy must be 'codebase' or explicit 'world'")
@@ -231,7 +234,7 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
                 'family_version': 1, 'shape': f'codebase-{slug(row["task_family"], 44)}', 'variant': row.get('variant', 'base'),
                 'pair_group': row.get('pair_group'), 'split_group': (f'codebase:{program_id}:{package_revision}'
                     if split_policy == 'codebase' else f'world:{program_id}:{row["group_id"]}'),
-                'slice': 'nested_scoped', 'domain': row.get('domain') or metadata.get('domain', 'unknown'),
+                'slice': 'nested_scoped', 'domain': curriculum_domain,
                 'mode': row.get('mode', 'multi_call' if row.get('invocation_index', 0) else 'single_call'),
                 'inline': 'optional', 'evidence': {'world': [], 'retrieved': [], 'background': []},
                 'assumptions': [], 'decisive': [], 'plausible_actions': [], 'minimum_sequence': [],
@@ -242,6 +245,7 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
                              'upstream_id': row['id'], 'upstream_split': row['split'],
                              'unit': f'{program_id}:{row["group_id"]}', 'shape': f'codebase-{slug(row["task_family"], 44)}',
                              'task_family': row['task_family'], 'failure_mode': row.get('failure_mode'),
+                             'authored_domain': row.get('domain') or metadata.get('domain'),
                              'operation': root, 'program_id': program_id, 'program_revision': package_revision,
                              'invocation_index': row.get('invocation_index'), 'entity_model_sha256': _sha(json.dumps(entity_model, sort_keys=True).encode()),
                              'workflow_ids': row.get('workflow_ids', []), 'instruction_sha256': text_digest(row['task']),
