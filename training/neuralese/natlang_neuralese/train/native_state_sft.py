@@ -3739,7 +3739,8 @@ def _main(argv=None, *, requested_refresh):
                 oversize_proof = qualify_oversize_batches(model, optimizer, micro_batches,
                     args=args, backend=backend, precision=precision_pass, source_path=train.path,
                     checkpoint_sha256=sha256_file_hex_cached(policy.slot) if policy.slot.exists() else config['base_inventory_sha256'],
-                    global_step=global_step, baseline=oversize_limits)
+                    global_step=global_step, baseline=oversize_limits,
+                    objective=objective, objective_binding=objective_binding)
             except BaseException:
                 cursor = previous_cursor
                 if warmup is not None: warmup.restore()

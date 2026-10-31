@@ -22,7 +22,8 @@ def test_oversize_baseline_authenticates_exact_prefix(tmp_path):
         oversize_baseline(SimpleNamespace(entries=entries),{'path':str(p),'sha256':sha256_file_hex(p)},fallback_tokens=3)
 
 
-def test_oversize_gate_uses_actual_point_and_restores_prior_gradients(tmp_path, monkeypatch):
+@pytest.mark.parametrize('with_objective', [False, True])
+def test_oversize_gate_uses_actual_point_and_restores_prior_gradients(tmp_path, monkeypatch, with_objective):
     from natlang_neuralese.eval import native_memory
     calls=[]
     def fake(model,optimizer,cases,**kwargs):
@@ -36,11 +37,16 @@ def test_oversize_gate_uses_actual_point_and_restores_prior_gradients(tmp_path, 
     source=tmp_path/'source.json';source.write_text('{}')
     args=SimpleNamespace(cotangent_accumulator_backend='plain',checkpoint_layers=True,chunk_tokens=16,accumulate_batches=16,out=tmp_path)
     precision=(object(),'fp8',0.06,1.5)
+    objective=object() if with_objective else None
+    objective_binding={'kind':'bound-policy','sha256':'b'*64} if with_objective else None
     ref=qualify_oversize_batches(model,optimizer,[[example]],args=args,backend=None,precision=precision,
-        source_path=source,checkpoint_sha256='a'*64,global_step=62,baseline={'forward_tokens':10,'kv_slots':11})
+        source_path=source,checkpoint_sha256='a'*64,global_step=62,baseline={'forward_tokens':10,'kv_slots':11},
+        objective=objective,objective_binding=objective_binding)
     assert ref and calls[0]['cotangent_mode']=='plain' and calls[0]['precision'] is precision
     assert calls[0]['retained_gradients'] and parameter.grad is gradient
-    assert json.loads(open(ref['path']).read())['optimizer_updates']==0
+    assert calls[0]['objective'] is objective
+    proof=json.loads(open(ref['path']).read())
+    assert proof['optimizer_updates']==0 and proof['objective']==objective_binding
     assert qualify_oversize_batches(model,optimizer,[[example]],args=args,backend=None,precision=precision,
         source_path=source,checkpoint_sha256='a'*64,global_step=62,baseline={'forward_tokens':100,'kv_slots':101}) is None
 

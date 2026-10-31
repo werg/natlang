@@ -226,12 +226,15 @@ def oversize_baseline(source, prior_geometry, *, fallback_tokens, current_geomet
 
 
 def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, precision,
-                             source_path, checkpoint_sha256, global_step, baseline):
+                             source_path, checkpoint_sha256, global_step, baseline,
+                             objective=None, objective_binding=None):
     """Gate newly larger actual groups on the live model and actual QAT point, before SGD."""
     from ..eval.native_memory import qualify_capacity
     from ..common.hashing import canonical_json_sha256_hex
     from ..common.jsonio import write_json_durable
     from .native_resident import binding
+    if (objective is None) != (objective_binding is None):
+        raise ValueError('oversize capacity needs the actual objective and its bound identity together')
     batches=[]
     for batch in micro_batches:
         tokens=sum(example.plan.token_count for example in batch)
@@ -248,12 +251,13 @@ def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, 
             checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
             checkpoint_sha256=checkpoint_sha256,source_binding=binding(source_path),
             production_packing=True,retained_gradients=args.accumulate_batches>1,
-            cotangent_mode=mode,precision=precision)
+            cotangent_mode=mode,precision=precision,objective=objective)
     finally:
         for parameter,gradient in prior.values():parameter.grad=gradient
     record={'schema':'natlang.native-oversize-live-capacity/1','global_step':global_step,
             'parent_checkpoint_sha256':checkpoint_sha256,'source':binding(source_path),
             'baseline':baseline,'model_boundary':'current-live-model-before-update',
+            'objective':objective_binding,
             'capacity':report,'passed':report['passed'],'optimizer_updates':0,'earned_exposure':0,
             'scope':'whole-graph forward/backward with retained gradients; excludes optimizer-step workspace'}
     path=Path(args.out)/'oversize-capacity'/(canonical_json_sha256_hex(record)+'.json')
