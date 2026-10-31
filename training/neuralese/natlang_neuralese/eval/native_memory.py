@@ -547,8 +547,7 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
             examples=list(source.iter_indices([row['index'] for row in selected]))
             result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,chunk_tokens=args.chunk_tokens,
                 checkpoint_layers=args.checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=request['source'],objective=objective,
-                retained_gradients=getattr(args,'accumulate_batches',1)>1,production_packing=True,
-            cotangent_mode='plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp')
+                retained_gradients=getattr(args,'accumulate_batches',1)>1)
             result['passed']=result['capacity']['passed']
     except (RuntimeError,FloatingPointError,MemoryError) as error:
         if isinstance(error,CapacityStateChangedError):raise
@@ -945,7 +944,8 @@ def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backe
         result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,
             checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
             checkpoint_sha256=checkpoint_sha256,source_binding=expected['source'],objective=objective,
-            retained_gradients=getattr(args,'accumulate_batches',1)>1)
+            retained_gradients=getattr(args,'accumulate_batches',1)>1,production_packing=True,
+            cotangent_mode='plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp')
         if not result['capacity']['passed']:
             raise RuntimeError('actual policy objective exceeded its learner capacity')
         if args.fp8_training!='off':

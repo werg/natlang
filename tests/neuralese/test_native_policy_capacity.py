@@ -48,9 +48,11 @@ def actual(tmp_path,family,*,device='cpu',fp8=False,recipe='current'):
 
 
 @pytest.mark.parametrize('family',['lfm'])
-def test_policy_max_backward_restores_optimizer_rng_all_parameters_and_reuses_proof(tmp_path,family):
+@pytest.mark.parametrize('cotangent_backend',['plain','cpu_file'])
+def test_policy_max_backward_restores_optimizer_rng_all_parameters_and_reuses_proof(tmp_path,family,cotangent_backend):
     values=actual(tmp_path,family,device=os.environ.get('NATLANG_POLICY_CAPACITY_DEVICE','cpu'))
     engine,model,opt,objective,train,args,config,backend,batches=values
+    args.cotangent_accumulator_backend=cotangent_backend
     try:
         # Seed a real optimizer history before the read-only boundary.
         native_training_update(model,opt,list(train.iter_indices([0])),checkpoint_layers=True,chunk_tokens=3,objective=objective)
@@ -62,6 +64,8 @@ def test_policy_max_backward_restores_optimizer_rng_all_parameters_and_reuses_pr
             checkpoint_sha256='a'*64,pending_batches=batches)
         proof=json.loads(Path(ref['path']).read_text())
         assert proof['passed']and proof['optimizer_updates']==proof['earned_exposure']==0
+        assert proof['capacity']['production_packing'] is True
+        assert proof['capacity']['cotangent_mode']==('plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp')
         assert any(len(row['example_ids'])==2 for row in proof['capacity']['cases'])
         assert any(any(name.startswith('backbone.')for name in row['gradients'])for row in proof['capacity']['cases'])
         assert_exact(state,opt.state_dict())
