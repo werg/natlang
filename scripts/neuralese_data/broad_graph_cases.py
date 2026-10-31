@@ -915,8 +915,12 @@ def _custody_shard(task):
         _PROTECTED = ProtectedWorlds.load()
     shard, target = map(Path, task)
     marker = target.with_suffix('.custody.json')
-    if marker.exists() and json.loads(marker.read_text())['protected_sha256'] == _PROTECTED.digest:
-        return json.loads(marker.read_text())['counts']
+    try:
+        done = json.loads(marker.read_text())
+        if done['protected_sha256'] == _PROTECTED.digest:
+            return done['counts']
+    except (OSError, ValueError, KeyError):
+        pass  # absent or torn by a kill: recheck the shard
     counts, kept, omissions = collections.Counter(), [], []
     for line in open(shard):
         record = json.loads(line)
@@ -934,7 +938,8 @@ def _custody_shard(task):
     os.replace(target.with_suffix('.tmp'), target)
     target.with_suffix('.omissions.tmp').write_text(''.join(json.dumps(row) + '\n' for row in omissions))
     os.replace(target.with_suffix('.omissions.tmp'), target.with_suffix('.custody-omissions.jsonl'))
-    marker.write_text(json.dumps({'protected_sha256': _PROTECTED.digest, 'counts': dict(counts)}))
+    marker.with_suffix('.tmp').write_text(json.dumps({'protected_sha256': _PROTECTED.digest, 'counts': dict(counts)}))
+    os.replace(marker.with_suffix('.tmp'), marker)
     return dict(counts)
 
 
