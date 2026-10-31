@@ -231,8 +231,26 @@ def _admit_and_train(args,trainer):
     deferred = _defer_long_graphs(args, graphs, objective, share='--no-share-causal-prefixes' not in trainer)
     if not graphs:
         raise ValueError('every admitted native policy episode exceeds --max-graph-forward-tokens')
-    write_bytes_durable(graph_path, ''.join(json.dumps(row) + '\n' for row in graphs).encode())
-    write_json_durable(objective_path, objective)
+    from .policy_source_continuation import arrange_and_seal, finish_seal
+    transition = arrange_and_seal(args.out, graphs, objective) if args.coefficient_policy is None else None
+    if transition is not None:
+        # Seal the complete successor before replacing either predecessor. A retry
+        # can recover even if interrupted between the two atomic replacements.
+        import os
+        next_graph=args.out/'rl-native-graphs.next.jsonl'
+        next_objective=args.out/'rl-native-objective.next.json'
+        write_bytes_durable(next_graph, ''.join(json.dumps(row) + '\n' for row in graphs).encode())
+        write_json_durable(next_objective, objective)
+        transition_path=finish_seal(args.out, transition, next_graph, next_objective,
+                                    final_graph=graph_path, final_objective=objective_path)
+        os.replace(next_graph,graph_path); os.replace(next_objective,objective_path)
+        directory=os.open(args.out,os.O_DIRECTORY)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+    else:
+        write_bytes_durable(graph_path, ''.join(json.dumps(row) + '\n' for row in graphs).encode())
+        write_json_durable(objective_path, objective)
+        transition_path=None
     write_json_durable(args.out/'rl-data-receipt.json', {
         'schema': 'natlang.native-rl-admission/1',
         **({'base_native_identity':objective['base_native_identity'],'behavior_policy_sha256':objective['behavior_policy_sha256']}
@@ -269,6 +287,8 @@ def _admit_and_train(args,trainer):
     trainer_args=['--native-graphs', str(graph_path), '--held-native-graphs', str(args.held_native_graphs),
         '--objective-spec', str(objective_path), '--continue-from', str(args.continue_from),
         '--objective-continuation', '--out', str(args.out), *trainer]
+    if transition_path is not None:
+        trainer_args += ['--policy-source-continuation', str(transition_path)]
     from .diloco_contract import register_admitted_stage
     register_admitted_stage(args,trainer_args)
     # The trainer reads the admitted graphs/objective back from disk; release the preparation copies (parsed

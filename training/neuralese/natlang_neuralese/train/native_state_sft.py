@@ -1299,6 +1299,8 @@ def build_parser():
     parser.add_argument('--native-participant')
     parser.add_argument('--objective-continuation', action='store_true',
         help='explicit new source/objective stage; preserve full optimizer/RNG and start local exposure at zero')
+    parser.add_argument('--policy-source-continuation', type=Path,
+        help='authenticated append of a rolling policy source, preserving its exact per-row exposure')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--rank', type=int, default=8)
     parser.add_argument('--epochs', type=float, default=1.)
@@ -2358,6 +2360,7 @@ def _main(argv=None, *, requested_refresh):
             verify_retirement(resume, proof, checkpoint_sha256=sha256_file_hex_cached(source_pin),
                               train_sha256=source_receipts[0]['sha256'], held_sha256=source_receipts[1]['sha256'])
         checkpoint_options['source_predecessor_retirement_history'] = history if already_committed else history + [recorded]
+    policy_append = False
     if resume is not None:
         if mandatory_objective:
             checkpoint_options['_objective_required_visits']=dict((resume.get('options') or {}).get('_objective_required_visits') or {})
@@ -2441,6 +2444,25 @@ def _main(argv=None, *, requested_refresh):
         if previous.get('schedule') not in {'source-order-stream/1', 'row-visit-deficit/2'}:
             raise ValueError('native SFT checkpoint has an unsupported row-credit schedule')
         offline_tweak=mandatory_objective and args.objective_continuation and previous.get('objective_kind')==objective.kind
+        policy_append = bool(args.policy_source_continuation and policy_operation and not parent_continuation
+                             and args.objective_continuation)
+        if args.policy_source_continuation and not policy_append:
+            raise ValueError('policy source continuation needs an existing rolling policy checkpoint')
+        if policy_append:
+            from ..rl.policy_source_continuation import verify_seal, verify_objectives
+            proof=verify_seal(args.policy_source_continuation,previous=previous.get('objective') or {},
+                current=objective_binding,checkpoint=policy.slot,train_sha=train.file_sha256)
+            verified_ids=verify_objectives(proof['predecessor']['objective']['path'],objective.spec)
+            if verified_ids != set((resume.get('source_row_bindings') or {})):
+                raise ValueError('policy source continuation objective differs from earned checkpoint rows')
+            if len(verified_ids)!=proof.get('old_rows') or len(objective.rows)-len(verified_ids)!=proof.get('added_rows'):
+                raise ValueError('policy source continuation changed its declared row counts')
+            if sorted(set(objective.rows)-verified_ids)!=proof.get('added_ids'):
+                raise ValueError('policy source continuation changed its declared appended rows')
+            history=list((resume.get('options') or {}).get('policy_source_continuation_history') or [])
+            history.append({**proof,'at_global_step':int(resume.get('global_step',resume['step'])),
+                            'weights_optimizer_rng_exposure':'preserved'})
+            checkpoint_options['policy_source_continuation_history']=history
         if offline_tweak and previous.get('objective')!=objective_binding:
             transition={'from':previous.get('objective'),'to':objective_binding,
                 'optimizer_rng_exposure':'preserved','previous_stage_complete':False,
@@ -2455,7 +2477,7 @@ def _main(argv=None, *, requested_refresh):
                     for key in source_row_bindings})
             checkpoint_options['offline_objective_transition']=transition
             checkpoint_options['offline_objective_revisions'].append(transition)
-        if (parent_continuation and args.objective_continuation) or offline_tweak:
+        if (parent_continuation and args.objective_continuation) or offline_tweak or policy_append:
             stable = tuple(key for key in stable if key not in {'objective', 'batch_graphs', 'batch_tokens'})
         identity_mismatches = [key for key in stable
             if previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key)]
@@ -3035,6 +3057,10 @@ def _main(argv=None, *, requested_refresh):
         return {ident for ident in focus_active if ident in required_visits and exposure_counts.get(ident,0)<required_visits[ident]
                 and exposure_counts.get(ident,0)==focus_record['initial_credits'][ident]} if focus_record else set()
     focus_ids=pending_focus_ids()
+    policy_focus_ids = {ident for item in checkpoint_options.get('policy_source_continuation_history',[])
+                        for ident in item.get('added_ids',[]) if ident in required_visits
+                        and exposure_counts.get(ident,0)<required_visits[ident]}
+    focus_ids |= policy_focus_ids
     if focus_record:
         pending_batches=promote_focus(pending_batches,train.entries,focus_ids)
         focus_record['consumed']=[x for x in focus_record['initial_credits'] if x in focus_active and exposure_counts.get(x,0)>focus_record['initial_credits'][x]]
@@ -3052,6 +3078,8 @@ def _main(argv=None, *, requested_refresh):
     checkpoint_options['native_diversity_history']=diversity_history
     pending_batches=cohort_head_merge(train.entries,pending_batches,urgent_cohort_ids,
         priority_ids=foundation_priority_ids,focus_ids=focus_ids,batch_tokens=args.batch_tokens,batch_graphs=args.batch_graphs,schedule_offset=global_step)
+    if policy_focus_ids:
+        pending_batches=promote_focus(pending_batches,train.entries,policy_focus_ids)
     if args.memory_qualification and objective is None:
         from .native_packed_capacity import qualify_pending
         from ..eval.native_memory import capacity_identity
