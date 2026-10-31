@@ -99,6 +99,32 @@ def test_outputs_kv_hybrid_and_complete_ce_gradients_match_explicit_cached_execu
     assert model.adapter.up.weight.grad.norm()>0
 
 
+def test_bf16_sft_shares_only_raw_prefixes_and_preserves_producer_consumer_supervision():
+    model=SharedStateModel(tiny('lfm').to(dtype=torch.bfloat16),(58,59,60,61),rank=4)
+    for parameter in model.port.parameters():parameter.requires_grad_(True)
+    reference=copy.deepcopy(model);rows=episodes(empty_relay=True)
+    actual,actual_details=packed_graph_loss(model,rows,share_causal_prefixes=True,
+        checkpoint_layers=False,chunk_tokens=2)
+    expected,expected_details=packed_graph_loss(reference,rows,share_causal_prefixes=False,
+        checkpoint_layers=False,chunk_tokens=2)
+    actual.backward();expected.backward()
+    assert actual_details[0]['packed_physical_tokens'] < actual_details[0]['original_physical_tokens']
+    assert [item['supervised_tokens'] for item in actual_details] == [item['supervised_tokens'] for item in expected_details]
+    assert [item['boundary_targets'] for item in actual_details] == [item['boundary_targets'] for item in expected_details]
+    torch.testing.assert_close(actual.detach(),expected.detach(),atol=0,rtol=0)
+    actual_gradients=[];expected_gradients=[]
+    for (name,left),(other_name,right) in zip(model.named_parameters(),reference.named_parameters()):
+        assert name==other_name and (left.grad is None)==(right.grad is None),name
+        if left.grad is not None:
+            actual_gradients.append(left.grad.detach().float().flatten())
+            expected_gradients.append(right.grad.detach().float().flatten())
+    actual_gradients=torch.cat(actual_gradients);expected_gradients=torch.cat(expected_gradients)
+    relative_error=(actual_gradients-expected_gradients).norm()/expected_gradients.norm().clamp_min(1e-12)
+    cosine=torch.nn.functional.cosine_similarity(actual_gradients,expected_gradients,dim=0)
+    assert float(relative_error)<.02
+    assert float(cosine)>.999
+
+
 @pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
 def test_cuda_native_stateful_prefixes_against_cached_reference(family,dtype):
@@ -124,10 +150,21 @@ def test_cuda_native_stateful_prefixes_against_cached_reference(family,dtype):
         outputs.append(loss.detach())
     torch.testing.assert_close(outputs[0],outputs[1],atol=0 if dtype==torch.bfloat16 else 1e-6,
                                rtol=0 if dtype==torch.bfloat16 else 1e-6)
+    actual_gradients=[];expected_gradients=[]
     for (name,p),(other,q)in zip(model.named_parameters(),old.named_parameters()):
         assert name==other and (p.grad is None)==(q.grad is None),name
-        if p.grad is not None:torch.testing.assert_close(p.grad,q.grad,
-            atol=0 if dtype==torch.bfloat16 else 3e-6,rtol=0 if dtype==torch.bfloat16 else 2e-4,msg=name)
+        if p.grad is not None:
+            if dtype==torch.bfloat16:
+                actual_gradients.append(p.grad.detach().float().flatten())
+                expected_gradients.append(q.grad.detach().float().flatten())
+            else:
+                torch.testing.assert_close(p.grad,q.grad,atol=3e-6,rtol=2e-4,msg=name)
+    if dtype==torch.bfloat16:
+        actual_gradients=torch.cat(actual_gradients);expected_gradients=torch.cat(expected_gradients)
+        relative_error=(actual_gradients-expected_gradients).norm()/expected_gradients.norm().clamp_min(1e-12)
+        cosine=torch.nn.functional.cosine_similarity(actual_gradients,expected_gradients,dim=0)
+        assert float(relative_error)<.02
+        assert float(cosine)>.999
 
 
 @pytest.mark.parametrize('family',['lfm'])

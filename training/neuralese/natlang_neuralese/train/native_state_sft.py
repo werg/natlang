@@ -611,17 +611,15 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         raise ValueError('native graph has no ordinary CE targets; its declared offline/policy objective is required')
     targeted_graphs = sum(targeted)
     from .native_prefix_packing import pack_causal_prefixes
-    # Ordinary SFT: physical raw-context aliasing is qualified for FP32 activations; BF16 SFT retains its
-    # original episode rows (bitwise readout/adjoint law, plans/neuralese/shared-state/PREFIX_READOUT_REUSE_20261020.md).
-    # A policy objective that declares support (plain token readouts at remapped query rows, no per-invocation
-    # actors, external states or semantic codecs) shares exact causal prefixes in every dtype: each shared row's
-    # cotangent is the fan-in of its original occurrences' cotangents at the KV/convolution slot gathers. In BF16
-    # the shared plan's gradients stay within the unshared BF16 plan's own distance from an FP64 reference
-    # (tests/neuralese/test_native_policy_prefix_sharing.py); FP32 matches the unshared plan to FP32 tolerance.
+    # Exact raw-context aliasing is valid for ordinary SFT in every activation dtype: the original-token maps retain
+    # each graph's own targets and loss normalization, while shared causal states receive the fan-in of their
+    # occurrences' cotangents at KV/convolution gathers. BF16 changes accumulation order, as the already-supported
+    # BF16 policy-prefix path does; its numerical error is checked against an unshared BF16 reference, not hidden by
+    # claiming bitwise equality. Communication graphs remain capability-gated because backend/QAT paths may not
+    # support their imported/adapted suffix operations.
     if objective is None:
-        share = share_causal_prefixes and model.port.embedding_weight.dtype != torch.bfloat16
-        allow_communication = (share and allow_communication_prefixes
-                               and model.port.embedding_weight.dtype in (torch.float32, torch.float64))
+        share = bool(share_causal_prefixes)
+        allow_communication = share and allow_communication_prefixes
     else:
         supports = getattr(objective, 'shares_causal_prefixes', None)
         share = bool(share_causal_prefixes and supports is not None and supports(examples))
@@ -1824,6 +1822,11 @@ def _main(argv=None, *, requested_refresh):
         prefix_resolution = {'source': 'declared'}
     checkpoint_options['share_causal_prefixes'] = args.share_causal_prefixes
     checkpoint_options['share_causal_prefixes_resolution'] = prefix_resolution
+    from .native_prefix_packing import (PREFIX_ARITHMETIC_VERSION,
+        PREFIX_ARITHMETIC_QUALIFICATION_PATH, PREFIX_ARITHMETIC_QUALIFICATION_SHA256)
+    qualification_path = Path(__file__).resolve().parents[4] / PREFIX_ARITHMETIC_QUALIFICATION_PATH
+    if args.share_causal_prefixes and sha256_file_hex_cached(qualification_path) != PREFIX_ARITHMETIC_QUALIFICATION_SHA256:
+        raise ValueError('native prefix arithmetic qualification receipt is missing or changed')
     # Improvements ship on by default (owner 2026-10-28): an omitted EMA declaration continues a carried EMA or
     # starts the default one from the current weights (recorded in its provenance and the options).
     from .weight_ema import resolve_weight_ema
@@ -2144,6 +2147,29 @@ def _main(argv=None, *, requested_refresh):
         [source_receipts[0]['sha256'], source_receipts[1]['sha256'],
          sorted(source_row_bindings.items()), sorted(held_row_bindings.items())],
         ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    prefix_history = list(((resume or {}).get('options') or {}).get('prefix_sharing_arithmetic_history') or [])
+    if args.share_causal_prefixes and (not prefix_history or
+            prefix_history[-1].get('feature_version') != PREFIX_ARITHMETIC_VERSION):
+        previous_global_step = int((resume or {}).get('global_step', (resume or {}).get('step', 0)))
+        prefix_history.append({
+            'schema': 'natlang.native-prefix-arithmetic-transition/1',
+            'from_feature_version': (prefix_history[-1].get('feature_version')
+                if prefix_history else 'legacy-unrecorded'),
+            'feature_version': PREFIX_ARITHMETIC_VERSION,
+            'state': 'pending-first-update',
+            'effective_global_step': previous_global_step + 1,
+            'source_sha256': source_hash,
+            'qualification_receipt': {'path': PREFIX_ARITHMETIC_QUALIFICATION_PATH,
+                'sha256': PREFIX_ARITHMETIC_QUALIFICATION_SHA256},
+            'scope': 'ordinary-SFT; exact raw causal-prefix aliasing in every activation dtype; imported/adapted suffixes remain backend-gated',
+            'ownership': 'original-graph-target-maps-and-loss-normalization-preserved/1',
+            'gradient_fanin': 'all-original-occurrence-cotangents-through-shared-causal-slots/1',
+            'reason': 'BF16 physical sharing was previously disabled to retain bitwise-per-use rounding; bounded numerical error is qualified against unshared BF16 gradients instead',
+            'qualification_tests': [
+                'tests/neuralese/test_native_prefix_packing.py::test_bf16_ordinary_sft_reuses_exact_raw_prefixes_with_bounded_gradient_change',
+                'tests/neuralese/test_native_communication_prefix.py::test_bf16_sft_shares_only_raw_prefixes_and_preserves_producer_consumer_supervision'],
+        })
+    checkpoint_options['prefix_sharing_arithmetic_history'] = prefix_history
     source_order = train.ordered_ids()
     diloco_previous_source_hash = (resume or {}).get('source_hash')
     source_correction_result = {'changed': False}
@@ -3805,6 +3831,44 @@ def _main(argv=None, *, requested_refresh):
                 progress['readout_original_rows'] = details[0]['readout_original_rows']
                 progress['reused_readout_rows'] = details[0]['readout_original_rows'] - details[0]['readout_forward_rows']
                 progress['communication_graphs'] = sum(bool(train.entries[index].get('communication')) for index in indices)
+                from .native_prefix_packing import (PREFIX_ARITHMETIC_VERSION,
+                    PREFIX_ARITHMETIC_QUALIFICATION_PATH, PREFIX_ARITHMETIC_QUALIFICATION_SHA256)
+                graph_binding_sha256 = canonical_json_sha256_hex([
+                    {'id': item.id, 'binding': source_row_bindings[item.id]} for item in batch])
+                prefix_receipt = {
+                    'schema': 'natlang.native-prefix-arithmetic-update/1',
+                    'feature_version': PREFIX_ARITHMETIC_VERSION,
+                    'qualification_receipt': {'path': PREFIX_ARITHMETIC_QUALIFICATION_PATH,
+                        'sha256': PREFIX_ARITHMETIC_QUALIFICATION_SHA256},
+                    'global_step': global_step,
+                    'source_sha256': source_hash,
+                    'ordered_graph_bindings_sha256': graph_binding_sha256,
+                    'graphs': len(batch),
+                    'supervised_tokens': supervised_tokens,
+                    'logical_forward_tokens': batch_tokens,
+                    'physical_forward_tokens': physical_tokens,
+                    'physical_prefix_savings': batch_tokens - physical_tokens,
+                    'activation_dtype': str(model.port.embedding_weight.dtype),
+                    'ordinary_loss_normalization': batch[0].loss_normalization if batch else None,
+                    'communication_prefixes_enabled': backend is None,
+                    'readout_forward_rows': details[0]['readout_forward_rows'],
+                    'readout_original_rows': details[0]['readout_original_rows'],
+                    'ownership': 'original-graph-target-maps-and-loss-normalization-preserved/1',
+                    'gradient_fanin': 'all-original-occurrence-cotangents-through-shared-causal-slots/1',
+                }
+                progress['prefix_sharing_arithmetic'] = prefix_receipt
+                for transition in reversed(checkpoint_options.get('prefix_sharing_arithmetic_history', [])):
+                    if (transition.get('state') == 'pending-first-update'
+                            and transition.get('effective_global_step') == global_step):
+                        transition.update(state='applied',
+                            applied_global_step=global_step,
+                            ordered_graph_bindings_sha256=graph_binding_sha256,
+                            graphs=len(batch), supervised_tokens=supervised_tokens,
+                            logical_forward_tokens=batch_tokens, physical_forward_tokens=physical_tokens,
+                            physical_prefix_savings=batch_tokens - physical_tokens,
+                            activation_dtype=str(model.port.embedding_weight.dtype),
+                            communication_prefixes_enabled=backend is None)
+                        break
                 progress['boundary_targets'] = {
                     token: {'count': sum(item['boundary_targets'][token]['count'] for item in details),
                             'weight': sum(item['boundary_targets'][token]['weight'] for item in details),

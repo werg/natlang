@@ -8,6 +8,10 @@ declare support read every action through the returned original-token row maps
 """
 from ..model.native_graph_plan import Invocation, ImportSpan, compile_graph
 
+PREFIX_ARITHMETIC_VERSION = 'native-prefix-physical-alias-v2'
+PREFIX_ARITHMETIC_QUALIFICATION_PATH = 'plans/neuralese/native-prefix-arithmetic-qualification-20261031.json'
+PREFIX_ARITHMETIC_QUALIFICATION_SHA256 = '53fcd68a5811e322b23315444ebddaf59a6031706bdbafc4303a2e32a347b0f0'
+
 
 def pack_causal_prefixes(examples, *, allow_communication=True):
     """Return (plan, original-token physical row maps), or no applicable reuse."""
