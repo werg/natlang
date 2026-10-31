@@ -43,7 +43,14 @@ def test_joint_three_node_chain_preserves_both_import_and_export(monkeypatch):
                               role_ids=(10, 11, 12, 13), source_binding={'records_sha256': 'r'})
     assert graph['nodes'][1]['imports'][0]['at'] == 2
     assert graph['nodes'][1]['producing'] == [[4, 5]]
+    # A consumer occurrence before this writer's own output shifts the latter
+    # when assembly removes duplicate imported text. Source receipts must bind
+    # final graph coordinates, not the pre-assembly coordinates.
+    assert graph['source_chain']['producer_bindings']['b'][0]['start'] == 4
+    assert graph['source_chain']['producer_bindings']['b'][0]['stop'] == 5
     assert [item['source'] for item in graph['nodes'][2]['imports']] == ['n0', 'n1']
+    assert graph['source_chain']['consumer_bindings']['b'][0]['import_at'] == 2
+    assert graph['source_chain']['consumer_bindings']['b'][0]['source_start'] == 2
     assert graph['nodes'][1]['target_weights'][2] == 0
     from natlang_neuralese.train.own_output_supervision import _node_suffixes
     assert _node_suffixes(graph, [node['target_weights'] for node in graph['nodes']]) == [1, 3, 5]

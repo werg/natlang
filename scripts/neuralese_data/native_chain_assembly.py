@@ -37,6 +37,7 @@ def assemble(chain, records, edges, rendered, *, tokenizer, tokenizer_fingerprin
         expected_occurrences.update({(edge_id, x): pointer for x, pointer in zip(ids, pointers)})
     seen_occurrences, covered_edges = set(), set()
     nodes, boundaries, pending, suffixes = [], {}, [], []
+    final_producer_bindings, final_consumer_bindings = {}, {rid: [] for rid in custody['records']}
     for rid in custody['records']:
         row = rendered[rid]
         digest = lambda value: hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
@@ -81,6 +82,14 @@ def assemble(chain, records, edges, rendered, *, tokenizer, tokenizer_fingerprin
                     or any(remap[j] is None for j in range(start, stop))):
                 raise ValueError('producer span changed or overlaps an imported payload')
             producing.append([remap[start], remap[stop]])
+        final_producer_bindings[rid] = []
+        for binding in row.get('producer_bindings', []):
+            start, stop = binding.get('start'), binding.get('stop')
+            if (type(start) is not int or type(stop) is not int or start >= stop
+                    or remap[start] is None or remap[stop] is None
+                    or [remap[start], remap[stop]] not in producing):
+                raise ValueError('producer source binding did not survive exact import-position remapping')
+            final_producer_bindings[rid].append({**binding, 'start': remap[start], 'stop': remap[stop]})
         boundaries[rid] = remap
         nodes.append({'name': names[rid], 'token_ids': new_ids, 'target_weights': new_weights,
                       'producing': producing, 'imports': []})
@@ -112,6 +121,10 @@ def assemble(chain, records, edges, rendered, *, tokenizer, tokenizer_fingerprin
             raise ValueError('consumer payload differs from its authenticated producer span')
         by_id[rid]['imports'].append({'at': at, 'source': names[source],
                                        'start': mapped_start, 'stop': mapped_stop})
+        final_consumer_bindings[rid].append({
+            'edge_sha256': edge_id, 'occurrence_id': occurrence, 'source_pointer': read.get('source_pointer'),
+            'source_record_id': source, 'import_at': at,
+            'source_start': mapped_start, 'source_stop': mapped_stop})
     if covered_edges != set(edge_by_sha) or seen_occurrences != set(expected_occurrences):
         raise ValueError('joint graph does not cover every authenticated source occurrence')
     graph = {'schema': 'natlang.neuralese-native-graph/1',
@@ -125,7 +138,7 @@ def assemble(chain, records, edges, rendered, *, tokenizer, tokenizer_fingerprin
                                   'provenance': records[rid].get('provenance'),
                                   'static_derivations': rendered[rid].get('static_derivations', [])}
                                   for rid in custody['records']},
-                              'producer_bindings': {rid: rendered[rid].get('producer_bindings', []) for rid in custody['records']},
-                              'consumer_bindings': {rid: rendered[rid].get('reads', []) for rid in custody['records']}}}
+                              'producer_bindings': final_producer_bindings,
+                              'consumer_bindings': final_consumer_bindings}}
     parse_graph(graph, tokenizer_fingerprint=tokenizer_fingerprint)
     return graph
