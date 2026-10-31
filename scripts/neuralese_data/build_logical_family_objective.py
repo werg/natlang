@@ -69,6 +69,8 @@ def feature_overrides(manifest_path):
     result, bindings = {}, []
     for ref in refs:
         path = Path(ref['path']); path = path if path.is_absolute() else manifest_path.parent / path
+        from natlang_neuralese.data.native_source_tree import _staged_path
+        path = _staged_path(manifest_path, path)
         if sha256_file_hex(path) != ref['sha256']:
             raise ValueError('logical family feature input changed')
         bindings.append(bind(path))

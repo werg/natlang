@@ -33,3 +33,23 @@ def test_capped_scales_keep_mean_one_and_true_cap():
     assert abs(sum(scales[f] * mass[f] for f in mass) - sum(mass.values())) < 1e-9
     scales, capped = capped_scales({'a': 0.5, 'b': 0.5}, {'a': 40.0, 'b': 60.0}, 8)
     assert not capped and abs(scales['a'] * 40 - 50) < 1e-9
+
+
+def test_recovered_feature_inputs_use_the_bound_source_map(tmp_path):
+    import hashlib
+    import json
+    from build_logical_family_objective import feature_overrides
+    original = tmp_path/'original-features.jsonl'
+    staged = tmp_path/'recovered'; staged.mkdir()
+    payload = staged/'features.jsonl'
+    payload.write_text(json.dumps({'id':'actual-row', 'interface_family':'port_record_calls',
+                                   'logical_family':'coding'})+'\n')
+    digest = hashlib.sha256(payload.read_bytes()).hexdigest()
+    manifest = staged/'train-sources.json'
+    manifest.write_text(json.dumps({'logical_family_features':[{'path':str(original),'sha256':digest}]}))
+    (staged/'.natlang-source-map.json').write_text(json.dumps({'schema':'natlang.staged-source-map/1',
+        'paths':{str(original):str(payload)}}))
+    assert not original.exists()
+    overrides, bindings = feature_overrides(manifest)
+    assert overrides == {'actual-row':'coding'}
+    assert bindings[0]['path'] == str(payload) and bindings[0]['sha256'] == digest
