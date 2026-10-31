@@ -40,11 +40,43 @@ import { returnErrorText, returnValueRejection, type ReturnErrorText } from './r
 import { STAGED_RESULT_NOTICE } from './staged-result.js';
 import { TOOL_MARKUP } from './tool-markup.js';
 import type { Platform } from '../runtime/platform.js';
+import ts from 'typescript';
 
 /** What the model is told when it reaches for the call it is executing (calling it, or reading its code): a judgment is
  * made here and returned, and eval serves the exact work the instructions need, not as a stand-in for the judgment. */
 const SELF_CALL_ADVICE = 'Do what its instructions ask here. For a judgment, decide it yourself from the inputs and return the answer with ' +
   'return_result; use eval only for exact work the instructions need.';
+
+/** Detect the unsupported pattern of wrapping a computed value in marker strings. Static marker literals remain valid. */
+function computedNeuraleseMarkerConcatenation(code: string): ts.Node | undefined {
+  const source = ts.createSourceFile('natlang-eval.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const partsOf = (expression: ts.Expression): ts.Expression[] => ts.isBinaryExpression(expression) &&
+    expression.operatorToken.kind === ts.SyntaxKind.PlusToken ? [...partsOf(expression.left), ...partsOf(expression.right)] : [expression];
+  const hasComputedMarker = (expression: ts.Expression): boolean => {
+    if (ts.isTemplateExpression(expression)) {
+      const templateText = expression.head.text + expression.templateSpans.map(span => span.literal.text).join('');
+      return expression.templateSpans.length > 0 && templateText.includes('<|neuralese|>') && templateText.includes('<|/neuralese|>');
+    }
+    const parts = partsOf(expression);
+    const literalText = parts.filter(ts.isStringLiteralLike).map(part => part.text);
+    const hasOpen = literalText.some(text => text.includes('<|neuralese|>'));
+    const hasClose = literalText.some(text => text.includes('<|/neuralese|>'));
+    const hasComputedPart = parts.some(part => !ts.isStringLiteralLike(part) &&
+      !(ts.isNoSubstitutionTemplateLiteral(part)));
+    return hasOpen && hasClose && hasComputedPart;
+  };
+  let found: ts.Node | undefined;
+  const visit = (node: ts.Node) => {
+    if (found) return;
+    if (ts.isReturnStatement(node) && node.expression && hasComputedMarker(node.expression)) {
+      found = node.expression;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
 
 /** Services the invocation kernel provides to an interpreter run. */
 export type NativeRuntimeHooks = {
@@ -1962,6 +1994,13 @@ export class NativeSession {
   /** Execute one eval action as an atomic scope transaction. */
   private async evaluate(written: string, timeoutMs?: number, complete = false, toolCallId?: string): Promise<NativeResult> {
     if (!written.trim()) throw new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]);
+    const declaredResult = this.lam.type.kind === 'lambda' ? this.env.resolve(this.lam.type.returns) : undefined;
+    const neuraleseElement = declaredResult?.kind === 'neuralese' ? this.env.resolve(declaredResult.element) : undefined;
+    const isStructuredNeuraleseResult = !!neuraleseElement &&
+      !(neuraleseElement.kind === 'prim' && neuraleseElement.name === 'string');
+    if (isStructuredNeuraleseResult && computedNeuraleseMarkerConcatenation(written))
+      throw new Reject([{ path: 'code', code: 'computed-neuralese-marker-concatenation',
+        expected: `This function returns ${formatType(declaredResult!)}. Marker bodies are literal and do not evaluate JavaScript concatenation. Return the complete ${formatType(neuraleseElement!)} value directly (for example, return result;) or return its JSON text without marker strings.` }]);
     // Literals the model wrote are block markers in its text; compiled, each is a call the checker types from context.
     const code = desugarNlCalls(sourceWithLiteralCalls(written));
     const scopeBefore = this.scopeSnapshot(), traceMark = this.runtime.trace.events.length;

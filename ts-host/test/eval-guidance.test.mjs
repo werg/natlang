@@ -29,7 +29,9 @@ test('shared result guidance shows computed Neuralese text return and static mar
   assert.match(SEMANTIC_RESULT_PROMPT, /At a direct parameter declared Neuralese<string>, an ordinary string argument is written through the configured writer/);
   assert.match(SEMANTIC_RESULT_PROMPT, /When this call's declared result is exactly Neuralese<string>/);
   assert.match(SEMANTIC_RESULT_PROMPT, /marker body is literal payload written before eval runs/);
-  assert.match(SEMANTIC_RESULT_PROMPT, /for computed Neuralese<string> output, return the computed string/);
+  assert.match(SEMANTIC_RESULT_PROMPT, /When this call's declared result is exactly Neuralese<string>, computed ordinary text can be returned directly/);
+  assert.match(SEMANTIC_RESULT_PROMPT, /When the declared result is Neuralese<T> for a structured JSON type T, build and return the complete typed T value directly/);
+  assert.match(SEMANTIC_RESULT_PROMPT, /Never concatenate marker strings around a computed value/);
 });
 
 test('read_code shows the authentic built-in Neuralese type declaration', async () => {

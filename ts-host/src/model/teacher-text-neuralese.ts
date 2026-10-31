@@ -7,8 +7,11 @@ import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
 export const TEACHER_TEXT_NEURALESE_VERSION = 'teacher-text/1';
 export const TEACHER_TEXT_NEURALESE_DIALECT = 'nd:teacher-text/1';
 export const TEACHER_TEXT_NEURALESE_PROMPT = `\n\nExplicit teacher text-Neuralese transport for this collection only:\n` +
-  `For a declared Neuralese<T> result, return the exact body inside <|neuralese|>BODY<|/neuralese|>, or return a plain ` +
-  `string only when the declared result is Neuralese<string>. A provided teacher-text Neuralese value is displayed as a ` +
+  `For a declared Neuralese<T> result where T is a structured JSON type, build and return the complete typed T value ` +
+  `directly (or return its JSON text); the runtime validates it and writes its canonical JSON body. For Neuralese<string>, ` +
+  `return the computed ordinary string directly. A <|neuralese|>BODY<|/neuralese|> marker is a literal body written before ` +
+  `eval runs; it cannot evaluate JavaScript expressions. Use markers only for literal bodies, and never concatenate marker ` +
+  `strings around a computed value. A provided teacher-text Neuralese value is displayed as a ` +
   `labeled block containing its exact JSON-escaped body. Use that body as the value; never copy its ID as content. ` +
   `Ordinary string results remain ordinary strings. This transport stores literal text only and does not provide native ` +
   `state, model vectors, token IDs, learned representations, or a student writer.`;

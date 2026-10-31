@@ -148,3 +148,78 @@ test('teacher text Neuralese executes an exact producer→consumer edge and stay
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('structured Neuralese results use computed typed JSON and preserve its consumer edge', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'teacher-text-structured-'));
+  const diagnosis = { primaryHypothesis: 'SIM is undetected', alternatives: ['SIM is faulty'],
+    causalExplanation: 'No SIM registration prevents cellular service.',
+    distinguishingEvidence: ['receipt:check_sim_status:11'], unresolved: ['Whether reseating restores service'] };
+  const calls = [
+    ['eval', { code:
+      'const diagnosis = await nl<Neuralese<FaultDiagnosis>>`Diagnose the supplied receipts.`();\n' +
+      'const present = nl.with<FaultDiagnosis>({})`Return the exact diagnosis fields from the supplied typed result.`;\n' +
+      'return await present(diagnosis);', finish: true }],
+    ['eval', { code: 'const diag: FaultDiagnosis = ' + JSON.stringify(diagnosis) + '; return diag;', finish: true }],
+    ['return_result', { status: 'success', value: diagnosis }],
+  ];
+  const requests = [];
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on('data', chunk => chunks.push(chunk));
+    request.on('end', () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      requests.push(body);
+      const [name, args] = calls[requests.length - 1] ?? [];
+      if (!name) { response.writeHead(500); response.end('unexpected additional request'); return; }
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ finish_reason: 'tool_calls', message: { role: 'assistant', content: '',
+        tool_calls: [{ id: `fixture-${requests.length}`, type: 'function',
+          function: { name, arguments: JSON.stringify(args) } }] } }],
+      usage: { prompt_tokens: 32, completion_tokens: 8 } }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const project = definitionProject('telecomDiagnosis', { returns: 'FaultDiagnosis',
+      types: { FaultDiagnosis: '{ primaryHypothesis: string; alternatives: string[]; causalExplanation: string; distinguishingEvidence: string[]; unresolved: string[] }' },
+      instructions: 'Diagnose the supplied device evidence, pass the typed diagnosis to a presentation child, and return its structured report.' });
+    const record = { version: 'natlang.program/2', id: 'teacher-text-structured-fault-diagnosis', kind: 'lambda_source',
+      source: 'teacher-text-structured-fixture', split: 'train', source_ids: ['teacher-text-structured-fixture'],
+      source_groups: ['test:teacher-text-structured'], license: 'test', semantics: {
+        root: project.root, files: project.files, inputs: {}, expected: diagnosis, operation: 'exact' } };
+    const options = { jobs: join(directory, 'jobs'), output: join(directory, 'out.jsonl'), workers: 1,
+      modelId: 'scripted-teacher-text-structured-fixture', endpoint: `http://127.0.0.1:${server.address().port}/v1`,
+      rootSeed: 20261031, systemPrompt: 'Use the declared task and typed call signatures.', contextTokens: 8192,
+      toolSurfaceSha256: await defaultToolSurfaceHash(), maxTurns: 12, maxModelRequests: 12,
+      modelConcurrency: 1, transportRetries: 0, requestRetries: 0, retryDelayMs: 0,
+      collectionRole: 'teacher', textNeuraleseEmulation: true };
+    await collectBatch([{ index: 0, record }], options, nativeJobRunner(options));
+    const row = JSON.parse((await readFile(options.output, 'utf8')).trim());
+    assert.equal(requests.length, 3, 'root, structured producer, and consumer all reach the collector');
+    if (!process.env.NATLANG_TS_HOST_TEST_DIST) assert.ok(requests[1].messages.some(message => String(message.content).includes(
+      'return the complete typed T value directly')),
+    'the collector prompt explains how to produce a computed structured Neuralese result');
+    assert.deepEqual(row.outcome.value, diagnosis);
+    assert.equal(row.outcome.accepted, true);
+    const events = row.outcome.execution_graph;
+    const writes = events.filter(event => event.kind === 'block_write' && event.format === 'teacher-text');
+    assert.equal(writes.length, 1);
+    const writer = writes[0];
+    assert.equal(writer.result_type, 'Neuralese<FaultDiagnosis>');
+    assert.equal(writer.source_kind, 'typed-json-result');
+    assert.equal(writer.text_body_sha256, sha256(canonical(diagnosis)));
+    const reads = events.filter(event => event.kind === 'block_read' && event.format === 'teacher-text');
+    assert.equal(reads.length, 1);
+    assert.equal(reads[0].block, writer.block);
+    assert.equal(reads[0].text_body_sha256, writer.text_body_sha256);
+    const producerCall = row.outcome.invocation_ledger.find(entry => entry.host_result?.value?.$neuralese?.id === writer.block);
+    assert.ok(producerCall, 'the typed JSON host result is bound to the recorded writer ID');
+    assert.equal(producerCall.host_result.value.$neuralese.type, 'Neuralese<FaultDiagnosis>');
+    const consumerWire = requests[2].messages.map(message => message.content ?? '').join('\n');
+    assert.ok(consumerWire.includes(`[[teacher-text Neuralese id=${writer.block} type=Neuralese<FaultDiagnosis> body=${JSON.stringify(canonical(diagnosis))}]]`),
+      'the real collector renders the exact JSON body to the structured Neuralese consumer');
+  } finally {
+    await new Promise(resolve => { server.closeAllConnections?.(); server.close(resolve); });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
