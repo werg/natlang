@@ -5,7 +5,9 @@ short tail. With a prefix cache the engine prefills a fresh prompt on a fixed gr
 state after each block, keyed by the exact token prefix and the active adapter binding. A later prompt resumes from
 its longest stored prefix that ends on the grid (or from its whole prompt), so the computation is the one a fresh
 prefill on that grid performs: reuse changes nothing but the work done. `PortCache` states are immutable (a
-reference is a snapshot; lfm2_port.PortCache), so stored states are shared, never copied.
+reference is a snapshot; lfm2_port.PortCache). Attention buffers remain shared;
+small convolution tails and last-token readouts are compacted when their views
+would otherwise retain an entire prefill projection.
 
 The grid itself splits prefill differently from a single chunk. The cache is on by default (`--prefix-cache-gb 2`,
 owner 2026-10-28: improvements ship on by default; the managed host already defaulted to 2); actors whose exact
@@ -35,6 +37,27 @@ def _storages(value, out):
         for name in value.__slots__:
             _storages(getattr(value, name, None), out)
     return out
+
+
+def _compact_snapshot(cache, h_last):
+    """Keep exact logical recurrent state without retaining discarded prefill activations.
+
+    Attention's explicit copy-on-write buffers retain their identity and capacity.
+    Clones preserve autograd when present; this does not detach native state.
+    """
+    from dataclasses import replace
+    import torch
+    from ..model.lfm2_port import PortCache, ConvState, DeltaState
+    if not isinstance(cache, PortCache):
+        return cache, h_last
+    def compact(value):
+        if isinstance(value, torch.Tensor) and value.untyped_storage().nbytes() > value.numel() * value.element_size():
+            return value.clone(memory_format=torch.contiguous_format)
+        return value
+    states = tuple(replace(state, window=compact(state.window)) if isinstance(state, ConvState) else
+                   replace(state, conv=compact(state.conv), recurrent=compact(state.recurrent))
+                   if isinstance(state, DeltaState) else state for state in cache.states)
+    return replace(cache, states=states), compact(h_last)
 
 
 class PrefixCache:
@@ -72,14 +95,15 @@ class PrefixCache:
             return None
 
     def store(self, digest: str, cache, h_last):
-        storages = _storages((cache, h_last), {})
         with self.lock:
+            if digest in self.entries:
+                self.entries.move_to_end(digest)
+                return
+            cache, h_last = _compact_snapshot(cache, h_last)
+            storages = _storages((cache, h_last), {})
             # A snapshot that cannot fit alone must not evict useful shorter
             # prefixes, especially the final grid block of a long prompt.
             if sum(storages.values()) > self.budget:
-                return
-            if digest in self.entries:
-                self.entries.move_to_end(digest)
                 return
             for ref, size in storages.items():
                 held = self.refs.setdefault(ref, [size, 0])

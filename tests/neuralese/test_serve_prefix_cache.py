@@ -90,6 +90,44 @@ def test_oversized_snapshot_does_not_exceed_budget_or_leave_storage_refs():
     assert cache.bytes == 80 and list(cache.entries) == ['small', 'next']
 
 
+def test_native_prefix_snapshot_retains_small_state_not_full_prefill_storage():
+    from natlang_neuralese.model.lfm2_port import PortCache, ConvState, DeltaState, AttentionState, KVBuffer
+    projected = torch.arange(8192, dtype=torch.float32).reshape(1, 8, 1024)
+    hidden = torch.arange(32768, dtype=torch.float32).reshape(1, 1024, 32)
+    keys, values = torch.zeros(1, 2, 16, 4), torch.ones(1, 2, 16, 4)
+    buffer = KVBuffer(keys, values, 8)
+    attention = AttentionState(keys[:, :, :8], values[:, :, :8], buffer)
+    recurrent = torch.ones(1, 2, 4, 4)
+    original = PortCache((ConvState(projected[..., -6:]),
+                          DeltaState(projected[..., -4:], recurrent), attention), (1024,1024,8))
+    cache = PrefixCache(4096, 256)
+    cache.store('snapshot', original, hidden[:, -1:])
+    # The large source tensors cannot fit this budget; their exact logical tails can.
+    assert list(cache.entries) == ['snapshot'] and cache.bytes <= cache.budget
+    stored, last, _ = cache.entries['snapshot']
+    assert torch.equal(stored.states[0].window, original.states[0].window)
+    assert torch.equal(stored.states[1].conv, original.states[1].conv)
+    assert torch.equal(last, hidden[:, -1:])
+    assert stored.states[0].window.untyped_storage().nbytes() == 8*6*4
+    assert last.untyped_storage().nbytes() == 32*4
+    assert stored.states[1].recurrent is recurrent and stored.states[2] is attention
+    assert stored.states[2].buffer is buffer and stored.lengths == original.lengths
+
+
+def test_native_snapshot_compaction_keeps_input_gradients():
+    from natlang_neuralese.model.lfm2_port import PortCache, ConvState
+    source = torch.randn(1, 4, 32, requires_grad=True)
+    hidden = torch.randn(1, 32, 8, requires_grad=True)
+    cache = PrefixCache(4096, 16)
+    cache.store('differentiable', PortCache((ConvState(source[..., -3:]),),(32,)), hidden[:, -1:])
+    stored, last, _ = cache.entries['differentiable']
+    (stored.states[0].window.sum()+last.sum()).backward()
+    assert torch.equal(source.grad[..., -3:], torch.ones_like(source[..., -3:]))
+    assert torch.count_nonzero(source.grad[..., :-3]) == 0
+    assert torch.equal(hidden.grad[:, -1:], torch.ones_like(hidden[:, -1:]))
+    assert torch.count_nonzero(hidden.grad[:, :-1]) == 0
+
+
 def test_prefix_configuration_is_bound_to_policy_and_metrics(tmp_path):
     from natlang_neuralese.serve import configure_native_prefix_cache
     engine = _engine(tmp_path, 0)
