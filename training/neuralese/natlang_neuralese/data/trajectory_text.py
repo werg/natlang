@@ -302,6 +302,49 @@ def authenticated_recurrence_context_view(records, pieces):
     def digest(value):
         return hashlib.sha256(canonical_json_str(value).encode("utf-8")).hexdigest()
 
+    def validate_provider_input_context(row):
+        source_ref = row.get("source_ref") or {}
+        binding = source_ref.get("provider_input_context")
+        if binding is None:
+            return
+        conversion = row.get("native_source_conversion") or {}
+        source_messages = conversion.get("source_messages")
+        source_messages_sha256 = conversion.get("source_messages_sha256")
+        if (not isinstance(binding, dict)
+                or binding.get("schema") != "natlang.captured-provider-input-context/1"
+                or binding.get("student_context_policy") != "teacher-provider-plan-exchange-distilled-to-teacher-execution-plan/1"
+                # Neuralese/text-corpus conversion may rewrite the system message into structured
+                # parts. Authenticate the captured student prompt against the exact pre-conversion
+                # messages, whose hash is itself checked by native-source reconstruction below.
+                or not isinstance(source_messages, list)
+                or source_messages_sha256 != digest(source_messages)
+                or binding.get("student_context_sha256") != source_messages_sha256
+                or binding.get("source_trajectory_index") != (row.get("decision") or {}).get("index")
+                or binding.get("source_response_sha256") != (row.get("decision") or {}).get("source_raw_response_sha256")
+                or not isinstance(binding.get("rendered_message_count"), int)
+                or binding.get("rendered_message_count") < 2
+                or any(not isinstance(binding.get(key), str) or
+                       not re.fullmatch(r"[0-9a-f]{64}", binding[key]) for key in (
+                           "source_request_sha256", "source_response_sha256", "raw_request_sha256",
+                           "rendered_request_sha256", "transport_provenance_sha256", "rendered_messages_sha256"))):
+            raise ValueError(f"source row {row.get('id')} has a provider prompt that differs from its captured request binding")
+        plan = ((row.get("decision") or {}).get("assistant") or {}).get("execution_plan")
+        expected_plan_sha = digest(plan) if isinstance(plan, str) and plan.strip() else None
+        if (binding.get("teacher_plan_sha256") != expected_plan_sha
+                or binding.get("student_reasoning_field") != ("teacher_execution_plan" if expected_plan_sha else None)
+                or (expected_plan_sha is not None and not isinstance(binding.get("planner_call_sha256"), str))
+                or (expected_plan_sha is not None and not re.fullmatch(r"[0-9a-f]{64}", binding["planner_call_sha256"]))):
+            raise ValueError(f"source row {row.get('id')} plan-distillation binding differs from its captured teacher plan")
+        for receipt in list(source_ref.get("provider_expanded_read_contexts") or []) + \
+                       list(source_ref.get("provider_expanded_visible_inputs") or []):
+            if not isinstance(receipt, dict):
+                continue
+            for field in ("source_trajectory_index", "source_request_sha256", "source_response_sha256",
+                          "raw_request_sha256", "rendered_request_sha256", "transport_provenance_sha256"):
+                bound_key = "source_response_sha256" if field == "source_response_sha256" else field
+                if receipt.get(field) is not None and receipt.get(field) != binding.get(bound_key):
+                    raise ValueError(f"source row {row.get('id')} provider input receipt conflicts with its exact captured request")
+
     def occurrence_path(row, path):
         current = row
         for part in path:
@@ -329,6 +372,7 @@ def authenticated_recurrence_context_view(records, pieces):
     source_hashes = {}
     for row in rows:
         rid = row.get("id")
+        validate_provider_input_context(row)
         meta = row.get("native_source_conversion")
         if not isinstance(meta, dict) or meta.get("schema") != "natlang.native-source-conversion/1":
             raise ValueError(f"source row {rid} lacks the current native occurrence conversion")

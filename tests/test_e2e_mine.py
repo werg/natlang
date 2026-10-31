@@ -80,6 +80,39 @@ def test_native_occurrence_reader_binds_exact_paths_and_builds_per_occurrence_ed
         authenticated_recurrence_context_view([unbound], {})
 
 
+def test_provider_context_binds_preconversion_messages_not_rewritten_neuralese_prompt():
+    import sys
+    sys.path.insert(0, str(Path(__file__).parents[1] / 'training/neuralese'))
+    from natlang_neuralese.data.trajectory_text import authenticated_recurrence_context_view
+    canonical = lambda value: json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+    digest = lambda value: hashlib.sha256(canonical(value).encode()).hexdigest()
+    original_messages = [{'role': 'system', 'content': 'fixed instruction'}, {'role': 'user', 'content': 'question'}]
+    response_sha = 'a' * 64
+    binding = {'schema': 'natlang.captured-provider-input-context/1',
+        'source_trajectory_index': 0, 'source_request_sha256': 'b' * 64,
+        'source_response_sha256': response_sha, 'raw_request_sha256': 'c' * 64,
+        'rendered_request_sha256': 'd' * 64, 'transport_provenance_sha256': 'e' * 64,
+        'rendered_messages_sha256': 'f' * 64, 'rendered_message_count': 4,
+        'student_context_policy': 'teacher-provider-plan-exchange-distilled-to-teacher-execution-plan/1',
+        'student_context_sha256': digest(original_messages), 'teacher_plan_sha256': None,
+        'planner_call_sha256': None, 'student_reasoning_field': None}
+    row = native_row({'id': 'provider-bound', 'split': 'train', 'messages': original_messages,
+        'decision': {'index': 0, 'source_raw_response_sha256': response_sha, 'assistant': {}},
+        'source_ref': {'trajectory_id': 'run', 'invocation_id': 'call', 'provider_input_context': binding},
+        'target': {'role': 'assistant', 'content': 'answer'}})
+    # The corpus converter rewrites structured prompt content after authenticating the native record.
+    row['messages'] = [{'role': 'system', 'content': [{'type': 'text', 'text': 'fixed instruction'}]},
+        {'role': 'user', 'content': 'question'}]
+    _, review = authenticated_recurrence_context_view([row], {})
+    assert review['decisions']
+    altered = json.loads(json.dumps(row))
+    altered['native_source_conversion']['source_messages'][1]['content'] = 'different question'
+    altered['native_source_conversion']['source_messages_sha256'] = digest(altered['native_source_conversion']['source_messages'])
+    # Rebinding only the embedded source-message hash cannot change the provider's prompt commitment.
+    with pytest.raises(ValueError, match='provider prompt that differs'):
+        authenticated_recurrence_context_view([altered], {})
+
+
 def test_assemble_requires_restoration_of_archived_sources_before_creating_output(tmp_path):
     from types import SimpleNamespace
     spec = importlib.util.spec_from_file_location('e2e_archived_source', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')

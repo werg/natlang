@@ -2169,10 +2169,55 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const contextSource = messages(source.context, `${row.id}.trajectory[${index}].context`);
       if (!contextSource.length || contextSource[0]?.role !== 'system' || contextSource[1]?.role !== 'user')
         throw new Error(`${row.id}: decision ${index} lacks a fresh system/user opening context`);
+      const modelResponse = source.model_response && typeof source.model_response === 'object' ?
+        source.model_response as Dict : {};
+      const transport = modelResponse.transport_provenance && typeof modelResponse.transport_provenance === 'object' ?
+        modelResponse.transport_provenance as Dict : undefined;
+      const renderedMessages = transport?.rendered_messages;
+      const providerInputContext = Array.isArray(renderedMessages) ?
+        messages(renderedMessages, `${row.id}.trajectory[${index}].model_response.transport_provenance.rendered_messages`) :
+        contextSource;
+      const providerInputContextBinding = Array.isArray(renderedMessages) ? {
+        schema: 'natlang.captured-provider-input-context/1', source_trajectory_index: index,
+        source_request_sha256: source.request_sha256 ?? null, source_response_sha256: source.raw_response_sha256 ?? null,
+        raw_request_sha256: transport?.raw_request_sha256 ?? null,
+        rendered_request_sha256: transport?.rendered_request_sha256 ?? null,
+        transport_provenance_sha256: nativeRowDigest(transport),
+        rendered_messages_sha256: nativeRowDigest(providerInputContext), rendered_message_count: providerInputContext.length,
+        student_context_policy: 'teacher-provider-plan-exchange-distilled-to-teacher-execution-plan/1',
+        student_context_sha256: nativeRowDigest(publicValue(contextSource)),
+      } : undefined;
+      if (providerInputContextBinding &&
+          (!/^[0-9a-f]{64}$/.test(String(providerInputContextBinding.source_request_sha256)) ||
+           !/^[0-9a-f]{64}$/.test(String(providerInputContextBinding.source_response_sha256)) ||
+           !/^[0-9a-f]{64}$/.test(String(providerInputContextBinding.raw_request_sha256)) ||
+           !/^[0-9a-f]{64}$/.test(String(providerInputContextBinding.rendered_request_sha256))))
+        throw new Error(`${row.id}: decision ${index} has an incomplete captured provider request binding`);
 
       const parsedNative = (source.model_response as Dict | undefined)?.tool_parse ? authenticateNativeXmlTurn(source) : undefined;
       const offered = toolSchemas(parsedNative ? source.response_tools : source.tools_offered ?? [], `${row.id}.trajectory[${index}].allowed_tools`);
       const assistant = record(source.assistant, `${row.id}.trajectory[${index}].assistant`);
+      if (providerInputContextBinding) {
+        const plan = typeof assistant.execution_plan === 'string' && assistant.execution_plan.trim() ?
+          assistant.execution_plan : null;
+        if (plan !== null) {
+          const calls = providerInputContext.flatMap(message => Array.isArray(message.tool_calls) ?
+            (message.tool_calls as Dict[]) : []).filter(call => {
+              const fn = call.function && typeof call.function === 'object' ? call.function as Dict : {};
+              if (fn.name !== 'execution_plan' || typeof fn.arguments !== 'string') return false;
+              try { return canonical(JSON.parse(fn.arguments)) === canonical({ plan }); } catch { return false; }
+            });
+          const plannerCall = calls.at(-1);
+          const acknowledgements = plannerCall ? providerInputContext.filter(message => message.role === 'tool' &&
+            message.content === 'Plan recorded. Now take the planned next step.' &&
+            message.tool_call_id === plannerCall.id) : [];
+          if (!plannerCall || acknowledgements.length !== 1)
+            throw new Error(`${row.id}: decision ${index} provider plan exchange does not match the distilled execution plan`);
+          Object.assign(providerInputContextBinding, { teacher_plan_sha256: nativeRowDigest(plan),
+            planner_call_sha256: nativeRowDigest(plannerCall), student_reasoning_field: 'teacher_execution_plan' });
+        } else Object.assign(providerInputContextBinding, { teacher_plan_sha256: null,
+          planner_call_sha256: null, student_reasoning_field: null });
+      }
       const planningAttempted = Object.hasOwn(assistant, 'execution_plan');
       const executionPlan = typeof assistant.execution_plan === 'string' && assistant.execution_plan.trim() ?
         assistant.execution_plan : null;
@@ -2364,6 +2409,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       if (!authoredRootAction || decisionApproved) rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
+          ...(providerInputContextBinding ? { provider_input_context: providerInputContextBinding } : {}),
           ...(sourceQualityActionBinding || (sourceQualityBinding && !invocation) ? { source_quality_clearance: options.sourceQualityClearanceRef ?
             sourceQualityClearanceRefForProgram(sourceQualityReview as VerifiedSourceQualityClearance, program,
               options.sourceQualityClearanceRef.sidecar_path, options.sourceQualityClearanceRef.file_sha256,
