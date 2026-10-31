@@ -825,6 +825,83 @@ test('links a soft return marker only to its exact typed runtime block write and
   assert.equal(JSON.parse(result.turns[0].target.tool_calls[0].function.arguments).value, softMarker);
 });
 
+function teacherTextReturnRow({ id = 'teacher-text-return-linked', wrongBody = false, wrongWriter = false } = {}) {
+  const row = nativeRow(id), invocationId = 'teacher-text-return-call';
+  const blockId = `nzt1_${'a'.repeat(52)}`, resultType = 'Neuralese<TemplateHypothesis>';
+  const body = '{"interpretation":"insufficient-evidence","sourceLineIds":[292]}';
+  const modelBody = wrongBody ? `${body} ` : body;
+  const writerNode = `${invocationId}#writer`, turnNode = `${invocationId}#turn1`;
+  const rawCallId = 'provider-return-call';
+  const requestSha = 'c'.repeat(64), responseSha = 'd'.repeat(64);
+  const marker = `<|neuralese|>${modelBody}<|/neuralese|>`;
+  const modelArgs = { status: 'success', value: marker };
+  const typedRef = { type: 'teacher_text', id: blockId, value_type: resultType, source_occurrence: writerNode };
+  const actionArgs = { status: 'success', value: [typedRef] };
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  const typedWrite = { id: blockId, type: resultType, body, body_sha256: sha(body),
+    producer_call_id: invocationId, writer_node: wrongWriter ? `${invocationId}#other-writer` : writerNode,
+    source_kind: 'typed-text-result', source: 'return_result', marker_context: 'return-result',
+    format: 'teacher-text', teacher_text: true, learned_vectors: false, tokenizer_ids: false };
+  const invocationSignature = `(record: LogContentRecord, priorFindings: WindowCandidateFinding[]) => ${resultType}`;
+  const occurrenceBase = { schema: 'natlang.execution-occurrence/1', definition_id: 'nl:inferTemplate.nl',
+    revision: '962f307b1df96553', context: 'ctx:files', signature: invocationSignature,
+    parent_occurrence_sha256: 'e'.repeat(64), sibling_ordinal: 0, argument_binding_sha256: 'f'.repeat(64) };
+  const occurrence = { ...occurrenceBase, occurrence_sha256: sha(canonical(occurrenceBase)) };
+  const hostValue = { $neuralese: { id: blockId, type: resultType, teacher_text: true, source_occurrence: writerNode } };
+  const event = { seq: 9, call_id: invocationId, tool_call_id: rawCallId, name: 'return_result',
+    arguments: actionArgs, outcome: 'completed', result_text: 'returned typed hypothesis' };
+  const receipt = { kind: 'host_capture', capture_kind: 'invocation_output', call_id: invocationId,
+    complete: true, result_type: resultType, value: hostValue,
+    value_sha256: sha(JSON.stringify(hostValue)), bytes: new TextEncoder().encode(JSON.stringify(hostValue)).byteLength,
+    terminal_action_seq: event.seq };
+  const invocationLedger = { invocation_id: invocationId, parent_invocation_id: null, host_result: receipt };
+  const response = { raw_calls: [{ id: rawCallId, type: 'function', function: { name: 'return_result',
+    arguments: JSON.stringify(modelArgs) } }], transport_provenance: { raw_response_sha256: responseSha,
+    marker_outputs: [{ body, body_sha256: sha(body) }], typed_result_writes: [typedWrite] } };
+  row.outcome.action_ledger = [event];
+  row.outcome.invocation_ledger = [invocationLedger];
+  row.outcome.execution_graph = [
+    { kind: 'invocation', phase: 'start', call_id: invocationId, node: `call:${invocationId}`,
+      definition: { id: occurrence.definition_id, revision: occurrence.revision },
+      signature: invocationSignature, native_occurrence: occurrence },
+    { kind: 'model_turn', seq: 5, call_id: invocationId, node: turnNode, turn: 1,
+      inputs: [{ node: `call:${invocationId}`, port: 'invocation' }] },
+    { kind: 'block_write', seq: 6, call_id: invocationId, block: blockId, node: writerNode, turn: turnNode,
+      inputs: [{ node: turnNode, port: 'result-source' }], truncated: false, result_type: resultType,
+      marker_context: 'return-result', source_kind: 'typed-text-result', source: 'return_result',
+      format: 'teacher-text', producer: 'teacher-text-emulation', learned_vectors: false,
+      tokenizer_ids: false, training_admission: false, text_body: body, text_body_sha256: sha(body) },
+  ];
+  row.trajectory = [{ phase: 'action', invocation_id: invocationId, context: [system, opening], tools_offered: schema,
+    request_sha256: requestSha, raw_response_sha256: responseSha,
+    assistant: { content: '', reasoning: 'Return the inspected source hypothesis.', calls: [{
+      tool: 'return_result', source_tool: 'return_result', arguments: modelArgs, call_id: null }] }, model_response: response }];
+  return row;
+}
+
+test('links a teacher-text typed return through its exact invocation signature and writer receipt', () => {
+  const row = teacherTextReturnRow();
+  const result = materializeNativeRows([row], { directAnswers: true });
+  assert.equal(result.acceptedRows, 1, JSON.stringify(result.unlinked));
+  assert.deepEqual(result.unlinked, []);
+  assert.equal(result.turns.length, 1);
+  const call = result.turns[0].decision.assistant.calls[0];
+  assert.equal(JSON.parse(result.turns[0].target.tool_calls[0].function.arguments).value,
+    row.trajectory[0].assistant.calls[0].arguments.value, 'keep the teacher target as its exact sampled marker text');
+  assert.equal(call.outcome.typed_result_writes[0].body_source, '{"interpretation":"insufficient-evidence","sourceLineIds":[292]}');
+  assert.equal(call.outcome.typed_result_writes[0].format, 'teacher-text');
+  assert.equal(call.outcome.typed_result_writes[0].writer_node, 'teacher-text-return-call#writer');
+});
+
+test('teacher-text typed return does not link when the sampled body or writer receipt differs', () => {
+  for (const options of [{ wrongBody: true }, { wrongWriter: true }]) {
+    const result = materializeNativeRows([teacherTextReturnRow({ id: `bad-${Object.keys(options)[0]}`,
+      ...options })], { directAnswers: true });
+    assert.equal(result.acceptedRows, 0);
+    assert.deepEqual(result.unlinked, [{ id: `bad-${Object.keys(options)[0]}`, outcomes: 1 }]);
+  }
+});
+
 test('links a callable marker to its exact typed singleton return reference and rejects corrupted evidence', () => {
   const sha = value => createHash('sha256').update(value).digest('hex');
   const make = () => {

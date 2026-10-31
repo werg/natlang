@@ -16,6 +16,7 @@ from pathlib import Path
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
 from scripts.neuralese_data.teacher_outcome_contract import exact_honest_root_block
+from scripts.neuralese_data.provider_judged_regrade import project as project_judged_outcome, validate_projection
 
 SCHEMA = 'natlang.provider-campaign-source/1'
 
@@ -45,7 +46,9 @@ def validated_dispatch_plan(path, expected_sha256):
         # output ledger. This is an explicit continuation; never rewrite the
         # historical plan or treat current source files as its execution code.
         attestation_path = Path(path).with_name('dispatch-plan-history-attestation.json')
-        if 'Missing or changed reviewed artifact pin:' not in str(error) or not attestation_path.is_file():
+        if (not any(marker in str(error) for marker in
+                    ('Missing or changed reviewed artifact pin:', 'Reviewed artifact changed:'))
+                or not attestation_path.is_file()):
             raise
         attestation = json.loads(attestation_path.read_text())
         plan_sha = sha256_file_hex(path)
@@ -88,6 +91,22 @@ def validated_dispatch_plan(path, expected_sha256):
     return plan, identity
 
 
+def ledger_dispatch_identity(identity):
+    """Recover the exact immutable ledger identity for historically pinned plans.
+
+    The attestation is a later custody artifact and was not part of the claim
+    header. Keep it in conversion provenance, but verify claims against the
+    original dispatch identity reconstructed without that later annotation.
+    """
+    if not identity.get('dispatch_plan_history_attestation'):
+        return identity
+    ledger = {key: value for key, value in identity.items()
+              if key not in {'dispatch_plan_history_attestation', 'identity_sha256'}}
+    ledger['identity_sha256'] = hashlib.sha256(json.dumps(
+        ledger, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return ledger
+
+
 def collector_program_digests(runtime, programs):
     """Use the authenticated collector's wire digest, not Python key ordering.
 
@@ -115,6 +134,7 @@ def collector_program_digests(runtime, programs):
 
 def source_binding(args, *, protection_reader):
     from scripts.run_reviewed_luna_dispatcher import _verify_ledger_identity, _verify_ledger_events
+    from natlang_neuralese.common.custody import ProtectedWorlds, REGISTRY as protected_worlds_registry
 
     manifest_path = Path(args.provider_source_manifest).resolve(strict=True)
     declaration = json.loads(manifest_path.read_text())
@@ -127,20 +147,33 @@ def source_binding(args, *, protection_reader):
     plan, identity = validated_dispatch_plan(plan_path, declaration['plan']['sha256'])
     ledger_path = bound(declaration['claim_ledger'])
     events = [json.loads(line) for line in ledger_path.read_text().splitlines() if line.strip()]
-    _verify_ledger_identity(events, identity)
-    _verify_ledger_events(events, identity)
+    ledger_identity = ledger_dispatch_identity(identity)
+    _verify_ledger_identity(events, ledger_identity)
+    _verify_ledger_events(events, ledger_identity)
     claims = {event['claim_id']: event for event in events if event['event'] == 'claim'}
     terminals = {event['claim_id']: event for event in events if event['event'] == 'terminal'}
     programs = {index: json.loads(line) for index, line in
                 enumerate(Path(plan['source']).read_text().splitlines()) if line.strip()}
     current = protection_reader(Path(args.protection_manifest))
+    current_worlds = ProtectedWorlds.load()
+    current_worlds_sha = sha256_file_hex(protected_worlds_registry)
     proof_paths = {'provider_source': manifest_path, 'source': source,
                    'dispatch_plan': plan_path, 'claim_ledger': ledger_path,
-                   'transfer': manifest_path}
+                   'transfer': manifest_path, 'current_protected_worlds': protected_worlds_registry}
     history = identity.get('dispatch_plan_history_attestation')
     if history:
         proof_paths['dispatch_plan_history_attestation'] = history
     source_files, selected_ids, groups, packet_programs = {}, set(), set(), {}
+    declaration_regrades = declaration.get('oracle_regrades', [])
+    if not isinstance(declaration_regrades, list):
+        raise ValueError('provider source oracle regrades must be an exact list')
+    regrades_by_case = {}
+    for item in declaration_regrades:
+        if (not isinstance(item, dict) or not isinstance(item.get('case_id'), str)
+                or item['case_id'] in regrades_by_case):
+            raise ValueError('provider source oracle regrades contain duplicate or malformed case bindings')
+        regrades_by_case[item['case_id']] = item
+    validated_regrades = set()
     collection_key = 'provider-campaign:' + declaration['plan']['sha256']
     combined = [json.loads(line) for line in source.read_text().splitlines() if line.strip()]
     wire_digests = collector_program_digests(plan['runtime'], [row.get('task', {}).get('program_ir') for row in combined])
@@ -164,7 +197,7 @@ def source_binding(args, *, protection_reader):
         actual = [json.loads(line) for line in result_path.read_text().splitlines() if line.strip()]
         receipt = json.loads(receipt_path.read_text())
         accounting = terminal.get('output_accounting') or {}
-        if (len(actual) != 1 or actual[0] != row or not accounting.get('complete')
+        if (len(actual) != 1 or not accounting.get('complete')
                 or accounting.get('output_sha256') != entry['result']['sha256']
                 or receipt.get('version') != 'natlang.teacher_batch.native/1'
                 or receipt.get('source_sha256') != plan['source_sha256']
@@ -174,6 +207,40 @@ def source_binding(args, *, protection_reader):
                 or receipt.get('model') != plan['model_id']):
             raise ValueError('provider result lacks complete exact collector accounting')
         program = programs[claim['index']]
+        row_regrade = row.get('source_regrade')
+        regrade_projection = row_regrade.get('projection') if isinstance(row_regrade, dict) else None
+        regrade_ref = row_regrade.get('receipt') if isinstance(row_regrade, dict) else None
+        if regrade_projection is not None:
+            if (not isinstance(regrade_ref, dict) or entry.get('source_regrade') != regrade_ref
+                    or row_regrade.get('schema') != 'natlang.provider-judged-outcome-regrade/1'):
+                raise ValueError('derived provider row lacks its exact regrade receipt reference')
+            declared_regrade = regrades_by_case.get(row.get('id'))
+            if (not isinstance(declared_regrade, dict) or declared_regrade.get('projection') != regrade_ref
+                    or declared_regrade.get('proof', {}).get('path') != regrade_projection.get('qualification_path')
+                    or declared_regrade.get('proof', {}).get('sha256') != regrade_projection.get('qualification_sha256')):
+                raise ValueError('provider source declaration omits or changes this row regrade binding')
+            validated_regrades.add(row['id'])
+            regrade_path = bound(regrade_ref)
+            stored_projection = json.loads(regrade_path.read_text())
+            if stored_projection != regrade_projection:
+                raise ValueError('derived row regrade projection differs from its sealed proof file')
+            qualified_row, verified_projection = project_judged_outcome(actual[0], program,
+                Path(regrade_projection['source_worlds_path']), Path(regrade_projection['qualification_path']),
+                plan_path=plan_path, plan_sha256=declaration['plan']['sha256'], claim_id=entry['claim_id'],
+                claim_index=claim['index'],
+                queue_path=queue_path, result_path=result_path, result_manifest_path=receipt_path,
+                runtime=Path(plan['runtime']))
+            if verified_projection != regrade_projection:
+                raise ValueError('provider regrade projection does not revalidate against original source artifacts')
+            qualified_row['source_regrade'] = row_regrade
+            if canonical_json_sha256_hex(qualified_row) != canonical_json_sha256_hex(row):
+                raise ValueError('provider derived row differs from its exact regrade projection')
+            validate_projection(actual[0], row, regrade_projection)
+            proof_paths[f'case:{number}:outcome_regrade'] = regrade_path
+            proof_paths[f'case:{number}:qualification'] = Path(regrade_projection['qualification_path']).resolve(strict=True)
+            proof_paths[f'case:{number}:sol_grade'] = Path(regrade_projection['sol_regrade_path']).resolve(strict=True)
+        elif actual[0] != row:
+            raise ValueError('provider trajectory differs from the exact collector result without a regrade')
         trace = row.get('provenance') or {}
         outcome = row.get('outcome') or {}
         accepted_block = exact_honest_root_block(row, program)
@@ -192,13 +259,20 @@ def source_binding(args, *, protection_reader):
             raise ValueError('provider source repeats an execution or selected task')
         if set(program['source_groups']) & (current['held'] | current['quality'] | current['pending']):
             raise ValueError('provider source intersects current protected source groups')
+        try:
+            current_worlds.check(program)
+        except ValueError as error:
+            raise ValueError('provider source intersects current ProtectedWorlds custody: ' + str(error)) from error
         selected_ids.add(program['id']); groups.update(program['source_groups'])
         packet_programs[program['id']] = canonical_json_sha256_hex(program)
         source_files[row['id']] = {**entry['result'],'row_id':row['id'],
-                                  'collection_source':collection_key,'source':str(result_path)}
+                                  'collection_source':collection_key,'source':str(result_path),
+                                  **({'source_regrade': regrade_ref} if regrade_projection is not None else {})}
         proof_paths.update({f'case:{number}:result':result_path,
                             f'case:{number}:manifest':receipt_path,
                             f'case:{number}:queue':queue_path})
+    if validated_regrades != set(regrades_by_case):
+        raise ValueError('provider source declares unused or missing outcome regrades')
     packet = {'selected_ids':selected_ids,'program_sha256':packet_programs,
               'train_groups':groups,'held_groups':set(),
               'proofs':{'selection':declaration['plan'],
@@ -214,4 +288,6 @@ def source_binding(args, *, protection_reader):
             'train_groups':groups,'held_groups':set(),'proof_paths':proof_paths,
             'proof_sha256':{key:sha256_file_hex(path)for key,path in proof_paths.items()},
             'collections':{collection_key:{**declaration['plan'],'runtime_model':plan['model_id']}},
-            'packets':{collection_key:packet},'current':current}
+            'packets':{collection_key:packet},'current':current,
+            'current_protected_worlds':{'path':str(protected_worlds_registry),
+                'sha256':current_worlds_sha,'identity_digest':current_worlds.digest}}

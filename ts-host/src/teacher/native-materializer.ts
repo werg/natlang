@@ -536,6 +536,33 @@ function softBodyActionMatches(modelArguments: unknown, actionArguments: unknown
     event.block === block && event.truncated === true && event.text_body_sha256 === hexDigest(body));
 }
 
+/** Return type from the captured start event for named functions, whose source has no inline site. */
+function graphInvocationReturnType(row: NativeRow, invocationId: string): string | undefined {
+  const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+  const starts = graph.filter(event => event.kind === 'invocation' && event.phase === 'start' &&
+    event.call_id === invocationId && event.node === `call:${invocationId}`);
+  if (starts.length !== 1) return;
+  const start = starts[0]!;
+  const definition = start.definition && typeof start.definition === 'object' ? start.definition as Dict : undefined;
+  const occurrence = start.native_occurrence && typeof start.native_occurrence === 'object' ?
+    start.native_occurrence as Dict : undefined;
+  if (!definition || !occurrence || occurrence.schema !== 'natlang.execution-occurrence/1' ||
+      typeof start.signature !== 'string' || occurrence.signature !== start.signature ||
+      occurrence.definition_id !== definition.id || occurrence.revision !== definition.revision) return;
+  const digest = occurrence.occurrence_sha256;
+  const base = { ...occurrence };
+  delete base.occurrence_sha256;
+  if (typeof digest !== 'string' || digest !== hexDigest(canonical(base))) return;
+  const delimiter = start.signature.lastIndexOf(') => ');
+  if (delimiter < 0) return;
+  const returnType = start.signature.slice(delimiter + ') => '.length).trim();
+  if (!returnType) return;
+  try {
+    if (formatType(parseType(returnType)) !== returnType) return;
+  } catch { return; }
+  return returnType;
+}
+
 /** Match an authored Neuralese result marker only when runtime trace proves that exact child wrote its block. */
 function softReturnResultActionMatches(modelArguments: unknown, actionArguments: unknown,
   row: NativeRow, invocationId: string | undefined, actionEvent: Dict): boolean {
@@ -580,7 +607,10 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
   const resultValue = hostResult?.value && typeof hostResult.value === 'object' ? hostResult.value as Dict : undefined;
   const resultRef = resultValue?.$neuralese && typeof resultValue.$neuralese === 'object' ? resultValue.$neuralese as Dict : undefined;
   const declaredType = (invocation?.inline_instruction_site as Dict | undefined)?.returns;
-  const runtimeType = declaredType && typeof declaredType === 'object' ? (declaredType as Dict).natlang : undefined;
+  const inlineType = declaredType && typeof declaredType === 'object' ? (declaredType as Dict).natlang : undefined;
+  const graphType = graphInvocationReturnType(row, invocationId);
+  if (typeof inlineType === 'string' && graphType && inlineType !== graphType) return false;
+  const runtimeType = typeof inlineType === 'string' ? inlineType : graphType;
   if (structuredTransport) {
     if (typeof runtimeType !== 'string') return false;
     try {
@@ -631,6 +661,8 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
           !receipts.some(receipt => receipt.id === blockId && receipt.type === runtimeType &&
             receipt.body === markers[0]![1] && receipt.body_sha256 === writer.text_body_sha256 &&
             receipt.writer_node === writer.node && receipt.producer_call_id === invocationId &&
+            receipt.source_kind === 'typed-text-result' && receipt.source === 'return_result' &&
+            receipt.marker_context === 'return-result' &&
             receipt.format === 'teacher-text' && receipt.teacher_text === true &&
             receipt.learned_vectors === false && receipt.tokenizer_ids === false)) return false;
     }
@@ -898,7 +930,11 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
       !['ok', 'completed'].includes(String(actionEvent.outcome))) return;
   const model = modelArguments && typeof modelArguments === 'object' && !Array.isArray(modelArguments) ? modelArguments as Dict : {};
   const action = actionArguments && typeof actionArguments === 'object' && !Array.isArray(actionArguments) ? actionArguments as Dict : {};
-  if ((actionEvent.name === 'return_result' && !Object.hasOwn(model, 'value')) || canonical(model) !== canonical(action)) return;
+  const argumentsMatch = canonical(model) === canonical(action);
+  const authenticatedTeacherTextRewrite = actionEvent.name === 'return_result' && !argumentsMatch &&
+    softReturnResultActionMatches(model, action, row, invocationId, actionEvent);
+  if ((actionEvent.name === 'return_result' && !Object.hasOwn(model, 'value')) ||
+      (!argumentsMatch && !authenticatedTeacherTextRewrite)) return;
   const ledger = Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger as Dict[] : [];
   const outputs = ledger.filter(item => item.invocation_id === invocationId && item.host_result &&
     typeof item.host_result === 'object').map(item => item.host_result as Dict);
@@ -949,7 +985,7 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
     let bodyBasis = 'authenticated-final-host-output-reference';
     const exactRawValue = actionEvent.name === 'return_result' &&
       (model.status === undefined || model.status === 'success') && Object.hasOwn(model, 'value');
-    if (exactRawValue && teacherTextWrite && write.source_kind === 'typed-text-result' && type === 'Neuralese<string>' && write.result_path === undefined &&
+    if (exactRawValue && teacherTextWrite && write.source_kind === 'typed-text-result' && write.result_path === undefined &&
         typeof model.value === 'string') {
       const marker = /^<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>$/.exec(model.value);
       const turn = sourceTurns[0]!;

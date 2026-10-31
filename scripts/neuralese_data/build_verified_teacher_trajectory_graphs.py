@@ -746,7 +746,21 @@ def verify_original_row(row, original):
     originals = [value for _, value in file_rows(path) if value.get('id') == row['id']]
     if len(originals) != 1:
         raise ValueError('combined teacher trajectory differs from its original response: ' + row['id'])
-    if row.get('source_quality_continuation'):
+    if row.get('source_regrade'):
+        regrade = row['source_regrade']
+        reference = regrade.get('receipt') if isinstance(regrade, dict) else None
+        if reference != original.get('source_regrade'):
+            raise ValueError('derived row regrade differs from its exact source receipt')
+        proof_path = Path(reference['path']).resolve(strict=True)
+        if (sha256_file(proof_path) != reference.get('sha256')
+                or proof_path.stat().st_size != reference.get('bytes')):
+            raise ValueError('provider outcome regrade receipt changed')
+        projection = json.loads(proof_path.read_text())
+        from scripts.neuralese_data.provider_judged_regrade import validate_projection
+        if projection.get('raw_result_sha256') != original.get('sha256'):
+            raise ValueError('outcome regrade refers to another original provider result')
+        validate_projection(originals[0], row, projection)
+    elif row.get('source_quality_continuation'):
         from scripts.neuralese_data.teacher_file_quality import verify_quality_continuation
         verify_quality_continuation(row, originals[0], original)
     elif canonical_json_sha256_hex(originals[0]) != canonical_json_sha256_hex(row):
