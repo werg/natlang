@@ -1093,6 +1093,19 @@ def _retain_current_held_coverage(metrics, training, held):
             metrics[key]=copy.deepcopy(coverage)
 
 
+def _validate_rolling_checkpoint_parent(slot, continue_from):
+    """Reject an explicit parent that rolling-slot precedence would ignore."""
+    if continue_from is None or not slot.exists():
+        return
+    try:
+        same = slot.samefile(continue_from)
+    except OSError as error:
+        raise ValueError('cannot verify explicit parent against existing rolling checkpoint') from error
+    if not same:
+        raise ValueError('explicit continuation parent differs from existing rolling checkpoint; '
+                         'bind the actual rolling slot or choose a different output directory')
+
+
 def _resume_identity_for_comparison(identity):
     """Normalize legacy default-backend omission without mutating checkpoint state."""
     previous = dict(identity or {})
@@ -1757,6 +1770,7 @@ def _main(argv=None, *, requested_refresh):
         policy.on_saved=saved_publication_hook(namespace=args.checkpoint_publication_namespace,
                                                readonly_input_roots=roots)
     policy.install_signal_handlers()
+    _validate_rolling_checkpoint_parent(policy.slot, args.continue_from)
     resume = None
     state = parent_state = None
     parent_continuation = False
