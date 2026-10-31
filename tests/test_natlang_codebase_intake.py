@@ -251,12 +251,14 @@ def test_intake_folder_files_and_verifier_targets(tmp_path):
     row = json.loads(path.read_text())
     row['folder_files'] = {'src/app.ts': 'before'}
     row['expected_files'] = {'src/app.ts': 'after'}
+    row['files_oracle'] = {'compare': 'rewrite', 'threshold': 1.0, 'rubric': 'Preserve behavior.'}
     path.write_text(json.dumps(row) + '\n')
     out = tmp_path / 'out.jsonl'
     intake(package, output=out)
     case = json.loads(out.read_text())
     assert case['semantics']['folder_files'] == {'src/app.ts': 'before'}
     assert case['semantics']['expected_files'] == {'src/app.ts': 'after'}
+    assert case['semantics']['files_oracle'] == row['files_oracle']
     assert 'after' not in json.dumps(case['semantics']['files'])
     for bad in ('../escape', '/absolute', 'a/./b', 'a//b', 'a\\b', 'C:/absolute', 'a\x00b'):
         row['folder_files'] = {bad: 'content'}

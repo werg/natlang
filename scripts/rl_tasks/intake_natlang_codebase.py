@@ -290,6 +290,11 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
         for field in ('folder_files', 'expected_files'):
             if field in row:
                 case['semantics'][field] = row[field]
+        # Preserve the file-specific oracle contract from an authored world.
+        # In particular, judged rewrites need their own rubric so the runtime
+        # can judge newly created output files against the bound source folder.
+        if 'files_oracle' in row:
+            case['semantics']['files_oracle'] = row['files_oracle']
         cases.append(case)
     return cases
 
