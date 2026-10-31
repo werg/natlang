@@ -1160,7 +1160,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         } else return false;
       }
     };
-    if (ts.isCallExpression(node) && !instance && !chainedMethodCall && !iterateOnCall && !inIterateOnChain(node)) {
+    const promiseConstruction = ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'Promise';
+    if ((ts.isCallExpression(node) && !instance && !chainedMethodCall && !iterateOnCall && !inIterateOnChain(node)) || promiseConstruction) {
       const at = rel(node);
       primitive.push({ start: at.start, end: at.start, text: '__natlang_own((' },
         { start: at.end, end: at.end, text: '))' });

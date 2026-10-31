@@ -78,6 +78,17 @@ test('owned async promises keep awaited rejection and async default-parameter se
   assert.equal(defaultParameter.ok, 'rejected asynchronously');
 });
 
+test('an unawaited native Promise constructor rejection is owned without changing awaited rejection', async () => {
+  const detached = await evalCase({ code:
+    'new Promise((_, reject) => reject(new Error("detached rejection"))); return "survived";' });
+  assert.equal(detached.ok, 'survived');
+
+  const awaited = await evalCase({ code:
+    'try { await new Promise((_, reject) => reject(new Error("expected rejection"))); return "missed"; } ' +
+    'catch (error) { return error.message; }' });
+  assert.equal(awaited.ok, 'expected rejection');
+});
+
 test('setInterval is not available; timers end with their call', async () => {
   const interval = await evalCase({ code: 'setInterval(() => counter.tick(), 5); return "scheduled";' });
   assert.match(interval.error, /setInterval` is not available here; repeat with `iterateOn/);
