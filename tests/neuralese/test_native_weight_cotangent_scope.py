@@ -519,3 +519,21 @@ def test_custom_linear_instance_forward_rejected_without_changing_semantics(chil
     assert linear.__dict__['forward'] is override
     assert (model[0] if child else model) is linear
     assert torch.equal(model(x), expected)
+
+
+def test_stored_rmsnorm_cpu_higher_order_input_adjoint():
+    from natlang_neuralese.maple.model import RMSNorm
+    from natlang_neuralese.model.native_weight_carrier import _TorchStoredRMSNorm
+
+    torch.manual_seed(404)
+    layer = RMSNorm(7, 1e-5).float()
+    x = torch.randn(3, 7, requires_grad=True)
+    reference = x.detach().clone().requires_grad_(True)
+    cotangent = torch.randn_like(x)
+    probe = torch.randn_like(x)
+    out = _TorchStoredRMSNorm.apply(x, layer.weight, layer.eps, layer, layer.forward)
+    dx = torch.autograd.grad(out, x, cotangent, create_graph=True)[0]
+    actual = torch.autograd.grad(dx, x, probe)[0]
+    expected_dx = torch.autograd.grad(layer(reference), reference, cotangent, create_graph=True)[0]
+    expected = torch.autograd.grad(expected_dx, reference, probe)[0]
+    torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-5)
