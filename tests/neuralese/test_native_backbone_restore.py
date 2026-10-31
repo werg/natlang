@@ -40,6 +40,9 @@ def test_checkpoint_restore_uses_saved_backbone_and_keeps_exact_buffers_and_logi
     monkeypatch.setattr(model_type, 'from_pretrained', from_saved)
     restored, _, _, _, state = load_native_checkpoint(
         tmp_path / 'native.pt', device=original.port.embedding_weight.device)
+    assert 'base_restore' not in state['model_config'], 'restore path metadata must not alter saved model identity'
+    assert restored.native_base_restore_receipt['schema'] == 'natlang.native-config-only-checkpoint-restore/1'
+    assert restored.native_base_restore_receipt['pinned_base_inventory_sha256'] == state['model_config']['base_inventory_sha256']
     exact(model_state(restored), model_state(original))
     assert dict(original.named_buffers()).keys() == dict(restored.named_buffers()).keys()
     for (name, before), (other_name, after) in zip(original.named_buffers(), restored.named_buffers()):
@@ -53,3 +56,12 @@ def test_checkpoint_restore_uses_saved_backbone_and_keeps_exact_buffers_and_logi
     with torch.no_grad():
         first.add_(1)
     torch.testing.assert_close(state['backbone_state'][first_name], saved, rtol=0, atol=0)
+
+
+def test_serving_binds_restore_receipt_outside_model_identity(tmp_path):
+    engine = engine_fixture(tmp_path, 'lfm')
+    assert 'base_restore' not in engine.model_config
+    receipt = engine.rl_policy_binding['base_restore']
+    assert receipt['schema'] == 'natlang.native-config-only-checkpoint-restore/1'
+    assert receipt['pinned_base_inventory_sha256'] == engine.model_config['base_inventory_sha256']
+    assert receipt['verified_local_files']['config.json']

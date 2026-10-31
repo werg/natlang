@@ -92,8 +92,9 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
         'serving_precision':dict(serving_config['precision']),
         'serving_config_sha256':serving_config['identity_sha256'],
         **({'native_participant': participant} if participant is not None else {})}
-    if config.get('base_restore') is not None:
-        engine.rl_policy_binding['base_restore'] = dict(config['base_restore'])
+    base_restore = getattr(model, 'native_base_restore_receipt', None)
+    if base_restore is not None:
+        engine.rl_policy_binding['base_restore'] = dict(base_restore)
     if _state.get('inference_source') is not None:
         engine.rl_policy_binding['inference_source'] = dict(_state['inference_source'])
     if engine.native_actor_view is not None:

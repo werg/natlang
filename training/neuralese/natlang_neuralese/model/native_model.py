@@ -288,7 +288,10 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
               'native_linear_precision': native_linear_precision,
               'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer), 'dtype': str(dtype)}
     if base_restore is not None:
-        config['base_restore'] = base_restore
+        # This attests how this process reconstructed the weights. It is not
+        # part of the model's saved identity: the checkpoint already binds the
+        # same complete source inventory and complete backbone tensors.
+        model.native_base_restore_receipt = dict(base_restore)
     if architecture == 'lfm3':
         # The modeling code is part of the backbone identity: the vendored pinned remote code, hash-verified.
         from ..third_party import lfm3
