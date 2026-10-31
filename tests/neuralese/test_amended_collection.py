@@ -90,5 +90,19 @@ def test_zero_signal_jolt_projection_preserves_active_and_privileged_graphs():
     assert set(projected['rows'])=={'outcome','privileged'} and set(rows)=={'zero','outcome','privileged'}
     assert receipt['omitted_graph_visits']==0 and receipt['omitted_graph_ids']==['zero']
     assert 'active episodes' in receipt['normalization']
-    with pytest.raises(ValueError,match='all admitted'):
-        skip_zero_signal_jolt(graphs[:1],{**objective,'rows':{'zero':rows['zero']}})
+    empty,_,all_zero=skip_zero_signal_jolt(graphs[:1],{**objective,'rows':{'zero':rows['zero']}})
+    assert not empty and all_zero['omitted_graph_visits']==0
+
+
+def test_no_signal_round_advances_collection_without_training_credit(tmp_path):
+    from natlang_neuralese.rl.production import commit_no_signal_round
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    rollout=tmp_path/'rollouts.jsonl';rollout.write_text('{}\n');parent=tmp_path/'parent.pt';parent.write_bytes(b'parent')
+    policy='a'*64;loss={'schema':'jolt-plus/1'};report=tmp_path/'zero-signal-report.json'
+    report.write_text(json.dumps({'schema':'natlang.native-rl-no-signal/1','policy_sha256':policy,'policy_loss':json.dumps(loss),
+        'rollouts':{str(rollout):sha256_file_hex(rollout)},'optimizer_updates':0,'graph_visits':0,
+        'projection':{'active_count':0,'omitted_graph_visits':0}}))
+    state={'round':10,'offset':57,'trained_rounds':7,'checkpoint':str(parent),'active_update_round':'x','update_mode':'grpo'}
+    commit_no_signal_round(state,report_path=report,rollouts_path=rollout,policy_id=policy,policy_loss=loss,next_offset=58)
+    assert state['round']==11 and state['offset']==58 and state['trained_rounds']==7 and state['checkpoint']==str(parent)
+    assert state['no_signal_history'][0]['optimizer_updates']==0 and 'active_update_round' not in state

@@ -237,7 +237,6 @@ def skip_zero_signal_jolt(graphs, objective):
             omitted.append(ident)
     if not omitted:return graphs,objective,None
     omitted_set=set(omitted);kept=[graph for graph in graphs if graph['id'] not in omitted_set]
-    if not kept:raise ValueError('all admitted JOLT episodes have provably zero objective signal')
     projected={**objective,'rows':{key:value for key,value in rows.items() if key not in omitted_set}}
     disposition={'schema':'natlang.jolt-zero-signal-projection/1','omitted_graph_ids':omitted,
         'omitted_count':len(omitted),'active_count':len(kept),'omitted_graph_visits':0,
@@ -260,6 +259,13 @@ def _admit_and_train(args,trainer):
     if not graphs:
         raise ValueError('no useful native policy episodes: route flat failures to verified graph SFT seeding')
     graphs,objective,zero_signal = skip_zero_signal_jolt(graphs,objective)
+    if not graphs and zero_signal is not None:
+        args.out.mkdir(parents=True,exist_ok=True)
+        write_json_durable(args.out/'zero-signal-report.json',{'schema':'natlang.native-rl-no-signal/1',
+            'policy_sha256':sha256_file_hex_cached(args.continue_from),'policy_loss':args.rl_policy_loss,
+            'rollouts':{str(path.resolve()):sha256_file_hex_cached(path) for path in args.rollouts},
+            'projection':zero_signal,'optimizer_updates':0,'graph_visits':0})
+        return 0
     args.out.mkdir(parents=True, exist_ok=True)
     graph_path, objective_path = args.out/'rl-native-graphs.jsonl', args.out/'rl-native-objective.json'
     # Deferral runs on the admitted graphs in memory, so the (large) graph and objective files are written once.

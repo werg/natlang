@@ -22,6 +22,31 @@ from ..common.paths import root
 from .task_rollouts import prepare, score, neuralese_use_bonus as bonus_setting
 
 
+def commit_no_signal_round(state, *, report_path, rollouts_path, policy_id, policy_loss, next_offset):
+    """Advance collection custody without claiming a training update."""
+    from ..common.hashing import sha256_file_hex_cached
+    path=Path(report_path).resolve(strict=True);report=json.loads(path.read_text())
+    declared=report.get('policy_loss')
+    if isinstance(declared,str):declared=json.loads(declared)
+    rollout=Path(rollouts_path).resolve(strict=True)
+    if (report.get('schema')!='natlang.native-rl-no-signal/1' or report.get('policy_sha256')!=policy_id
+            or declared!=policy_loss or report.get('optimizer_updates')!=0 or report.get('graph_visits')!=0
+            or report.get('rollouts')!={str(rollout):sha256_file_hex_cached(rollout)}
+            or (report.get('projection') or {}).get('active_count')!=0
+            or (report.get('projection') or {}).get('omitted_graph_visits')!=0):
+        raise ValueError('no-signal round lacks exact zero-update policy custody')
+    record={'schema':'natlang.rl-no-signal-round/1','round':state['round'],'policy_sha256':policy_id,
+            'report':{'path':str(path),'sha256':sha256_file_hex_cached(path)},'next_offset':next_offset,
+            'optimizer_updates':0,'graph_visits':0,'checkpoint':state['checkpoint']}
+    state.setdefault('no_signal_history',[]).append(record)
+    state.update(round=state['round']+1,offset=next_offset,phase='collect',production_complete=False,
+                 collection_attempt=0,group_stats=[])
+    for key in ('active_update_round','update_mode','update_rollouts','update_stages',
+                'update_coefficient_policy','update_policy_loss'):
+        state.pop(key,None)
+    return state
+
+
 def invalidate_checkpoint_readiness(state, checkpoint, *, reason):
     """Archive checkpoint-specific proofs before advancing the owner head."""
     from ..common.hashing import sha256_file_hex_cached
@@ -1471,6 +1496,7 @@ def run(config_path, *, rounds=None, stop=None):
             write_json_durable(round_dir / 'learner-parameters.json', state['update_learner_parameters'])
             base_learner_out = Path(values['learner_out'])
             pending = False
+            no_signal = False
             for kind in rft_stages:
                 stage_out = base_learner_out if len(rft_stages) == 1 else base_learner_out.parent / ('learner-' + kind)
                 values.update(learner_out=str(stage_out), rft_document_kind=kind)
@@ -1492,6 +1518,14 @@ def run(config_path, *, rounds=None, stop=None):
                         command=prepare_seed_command(config,stage_out,values,state,state_path,
                             parameters=config.get('seed_trainer_parameters',config.get('trainer_parameters',{})))
                     run_command(command, values)
+                no_signal_path=stage_out/'zero-signal-report.json'
+                if no_signal_path.is_file():
+                    if mode!='grpo' or len(rft_stages)!=1 or (stage_out/'checkpoint.pt').exists() or learner_report.exists():
+                        raise ValueError('no-signal receipt cannot replace a trained or multi-stage update')
+                    offset=((selection[-1]['row']+1)%len(cases) if amended_offset is None else amended_offset)
+                    commit_no_signal_round(state,report_path=no_signal_path,rollouts_path=values['rollouts'],
+                                           policy_id=policy,policy_loss=policy_loss,next_offset=offset)
+                    write_json_durable(state_path,state);no_signal=True;break
                 checkpoint = stage_out / 'checkpoint.pt'
                 if (not checkpoint.is_file() or not learner_report.is_file()) and control is not None and control.stop.requested:
                     state['phase'] = 'requested_stop'
@@ -1543,6 +1577,9 @@ def run(config_path, *, rounds=None, stop=None):
                     checkpoint=Path(state['checkpoint'])  # actual unchanged backbone, never the coefficient state slot
                 values.update(checkpoint=str(checkpoint), continue_identity=str(stage_out / 'identity-check.json'),
                               continue_monitor_reference=str(stage_out / 'monitor-reference.pt'))
+            if no_signal:
+                completed += 1
+                continue
             if pending:
                 continue
             if control is not None and control.stop.requested:
