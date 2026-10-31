@@ -43,6 +43,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 from natlang_neuralese.common.paths import resolve as data_path  # noqa: E402
+from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex  # noqa: E402
 
 LFM3 = Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd'
 LFM3_FINGERPRINT = '133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3'
@@ -56,18 +57,7 @@ CODE = ('scripts/neuralese_data/build_chain_graphs.py', 'scripts/neuralese_data/
         'training/neuralese/natlang_neuralese/serve/chat.py')
 ID_PATTERN = re.compile(rb'"id"\s*:\s*"([^"]+)"')
 STATE = {}
-
-
-def sha_file(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as stream:
-        for block in iter(lambda: stream.read(1 << 22), b''):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def canonical_sha(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+STATE_INDEX_CACHE = None  # set from --index-cache: byte offsets of records.jsonl, bound to its size/mtime
 
 
 def edge_digest(edge):
@@ -111,14 +101,26 @@ def shard_units(work, source):
 def corpus_units(corpus):
     """Chains of an assembled cohort, records located by a one-pass byte-offset index of records.jsonl."""
     records_path = corpus / 'records.jsonl'
-    index = {}
-    with open(records_path, 'rb') as stream:
-        offset = 0
-        for line in stream:
-            match = ID_PATTERN.search(line)
-            if match:
-                index[match.group(1).decode()] = (str(records_path), offset, len(line))
-            offset += len(line)
+    stat = records_path.stat()
+    identity = {'path': str(records_path.resolve()), 'size': stat.st_size, 'mtime_ns': stat.st_mtime_ns}
+    cache = Path(STATE_INDEX_CACHE) if STATE_INDEX_CACHE else None
+    index = None
+    if cache and cache.exists():
+        saved = json.loads(cache.read_text())
+        if saved.get('identity') == identity:
+            index = {rid: (str(records_path), offset, length) for rid, (offset, length) in saved['index'].items()}
+    if index is None:
+        index = {}
+        with open(records_path, 'rb') as stream:
+            offset = 0
+            for line in stream:
+                match = ID_PATTERN.search(line)
+                if match:
+                    index[match.group(1).decode()] = (str(records_path), offset, len(line))
+                offset += len(line)
+        if cache:
+            cache.write_text(json.dumps({'identity': identity,
+                                         'index': {rid: [o, n] for rid, (_, o, n) in index.items()}}))
     edges_by = collections.defaultdict(list)
     for line in open(corpus / 'edges.jsonl'):
         if line.strip():
@@ -174,7 +176,7 @@ def target_shas(unit):
     chain, locations, edges, _ = unit
     if locations is None:
         return {}
-    return {rid: canonical_sha(row.get('target')) for rid, row in read_records(locations).items()}
+    return {rid: canonical_json_sha256_hex(row.get('target')) for rid, row in read_records(locations).items()}
 
 
 def pieces_for(path):
@@ -280,7 +282,7 @@ class Writer:
             tmp, final = self.out / f'{name}.jsonl.tmp', self.out / f'{name}.jsonl.zst'
             if os.system(f'zstd -q -T4 -6 --rm -f "{tmp}" -o "{final}"'):
                 raise RuntimeError('zstd failed for ' + name)
-            bindings[name] = {'path': str(final), 'rows': self.counts[name], 'sha256': sha_file(final),
+            bindings[name] = {'path': str(final), 'rows': self.counts[name], 'sha256': sha256_file_hex(final),
                               'bytes': final.stat().st_size}
         return bindings
 
@@ -307,6 +309,7 @@ def main():
                              'from the target dedupe')
     parser.add_argument('--target-cap', type=int, default=64)
     parser.add_argument('--limit-chains', type=int)
+    parser.add_argument('--index-cache', type=Path, help='reusable records.jsonl offset index (corpus input)')
     parser.add_argument('--cap-state', type=Path,
                         help='JSON counters shared by successive runs, so the caps are global across tranches')
     parser.add_argument('--workers', type=int, default=4)
@@ -321,9 +324,11 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     protection = current_protection(args.protection)
     holds, hold_bindings = load_decision_holds(sorted((ROOT / 'training/decision-holds').glob('*.jsonl')))
-    code = {path: sha_file(ROOT / path) for path in CODE}
+    code = {path: sha256_file_hex(ROOT / path) for path in CODE}
+    global STATE_INDEX_CACHE
+    STATE_INDEX_CACHE = args.index_cache
     if args.corpus:
-        inputs = {name: {'path': str(args.corpus / name), 'sha256': sha_file(args.corpus / name)}
+        inputs = {name: {'path': str(args.corpus / name), 'sha256': sha256_file_hex(args.corpus / name)}
                   for name in ('records.jsonl', 'edges.jsonl', 'chains.jsonl', 'pieces.jsonl')}
         units = list(corpus_units(args.corpus))
     else:
@@ -339,7 +344,7 @@ def main():
                                              if hold['primarySourceId'] is None}
     held_sources = {hold['primarySourceId'] for hold in family_holds if hold['primarySourceId']}
     binding['family_holds'] = {'path': 'training/source-reviews/family-holds.json',
-                               'sha256': sha_file(ROOT / 'training/source-reviews/family-holds.json'),
+                               'sha256': sha256_file_hex(ROOT / 'training/source-reviews/family-holds.json'),
                                'excluded_families': sorted(excluded)}
     config = {'binding': binding, 'excluded_families': excluded, 'held_sources': held_sources, 'prompts': prompts, 'max_tokens': args.max_tokens, 'holds': holds,
               'blocked': protection['held'] | protection['quality'] | protection['pending'],
@@ -396,7 +401,7 @@ def main():
             families[value['family']][f'{name}:imports'] += value['stats']['imports']
     files = writer.finish()
     omission_files = omissions.finish()
-    if any(sha_file(ROOT / path) != digest for path, digest in code.items()):
+    if any(sha256_file_hex(ROOT / path) != digest for path, digest in code.items()):
         raise ValueError('chain renderer code changed during this conversion')
     receipt = {'schema': 'natlang.chain-graphs/1', 'corpus_id': args.corpus_id, 'source_binding': binding,
                'prompt_rendering': prompts, 'context_weight': 0.0, 'max_tokens': args.max_tokens,

@@ -37,6 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 from natlang_neuralese.common.paths import resolve as data_path  # noqa: E402
+from natlang_neuralese.common.hashing import sha256_hex  # noqa: E402
 
 SCHEMA = 'natlang.broad-graph-case/1'
 HF = Path.home() / '.cache/huggingface/hub'
@@ -46,8 +47,8 @@ S1_GROUPS = data_path('data_nvme', 'natlang-corpora/cross-corpus-index/s1-full-f
 MAX_DOCS = 4
 
 
-def sha(text):
-    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+def text_sha(text):
+    return sha256_hex(text.encode('utf-8'))
 
 
 def file_binding(path):
@@ -60,12 +61,12 @@ def file_binding(path):
 
 
 def rng_for(*parts):
-    return random.Random(int(sha('\0'.join(map(str, parts)))[:16], 16))
+    return random.Random(int(text_sha('\0'.join(map(str, parts)))[:16], 16))
 
 
 def carve(group, percent=5):
     """Deterministic test carve of a train-only source by its world group."""
-    return 'test' if int(sha('broad-graph-carve:' + group)[:8], 16) % 100 < percent else 'train'
+    return 'test' if int(text_sha('broad-graph-carve:' + group)[:8], 16) % 100 < percent else 'train'
 
 
 def wiki_group(title):
@@ -255,7 +256,7 @@ def make_case(*, source, dataset, upstream_id, upstream_split, split, groups, ki
     }
     for doc in documents:
         doc.setdefault('view_origin', 'none-line' if doc['view'] == spec['none'] else 'dataset')
-        doc['group'] = 'document:' + sha(doc['text'])
+        doc['group'] = 'document:' + text_sha(doc['text'])
     case['groups'] = sorted(set(case['groups']) | {doc['group'] for doc in documents})
     return case
 
@@ -407,7 +408,7 @@ def squad(holds):
         for r in rows:
             per_paragraph[r['context']].append(r)
         for context, questions in per_paragraph.items():
-            row = rng_for('squad', title, sha(context)).choice(questions)
+            row = rng_for('squad', title, text_sha(context)).choice(questions)
             answer, start = row['answers']['text'][0], row['answers']['answer_start'][0]
             end = start + len(answer)
             if context[start:end] != answer:
@@ -446,7 +447,7 @@ def qmsum(holds):
         for meeting_index, line in enumerate(open(path)):
             meeting = json.loads(line)
             turns = [f'{t["speaker"]}: {" ".join(t["content"].split())}' for t in meeting['meeting_transcripts']]
-            meeting_id = sha('\n'.join(turns[:5]))[:20]
+            meeting_id = text_sha('\n'.join(turns[:5]))[:20]
             segments, current, size = [], [], 0
             for index, turn in enumerate(turns):
                 if current and size + len(turn) + 1 > 4000:
@@ -579,7 +580,7 @@ def multi_news(holds):
         files = [file_binding(src), file_binding(tgt)]
         split = 'train' if upstream_split == 'train' else 'test'
         for index, (source_line, summary) in enumerate(zip(open(src), open(tgt))):
-            if upstream_split == 'train' and int(sha(f'multi_news-select:{index}')[:8], 16) % 5:
+            if upstream_split == 'train' and int(text_sha(f'multi_news-select:{index}')[:8], 16) % 5:
                 continue  # deterministic 1/5 pre-selection: the train cap (4,000) is far below 45k stories
             summary = ' '.join(summary.replace('NEWLINE_CHAR', ' ').split()).lstrip('– ').strip()
             articles = [' '.join(a.replace('NEWLINE_CHAR', ' ').split())
@@ -601,7 +602,7 @@ def multi_news(holds):
                 yield None, 'no-oracle-sentences'; continue
             upstream_id = f'{upstream_split}:{index}'
             yield make_case(source='multi_news', dataset='alexfabbri/multi_news', upstream_id=upstream_id,
-                            upstream_split=upstream_split, split=split, groups=[f'multi_news:{sha(source_line)[:24]}'],
+                            upstream_split=upstream_split, split=split, groups=[f'multi_news:{text_sha(source_line)[:24]}'],
                             kind='news', request_text='Write a short news report of the story these articles cover.',
                             answer=summary, documents=docs, license={'spdx': 'LicenseRef-multi-news-research',
                             'notes': 'card: other, non-commercial research terms; articles from newser.com sources'},
@@ -771,7 +772,7 @@ def xlam(holds):
 def loghub(holds, cases_per_system=120):
     base = VIEW3 / 'loghub'
     systems = sorted(p.name for p in base.iterdir() if p.is_dir())
-    held = sorted(systems, key=lambda s: sha('loghub-split:' + s))[:3]
+    held = sorted(systems, key=lambda s: text_sha('loghub-split:' + s))[:3]
     for system in systems:
         log, structured = base / system / f'{system}_2k.log', base / system / f'{system}_2k.log_structured.csv'
         if not log.is_file() or not structured.is_file():
@@ -870,7 +871,7 @@ def cmd_build(args):
             candidates[case['split']].append(case)
         caps = {'train': args.train_cap.get(source, args.default_train_cap), 'test': args.test_cap}
         for split, items in candidates.items():
-            items.sort(key=lambda c: sha('broad-graph-select:' + c['id']))
+            items.sort(key=lambda c: text_sha('broad-graph-select:' + c['id']))
             if len(items) > caps[split]:
                 omitted[f'{split}-cap'] += len(items) - caps[split]
             selected.extend(items[:caps[split]])
@@ -880,7 +881,7 @@ def cmd_build(args):
     final = collections.Counter((c['source'], c['split']) for c in selected)
     # Test cases are held evaluation graphs only: cap them after closure (dropping them never trains anything).
     kept, per = [], collections.Counter()
-    for case in sorted(selected, key=lambda c: sha('broad-graph-select:' + c['id'])):
+    for case in sorted(selected, key=lambda c: text_sha('broad-graph-select:' + c['id'])):
         if case['split'] == 'test':
             per[case['source']] += 1
             if per[case['source']] > args.test_cap:
@@ -888,7 +889,7 @@ def cmd_build(args):
                     report[case['source']]['omitted'].get('test-cap-after-closure', 0) + 1
                 continue
         kept.append(case)
-    kept.sort(key=lambda c: (c['source'], sha('broad-graph-order:' + c['id'])))
+    kept.sort(key=lambda c: (c['source'], text_sha('broad-graph-order:' + c['id'])))
     with open(out / 'cases.jsonl', 'w') as stream:
         for case in kept:
             stream.write(json.dumps(case, ensure_ascii=False, separators=(',', ':')) + '\n')
