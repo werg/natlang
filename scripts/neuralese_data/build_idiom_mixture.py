@@ -434,7 +434,7 @@ def carve_groups(config, policy, trained_groups=frozenset(), held_groups=frozens
     return chosen, protected
 
 
-def prior_versions(config):
+def prior_versions(config, custody=None):
     """Earlier mixture versions this one appends to: their train sources stay in the manifest unchanged, their rows,
     decisions and graphs are taken, and their held groups stay held."""
     sources, ids, decisions, keys, groups, trained, components = [], set(), set(), set(), set(), set(), []
@@ -453,6 +453,8 @@ def prior_versions(config):
                 for _, raw in iter_lines(path):
                     pair = json.loads(raw)
                     views = list((pair.get('models') or {}).values())
+                    if any(source_custody_reason(view.get('graph') or {},custody) for view in views):
+                        raise ValueError('prior source contains a protected identity; use an explicit earned-source correction')
                     pair_groups = pair.get('source_groups') or sorted({g for view in views
                         for g in (view.get('graph') or {}).get('source_groups') or []})
                     trained.update(pair_groups)
@@ -460,6 +462,8 @@ def prior_versions(config):
                 continue
             for _, raw in iter_lines(path):
                 row = json.loads(raw)
+                if source_custody_reason(row,custody):
+                    raise ValueError('prior source contains a protected identity; use an explicit earned-source correction')
                 conversion = row.get('conversion') or {}
                 teacher = conversion.get('teacher_source')
                 decisions.update([f'{teacher.get("source_row_id")}#{teacher.get("teacher_turn_index")}'] if teacher
@@ -476,8 +480,26 @@ def prior_versions(config):
     return sources, ids, decisions, keys, groups, trained, components
 
 
+def graph_source_identities(row):
+    conversion=row.get('conversion') or {};teacher=conversion.get('teacher_source') or {};pair=row.get('source_pairing') or {}
+    values=set(row.get('source_ids') or ())|set(conversion.get('source_record_ids') or ())|set(pair.get('source_ids') or ())
+    values.update(v for v in (row.get('id'),conversion.get('source_row_id'),teacher.get('source_row_id'),teacher.get('source_program_id'),pair.get('chain_id'),pair.get('consumer_source_row_id')) if isinstance(v,str))
+    targets={v for v in (row.get('id'),conversion.get('source_row_id'),teacher.get('source_row_id')) if isinstance(v,str)}
+    return values,targets
+
+
+def source_custody_reason(row, custody):
+    """Keep held outcomes out of targets and explicit whole-trajectory exclusions out of every view."""
+    if custody is None:return None
+    values,targets=graph_source_identities(row)
+    ancestors={match.group(0) for value in values for match in [re.search(r'teacher-program:[^:]+',value)] if match}
+    if ancestors & custody['excluded_trajectories']:return 'explicit whole-trajectory quality exclusion'
+    if values & custody['hard_ids']:return 'protected source identity'
+    if targets & custody['context_only_ids']:return 'non-success held decision cannot be a training target'
+    return None
+
 def candidates(config, policy, decisions, trajectories, held, carve_out=None, carve_set=frozenset(), prior=None,
-               *, checkpoint_path=None):
+               *, checkpoint_path=None, custody=None):
     """Eligible samples with features, tier and category; omissions by reason. Rows of carved held groups go to
     ``carve_out`` (held, up to the declared row cap; beyond it they are dropped, never trained)."""
     out, omitted, covered, seen = [], collections.Counter(), set(), set()
@@ -499,7 +521,7 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
                   if view in ('program-header', 'teacher-turn')}
     identity = _scan_identity([p for _, _, p in inputs], config, policy,
         {'held': sorted(held), 'carve': sorted(carve_set), 'prior_decisions': sorted(covered),
-         'prior_keys': sorted(seen), 'score_files': [_scan_identity([p], {}, {}, None) for p in config['scores']]}) \
+         'prior_keys': sorted(seen), 'custody': custody['digest'] if custody else None, 'score_files': [_scan_identity([p], {}, {}, None) for p in config['scores']]}) \
         if checkpoint_path else None
     saved = _load_scan(checkpoint_path, identity)
     start = 0
@@ -514,6 +536,10 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
             row = json.loads(raw)
             if row.get('split') != 'train':
                 omitted['not train split'] += 1
+                continue
+            reason=source_custody_reason(row,custody)
+            if reason:
+                omitted[reason]+=1
                 continue
             if set(row.get('source_groups') or ()) & held:
                 omitted['shares a held/dev source group'] += 1
@@ -670,7 +696,7 @@ def balance(cands, policy, dropped):
     return out + rest
 
 
-def bounded_candidates(config, policy, held, carve_set, seen, omitted):
+def bounded_candidates(config, policy, held, carve_set, seen, omitted, custody=None):
     """Rows of declared bounded mixes without idiom scores (config ``bounded_graphs``: e.g. complete acquired agent
     sessions): admitted train rows, no held/carved group, no exact duplicate; sampled later to the mix's share."""
     mixes = policy.get('bounded_mixes') or {}
@@ -682,6 +708,10 @@ def bounded_candidates(config, policy, held, carve_set, seen, omitted):
             row = json.loads(raw)
             if row.get('split') != 'train':
                 omitted[f'{item["mix"]}: not train split'] += 1
+                continue
+            reason=source_custody_reason(row,custody)
+            if reason:
+                omitted[reason]+=1
                 continue
             if set(row.get('source_groups') or ()) & (held | carve_set):
                 omitted[f'{item["mix"]}: shares a held/dev source group'] += 1
@@ -832,6 +862,14 @@ def main(argv=None):
     if (out / 'mixture.json').exists():
         raise SystemExit(f'{out} already holds a mixture; write a new one')
 
+    from natlang_neuralese.common.custody import ProtectedWorlds
+    worlds=ProtectedWorlds.load(root=REPO)
+    hold_files=sorted((REPO/'training/decision-holds').glob('*.jsonl'))
+    holds=[json.loads(raw) for path in hold_files for _,raw in iter_lines(path)]
+    context_only={r['id'] for r in holds if 'keep only as recovery context' in r.get('reason','')}
+    excluded={r['teacher_trajectory_id'] for r in holds if r.get('teacher_trajectory_id') and 'exclude the entire trajectory from SFT' in r.get('reason','')}
+    custody={'hard_ids':{v for k,v in worlds.identities if k=='id'}-context_only,'context_only_ids':context_only,'excluded_trajectories':excluded,
+             'digest':canonical_json_sha256_hex({'worlds':worlds.digest,'context_only':sorted(context_only),'excluded_trajectories':sorted(excluded)})}
     decisions, trajectories, score_census = load_scores(config['scores'])
     held, packet_sources = held_groups_of(config)
     if config.get('protection_manifest'):
@@ -856,13 +894,13 @@ def main(argv=None):
         for _, raw in iter_lines(path):
             held.update(json.loads(raw).get('source_groups') or [])
 
-    prior = prior_versions(config)
+    prior = prior_versions(config, custody)
     held |= prior[4]
     carve_set, held = carve_groups(config, policy, prior[5], held, prior[6], checkpoint_path=out.parent / 'carve-scan.pkl')
     carve_out = []
     cands, omitted = candidates(config, policy, decisions, trajectories, held, carve_out, carve_set, prior,
-                                checkpoint_path=out.parent / 'candidate-scan.pkl')
-    cands += bounded_candidates(config, policy, held, carve_set, prior[3] if prior else set(), omitted)
+                                checkpoint_path=out.parent / 'candidate-scan.pkl', custody=custody)
+    cands += bounded_candidates(config, policy, held, carve_set, prior[3] if prior else set(), omitted, custody)
     chosen, cap_drops = apply_caps(cands, policy)
     resolved = objective(config, policy)
 
@@ -936,6 +974,9 @@ def main(argv=None):
                     composition['communication'].update(not_train=1)
                     continue
                 graphs = [v['graph'] for v in row['models'].values()] if 'models' in row else [row]
+                if any(source_custody_reason(graph,custody) for graph in graphs):
+                    composition['communication'].update(dropped_protected_source_identity=1)
+                    continue
                 if communication_is_held(row, graphs, held, carve_set):
                     composition['communication'].update(dropped_held_group=1)
                     continue

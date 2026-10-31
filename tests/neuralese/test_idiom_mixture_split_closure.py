@@ -162,3 +162,14 @@ def test_held_identity_retains_colliding_views_and_world_custody():
     assert all('same-source-id' in row['source_record_ids'] for row in rows)
     assert mod.held_graph_identity(copy.deepcopy(first), seen) is None
     assert first['id'] == 'same-source-id' and 'held_identity' not in first
+
+
+def test_source_identity_custody_distinguishes_excluded_trajectory_and_recovery_context():
+    custody = {'hard_ids': {'eval:held'}, 'context_only_ids': {'decision:failed'},
+               'excluded_trajectories': {'teacher-program:bad'}}
+    reason = mod.source_custody_reason
+    assert reason({'id': 'x', 'conversion': {'source_row_id': 'teacher-program:bad:decision:1'}}, custody)
+    assert reason({'id': 'x', 'source_ids': ['eval:held']}, custody)
+    assert reason({'id': 'x', 'conversion': {'source_row_id': 'decision:failed'}}, custody)
+    assert reason({'id': 'x', 'source_ids': ['decision:failed'],
+                   'conversion': {'source_row_id': 'decision:good'}}, custody) is None
