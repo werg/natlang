@@ -41,6 +41,36 @@ def native_prefill_configuration(device: str, requested: int | None = None, *,
         "identity_sha256": None}
 
 
+
+def configure_native_prefix_cache(engine, budget_gb: float = 2.0, block: int = 256):
+    """Bind prefill grid and cache capacity to the policy identity before serving."""
+    import math
+    from ..common.hashing import canonical_json_sha256_hex
+    from .prefix_cache import PrefixCache
+    if (isinstance(budget_gb, bool) or not isinstance(budget_gb, (int, float))
+            or not math.isfinite(budget_gb) or budget_gb < 0
+            or type(block) is not int or block <= 0):
+        raise ValueError('prefix cache needs a nonnegative finite budget and positive integer block')
+    if budget_gb and block > engine.prefill_tokens:
+        raise ValueError('prefix cache block exceeds the bound prefill token limit')
+    budget = int(budget_gb * 2**30)
+    if budget_gb and not budget:
+        raise ValueError('positive prefix cache budget rounds to zero bytes')
+    if getattr(engine, '_thread', None) is not None:
+        raise ValueError('prefix cache identity cannot change after engine start')
+    engine.prefix_cache = PrefixCache(budget, block) if budget else None
+    config = dict(engine.serving_config)
+    config['prefix_cache'] = {'schema': 'natlang.native-prefix-cache/1',
+        'enabled': bool(budget), 'budget_bytes': budget, 'block_tokens': block,
+        'scope': 'fresh-native-prefill-only', 'key': 'model-identity-adapter-binding-and-exact-token-prefix',
+        'execution': 'fixed-block-grid' if budget else 'native-prefill-chunks'}
+    config['identity_sha256'] = canonical_json_sha256_hex(
+        {key: value for key, value in config.items() if key != 'identity_sha256'})
+    engine.serving_config = config
+    if hasattr(engine, 'rl_policy_binding'):
+        engine.rl_policy_binding['serving_config_sha256'] = config['identity_sha256']
+    return config
+
 def load_native_engine(checkpoint: str, *, base: str | None = None, device: str = "cpu", dtype=None,
                        prompt_rendering: str = "full", participant: str | None = None,
                        actor_view: dict | None = None, transported_actor: dict | None = None,

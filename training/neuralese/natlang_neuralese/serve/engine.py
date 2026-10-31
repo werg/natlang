@@ -196,12 +196,14 @@ class Engine:
         self._stopping = False
         self._ids = itertools.count()
         self._native_decoded_tokens = 0
+        self._native_prefill_tokens = 0
         self._last_cuda_request_memory: dict | None = None
 
     def progress_metrics(self):
         """Scheduler and non-synchronizing CUDA allocator observations."""
         active = tuple(self._active)
         metrics = {'natlang_native_decode_tokens_total': self._native_decoded_tokens,
+                'natlang_native_prefill_tokens_processed_total': self._native_prefill_tokens,
                 'natlang_native_batched_decode_rounds_total': getattr(self, '_native_batched_decode_rounds', 0),
                 'natlang_native_batched_decode_tokens_total': getattr(self, '_native_batched_decode_tokens', 0),
                 'natlang_active_sequences': sum(seq.phase != 'done' for seq in active),
@@ -418,7 +420,9 @@ class Engine:
         if cache is None and self.prefix_cache is not None and not torch.is_grad_enabled() and not live_adapter_leaves():
             return self._native_prefix_prefill(ids)
         for start in range(0, len(ids), self.prefill_tokens):
-            output = self._native_forward(ids[start:start+self.prefill_tokens], cache)
+            chunk = ids[start:start+self.prefill_tokens]
+            output = self._native_forward(chunk, cache)
+            self._native_prefill_tokens += len(chunk)
             cache = output['cache']
             if start + self.prefill_tokens < len(ids):
                 # Do not retain the preceding chunk's raw captures/hidden state
@@ -439,6 +443,7 @@ class Engine:
         for begin in range(start, len(ids), prefix.block):
             end = min(begin + prefix.block, len(ids))
             output = self._native_forward(ids[begin:end], cache)
+            self._native_prefill_tokens += end - begin
             cache = output['cache']
             prefix.store(digests[end], cache, output['h_final'][:, -1:])
         return output

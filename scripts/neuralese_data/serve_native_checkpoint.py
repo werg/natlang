@@ -38,6 +38,8 @@ def main() -> None:
     parser.add_argument('--prefill-tokens', type=int, default=None,
                         help='native prompt-forward chunk size (default: 2048 on GPUs <=12 GiB, otherwise 8192)')
     parser.add_argument('--device', default='cuda')
+    parser.add_argument('--prefix-cache-gb', type=float, default=2.0, help='native prompt-prefix cache budget; 0 disables')
+    parser.add_argument('--prefix-block', type=int, default=256, help='native prefill cache grid in tokens')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8097)
     parser.add_argument('--sdpa-backend', choices=['default', 'flash', 'math'], default='default')
@@ -113,6 +115,8 @@ def main() -> None:
         device=args.device,
         prefill_tokens=args.prefill_tokens,
         **view_options)
+    from natlang_neuralese.serve import configure_native_prefix_cache
+    configure_native_prefix_cache(engine, args.prefix_cache_gb, args.prefix_block)
     if args.engine == 'sglang':
         launch_sglang(engine, args, checkpoint)
         # The native model is loaded again only when a turn SGLang cannot serve arrives (serve/sglang_actor.py).

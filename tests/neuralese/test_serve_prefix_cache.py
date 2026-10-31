@@ -88,3 +88,36 @@ def test_oversized_snapshot_does_not_exceed_budget_or_leave_storage_refs():
     assert len(cache.refs) == 1 and next(iter(cache.refs.values())) == [40, 1]
     cache.store('next', (torch.zeros(10),), None)
     assert cache.bytes == 80 and list(cache.entries) == ['small', 'next']
+
+
+def test_prefix_configuration_is_bound_to_policy_and_metrics(tmp_path):
+    from natlang_neuralese.serve import configure_native_prefix_cache
+    engine = _engine(tmp_path, 0)
+    initial = engine.serving_config['identity_sha256']
+    config = configure_native_prefix_cache(engine, 0.01, 4)
+    assert config['identity_sha256'] != initial
+    assert engine.rl_policy_binding['serving_config_sha256'] == config['identity_sha256']
+    assert config['prefix_cache']['execution'] == 'fixed-block-grid'
+    _prefill(engine, list(range(5, 17)))
+    _prefill(engine, list(range(5, 15)) + [40, 41])
+    metrics = engine.progress_metrics()
+    assert metrics['natlang_native_prefill_tokens_processed_total'] == 16
+    assert metrics['natlang_prefix_cache_reused_tokens'] == 8
+    disabled = configure_native_prefix_cache(engine, 0, 4)
+    assert disabled['identity_sha256'] != config['identity_sha256']
+    assert engine.prefix_cache is None
+    assert disabled['prefix_cache']['execution'] == 'native-prefill-chunks'
+
+
+def test_prefix_configuration_rejects_invalid_or_live_changes(tmp_path):
+    import pytest
+    from natlang_neuralese.serve import configure_native_prefix_cache
+    engine = _engine(tmp_path, 0)
+    for budget, block in ((-1, 4), (float('nan'), 4), (1, 0), (1, True)):
+        with pytest.raises(ValueError):
+            configure_native_prefix_cache(engine, budget, block)
+    with pytest.raises(ValueError, match='exceeds the bound prefill'):
+        configure_native_prefix_cache(engine, 1, engine.prefill_tokens + 1)
+    engine._thread = object()
+    with pytest.raises(ValueError, match='after engine start'):
+        configure_native_prefix_cache(engine, 1, 4)

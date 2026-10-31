@@ -78,9 +78,8 @@ def main(argv=None):
         directory = args.store_dir or resolve("data_nvme", "neuralese-blocks", re.sub(r"[^A-Za-z0-9._-]+", "_", engine.dialect))
         engine.store = TensorStore(directory, int(args.store_resident_gb * 2**30))  # the loaders return an empty store
     engine.default_guidance = json.loads(args.guidance) if args.guidance else None
-    if args.prefix_cache_gb > 0:
-        from .prefix_cache import PrefixCache
-        engine.prefix_cache = PrefixCache(int(args.prefix_cache_gb * 2**30), args.prefix_block)
+    from . import configure_native_prefix_cache
+    configure_native_prefix_cache(engine, args.prefix_cache_gb, args.prefix_block)
     engine.start()
     server = serve(engine, args.host, args.port)
     from ..data.prompt_rendering import prompt_rendering_identity
