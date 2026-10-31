@@ -280,9 +280,12 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
 
     repo = Path(__file__).resolve().parents[2]
     assert (repo / 'ts-host/dist/teacher/collector.js').is_file(), 'build:node before collector test'
+    original_torch_threads = torch.get_num_threads()
     port = tiny('lfm')
     model = SharedStateModel(port, marker_ids=(58, 59, 60, 61), rank=4).eval()
     vocab = {f't{index}': index for index in range(port.embedding_weight.shape[0])}
+    for token, index in zip(('1', '2', '3', '4', 'yes', 'no'), range(6, 12)):
+        del vocab[f't{index}']; vocab[token] = index
     for marker, token in zip(ROLE_MARKERS, model.marker_ids):
         del vocab[f't{token}']; vocab[marker] = token
     del vocab['t5']; vocab['guide'] = 5
@@ -306,7 +309,17 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         'checkpoint_sha256': identity['checkpoint_sha256'], 'communication': 'native-state',
         'native_identity': dict(identity)}
     engine.context = 8192
-    monkeypatch.setattr(engine, '_native_token', lambda sequence: (2, -.1))
+    def deterministic_text_token(sequence):
+        if sequence.generated_positions:
+            return 2, -.1  # eos; the fixture is for collector/KV custody, not model capability.
+        prompt = '\n'.join(str(message.get('content', '')) for message in sequence.request.messages)
+        if 'yes or no' in prompt.lower():
+            return vocab['yes'], -.1
+        import re
+        match = re.search(r'Return exactly (\d+)\.', prompt)
+        return (vocab.get(match.group(1), vocab['1']) if match else vocab['1']), -.1
+    monkeypatch.setattr(engine, '_native_token', deterministic_text_token)
+    torch.set_num_threads(1)
     engine.start()
     server = serve(engine, '127.0.0.1', 0)
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
@@ -327,12 +340,16 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         guidance_binding = memetic.program_binding('one', identity, 'guide', written,
                                                    memetic.archive_state(url, tmp_path, written))
         task = {**case('one'), 'version': 'natlang.program/2', 'kind': 'lambda_source',
-            'semantics': {'root': 'task.nl', 'files': {'task.nl': '---\nargs: {}\nreturns: "number"\n---\nReturn 1.\n'},
-                          'inputs': {}, 'expected': 1}}
+            'source_ids': ['test:memetic-shared-http'],
+            'source_groups': ['test:memetic-world:one'],
+            'source_revisions': ['test-fixture:v1'],
+            'semantics': {'root': 'task.nl', 'files': {'task.nl':
+                '---\nargs: {value: number}\nreturns: "number"\n---\nReturn the provided value.\n'},
+                          'inputs': {'value': 1}, 'expected': 1}}
         # The authored root calls the student in a child; a direct return would
         # only replay reference code and never exercise the server.
         task['curriculum']['reference']['root'][0][1]['code'] = (
-            'const f = nl<() => Promise<number>>`Return 1.`; return await f();')
+            'const f = nl<(value: number) => Promise<number>>`Return exactly ${value}.`; return await f(value);')
         args = Namespace(samples=2, shards=1, case_seconds=40, max_model_requests=2, max_turns=2, seed_base=7,
             server=url)
         fit = memetic.evaluate(args, tmp_path, 'actual', memetic.state_guidance('guide', written['id']), [task],
@@ -368,9 +385,20 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
             memetic.evaluate(args, tmp_path, 'unbound', memetic.state_guidance('guide', written['id']), [task],
                 base_system='x', actor=identity, server_info_sha256='f' * 64, evaluation_inputs_sha256='e' * 64)
         development, confirmation = tmp_path / 'dev.jsonl', tmp_path / 'confirmation.jsonl'
-        for path, ids in ((development, ('a', 'b')), (confirmation, ('c', 'd'))):
-            path.write_text(''.join(json.dumps({**task, 'id': name, 'curriculum': {**task['curriculum'],
-                'evidence': {'world': [name]}}}) + '\n' for name in ids))
+        for path, items in ((development, (('a', 1), ('b', 2))),
+                            (confirmation, (('c', 3), ('d', 4)))):
+            slice_rows = []
+            for name, value in items:
+                row_task = {**task, 'id': name,
+                    'source_ids': [f'test:memetic-source:{name}'],
+                    'source_groups': [f'test:memetic-world:{name}'],
+                    'semantics': {**task['semantics'], 'inputs': {'value': value}, 'expected': value},
+                    'curriculum': {**task['curriculum'], 'evidence': {'world': [name]}}}
+                row_task['curriculum']['reference']['root'][0][1]['code'] = (
+                    f'const f = nl<(value: number) => Promise<number>>`Return exactly ${{value}}.`; '
+                    'return await f(value);')
+                slice_rows.append(json.dumps(row_task) + '\n')
+            path.write_text(''.join(slice_rows))
         receipt = write_custody(development, confirmation, tmp_path / 'custody.json')
         baseline = memetic.main(['--program-id', 'p', '--development', str(development),
             '--confirmation', str(confirmation), '--custody', str(receipt), '--out', str(tmp_path / 'memetic-baseline'),
@@ -381,6 +409,7 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         assert baseline['development']['scored'] == baseline['confirmation']['scored'] == 4
     finally:
         server.shutdown(); server.server_close(); engine.stop(); thread.join(timeout=5)
+        torch.set_num_threads(original_torch_threads)
 
 
 def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeypatch):
