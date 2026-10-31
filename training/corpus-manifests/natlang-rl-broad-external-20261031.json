@@ -1,0 +1,1700 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-broad-external-20261031",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-broad-external-20261031",
+  "files": [
+    {
+      "path": "assets/sql/bird-dev-california_schools.sqlite",
+      "bytes": 11116544,
+      "sha256": "986817d793479801ed55133e55aa27e335422c0cd3866b54a3d6317b7c5f09c1"
+    },
+    {
+      "path": "assets/sql/bird-dev-debit_card_specializing.sqlite",
+      "bytes": 34635776,
+      "sha256": "b3d149ad05746dbbe5116e229e17e18f09c39db43cf117d9ef3441753608b691"
+    },
+    {
+      "path": "assets/sql/bird-dev-formula_1.sqlite",
+      "bytes": 22360064,
+      "sha256": "17185981cd747f6cdc374cb02a6096db3130e6ec2ddc582fe1686a28fb4c4c8a"
+    },
+    {
+      "path": "assets/sql/bird-dev-student_club.sqlite",
+      "bytes": 2641920,
+      "sha256": "eb89bcfe97eefa386a27904ec5aa15159811a7eac894ec659a36e48fa9f76b77"
+    },
+    {
+      "path": "assets/sql/bird-dev-superhero.sqlite",
+      "bytes": 237568,
+      "sha256": "75e94a2c3236ee3bb2c01fb97a1c4b4c1c269bcefd4eab1d04be323d2d0825b1"
+    },
+    {
+      "path": "assets/sql/bird-dev-thrombosis_prediction.sqlite",
+      "bytes": 7327744,
+      "sha256": "e7e16d74b4731b4b8d33fdbe8c29cd5622620788ce8d1f335631f65fc7cf1db9"
+    },
+    {
+      "path": "assets/sql/bird-dev-toxicology.sqlite",
+      "bytes": 2678784,
+      "sha256": "f5fa7f21af1ad878ff8fef1b0582b8cb2d7ed63dbac65ff16d2ba05667650c5b"
+    },
+    {
+      "path": "assets/sql/bird-train-address.sqlite",
+      "bytes": 26550272,
+      "sha256": "cc75a98289fc6998bb0cc314306b92277f23c97000ef3f2bd0d8b220cb1e8771"
+    },
+    {
+      "path": "assets/sql/bird-train-app_store.sqlite",
+      "bytes": 18018304,
+      "sha256": "5abf267faa3c2b25f1b23c0a82bca1ca7b65368b84b16be2a6e7228168a681ef"
+    },
+    {
+      "path": "assets/sql/bird-train-beer_factory.sqlite",
+      "bytes": 991232,
+      "sha256": "3cf815ded995e8bec52d59b4763f8229054556f171a4eeb7b53f86535b94bc19"
+    },
+    {
+      "path": "assets/sql/bird-train-book_publishing_company.sqlite",
+      "bytes": 184320,
+      "sha256": "b493a54214d7b224a6f2b9b22b0f651c98f0c345a91cdec10b94825d4d897f4d"
+    },
+    {
+      "path": "assets/sql/bird-train-books.sqlite",
+      "bytes": 4337664,
+      "sha256": "8b34bb9752cb1550a622945e1b814b5978cd9435a00ab037c2758b552a7f856e"
+    },
+    {
+      "path": "assets/sql/bird-train-car_retails.sqlite",
+      "bytes": 487424,
+      "sha256": "a5c434b67cd62c8e35721dfb462405b8750fee684e9d005f79bcc23bacdb1bf5"
+    },
+    {
+      "path": "assets/sql/bird-train-cars.sqlite",
+      "bytes": 135168,
+      "sha256": "0338e4d6f3c7bb90748b6a1971c0d18f301166b77f2ca9984c197a0f20d7f67e"
+    },
+    {
+      "path": "assets/sql/bird-train-citeseer.sqlite",
+      "bytes": 7430144,
+      "sha256": "2590117d0545f92aec1651f1bc063bd5897755eaadfd56aaf0c105a81e616e32"
+    },
+    {
+      "path": "assets/sql/bird-train-computer_student.sqlite",
+      "bytes": 45056,
+      "sha256": "617669575dff24ed08efacf95e05bb53347f2d895f053faa2dcbcd047b27a513"
+    },
+    {
+      "path": "assets/sql/bird-train-cookbook.sqlite",
+      "bytes": 1220608,
+      "sha256": "bff5b9b84f633be89f7954eb4067e246f4ba7441ad4ffb33374ca8a8efe206da"
+    },
+    {
+      "path": "assets/sql/bird-train-craftbeer.sqlite",
+      "bytes": 442368,
+      "sha256": "127bad8fbd45772d66f81aa3935e5b957eaeccce104ec3e933ff156efea168ea"
+    },
+    {
+      "path": "assets/sql/bird-train-cs_semester.sqlite",
+      "bytes": 36864,
+      "sha256": "c6b199692b7169678682ad9e327762d0a0cafff1ac8f3d61505c7b2fed28b5eb"
+    },
+    {
+      "path": "assets/sql/bird-train-disney.sqlite",
+      "bytes": 258048,
+      "sha256": "0356fc508607fa20da3c94dc785705f05a4b8a9455bb4ac02fb1271fe3bd5c25"
+    },
+    {
+      "path": "assets/sql/bird-train-european_football_1.sqlite",
+      "bytes": 11907072,
+      "sha256": "1a7c2e8e0868a3c61f0cf6dc936483b31e05d86226400273280a5975c5fc99d5"
+    },
+    {
+      "path": "assets/sql/bird-train-food_inspection.sqlite",
+      "bytes": 5021696,
+      "sha256": "c76a6576ba7fe150e12b64a9eefa0ad418b10449f771f91830a87319e34f64c1"
+    },
+    {
+      "path": "assets/sql/bird-train-genes.sqlite",
+      "bytes": 1527808,
+      "sha256": "726f142a9281a90cb36a6969b08be51d03a7ba2a58d30dfa02bdb766993fe6b5"
+    },
+    {
+      "path": "assets/sql/bird-train-hockey.sqlite",
+      "bytes": 6893568,
+      "sha256": "2987cba3921e2544fcd4603eccf5ff97b17f63103d8feb6fb908d55eb5bd9ba2"
+    },
+    {
+      "path": "assets/sql/bird-train-human_resources.sqlite",
+      "bytes": 28672,
+      "sha256": "9cc6021a63b07908765954f922f86c4f335706a54b956e7c401f8f0c23aaa6f2"
+    },
+    {
+      "path": "assets/sql/bird-train-ice_hockey_draft.sqlite",
+      "bytes": 1028096,
+      "sha256": "4b297d4b7f8c0ff3b751a4017c4d2355aa8eeb11159cf258600995a56f53bf18"
+    },
+    {
+      "path": "assets/sql/bird-train-law_episode.sqlite",
+      "bytes": 548864,
+      "sha256": "164ae73150ba2f081931fcca583aafc51f319c239eab3e0005ac1a08e6f95fc7"
+    },
+    {
+      "path": "assets/sql/bird-train-legislator.sqlite",
+      "bytes": 3485696,
+      "sha256": "7fb0b945de2e21967c6f857325a42c727ef486e9f283520e2337c2ff08efdf4c"
+    },
+    {
+      "path": "assets/sql/bird-train-mental_health_survey.sqlite",
+      "bytes": 18276352,
+      "sha256": "677194717340a10ed4ec490297d695b6bb7614e928bedc81d4753bb13d47433c"
+    },
+    {
+      "path": "assets/sql/bird-train-mondial_geo.sqlite",
+      "bytes": 2113536,
+      "sha256": "02e71c23c27973be373e0c110600b4f12c77904c7594f3e345310511fe8b8d63"
+    },
+    {
+      "path": "assets/sql/bird-train-movie.sqlite",
+      "bytes": 1568768,
+      "sha256": "4d87ad371470f07af926e4bbca2784aed9a643935dd6e6a00d8009aad1816547"
+    },
+    {
+      "path": "assets/sql/bird-train-movie_3.sqlite",
+      "bytes": 6356992,
+      "sha256": "af79f59f94e64e43fb0bb6a8fdc6e6d3a2017aec9dfcb5519bc840d16e01871f"
+    },
+    {
+      "path": "assets/sql/bird-train-movies_4.sqlite",
+      "bytes": 13070336,
+      "sha256": "65bdaa5265e5d84fc97cc22eb977bff86755c7d07f2f607d7bb3d9e36046afcd"
+    },
+    {
+      "path": "assets/sql/bird-train-music_tracker.sqlite",
+      "bytes": 15204352,
+      "sha256": "7c2444428e987218e2ce0655e489448dac95cec1225ba965183f09961034038f"
+    },
+    {
+      "path": "assets/sql/bird-train-olympics.sqlite",
+      "bytes": 18145280,
+      "sha256": "c34a94838914a78f62c2989b729907aa9f58cd45b93567ab211a8a840957e074"
+    },
+    {
+      "path": "assets/sql/bird-train-professional_basketball.sqlite",
+      "bytes": 6668288,
+      "sha256": "11bc18807f9209e4fae852695907c77961a208639e25b59def05802c9f0b8839"
+    },
+    {
+      "path": "assets/sql/bird-train-regional_sales.sqlite",
+      "bytes": 2277376,
+      "sha256": "9820888505c30dfd913738265ddb9150bf1c33a93e1b236313964ada98423a0c"
+    },
+    {
+      "path": "assets/sql/bird-train-restaurant.sqlite",
+      "bytes": 806912,
+      "sha256": "39dbaf39bf244e1062e50d3be9dfd952320bd12e8471a58ae93db6ff83d57504"
+    },
+    {
+      "path": "assets/sql/bird-train-retail_complains.sqlite",
+      "bytes": 25133056,
+      "sha256": "03dce545a321d5564f5ac1ccd123bd5948c90ef7b56253fea534e11235cbe8bc"
+    },
+    {
+      "path": "assets/sql/bird-train-retail_world.sqlite",
+      "bytes": 65536,
+      "sha256": "90ac33a038f95e9f2fae7ed4782b3bbe5e65ee94b7df5422915a745419f77d33"
+    },
+    {
+      "path": "assets/sql/bird-train-shakespeare.sqlite",
+      "bytes": 12029952,
+      "sha256": "c9557c1bafa039c420d8b87d5407f90d0a8c99f24f9129f9ea6b39024f0c788d"
+    },
+    {
+      "path": "assets/sql/bird-train-shipping.sqlite",
+      "bytes": 131072,
+      "sha256": "a6b4af6401c43aeb7f678ba18e3ebc5ba8708d4a98674be6095e3d9863f4f259"
+    },
+    {
+      "path": "assets/sql/bird-train-shooting.sqlite",
+      "bytes": 180224,
+      "sha256": "9d96c60a9ef532f6c02b942ac5691eda753937324ddedd2dae7a131185cae82b"
+    },
+    {
+      "path": "assets/sql/bird-train-simpson_episodes.sqlite",
+      "bytes": 753664,
+      "sha256": "777172b55c622b0106dc4e0a03a1c1af61a0413d0a358f40e6210b8f0ca64f4d"
+    },
+    {
+      "path": "assets/sql/bird-train-soccer_2016.sqlite",
+      "bytes": 17170432,
+      "sha256": "84651eed21dbfae9f36a15697a5df81f3cb6ad78740f7301096e99dd7c4c06d5"
+    },
+    {
+      "path": "assets/sql/bird-train-student_loan.sqlite",
+      "bytes": 307200,
+      "sha256": "8dac8a8757e66599716907071ebdfb20bfd1d06b90d9cecc945dd5a040a0f3b6"
+    },
+    {
+      "path": "assets/sql/bird-train-superstore.sqlite",
+      "bytes": 6631424,
+      "sha256": "6090a5d5214c49b4eb41ab793e87c370bf54973febe6a017d569c6d0c245ab77"
+    },
+    {
+      "path": "assets/sql/bird-train-synthea.sqlite",
+      "bytes": 38637568,
+      "sha256": "7803821b0e4f7e88dfb89461d85d3c6e0e4cfe31a9c6fd979d07fa5b735bffd4"
+    },
+    {
+      "path": "assets/sql/bird-train-trains.sqlite",
+      "bytes": 5070848,
+      "sha256": "5ff21e3769ac341aec4b58d8c3e2fc5215688958cc2c0a82132223eeb124d724"
+    },
+    {
+      "path": "assets/sql/bird-train-university.sqlite",
+      "bytes": 630784,
+      "sha256": "295afab81225bea2df72f5b779e4da0b6c5fb691ff8f7e9f448ed20e54555e18"
+    },
+    {
+      "path": "assets/sql/bird-train-video_games.sqlite",
+      "bytes": 2547712,
+      "sha256": "d45a2b2e9014c1bac97ab0a94ca71a3d17632f046e48e3766134d01f5e155641"
+    },
+    {
+      "path": "assets/sql/bird-train-world.sqlite",
+      "bytes": 253952,
+      "sha256": "813faade795b875f6d46cf81d9651e2400524b414a407aa9d473aa9a8c142861"
+    },
+    {
+      "path": "assets/sql/spider-dev-battle_death.sqlite",
+      "bytes": 28672,
+      "sha256": "12569f4493a9655639c4ea86ba4bd8a4ea6411e1b8ae0e1fdf3d6a995344265d"
+    },
+    {
+      "path": "assets/sql/spider-dev-car_1.sqlite",
+      "bytes": 65536,
+      "sha256": "9d851e396e02997a1de073ae982fe1e4b1769fdffce2fac6e325857a3a938709"
+    },
+    {
+      "path": "assets/sql/spider-dev-concert_singer.sqlite",
+      "bytes": 36864,
+      "sha256": "4fa1ba5ab4577e895271088b1dc44aa94be88e25a54293317a67584112ef059d"
+    },
+    {
+      "path": "assets/sql/spider-dev-course_teach.sqlite",
+      "bytes": 28672,
+      "sha256": "da45fcdde64ac2b9330146506b7653ad4417489d8e496e509045e1b02245d793"
+    },
+    {
+      "path": "assets/sql/spider-dev-cre_Doc_Template_Mgt.sqlite",
+      "bytes": 24576,
+      "sha256": "9c3fdd03d8795ecde60aae782ce50c4fb1d6c03de1401fcdd6dc177342a53df5"
+    },
+    {
+      "path": "assets/sql/spider-dev-dog_kennels.sqlite",
+      "bytes": 49152,
+      "sha256": "ea5fbc6cf6aaf500371c5c121c339d9802ba6f5fbecd948a5274c0b487a9f486"
+    },
+    {
+      "path": "assets/sql/spider-dev-employee_hire_evaluation.sqlite",
+      "bytes": 36864,
+      "sha256": "760fec5cc872ef0cdf99242614f05c93dbd00d422ac9da87ea64fcf555be7373"
+    },
+    {
+      "path": "assets/sql/spider-dev-flight_2.sqlite",
+      "bytes": 77824,
+      "sha256": "db777ba6488ae2b515cb138d71ff23c4533e5fd0355854648a1102faff3fb7af"
+    },
+    {
+      "path": "assets/sql/spider-dev-museum_visit.sqlite",
+      "bytes": 28672,
+      "sha256": "3217aee38d8e3661d374bf025591b7164a1179c568ef5d20f3c338035fc6e1dd"
+    },
+    {
+      "path": "assets/sql/spider-dev-network_1.sqlite",
+      "bytes": 28672,
+      "sha256": "bec92cd9a68d6f23469a0df246429299f44caaf75eab12275784e0bb7d0aa9ca"
+    },
+    {
+      "path": "assets/sql/spider-dev-orchestra.sqlite",
+      "bytes": 32768,
+      "sha256": "13b64af1cf6fcbd34953a44f951b2bf79bedc000b344549212dac1a9345e2f86"
+    },
+    {
+      "path": "assets/sql/spider-dev-pets_1.sqlite",
+      "bytes": 16384,
+      "sha256": "8ffe0ea9b3b034ca8860a2f18300a98c7583ce2522ea195726a04803f675e5bb"
+    },
+    {
+      "path": "assets/sql/spider-dev-poker_player.sqlite",
+      "bytes": 20480,
+      "sha256": "63fffd7b68524f07a742a74b74b95a4ba178e6419f3574b9ee78b8dda1df46ba"
+    },
+    {
+      "path": "assets/sql/spider-dev-real_estate_properties.sqlite",
+      "bytes": 32768,
+      "sha256": "5d0bd83afa93a843e68f892d8430fe625d7ed2508aae00a341926b0b5b478a29"
+    },
+    {
+      "path": "assets/sql/spider-dev-singer.sqlite",
+      "bytes": 20480,
+      "sha256": "5c1b72755d148c294b26d7b479307e8799b93485ac918720f953e2ab84d59a0a"
+    },
+    {
+      "path": "assets/sql/spider-dev-student_transcripts_tracking.sqlite",
+      "bytes": 49152,
+      "sha256": "5a1f4928a1fd36f6edb31c4f054203b2e2fab6b18e5951c4f5633628f82a8e56"
+    },
+    {
+      "path": "assets/sql/spider-dev-tvshow.sqlite",
+      "bytes": 28672,
+      "sha256": "1212c2e75cf1dcf3aeb4055331a85298b073d8a613ead77975b13bd3346b9fc4"
+    },
+    {
+      "path": "assets/sql/spider-dev-voter_1.sqlite",
+      "bytes": 20480,
+      "sha256": "815bf1611b8a32f649d292a6138562f1761a0c10cb256e20f6561199cff31531"
+    },
+    {
+      "path": "assets/sql/spider-dev-world_1.sqlite",
+      "bytes": 319488,
+      "sha256": "17b986695f16786d58d66f85e49dba87bdfe72953207ab9b1b49da9d2301ef65"
+    },
+    {
+      "path": "assets/sql/spider-test-aan_1.sqlite",
+      "bytes": 17154048,
+      "sha256": "54c45e431f0f654bfac741cf69e66ca34dacf42a0d0abbde6fd426a7a1e60c4b"
+    },
+    {
+      "path": "assets/sql/spider-test-address_1.sqlite",
+      "bytes": 20480,
+      "sha256": "5445559b7dfd1779cefb0198047cfb1de380a394e90ea33d1bc6c4d3a94e12f7"
+    },
+    {
+      "path": "assets/sql/spider-test-advertising_agencies.sqlite",
+      "bytes": 32768,
+      "sha256": "4f7fd1fd606b3bb1f4a988f8557e9dc393e3fc1f9bf097bb79cff07df5d680b7"
+    },
+    {
+      "path": "assets/sql/spider-test-art_1.sqlite",
+      "bytes": 8192,
+      "sha256": "ccfd00de54bbe9a7ce57f226e9634e8c4693520299795fb8da834017fc55d735"
+    },
+    {
+      "path": "assets/sql/spider-test-bakery_1.sqlite",
+      "bytes": 57344,
+      "sha256": "8ab55eb34c0ea8cbe29f9651ec3deae620ba8558e03b0e7740daa871e4eba025"
+    },
+    {
+      "path": "assets/sql/spider-test-bbc_channels.sqlite",
+      "bytes": 36864,
+      "sha256": "1b9a7e6de6706734736e869180334b35420de138b1ee47b0b0f7822758cbf01a"
+    },
+    {
+      "path": "assets/sql/spider-test-bike_racing.sqlite",
+      "bytes": 28672,
+      "sha256": "5d485e48c937b87f80c4e2bcc588d88042b1f52b8596b1f47afa33da674c8a5d"
+    },
+    {
+      "path": "assets/sql/spider-test-boat_1.sqlite",
+      "bytes": 16384,
+      "sha256": "b9305054e2a29c18cdbfbe2306a27c15ba01c67085e1b72745e7e01e5336a98c"
+    },
+    {
+      "path": "assets/sql/spider-test-book_1.sqlite",
+      "bytes": 53248,
+      "sha256": "ab0fcc505f150d8904d62f639cfcbd01497ef755bb5926ed2acff3152eb662a2"
+    },
+    {
+      "path": "assets/sql/spider-test-book_press.sqlite",
+      "bytes": 28672,
+      "sha256": "c8748351b418fb213f3e4871471f8b923011323df6d341fb96796bb36f466acb"
+    },
+    {
+      "path": "assets/sql/spider-test-book_review.sqlite",
+      "bytes": 20480,
+      "sha256": "ed22389124512c73025037cf2e5546e1225e78a6f5a9db052a3aa635b93fba31"
+    },
+    {
+      "path": "assets/sql/spider-test-car_racing.sqlite",
+      "bytes": 36864,
+      "sha256": "b10a7888db067f3c1a397616447e9e5bcc7a2506940f8b63d7e3cbf66ee7a404"
+    },
+    {
+      "path": "assets/sql/spider-test-car_road_race.sqlite",
+      "bytes": 20480,
+      "sha256": "0047c3f95b20793e6e6669aa9396424366c3f98e37bd5f844333d66ea2f22543"
+    },
+    {
+      "path": "assets/sql/spider-test-club_leader.sqlite",
+      "bytes": 28672,
+      "sha256": "a863548152196d5ab4291c7393bc2fa814f020b0bbd7057a25e9ddaa7ab5e9cb"
+    },
+    {
+      "path": "assets/sql/spider-test-conference.sqlite",
+      "bytes": 36864,
+      "sha256": "8dbb6c370365ed4ad459b35223a75d8c5d721bd56482027d33d7f44049ec1b98"
+    },
+    {
+      "path": "assets/sql/spider-test-country_language.sqlite",
+      "bytes": 20480,
+      "sha256": "c805b8c455299dc5c9ea8ae62a14cc575d0039c7806081d522e3fd20976480d6"
+    },
+    {
+      "path": "assets/sql/spider-test-cre_Doc_Workflow.sqlite",
+      "bytes": 65536,
+      "sha256": "c9ac6c214f1b149929f50d5b7357e776e09ee3091c5072db838fd337b26d2d35"
+    },
+    {
+      "path": "assets/sql/spider-test-cre_Doc_and_collections.sqlite",
+      "bytes": 45056,
+      "sha256": "36de22b49bded0edb54ca8d9ee02fef38e522c8cca4f6487d89009ef57991cd6"
+    },
+    {
+      "path": "assets/sql/spider-test-cre_Students_Information_Systems.sqlite",
+      "bytes": 90112,
+      "sha256": "16a779c92da4c0e1542a8dd2baf1511940501c3c3b89c085bc45f8d1d05a6504"
+    },
+    {
+      "path": "assets/sql/spider-test-customers_and_orders.sqlite",
+      "bytes": 24576,
+      "sha256": "061d322d229fc3d0057da9f75096285a817e3f464e7023263297161256e4b5b0"
+    },
+    {
+      "path": "assets/sql/spider-test-district_spokesman.sqlite",
+      "bytes": 28672,
+      "sha256": "c2be10f9693220a9d6e06ccaf941135842fd1973192d698103b58597a9520394"
+    },
+    {
+      "path": "assets/sql/spider-test-e_commerce.sqlite",
+      "bytes": 40960,
+      "sha256": "5fc39a43d1eb5da15b3a18701579cbdd2420e4fd266a1286416941ea7a70b856"
+    },
+    {
+      "path": "assets/sql/spider-test-government_shift.sqlite",
+      "bytes": 32768,
+      "sha256": "36c5fe0697df772c72bcd7dc48c2cac0d098dc0ea148f1f017a7a153d978b0b9"
+    },
+    {
+      "path": "assets/sql/spider-test-headphone_store.sqlite",
+      "bytes": 28672,
+      "sha256": "1c4205dfc12b9bdb8971a6ebdb8617413694b0b217f4d5991ddbfdc3cc7e0dce"
+    },
+    {
+      "path": "assets/sql/spider-test-institution_sports.sqlite",
+      "bytes": 20480,
+      "sha256": "66acbb7925409f9a9ea567828f22215a3b4dbc6ec63dc3a10fc9dc4596447f7e"
+    },
+    {
+      "path": "assets/sql/spider-test-movie_2.sqlite",
+      "bytes": 12288,
+      "sha256": "cd406c1f421f4ad76369620ed31e0d708786930a1b1622929a77dc09a7ebad48"
+    },
+    {
+      "path": "assets/sql/spider-test-online_exams.sqlite",
+      "bytes": 40960,
+      "sha256": "b0d96a122899e69bd546640a3e644afd340823eeab07fafa9a80eeb331fa3927"
+    },
+    {
+      "path": "assets/sql/spider-test-pilot_1.sqlite",
+      "bytes": 20480,
+      "sha256": "4d85b0e80c4d0602167a44592404f3c11fccd7609d1530e8e32162144b767443"
+    },
+    {
+      "path": "assets/sql/spider-test-planet_1.sqlite",
+      "bytes": 36864,
+      "sha256": "620b0235ccf2b12b0ae6f112e0cd0362706cae963ff165ddeea69fa25a4e9f89"
+    },
+    {
+      "path": "assets/sql/spider-test-real_estate_rentals.sqlite",
+      "bytes": 81920,
+      "sha256": "9c8bf5b0de09d48b6f73e82e404b221741e9f8ec40020b83f666e9f5f470a45f"
+    },
+    {
+      "path": "assets/sql/spider-test-region_building.sqlite",
+      "bytes": 20480,
+      "sha256": "7015a54bcc7ad6e3dcda629a195166c4634d8ac09e7b8644a1fecb8975688875"
+    },
+    {
+      "path": "assets/sql/spider-test-restaurant_bills.sqlite",
+      "bytes": 28672,
+      "sha256": "184e038302f9a1e424dff7aea92f1a26ce61d6e424094dadcc50102805c8dbfb"
+    },
+    {
+      "path": "assets/sql/spider-test-sing_contest.sqlite",
+      "bytes": 28672,
+      "sha256": "40bd51331a9056664cb86d3be37678037700ac1b284b01aa5a268adb0cdf1478"
+    },
+    {
+      "path": "assets/sql/spider-test-soccer_3.sqlite",
+      "bytes": 20480,
+      "sha256": "ecdb8ede7aa481b51a1453fa16df746cc4532a90267796b75ad4c514d2a4fe56"
+    },
+    {
+      "path": "assets/sql/spider-test-tv_shows.sqlite",
+      "bytes": 45056,
+      "sha256": "b424fc295c5d2dbc7582fd8f0a744d82bfa14141008387c568f51d375db3231a"
+    },
+    {
+      "path": "assets/sql/spider-test-university_rank.sqlite",
+      "bytes": 36864,
+      "sha256": "1f6a890b0c55582f0e836d173116e7bbcb190a29fc9653f10e9838924f011e9f"
+    },
+    {
+      "path": "assets/sql/spider-test-vehicle_driver.sqlite",
+      "bytes": 28672,
+      "sha256": "98aafdbdde3905b9061d49803d095d04a913c772af1fcdc6c2592818decb6982"
+    },
+    {
+      "path": "assets/sql/spider-test-vehicle_rent.sqlite",
+      "bytes": 36864,
+      "sha256": "d5d33cb6e5bf6b013fc568505586ebd1b74eed21963ed58c83d28f21d277611f"
+    },
+    {
+      "path": "assets/sql/spider-test-video_game.sqlite",
+      "bytes": 36864,
+      "sha256": "9439739974c550719f9d5a003c61b48c9e79df1fe5499eb3bd93907a9363a76f"
+    },
+    {
+      "path": "assets/sql/spider-test-warehouse_1.sqlite",
+      "bytes": 16384,
+      "sha256": "c246f802423368bf0428e9e588fe0041b9ac0edd48593974f9ec2638266208fd"
+    },
+    {
+      "path": "assets/sql/spider-train-academic.sqlite",
+      "bytes": 122880,
+      "sha256": "9ca59ebaa830731011a222885480e4b9f9d49c3e36849dee25b769fb74f296c2"
+    },
+    {
+      "path": "assets/sql/spider-train-activity_1.sqlite",
+      "bytes": 24576,
+      "sha256": "9e32fff45bbcf0d0f4304bf646d52c651063f3c128d974d72cb751d5cf105c83"
+    },
+    {
+      "path": "assets/sql/spider-train-aircraft.sqlite",
+      "bytes": 45056,
+      "sha256": "2b92973e99d8348a324e318fd4d62645ebe428e7346b51277e78385d1ad3b1ef"
+    },
+    {
+      "path": "assets/sql/spider-train-allergy_1.sqlite",
+      "bytes": 20480,
+      "sha256": "d3ce73d649463526f6f6b04f457f40a778c8c192b8451cc2837437dc7a18a207"
+    },
+    {
+      "path": "assets/sql/spider-train-apartment_rentals.sqlite",
+      "bytes": 53248,
+      "sha256": "42121c39f5132a9df8eea63ff01d4cdb446144e020079c073a58a949f9d40e34"
+    },
+    {
+      "path": "assets/sql/spider-train-architecture.sqlite",
+      "bytes": 28672,
+      "sha256": "ea405f3511d01a3f7d688fbec2b214b7fb82ed9f5795f424a0e1a655f704d406"
+    },
+    {
+      "path": "assets/sql/spider-train-assets_maintenance.sqlite",
+      "bytes": 69632,
+      "sha256": "847af85ebcc94f6be06e06f5bd8a22500bd4e208a29a3e732eed13c72eda43c1"
+    },
+    {
+      "path": "assets/sql/spider-train-baseball_1.sqlite",
+      "bytes": 29794304,
+      "sha256": "cbeb49298ffc84465f7a27f3477fe73e05a2ced8d4c3c972d20d75c25820f29b"
+    },
+    {
+      "path": "assets/sql/spider-train-behavior_monitoring.sqlite",
+      "bytes": 65536,
+      "sha256": "689af3fbf11164f50d02f4a75ff6c9a7fb419938de861a1c26477ae577c1443a"
+    },
+    {
+      "path": "assets/sql/spider-train-bike_1.sqlite",
+      "bytes": 1785856,
+      "sha256": "f5ae0e24e3a9d860a38ec6256828e3b9e37691c80931ef554adc202f8eb2950c"
+    },
+    {
+      "path": "assets/sql/spider-train-body_builder.sqlite",
+      "bytes": 20480,
+      "sha256": "76221ea59be7c46e0712e308dd9f0527c63b71669186b2e97c23df78ab974108"
+    },
+    {
+      "path": "assets/sql/spider-train-book_2.sqlite",
+      "bytes": 20480,
+      "sha256": "8b0bffbf8805809461b29573dc55782d810cc688af526e28088b299326d72407"
+    },
+    {
+      "path": "assets/sql/spider-train-browser_web.sqlite",
+      "bytes": 28672,
+      "sha256": "ced1ee75f531e02adf66f387ced5997f416653adbcf519c037813aa69599f17a"
+    },
+    {
+      "path": "assets/sql/spider-train-candidate_poll.sqlite",
+      "bytes": 20480,
+      "sha256": "7df58984f9d9796538716294ba0dda9f48a4a54907f03a3859285aa4b5cf8dc5"
+    },
+    {
+      "path": "assets/sql/spider-train-chinook_1.sqlite",
+      "bytes": 901120,
+      "sha256": "70b3eb8c3ffb5351eb7943e3bf05b693a5397c22d200ff022ef99e2ca18ab7b9"
+    },
+    {
+      "path": "assets/sql/spider-train-cinema.sqlite",
+      "bytes": 28672,
+      "sha256": "9fbcc850e33d813a792417291ddfb1cebc4a31716621284ed28ef53df360a14e"
+    },
+    {
+      "path": "assets/sql/spider-train-city_record.sqlite",
+      "bytes": 36864,
+      "sha256": "112ff582c4552d8b35a0a70205fb7d8562f18c6a231b86fe8ac19beebebc4d4b"
+    },
+    {
+      "path": "assets/sql/spider-train-climbing.sqlite",
+      "bytes": 20480,
+      "sha256": "f2d3893fc5e79943ffad120b59522358b90ef077a989fb40c7c5fbbe16bfccd9"
+    },
+    {
+      "path": "assets/sql/spider-train-club_1.sqlite",
+      "bytes": 16384,
+      "sha256": "8c2fc993225d6ed604f7cb95146e025e5d71777f9a997db6ab0d9ff77eb26748"
+    },
+    {
+      "path": "assets/sql/spider-train-coffee_shop.sqlite",
+      "bytes": 36864,
+      "sha256": "a182a8a7f9b5df6da8b2976b42aca0a7db6c2b13300b13b398e568a5bf4a6b2e"
+    },
+    {
+      "path": "assets/sql/spider-train-college_1.sqlite",
+      "bytes": 53248,
+      "sha256": "5bf3ee598b9f10b4d9bef9a2d390f1391bccbcb64986c88241fad24452695d18"
+    },
+    {
+      "path": "assets/sql/spider-train-college_2.sqlite",
+      "bytes": 2117632,
+      "sha256": "cb729920ad0b7f06d38a12f6f678307964acc7d3417af83d98c519c65c90d386"
+    },
+    {
+      "path": "assets/sql/spider-train-college_3.sqlite",
+      "bytes": 45056,
+      "sha256": "9f47b8f927f27a63ba4aa35fcf6cc8360fd68bfd267e6cf05c04430f19cd773e"
+    },
+    {
+      "path": "assets/sql/spider-train-company_1.sqlite",
+      "bytes": 12288,
+      "sha256": "a58f492277a8b1bfa575746ac8b06dcbaed059c2a24ba6eb6090debc8b6c892f"
+    },
+    {
+      "path": "assets/sql/spider-train-company_employee.sqlite",
+      "bytes": 28672,
+      "sha256": "86574c9edbecd80ded437d9439d6f81def0973816b1c8af8d007335e62565378"
+    },
+    {
+      "path": "assets/sql/spider-train-company_office.sqlite",
+      "bytes": 28672,
+      "sha256": "4514dd10d9257ccaa08acff4d272595b6d92819575c736393f89e72f956c9915"
+    },
+    {
+      "path": "assets/sql/spider-train-county_public_safety.sqlite",
+      "bytes": 20480,
+      "sha256": "d608ce42a7b28ecb7500c4ded8096ade65a57dae6c5eefd56709ba96c3015d4a"
+    },
+    {
+      "path": "assets/sql/spider-train-cre_Doc_Control_Systems.sqlite",
+      "bytes": 81920,
+      "sha256": "8451c4a097dcbf8fabf7993e70e91df3d825c3c941ba96eb41faa8d236897d30"
+    },
+    {
+      "path": "assets/sql/spider-train-cre_Doc_Tracking_DB.sqlite",
+      "bytes": 57344,
+      "sha256": "9c9df67d3c16e585d159328b627c334383bea333d250c515052f65613a48fc86"
+    },
+    {
+      "path": "assets/sql/spider-train-cre_Docs_and_Epenses.sqlite",
+      "bytes": 40960,
+      "sha256": "87b83375d433672b428afaffa8f586fd73456b5e49f2609c1feae42d90cd4c79"
+    },
+    {
+      "path": "assets/sql/spider-train-cre_Drama_Workshop_Groups.sqlite",
+      "bytes": 147456,
+      "sha256": "a9a9e215fae2314be429307b47ee7fc3ffdc749fba933faba980b97a5f6b9a0a"
+    },
+    {
+      "path": "assets/sql/spider-train-cre_Theme_park.sqlite",
+      "bytes": 94208,
+      "sha256": "ea37aa49d5cd7905f04eb76c2638f706fab1ef3cd8ce41234507b457a660d261"
+    },
+    {
+      "path": "assets/sql/spider-train-csu_1.sqlite",
+      "bytes": 102400,
+      "sha256": "c66e85b742a4941118aab88183c4be7f3e238f9d2558a5e68f8818c504e2710d"
+    },
+    {
+      "path": "assets/sql/spider-train-culture_company.sqlite",
+      "bytes": 28672,
+      "sha256": "d73d31db2c91dadeb67b8ed0c9366fbbe7658774dfa110161c168ee13e781820"
+    },
+    {
+      "path": "assets/sql/spider-train-customer_complaints.sqlite",
+      "bytes": 20480,
+      "sha256": "495dbacbcd3ea5afb6c659a99cc10ef524213b66f692a8803942924d93bdb4a9"
+    },
+    {
+      "path": "assets/sql/spider-train-customer_deliveries.sqlite",
+      "bytes": 61440,
+      "sha256": "e4d269a357190432d3f0b154070dccf1cc5f7f7715571c1597e2fdd9ee47d485"
+    },
+    {
+      "path": "assets/sql/spider-train-customers_and_addresses.sqlite",
+      "bytes": 32768,
+      "sha256": "7d8ceb2520e7b2db55eca8c2a1e9a52a5f1d9e27d7f0dd11bcd367274e6fee96"
+    },
+    {
+      "path": "assets/sql/spider-train-customers_and_invoices.sqlite",
+      "bytes": 45056,
+      "sha256": "19621a734777eefff77544c93f5da387f086e53b9dc0aa6266bc2da55dbd7103"
+    },
+    {
+      "path": "assets/sql/spider-train-customers_and_products_contacts.sqlite",
+      "bytes": 32768,
+      "sha256": "0d7e27cbc07e177126eda4914c9fee9eba6afdcfef03ffdc3eeee094c68aa399"
+    },
+    {
+      "path": "assets/sql/spider-train-customers_campaigns_ecommerce.sqlite",
+      "bytes": 36864,
+      "sha256": "7f7ae5bbe53359854f5c18656d5878713e88b1a364dfba05670149bcc00f3544"
+    },
+    {
+      "path": "assets/sql/spider-train-customers_card_transactions.sqlite",
+      "bytes": 20480,
+      "sha256": "c2cde3ed8c5a33dd1f708a657ef9fab552c1a74ce19010bcc0dbff37ce708d62"
+    },
+    {
+      "path": "assets/sql/spider-train-debate.sqlite",
+      "bytes": 28672,
+      "sha256": "6e9d72cbaf8e3e695a2e8865e6a35ee8c73042ddd651c30b1816d72fadfccaa7"
+    },
+    {
+      "path": "assets/sql/spider-train-decoration_competition.sqlite",
+      "bytes": 28672,
+      "sha256": "31cd2ac964594fd188e91bc9fe4d9b3bed3d05983d45d58c9c4c7ad911733ed2"
+    },
+    {
+      "path": "assets/sql/spider-train-department_management.sqlite",
+      "bytes": 28672,
+      "sha256": "14474b9543dcdf6f8bdd1ce129819af8237b54143ccaef1fd0d8b2d5ea55911f"
+    },
+    {
+      "path": "assets/sql/spider-train-department_store.sqlite",
+      "bytes": 86016,
+      "sha256": "48cd35afc5b1b2eb9c10817ef20e5ce77f607d5cf27d8aeff6171446f2b904a2"
+    },
+    {
+      "path": "assets/sql/spider-train-device.sqlite",
+      "bytes": 28672,
+      "sha256": "870dbe835b44d96a5b961fb81885a1660088410c8fe712008f8a40691ce81d00"
+    },
+    {
+      "path": "assets/sql/spider-train-document_management.sqlite",
+      "bytes": 61440,
+      "sha256": "6f1909fa7b9c40160a1c0bcf147fdd73310e3518c739622c507e439f43f7cc31"
+    },
+    {
+      "path": "assets/sql/spider-train-dorm_1.sqlite",
+      "bytes": 24576,
+      "sha256": "2f836de861ed2b67679990d12b57814feda426f88e62509201277a7200a2c20b"
+    },
+    {
+      "path": "assets/sql/spider-train-driving_school.sqlite",
+      "bytes": 32768,
+      "sha256": "e2f2c540806874532f4a8c0144d9db0961680f87b130882766f881d4e50c4af5"
+    },
+    {
+      "path": "assets/sql/spider-train-e_government.sqlite",
+      "bytes": 57344,
+      "sha256": "3fd703754d0334da78878f0f2544c7b44c75a7e86dee938d4f0ebd033c265636"
+    },
+    {
+      "path": "assets/sql/spider-train-e_learning.sqlite",
+      "bytes": 28672,
+      "sha256": "dc06b485f9e041c8af060593fb31746ad1f97b07543ca69a94560dd6c89f3d1b"
+    },
+    {
+      "path": "assets/sql/spider-train-election.sqlite",
+      "bytes": 28672,
+      "sha256": "9446dd051f33eb9e009c287564f900d61e18893f4307623326edd5170dd2034b"
+    },
+    {
+      "path": "assets/sql/spider-train-election_representative.sqlite",
+      "bytes": 20480,
+      "sha256": "d2460ee5c413caf1d37accf3357256dc9eefd91a6373860eb93ae4df6293cec0"
+    },
+    {
+      "path": "assets/sql/spider-train-entertainment_awards.sqlite",
+      "bytes": 28672,
+      "sha256": "35c7b2b1532c63139784543c2465b9a149f9c46c925c1316f9e78b45e054c32b"
+    },
+    {
+      "path": "assets/sql/spider-train-entrepreneur.sqlite",
+      "bytes": 20480,
+      "sha256": "a6ac491af6814c1e5f675687b72f01367c96aac042d0a56f12e90d796fa37ab4"
+    },
+    {
+      "path": "assets/sql/spider-train-epinions_1.sqlite",
+      "bytes": 57344,
+      "sha256": "12ce3aba8022f11940c605336fb3ce6e659d1d38c6aa0faf6b36b84e9df2dee1"
+    },
+    {
+      "path": "assets/sql/spider-train-farm.sqlite",
+      "bytes": 36864,
+      "sha256": "4e2be63e448a8cee55564ee22e3a7596102338caabfbb20c61db1882389cf576"
+    },
+    {
+      "path": "assets/sql/spider-train-film_rank.sqlite",
+      "bytes": 28672,
+      "sha256": "05689a15fc7baa119ae9b1ce3a977affb9d86ba20f06aa6384e429071c09ef1d"
+    },
+    {
+      "path": "assets/sql/spider-train-flight_1.sqlite",
+      "bytes": 36864,
+      "sha256": "1b2414f44c04f84bbe30b4dee2eac4c0f24eb39829d694a40e779e8eb069cd01"
+    },
+    {
+      "path": "assets/sql/spider-train-flight_4.sqlite",
+      "bytes": 3129344,
+      "sha256": "4885150ab97173411aee5b73009ac2a28ce1748ce1218331608b939d9d54330e"
+    },
+    {
+      "path": "assets/sql/spider-train-flight_company.sqlite",
+      "bytes": 28672,
+      "sha256": "5a200a8093486ebafe6d8020585d3dbb4dd136625ea7e7fd3b8c76d363bb69dd"
+    },
+    {
+      "path": "assets/sql/spider-train-formula_1.sqlite",
+      "bytes": 2940928,
+      "sha256": "fb6dad97c0a4da22f01bdf817a77fe8f6b6559554661ff0120b40cb81b8c3b68"
+    },
+    {
+      "path": "assets/sql/spider-train-game_1.sqlite",
+      "bytes": 20480,
+      "sha256": "b988661bebc7b34de11e3c1a5cd70b8f9d431bbc5c6ee191e688a7889944be0b"
+    },
+    {
+      "path": "assets/sql/spider-train-game_injury.sqlite",
+      "bytes": 28672,
+      "sha256": "5c4ab959ae9249dbdd075b639b740e5fa3397f25645904d80479b886d34238be"
+    },
+    {
+      "path": "assets/sql/spider-train-gas_company.sqlite",
+      "bytes": 28672,
+      "sha256": "8800c43067ed4de67c7ca9bea0f8188a65b1cb9f41400b1f3c0d1cfdff85c32b"
+    },
+    {
+      "path": "assets/sql/spider-train-geo.sqlite",
+      "bytes": 57344,
+      "sha256": "becb9fc6faf0d87b2b396100d962ed6d9de0fd4e5e03ad102bacec73529ffbc8"
+    },
+    {
+      "path": "assets/sql/spider-train-gymnast.sqlite",
+      "bytes": 20480,
+      "sha256": "99e04d7903f4adc48e195c74c83c9247d068381781768a061015d8d0c6fbcdfa"
+    },
+    {
+      "path": "assets/sql/spider-train-hospital_1.sqlite",
+      "bytes": 98304,
+      "sha256": "9814885b9c315749a4b57d4532e489260640eb79daf3f06b8de465aa27416dd1"
+    },
+    {
+      "path": "assets/sql/spider-train-hr_1.sqlite",
+      "bytes": 69632,
+      "sha256": "5e3358561f210b2f75d9ced5eafc13744c773f3f27eb8e0967afddd21fb25350"
+    },
+    {
+      "path": "assets/sql/spider-train-icfp_1.sqlite",
+      "bytes": 12288,
+      "sha256": "e616296ac28a94dc686047a34ee57b8e058c959a8fb0170a8d8e59db3853368a"
+    },
+    {
+      "path": "assets/sql/spider-train-imdb.sqlite",
+      "bytes": 131072,
+      "sha256": "c84df167fd43cd471701ddc4ae9bbcbc146fc7fbe11abff0fd75dbe0c30741e7"
+    },
+    {
+      "path": "assets/sql/spider-train-inn_1.sqlite",
+      "bytes": 53248,
+      "sha256": "96c5f2c08f90a0c378960e320c53d74ddcf8b40e4d75c831a689547b7ecc2569"
+    },
+    {
+      "path": "assets/sql/spider-train-insurance_and_eClaims.sqlite",
+      "bytes": 36864,
+      "sha256": "62d20c5b8e7c6af8ba844ae523cefe91779d3a1f0a096a784524390d96863595"
+    },
+    {
+      "path": "assets/sql/spider-train-insurance_fnol.sqlite",
+      "bytes": 53248,
+      "sha256": "e52f4ba1301a45ea367ac56138ada91c5cabecf7b18454bfea80c59743547f6f"
+    },
+    {
+      "path": "assets/sql/spider-train-insurance_policies.sqlite",
+      "bytes": 24576,
+      "sha256": "78d46ef4ac473552b94ae9b380aec85c33bf98a8512e24612cdc05c60405d2e4"
+    },
+    {
+      "path": "assets/sql/spider-train-journal_committee.sqlite",
+      "bytes": 28672,
+      "sha256": "669e6bc2ca07838e7a3d225b190387fc003e267d3a9fc4ae03056f5699dfae39"
+    },
+    {
+      "path": "assets/sql/spider-train-loan_1.sqlite",
+      "bytes": 28672,
+      "sha256": "b5142ff67a31901ebea4003f89ab8e9d8182217721072cf3aa0f86916feee663"
+    },
+    {
+      "path": "assets/sql/spider-train-local_govt_and_lot.sqlite",
+      "bytes": 65536,
+      "sha256": "6b3f0b4d537e6a784df4c0b17445ae891075a099fcdc172024524ed6e4dc8005"
+    },
+    {
+      "path": "assets/sql/spider-train-local_govt_in_alabama.sqlite",
+      "bytes": 24576,
+      "sha256": "f019a15a37c83e9bf3d6fb3831f242714a5629b5e83886201dbf65fb1a6d35fa"
+    },
+    {
+      "path": "assets/sql/spider-train-local_govt_mdm.sqlite",
+      "bytes": 36864,
+      "sha256": "d0ebfc3700908467260642cd68906225899d55f4932a2fa65f84001f871f396c"
+    },
+    {
+      "path": "assets/sql/spider-train-machine_repair.sqlite",
+      "bytes": 36864,
+      "sha256": "7f0c84fe10eada47019897bc6301ac5d6944b6b1a7e3f9929e0e7de68195c6ac"
+    },
+    {
+      "path": "assets/sql/spider-train-manufactory_1.sqlite",
+      "bytes": 12288,
+      "sha256": "37043ca40871d69b718825ebd3c25748f3c74a71e9b457dc2bb4d01bd7b2ebe1"
+    },
+    {
+      "path": "assets/sql/spider-train-manufacturer.sqlite",
+      "bytes": 28672,
+      "sha256": "f3b5d248bef1774eadc4f5a68c187ac5485ac1017c8937c1df282abd4515ae06"
+    },
+    {
+      "path": "assets/sql/spider-train-match_season.sqlite",
+      "bytes": 36864,
+      "sha256": "51f029a0762ce7cf2957ba38666da08f1a185f8db7f66f9d4c056d0fb6b527e5"
+    },
+    {
+      "path": "assets/sql/spider-train-medicine_enzyme_interaction.sqlite",
+      "bytes": 28672,
+      "sha256": "810035b240955e7d0a6171c81553bd5b6b569e75d2ee896cafc363a53af2ce02"
+    },
+    {
+      "path": "assets/sql/spider-train-mountain_photos.sqlite",
+      "bytes": 28672,
+      "sha256": "3f61a547dcc356913fb34095f9533d20c3710ad4eb3740f507115c4fd44ce32f"
+    },
+    {
+      "path": "assets/sql/spider-train-movie_1.sqlite",
+      "bytes": 24576,
+      "sha256": "71b33287968e5238593ea7154e4e38a03be3680ff84bf338d9cbb3206cf6ea3e"
+    },
+    {
+      "path": "assets/sql/spider-train-music_1.sqlite",
+      "bytes": 36864,
+      "sha256": "e6f56185952431c5cf6c036e463a8e8755ea9ff3e2cbe14f5ac3ebe2e850b603"
+    },
+    {
+      "path": "assets/sql/spider-train-music_2.sqlite",
+      "bytes": 49152,
+      "sha256": "1d2ab9310c84c5acb0c2b30f0ba52898d73a86a89c721131032260c827bdf8b9"
+    },
+    {
+      "path": "assets/sql/spider-train-music_4.sqlite",
+      "bytes": 28672,
+      "sha256": "9218150008f10c4dbb97395116dab00f68e646c90f839e00698a876ff5b7d17d"
+    },
+    {
+      "path": "assets/sql/spider-train-musical.sqlite",
+      "bytes": 20480,
+      "sha256": "3ac3c942bf8af489d217a1877980fdbfde2202ede336e3e5f216b35b2b47ca92"
+    },
+    {
+      "path": "assets/sql/spider-train-network_2.sqlite",
+      "bytes": 16384,
+      "sha256": "f49b1043d6491f0af5e084340bc3f9dcaac35ed5893a5ff021644c2cb3428936"
+    },
+    {
+      "path": "assets/sql/spider-train-news_report.sqlite",
+      "bytes": 28672,
+      "sha256": "15522dd21fe7c0f13bbc67fe468d48a70d10561dcf8659e0b821e7e18ce4f048"
+    },
+    {
+      "path": "assets/sql/spider-train-party_host.sqlite",
+      "bytes": 28672,
+      "sha256": "15fe4143a5e920b5635024750a8720cb13a0dfce4e3c3e15d805187dc436f435"
+    },
+    {
+      "path": "assets/sql/spider-train-party_people.sqlite",
+      "bytes": 36864,
+      "sha256": "655368bccbfbe732c0fc0f4525ed1587a3a571e7ae661ee040db92014e72d6f4"
+    },
+    {
+      "path": "assets/sql/spider-train-performance_attendance.sqlite",
+      "bytes": 28672,
+      "sha256": "6b8e83a87f12847653244e6c68d28d2d464c9e62d0abf424422f67b015855da1"
+    },
+    {
+      "path": "assets/sql/spider-train-perpetrator.sqlite",
+      "bytes": 20480,
+      "sha256": "752ddb2c9d1024d92caa25afe441afa337028f8dd947373aec15b82ed53a35b6"
+    },
+    {
+      "path": "assets/sql/spider-train-phone_1.sqlite",
+      "bytes": 28672,
+      "sha256": "d4c874e411976e7b8a971cdb3f0685dc5d2f40f4ab225260aa8cd143b4ab76f7"
+    },
+    {
+      "path": "assets/sql/spider-train-phone_market.sqlite",
+      "bytes": 28672,
+      "sha256": "eb035586e49616661b170ed754960f64306b38839dc20a758a5aaedfc8022050"
+    },
+    {
+      "path": "assets/sql/spider-train-pilot_record.sqlite",
+      "bytes": 28672,
+      "sha256": "dd48d8266693a1ea33b2af4fba49787a0d36bb35686d8497da5ea72bc82edd4e"
+    },
+    {
+      "path": "assets/sql/spider-train-product_catalog.sqlite",
+      "bytes": 24576,
+      "sha256": "818f8d5d6eca960ad28bc088d87085a1cf4fed4aa0c59fdb016784b5d23bd70a"
+    },
+    {
+      "path": "assets/sql/spider-train-products_for_hire.sqlite",
+      "bytes": 40960,
+      "sha256": "f8ee0888cf7788ae89576350484a5045fe8416c727ba5f623096540c82c89c3f"
+    },
+    {
+      "path": "assets/sql/spider-train-products_gen_characteristics.sqlite",
+      "bytes": 40960,
+      "sha256": "5b964952f7d61b20885b5a90e0cde1e5d2bceb19ee57bdb21fc8f2fdd2ade331"
+    },
+    {
+      "path": "assets/sql/spider-train-program_share.sqlite",
+      "bytes": 36864,
+      "sha256": "76b2a7ef2e13b04c3085998e08c7c9224a1c195b76073b29e96b2bdb007c98c6"
+    },
+    {
+      "path": "assets/sql/spider-train-protein_institute.sqlite",
+      "bytes": 28672,
+      "sha256": "b13b84cabf62d1e2a3dfd9f54687acd7df73b8f51e5f7111e9b335c7f0189096"
+    },
+    {
+      "path": "assets/sql/spider-train-race_track.sqlite",
+      "bytes": 20480,
+      "sha256": "812a03deb99828f6a2ed62674f0678984cc759a6253b177e4da78e470f48e2db"
+    },
+    {
+      "path": "assets/sql/spider-train-railway.sqlite",
+      "bytes": 36864,
+      "sha256": "8df66ea51b3845868e5fd7b218eeb691cd6792de16ec8536c145d42e16b355fd"
+    },
+    {
+      "path": "assets/sql/spider-train-restaurant_1.sqlite",
+      "bytes": 24576,
+      "sha256": "f5295466d92e97bd241caa942228793c09b2c1e42382337fbb5d90a6d797de0b"
+    },
+    {
+      "path": "assets/sql/spider-train-restaurants.sqlite",
+      "bytes": 28672,
+      "sha256": "3498fc8ae63173900a45209a4096760e7724e621fe369f121a5c69345e0d5d1a"
+    },
+    {
+      "path": "assets/sql/spider-train-riding_club.sqlite",
+      "bytes": 45056,
+      "sha256": "7c7870709414fdfc72a2e8725da16d293555267f87e1a006c9e83b375ec892bd"
+    },
+    {
+      "path": "assets/sql/spider-train-roller_coaster.sqlite",
+      "bytes": 20480,
+      "sha256": "d0b3dcaf97a601063cf65b05fd251b223d22e75e7f05d4bad9539f0fb368b6c6"
+    },
+    {
+      "path": "assets/sql/spider-train-sakila_1.sqlite",
+      "bytes": 3706880,
+      "sha256": "5fe25744a6e2acf29295eba0fb73a98065008c0a365b92a86de6237310a72444"
+    },
+    {
+      "path": "assets/sql/spider-train-scholar.sqlite",
+      "bytes": 61440,
+      "sha256": "de85aa268f98502bdd67faae5efb9f1f4ff6018eab86aec6d82529b1a8b100df"
+    },
+    {
+      "path": "assets/sql/spider-train-school_bus.sqlite",
+      "bytes": 28672,
+      "sha256": "90c6e1580bb10f8daf10f88240265eca20589d7c863112ab0b4dfa2ac3def875"
+    },
+    {
+      "path": "assets/sql/spider-train-school_finance.sqlite",
+      "bytes": 28672,
+      "sha256": "356307e93454a7a68823b3d064caaabaa1c9825b73427e326de72d6242c2990f"
+    },
+    {
+      "path": "assets/sql/spider-train-school_player.sqlite",
+      "bytes": 36864,
+      "sha256": "5c5a4b07a93f92ba1467202c31270a25330e578bb498eb7bfc43d393d69d2aaf"
+    },
+    {
+      "path": "assets/sql/spider-train-scientist_1.sqlite",
+      "bytes": 28672,
+      "sha256": "073d55c8f3c44afde950e389860e7a64c81ade0ff407ee44e092f9658eb8d461"
+    },
+    {
+      "path": "assets/sql/spider-train-ship_1.sqlite",
+      "bytes": 20480,
+      "sha256": "41d181f77e213f55a8ad8d17ab904870b24706dd6f145ce3972cda5601ef4afe"
+    },
+    {
+      "path": "assets/sql/spider-train-ship_mission.sqlite",
+      "bytes": 20480,
+      "sha256": "68d9783c02a0b8b1d2890457d2e2733f1d691cd45757c5423691d76544bd04ea"
+    },
+    {
+      "path": "assets/sql/spider-train-shop_membership.sqlite",
+      "bytes": 36864,
+      "sha256": "50b9361db2f9bedff4bc0546fe00b3d68d36afb94d8e7fbe0f974e4b7170b27f"
+    },
+    {
+      "path": "assets/sql/spider-train-small_bank_1.sqlite",
+      "bytes": 28672,
+      "sha256": "981992bc10f2a98b186be259ff031d195db7393e355e475de1e3da6e0c685f16"
+    },
+    {
+      "path": "assets/sql/spider-train-soccer_2.sqlite",
+      "bytes": 28672,
+      "sha256": "3726fe9687d5019d22332ce917c87bb586e9a9f0c410e96ab6a09b699cb86811"
+    },
+    {
+      "path": "assets/sql/spider-train-solvency_ii.sqlite",
+      "bytes": 73728,
+      "sha256": "5947be75bb80a8f5701f78d39b5b19d339c58d83586f4309754a9c26dfbe7577"
+    },
+    {
+      "path": "assets/sql/spider-train-sports_competition.sqlite",
+      "bytes": 45056,
+      "sha256": "ae8f322b30d1634e2cf0e3e9f033082096d469152a567e0e3014c000386f7c2f"
+    },
+    {
+      "path": "assets/sql/spider-train-station_weather.sqlite",
+      "bytes": 36864,
+      "sha256": "2cf7d26e0036e3059a3a03e347e3aa0d63b38952e899d08fd92c5a90a6e69bb7"
+    },
+    {
+      "path": "assets/sql/spider-train-store_1.sqlite",
+      "bytes": 1155072,
+      "sha256": "8d9212f03e0fcfd875750d37067c4c9ac06efaf7334e91776f687976723da26e"
+    },
+    {
+      "path": "assets/sql/spider-train-store_product.sqlite",
+      "bytes": 45056,
+      "sha256": "f36004a47e0a221b56b5eab99198f0f234161399f745545b9a39338ca77a64ba"
+    },
+    {
+      "path": "assets/sql/spider-train-storm_record.sqlite",
+      "bytes": 28672,
+      "sha256": "049c32b9dbe9973e4a054e53359ef3b3ff48d28c846ca9a59b9fa1a79f1d3c17"
+    },
+    {
+      "path": "assets/sql/spider-train-student_1.sqlite",
+      "bytes": 20480,
+      "sha256": "671cc99b3e2cbc52547377eecdcbb365347aa4a3ff706243d48520bcd24658df"
+    },
+    {
+      "path": "assets/sql/spider-train-student_assessment.sqlite",
+      "bytes": 57344,
+      "sha256": "23977676ac6170ea91819d6e1a9389942335bb224fbd0a953e4cba0e25dec748"
+    },
+    {
+      "path": "assets/sql/spider-train-swimming.sqlite",
+      "bytes": 36864,
+      "sha256": "1670e8ffa96ee64266eba1b012dd3d24d4a81edbac1b11ea51e1898293a82c1a"
+    },
+    {
+      "path": "assets/sql/spider-train-theme_gallery.sqlite",
+      "bytes": 28672,
+      "sha256": "0acbd0525f6ccfae9eba0bcd03e64c9ab50921cfe8ea3ad5509ad1b287f5f785"
+    },
+    {
+      "path": "assets/sql/spider-train-tracking_grants_for_research.sqlite",
+      "bytes": 73728,
+      "sha256": "7ac4cc3ceb52e354504fa32600ba7df11ee7d537e1c82202e9121b71382b6618"
+    },
+    {
+      "path": "assets/sql/spider-train-tracking_orders.sqlite",
+      "bytes": 32768,
+      "sha256": "218482989e7b3ff71c89c9a46bab802e17a5628433d9f3a9b2948aadc05813f4"
+    },
+    {
+      "path": "assets/sql/spider-train-tracking_share_transactions.sqlite",
+      "bytes": 36864,
+      "sha256": "cce24123ba7cdb3b4c440370a1c31568f924a229c116dd54c5d202d320a6337e"
+    },
+    {
+      "path": "assets/sql/spider-train-tracking_software_problems.sqlite",
+      "bytes": 36864,
+      "sha256": "a394607a1a212b5e6e6a356171fdb7969300b3f08a5b5b563c69fcafedc9b0de"
+    },
+    {
+      "path": "assets/sql/spider-train-train_station.sqlite",
+      "bytes": 28672,
+      "sha256": "0e3b2e8ed2965b01bd22f3eec4f8d9447b8c0ea006a16e3c325316e605e49b7b"
+    },
+    {
+      "path": "assets/sql/spider-train-twitter_1.sqlite",
+      "bytes": 45056,
+      "sha256": "e6733f66370f826f98aafd378926d4781283d62daf4494c6a1f2875b928e7ee1"
+    },
+    {
+      "path": "assets/sql/spider-train-university_basketball.sqlite",
+      "bytes": 20480,
+      "sha256": "1e80df40a33f074844fb89fc7ebc7586467643e24c8b87b0839818dca1c1da4c"
+    },
+    {
+      "path": "assets/sql/spider-train-voter_2.sqlite",
+      "bytes": 12288,
+      "sha256": "d951d4466b32ea31c7948ab52c35f0079aa53a2acd08ab54b6fb38117d499dbf"
+    },
+    {
+      "path": "assets/sql/spider-train-wedding.sqlite",
+      "bytes": 28672,
+      "sha256": "d73acad10719e5616f4ded960b5341a0e34e7c5780f5182bb996b5887c5a6f6e"
+    },
+    {
+      "path": "assets/sql/spider-train-wine_1.sqlite",
+      "bytes": 69632,
+      "sha256": "1d43afbeb3001d09dc86aeff6baa44bc5cd88df0509377a5b93c0af5b436e967"
+    },
+    {
+      "path": "assets/sql/spider-train-workshop_paper.sqlite",
+      "bytes": 28672,
+      "sha256": "e7f99a71637ace76f3e61a636bccd9fabe268ad3139c0f4bbad1946ac5054412"
+    },
+    {
+      "path": "assets/sql/spider-train-wrestler.sqlite",
+      "bytes": 20480,
+      "sha256": "ef538c66862d997561619be1ac1b0c488bc54e7171ad33f7fe6195e903619ae4"
+    },
+    {
+      "path": "assets/sql/spider-train-yelp.sqlite",
+      "bytes": 61440,
+      "sha256": "7627aa28b6e564f3a7599ae76babce8f174954aaa691f0814917506a42742908"
+    },
+    {
+      "path": "assets/tables/databench-001_Forbes.json",
+      "bytes": 2098401,
+      "sha256": "d2de109130001a34db6aebeb3fd64bd300be3b24a6b3e3ef6e06c5806dabf24b"
+    },
+    {
+      "path": "assets/tables/databench-002_Titanic.json",
+      "bytes": 59332,
+      "sha256": "3d5c4a4ea0e22b653c6006d1d86aa29ec41eda2ec2b9e6536bf548e7322e767d"
+    },
+    {
+      "path": "assets/tables/databench-003_Love.json",
+      "bytes": 113703,
+      "sha256": "999d6daa46f7ea3db91c509bc0459d9be3eb89e86baccf3600a40f710bf7486e"
+    },
+    {
+      "path": "assets/tables/databench-007_Fifa.json",
+      "bytes": 5409062,
+      "sha256": "75471ca357367b9a17c8bf42a721efc2e65add46fcacd2e103852da8ccd887d2"
+    },
+    {
+      "path": "assets/tables/databench-012_Heart.json",
+      "bytes": 59152,
+      "sha256": "d206d2d0bf72a50a9b318ed5be9d97639088a751be3c7e674796fc207dfc8bc5"
+    },
+    {
+      "path": "assets/tables/databench-013_Roller.json",
+      "bytes": 693458,
+      "sha256": "231961af5ab39beaa6790f4c18b58e2230418f8f9e7b777ae033e7df2f000b0b"
+    },
+    {
+      "path": "assets/tables/databench-015_Food.json",
+      "bytes": 57341,
+      "sha256": "eac5fc8973f69c48805d16b1922138f3c154622c2c1ad520283f645a0b20914a"
+    },
+    {
+      "path": "assets/tables/databench-016_Holiday.json",
+      "bytes": 633882,
+      "sha256": "c6ead1cefd266f6e9359a4db8ae0ff38be54bdadeac8c4ef3ab051cc7e0b3087"
+    },
+    {
+      "path": "assets/tables/databench-017_Hacker.json",
+      "bytes": 3408303,
+      "sha256": "c18f5c3e2137bc166f30d6c0bbde1d9573f23763009a2bf767fe2d84693ba66d"
+    },
+    {
+      "path": "assets/tables/databench-018_Staff.json",
+      "bytes": 1368660,
+      "sha256": "2e55eaa5ce4f21b272a9b4e79316caf87a0a8c700ab6d33462de2db0ce77cac2"
+    },
+    {
+      "path": "assets/tables/databench-021_Telco.json",
+      "bytes": 1373459,
+      "sha256": "5907a238404ba577d7996ba80ef7bf80aa26f36d1a91c30613ae2a45b5153d08"
+    },
+    {
+      "path": "assets/tables/databench-025_Data.json",
+      "bytes": 7069,
+      "sha256": "900addd2f1b5b9c5fba316949dba1f2c2656fd4d337d5fac46be87fdbfede695"
+    },
+    {
+      "path": "assets/tables/databench-026_Predicting.json",
+      "bytes": 108061,
+      "sha256": "927ad543e1afa9e8ca5a8e5335f5e766d6da865de4bdf61fcc5d9ebd134cf3eb"
+    },
+    {
+      "path": "assets/tables/databench-027_Supermarket.json",
+      "bytes": 184250,
+      "sha256": "5396e66b136e7f6da5cbe7da08fd8da82be123add3d393b9090391a969ea16d0"
+    },
+    {
+      "path": "assets/tables/databench-028_Predict.json",
+      "bytes": 31788,
+      "sha256": "cc5b063e9377cab82bfccd7df655b518c5c0637abe72b9b34a9e3f37bb71e233"
+    },
+    {
+      "path": "assets/tables/databench-030_Professionals.json",
+      "bytes": 27512344,
+      "sha256": "1ecf418d4299d529556f555eb7ccca900d412148e23417f8508c00eaf53989a4"
+    },
+    {
+      "path": "assets/tables/databench-031_Trustpilot.json",
+      "bytes": 2495433,
+      "sha256": "7223e8de84ed1d37ff8bca967ead983cd56332200a4dfbe93bd7bd476fc89544"
+    },
+    {
+      "path": "assets/tables/databench-032_Delicatessen.json",
+      "bytes": 334633,
+      "sha256": "fe6f3b9b6fdd7a8bc9d499a693d02dc54006f994587bb702299490e0028d6d69"
+    },
+    {
+      "path": "assets/tables/databench-033_Employee.json",
+      "bytes": 1535908,
+      "sha256": "9e08e0f249c3c0c3bf6496c8044866c00e3230e11426ced42645646e5253ca76"
+    },
+    {
+      "path": "assets/tables/databench-034_World.json",
+      "bytes": 42148,
+      "sha256": "1a8eccfa616f3fe5a50b71478842cbeff7df4e9be32bb239600a841a7b976129"
+    },
+    {
+      "path": "assets/tables/databench-035_Billboard.json",
+      "bytes": 7995842,
+      "sha256": "fc66ba7b59db71538266c6bc45805126800228d82d3b9e5742c87657ed86333e"
+    },
+    {
+      "path": "assets/tables/databench-037_Ted.json",
+      "bytes": 45806505,
+      "sha256": "aea73b97a418f78f31d41b20c35e5e259ba5673b57706363ed1111ed45784cee"
+    },
+    {
+      "path": "assets/tables/databench-038_Stroke.json",
+      "bytes": 440982,
+      "sha256": "25e7f8e6ed841d645e0ebdc8a028e220edaa139a42e2bb8d0fd388e65604b8e7"
+    },
+    {
+      "path": "assets/tables/databench-040_Speed.json",
+      "bytes": 7223810,
+      "sha256": "9d4dc699bd144a38372f80d51774b01774157c85a15dc560548941b8a50f0a33"
+    },
+    {
+      "path": "assets/tables/databench-041_Airline.json",
+      "bytes": 4104103,
+      "sha256": "c97c4badac5e6346236c3fb4a94907062e239711eced1905579a94fe05e989f0"
+    },
+    {
+      "path": "assets/tables/databench-042_Predict.json",
+      "bytes": 69360,
+      "sha256": "579e1ddd90a7fe0434230435bde69470d82848168bd4fd5e67dc0afbbec62585"
+    },
+    {
+      "path": "assets/tables/databench-047_Bank.json",
+      "bytes": 679859,
+      "sha256": "3d61e58dc351c402403dcf6f6fecd634775b60f2a5d92417a85e907086dc9429"
+    },
+    {
+      "path": "assets/tables/databench-048_Data.json",
+      "bytes": 3167572,
+      "sha256": "3d68bf3e10e6d1a9e45eb8ef248a3482a9f1f03303a2958d5cf4d15da0421796"
+    },
+    {
+      "path": "assets/tables/databench-049_Boris.json",
+      "bytes": 2886943,
+      "sha256": "fd5b0738233e908ff2d9f2a97187e5066de92db7fd02716f89cc0b26d78dabae"
+    },
+    {
+      "path": "assets/tables/databench-050_ING.json",
+      "bytes": 3507813,
+      "sha256": "f8f5d168eda0e568a9ef77866c49d3a56b2dc795ed821a04551f0605ee8033d3"
+    },
+    {
+      "path": "assets/tables/databench-051_Pokemon.json",
+      "bytes": 83228,
+      "sha256": "7d7897d7fefae82f5da2a850bcdc3fbdf41d3b52f860b541f2f79bf865691e32"
+    },
+    {
+      "path": "assets/tables/databench-052_Professional.json",
+      "bytes": 282962,
+      "sha256": "b77a694bf1507a82c11f274d5e7cd100f9744801147f61c26c13fc206471dad9"
+    },
+    {
+      "path": "assets/tables/databench-053_Patents.json",
+      "bytes": 31102031,
+      "sha256": "673699d677988561888d1674a04b848fc87b61ead534858d1f265f77e3e07ccb"
+    },
+    {
+      "path": "assets/tables/databench-054_Joe.json",
+      "bytes": 476079,
+      "sha256": "6892a4f476238f323b81340721d036a8ef5143f500b1f168d011a16261f9dc7b"
+    },
+    {
+      "path": "assets/tables/databench-055_German.json",
+      "bytes": 208158,
+      "sha256": "c73357a845cba5380181f3e4f8275f32b8980c2209f0da0ad53f2d0e0ea75536"
+    },
+    {
+      "path": "assets/tables/databench-056_Emoji.json",
+      "bytes": 15335,
+      "sha256": "6327925fcc89e94f92b8ea1855077f11743948387adfb06c7c2eb9a29a9ce98e"
+    },
+    {
+      "path": "assets/tables/databench-057_Spain.json",
+      "bytes": 5453699,
+      "sha256": "99e33ef5cd77ccbb5648d74a8c40eafa225ad8393bd576d4a8ee6e226b8803e9"
+    },
+    {
+      "path": "assets/tables/databench-058_US.json",
+      "bytes": 2884969,
+      "sha256": "7ae24f77b1730e1fa6edfceffe7ac8e90a7a25941c80172974707a4f82fc4e31"
+    },
+    {
+      "path": "assets/tables/databench-062_Trump.json",
+      "bytes": 7776347,
+      "sha256": "a4f67d54cfac9d7749c3c04c2c561d2c11d3c3b92e075ae323e94fb6410f500c"
+    },
+    {
+      "path": "assets/tables/databench-063_Influencers.json",
+      "bytes": 1301317,
+      "sha256": "89c1d1dc413a1963e53364abddfc9c1b6d216dfbfc0d539e9899edd150a6fbc4"
+    },
+    {
+      "path": "assets/tables/databench-064_Clustering.json",
+      "bytes": 6565,
+      "sha256": "a6b9b581b79519d4d0be4eb86e5179bdfba22bcf5de87fa896ace8b116fe45af"
+    },
+    {
+      "path": "assets/tables/databench-066_IBM_HR.json",
+      "bytes": 307481,
+      "sha256": "614b789fa52fbc4f0b1ad81d8e6b62295d8d2c4d4a501b97a4338989153f3673"
+    },
+    {
+      "path": "assets/tables/databench-067_TripAdvisor.json",
+      "bytes": 23905571,
+      "sha256": "55694ab547ecf452f43fccc11a4661d6755ed5850813979e343d8d10ffc013c0"
+    },
+    {
+      "path": "assets/tables/databench-069_Taxonomy.json",
+      "bytes": 67618,
+      "sha256": "a032ff19f71b23bfe279bcd94184886f6c81d84b6e93cf4ee6c25ee5ccb23f78"
+    },
+    {
+      "path": "assets/tables/databench-070_OpenFoodFacts.json",
+      "bytes": 7234435,
+      "sha256": "e95eb147627f3e7432fef5f71265fe58c217305422fb0f816bf189291129f70f"
+    },
+    {
+      "path": "assets/tables/databench-071_COL.json",
+      "bytes": 6751,
+      "sha256": "96325fd13bbacf751c035098b0cc9cd570998559dcaec2b38983573baa4d333a"
+    },
+    {
+      "path": "assets/tables/databench-072_Admissions.json",
+      "bytes": 22353,
+      "sha256": "adb1f0f9832306ef2c59aa487943835e4b00676eb70ade80b870ac7a22ec06bf"
+    },
+    {
+      "path": "assets/tables/databench-073_Med_Cost.json",
+      "bytes": 74465,
+      "sha256": "8abc62f951acdab44dda4c4d31b5cde78067bf4312974cc411449a797b2c4d8f"
+    },
+    {
+      "path": "assets/tables/databench-074_Lift.json",
+      "bytes": 144155,
+      "sha256": "d67900e32b24c6bfc998975546cfa3bd04f844a023f844c3c37f490625ba5d82"
+    },
+    {
+      "path": "assets/tables/databench-075_Mortality.json",
+      "bytes": 28168,
+      "sha256": "fd51d8d656ab3db0e49bb052acb0e1d2fed9c3b78e2f995d4cf9580c6d374ce2"
+    },
+    {
+      "path": "assets/tables/databench-076_NBA.json",
+      "bytes": 1627242,
+      "sha256": "af7b72ad18de1eaa101c6217a26ada7651ed3ab20561ad6924f6ee3e83feec31"
+    },
+    {
+      "path": "assets/tables/databench-077_Gestational.json",
+      "bytes": 30485,
+      "sha256": "a825ea0cb01ff9edcae49ae9cced67079a6fa9b39626a821474f2625936bd785"
+    },
+    {
+      "path": "assets/tables/databench-078_Fires.json",
+      "bytes": 52886,
+      "sha256": "0e384cdcd7af83e6b88a307600adf8217889be11c4029a254ea0bf58b1be2b31"
+    },
+    {
+      "path": "assets/tables/databench-080_Books.json",
+      "bytes": 7205,
+      "sha256": "0f90a15e2221777388761d207f30a5ef7df658a413d89cfa7defdfa0ecb26d04"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 292907920,
+      "sha256": "3c62fd493bcc94d82fe35f798fcc891cf85eee8783aca5e1589d1d50a090505e",
+      "lines": 33047
+    },
+    {
+      "path": "diversity.json",
+      "bytes": 8627,
+      "sha256": "e9d034f2b66b467c283600fb7697697c8d51315850dee61cbdaaad2ac68ff3a8"
+    },
+    {
+      "path": "qualification.json",
+      "bytes": 6647839,
+      "sha256": "91c77f638f03e109c02320f1fd3cd94bdd70fbb703c57f9615f5159b62314d5c"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1489,
+      "sha256": "c6b1ac48d5b9b729e9d71f2025603aae95df38ad32ed9c168fb285866d7e6ff2"
+    },
+    {
+      "path": "verification/2wikimultihopqa.json",
+      "bytes": 924486,
+      "sha256": "34549cc9be1452a6a96133cf057e1e2462b6c7fe971e22d02d6db7d68e0bd290"
+    },
+    {
+      "path": "verification/babi.json",
+      "bytes": 680240,
+      "sha256": "30e35beee241b889b6396b002cf855413cfc57947942bc2e51594ea350115ada"
+    },
+    {
+      "path": "verification/bird.json",
+      "bytes": 1195465,
+      "sha256": "d6f6bc33791cb5db1dd0e6f73e9a6906eede38c7ae4a05011983e4b5b2b0bc76"
+    },
+    {
+      "path": "verification/clutrr.json",
+      "bytes": 533201,
+      "sha256": "58b57312812bf2f2603f28796175d2a1738078fcfb59bd840b98f1f029dacf27"
+    },
+    {
+      "path": "verification/databench.json",
+      "bytes": 1091770,
+      "sha256": "aa02f22085de8dfa2248fbf8df37b993196b9277c4910a5620325588f4b9f104"
+    },
+    {
+      "path": "verification/drop.json",
+      "bytes": 695753,
+      "sha256": "1848f3b165a1d8fbc4b514fc41e56c3f6d6b084d0909ec812d2ff58ea503dbd8"
+    },
+    {
+      "path": "verification/finqa.json",
+      "bytes": 664693,
+      "sha256": "44a3d4c0fe660a5ddc281bcdeeb6b7bee98da6baf91127b92d3abed2016a2e86"
+    },
+    {
+      "path": "verification/gsm8k.json",
+      "bytes": 613065,
+      "sha256": "bbc5d2cd3d5aae0acc6211a1878ebb8756158a85779e93183cd43dc84592495c"
+    },
+    {
+      "path": "verification/hotpotqa.json",
+      "bytes": 907387,
+      "sha256": "731fbbe67ebc3874c35784914d9bfe6d3782efaa3b6a543d33c3da892a72ae12"
+    },
+    {
+      "path": "verification/hybridqa.json",
+      "bytes": 779675,
+      "sha256": "87f12be7470f9f83f21e5d0e8993b95ce28b4dcbd9dd596af83af54c0f2b21e0"
+    },
+    {
+      "path": "verification/knights-knaves.json",
+      "bytes": 1104190,
+      "sha256": "21d238d745e9226f53bde20c26c48e29db306d7dab87d1f8b9f94e01bc6ff18d"
+    },
+    {
+      "path": "verification/logiqa2.json",
+      "bytes": 508341,
+      "sha256": "31d2f61e55d09e11987e27e90a5365d676365df6e9c258ecc2f48250ac2f17c6"
+    },
+    {
+      "path": "verification/math.json",
+      "bytes": 523604,
+      "sha256": "6861ac1caa7ef781ff73d968c798a981de5e30b80f5c6c958ded7429d015a159"
+    },
+    {
+      "path": "verification/mbpp.json",
+      "bytes": 465380,
+      "sha256": "7c17c64685b9ef018d3b989da2e8982a21c803f827a9d3079c4a835596afbe0d"
+    },
+    {
+      "path": "verification/musique.json",
+      "bytes": 818995,
+      "sha256": "684d842452251d9c51e85366a86ad210c2a894a0e0c1b3583581cdb1f02aba6d"
+    },
+    {
+      "path": "verification/quality.json",
+      "bytes": 565283,
+      "sha256": "2e420788db9e999277b56ed9ffefd59ffe229c902973a998188e82ac640faeb4"
+    },
+    {
+      "path": "verification/reasoning-gym.json",
+      "bytes": 2021543,
+      "sha256": "a3cf9deda09120cb77862486d62c095aae06ab9231ad9682cbe1001f8f086e78"
+    },
+    {
+      "path": "verification/spider.json",
+      "bytes": 1226555,
+      "sha256": "2cf045243511ffbe51a7152c06c2e4157fd7dacb3f941a795832c578c14c77d5"
+    },
+    {
+      "path": "verification/squad.json",
+      "bytes": 759899,
+      "sha256": "27af96fa6a8b4d188c24eddd6a414926bd671f61342515e0eda4a9acb401ae1a"
+    },
+    {
+      "path": "verification/tatqa.json",
+      "bytes": 817506,
+      "sha256": "2b674ac3dc96c2352e96b33fcfc5566389191596d99e683783ea7b91fd0539ca"
+    },
+    {
+      "path": "verification/triviaqa.json",
+      "bytes": 683431,
+      "sha256": "b31297bcf3cbf51b0cb76f2b71390ade61c08717f5f1dc088dfd2b6c3bbfe56e"
+    },
+    {
+      "path": "verification/wikitablequestions.json",
+      "bytes": 805986,
+      "sha256": "aade62f7700ba936154e92d1a16c567fe09f0c00e608db359cf038255b9a6503"
+    },
+    {
+      "path": "verification/xlam.json",
+      "bytes": 995892,
+      "sha256": "392d551122bd7879b05d680839a9d24ab385aa13217737e026f5ab4e5acb564d"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 11418,
+      "sha256": "ae9876032f9af4c3b6d42ffb04a7f548d8ffed2bdf26266f1e629ea1833cb950"
+    }
+  ],
+  "bytes": 961299098
+}

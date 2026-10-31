@@ -4,7 +4,7 @@ Owner request: the RL cases were too narrow (20,640 cases from one procedural ge
 texts per family). Build a broad mix from external sources with checkable answers, actively bring in new sources,
 and (owner, 2026-10-31) prefer framings where Neuralese communication is natural, marking each case's framing.
 
-Status: **in progress** (this file is updated in stages). Builder code: `scripts/rl_tasks/`. Build area:
+Status: **first mixture registered** (stage 3, 2026-10-31 03:00 CET). Builder code: `scripts/rl_tasks/`. Build area:
 `/home/werg/data/broad-rl-tasks-20261031/` (per-source `build/<source>/raw-cases.jsonl`, `verified/`, `assets/`).
 Downloads: `/home/werg/data/external-rl-sources/<name>/` (PROVENANCE.json each; survey in `SURVEY.md` there).
 Related: `LFM3_DATA_COVERAGE_AUDIT_20261031.md` (SFT coverage of the same upstream datasets; its D8/D11 rows list
@@ -54,7 +54,7 @@ Kept = (1) passes and every negative control is rejected. Alias acceptance is me
 Lesson: alias probes must respect the declared return type (the runtime rejects a mistyped return before the
 oracle); the first K&K ("Knight") and Spider (flat list) probes were type-invalid and were replaced.
 
-## Sources and qualification (stage 2: all 22 converted sources verified; BIRD building)
+## Sources and qualification (stage 3: all 23 sources verified)
 
 Columns: families / shapes (distinct `curriculum.shape`), cases built, kept after verification, kept split
 train/dev/confirmation, negative controls accepted / tried (each accepted one drops its case), alias probes rejected /
@@ -75,7 +75,8 @@ tried (false-negative probe), oracle kinds, rows with the Neuralese-helper frami
 | LogiQA 2.0 (new) | 1 | 6 | 1500 | 1500 | 1200/149/151 | 0/4500 | - | exact letter | 0 | CC-BY-NC-SA-4.0 |
 | MATH (numeric answers) (new) | 7 | 5 | 1500 | 1500 | 1200/122/178 | 0/4500 | 0/1500 | normalized number | 0 | MIT |
 | MBPP (new) | 1 | 1 | 895 | 895 | 354/269/272 | 0/1790 | - | executable authoring (tests) | 0 | CC-BY-4.0 |
-| MuSiQue (new) | 1 | 5 | 1800 | 1751 | 1461/150/140 | 44/5400 | 0/4263 | span qa F1 0.8 + aliases | 847 | CC-BY-4.0 |
+| MuSiQue (new) | 1 | 5 | 1579 | 1542 | 1278/143/121 | 32/4737 | 0/3729 | span qa F1 0.8 + aliases | 763 | CC-BY-4.0 |
+| BIRD | 1 | 8 | 1959 | 1958 | 1679/119/160 | 1/5682 | 0/3918 | result-set (sqlite service) | 1041 | CC-BY-SA-4.0 |
 | QuALITY (new) | 1 | 2 | 1500 | 1500 | 1200/160/140 | 0/4500 | - | exact letter | 819 | CC-BY-4.0 |
 | reasoning-gym | 59 | 59 | 4248 | 4248 | 3540/349/359 | 0/12384 | 0/3193 | normalized (scorer-agreement checked) | 0 | Apache-2.0 |
 | Spider | 1 | 4 | 1627 | 1623 | 1158/238/227 | 4/4666 | 0/3254 | result-set (sqlite service) | 751 | CC-BY-SA-4.0 |
@@ -84,6 +85,14 @@ tried (false-negative probe), oracle kinds, rows with the Neuralese-helper frami
 | TriviaQA rc.wikipedia (new download) | 1 | 27 | 1500 | 1500 | 1200/151/149 | 0/4498 | 0/2761 | span qa + aliases | 795 | Apache-2.0 |
 | WikiTableQuestions (new) | 1 | 3 | 1799 | 1799 | 1499/147/153 | 0/5456 | 0/3598 | answer-list | 0 | CC-BY-SA-4.0 |
 | xLAM 60k | 1 | 24 | 1800 | 1794 | 1689/46/59 | 0/5547 | 7/1800 | service receipts, answer-list | 0 | CC-BY-4.0 |
+
+MuSiQue: about 92% of its answerable train questions share a single-hop seed question with protected held MuSiQue
+worlds (`musique:seed:*`, 31,870 protected MuSiQue groups); the builder skips those (snapshot of the protected groups)
+and the assembler's custody check drops any remaining relation, leaving 1,278 usable train items.
+BIRD: train/dev databases of at most 40 MB (52 databases), up to 40 questions each, gold results executed at build
+time (10 s limit); dev questions keep their difficulty labels. SQL end-to-end check: the gold SQL executed through the
+case's own `db` service matched the build-time result on 100/100 sampled Spider/BIRD cases after two service fixes
+(rows as arrays so duplicate column names survive; SQLite's double-quoted string literals accepted as in the gold run).
 
 Reference execution: every source 100% except HybridQA (one case with a page title `$9.99`, a reserved record key),
 MuSiQue (5) and Spider/xLAM (4 each); those cases are dropped.
@@ -125,3 +134,52 @@ long_page_qa (TriviaQA: per-section notes of long pages), long_article_mcq (QuAL
 article_multi_qa (SQuAD: per-question located evidence), sql_qa (Spider/BIRD: private query plan), roles (K&K:
 consistency notes per candidate assignment). The other families are plain (single-pass computation: arithmetic,
 tables, code, tool calls, short logic). `curriculum.external.framing` records it per row.
+
+## First mixture (registered)
+
+- Train task source: `natlang-rl-broad-external-20261031` (`runs/natlang-rl-broad-external-20261031/`,
+  manifest `training/corpus-manifests/natlang-rl-broad-external-20261031.json`): **33,047 train cases** from 23
+  external sources plus a 1,394-row slice (whole split units, about 30 rows per family, byte-identical rows) of the
+  procedural curriculum `natlang-rl-train-curriculum-lfm3-20261030-stop-evidence` for natlang-specific skills (4.2%).
+  161 families, 777 family shapes, 317 distinct instruction texts (the old curriculum: 49 families), levels
+  0/1/2/3 = 1,958/16,995/10,316/3,778, 6,390 rows with the Neuralese-helper framing. Per-source rows, families,
+  shapes, instruction texts, levels, framings and oracle kinds: `diversity.json`. Rows are interleaved source by
+  source and family by family. Per-source cap 1,500 train rows (reasoning-gym 3,520 for its 59 families).
+- `qualification.json` is `natlang.rl-additional-task-source-qualification/1` (task ids, row hashes, protected-world
+  bindings, zero intersections), so a lineage can append the packet as an additional admitted train source through
+  the existing `natlang.rl-task-source/1` manifest (`training/neuralese/natlang_neuralese/rl/task_source.py`).
+- Held packets (evaluation-only, registered with `admission: evaluation-only-never-training`, so they join the
+  ProtectedWorlds union): `natlang-rl-broad-external-dev-20261031` (3,527 cases, 23 sources) and
+  `natlang-rl-broad-external-confirmation-20261031` (3,558 cases, 22 sources). They are upstream evaluation splits
+  (HotpotQA/MuSiQue/2Wiki/SQuAD/DROP/QuALITY/TriviaQA/HybridQA validation, Spider/BIRD dev and Spider test-only DBs,
+  GSM8K/MATH/MBPP test, WTQ test, TAT-QA dev+test, FinQA dev+test, LogiQA dev+test, K&K test, bAbI test, CLUTRR test)
+  or a 6% unit carve-out (xLAM, DataBench, reasoning-gym).
+- Custody: ProtectedWorlds (registry union) plus this source's own held rows, by ids, groups, world bindings,
+  world and visible fingerprints; dropped before assembly: xLAM 32 (tool sets shared with held items), HybridQA 30
+  (tables shared with held questions), reasoning-gym 20, TAT-QA 12, LogiQA 7, MBPP 4, Spider 2; MuSiQue protected seeds
+  skipped at build time. The LFM3 held-set union check (`protection_union.py`: joint-SFT held graph sets, big2 held
+  tranches, packet holds) is recorded in `/home/werg/data/broad-rl-tasks-20261031/protection-union.json`.
+- Assets: 52 BIRD + 157 Spider SQLite databases and 20 DataBench tables (613 MB) in `assets/`, read by each case's
+  service with a SHA-256 check; set `NATLANG_RL_TASK_ASSETS` when the source directory moves (cloud sandboxes).
+
+Using it: the controller runtime must contain ts-host at 542df3c08 or later (the new `result-set`,
+`numeric-tolerance`, `answer-list` and `qa-alias-map` normalizations; an older runtime rejects them as unknown
+normalizations) and run Node 22.16+/24 (`node:sqlite` `setReturnArrays`). Select a broad window across sources
+(rows are already interleaved); the dev packet gives per-source success rates without touching training rows.
+
+## Blocked / next
+
+- Live-model false-negative sample (paraphrased right answers under span F1 0.8, numeric formatting) needs actor
+  rollouts; the GPU was busy (decision eval). Measure from the first RL rounds' rejected rollouts per source.
+- Sources whose upstream verifier accepts many valid solutions (reasoning-gym countdown, puzzle24, n-queens, sokoban,
+  rush hour, word ladder, graph colouring, integrals, ...; Enigmata; Countdown-3to4) need their verifiers ported into
+  the shared scoring path (a trusted exact verifier per family); excluded until then.
+- Downloaded, not converted yet: MultiHiertt, ConvFinQA (multi-turn), MSR-SQA, WikiSQL, TableInstruct, Qasper,
+  NESTFUL (executable nested calls), tau2-bench (needs its environments and user simulator), APIGen-MT and ToolACE,
+  KodCode / verifiable-coding (stdin/stdout or pytest tests need a Python or I/O runner in the authoring check),
+  NuminaMath/DeepScaleR/ORZ/WebInstruct (decontaminate against MATH-500/AIME first), RLVR-IF constraints (map to the
+  existing `constraints` oracle). Big-Math-RL-Verified needs a manual HF gate acceptance.
+- Spider/BIRD gold execution has a 10 s limit; queries that time out are skipped (two Spider test-DB items vary
+  between builds). BIRD databases over 40 MB are not included (about 17 of 69 train DBs).
+- MBPP contributes only 350 train items (its upstream test split is held). More code needs KodCode with a Python
+  test runner.

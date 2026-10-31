@@ -734363,6 +734363,49 @@
           }
         }
       }
+    },
+    {
+      "id": "natlang-rl-broad-external-20261031",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-broad-external-20261031",
+      "include": [
+        "cases.jsonl",
+        "receipt.json",
+        "qualification.json",
+        "verification.json",
+        "diversity.json",
+        "verification/*.json",
+        "assets/*/*"
+      ],
+      "source_class": "immutable-RL-task-source-external-datasets",
+      "split": "Train-only 33047-row RL task source: 24 sources (23 external datasets plus a 1394-row slice of the procedural curriculum), 161 families, 777 family shapes, levels {'0': 1958, '1': 16995, '2': 10316, '3': 3778}, 6390 rows with the Neuralese-helper framing. Split units (document/database/table/article/item) stay on one side; upstream evaluation splits and a 6% carve-out of sources without one are the held packets natlang-rl-broad-external-{dev,confirmation}-20261031. Current protected-world intersections: 0 (qualification.json); custody drops before assembly: {'hybridqa:binding,group': 30, 'logiqa2:binding,visible,world': 5, 'logiqa2:binding': 2, 'mbpp:binding': 4, 'reasoning-gym:binding': 14, 'reasoning-gym:binding,visible,world': 6, 'spider:binding': 2, 'tatqa:group': 12, 'xlam:binding': 32}.",
+      "admission": "Every external row is a typed natlang root function (inputs as documents/tables/db/services) whose reference replayed through the collector (verifyCases) and whose every meaningful wrong answer (other items' gold, perturbations, wrong implementations or calls) was rejected by the shared oracle (scripts/rl_tasks/verify.mjs; per-source reports in verification/). New oracle normalizations result-set, numeric-tolerance, answer-list, qa-alias-map need ts-host at 542df3c08 or later; the SQL service needs node:sqlite setReturnArrays (Node 22.16+/24). Plan and per-source oracle quality: plans/neuralese/BROAD_RL_TASKS_20261031.md.",
+      "training_admission": true,
+      "training_admission_reason": "RL task source (outcome oracles only, no SFT targets): owner request 2026-10-31 for a broad external mix; LFM3 JOLT+ RL scores whole student episodes by the collector outcome; communication graphs updated whole.",
+      "snapshot_manifest": "training/corpus-manifests/natlang-rl-broad-external-20261031.json",
+      "license": "mixed (recorded per row in `license`)",
+      "license_provenance": "Per source: CC-BY-SA-4.0 (HotpotQA, SQuAD, DROP, Spider, BIRD, WikiTableQuestions), CC-BY-4.0 (MuSiQue, QuALITY, HybridQA, MBPP, xLAM), Apache-2.0 (2WikiMultihopQA, TriviaQA, reasoning-gym), MIT (GSM8K, MATH, FinQA, TAT-QA, DataBench), BSD-3-Clause (bAbI), CC-BY-NC-4.0 (CLUTRR), CC-BY-NC-SA-4.0 (Knights and Knaves, LogiQA 2.0); provenance files under the data_nvme root external-rl-sources/<name>/PROVENANCE.json and archive raw MANIFEST.json files.",
+      "note": "RL task source, not native SFT graph data. SQL databases and DataBench tables are assets/ bound by SHA-256 in each case service; NATLANG_RL_TASK_ASSETS overrides their directory. Builder: scripts/rl_tasks (build.py, verify.mjs, assemble.py)."
+    },
+    {
+      "id": "natlang-rl-broad-external-dev-20261031",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-broad-external-dev-20261031",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held dev packet of the broad external RL task mix (3527 verified cases across 23 sources; split dev). Upstream evaluation splits (or a 6% unit carve-out) of each source; related items share a split unit with their siblings. For per-source development and confirmation of RL outcomes; never a training source. Its db/table services read the assets of natlang-rl-broad-external-20261031."
+    },
+    {
+      "id": "natlang-rl-broad-external-confirmation-20261031",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-broad-external-confirmation-20261031",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held confirmation packet of the broad external RL task mix (3558 verified cases across 22 sources; split confirmation). Upstream evaluation splits (or a 6% unit carve-out) of each source; related items share a split unit with their siblings. For per-source development and confirmation of RL outcomes; never a training source. Its db/table services read the assets of natlang-rl-broad-external-20261031."
     }
   ],
   "coverage_backlog": [
