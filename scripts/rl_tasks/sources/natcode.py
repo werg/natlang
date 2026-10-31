@@ -310,17 +310,12 @@ def natlang_codebases(per_package=60, repairs=24, seed=20261031):
                 'nl_functions': sum(p.endswith('.nl') for p in files)}
         questions = _explore_questions(files, rng)[:per_package]
         pool = [q[2] for q in questions if isinstance(q[2], list)]
-        # The source application becomes the root's companion folder. Keep a
-        # package marker at the fixture root so the loader resolves `uses`
-        # paths relative to this wrapper, not the companion directory itself.
-        # Without this file, packageRoot() falls back to `explore_program/`;
-        # the already-prefixed paths then resolve as
-        # `explore_program/explore_program/...` and valid source functions look
-        # missing at runtime.
-        program = {f'explore_program/{p}': (re.sub(r'^uses:.*?(?=^\w+:|^---)', lambda m: re.sub(
-            r'([\[\s,-])([A-Za-z_][\w/]*)', lambda u: u.group(1) + 'explore_program/' + u.group(2), m.group(0)[5:]).join(['uses:', '']),
-            t, count=1, flags=re.M | re.S) if p.endswith('.nl') else t) for p, t in files.items() if p != 'natlang.json'}
-        program['natlang.json'] = '{"schema":"natlang.package/v2"}\n'
+        # Keep the source package as its own nested package. The synthetic task
+        # root lives elsewhere: if it shared a name with the source folder, the
+        # loader would mistake it for the owner of every source child while
+        # resolving `uses`, and recursively reload that owner.
+        program = {f'explore_program/{p}': t for p, t in files.items() if p != 'natlang.json'}
+        program['explore_program/natlang.json'] = files.get('natlang.json', '{}\n')
         for index, (kind, x, answer) in enumerate(questions):
             item = f'{unit_dir}:{kind}:{x}'
             text = pick(EXPLORE[kind], item).format(x=x)
@@ -335,12 +330,20 @@ def natlang_codebases(per_package=60, repairs=24, seed=20261031):
             case = make_case(
                 source='natlang-codebase', family=f'natlang_codebase_{kind.replace("-", "_")}',
                 shape=f'natlang-codebase-explore-{kind}', upstream='natlang:codebases', upstream_id=item,
-                upstream_split=upstream_split, unit=unit, groups=[unit], root_name='explore_program', args={},
+                upstream_split=upstream_split, unit=unit, groups=[unit], args={},
                 returns=returns, instruction=text, inputs={}, expected=answer, oracle=oracle, split=split,
                 framing=pick(['plain', 'neuralese-helper'], item + '|framing'), level=2 if isinstance(answer, list) else 1,
-                license_='natlang repository (owner)', extra_files=program, domain='relational',
+                license_='natlang repository (owner)', extra_files=program, domain='relational', root_name='task/explore_program',
                 slice_='nested_scoped', wrong=wrong, aliases=aliases, revision=commit, neuralese=NEURALESE,
                 neuralese_room='per-function notes from read_function fanned in to the answer')
+            # Make source operations visible from the task root while keeping
+            # the nested source package's original package-relative layout.
+            operation_paths = sorted(p for p in files if p.endswith('.nl') and '/' not in p)
+            root_path = case['semantics']['root']
+            uses = ', '.join(f'explore_program/{Path(p).stem}' for p in operation_paths)
+            case['semantics']['files'][root_path] = case['semantics']['files'][root_path].replace(
+                '---\n', f'---\nuses: [{uses}]\n', 1)
+            case['semantics']['files']['natlang.json'] = '{"schema":"natlang.package/v2"}\n'
             case['curriculum']['external']['codebase'] = {'package': unit_dir, 'version': commit, 'kind': f'explore-{kind}', **size}
             out.append(case)
         for kind, path, broken, extras, wrong_fix, contract in _repairs(files, rng, repairs):
