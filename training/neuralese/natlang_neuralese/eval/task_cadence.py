@@ -65,6 +65,7 @@ from .task_packet import accounted
 
 DEFAULT_CASES = tuple(range(0, 48, 3))
 SCHEMA = 'natlang.in-run-task-eval/1'
+NOISE_POLICY = 'accounted-terminal-outcomes-no-wall-timeouts/1'
 
 
 def wait_collectors(children, queues, launch, *, min_free_mib, max_workers=None, stop_requested=None):
@@ -478,7 +479,21 @@ class TaskEval:
                     row = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if row.get('packet_sha256') == self.spec['packet']['sha256'] and row.get('repeat_noise') is not None:
+                if (row.get('packet_sha256') != self.spec['packet']['sha256']
+                        or row.get('case_indices') != self.spec['cases']
+                        or row.get('prompt_rendering') != self.prompt_rendering
+                        or row.get('noise_measurement_policy') != NOISE_POLICY
+                        or row.get('eligible') is not True):
+                    continue
+                counts=[row.get('task_successes')]
+                for observation in row.get('repeat_observations') or []:
+                    score=observation.get('score') or {}
+                    if (accounted(score) and score.get('cases_expected') == row.get('cases')
+                            and type(score.get('task_successes')) is int
+                            and score['task_successes'] == score['outcome_counts']['task_success']):
+                        counts.append(score['task_successes'])
+                if (len(counts)>1 and all(type(n) is int and n>=0 for n in counts)
+                        and row.get('repeat_noise') == max(counts)-min(counts)):
                     values.append(row['repeat_noise'])
         return max(values) if values else None
 
@@ -490,11 +505,14 @@ class TaskEval:
         eligible = accounted(score) and not operational_stop
         # Noise from repeat runs (coordinator 2026-10-12): the first evaluation of a stage runs the same model again
         # (noise_repeats total runs); the spread of the success counts is this stage's measured noise.
-        repeats, repeat_noise = [], None
+        repeats, repeat_noise, repeat_observations = [], None, []
         if eligible and self.measured_noise() is None and self.spec.get('noise_repeats', 1) > 1:
             for index in range(1, self.spec.get('noise_repeats', 1)):
                 if self.operational_stop_requested(): break
                 again, again_codes = self._execute(run.with_name(run.name + f'-repeat{index}'), index)
+                repeat_observations.append({'run':str(run.with_name(run.name + f'-repeat{index}')),
+                    'score':{key:again.get(key) for key in ('cases_expected','outcome_counts','task_successes')},
+                    'collector_exit_codes':again_codes})
                 if accounted(again):
                     repeats.append(again['task_successes'])
             if repeats:
@@ -516,6 +534,7 @@ class TaskEval:
                    'reference_successes': self.spec.get('reference_successes'),
                    'min_successes': self.spec['min_successes'],
                    'repeat_successes': repeats or None, 'repeat_noise': repeat_noise,
+                   'noise_measurement_policy':NOISE_POLICY, 'repeat_observations':repeat_observations,
                    'noise_successes': noise,
                    'previous_step': previous.get('step') if previous else None,
                    'previous_successes': previous.get('task_successes') if previous else None,

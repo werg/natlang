@@ -84,9 +84,9 @@ def test_default_evaluation_executes_once_and_does_not_invent_measured_noise(tmp
 
 def test_the_first_evaluation_repeats_to_measure_noise_and_later_ones_reuse_it(tmp_path):
     from natlang_neuralese.eval.task_cadence import TaskEval
-    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'noise_repeats': 3})
+    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': list(range(16)), 'noise_repeats': 3})
     evaluator = TaskEval.__new__(TaskEval)
-    evaluator.spec, evaluator.out, evaluator.root, evaluator.rows = spec, tmp_path, tmp_path / 'task-eval', [{}]
+    evaluator.spec, evaluator.out, evaluator.root, evaluator.rows = spec, tmp_path, tmp_path / 'task-eval', [{} for _ in range(16)]
     evaluator.prompt_rendering = 'full'
     counts = iter([4, 6, 5, 3])
     calls = []
@@ -106,6 +106,26 @@ def test_the_first_evaluation_repeats_to_measure_noise_and_later_ones_reuse_it(t
     second = evaluator.run(20)  # 3 successes: within noise of 4, no repeat
     assert calls[-1] == 'step-0000020' and second['repeat_noise'] is None
     assert second['noise_successes'] == 2 and second['previous_successes'] == 4 and second['regressed'] is False
+
+
+def test_old_unattested_noise_and_unscored_repeat_cannot_relax_future_gates(tmp_path):
+    import json
+    from natlang_neuralese.eval.task_cadence import TaskEval, NOISE_POLICY
+    evaluator=TaskEval.__new__(TaskEval)
+    evaluator.spec=parse_task_eval({'packet':{'path':'p','sha256':'s'},'cases':[0]})
+    evaluator.out, evaluator.prompt_rendering=tmp_path,'full'
+    base={'packet_sha256':'s','case_indices':[0],'prompt_rendering':'full',
+          'eligible':True,'cases':1,'task_successes':1,'repeat_noise':1}
+    invalid={**base,'noise_measurement_policy':NOISE_POLICY,'repeat_observations':[{'score':{
+        'cases_expected':1,'task_successes':0,
+        'outcome_counts':{'task_success':0,'infrastructure_error':0,'unresolved':1}}}]}
+    log=tmp_path/'task-eval.jsonl'
+    log.write_text(json.dumps(base)+'\n'+json.dumps(invalid)+'\n')
+    assert evaluator.measured_noise() is None
+    valid={**invalid,'repeat_observations':[{'score':{'cases_expected':1,'task_successes':0,
+        'outcome_counts':{'task_success':0,'infrastructure_error':0,'unresolved':0,'semantic_mismatch':1}}}]}
+    with log.open('a') as stream:stream.write(json.dumps(valid)+'\n')
+    assert evaluator.measured_noise()==1
 
 
 def test_sampled_evaluations_send_their_temperature_and_repeat_runs_draw_new_seeds(tmp_path):

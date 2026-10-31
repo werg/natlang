@@ -89,9 +89,12 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
         states = accounting.get('job_states') or []
         if any(isinstance(state, dict) and state.get('state') == 'transport_failed' for state in states):
             return 'infrastructure_error'
-        if finish and finish.get("resource_limit_reason") in {"case_wall_budget", "model_request_budget"}:
-            return "budget_exhaustion"
-        if finish and finish.get("status") in {"timeout", "no_observation_limit"}:
+        if finish and (finish.get("resource_limit_reason") == "case_wall_budget"
+                       or finish.get("status") in {"timeout", "no_observation_limit"}):
+            # Host time spent waiting/decoding is not a completed model answer.
+            # Preserve it as unscored even when useful partial actions exist.
+            return "unresolved"
+        if finish and finish.get("resource_limit_reason") == "model_request_budget":
             return "budget_exhaustion"
         if finish and finish.get("status") in {"complete", "complete_with_skips"}:
             return "infrastructure_error"
@@ -104,7 +107,12 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
     if outcome.get("status") == "done" and outcome.get("accepted") is True:
         return "task_success"
 
-    if finish and finish.get("resource_limit_reason") in {"case_wall_budget", "model_request_budget"}:
+    if finish and (finish.get("resource_limit_reason") == "case_wall_budget"
+                   or finish.get("status") in {"timeout", "no_observation_limit"}):
+        return "unresolved"
+    if outcome.get('resource_limit_reason') in ('case_wall_budget', 'wall_clock_budget'):
+        return "unresolved"
+    if finish and finish.get("resource_limit_reason") == "model_request_budget":
         return "budget_exhaustion"
     if outcome.get("resource_limit_reason") or outcome.get("resource_limit"):
         return "budget_exhaustion"
@@ -120,7 +128,12 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
             incomplete_details.append(detail)
             if invocation.get("completion_status") == "failed" and isinstance(detail, str):
                 failed_invocation_details.append(detail.casefold())
-    if any(re.search(r"\b(episode turn, token, or wall-clock budget exhausted|case wall(?:-clock)? budget exhausted|model request budget exhausted)\b",
+    if any(re.search(r"\b(?:wall(?:-clock)? budget exhausted)\b",
+                     str(detail).casefold()) for detail in incomplete_details if isinstance(detail, str)):
+        # Older mixed-limit messages do not establish whether a deterministic
+        # turn/token limit or the host's wall-clock timeout actually fired.
+        return "unresolved"
+    if any(re.search(r"\b(model request budget exhausted|episode (?:turn|token) budget exhausted)\b",
                      str(detail).casefold()) for detail in incomplete_details if isinstance(detail, str)):
         return "budget_exhaustion"
     # A recovered collector finish can be complete even when a nested runtime

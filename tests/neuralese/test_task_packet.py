@@ -91,7 +91,7 @@ def test_repeated_exact_empty_eos_is_model_incomplete_not_infrastructure_or_budg
 def test_empty_reply_without_explicit_eos_classification_stays_unresolved_or_semantic():
     result = {"outcome": {"status": "quiesced", "accepted": False, "detail": "empty reply"}}
     assert classify_case(result, {"status": "complete", "resource_limit_reason": None}) == "semantic_mismatch"
-    assert classify_case(None, {"status": "timeout", "resource_limit_reason": "case_wall_budget"}) == "budget_exhaustion"
+    assert classify_case(None, {"status": "timeout", "resource_limit_reason": "case_wall_budget"}) == "unresolved"
 
 
 def test_model_incomplete_phrase_in_generated_action_text_is_not_protocol_evidence():
@@ -101,14 +101,26 @@ def test_model_incomplete_phrase_in_generated_action_text_is_not_protocol_eviden
     assert classify_case(result, {"status": "complete", "resource_limit_reason": None}) == "semantic_mismatch"
 
 
-def test_nested_episode_budget_exhaustion_is_not_semantic_mismatch():
+def test_ambiguous_nested_wall_budget_is_unscored_but_explicit_token_budget_is_known():
     result = {"outcome": {"status": "quiesced", "accepted": False,
                           "detail": "source-authored root eval did not finish",
                           "invocation_ledger": [{"completion_status": "quiesced",
                                                  "completion_source": "execution_graph",
                                                  "completion_detail": "episode turn, token, or wall-clock budget exhausted"}],
                           "action_ledger": [], "scope_failures": []}}
+    assert classify_case(result, {"status": "complete", "resource_limit_reason": None}) == "unresolved"
+    result['outcome']['resource_limit_reason']='token_budget'
     assert classify_case(result, {"status": "complete", "resource_limit_reason": None}) == "budget_exhaustion"
+
+
+def test_wall_timeout_cannot_be_used_as_measured_behavioral_noise():
+    score=score_rows([{'id':'case'}],[],{'key':{'status':'timeout',
+        'resource_limit_reason':'case_wall_budget','stuckness':'unknown','decode_activity':True}},{0:'key'})
+    assert score['outcome_counts']['unresolved']==1
+    assert not accounted(score) and not score['eligible_for_best']
+    # An already exported accepted final result remains actual success.
+    assert classify_case({'outcome':{'status':'done','accepted':True}},
+                         {'status':'timeout','resource_limit_reason':'case_wall_budget'})=='task_success'
 
 
 def test_recovered_nested_host_abort_is_infrastructure_error():
