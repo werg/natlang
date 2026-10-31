@@ -29,6 +29,7 @@ sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
 sys.path.insert(0, str(REPO / 'scripts' / 'neuralese_data'))
 from natlang_neuralese.common import line_backbones  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 PY = str(REPO / '.venv-neuralese/bin/python')
 POLICY = 'training/neuralese/mixtures/lfm3-joint-sft-mixture-policy-v4.json'
@@ -44,9 +45,9 @@ HELD_PACKETS = ['runs/natlang-dev-task-packet-v1-20261028/cases.jsonl',
                 'runs/natlang-held-task-packet-v4-20261012/cases.jsonl']
 HELD_GRAPHS = [
     'runs/lfm3-mixture/joint-sft-v3/mixture/held/native-graphs.jsonl.zst',
-    '/home/werg/data/dgxops/claude-recovery-20261028/data/clef-exact-mixture-v2/held/native-graphs.jsonl.zst',
-    '/home/werg/data/dgxops/claude-recovery-20261028/data/repaired-fourteen-mixture-v1/held/native-graphs.jsonl.zst',
-    *[f'/mnt/external/natlang-lfm3-data-20261028/communication/big2-stream-tranche-{n:03d}/graphs/test/native-graphs.jsonl.zst' for n in range(3)],
+    resolve_str('data_nvme', 'dgxops/claude-recovery-20261028/data/clef-exact-mixture-v2/held/native-graphs.jsonl.zst'),
+    resolve_str('data_nvme', 'dgxops/claude-recovery-20261028/data/repaired-fourteen-mixture-v1/held/native-graphs.jsonl.zst'),
+    *[resolve_str('data_hdd', f'natlang-lfm3-data-20261028/communication/big2-stream-tranche-{n:03d}/graphs/test/native-graphs.jsonl.zst') for n in range(3)],
 ]
 
 
@@ -169,7 +170,7 @@ def build(args):
               'teacher_graphs_full': teacher_full, 'bounded_graphs': bounded,
               'teacher_graphs_test': teacher_test, 'communication': communication, 'held_packets': HELD_PACKETS,
               'protected_held_graphs': HELD_GRAPHS,
-              'protection_manifest': '/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/protection-manifest.json',
+              'protection_manifest': resolve_str('data_nvme', 'dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/protection-manifest.json'),
               'objective_tokenizer': tokenizer, 'expanded_tokenizer_fingerprint': fingerprint,
               'renders_waiting_for_scores': waiting,
               'prior': [str((REPO / prior).resolve().relative_to(REPO)) for prior in args.prior]}
