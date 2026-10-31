@@ -49,6 +49,77 @@ USE_LINE = re.compile(r'In eval you can use ([^;\n]+);')
 CATEGORIES = ('iteration', 'delegation', 'exact', 'scope', 'broad')
 
 
+# ``const f = nl<T>`...```, also with a type annotation (``const f: Neuralese<(x) => Promise<T>> = nl<T>`...```).
+NAMED_NL = re.compile(r'\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\b(?:[^\n`=]|=>)*?=\s*(?:await\s+)?nl\s*(?:<[^`(]*?>)?\s*(?:`|\()')
+HANDLED_BEFORE = re.compile(r'(?:\bawait|\breturn|=>|\byield)\s*$')
+COMBINATOR = re.compile(r'\bPromise\.(?:all|allSettled|race|any)\s*\(')
+
+
+def template_end(code: str, start: int) -> int:
+    """Index after the template literal opening at ``start`` (a backtick), skipping ${...} substitutions."""
+    i, depth = start + 1, 0
+    while i < len(code):
+        c = code[i]
+        if c == '\\':
+            i += 2
+            continue
+        if depth == 0 and c == '`':
+            return i + 1
+        if c == '$' and code[i + 1:i + 2] == '{':
+            depth += 1
+            i += 2
+            continue
+        if c == '}' and depth:
+            depth -= 1
+        i += 1
+    return len(code)
+
+
+def unhandled_nl(code: str) -> int:
+    """nl promises that nothing awaits (2026-10-31 coverage audit D11: the count-based check flagged ~87% of named
+    templates wrongly). An ``nl`` occurrence is handled when it is awaited, returned (from an arrow or function: its
+    caller holds the promise), inside a Promise combinator, or bound to a name as a natlang function
+    (``const f = nl<T>`...```) whose every call is handled the same way. An immediately invoked template assigned to a
+    name is handled when the name is later awaited or combined."""
+    combined = [(m.start(), m.end()) for m in COMBINATOR.finditer(code)]
+
+    def in_combinator(pos: int) -> bool:
+        return any(start <= pos and pos - start < 4000 for start, _ in combined)
+
+    def handled_at(pos: int) -> bool:
+        return bool(HANDLED_BEFORE.search(code[max(0, pos - 12):pos])) or in_combinator(pos)
+
+    named = {m.start(): m for m in NAMED_NL.finditer(code)}
+    unhandled = 0
+    for match in NL_CALL.finditer(code):
+        start = match.start()
+        if handled_at(start):
+            continue
+        binding = next((m for m in named.values() if m.start() < start <= m.end()), None)
+        if binding is None:
+            unhandled += 1
+            continue
+        name = binding.group(1)
+        # Function form: the template is not invoked where it is bound.
+        invoked = False
+        if code[match.end() - 1] == '`':
+            end = template_end(code, match.end() - 1)
+            invoked = code[end:end + 1] == '('
+        if invoked:
+            # The promise itself must be awaited/returned/combined (``return r.length`` reads a promise property).
+            uses = [m.start() for m in re.finditer(r'(?<![\w$.])' + re.escape(name) + r'\b(?!\s*[.\[])',
+                                                   code[binding.end():])]
+            if not any(handled_at(binding.end() + u) for u in uses):
+                unhandled += 1
+            continue
+        calls = [m.start() for m in re.finditer(r'(?<![\w$.])' + re.escape(name) + r'\s*\(', code[binding.end():])]
+        passed = re.search(r'\.(?:map|forEach|flatMap)\s*\(\s*' + re.escape(name) + r'\s*\)', code)
+        if passed and not in_combinator(passed.start()) and not handled_at(passed.start()):
+            unhandled += 1
+        unhandled += sum(1 for c in calls if not handled_at(binding.end() + c))
+    return unhandled
+
+
 def per_item_loop_nl(code: str) -> bool:
     for match in FOR_OF.finditer(code):
         if AWAITED_NL.search(code[match.end():match.end() + 600]):
@@ -92,7 +163,7 @@ def score_calls(calls, scope_names, *, child: bool) -> dict:
         n_nl, n_await = len(NL_CALL.findall(code)), len(AWAITED_NL.findall(code))
         s['nl_calls'] += n_nl
         s['nl_awaited'] += n_await
-        if n_nl and n_nl > n_await and not PROMISE_ALL.search(code):
+        if n_nl and n_nl > n_await and unhandled_nl(code):
             s['unawaited_nl'] += 1
         if MAP_NL.search(code) and PROMISE_ALL.search(code):
             s['per_item_nl_promise_all'] += 1

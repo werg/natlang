@@ -453,11 +453,11 @@ def status(args):
     for item in queue['items'].values():
         by[item['status']].append(item)
     for state, items in sorted(by.items()):
-        tokens = sum(i['reference_tokens'] for i in items)
+        tokens = sum(i.get('reference_tokens') or 0 for i in items)
         print(f'{state}: {len(items)} corpora, {tokens / 1e6:.1f} M reference tokens')
         if args.verbose:
-            for i in sorted(items, key=lambda i: i['reference_tokens']):
-                print(f'   T{i["tier"]} {i["reference_tokens"] / 1e6:8.1f}M {i["id"]} {i.get("reason") or ""}')
+            for i in sorted(items, key=lambda i: i.get('reference_tokens') or 0):
+                print(f'   T{i["tier"]} {(i.get("reference_tokens") or 0) / 1e6:8.1f}M {i["id"]} {i.get("reason") or ""}')
 
 
 # ---------------------------------------------------------------------------------------------------------- verify
