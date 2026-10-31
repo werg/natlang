@@ -43,6 +43,42 @@ def family_of(leaf: Path) -> str:
     raise ValueError(f'no logical family for cohort leaf {leaf}')
 
 
+def feature_family(row):
+    """Classify actual coding-target port rows without renaming their shared interface family."""
+    features = row.get('features') or {}
+    if features.get('family') == 'port_record_calls' and features.get('domain') == 'trajectory_continuation_coding':
+        return 'coding'
+    if row.get('interface_family') == 'port_record_calls':
+        family = row.get('logical_family')
+        if family not in {'coding', 'natlang'}:
+            raise ValueError('port target feature lacks an exact logical family')
+        return family
+    return None
+
+
+def feature_overrides(manifest_path):
+    """Bind recorded row features to coding objective mass, never a new semantic task family."""
+    from natlang_neuralese.common.jsonio import iter_jsonl_rows
+    manifest = json.loads(manifest_path.read_text())
+    refs = list(manifest.get('logical_family_features') or [])
+    default = manifest_path.parent / 'sample-features.jsonl.zst'
+    if default.exists() and not refs:
+        refs = [{'path': str(default), 'sha256': sha256_file_hex(default)}]
+    result, bindings = {}, []
+    for ref in refs:
+        path = Path(ref['path']); path = path if path.is_absolute() else manifest_path.parent / path
+        if sha256_file_hex(path) != ref['sha256']:
+            raise ValueError('logical family feature input changed')
+        bindings.append(bind(path))
+        for _, row in iter_jsonl_rows(path):
+            family = feature_family(row)
+            if family is not None:
+                if row['id'] in result:
+                    raise ValueError('logical family features repeat a classified row')
+                result[row['id']] = family
+    return result, bindings
+
+
 def leaf_paths(source) -> list[Path]:
     """Each TRAIN row's graph-file leaf (as native_cohort_schedule.source_cohort_ids walks the validated tree)."""
     def walk(node):
@@ -126,7 +162,12 @@ def main():
     if abs(sum(targets.values()) - 1) > 1e-9:
         raise ValueError(f'logical family targets do not sum to 1: {targets}')
     train = NativeGraphSource(manifest_path, args.fingerprint, required_split='train', role_ids=args.role_ids)
-    families = [family_of(p) for p in leaf_paths(train)]
+    overrides, feature_bindings = feature_overrides(manifest_path)
+    train_ids = {entry['id'] for entry in train.entries}
+    if set(overrides) - train_ids:
+        raise ValueError('logical family features name rows absent from the exact train source')
+    families = [overrides.get(entry['id'], family_of(path))
+                for entry, path in zip(train.entries, leaf_paths(train))]
     rows = [{'id': e['id'], 'binding': e['binding'], 'family': f} for e, f in zip(train.entries, families)]
     (out / 'families.json').write_bytes(json.dumps({'schema': 'natlang.logical-family-map/1',
                                                     'source_sha256': train.file_sha256, 'rows': rows},
@@ -177,7 +218,8 @@ def main():
                'target_shares': targets, 'absent_families': missing, 'capped_families': capped, 'max_scale': cap, 'map': bind(out / 'families.json'),
                'census': bind(out / 'census.json'), 'ce_policy': bind(out / 'ce-policy.json'), 'scales': scales,
                'effective_shares': {f: scales[f] * mass[f] / total for f in scales},
-               'rule': [[p.pattern, f] for p, f in FAMILY_RULES]}
+               'rule': [[p.pattern, f] for p, f in FAMILY_RULES],
+               'feature_inputs': feature_bindings, 'feature_classified_rows': len(overrides)}
     (out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
     print(json.dumps({k: receipt[k] for k in ('scales', 'effective_shares', 'absent_families', 'capped_families')},
                      indent=1))

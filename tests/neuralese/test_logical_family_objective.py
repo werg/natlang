@@ -16,6 +16,15 @@ def test_cohort_leaves_map_to_logical_families():
         family_of(Path('elsewhere/native-graphs.jsonl.zst'))
 
 
+def test_port_coding_targets_use_bounded_coding_mass_without_renaming_interface():
+    from build_logical_family_objective import feature_family
+    assert feature_family({'features': {'family': 'port_record_calls', 'domain': 'trajectory_continuation_coding'}}) == 'coding'
+    assert feature_family({'features': {'family': 'port_record_calls', 'domain': 'trajectory_continuation_research'}}) is None
+    assert feature_family({'interface_family': 'port_record_calls', 'logical_family': 'natlang'}) == 'natlang'
+    with pytest.raises(ValueError):
+        feature_family({'interface_family': 'port_record_calls', 'logical_family': 'unbound'})
+
+
 def test_capped_scales_keep_mean_one_and_true_cap():
     from build_logical_family_objective import capped_scales
     mass = {'native-communication': 1.0, 'natlang': 99.0}
