@@ -135,3 +135,7 @@ PUT over the DGX uplink (~3 MB/s) failed after a full pass and restarted from ze
   runtime 27 s; `ProtectedWorlds.load` + learner/controller imports on NGC torch 2.14.0a0 and the fork's LFM3 imports
   pass on x86_64. Fixed on the way: bootstrap apt install of zstd hung 11 min (now bounded; Python zstandard
   fallback), the fork's editable install needs cargo (rustup minimal, `SGLANG_BUILD_RUST_EXTS=mem_cache`).
+  Export round trip verified end to end: seed upload DGX->W&B 9.5 GB in 52 min (3.05 MB/s, 9 parts); sandbox GET of
+  the parent from W&B 30-76 MB/s per part (209 s for parent fetch); staged export -> signed PUT -> commit -> DGX GET
+  at ~12 MB/s -> hub copy `ROOT/smoke-jolt` with the checkpoint sha256 `5ff07638...` re-verified. Fixed on the way:
+  exports recorded the sandbox's resolved `/work/mirror` paths (now logical paths).
