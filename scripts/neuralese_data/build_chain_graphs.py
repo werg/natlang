@@ -478,7 +478,8 @@ def main():
             os.replace(tmp, args.cap_state)
         # Phase 2 runs in bounded batches committed to progress.json, so a kill resumes after the last batch.
         # Phase 1 is deterministic (other outputs' cap-state only), so the plans identity must match to resume.
-        plans_sha = canonical_json_sha256_hex({'binding': binding, 'args': {k: str(v) for k, v in sorted(vars(args).items()) if k not in ('workers', 'batch_chains')},
+        plans_sha = canonical_json_sha256_hex({'binding': binding, 'args': {k: str(sorted(v) if isinstance(v, (set, frozenset)) else v)  # set order varies per process
+                                                        for k, v in sorted(vars(args).items()) if k not in ('workers', 'batch_chains')},
                                                'plans': [{'supervised': sorted(p['supervised']), 'edges': sorted(p['edges'])} for p in plans]})
         progress_path = args.out / 'progress.json'
         progress = json.loads(progress_path.read_text()) if progress_path.exists() else None
