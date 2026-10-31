@@ -17,8 +17,10 @@ one-2-node-graph-per-edge conversion for communication data (audit D7, LFM3_DATA
 - A chain left without edges is written as an ordinary multi-node graph (``ordinary-<split>``), keeping the item
   variety of its decisions; a chain left without supervised decisions is an omission.
 
-Custody: a train chain touching current held/quality/pending groups (acquired-connected protection projection) or a
-native decision hold is omitted; test chains are written as held graphs. Context weight is zero (own outputs only).
+Custody: a train chain related to any current ProtectedWorlds identity (including reserved groups and quality-only
+groups), acquired-connected groups, or a native decision hold is omitted; quality-only overlaps retain their reason.
+The exact current protection digest is bound into every graph build. Test chains are written as held graphs. Context
+weight is zero (own outputs only).
 Prompt rendering: each tool-loop call is rebuilt with the current ts-host serving prompt and tool schemas
 (``data/serving_prompt.py``; ``--serving-entry mix`` draws collector/runtime per record as the SFT re-render does) and
 rendered ``full``; ``--fallback program-header``
@@ -52,6 +54,8 @@ LFM3_FINGERPRINT = '133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ff
 LFM3_ROLES = [125033, 125034, 125035, 125036]
 PROTECTION = data_path('data_nvme', 'dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/protection-manifest.json')
 CODE = ('scripts/neuralese_data/build_chain_graphs.py', 'scripts/neuralese_data/native_chain_sources.py',
+        'scripts/neuralese_data/e2e_mine.py', 'scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py',
+        'training/neuralese/natlang_neuralese/common/custody.py',
         'scripts/neuralese_data/native_chain_render.py', 'scripts/neuralese_data/native_chain_materialize.py',
         'scripts/neuralese_data/native_chain_assembly.py', 'scripts/neuralese_data/build_native_semantic_pairs_e2e.py',
         'training/neuralese/natlang_neuralese/data/text_corpus.py',
@@ -174,26 +178,43 @@ def init_worker(config):
     STATE.update(config, tokenizer=tokenizer, roles=roles, fingerprint=LFM3_FINGERPRINT, pieces={})
 
 
-def bind_current_protection_receipt(receipt_path):
-    """Require an e2e cohort's exact current-ProtectedWorlds assembly receipt for graph admission."""
+def current_protection_snapshot():
+    """Load exact current identities and source-group classes for every graph build by default."""
     sys.path[:0] = [str(ROOT / 'training' / 'neuralese'), str(ROOT)]
     from natlang_neuralese.common.custody import REGISTRY, ProtectedWorlds
-    receipt_path = Path(receipt_path)
-    receipt_sha = sha256_file_hex(receipt_path)
-    receipt = json.loads(receipt_path.read_text())
-    proof = receipt.get('current_protected_worlds') or {}
+    from scripts.neuralese_data.e2e_mine import current_protected_source_groups
     registry_path = ROOT / REGISTRY
     registry_sha = sha256_file_hex(registry_path)
     protected = ProtectedWorlds.load()
-    if (receipt.get('schema') != 'natlang.neuralese-e2e-cohort/2'
-            or proof.get('registry') != REGISTRY
-            or proof.get('registry_sha256') != registry_sha
-            or proof.get('protected_sha256') != protected.digest):
-        raise ValueError('e2e cohort receipt is not bound to the exact current ProtectedWorlds union')
-    return {'source_receipt': {'path': str(receipt_path.resolve()), 'sha256': receipt_sha},
-            'registry': REGISTRY, 'registry_sha256': registry_sha,
-            'protected_sha256': protected.digest,
-            'source_categories': [json.loads(item) for item in protected.sources]}
+    categories, group_bindings, category_registry_sha = current_protected_source_groups()
+    if category_registry_sha != registry_sha:
+        raise ValueError('ProtectedWorlds registry changed while loading graph-build custody')
+    return ({'registry': REGISTRY, 'registry_sha256': registry_sha,
+             'protected_sha256': protected.digest,
+             'source_categories': [json.loads(item) for item in protected.sources],
+             'source_group_bindings': group_bindings}, protected, categories)
+
+
+def current_protection_omission(records, protected, quality_groups, nonquality_groups):
+    """Return the applicable current custody exclusions for one complete chain, preserving quality-only labels."""
+    from scripts.neuralese_data.e2e_mine import protected_trajectories, reviewed_trajectories
+    matches = protected_trajectories(records.values(), protected)
+    if not matches:
+        return None
+    trajectories = set(matches)
+    kinds = set().union(*matches.values())
+    quality = reviewed_trajectories(records.values(), quality_groups)
+    nonquality = reviewed_trajectories(records.values(), nonquality_groups)
+    reasons = set()
+    if trajectories & set(quality):
+        reasons.add('source_quality_quarantine_chain')
+    if (trajectories & set(nonquality) or kinds - {'group', 'binding'} or not trajectories <= set(quality)):
+        reasons.add('current_protected_worlds_custody')
+    return {'reason': ('current_protected_worlds_custody' if 'current_protected_worlds_custody' in reasons
+                       else 'source_quality_quarantine_chain'),
+            'applicable_exclusions': sorted(reasons),
+            'protected_identity_kinds': sorted(kinds),
+            'protected_trajectories': sorted(trajectories)}
 
 
 def target_shas(unit):
@@ -259,9 +280,24 @@ def convert_unit(task):
     if chain['split'] not in ('train', 'test'):
         return 'omission', None, {'trajectory': chain['trajectory'], 'reason': 'mixed-split-trajectory'}
     records = read_records(locations)
-    if chain['split'] == 'train' and (set(records) & STATE['holds'] or any(
-            set(row.get('source_groups') or []) & STATE['blocked'] for row in records.values())):
-        return 'omission', 'train', {'trajectory': chain['trajectory'], 'reason': 'protected-or-held'}
+    if chain['split'] == 'train':
+        current_omission = current_protection_omission(records, STATE['current_worlds'],
+                                                       STATE['current_quality_groups'],
+                                                       STATE['current_nonquality_groups'])
+        if current_omission:
+            return 'omission', 'train', {'trajectory': chain['trajectory'], **current_omission}
+        if set(records) & STATE['holds']:
+            return 'omission', 'train', {'trajectory': chain['trajectory'], 'reason': 'native-decision-hold'}
+        source_groups = set().union(*(set(row.get('source_groups') or []) |
+                                      set((((row.get('task') or {}).get('program_ir') or {}).get('source_groups') or []))
+                                      for row in records.values()))
+        acquired = STATE['acquired_protection']
+        if source_groups & acquired['held']:
+            return 'omission', 'train', {'trajectory': chain['trajectory'], 'reason': 'acquired-held-source-group'}
+        if source_groups & acquired['quality']:
+            return 'omission', 'train', {'trajectory': chain['trajectory'], 'reason': 'source-quality-quarantine-chain'}
+        if source_groups & acquired['pending']:
+            return 'omission', 'train', {'trajectory': chain['trajectory'], 'reason': 'acquired-pending-source-review'}
     families = {row.get('family') for row in records.values()}
     if chain['split'] == 'train' and families & STATE['excluded_families']:
         return 'omission', 'train', {'trajectory': chain['trajectory'],
@@ -417,8 +453,6 @@ def main():
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--batch-chains', type=int, default=512, help='chains per committed (resumable) batch')
     parser.add_argument('--protection', type=Path, default=PROTECTION)
-    parser.add_argument('--require-current-protection', action='store_true',
-                        help='require an assembled e2e corpus receipt authenticated against the exact current ProtectedWorlds union')
     parser.add_argument('--exclude-families', type=lambda v: set(v.split(',')), default=set(),
                         help='record families excluded from training (e.g. graded by a since-repaired oracle)')
     args = parser.parse_args()
@@ -428,6 +462,10 @@ def main():
         print('already complete:', args.out); return
     args.out.mkdir(parents=True, exist_ok=True)
     protection = current_protection(args.protection)
+    current_binding, current_worlds, current_group_categories = current_protection_snapshot()
+    current_quality_groups = set(current_group_categories['quality-source-groups'])
+    current_nonquality_groups = set().union(*(groups for source_id, groups in current_group_categories.items()
+                                               if source_id != 'quality-source-groups'))
     holds, hold_bindings = load_decision_holds(sorted((ROOT / 'training/decision-holds').glob('*.jsonl')))
     code = {path: sha256_file_hex(ROOT / path) for path in CODE}
     global STATE_INDEX_CACHE
@@ -435,25 +473,25 @@ def main():
     if args.corpus:
         inputs = {name: {'path': str(args.corpus / name), 'sha256': sha256_file_hex(args.corpus / name)}
                   for name in ('records.jsonl', 'edges.jsonl', 'chains.jsonl', 'pieces.jsonl')}
-        current_protection_binding = None
-        if args.require_current_protection:
-            if not (args.corpus / 'receipt.json').is_file():
-                raise ValueError('--require-current-protection needs the assembled corpus receipt.json')
-            current_protection_binding = bind_current_protection_receipt(args.corpus / 'receipt.json')
-            inputs['receipt.json'] = current_protection_binding['source_receipt']
+        if (args.corpus / 'receipt.json').is_file():
+            source_receipt = args.corpus / 'receipt.json'
+            receipt_sha = sha256_file_hex(source_receipt)
+            source_proof = json.loads(source_receipt.read_text()).get('current_protected_worlds') or {}
+            current_binding['source_receipt'] = {'path': str(source_receipt.resolve()),
+                                                 'sha256': receipt_sha,
+                                                 'upstream_union_status': ('matches-current' if
+                                                     source_proof.get('registry_sha256') == current_binding['registry_sha256']
+                                                     and source_proof.get('protected_sha256') == current_binding['protected_sha256']
+                                                     else 'rechecked-record-by-record')}
+            inputs['receipt.json'] = current_binding['source_receipt']
         units = list(corpus_units(args.corpus))
     else:
-        if args.require_current_protection:
-            raise ValueError('--require-current-protection requires --corpus, not raw work shards')
         inputs = {'work': str(args.work / args.source)}
-        current_protection_binding = None
         units = list(shard_units(args.work, args.source))
     if args.limit_chains:
         units = units[:args.limit_chains]
     binding = {'source_corpus_id': args.corpus_id, 'inputs': inputs, 'protection': protection['proof'],
-               'decision_holds': hold_bindings}
-    if current_protection_binding:
-        binding['current_protected_worlds'] = current_protection_binding
+               'decision_holds': hold_bindings, 'current_protected_worlds': current_binding}
     prompts = [args.prompt] + ([args.fallback] if args.fallback != 'none' and args.fallback != args.prompt else [])
     family_holds = json.loads((ROOT / 'training/source-reviews/family-holds.json').read_text())['holds']
     excluded = set(args.exclude_families) | {'curriculum_' + hold['family'] for hold in family_holds
@@ -465,8 +503,11 @@ def main():
     from natlang_neuralese.data.serving_prompt import load_surface, surface_identity
     serving_entry = None if args.serving_entry == 'recorded' else args.serving_entry
     binding['serving_surface'] = surface_identity(load_surface()) if serving_entry else None
-    config = {'serving_entry': serving_entry, 'binding': binding, 'excluded_families': excluded, 'held_sources': held_sources, 'prompts': prompts, 'max_tokens': args.max_tokens, 'holds': holds,
-              'blocked': protection['held'] | protection['quality'] | protection['pending'],
+    config = {'serving_entry': serving_entry, 'binding': binding, 'excluded_families': excluded,
+              'held_sources': held_sources, 'prompts': prompts, 'max_tokens': args.max_tokens, 'holds': holds,
+              'acquired_protection': protection, 'current_worlds': current_worlds,
+              'current_quality_groups': current_quality_groups,
+              'current_nonquality_groups': current_nonquality_groups,
               'reader_cap': args.reader_cap, 'target_cap': args.target_cap}
     families, totals = collections.defaultdict(collections.Counter), collections.Counter()
     with ProcessPoolExecutor(args.workers, initializer=init_worker, initargs=(config,)) as pool:
@@ -566,15 +607,14 @@ def main():
                'tokenizer': {'path': str(LFM3), 'fingerprint': LFM3_FINGERPRINT, 'role_ids': LFM3_ROLES},
                'code': code, 'totals': dict(totals), 'families': {k: dict(v) for k, v in sorted(families.items())},
                'files': files, 'omissions': omission_files}
-    if current_protection_binding:
-        from natlang_neuralese.common.custody import ProtectedWorlds
-        current = ProtectedWorlds.load()
-        if (current.digest != current_protection_binding['protected_sha256']
-                or sha256_file_hex(ROOT / current_protection_binding['registry']) !=
-                current_protection_binding['registry_sha256']
-                or sha256_file_hex(args.corpus / 'receipt.json') !=
-                current_protection_binding['source_receipt']['sha256']):
-            raise ValueError('current protected union or assembled source receipt changed during graph conversion')
+    end_binding, _, _ = current_protection_snapshot()
+    if (end_binding['protected_sha256'] != current_binding['protected_sha256']
+            or end_binding['registry_sha256'] != current_binding['registry_sha256']
+            or end_binding['source_group_bindings'] != current_binding['source_group_bindings']):
+        raise ValueError('current ProtectedWorlds union or source-group files changed during graph conversion')
+    if current_binding.get('source_receipt') and sha256_file_hex(
+            Path(current_binding['source_receipt']['path'])) != current_binding['source_receipt']['sha256']:
+        raise ValueError('assembled source receipt changed during graph conversion')
     (args.out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
     (args.out / 'progress.json').unlink(missing_ok=True)
     (args.out / 'target-shas.jsonl').unlink(missing_ok=True)

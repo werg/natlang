@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 from pathlib import Path
 
 import pytest
@@ -15,11 +14,13 @@ def module_under_test():
     return module
 
 
-def test_current_protection_receipt_binds_complete_registry_and_source_receipt(tmp_path, monkeypatch):
+def test_current_protection_snapshot_is_loaded_for_default_graph_build(monkeypatch):
     module = module_under_test()
     import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
     from natlang_neuralese.common.custody import REGISTRY, ProtectedWorlds
+    import scripts.neuralese_data.e2e_mine as e2e
 
     class FakeProtected:
         digest = 'a' * 64
@@ -27,41 +28,50 @@ def test_current_protection_receipt_binds_complete_registry_and_source_receipt(t
 
     monkeypatch.setattr(ProtectedWorlds, 'load', classmethod(lambda cls: FakeProtected()))
     registry_sha = module.sha256_file_hex(module.ROOT / REGISTRY)
-    source_receipt = tmp_path / 'receipt.json'
-    source_receipt.write_text(json.dumps({
-        'schema': 'natlang.neuralese-e2e-cohort/2',
-        'current_protected_worlds': {'registry': REGISTRY, 'registry_sha256': registry_sha,
-                                     'protected_sha256': 'a' * 64},
-    }) + '\n')
-    binding = module.bind_current_protection_receipt(source_receipt)
-    assert binding['registry'] == REGISTRY
-    assert binding['registry_sha256'] == registry_sha
+    monkeypatch.setattr(e2e, 'current_protected_source_groups', lambda: (
+        {'quality-source-groups': {'quality:one'}, 'v4-reserved': {'2wiki-q:held'}},
+        [{'id': 'quality-source-groups', 'sha256': 'b' * 64}, {'id': 'v4-reserved', 'sha256': 'c' * 64}],
+        registry_sha))
+    binding, worlds, groups = module.current_protection_snapshot()
+    assert worlds.digest == 'a' * 64
     assert binding['protected_sha256'] == 'a' * 64
-    assert binding['source_receipt'] == {
-        'path': str(source_receipt.resolve()), 'sha256': module.sha256_file_hex(source_receipt)}
-    assert binding['source_categories'] == [{'id': 'held', 'kind': 'source-groups'}]
+    assert binding['registry_sha256'] == registry_sha
+    assert groups == {'quality-source-groups': {'quality:one'}, 'v4-reserved': {'2wiki-q:held'}}
+    assert len(binding['source_group_bindings']) == 2
 
 
-def test_current_protection_receipt_rejects_stale_union_or_wrong_schema(tmp_path, monkeypatch):
+def test_current_graph_filter_keeps_quality_only_distinct_from_mixed_reserved_overlap():
     module = module_under_test()
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
-    from natlang_neuralese.common.custody import REGISTRY, ProtectedWorlds
+    from natlang_neuralese.common.custody import ProtectedWorlds
+    quality = 'quality:only'
+    reserved = '2wiki-q:00310dc8094611ebbdaeac1f6bf848b6'
+    protected = ProtectedWorlds.from_cases({'current': ('a' * 64, [
+        {'id': 'quality-held', 'split': 'test', 'family': 'held', 'source_groups': [quality],
+         'semantics': {'root': 'q.nl', 'files': {'q.nl': 'q'}, 'inputs': {}}},
+        {'id': 'reserved-held', 'split': 'test', 'family': 'held', 'source_groups': [reserved],
+         'semantics': {'root': 'r.nl', 'files': {'r.nl': 'r'}, 'inputs': {}}},
+    ])})
+    base = {'id': 'program', 'family': 'fixture', 'semantics': {
+        'root': 'main.nl', 'files': {'main.nl': 'body'}, 'inputs': {'request': 'x'}}}
+    quality_only = {'q:0': {'id': 'q:0', 'split': 'train',
+        'source_ref': {'trajectory_id': 'quality-only'}, 'source_groups': [quality],
+        'task': {'program_ir': base}}}
+    result = module.current_protection_omission(quality_only, protected, {quality}, {reserved})
+    assert result['reason'] == 'source_quality_quarantine_chain'
+    assert result['applicable_exclusions'] == ['source_quality_quarantine_chain']
 
-    class FakeProtected:
-        digest = 'b' * 64
-        sources = ()
+    mixed = {'both:0': {'id': 'both:0', 'split': 'train',
+        'source_ref': {'trajectory_id': 'quality-and-reserved'}, 'source_groups': [quality, reserved],
+        'task': {'program_ir': base}}}
+    result = module.current_protection_omission(mixed, protected, {quality}, {reserved})
+    assert result['reason'] == 'current_protected_worlds_custody'
+    assert result['applicable_exclusions'] == [
+        'current_protected_worlds_custody', 'source_quality_quarantine_chain']
+    assert result['protected_identity_kinds'] == ['binding', 'group']
 
-    monkeypatch.setattr(ProtectedWorlds, 'load', classmethod(lambda cls: FakeProtected()))
-    registry_sha = module.sha256_file_hex(module.ROOT / REGISTRY)
-    path = tmp_path / 'receipt.json'
-    path.write_text(json.dumps({'schema': 'natlang.neuralese-e2e-cohort/2',
-        'current_protected_worlds': {'registry': REGISTRY, 'registry_sha256': registry_sha,
-                                     'protected_sha256': 'a' * 64}}))
-    with pytest.raises(ValueError, match='exact current ProtectedWorlds union'):
-        module.bind_current_protection_receipt(path)
-    path.write_text(json.dumps({'schema': 'wrong',
-        'current_protected_worlds': {'registry': REGISTRY, 'registry_sha256': registry_sha,
-                                     'protected_sha256': 'b' * 64}}))
-    with pytest.raises(ValueError, match='exact current ProtectedWorlds union'):
-        module.bind_current_protection_receipt(path)
+    clean = {'clean:0': {'id': 'clean:0', 'split': 'train',
+        'source_ref': {'trajectory_id': 'clean'}, 'source_groups': ['train:clean'],
+        'task': {'program_ir': {**base, 'id': 'clean-program'}}}}
+    assert module.current_protection_omission(clean, protected, {quality}, {reserved}) is None
