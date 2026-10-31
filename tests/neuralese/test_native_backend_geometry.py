@@ -13,3 +13,13 @@ def test_complete_runtime_forwards_long_source_and_consumer_geometry(monkeypatch
         gradient_atol=1e-5, device='cpu', minimum_source_tokens=512, minimum_target_tokens=256)
     assert seen[0]['minimum_source_tokens'] == 512
     assert seen[0]['minimum_target_tokens'] == 256
+
+
+def test_reference_geometry_rejects_invalid_token_bounds():
+    import pytest
+    from natlang_neuralese.eval.native_state import qualify_existing
+    for source, target in ((-1, 0), (0, -1), (0, True), (True, 0)):
+        with pytest.raises(ValueError, match='minimum .* tokens'):
+            qualify_existing(None, None, None, {}, checkpoint_sha256='a'*64,
+                forward_atol=1e-4, gradient_atol=1e-5,
+                minimum_source_tokens=source, minimum_target_tokens=target)
