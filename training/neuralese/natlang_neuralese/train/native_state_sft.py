@@ -1409,6 +1409,8 @@ def build_parser():
     parser.add_argument('--resident-geometry-qualification', type=Path)
     parser.add_argument('--policy-capacity-request',default=None,
         help='exact admitted whole-policy source/objective MAX request; policy SGD always qualifies before updates')
+    parser.add_argument('--continuation-preflight-only', action='store_true',
+        help='CPU-only real-checkpoint continuation validation; exit before GPU qualification and updates')
     parser.add_argument('--memory-qualification', default=None,
         help='bound prepared new-source capacity request JSON; checked read-only after exact restore')
     parser.add_argument('--sft-packed-geometry', default=None,
@@ -1653,6 +1655,8 @@ def training_precision_pass(quantization, *, policy_operation, checkpoint_option
 
 def validate_static_args(args, *, check_output=True):
     """Validate pre-model argument semantics, also used by launch builders."""
+    if getattr(args,'continuation_preflight_only',False) and (args.device!='cpu' or args.continue_from is None):
+        raise ValueError('continuation preflight requires CPU and an exact checkpoint parent')
     if check_output and args.initialize_only and (args.continue_from is not None or (args.out / 'checkpoint.pt').exists()):
         raise ValueError('initialize-only requires a fresh output and no checkpoint parent')
     if args.checkpoint_direct_token_limit < 0 or (args.checkpoint_direct_token_limit and not args.checkpoint_layers):
@@ -3172,6 +3176,19 @@ def _main(argv=None, *, requested_refresh):
         checkpoint_options['communication_quota_policy']['interleave']='sustained-packed-batch-proportional/1'
     if policy_focus_ids:
         pending_batches=promote_focus(pending_batches,train.entries,policy_focus_ids)
+    if args.continuation_preflight_only:
+        receipt={'schema':'natlang.native-continuation-cpu-preflight/1','passed':True,
+            'parent_sha256':sha256_file_hex_cached(args.continue_from),'global_step':global_step,
+            'stage_id':args.stage_id,'source_sha256':train.file_sha256,'rows':len(train.entries),
+            'pending_batches':len(pending_batches),'required_visits':sum(required_visits.values()),
+            'focus_history':checkpoint_options.get('pending_focus_history'),
+            'token_mass_update_normalization_history':checkpoint_options.get('token_mass_update_normalization_history'),
+            'base_restore_history':checkpoint_options.get('base_restore_history'),
+            'scope':'real checkpoint model, optimizer and CPU RNG restored; no GPU probe or optimizer update',
+            'optimizer_updates':0}
+        write_json(args.out/'continuation-preflight.json',receipt)
+        print(json.dumps({'continuation_preflight':str(args.out/'continuation-preflight.json'),'passed':True,'global_step':global_step}),flush=True)
+        return 0
     if args.memory_qualification and objective is None:
         from .native_packed_capacity import qualify_pending
         from ..eval.native_memory import capacity_identity
