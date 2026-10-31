@@ -404,12 +404,14 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
         campaign_id='test-codebase-plan-v1', campaign_root=Path(dispatcher.ROOT / 'runs' / '.plan-test-never-created'),
         output=output, inventory_output=tmp_path / 'inventory.json',
         selected_source=tmp_path / 'selected.jsonl', protection_receipt=tmp_path / 'protection.json',
-        max_cases=2, seed=7, intake_receipt=intake_receipt, protected=Protected(),
+        max_cases=2, slots=1, max_turns=12, max_model_requests=24, case_seconds=300,
+        seed=7, intake_receipt=intake_receipt, protected=Protected(),
     )
     plan = json.loads(output.read_text())
     assert report['status'] == 'prepared_unapproved'
     assert plan['root_approved'] is False
-    assert plan['slots'] == 6 and plan['prompt_rendering'] == 'full'
+    assert plan['slots'] == 1 and plan['prompt_rendering'] == 'full'
+    assert (plan['max_turns'], plan['max_model_requests'], plan['case_seconds']) == (12, 24, 300)
     assert plan['resource_policy']['resumable'] is False
     assert plan['resource_policy']['backfill'] is False
     assert '--no-resumable' in report['dispatch_command_after_review']
@@ -424,7 +426,7 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     reviewed_path.write_text(json.dumps(reviewed, sort_keys=True))
     validated, identity = dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
     assert validated['prompt_rendering'] == 'full'
-    assert identity['slots'] == 6 and identity['source_inventory']['entries'] == 2
+    assert identity['slots'] == 1 and identity['source_inventory']['entries'] == 2
     service.write_text('export function read(): number { return 2; }\n')
     with pytest.raises(ValueError, match='Reviewed artifact changed'):
         dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))

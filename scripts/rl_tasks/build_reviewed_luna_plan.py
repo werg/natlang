@@ -306,6 +306,8 @@ def select_balanced_train(rows: list[dict], *, max_cases: int, seed: int,
 def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Path,
                campaign_id: str, campaign_root: Path, output: Path, inventory_output: Path,
                selected_source: Path, protection_receipt: Path, max_cases: int = 42,
+               slots: int = 6,
+               max_turns: int = 60, max_model_requests: int = 384, case_seconds: int = 1800,
                seed: int = 20261031, intake_receipt: Path | None = None,
                diversity_manifest: Path | None = None,
                case_ids: set[str] | None = None,
@@ -314,6 +316,12 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
     source = source.resolve(strict=True)
     verification = verification.resolve(strict=True)
     runtime = runtime.resolve(strict=True)
+    if not isinstance(slots, int) or not 1 <= slots <= 6:
+        raise ValueError('slots must be between 1 and the authorized six-worker limit')
+    if (not isinstance(max_turns, int) or max_turns < 1 or
+            not isinstance(max_model_requests, int) or max_model_requests < 1 or
+            not isinstance(case_seconds, int) or case_seconds < 1):
+        raise ValueError('turn, model-request, and case-time limits must be positive integers')
     runtime_receipt = runtime / 'frozen-runtime.json'
     if not runtime_receipt.is_file():
         raise ValueError(f'frozen runtime receipt missing: {runtime_receipt}')
@@ -409,7 +417,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'storage_root': str(storage_root),
         'launch_record': str(campaign_root / 'dispatch/launch.json'), 'authority': str(authority),
         'provider': 'openai-codex', 'model_id': 'gpt-6-luna', 'model_concurrency': 1,
-        'slots': 6, 'execution_plans': True, 'reasoning_effort': 'low',
+        'slots': slots, 'execution_plans': True, 'reasoning_effort': 'low',
         'resource_policy': {
             'schema': 'natlang.teacher_execution_resource_policy/1',
             'resumable': False, 'backfill': False,
@@ -418,10 +426,10 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
             'campaign_resume': 'explicit only for unclaimed cases; uncertain claims are terminalized',
         },
         'prompt_rendering': 'full', 'text_neuralese_emulation': True,
-        'max_transport_retries': 1, 'max_turns': 60, 'max_model_requests': 384,
+        'max_transport_retries': 1, 'max_turns': max_turns, 'max_model_requests': max_model_requests,
         # Hosted teachers author text-backed Neuralese. Native student KV is
         # reconstructed during graph conversion/training, never claimed here.
-        'context_tokens': 32768, 'case_seconds': 1800, 'min_free_mib': 40960,
+        'context_tokens': 32768, 'case_seconds': case_seconds, 'min_free_mib': 40960,
         'cases': cases,
     }
     if judge_model is not None:
@@ -447,7 +455,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'world_group_counts': dict(counts_world), 'source_groups_preserved': True,
         'quality_excluded_rows': sum(1 for row in rows if row.get('split') == 'train' and
                                      (row.get('curriculum', {}).get('external') or {}).get('quality_status', 'ready') != 'ready'),
-        'prompt_rendering': 'full', 'slots': 6, 'root_approved': False,
+        'prompt_rendering': 'full', 'slots': slots, 'root_approved': False,
         'dispatch_command_after_review': (
             f'python3 scripts/memory_ledger.py run --unit {campaign_id} --budget-gb 2 --class collection '
             f'--priority low --no-resumable -- python3 scripts/run_reviewed_luna_dispatcher.py '
@@ -475,6 +483,10 @@ def main() -> None:
     judge_transport.add_argument('--judge-provider')
     judge_transport.add_argument('--judge-server')
     parser.add_argument('--max-cases', type=int, default=42)
+    parser.add_argument('--slots', type=int, default=6, help='maximum concurrent workers (1..6)')
+    parser.add_argument('--max-turns', type=int, default=60)
+    parser.add_argument('--max-model-requests', type=int, default=384)
+    parser.add_argument('--case-seconds', type=int, default=1800)
     parser.add_argument('--case-id', action='append', dest='case_ids',
                         help='select an exact authenticated public TRAIN row ID; repeat for multiple rows')
     parser.add_argument('--seed', type=int, default=20261031)
@@ -488,6 +500,9 @@ def main() -> None:
                          campaign_root=args.campaign_root, output=args.output,
                          inventory_output=args.inventory_output, selected_source=args.selected_source,
                          protection_receipt=args.protection_receipt, max_cases=args.max_cases,
+                         slots=args.slots,
+                         max_turns=args.max_turns, max_model_requests=args.max_model_requests,
+                         case_seconds=args.case_seconds,
                          seed=args.seed, intake_receipt=args.intake_receipt,
                          diversity_manifest=args.diversity_manifest,
                          case_ids=set(args.case_ids) if args.case_ids else None,
