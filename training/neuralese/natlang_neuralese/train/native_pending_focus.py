@@ -67,3 +67,27 @@ def active_for_operation(*, ordinary_sft, explicit_request):
     if not ordinary_sft and explicit_request is not None:
         raise ValueError('pending SFT focus cannot target a distinct objective source')
     return ordinary_sft
+
+
+def supersede_unearned_focus(history, old_frame, *, proof_sha256, global_step):
+    """Archive a focus request only when every referenced old-stage credit is zero."""
+    history = [dict(item) for item in history]
+    if not history or history[-1].get('state') in ('complete', 'superseded-unearned'):
+        return history
+    record = history[-1]
+    if record.get('state') != 'active' or record.get('consumed') or record.get('withdrawn'):
+        raise ValueError('earned or ambiguous pending focus cannot be superseded')
+    doc, _ = dependencies(record['request'])
+    bindings = old_frame.get('source_row_bindings') or {}
+    counts = old_frame.get('exposure_counts') or {}
+    credits = record.get('initial_credits')
+    if not isinstance(credits, dict) or set(credits) != {r['id'] for r in doc['rows']}:
+        raise ValueError('pending focus initial credit inventory differs')
+    for row in doc['rows']:
+        ident = row['id']
+        if bindings.get(ident) != row['binding'] or counts.get(ident) != 0 or credits[ident] != 0:
+            raise ValueError('pending focus does not bind an unearned old-stage row')
+    record.update({'state': 'superseded-unearned', 'superseded_at_global_step': int(global_step),
+                   'supersession_proof_sha256': proof_sha256,
+                   'disposition': 'unearned old-stage focus superseded with the unearned source; no completion claimed'})
+    return history

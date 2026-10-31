@@ -444,3 +444,25 @@ def test_transported_foundation_requires_each_exact_completed_row(tmp_path,damag
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
+
+
+def test_unearned_focus_supersession_preserves_and_rejects_earned(tmp_path):
+    import hashlib
+    from natlang_neuralese.train.native_pending_focus import supersede_unearned_focus
+    evidence = tmp_path / 'evidence'; evidence.write_text('proof')
+    evidence_ref = {'path': str(evidence), 'sha256': hashlib.sha256(evidence.read_bytes()).hexdigest()}
+    binding = 'a' * 64
+    request = tmp_path / 'focus.json'
+    request.write_text(json.dumps({'schema': 'natlang.native-pending-focus/1', 'rows': [
+        {'id': 'row', 'binding': binding, 'source_sha256': 'b' * 64, 'split': 'train', 'evidence': [evidence_ref]}]}))
+    ref = {'path': str(request), 'sha256': hashlib.sha256(request.read_bytes()).hexdigest()}
+    record = {'request': ref, 'state': 'active', 'initial_credits': {'row': 0}, 'consumed': [], 'withdrawn': []}
+    frame = {'source_row_bindings': {'row': binding}, 'exposure_counts': {'row': 0}}
+    result = supersede_unearned_focus([record], frame, proof_sha256='proof', global_step=52)
+    assert result[0]['state'] == 'superseded-unearned' and result[0]['request'] == ref
+    assert record['state'] == 'active'
+    for bad_frame in ({**frame, 'exposure_counts': {'row': 1}}, {**frame, 'source_row_bindings': {'row': 'c' * 64}}):
+        with pytest.raises(ValueError):
+            supersede_unearned_focus([record], bad_frame, proof_sha256='proof', global_step=52)
+    with pytest.raises(ValueError):
+        supersede_unearned_focus([{**record, 'consumed': ['row']}], frame, proof_sha256='proof', global_step=52)

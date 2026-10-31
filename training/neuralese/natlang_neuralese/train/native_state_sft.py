@@ -2944,6 +2944,12 @@ def _main(argv=None, *, requested_refresh):
     rotation_history = list((saved_options or {}).get('pending_batch_rotation_history') or [])
     rotation_has_saved_parent = bool(saved_training)
     saved_focus_history = list((saved_options or {}).get('pending_focus_history') or [])
+    if parent_continuation and args.supersede_unearned_sft_stage and saved_focus_history:
+        from .native_pending_focus import supersede_unearned_focus
+        old_progress=collect_sft_progress(saved_training,borrow_frames=True)
+        saved_focus_history=supersede_unearned_focus(saved_focus_history,old_progress[proof['old_stage']],
+            proof_sha256=proof_sha,global_step=global_step)
+        checkpoint_options['pending_focus_history']=saved_focus_history
     saved_options = ce_prior_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
@@ -3087,11 +3093,11 @@ def _main(argv=None, *, requested_refresh):
         if focus_history and focus_history[-1]['request']['sha256']==focus_reference['sha256']:
             focus_record=focus_history[-1]
         else:
-            if focus_history and focus_history[-1].get('state')!='complete':raise ValueError('prior pending focus has not completed')
+            if focus_history and focus_history[-1].get('state') not in ('complete','superseded-unearned'):raise ValueError('prior pending focus has not completed')
             focus_record={'schema':'natlang.native-pending-focus-history/1','request':focus_reference,'at_global_step':global_step,
                 'initial_credits':{row['id']:exposure_counts.get(row['id'],0) for row in focus_request['rows']},'state':'active','consumed':[],'withdrawn':[]}
             focus_history.append(focus_record)
-    elif focus_enabled and focus_history and focus_history[-1].get('state')!='complete':
+    elif focus_enabled and focus_history and focus_history[-1].get('state') not in ('complete','superseded-unearned'):
         focus_record=focus_history[-1];focus_request,_=focus_dependencies(focus_record['request'])
     urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness or args.ordinary_cohort_fairness or args.communication_cohort_fairness or focus_request else None
     if focus_request:
