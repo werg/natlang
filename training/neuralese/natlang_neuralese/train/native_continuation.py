@@ -182,6 +182,16 @@ def stage_key(training):
     return str((training.get('options') or {}).get('stage_id') or 'native-graph-ce')
 
 
+def policy_pending_frame(frame):
+    """Build only active policy-source quotas; SFT frames remain carried separately."""
+    options=dict(frame.get('options') or {})
+    options.pop('_pending_native_source_declarations',None)
+    active=frame.get('source_row_bindings') or {}
+    options['_objective_required_visits']={key:value for key,value in
+        (options.get('_objective_required_visits') or {}).items() if key in active}
+    return _retain_pending_sources({**frame,'options':options},{})
+
+
 def _retain_pending_sources(frame,previous):
     """Merge mandatory source declarations into the existing CE frame, with no earned credit."""
     active=frame.get('source_row_bindings') or {}

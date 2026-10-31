@@ -279,12 +279,61 @@ def normalize_legacy_completed_update(state, state_path):
 LEARNER_SIDE_KEYS = ('trainer_parameters', 'learner_command', 'seed_trainer_parameters', 'seed_command')
 
 
+def native_policy_parameter_contract():
+    allowed = {
+        'accumulate_batches','async_checkpoint','base','batch_graphs','batch_tokens',
+        'checkpoint_every','checkpoint_input_offload','checkpoint_input_offload_directory',
+        'checkpoint_seconds','checkpoint_layers','checkpoint_direct_token_limit',
+        'checkpoint_publication','checkpoint_publication_namespace',
+        'checkpoint_publication_readonly_input_roots','chunk_tokens','ffn_chunk_tokens',
+        'cotangent_accumulator_backend','device','dtype','epochs','eval_every','forward_atol',
+        'gradient_atol','held_eval_graphs','held_eval_tokens','held_final_policy',
+        'history_reasoning_policy','history_reasoning_binding_path','history_reasoning_binding_sha256',
+        'interface_row_learning_rate','learned_row_learning_rate','learning_rate','lr_warmup',
+        'lr_anneal','matrix_telemetry','memory_qualification','native_ordinary_precision',
+        'native_linear_precision','native_attention_precision','native_norm_execution',
+        'native_shared_execution','native_optimizer_migration','optimizer_state_storage',
+        'quantization','fp8_training','fp8_recipe','fp8_amax_history_len','muon_rounding',
+        'rank','recipe_binding','seed','share_causal_prefixes','softmax_numerics','stage_id',
+        'task_eval','task_eval_every','weight_decay','weight_ema','latent_ns',
+        'qualify_training_backend','native_participant','diloco','diloco_new_outer',
+        'standalone_diloco_parent',
+    }
+    sft_only = {
+        'communication_min_visits','pending_focus','pending_native_sources',
+        'pending_rotation_anchor','sft_packed_geometry','resident_data_directory',
+        'resident_geometry_qualification','foundation_native_graphs',
+        'foundation_communication_batches','foundation_declaration_recovery',
+        'communication_foundation','ordinary_cohort_fairness','communication_cohort_fairness',
+        'urgent_cohort_fairness','refresh_after_updates','refresh_at_checkpoint',
+        'refresh_foundation_readiness','learn_reasoning_boundaries','source_predecessor_retirement',
+        'source_classification_migration','source_correction','continued_native_graphs',
+        'continued_held_native_graphs','withdrawn_native_graphs','retired_native_withdrawal',
+        'retired_native_withdrawal_set','unavailable_native_sources','ce_supervision_policy',
+        'supervision_objective_mode','prerequisite_stages',
+    }
+    return allowed, sft_only
+
+
+def validate_native_policy_trainer_cli(argv):
+    allowed, _ = native_policy_parameter_contract()
+    for token in argv:
+        if token.startswith("--"):
+            name=token[2:].split("=",1)[0]
+            if name.startswith("no-"):name=name[3:]
+            if name.replace("-","_") not in allowed:
+                raise ValueError("unclassified native RL trainer flag: "+token)
+
+
 def native_policy_trainer_args(parameters, expected_native):
     """Bind sampled-policy admission independently of future ordinary rendering."""
     from ..train.recipe import stage_parameter_args
-    actual = dict(parameters)
-    # This quota belongs to the preserved SFT source, not sampled RL graphs.
-    actual.pop('communication_min_visits', None)
+    # Explicit objective-independent controls: SFT source and scheduling
+    # declarations remain in the parent checkpoint and seed arguments.
+    allowed, sft_only = native_policy_parameter_contract()
+    unknown=set(parameters)-allowed-sft_only
+    if unknown:raise ValueError('unclassified native RL trainer parameters: '+', '.join(sorted(unknown)))
+    actual={key:value for key,value in parameters.items() if key in allowed}
     for key in ('history_reasoning_policy', 'history_reasoning_binding_path',
                 'history_reasoning_binding_sha256'):
         actual.pop(key, None)

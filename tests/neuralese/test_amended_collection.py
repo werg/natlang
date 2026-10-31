@@ -42,7 +42,25 @@ def test_interrupted_group_projection_is_authenticated(tmp_path):
 def test_policy_arguments_do_not_apply_sft_communication_quota():
     from natlang_neuralese.rl.production import native_policy_trainer_args
     from natlang_neuralese.train.recipe import stage_parameter_args
-    parameters={'communication_min_visits':7,'learning_rate':1e-6}
-    assert '--communication-min-visits' not in native_policy_trainer_args(parameters,{})
+    parameters={'communication_min_visits':7,'pending_focus':'focus.json','sft_packed_geometry':{'path':'sft'},'foundation_communication_batches':1,'learning_rate':1e-6}
+    args=native_policy_trainer_args(parameters,{})
+    assert all(flag not in args for flag in ('--communication-min-visits','--pending-focus','--sft-packed-geometry','--foundation-communication-batches'))
     assert '--communication-min-visits' in stage_parameter_args(parameters)
     assert parameters['communication_min_visits']==7
+
+def test_policy_quota_frame_excludes_prior_sft_obligations():
+    from natlang_neuralese.train.native_continuation import policy_pending_frame
+    frame={'source_row_bindings':{'policy':'binding'},'source_row_order':['policy'],
+           'exposure_counts':{},'options':{'epochs':1,'_objective_required_visits':{'old-sft':7},
+           '_pending_native_source_declarations':[{'binding':{'sha256':'old'},'rows':{}}]}}
+    projected=policy_pending_frame(frame)
+    assert projected['required_visits']=={'policy':1}
+    assert not projected.get('pending_source_declarations')
+    assert frame['options']['_objective_required_visits']=={'old-sft':7}
+
+def test_policy_cli_rejects_direct_sft_override_and_unknown_control():
+    from natlang_neuralese.rl.production import validate_native_policy_trainer_cli
+    validate_native_policy_trainer_cli(['--batch-tokens','32768','--async-checkpoint'])
+    for flag in ('--pending-focus','--sft-packed-geometry','--communication-min-visits','--unknown-control'):
+        with pytest.raises(ValueError,match='unclassified native RL trainer flag'):
+            validate_native_policy_trainer_cli([flag,'x'])

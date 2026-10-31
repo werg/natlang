@@ -2810,6 +2810,10 @@ def _main(argv=None, *, requested_refresh):
     prior_packed_capacity = ((resume or {}).get('options') or {}).get('sft_packed_capacity') or {}
     prior_oversize_baseline = ((resume or {}).get('options') or {}).get('oversize_capacity_baseline')
     prior_oversize_history = list(((resume or {}).get('options') or {}).get('oversize_capacity_history') or [])
+    if objective is not None:
+        # Policy capacity is freshly qualified against its own complete graphs.
+        prior_packed_capacity = {}
+        prior_oversize_baseline = None
     admission_record = ((resume or saved_training).get('options') or {}).get('_pending_source_admission')
     prior_foundations = set((resume or {}).get('completed_foundations') or
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('completed_foundations') or [])
@@ -3030,7 +3034,7 @@ def _main(argv=None, *, requested_refresh):
     if matrix_reference is not None:
         checkpoint_options['matrix_norm_reference'] = matrix_reference
     saved_lr_anneal = saved_norm_reference = None
-    prior_rotation = (saved_options or {}).get('pending_batch_rotation') or {}
+    prior_rotation = ((saved_options or {}).get('pending_batch_rotation') or {}) if objective is None else {}
     rotation_history = list((saved_options or {}).get('pending_batch_rotation_history') or [])
     rotation_has_saved_parent = bool(saved_training)
     saved_focus_history = list((saved_options or {}).get('pending_focus_history') or [])
@@ -3096,10 +3100,14 @@ def _main(argv=None, *, requested_refresh):
     foundation_priority_ids = ({entry['id'] for entry in foundation_source.entries if entry.get('communication')}
                                if args.foundation_communication_batches is not None else None)
     from .native_continuation import _retain_pending_sources
-    pending_frame = _retain_pending_sources({
-        'source_row_bindings': source_row_bindings, 'source_row_order': source_order,
-        'exposure_counts': dict(exposure_counts), 'options': checkpoint_options},
-        carried_progress.get(args.stage_id or 'native-graph-ce') or {})
+    pending_input = {'source_row_bindings': source_row_bindings, 'source_row_order': source_order,
+        'exposure_counts': dict(exposure_counts), 'options': checkpoint_options}
+    if objective is None:
+        pending_frame = _retain_pending_sources(pending_input,
+            carried_progress.get(args.stage_id or 'native-graph-ce') or {})
+    else:
+        from .native_continuation import policy_pending_frame
+        pending_frame = policy_pending_frame(pending_input)
     from .native_cohort_schedule import source_cohort_ids
     fairness_history = fairness_saved_history
     prior_fairness = fairness_saved_policy
@@ -3227,7 +3235,7 @@ def _main(argv=None, *, requested_refresh):
     checkpoint_options['native_diversity_history']=diversity_history
     pending_batches=cohort_head_merge(train.entries,pending_batches,urgent_cohort_ids,
         priority_ids=foundation_priority_ids,focus_ids=focus_ids,batch_tokens=args.batch_tokens,batch_graphs=args.batch_graphs,schedule_offset=global_step)
-    if checkpoint_options.get('communication_quota_policy'):
+    if objective is None and checkpoint_options.get('communication_quota_policy'):
         from .native_diversity import sustained_communication_interleave
         pending_batches=sustained_communication_interleave(train.entries,pending_batches,
             focus_ids=focus_ids,schedule_offset=global_step)

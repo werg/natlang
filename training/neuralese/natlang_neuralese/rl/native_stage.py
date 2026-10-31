@@ -208,6 +208,8 @@ def main(argv=None):
     # data receipt, never silently dropped.
     parser.add_argument('--max-graph-forward-tokens', type=int)
     args, trainer = parser.parse_known_args(argv)
+    from .production import validate_native_policy_trainer_cli
+    validate_native_policy_trainer_cli(trainer)
     from contextlib import nullcontext
     from .native_output_lease import coefficient_output_lease
     with coefficient_output_lease(args.out) if args.coefficient_policy is not None else nullcontext():
