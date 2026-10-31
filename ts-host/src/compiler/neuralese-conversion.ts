@@ -265,10 +265,6 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
         ...(typeof write.source_occurrence === 'string' ? { source_occurrence: write.source_occurrence } : {}),
       });
   }
-  if (inlineInstructionRead && !occurrences.some(item => item.role === 'consumer' &&
-      item.reference === inlineInstructionRead.writer_id && item.body === inlineInstructionRead.body_source))
-    add('consumer', inlineInstructionRead.writer_id, inlineInstructionRead.body_source,
-      'inline-instruction', ['messages', 'user', 'inline-instruction']);
   const rewrite = (value: unknown, path: string[]): unknown => {
     if (Array.isArray(value)) return value.map((item, index) => rewrite(item, [...path, String(index)]));
     if (!value || typeof value !== 'object') return value;
@@ -285,7 +281,8 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
     if (item.type === 'read') {
       if (typeof item.name !== 'string' || !item.name || typeof item.source !== 'string')
         throw new Error('native source conversion read needs an exact source name and body');
-      add('consumer', item.name, item.source, 'authenticated-static-read', path, {
+      add('consumer', item.name, item.source,
+        inlineInstructionRead?.writer_id === item.name ? 'inline-instruction' : 'authenticated-static-read', path, {
         ...(item.stop_gradient === true ? { stop_gradient: true as const } : {}),
         ...(typeof item.source_occurrence === 'string' ? { source_occurrence: item.source_occurrence } : {}),
       });
@@ -319,6 +316,14 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
         item.$write as Record<string, unknown> : undefined;
       if (!write || typeof write.name !== 'string' || !write.name || typeof write.source !== 'string')
         throw new Error('native source conversion writer needs an exact name and body');
+      // A write in the visible history is that earlier action's text as context; its producer is the
+      // earlier row's target. Recording it again here would duplicate the producer outside a target.
+      if (path[0] === 'messages') {
+        if (write.source_encoding === 'json' || write.type === 'Neuralese<unknown>') {
+          try { return JSON.parse(write.source); } catch { /* Preserve exact source text if it is not valid JSON. */ }
+        }
+        return write.source;
+      }
       const sourceKind = typeof write.source_kind === 'string' ? write.source_kind :
         path[0] === 'target' && record.derived_target &&
           typeof record.derived_target === 'object' ? 'derived-equivalent-pure-terminal-eval-finish-target' :
@@ -344,6 +349,12 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
     return out;
   };
   const plainMessages = rewrite(messages, ['messages']) as Message[];
+  // The instruction read is bound where the rendered call shows it (its `read` part); a read the rendering could not
+  // place stays unresolved rather than claiming a position it does not have.
+  if (inlineInstructionRead && !occurrences.some(item => item.role === 'consumer' &&
+      item.reference === inlineInstructionRead.writer_id))
+    unresolved.push({ schema: 'natlang.unresolved-native-source-reference/1', path: ['messages'],
+      id: inlineInstructionRead.writer_id, reason: 'inline instruction read has no exact span in the rendered call' });
   // The actual source action stays exact. Writer bodies and paths are separate
   // statically derived inputs to native graph rendering, never a target rewrite.
   let plainTarget: Message | undefined;
@@ -355,9 +366,18 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
       const sourceCall = sourceCalls[index] as Record<string, unknown> | undefined;
       const targetCall = targetCalls[index] as Record<string, unknown> | undefined;
       if (!sourceCall || !targetCall || !Object.hasOwn(sourceCall, 'neuralese_code')) continue;
+      const receiptIndex = sourceReceipts.length;
       sourceReceipts.push({ schema: 'natlang.native-inline-instruction-source-receipt/1',
         call_id: sourceCall.id ?? null, sidecar: structuredClone(sourceCall.neuralese_code) });
       delete targetCall.neuralese_code;
+      // The sidecar leaves the target: its writes are bound at their exact `$write` descriptors in the receipt.
+      const prefix = ['target', 'tool_calls', String(index), 'neuralese_code'];
+      for (const [at, occurrence] of occurrences.entries()) {
+        if (!prefix.every((part, i) => occurrence.path[i] === part)) continue;
+        const path = ['source_receipts', String(receiptIndex), 'sidecar', ...occurrence.path.slice(prefix.length), '$write'];
+        occurrences[at] = { ...occurrence, path,
+          id: nativeOccurrenceId(trajectoryId, rowId, invocationId, occurrence.role, path, occurrence.reference) };
+      }
     }
     const proof = (target as Record<string, unknown>).assistant_text_result;
     if (proof && typeof proof === 'object' && !Array.isArray(proof)) {
@@ -1319,12 +1339,12 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       const parts = message.content;
       const bodyParts = parts.flatMap((part, partIndex) => {
         const item = part as Record<string, unknown>;
-        return item.type === 'neuralese' && item.id === inlineRead.body_block_id ? [partIndex] : [];
+        return (item.type === 'neuralese' || item.type === 'native_state') && item.id === inlineRead.body_block_id ? [partIndex] : [];
       });
       const flattened = parts.map(part => {
         const item = part as Record<string, unknown>;
         if (item.type === 'text' && typeof item.text === 'string') return item.text;
-        if (item.type === 'neuralese' && typeof item.id === 'string') return `${item.id}`;
+        if ((item.type === 'neuralese' || item.type === 'native_state') && typeof item.id === 'string') return `${item.id}`;
         return '';
       }).join('');
       const instructionStart = flattened.indexOf('Instructions:\n');
