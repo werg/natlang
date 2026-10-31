@@ -54,6 +54,29 @@ def test_cumulative_policy_history_must_bind_actual_parent(tmp_path):
         checked_policy_history({'parent_sha256': 'parent', 'cumulative_policy_history': reference})
 
 
+def test_communication_visit_quota_keeps_ordinary_epoch_and_exact_rows():
+    from natlang_neuralese.train.native_continuation import communication_minimum_quotas
+    from natlang_neuralese.train.native_state_sft import pending_exposure_batches
+    entries = [{'id': 'comm', 'communication': True, 'forward_tokens': 2},
+               {'id': 'ordinary', 'communication': False, 'forward_tokens': 2}]
+    quota = communication_minimum_quotas(entries, ['native-communication', 'coding'], 3)
+    required, batches = pending_exposure_batches(entries, {}, epochs=1, batch_graphs=1,
+                                                  minimum_visits=quota)
+    assert required == {'comm': 3, 'ordinary': 1}
+    assert sum(len(indices) for _, indices, _ in batches) == 4
+    # Family-bound quota is independent of source-file/rechunk ordering.
+    reordered = list(reversed(entries))
+    assert communication_minimum_quotas(reordered, ['coding', 'native-communication'], 3) == quota
+    resumed_required, resumed = pending_exposure_batches(entries, {'comm': 2, 'ordinary': 1},
+        epochs=1, batch_graphs=1, minimum_visits=quota)
+    assert resumed_required == required
+    assert [entries[i]['id'] for _, indices, _ in resumed for i in indices] == ['comm']
+    with pytest.raises(ValueError, match='non-communication'):
+        communication_minimum_quotas(entries, ['coding', 'native-communication'], 3)
+    with pytest.raises(ValueError, match='positive integral'):
+        communication_minimum_quotas(entries, ['native-communication', 'coding'], 0)
+
+
 def progress():
     return {'schema':'natlang.neuralese-native-sft-training/1','step':3,'global_step':3,'epoch':0,'cursor':1,
         'identity':{'objective':None},'source_row_bindings':{'old':'binding0','new':'binding1'},

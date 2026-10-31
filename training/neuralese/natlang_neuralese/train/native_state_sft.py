@@ -1301,6 +1301,8 @@ def build_parser():
         help='explicit new source/objective stage; preserve full optimizer/RNG and start local exposure at zero')
     parser.add_argument('--supersede-unearned-sft-stage', type=Path,
         help='bound proof replacing a zero-exposure SFT plan with a new stage')
+    parser.add_argument('--communication-min-visits', type=int, default=None,
+        help='minimum visits per exact native-communication CE-family row; ordinary quotas remain unchanged')
     parser.add_argument('--policy-source-continuation', type=Path,
         help='authenticated append of a rolling policy source, preserving its exact per-row exposure')
     parser.add_argument('--device', default='cuda')
@@ -2297,6 +2299,30 @@ def _main(argv=None, *, requested_refresh):
     train.set_ce_policy(ce_policy if objective is None else None)
     held.set_ce_policy(ce_policy if objective is None else None)
     checkpoint_options['ce_supervision_active'] = ce_policy is not None and objective is None
+    previous_quota = (saved_options.get('communication_quota_policy') or {})
+    requested_visits = args.communication_min_visits
+    if requested_visits is None and previous_quota.get('stage_id') == args.stage_id:
+        requested_visits = previous_quota.get('visits')
+    if requested_visits is not None:
+        if objective is not None or ce_policy is None:
+            raise ValueError('communication minimum visits require the native CE objective')
+        from .own_output_supervision import policy_objective
+        from .native_logical_families import load_map
+        from .native_continuation import communication_minimum_quotas
+        balance = policy_objective(ce_policy).get('family_balance') or {}
+        if balance.get('key') != 'logical-family':
+            raise ValueError('communication minimum visits require an exact logical-family CE map')
+        if (previous_quota.get('stage_id') == args.stage_id and
+                requested_visits < previous_quota.get('visits', 1)):
+            raise ValueError('communication minimum visits cannot silently reduce an earned quota')
+        quota_rows = communication_minimum_quotas(train.entries, load_map(balance['map'], train), requested_visits)
+        quota_values = dict(saved_options.get('_objective_required_visits') or {}) if previous_quota.get('stage_id') == args.stage_id else {}
+        for ident, minimum in quota_rows.items():quota_values[ident] = max(int(quota_values.get(ident, 0)), minimum)
+        checkpoint_options['_objective_required_visits'] = quota_values
+        checkpoint_options['communication_quota_policy'] = {'schema':'natlang.communication-minimum-visits/1',
+            'stage_id':args.stage_id,'source_sha256':train.file_sha256,'family_map':balance['map'],
+            'visits':requested_visits,'rows':len(quota_rows),'ordinary_epoch_quota':'unchanged',
+            'repetition':'repeated visits to the same exact graph; not independent examples'}
     from .native_source_classification import (reclassify_progress,
                                                require_explicit_reclassification)
     from .native_classification_reader import migration_classes

@@ -312,6 +312,21 @@ def checked_policy_history(proof):
     return dict(reference)
 
 
+def communication_minimum_quotas(entries, families, visits):
+    """Bind repeated native-communication visits to exact CE-family rows."""
+    if type(visits) is not int or visits < 1 or len(entries) != len(families):
+        raise ValueError('communication minimum needs positive integral visits and complete family map')
+    selected = {}
+    for entry, family in zip(entries, families, strict=True):
+        if family == 'native-communication':
+            if not entry.get('communication'):
+                raise ValueError('communication quota family contains a non-communication graph')
+            selected[entry['id']] = visits
+    if not selected:
+        raise ValueError('communication quota requires actual native-communication graphs')
+    return selected
+
+
 def supersede_unearned_stage(progress, training, proof, *, parent_sha256, train_sha256, held_sha256, new_stage):
     """Replace an unstarted plan while retaining its exact parent and disposition in history."""
     if proof.get('schema') != 'natlang.unearned-sft-source-replacement/1':

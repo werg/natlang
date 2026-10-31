@@ -30,7 +30,7 @@ HANDLERS = {
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
                          'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'source_predecessor_retirement', 'foundation_native_graphs', 'foundation_declaration_recovery', 'withdrawn_native_graphs', 'retired_native_withdrawal', 'retired_native_withdrawal_set', 'standalone_diloco_parent', 'diloco_new_outer', 'pending_native_sources', 'pending_focus', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'accumulate_batches', 'learning_rate', 'weight_decay',
-                             'latent_ns', 'muon_rounding', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
+                             'latent_ns', 'muon_rounding', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens', 'communication_min_visits',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
                              'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'ordinary_cohort_fairness', 'communication_cohort_fairness', 'pending_rotation_anchor', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend', 'optimizer_state_storage', 'diloco', 'lr_warmup', 'weight_ema', 'matrix_telemetry'}, 'result': 'checkpoint.pt'},
 
@@ -108,6 +108,9 @@ def validate_stage_parameters(kind, parameters):
     if kind in {'native_state_sft','native_state_rl','native_offline_preference'} and 'checkpoint_input_offload' in parameters:
         if parameters['checkpoint_input_offload'] is not None and type(parameters['checkpoint_input_offload']) is not bool:
             raise ValueError('checkpoint_input_offload must be a boolean or omitted for inheritance')
+    if kind == 'native_state_sft' and 'communication_min_visits' in parameters:
+        if type(parameters['communication_min_visits']) is not int or parameters['communication_min_visits'] < 1:
+            raise ValueError('communication_min_visits must be a positive integer')
     if kind in {'native_state_sft','native_state_rl','native_offline_preference'}:
         cotangent_backend = parameters.get('cotangent_accumulator_backend')
         if cotangent_backend is not None and cotangent_backend not in ('plain', 'device_fp32', 'cpu_file'):
