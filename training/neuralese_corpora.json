@@ -741034,6 +741034,22 @@
         "verification_passed": true
       },
       "snapshot_manifest": "training/corpus-manifests/luna-design-briefs-six-20261026-v8-tranche000004-lfm3.json"
+    },
+    {
+      "id": "luna-deep-inspection-v5-lfm3-20261031-v1",
+      "owner": "dgx",
+      "path": "runs/lfm3-teacher-graphs/luna-deep-inspection-v5-20261031/lfm3",
+      "include": [
+        "receipt.json",
+        "train/native-graphs.jsonl.zst",
+        "test/native-graphs.jsonl.zst"
+      ],
+      "training_admission": "admitted",
+      "admission": "38 verified ordinary teacher action graphs from two deep BIRD food-inspection executions. Exact raw Luna actor, source, split and outcome proofs are bound in receipt.json. All 38 are already retained byte-identically in the quality-corrected joint-v4 recipe under the complete connected protection closure; this registration adds zero examples or training exposure. These ordinary graphs do not establish native Neuralese training or capability lift.",
+      "recipe_binding": {
+        "path": "/home/werg/natlang/runs/lfm3-mixture/joint-v4-quality-corrected-20261031/mixture/train-sources.json",
+        "sha256": "98be7f77c580dde83a8e5c08e04cd5516e64472bd437fc17b00facf20aa50256"
+      }
     }
   ],
   "coverage_backlog": [

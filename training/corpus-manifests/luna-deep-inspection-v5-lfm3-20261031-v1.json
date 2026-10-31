@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-deep-inspection-v5-lfm3-20261031-v1",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/luna-deep-inspection-v5-20261031/lfm3",
+  "files": [
+    {
+      "path": "receipt.json",
+      "bytes": 9250,
+      "sha256": "d937f22fbf8ef8ea95391e0957a1381b1c95047037efa2588190210dbf72953d"
+    },
+    {
+      "path": "test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "train/native-graphs.jsonl.zst",
+      "bytes": 41357,
+      "sha256": "578b7f767b88583df0a59235524566cab17bcaa676ba2008be3b46af5e6b31b2"
+    }
+  ],
+  "bytes": 50620
+}

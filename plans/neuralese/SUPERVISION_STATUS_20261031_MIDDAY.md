@@ -4,6 +4,78 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Follow-up observation, 14:37 CET
+
+**No new joint-SFT optimizer update has been earned yet.** The production parent
+remains SD52, SHA `4be241a84b96d4c336b01c390da69122134389b784874a45fddeaf6818786784`.
+Attempts 1–4 stopped before SGD: contradictory activation-offload controls,
+missing native task-evaluation server configuration, stale zero-credit focus
+rows, then a model-identity continuation mismatch. The first three defects have
+specific fixes and tests. Terra is investigating the fourth against the actual
+loaded parent; the identity guard remains enforced. Do not describe GPU loading,
+admission, falling historical loss or a successful verifier as earned training.
+
+The actual corrected source is
+`runs/lfm3-mixture/joint-v4-quality-corrected-20261031`: 182,205 graphs,
+5,034 communication / 79,086 coding / 98,085 ordinary Natlang. It removes 3,274
+previously unearned quality-conflicting graphs. Its complete schedule is 4,046
+updates and 1,748,664,738 planned forward-token visits, with seven explicitly
+counted communication visits and ordinary coverage throughout. Twenty updates
+are a refresh/evaluation window, not the training obligation. Fixed 64-graph
+reference normalization removes packing-dependent update-scale variation for
+token-mass objectives; commits 791b45f48 and 2574a50ae bind the change.
+
+All 38 verified deep ordinary inspection graphs, 13 independently regraded
+ordinary actions and one complete seven-node native episode are included.
+The native episode's current proof is `campaign-v6-c/native-bridge-v2-episode/qualification.json`
+under `/home/werg/data/luna-deep-codebases-20261031`; the older single-input v1
+proof below does not establish complete-episode qualification. The 38-graph
+ordinary package is now also published in the corpus registry as
+`luna-deep-inspection-v5-lfm3-20261031-v1`; this adds no independent examples.
+
+The complete connected held protection is registered by commit 615d5862d;
+current union digest is
+`8ed08f067c6a9715e5f48d73bf1d5ddf5d3c07501ee100c83b361c7ae7407ef7`.
+Four protected SMS tasks were withdrawn from future collection. Historical
+exposure was real: 31 SD graph visits and 39 JOLT visits remain recorded and those
+worlds cannot be described as untouched. The actual four-case development
+packet has no shared declared identity/component with that exposed SMS group;
+this is not a proof of universal semantic independence.
+
+The complete RL successor has been applied to `sd-r1/config.json`: 61,335 cases,
+including all 6,458 newly verified codebase training cases. Source SHA is
+`401ad64feaa04307f92033c27a843067a9f060fc671c6c1ccc9a408a63bbe168`.
+The four withdrawn SMS cases are excluded. Both ordinary and v3 asset roots are
+bound and read-checked. Adoption changes future collection, not historical
+policy exposure. The deferred switch was coalesced, not falsely marked consumed.
+
+Pop is online. It independently verified a full SD52 checkpoint backup and
+loaded that checkpoint on its 8 GiB RTX4060. One completed development case ran
+with 1200 seconds / 64 requests / 64 turns: six requests, 102 seconds, incorrect
+answer 374 rather than 344. It included T2's 30 seats despite evidence of churn.
+The earlier interrupted five-reply attempt remains an operational interruption,
+not a completed capability failure. PyTorch-native serving differs from the
+historical SGLang backend, so this is not a backend-identical comparison. The
+actor remains owned for serialized LogHub native-episode capture.
+
+LogHub v8's original rejection is preserved; an independent Sol files regrade
+accepts its new report. All 33 actions have conversion custody (30 supervised,
+three context-only), including authenticated inline production and imports.
+Actual retained-actor capture and full native graph qualification remain pending;
+ordinary legacy wrapper targets are not admitted as native student targets.
+Telecom v2's 30-turn failed execution exposed a real scope defect: `advance`
+requests sibling helpers which its callable scope does not expose. V2 is retained
+as a diagnostic, excluded from positive SFT; C is rebuilding the nested topology
+and will validate the actual controller scope before another task.
+
+CoreWeave still rejects GPU creation as not entitled. Its old launch configuration
+is held; returning entitlement alone must not launch an obsolete source/runtime.
+Local USB full-state backup is live but slow and serialized; Pop's verified
+SD52 checkpoint is independently present. Complete source/runtime recovery
+closure is separate from a model/full-state copy and remains to be audited.
+Main's quick check found one new duplicate helper in the regrade adapter; A is
+removing the duplication. No full-suite-green claim is justified yet.
+
 ## Follow-up observation, 13:06 CET
 
 The actual SD52 CUDA bridge proof now exists:
