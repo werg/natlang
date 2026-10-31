@@ -218,9 +218,9 @@ def _validate_runtime_semantics_capabilities(runtime, runtime_manifest, required
         report = json.loads(result.stdout)
     except ValueError as error:
         raise ValueError('frozen collector returned malformed semantic capability evidence') from error
-    versions = {'service_aliases': 'natlang.service-aliases/1',
+    versions = {'service_aliases': 'natlang.service-aliases/2',
                 'service_scopes': 'natlang.service-scopes/1',
-                'report_completeness': 'natlang.report-completeness/1'}
+                'report_completeness': 'natlang.report-completeness/2'}
     if (not isinstance(report, dict) or report.get('schema') != 'natlang.teacher-collector-capabilities/1' or
             not isinstance(report.get('probes'), dict)):
         raise ValueError('frozen collector returned an unsupported semantic capability schema')

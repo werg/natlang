@@ -79,3 +79,37 @@ test('an account-scoped callable cannot see or invoke the device namespace', asy
   assert.deepEqual(seen.root, []);
   assert.deepEqual(seen.accountInspection, ['telecom']);
 });
+
+test('readonly device alias excludes writes even when its source module has mutators', async () => {
+  const module = externalModule('device', `export function checkStatusBar(): string { return 'airplane mode is on'; }
+    export function turnAirplaneModeOff(): string { throw new Error('forbidden write reached'); }`);
+  const services = { device: module.exports }, declarations = { device: module.declaration };
+  bindServiceAliases(new Map([['device', module]]), {
+    deviceRead: { source: 'device', methods: ['checkStatusBar'] },
+  }, services, declarations);
+  assert.deepEqual(Object.keys(services.deviceRead), ['checkStatusBar']);
+  assert.equal(Object.hasOwn(services, 'device'), false);
+  assert.match(declarations.deviceRead, /checkStatusBar/);
+  assert.doesNotMatch(declarations.deviceRead, /turnAirplaneModeOff/);
+  assert.equal(await services.deviceRead.checkStatusBar(), 'airplane mode is on');
+  assert.equal(Object.hasOwn(services.deviceRead, 'turnAirplaneModeOff'), false,
+    'the capability contains no callable write method');
+
+  const root = loadVirtualNatlang({
+    'root.nl': '---\nargs: {}\nreturns: boolean\n---\nCall the scoped inspection child.',
+    'root/investigateDevice.nl': '---\nargs: {}\nreturns: boolean\n---\nTry an out-of-scope write.',
+  }, 'root.nl');
+  const runtime = createNatlangRuntime({ services, serviceDeclarations: declarations,
+    serviceScopes: { deviceRead: ['root/investigateDevice.nl'] }, agent: async session => {
+      if (session.lam.functionName === 'root') {
+        const result = await session.applyAsync('eval', { code: 'await investigateDevice(); return true;', finish: true });
+        assert.equal(result.kind, 'completed', result.text); session.lam.return = true;
+      } else {
+        const result = await session.applyAsync('eval', { code: 'await deviceRead.turnAirplaneModeOff(); return true;', finish: true });
+        assert.notEqual(result.kind, 'ok');
+        assert.match(result.text, /turnAirplaneModeOff|deviceRead/);
+        session.lam.return = true;
+      }
+    } });
+  assert.equal(await runtime.run(() => root()), true);
+});

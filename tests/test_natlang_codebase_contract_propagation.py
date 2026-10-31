@@ -20,7 +20,8 @@ def test_intake_carries_namespace_scope_and_report_gate_contracts(tmp_path):
         'device': ['triage/chooseAction.nl'],
     }
     metadata['report_completeness'] = {
-        'schema': 'natlang.report-completeness/1', 'mutating_methods': ['writeAccount'],
+        'schema': 'natlang.report-completeness/2', 'mutating_methods': ['writeAccount'],
+        'effect_receipt_path': 'receipt',
         'report_effects_path': 'effects', 'checkpoint_effects_path': 'checkpoint.receipts',
         'report_diagnosis_path': 'diagnosis', 'diagnosis_function': 'triage/inspectEvidence.nl',
     }

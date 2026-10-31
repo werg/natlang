@@ -1,6 +1,7 @@
 export type ReportCompletenessSpec = {
-  schema: 'natlang.report-completeness/1';
+  schema: 'natlang.report-completeness/1' | 'natlang.report-completeness/2';
   mutating_methods: string[];
+  effect_receipt_path?: string;
   report_effects_path: string;
   checkpoint_effects_path: string;
   report_diagnosis_path: string;
@@ -27,13 +28,13 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function sameReceipt(actual: Dict, reported: unknown): boolean {
+function sameReceipt(actual: Dict, reported: unknown, nestedReceipt = false): boolean {
   if (!reported || typeof reported !== 'object' || Array.isArray(reported)) return false;
   const candidate = reported as Dict;
   const result = actual.result as Dict | undefined;
   if (!result || typeof result !== 'object') return false;
   const expected = { receiptId: result.receiptId, sequence: result.sequence, toolName: result.toolName,
-    requestor: result.requestor, arguments: result.arguments, result: result.value };
+    requestor: result.requestor, arguments: result.arguments, result: nestedReceipt ? result.result : result.value };
   const normalized = { receiptId: candidate.receiptId, sequence: candidate.sequence, toolName: candidate.toolName,
     requestor: candidate.requestor, arguments: candidate.arguments, result: candidate.result };
   return typeof candidate.actionId === 'string' && candidate.actionId.length > 0 &&
@@ -47,15 +48,25 @@ export function checkReportCompleteness(spec: ReportCompletenessSpec | undefined
     checkpoint_effect_receipts: number; diagnosis_observed: boolean; diagnosis_matches: boolean; reasons: string[];
   } {
   if (!spec) return { required: false };
-  if (spec.schema !== 'natlang.report-completeness/1' || !Array.isArray(spec.mutating_methods) ||
+  if (!['natlang.report-completeness/1', 'natlang.report-completeness/2'].includes(spec.schema) ||
+    (spec.schema === 'natlang.report-completeness/2' &&
+      (typeof spec.effect_receipt_path !== 'string' || !spec.effect_receipt_path.length)) ||
+    !Array.isArray(spec.mutating_methods) ||
     !spec.mutating_methods.every(method => typeof method === 'string' && method.length > 0) ||
     new Set(spec.mutating_methods).size !== spec.mutating_methods.length ||
     ![spec.report_effects_path, spec.checkpoint_effects_path, spec.report_diagnosis_path,
-      spec.diagnosis_function].every(path => typeof path === 'string' && path.length > 0))
+      spec.diagnosis_function, ...(spec.effect_receipt_path ? [spec.effect_receipt_path] : [])]
+      .every(path => typeof path === 'string' && path.length > 0))
     throw new TypeError('invalid report completeness contract');
   const methods = new Set(spec.mutating_methods);
   const actual = executionGraph.filter(event => event.kind === 'effect' && event.phase === 'completed' &&
-    typeof event.method === 'string' && methods.has(event.method));
+    typeof event.method === 'string' && methods.has(event.method)).flatMap(event => {
+      if (spec.schema !== 'natlang.report-completeness/2') return [event];
+      const wrapper = event.result as Dict | undefined;
+      if (wrapper && wrapper.applied === false && wrapper.receipt === null) return [];
+      const receipt = atPath(event.result, spec.effect_receipt_path!);
+      return [{ ...event, result: receipt }];
+    });
   const reportEffects = atPath(value, spec.report_effects_path);
   const checkpointEffects = atPath(value, spec.checkpoint_effects_path);
   const reportIsArray = Array.isArray(reportEffects), checkpointIsArray = Array.isArray(checkpointEffects);
@@ -67,7 +78,8 @@ export function checkReportCompleteness(spec: ReportCompletenessSpec | undefined
     const receiptIds = entries.map(entry => entry && typeof entry === 'object' ? (entry as Dict).receiptId : undefined);
     return actionIds.every(id => typeof id === 'string' && id.length > 0) && new Set(actionIds).size === actionIds.length &&
       receiptIds.every(id => typeof id === 'string' && id.length > 0) && new Set(receiptIds).size === receiptIds.length &&
-      actual.every(event => entries.filter(entry => sameReceipt(event, entry)).length === 1);
+      actual.every(event => entries.filter(entry => sameReceipt(event, entry,
+        spec.schema === 'natlang.report-completeness/2')).length === 1);
   };
   const diagnosisEntries = invocationLedger.filter(entry => {
     const result = entry.host_result as Dict | undefined;

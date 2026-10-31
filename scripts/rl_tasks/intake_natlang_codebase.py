@@ -349,9 +349,13 @@ def _validate_runtime_contracts(package: dict[str, str], metadata: dict[str, Any
     if gate is not None:
         required = ('mutating_methods', 'report_effects_path', 'checkpoint_effects_path',
                     'report_diagnosis_path', 'diagnosis_function')
-        if not isinstance(gate, dict) or gate.get('schema') != 'natlang.report-completeness/1' or \
+        if not isinstance(gate, dict) or gate.get('schema') not in {'natlang.report-completeness/1', 'natlang.report-completeness/2'} or \
                 any(field not in gate for field in required):
-            raise ValueError('metadata.report_completeness must satisfy natlang.report-completeness/1')
+            raise ValueError('metadata.report_completeness must satisfy a supported natlang.report-completeness contract')
+        if gate['schema'] == 'natlang.report-completeness/2':
+            receipt_path = gate.get('effect_receipt_path')
+            if not isinstance(receipt_path, str) or not re.fullmatch(r'[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*', receipt_path):
+                raise ValueError('report_completeness v2 requires a dotted effect_receipt_path')
         methods = gate['mutating_methods']
         if not isinstance(methods, list) or any(not isinstance(method, str) or not method for method in methods) or \
                 len(set(methods)) != len(methods):

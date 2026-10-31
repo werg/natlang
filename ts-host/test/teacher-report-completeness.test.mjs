@@ -40,6 +40,24 @@ test('report completeness requires a completed diagnosis invocation', () => {
   assert.ok(result.reasons.includes('diagnosis_invocation_missing'));
 });
 
+test('report completeness v2 binds a nested guarded-repair receipt and ignores blocked proposals', () => {
+  const v2 = { schema: 'natlang.report-completeness/2', effect_receipt_path: 'receipt',
+    mutating_methods: ['apply'], report_effects_path: 'effects', checkpoint_effects_path: 'checkpoint.receipts',
+    report_diagnosis_path: 'diagnosis', diagnosis_function: 'advance/presentDiagnosis.nl' };
+  const wrappedReceipt = { ...receipt, toolName: 'turn_airplane_mode_off' };
+  const wrappedEffect = { kind: 'effect', phase: 'completed', method: 'apply', result: {
+    applied: true, receipt: wrappedReceipt, blockers: [] } };
+  const nestedReport = { effects: [structuredClone(wrappedReceipt)], checkpoint: { receipts: [structuredClone(wrappedReceipt)] },
+    diagnosis: structuredClone(diagnosis) };
+  const accepted = checkReportCompleteness(v2, nestedReport, [wrappedEffect], ledger);
+  assert.equal(accepted.accepted, true);
+  const tampered = structuredClone(nestedReport); tampered.effects[0].result = 'changed';
+  assert.equal(checkReportCompleteness(v2, tampered, [wrappedEffect], ledger).accepted, false);
+  const blocked = { ...wrappedEffect, result: { applied: false, receipt: null, blockers: ['missing consent'] } };
+  const blockedReport = { effects: [], checkpoint: { receipts: [] }, diagnosis: structuredClone(diagnosis) };
+  assert.equal(checkReportCompleteness(v2, blockedReport, [blocked], ledger).accepted, true);
+});
+
 test('unconfigured programs retain existing collector behavior', () => {
   assert.deepEqual(checkReportCompleteness(undefined, {}, [], []), { required: false });
 });

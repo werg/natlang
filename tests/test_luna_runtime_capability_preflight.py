@@ -12,9 +12,9 @@ import run_reviewed_luna_dispatcher as dispatcher
 
 
 FEATURES = {
-    'service_aliases': 'natlang.service-aliases/1',
+    'service_aliases': 'natlang.service-aliases/2',
     'service_scopes': 'natlang.service-scopes/1',
-    'report_completeness': 'natlang.report-completeness/1',
+    'report_completeness': 'natlang.report-completeness/2',
 }
 
 
@@ -42,7 +42,7 @@ def _capability_cli(*, features=FEATURES, probes=None):
 def test_features_are_derived_from_selected_case_semantics():
     rows = {
         0: {'semantics': {'service_aliases': {'device': {}}, 'service_scopes': {'device': []},
-                          'report_completeness': {'schema': 'natlang.report-completeness/1'}}},
+                          'report_completeness': {'schema': 'natlang.report-completeness/2'}}},
         1: {'semantics': {}},
     }
     assert dispatcher._required_runtime_semantics_features(rows, [{'index': 0}]) == sorted(FEATURES)
@@ -73,4 +73,11 @@ def test_collector_with_missing_or_failed_feature_probe_is_rejected(tmp_path):
     probes = {'service_aliases': True, 'service_scopes': True, 'report_completeness': False}
     runtime, manifest = _runtime(tmp_path, _capability_cli(features=versions, probes=probes))
     with pytest.raises(ValueError, match='failed the required report_completeness capability probe'):
+        dispatcher._validate_runtime_semantics_capabilities(runtime, manifest, FEATURES)
+
+
+def test_collector_with_old_unfiltered_alias_semantics_is_rejected(tmp_path):
+    versions = {**FEATURES, 'service_aliases': 'natlang.service-aliases/1'}
+    runtime, manifest = _runtime(tmp_path, _capability_cli(features=versions))
+    with pytest.raises(ValueError, match='failed the required service_aliases capability probe'):
         dispatcher._validate_runtime_semantics_capabilities(runtime, manifest, FEATURES)
