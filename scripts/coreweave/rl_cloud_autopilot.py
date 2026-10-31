@@ -80,6 +80,8 @@ def mark_ended(run, name, status):
     state = rl_cloud.read_json(path, {})
     state['lineages'][name]['status'] = status
     rl_cloud.store_json(path, state)
+    if state['lineages'][name].get('lease_consumer'):
+        rl_cloud.release_consumer(run, state['lineages'][name]['lease_consumer'])
 
 
 def launch_on_entitled(run, name, auto, rounds=None):
@@ -110,6 +112,8 @@ def one_pass(run, args, auto):
     auto.setdefault('entitled', [])
     auto.setdefault('probes', [])
     if not auto['entitled']:
+        if auto['probes'] and time.time() - auto['probes'][-1]['at'] < args.interval - 60:
+            return  # exactly one probe per interval, also across autopilot restarts
         candidates = accounts()
         account = candidates[len(auto['probes']) % len(candidates)]
         ok, detail = probe(account)
@@ -121,6 +125,8 @@ def one_pass(run, args, auto):
             return
         auto['entitled'].append(account)
         rl_cloud.note(run, f'GPU entitlement: {account} created a GPU sandbox ({detail}, stopped at once)')
+        coord('cloud RL GPU entitlement granted', f'{account} created a GPU sandbox ({detail}, stopped at once); '
+              f'the autopilot now runs the {args.smoke} GPU smoke, then launches {args.lineages}', urgent=True)
     smoke = auto.setdefault('smoke', {})
     if not smoke.get('passed'):
         live = lineage_state(run, args.smoke)

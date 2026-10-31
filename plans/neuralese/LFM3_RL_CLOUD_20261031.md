@@ -108,8 +108,12 @@ sha256 and must be dropped (`null` override) or rebound for a new file.
 
 - GPU parity checks of the fork commit `8f2fd5894` (lfm3, producer, adapter, decide, actor capture) have not run
   (the DGX GPU is in the decision eval). The smoke exercises the actor path end to end only.
-- W&B blob retention: superseded export blobs stay in W&B until a retention pass (local DGX CAS keeps only the newest
-  verified export per lineage).
+- W&B blob retention: the exporter runs `rl_cloud.py prune` each pass. It keeps every lineage's newest DGX-verified
+  export and anything newer (in flight), the seed blobs (fresh-init parent) and the current run inputs, and never
+  deletes a blob leased through `scripts/coreweave/retention_leases.py` (namespace `.cloud/standalone-*`; a launch
+  leases its parent and inputs as consumer `launch:<job>`, released when its sandbox ends or exports from a newer
+  parent). Intent is durable in `.cloud/rl-blob-retirement.json` before any delete; absence is confirmed against the
+  full file listing (W&B `files(names=...)` echoes absent names, and deleting an absent file is an opaque error).
 - The exporter GETs whole checkpoints (15 GB, ~25 min each at the DGX downlink); with four lineages it verifies the
   newest export per lineage and skips superseded ones rather than queueing every round.
 
@@ -145,7 +149,7 @@ PUT over the DGX uplink (~3 MB/s) failed after a full pass and restarted from ze
 All cloud lineages use `natlang-rl-broad-external-20261031` (33,047 train cases, 23 external sources plus a curriculum
 slice; families already interleaved row by row) with 16 rows and 16 workers per round, `initial_train_world` dropped,
 and template runtime `runtime-9fbae2582` (broad source 7bbf8e055 + Neuralese bonus added after outcome-only centering
-338c5c2ba). The bundle ships the cases file (293 MB) and its db/table assets (613 MB) through the file API, about
-15 minutes per launch at the measured ~1.2 MB/s; moving them to W&B blobs (cloud-speed fetch) is the next transfer
-improvement. The DGX lineages switch to the same source and runtime at their next unbound round (cutover.sh);
+338c5c2ba). The cases file (293 MB) and its db/table assets (613 MB) are run `cloud_inputs`: each is
+a deterministic tar.zst stored once as a content-addressed W&B blob (sha256-checked on fetch, DGX copy authoritative),
+restored at the same absolute path by the sandbox before the controller starts; the bundle no longer carries them. The DGX lineages switch to the same source and runtime at their next unbound round (cutover.sh);
 `lfm3-rl-broad-watch` reports per-source success of each lineage's first broad round with failure samples.

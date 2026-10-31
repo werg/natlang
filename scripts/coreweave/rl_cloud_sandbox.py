@@ -314,6 +314,23 @@ def fetch(parent, lineage):
         else:
             untar_zst(temp, lineage)
             temp.unlink()
+    # Run inputs (task source, assets): tar.zst archives of the DGX trees, unpacked at their DGX paths.
+    for item in parent.get('inputs', []):
+        target = Path(item['path'])
+        marker = target.parent / f'.{target.name}.input-sha256'
+        if marker.exists() and marker.read_text() == item['sha256'] and target.exists():
+            continue
+        temp = scratch / item['sha256']
+        download_parts(item['parts'], temp, item['sha256'], item['bytes'])
+        if target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        untar_zst(temp, item['extract_to'])
+        temp.unlink()
+        marker.write_text(item['sha256'])
+        event(event='input_restored', path=str(target), sha256=item['sha256'], bytes=item['bytes'])
     for link in parent.get('links', []):
         target = Path(link['path'])
         if target.exists():

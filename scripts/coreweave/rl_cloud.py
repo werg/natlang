@@ -16,6 +16,7 @@ DGX: the sandbox gets per-object signed URLs (capabilities) for the private W&B 
                                                the exporter: uploads each lineage's newest staged export (sandbox ->
                                                W&B by signed PUT), then GETs it to the DGX hub (ROOT/<lineage>,
                                                verified), the resume point of the next launch
+  rl_cloud.py prune RUN.json [--execute]       retire superseded blobs (the exporter does this every pass)
   rl_cloud.py status RUN.json
   rl_cloud.py deliver-parent RUN.json LINEAGE  the parent of a sandbox launched with --parent-later
   rl_cloud.py stop RUN.json LINEAGE
@@ -152,6 +153,12 @@ def record_parts(run, digest, size, parts, committed):
     entry['done'] = [p for p in entry['pending'] if p['index'] in done]
     if len(entry['done']) == len(entry['pending']):
         entry = {'bytes': size, 'parts': entry['pending'], 'committed': time.time()}
+        retirement_path = hub(run) / 'rl-blob-retirement.json'
+        retirement = read_json(retirement_path)
+        if retirement and f'blob:{digest}' in retirement.get('retired_roles', []):  # the same content committed again
+            retirement['retired_roles'].remove(f'blob:{digest}')
+            retirement['operations'] = [o for o in retirement['operations'] if o.get('role') != f'blob:{digest}']
+            store_json(retirement_path, retirement)
     table[digest] = entry
     store_json(hub(run) / 'blobs.json', table)
 
@@ -332,10 +339,95 @@ def newest_verified(run, name):
 
 
 def parent_capability(run, record):
+    inputs = read_json(hub(run) / 'run-state.json', {}).get('inputs', [])
     return {'schema': PARENT_SCHEMA, 'lineage_dir': record['lineage_dir'], 'seq': record['seq'],
             'trained_rounds': record['trained_rounds'], 'state_sha256': record.get('state_sha256'),
             'blobs': [{**b, 'parts': part_urls(run, b['sha256'])} for b in record['blobs']],
+            'inputs': [{**i, 'parts': part_urls(run, i['sha256'])} for i in inputs],
             'links': record.get('links', [])}
+
+
+# -- blob retention (shared lease namespace: retention_leases.py) --------------------------------------------------------
+
+def _lease_paths(run):
+    h = hub(run)
+    return {'lock_path': h / 'standalone-cloud-retention.lock',
+            'state_path': h / 'standalone-retention-consumer-leases.json',
+            'retirement_state_path': h / 'rl-blob-retirement.json'}
+
+
+def lease_blobs(run, consumer, digests, release=False):
+    """Register (before any capability for them is issued) or release a consumer of exact blobs."""
+    from retention_leases import change_lease
+    from natlang_neuralese.common.jsonio import write_json_durable
+    for digest in sorted(set(digests)):
+        change_lease(**_lease_paths(run), role=f'blob:{digest}', consumer_id=consumer,
+                     identity={'sha256': digest, 'run': run['id']}, release=release, write_durable=write_json_durable)
+
+
+def release_consumer(run, consumer):
+    from retention_leases import change_lease
+    from natlang_neuralese.common.jsonio import write_json_durable
+    state = read_json(_lease_paths(run)['state_path'], {'leases': []})
+    for lease in [x for x in state['leases'] if x['consumer_id'] == consumer]:
+        change_lease(**_lease_paths(run), role=lease['role'], consumer_id=consumer, identity=lease['identity'],
+                     release=True, write_durable=write_json_durable)
+
+
+def retained_blobs(run):
+    """Every lineage's newest DGX-verified export, anything newer (in flight), its seed (the fresh-init parent and
+    the seeded config), the current run inputs."""
+    keep = {i['sha256'] for i in read_json(hub(run) / 'run-state.json', {}).get('inputs', [])}
+    for lineage in run['lineages']:
+        exports = hub(run) / 'exports' / lineage
+        records = [r for r in (read_json(p) for p in exports.glob('*.json')) if r]
+        newest = newest_verified(run, lineage)
+        for record in records:
+            if record['seq'] == 'seed' or newest is None or record['trained_rounds'] >= newest['trained_rounds']:
+                keep |= {b['sha256'] for b in record['blobs']}
+    return keep
+
+
+def prune_blobs(run, execute=True):
+    """Retire superseded blobs in the private store: never a retained or leased one. Intent is durable before any
+    delete; each part's absence is confirmed after its delete."""
+    import fcntl
+    import wandb
+    from retention_leases import leased_roles
+    paths = _lease_paths(run)
+    candidates = sorted(set(blobs(run)) - retained_blobs(run))
+    if not candidates or not execute:
+        return candidates
+    api = wandb.Api(api_key=_key())
+    remote = api.run(blob_run(run))
+    with paths['lock_path'].open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        leased = leased_roles(paths['state_path'])
+        retirement = read_json(paths['retirement_state_path'], {'retired_roles': [], 'operations': []})
+        table = read_json(hub(run) / 'blobs.json', {})
+        keep = retained_blobs(run)  # re-read under the lock
+        for digest in candidates:
+            role = f'blob:{digest}'
+            if role in leased or digest in keep or digest not in table:
+                continue
+            op = {'role': role, 'phase': 'intent', 'at': time.time(), 'parts': [p['name'] for p in table[digest]['parts']]}
+            retirement['operations'].append(op)
+            store_json(paths['retirement_state_path'], retirement)
+            # deleting an absent file is an opaque internal error: delete only parts the listing shows
+            for name in sorted({f.name for f in api.run(blob_run(run)).files()} & set(op['parts'])):
+                remote.file(name).delete()
+            # files(names=...) echoes requested names whether present or not: confirm against the full listing
+            present = {f.name for f in api.run(blob_run(run)).files()}
+            gone = not present & set(op['parts'])
+            if not gone:
+                raise RuntimeError(f'{role}: parts still present after delete')
+            op.update(phase='deleted', deleted_at=time.time())
+            retirement['retired_roles'].append(role)
+            table.pop(digest, None)
+            store_json(hub(run) / 'blobs.json', table)
+            store_json(paths['retirement_state_path'], retirement)
+            note(run, f'retired superseded blob {digest[:12]} ({len(op["parts"])} parts) from the private store')
+    return candidates
 
 
 # -- bundle ---------------------------------------------------------------------------------------------------------------
@@ -371,13 +463,54 @@ def fork_inputs(run, code_sha):
     return [str(tar), str(lock), str(runs)]
 
 
+def _tree_key(path):
+    """A cheap identity of a file or directory tree (relative path, size, mtime) to reuse its archive."""
+    path = Path(path)
+    items = [path] if path.is_file() else sorted(p for p in path.rglob('*') if p.is_file())
+    listing = [(str(p.relative_to(path.parent)), p.stat().st_size, p.stat().st_mtime_ns) for p in items]
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    return canonical_json_sha256_hex(listing)
+
+
+def cloud_inputs(run):
+    """Large run inputs (``run["cloud_inputs"]``: the task source, its assets) as tar.zst blobs in the private store,
+    so a launch fetches them at cloud bandwidth (sha256 per part and whole) instead of pushing them over the DGX uplink.
+    The DGX copies stay authoritative: an archive is rebuilt when its tree changes."""
+    cache_path = hub(run) / 'inputs.json'
+    cache = read_json(cache_path, {})
+    out = []
+    for path in run.get('cloud_inputs', []):
+        path = Path(path)
+        key = _tree_key(path)
+        entry = cache.get(str(path))
+        if not entry or entry['tree_key'] != key or entry['sha256'] not in blobs(run):
+            work = hub(run) / 'inputs'
+            work.mkdir(parents=True, exist_ok=True)
+            archive = work / f'.{path.name}.tar.zst'
+            subprocess.run(['tar', '--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner', '-C',
+                            str(path.parent), '-cf', str(archive.with_suffix('')), path.name], check=True)
+            subprocess.run(['zstd', '-q', '-f', '-T0', '-3', '--rm', str(archive.with_suffix('')), '-o', str(archive)],
+                           check=True)
+            digest, size = put_local(run, archive)
+            archive.unlink()
+            entry = {'tree_key': key, 'sha256': digest, 'bytes': size}
+            cache[str(path)] = entry
+            store_json(cache_path, cache)
+        out.append({'path': str(path), 'extract_to': str(path.parent), 'sha256': entry['sha256'],
+                    'bytes': entry['bytes'], 'encoding': 'tar.zst'})
+    return out
+
+
 def bundle(run):
     code_sha = subprocess.run(['git', '-C', str(REPO), 'rev-parse', run.get('code', 'HEAD')], capture_output=True,
                               text=True, check=True).stdout.strip()
-    extras = fork_inputs(run, code_sha) + list(run['extras'])
+    inputs = cloud_inputs(run)
+    remote = {i['path'] for i in inputs}
+    covered = lambda p: any(p == r or p.startswith(r + '/') for r in remote)
+    extras = fork_inputs(run, code_sha) + [e for e in run['extras'] if not covered(e)]
     for spec in run['lineages'].values():
         cases = spec.get('config', {}).get('cases') or json.loads(Path(spec['template']).read_text())['cases']
-        if cases not in extras:
+        if cases not in extras and not covered(cases):
             extras.append(cases)
     out = hub(run) / 'bundles' / f'{code_sha[:12]}.json'
     command = [sys.executable, str(HERE / 'bundle.py'), 'plan', '--code-sha', code_sha, '--prebuilt', 'wheelhouse',
@@ -388,6 +521,7 @@ def bundle(run):
     state = read_json(hub(run) / 'run-state.json', {})
     state['bundle'] = str(out)
     state['code_sha'] = code_sha
+    state['inputs'] = inputs
     store_json(hub(run) / 'run-state.json', state)
     return out
 
@@ -436,12 +570,16 @@ def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=Fal
         return {'dry_run': True, 'account': account, 'reason': reason, 'parent_seq': record['seq'],
                 'trained_rounds': record['trained_rounds'], 'job': job['id'], 'resources': job['resources']}
     # A parent delivered later (deliver-parent) lets the sandbox build its environments while a seed still uploads.
+    consumer = f"launch:{job['id']}"
+    if not parent_later:
+        lease_blobs(run, consumer, [b['sha256'] for b in record['blobs']] +
+                    [i['sha256'] for i in state.get('inputs', [])])
     secrets = {} if parent_later else {'rl-parent': json.dumps(parent_capability(run, record)).encode()}
 
     def created(sandbox_id):
         state.setdefault('lineages', {})[name] = {'sandbox_id': sandbox_id, 'account': account, 'status': 'running',
                                                   'launched': time.time(), 'job': job['id'],
-                                                  'parent_seq': record['seq']}
+                                                  'parent_seq': record['seq'], 'lease_consumer': consumer}
         store_json(hub(run) / 'run-state.json', state)
     def created_and_followed(sandbox_id):
         created(sandbox_id)
@@ -475,6 +613,9 @@ def deliver_parent(run, name):
     if record is None:
         raise SystemExit(f'{name}: nothing verified to deliver')
     box = cwctl.read_sandbox(live['sandbox_id'], patience=300)
+    live['lease_consumer'] = live.get('lease_consumer') or f"launch:{live['job']}"
+    lease_blobs(run, live['lease_consumer'], [b['sha256'] for b in record['blobs']] +
+                [i['sha256'] for i in state.get('inputs', [])])
     secrets = f"{json.loads(Path(REPO / run['job']).read_text())['scratch']['path']}/.coreweave/secrets"
     capability = json.dumps(parent_capability(run, record)).encode()
     cwctl.cwaccounts.refuse_credentials({'rl-parent': capability})
@@ -494,6 +635,8 @@ def stop(run, name):
     subprocess.run([sys.executable, str(HERE / 'cwctl.py'), 'stop', live['sandbox_id']], check=False)
     live['status'] = 'stopped'
     live['stopped'] = time.time()
+    if live.get('lease_consumer'):
+        release_consumer(run, live['lease_consumer'])
     store_json(hub(run) / 'run-state.json', state)
     note(run, f'{name} sandbox {live["sandbox_id"]} stopped')
 
@@ -539,6 +682,8 @@ def export_lineage(run, name, live, log=print, get=True):
     box = cwctl.read_sandbox(live['sandbox_id'], patience=300)
     E = f"{run['root']}/.exports/{name}"
     listing = _exec(box, ['sh', '-c', f'ls {E} 2>/dev/null'], 120).stdout.split()
+    if 'parent-seq' in listing and live.get('lease_consumer'):  # the parent and inputs are fetched and verified
+        release_consumer(run, live['lease_consumer'])
     staged = sorted(n for n in listing if re.fullmatch(r'\d{6}\.json', n))
     uploaded = {n.split('.')[0] for n in listing if n.endswith('.uploaded')}
     if not staged:
@@ -653,6 +798,12 @@ def export_loop(run, once=False, interval=120):
                 except Exception as error:  # one lineage's failure must not stop the others' exports
                     print(json.dumps({'event': 'export_error', 'lineage': name,
                                       'error': f'{type(error).__name__}: {error}'[:800]}), flush=True)
+        try:
+            retired = prune_blobs(run)
+            if retired:
+                print(json.dumps({'event': 'blobs_retired', 'count': len(retired)}), flush=True)
+        except Exception as error:  # retention must never stop exports
+            print(json.dumps({'event': 'prune_error', 'error': f'{type(error).__name__}: {error}'[:800]}), flush=True)
         if once:
             return
         time.sleep(interval)
@@ -682,9 +833,11 @@ def main(argv=None):
             p.add_argument('--dry-run', action='store_true')
             p.add_argument('--parent-later', action='store_true', help='deliver the parent with deliver-parent')
             p.add_argument('--check', action='store_true', help='CPU sandbox: pipeline check without GPU work')
-    for command in ('bundle', 'status', 'export'):
+    for command in ('bundle', 'status', 'export', 'prune'):
         p = sub.add_parser(command)
         p.add_argument('run')
+        if command == 'prune':
+            p.add_argument('--execute', action='store_true', help='without it, list the blobs that would be retired')
         if command == 'export':
             p.add_argument('--once', action='store_true')
             p.add_argument('--interval', type=float, default=120)
@@ -704,6 +857,8 @@ def main(argv=None):
         stop(run, args.lineage)
     elif args.command == 'export':
         export_loop(run, args.once, args.interval)
+    elif args.command == 'prune':
+        print(json.dumps(prune_blobs(run, execute=args.execute), indent=1))
     elif args.command == 'status':
         print(json.dumps(status(run), indent=1))
     return 0
