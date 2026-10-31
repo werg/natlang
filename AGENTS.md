@@ -19,6 +19,16 @@ covers all288 trainable parameters; a numerical certificate is not capability
 lift. Preserve reduced-arithmetic collections as historical data and never label
 them current-policy samples after a numerical-policy transition.
 
+Compile tensor kernels rather than unrolling Python invocation/chunk/norm
+planning. Long native graphs exposed multi-minute Dynamo tracing before any
+optimizer update. Keep default-on phase/stack diagnostics, and use the qualified
+eager wrapper path when cold compilation costs more than useful execution.
+Capacity qualification must exercise actual production packing, cotangent
+backend, precision and retained-gradient geometry. Reuse its authenticated
+geometry boundary across unchanged SGD execution; a new step alone is not a
+reason to repeat a full backward for every microbatch. Distinguish that measured
+capacity boundary from a fresh numerical certificate at the updated weights.
+
 An infrastructure wall timeout without an accepted final answer is unresolved,
 not a scored model failure or measured policy noise. Preserve raw observations
 and exact re-scoring history. Deterministic model request/token exhaustion remains
@@ -32,6 +42,14 @@ valid current completions. Status-only success still needs the real same-invocat
 staged action, exact output and terminal ledger custody. Task-level actual/expected
 judgment alone does not certify helper contracts: inspect the whole execution
 graph before admitting a teacher trajectory whose children have scoped duties.
+
+Inspect the actual visible API contract before assigning task failures to the
+model. The ToolACE converter discarded nested argument fields and enum values,
+exposing `sequences: any` while the oracle required hidden exact object keys.
+Preserve upstream schemas in typed service declarations and documentation; never
+infer a missing public contract from gold answers. Requalify corrected tasks
+through reference, negative and alias replay, keep held packets unchanged, and
+do not relabel old underspecified-prompt rollouts as current-policy evidence.
 
 ## Rejected 2026-10-31 SFT branch (supervision finding)
 

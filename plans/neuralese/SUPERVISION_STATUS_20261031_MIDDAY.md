@@ -4,6 +4,73 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Actual data and training corrections, 23:36 CET
+
+The current ToolACE failure group exposed a real task-conversion defect:
+upstream nested `sequence_id`, `sequence_data`, `sequence_type` and enum contracts
+were reduced to `sequences: any`. Shared converter5b6ac78e5 preserves nested TS
+types and the complete upstream JSON Schema; b96df5f37 binds future generated
+cases to schema-contract revision and schema hash. Three tests include actual
+TypeScript compilation of correct and incorrect nested arguments. This does not
+prove every failed attempt was otherwise correct: the traces also contain
+shadow bindings and split/misnamed arguments.
+
+A train-only successor is fully ready:
+`/home/werg/data/broad-rl-tasks-20261031/toolace-full-schema-successor-20261031/cases.jsonl`,
+SHA188bbb8aa607ffe7183cd98c9c97c954dfb84a89f22f98380468d645b595e32a.
+All1,500 changed task references passed actual collector replay;4,431 wrong
+controls were rejected and all1,500 aliases accepted. Independent verification
+confirmed the other59,835 rows are byte-identical and changed rows exactly match
+qualified collector inputs. Task IDs/groups/requests/expected receipts and held
+packets are preserved. READY receipt SHA
+12723b094c751e1c48e17e1dc944fbece4713d730cd2f8ccc8e0c9d2459d8498.
+Terra prepared a bound4-by-6 next-collection template using it. The current unit
+is limited to one round and retains its original collection binding. Six
+underspecified ToolACE episodes were withdrawn from its amended projection,
+leaving30 checkpoint54 episodes,25 successes and one mixed-outcome group;
+original evidence is retained and breadth cursor remains57.
+
+Source-chain descriptors were stale after compacting duplicated reader payloads.
+A independently repaired metadata for661 graphs (627 communication,15 earlier
+repairs,19 additional repairs): actual node tokens, masks, producer spans and
+imports are unchanged. Exact occurrence/edge/span remapping passed independent
+verification. Receipt SHA6d3c79928898eca3c07f05ce3b0af496964cb8a4c685d1c8c3c905a4164e7ef3.
+Three further fully approved thinking-prefix repairs are ready (41 nodes), SHA
+29946c29e7f27c4572d2487f5963d86e046bffc050bee906d15e4181446b153f.
+Terra has built the remapped189,352-row source including all22 additions; per-row
+CE evidence reuses verified unchanged payloads and checks22 genuinely new rows.
+It is not yet claimed adopted or trained.
+
+Repeated learner starts found inherited SFT-only flags and pending quotas in the
+policy lane; explicit RL argument projection and separate pending policy rows
+now preserve SFT history without applying it to RL execution. Later diagnostics
+localized pre-update CPU time to Dynamo tracing Python planning wrappers.
+The eager-wrapper continuation keeps compiled attention tensor kernels and
+FP32 BF16 accumulation. Its resident-model16-token probability comparison to
+captured checkpoint54 behavior has max absolute log-probability difference
+1.1920929e-7. This is not a full-logit/state or capability equivalence claim.
+
+The original policy capacity gate used VJP/default packing while actual updates
+used plain cotangents/production packing. The later correct oversize gate
+prevented an unqualified update but repeated backwards over many microbatches.
+Commits3ba48e1e2/c6895425d qualify actual execution once and retain the authenticated
+geometry boundary across unchanged SGD; changed source/objective/runtime/precision
+requires fresh qualification. Current unit `lfm3-amended54-jolt-capacityfixed` is
+in restore/qualification. At this observation checkpoint54 remains the last
+verified durable parent; no new optimizer step or capability lift is claimed.
+
+The teacher v17 run was stopped when actual collector traces proved its prepared
+TS controller was not executed. Commit e133b162c wires application controllers
+through the real collector/runtime frame, requires child graph evidence and
+rejects the old unused execution-adapter declaration. C owns v18: real collector
+capability and intake tests pass; a single bounded teacher case is queued behind
+the learner. No positive v17 trajectory was admitted.
+
+Cloud monitor3e32b73e0 persists probe cleanup, retries unresolved allocations and
+requires provider-terminal observation before reporting shutdown. Ten tests pass;
+probe resources now require only one GPU. Restart preserves the hourly deadline.
+The23:22 probe still reported GPU entitlement denied; no cloud GPU was allocated.
+
 ## Storage cleanup completed, 23:05 CET
 
 Megatoken state is deleted (88.5GiB released at deletion). Recovery duplicates,
