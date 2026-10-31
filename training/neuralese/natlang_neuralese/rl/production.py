@@ -788,6 +788,10 @@ def collect_with_actor(config, values, **kwargs):
     The entire actor lease ends only AFTER collect has durably archived blocks.
     External fleets use the same collect function and explicit supervisor hooks.
     """
+    amended = (config.get('amended_collection_continuations') or {}).get(str(Path(kwargs['out']).resolve()))
+    if amended is not None:
+        from .amended_collection import resume_amended_collection
+        return resume_amended_collection(amended, kwargs, validate_actors=validate_actor_receipts)
     completed = Path(kwargs['out']) / 'score.json'
     if completed.is_file() and json.loads(completed.read_text()).get('collection_complete'):
         saved=json.loads(completed.read_text())
@@ -1313,12 +1317,30 @@ def run(config_path, *, rounds=None, stop=None):
                 state.update(phase='stopped_collecting', latest_reward=report)
                 write_json_durable(state_path, state)
                 return state
+            amended_groups=report.get('amended_complete_groups')
+            amended_offset=None
+            if amended_groups is not None:
+                from .curriculum import breadth_rows, policy_options
+                budget={'rows':config.get('rows_per_round',32),'group':config.get('group',4),'offset':state['offset']}
+                breadth=breadth_rows(cases,budget,policy_options(config.get('task_curriculum') or {}))
+                selected_rows=[item['row'] for item in selection]
+                if selected_rows[-len(breadth):]!=breadth:
+                    raise ValueError('amended collection selection has no authenticated breadth suffix')
+                completed_positions=set(amended_groups)
+                completed_breadth=0
+                for position in range(len(selection)-len(breadth),len(selection)):
+                    if position not in completed_positions:break
+                    completed_breadth+=1
+                amended_offset=(state['offset']+completed_breadth)%len(cases)
+                selected=[selected[i] for i in amended_groups]
+                selection=[selection[i] for i in amended_groups]
+                values['rollouts']=report['amended_rollouts']
             values['block_bundle'] = report.get('block_bundle', '')
             if report.get('coefficient_policy'):
                 state['coefficient_policy']=report['coefficient_policy']['path']
                 values.update(coefficient_policy=state['coefficient_policy'],
                               coefficient_policy_sha256=report['coefficient_policy']['sha256'])
-            rows = list(read_jsonl(round_dir / 'rollouts.jsonl'))
+            rows = list(read_jsonl(Path(values['rollouts'])))
             collected = set(state.get('collected_task_ids', [])) | {r['task_id'] for r in rows if r.get('turns')}
             attempted = set(state.get('attempted_task_ids', [])) | {r['id'] for r in selected}
             state.update(collected_task_ids=sorted(collected), attempted_task_ids=sorted(attempted), available_tasks=len(cases),
@@ -1486,7 +1508,7 @@ def run(config_path, *, rounds=None, stop=None):
                 state['actor_policy_pending_load'] = values['policy_id']
                 if config.get('coefficient_policy'):state['coefficient_policy_pending_load']=values['coefficient_policy_sha256']
             state.update(checkpoint=str(checkpoint), round=state['round'] + 1,
-                         offset=(selection[-1]['row'] + 1) % len(cases),
+                         offset=((selection[-1]['row'] + 1) % len(cases) if amended_offset is None else amended_offset),
                          trained_rounds=state['trained_rounds'] + 1, phase='collect',
                          production_complete=False, collection_attempt=0, group_stats=[])
             state.pop('pending_native_checkpoint', None)
