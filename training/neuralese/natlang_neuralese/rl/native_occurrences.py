@@ -20,6 +20,8 @@ def capture_occurrences(name,capture,nodes):
     Different origins require explicit transported source-occurrence metadata.
     """
     writes=[event for event in nodes.values() if event.get('kind')=='block_write' and event.get('turn')==name]
+    forced=[event for event in writes if event.get('source_kind')=='typed-text-result' and event.get('producer') is None]
+    writes=[event for event in writes if event not in forced]
     reads=[event for event in nodes.values() if event.get('kind')=='block_read' and event.get('turn')==name]
     for event in writes+reads:
         if not isinstance(event.get('block'),str) or not isinstance(event.get('node'),str):
@@ -63,6 +65,17 @@ def graph_binding(name,capture,nodes):
     read_counts=Counter(item['source_state_id'] for item in reads)
     binding={'graph_turn':name,'written_nodes':{item['id']:item['node'] for item in writes if write_counts[item['id']]==1},
         'read_bindings':{item['source_state_id']:item['source'] for item in reads if read_counts[item['source_state_id']]==1 and item['source']!='external'}}
+    forced=[event for event in nodes.values() if event.get('kind')=='block_write' and event.get('turn')==name
+            and event.get('source_kind')=='typed-text-result' and event.get('producer') is None]
+    if forced:
+        for event in forced:
+            if (event.get('format')!='native-state' or not isinstance(event.get('source_capture'),dict)
+                    or event.get('native_identity') != event['source_capture'].get('policy')
+                    or not isinstance(event.get('text_body_sha256'),str)
+                    or event.get('inputs') != [{'node':name,'port':'result-source'}]):
+                raise ValueError('typed text writer needs its exact native source and result-source occurrence')
+        binding['text_result_writes']=[{key:event[key] for key in ('node','block','source_capture','text_body_sha256')}
+                                       for event in forced]
     if any(count>1 for count in write_counts.values()):binding['written_occurrences']=writes
     # Keep every external read occurrence explicit. An ID-keyed producer map
     # cannot represent a unique external root, and omitting it loses the exact

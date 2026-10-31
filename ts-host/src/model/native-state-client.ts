@@ -2,7 +2,7 @@
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore, requestNativeStateIds, restoreNativeArtifacts, restoreNativeStates } from '../model/neuralese-server.js';
 import { archiveNativeTensorFrom, archiveNativeArtifactFrom, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
-  type NeuralesePort, type NeuraleseStore, type NativeAdapterStateConsumption, validateNativeAdapterStateConsumption, nativeCanonicalJson } from '../native/neuralese-store.js';
+  type NeuralesePort, type NeuraleseStore, type NativeAdapterStateConsumption, type NativeAdapterBinding, validateNativeAdapterStateConsumption, nativeCanonicalJson } from '../native/neuralese-store.js';
 import { hexDigest } from '../native/hash.js';
 import { neuraleseServerInfo, serves, type NeuraleseServerInfo } from '../model/neuralese-info.js';
 import { nativeStateConsumerFromInfo, type NeuraleseRuntimeOptions } from '../native/neuralese.js';
@@ -13,6 +13,7 @@ import type {NativeStateDerivation} from '../native/native-derivative-contract.j
 
 export type NativeSourceCapture = { policy: { checkpoint_sha256: string; tokenizer_fingerprint: string;
   embedding_weight_sha256: string; architecture: string };
+  adapter_binding?: NativeAdapterBinding | null;
   segments: ({ kind: 'tokens'; token_ids: number[]; producing: boolean[] } |
     { kind: 'native_state'; id: string; native_identity: Record<string, string>; adapter_state_consumption?: NativeAdapterStateConsumption;state_derivation?:NativeStateDerivation;stop_gradient?:true;source_occurrence?:string })[];
   payload_start: number; payload_stop: number; imports?: { id: string; mode: string; stop_gradient?:true;source_occurrence?:string; observed_native_state_id?: string;
@@ -117,6 +118,9 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
   if (!/^nzs1_[a-z2-7]{52}$/.test(result.id)) return failure('neuralese-block-integrity', 'native writer returned no native content address');
   const artifact = await archiveNativeState(options, result.id);
   validateSource(result, artifact, body.text, info);
+  if (operation === 'write-text' && nativeCanonicalJson(result.source_capture.adapter_binding ?? null) !==
+      nativeCanonicalJson(artifact.metadata.adapter_binding ?? null))
+    return failure('neuralese-native-source-integrity', 'text writer actor binding differs from its archived state');
   let logicalPosition = 0;
   const explicitSegments: { id: string; receipt: NativeAdapterStateConsumption }[] = [];
   for (const segment of result.source_capture.segments) {

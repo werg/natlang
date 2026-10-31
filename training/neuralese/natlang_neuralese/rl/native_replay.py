@@ -129,6 +129,15 @@ def capture_invocation_actors(turns,base):
         capture=turn.get('sampling') or {}
         actors[name]={'native_identity':copy.deepcopy(capture.get('policy')),
                      'adapter_binding':copy.deepcopy(capture.get('adapter_binding'))}
+        for write in turn.get('text_result_writes',[]):
+            source=write['source_capture']; writer=write['node']
+            if writer in actors:
+                raise ValueError('native text writer invocation identity collides with another actor')
+            binding=source.get('adapter_binding')
+            if binding is None and source.get('policy') != base:
+                raise ValueError('adapted text writer needs its actual adapter binding receipt')
+            actors[writer]={'native_identity':copy.deepcopy(source.get('policy')),
+                            'adapter_binding':copy.deepcopy(binding)}
     return validate_invocation_actor_receipt({'schema':'natlang.native-invocation-actors/1',
         'base_native_identity':dict(base),'invocations':actors},base)
 
@@ -164,6 +173,36 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             if declared_actor(capture.get('policy'), identity, actors):
                 actor_identity = capture['policy']  # a declared stale/quantized actor (rl.actors)
         forced_capture=capture.get('schema')=='natlang.native-teacher-forced-capture/1'
+        for write in turn.get('text_result_writes',[]):
+            source=write['source_capture']; writer=write['node']; block_id=write['block']
+            block=fetch_block(block_id)
+            writer_identity=source.get('policy'); writer_binding=source.get('adapter_binding')
+            if writer_binding is None and writer_identity != (identity if invocation_actors is not None else actor_identity):
+                raise ValueError('adapted text writer needs its actual adapter binding receipt')
+            if invocation_actors is None and (writer_identity!=actor_identity or writer_binding!=capture.get('adapter_binding')):
+                raise ValueError('text writer with a different actor needs per-invocation actor execution')
+            block.require_native(**writer_identity)
+            if getattr(block,'adapter_binding',None)!=writer_binding:
+                raise ValueError('text writer actor binding differs from its archived state')
+            segments=source.get('segments')
+            if not isinstance(segments,list) or any(s.get('kind')!='tokens' for s in segments):
+                raise ValueError('text writer requires exact standalone token source')
+            tokens=[]; flags=[]
+            for segment in segments:
+                ids=_tokens(segment.get('token_ids')); producing=segment.get('producing')
+                if not isinstance(producing,list) or len(producing)!=len(ids) or any(type(x) is not bool for x in producing):
+                    raise ValueError('text writer source needs exact token roles')
+                tokens.extend(ids); flags.extend(producing)
+            lo,hi=source.get('payload_start'),source.get('payload_stop')
+            if (type(lo) is not int or type(hi) is not int or lo!=1 or hi!=len(tokens)-1 or hi<=lo
+                    or tokens[0]!=roles.produce_open or tokens[-1]!=roles.produce_close
+                    or flags != [False]+[True]*(hi-lo)+[False]
+                    or block.token_ids.tolist()!=tokens[lo:hi]):
+                raise ValueError('text writer source changed its exact standalone producer span')
+            import hashlib
+            if hashlib.sha256(block.text.encode('utf-8')).hexdigest()!=write.get('text_body_sha256'):
+                raise ValueError('text writer state text differs from actual returned text hash')
+            writers.setdefault(block_id, []).append((writer,lo,hi,writer))
         greedy = capture.get('schema') in ('natlang.native-structural-capture/1','natlang.native-structural-capture/2')
         decision = capture.get('schema') == 'natlang.native-decision-capture/1'
         schemas = {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3','natlang.native-rl-sampling/4',
@@ -362,6 +401,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         raise ValueError('native RL graph has no captured turns')
     externals, nodes, ordered, external_receipts, external_invocations = {}, [], [], {}, {}
     turn_nodes = {}
+    emitted=set()
+    text_writers={write['node'] for item in prepared.values() for write in item['turn'].get('text_result_writes',[])}
+    if len(text_writers)!=sum(len(item['turn'].get('text_result_writes',[])) for item in prepared.values()) or text_writers & set(prepared):
+        raise ValueError('text writer occurrence identities must be unique graph invocations')
     pending = dict(prepared)
     while pending:
         progress = False
@@ -424,7 +467,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     start, stop = 0, len(block.token_ids)
                 imports.append(ImportSpan(at, source, start, stop,
                     **({'stop_gradient':True} if item['read_stops'][read_index] else {})))
-            if any(dependency in pending for dependency in dependencies):
+            if any(dependency not in emitted for dependency in dependencies):
                 continue
             # All exact roles, including STOP and delimiter inputs, come from
             # the receipt. Only payload ranges export native state to readers.
@@ -449,6 +492,14 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     nodes.append(Invocation(option, (*item['own'], *continuation), imports=tuple(imports)))
                     ordered.append({**item, 'events': [], 'input_actions': []})
                     turn_nodes[name].append(option)
+            emitted.add(name)
+            for write in item['turn'].get('text_result_writes',[]):
+                source=write['source_capture']; writer=write['node']
+                tokens=tuple(token for segment in source['segments'] for token in segment['token_ids'])
+                nodes.append(Invocation(writer,tokens,producing=((source['payload_start'],source['payload_stop']),)))
+                ordered.append({'events':[],'input_actions':[]})
+                turn_nodes[name].append(writer)
+                emitted.add(writer)
             del pending[name]; progress = True
         if not progress:
             raise ValueError('native RL captured writer graph contains a cycle')
@@ -467,13 +518,14 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         if sample is None:
             continue
         prompt = len(item['own'])
+        option_nodes=turn_nodes[name][:len(sample['continuations'])]
         decision_actions.append({'kind': 'decision', 'turn': name, 'temperature': sample['temperature'],
             'chosen': sample['chosen'], 'behavior_logps': sample['behavior_logps'], 'prompt_tokens': prompt,
-            'option_nodes': list(turn_nodes[name]),
+            'option_nodes': list(option_nodes),
             'options': [[{'query': offsets[option] + prompt + index - 1, 'local_query': prompt + index - 1,
                           'token_id': token, 'temperature': 1., 'allowed_token_ids': None, 'banned_token_ids': None}
                          for index, token in enumerate(continuation)]
-                        for option, continuation in zip(turn_nodes[name], sample['continuations'])]})
+                        for option, continuation in zip(option_nodes, sample['continuations'])]})
     return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,written_sources,
         {name:value['protocol_failure'] for name,value in prepared.items() if value['protocol_failure']},
         input_actions, tuple(decision_actions), turn_nodes)
@@ -1234,8 +1286,9 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 require_policy_loss_actions(actions, policy_loss)
             objective_rows[identifier] = {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
                 'episode_turns': episode_turns,
-                **({'decision_actions': decisions,
-                    'graph_nodes': [node.name for node in replay.plan.invocations]} if decisions else {}),
+                **({'decision_actions': decisions} if decisions else {}),
+                **({'graph_nodes': [node.name for node in replay.plan.invocations]}
+                   if {node.name for node in replay.plan.invocations} != set(episode_turns) else {}),
                 'actions': actions, 'advantage': float(advantage or 0.),
                 # Self-distillation prefers successful Neuralese-using episodes: their sampled-output CE is
                 # weighted by the episode return (1 + bonus); other correct episodes keep weight 1.

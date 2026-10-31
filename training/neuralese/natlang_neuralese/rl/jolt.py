@@ -224,6 +224,8 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
                     telemetry['verbatim_reference'] += 1
             from dataclasses import replace
             for node in nodes:
+                if node in {write['node'] for write in turn.get('text_result_writes',[])}:
+                    continue
                 blocks[node] = replace(block, invocation=node)
         if not blocks:
             raise CustodyError('the actor recorded no guidance for this episode')

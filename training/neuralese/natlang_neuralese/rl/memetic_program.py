@@ -560,7 +560,7 @@ def guidance_training_graph(rollout: dict, *, program_id: str, written: dict, ac
         'tokenizer_fingerprint': actor['tokenizer_fingerprint'],
         'nodes': [{**json.loads(json.dumps(invocation_dict(node))), 'target_weights': weight}
                   for node, weight in zip(converted, weights)],
-        'recorded_turn_bindings': [{key: turn.get(key) for key in ('graph_turn','written_nodes','read_bindings','external_read_bindings','written_occurrences','read_occurrences')}
+        'recorded_turn_bindings': [{key: turn.get(key) for key in ('graph_turn','written_nodes','read_bindings','external_read_bindings','written_occurrences','read_occurrences','text_result_writes')}
                                    for turn in turns],
         'memetic_guidance': {'schema': 'natlang.memetic-graph-source/1', 'program_id': program_id,
             'source_task_id': rollout['task_id'], 'sample': rollout['sample'],

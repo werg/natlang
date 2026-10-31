@@ -343,8 +343,11 @@ def graph_invocations(replay, turns, *, root_calls):
     by_name = {turn.get('graph_turn'): turn for turn in turns}
     # A sampled decision's option nodes (``<turn>:option:<i>``) belong to its decision turn.
     owners = {option: name for name, options in (replay.turn_nodes or {}).items() for option in options}
+    text_writers={write['node'] for turn in turns for write in turn.get('text_result_writes',[])}
     result = []
     for node in replay.plan.invocations:
+        if node.name in text_writers:
+            continue
         owner = owners.get(node.name, node.name)
         turn = by_name.get(owner)
         if turn is None:

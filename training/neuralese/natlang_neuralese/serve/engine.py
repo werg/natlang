@@ -900,7 +900,8 @@ class Engine:
             {"kind": "tokens", "token_ids": [self.role_tokens.produce_open], "producing": [False]},
             {"kind": "tokens", "token_ids": ids, "producing": [True] * len(ids)},
             {"kind": "tokens", "token_ids": [self.role_tokens.produce_close], "producing": [False]}],
-            "payload_start": 1, "payload_stop": len(ids) + 1}
+            "payload_start": 1, "payload_stop": len(ids) + 1,
+            "adapter_binding": block.adapter_binding}
         result["source_text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
         return result
 

@@ -34,7 +34,7 @@ def authenticated_turns(turns, events):
             raise ValueError('native recorded turn needs its unique exact receipt identity')
         ids.add(native['id'])
         binding = native.get('graph')
-        if not isinstance(binding, dict) or set(binding) - {'graph_turn','written_nodes','read_bindings','written_occurrences','read_occurrences'} or not {'graph_turn','written_nodes','read_bindings'} <= set(binding):
+        if not isinstance(binding, dict) or set(binding) - {'graph_turn','written_nodes','read_bindings','written_occurrences','read_occurrences','text_result_writes'} or not {'graph_turn','written_nodes','read_bindings'} <= set(binding):
             raise ValueError('native recorded turn lacks its exact graph occurrence binding')
         name = binding['graph_turn']
         node = nodes.get(name)
@@ -56,7 +56,7 @@ def authenticated_turns(turns, events):
                          'receipt_id': native['id'], 'kind': kind})
     from ..rl.episode_graph import validate_model_turn_coverage
     validate_model_turn_coverage(linked, events)
-    captured_writers={node for turn in prepared for node in [*turn['written_nodes'].values(),*(item['node'] for item in turn.get('written_occurrences',[]))]}
+    captured_writers={node for turn in prepared for node in [*turn['written_nodes'].values(),*(item['node'] for item in turn.get('written_occurrences',[])),*(item['node'] for item in turn.get('text_result_writes',[]))]}
     for turn in prepared:
         outside={block:node for block,node in turn['read_bindings'].items() if node not in captured_writers}
         turn['external_read_bindings']=outside
@@ -104,7 +104,13 @@ def compile_recorded_graph(turns, events, *, identity, roles, fetch_block):
     by_name = {turn['graph_turn']:turn for turn in prepared}
     nodes, actor_map, invocations, local_actions = [], {}, {}, {}
     reserved = set(by_name) | set(replay.external_blocks)
+    text_writers={write['node'] for turn in prepared for write in turn.get('text_result_writes',[])}
+    reserved.update(text_writers)
     for node in replay.plan.invocations:
+        if node.name in text_writers:
+            nodes.append(node)
+            actor_map[node.name]=actors['invocations'][node.name]
+            continue
         turn = by_name[node.name]
         names = []
         if turn['kind'] == 'generation':
@@ -144,6 +150,6 @@ def compile_recorded_graph(turns, events, *, identity, roles, fetch_block):
         for source,entries in external_invocations.items()
         if any(item['receipt'] is not None for item in entries)}
     origins={turn['receipt_id']:{key:copy.deepcopy(turn[key]) for key in
-        ('graph_turn','written_nodes','read_bindings','external_read_bindings','written_occurrences','read_occurrences') if key in turn} for turn in prepared}
+        ('graph_turn','written_nodes','read_bindings','external_read_bindings','written_occurrences','read_occurrences','text_result_writes') if key in turn} for turn in prepared}
     return RecordedGraph(replace(replay,plan=plan,invocation_actors=receipts,
         external_invocations=external_invocations,external_receipts=external_receipts),invocations,decisions,origins)

@@ -58,23 +58,6 @@ def rollout_turn_names(turns):
     return result
 
 
-def uncaptured_text_result_writes(rollout):
-    """Graph writes of a turn's typed text result into ``Neuralese<...>`` state that its sampling did not capture.
-
-    The runtime encodes such a returned text into state outside the model's sampled output (producer null,
-    source_kind typed-text-result). Whole-graph RL has no differentiable lowering for that text-to-state
-    encoding yet, so the occurrence check correctly refuses the episode."""
-    events = rollout.get('execution_graph') or []
-    found = []
-    for name, turn in zip(rollout_turn_names(rollout.get('turns') or []), rollout.get('turns') or []):
-        writes = [event for event in events if event.get('kind') == 'block_write' and event.get('turn') == name]
-        captured = (turn.get('sampling') or {}).get('writes') or []
-        host = [event for event in writes if event.get('source_kind') == 'typed-text-result' and event.get('producer') is None]
-        if host and len(writes) - len(host) == len(captured):
-            found += [event.get('block') for event in host]
-    return found
-
-
 def validate_rollout_graph(rollout):
     turns = rollout.get('turns') or []
     events = rollout.get('execution_graph', [])
