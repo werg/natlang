@@ -350,3 +350,41 @@ def test_declared_family_scale_refresh_requires_same_families_and_exact_append(t
     assert extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)['objective']['family_balance']['scales']=={'ordinary':1.4}
     newdoc['objective']['family_balance']['scales']['unproved']=1.;write_json(paths['new_ce'],newdoc);new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
     with pytest.raises(ValueError,match='family set'):extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
+
+
+def test_prior_inventory_repair_requires_exact_quarantine_and_family_custody(tmp_path):
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.train.own_output_supervision import identity, policy_objective
+    from test_own_output_supervision import objective
+    paths, old, new = fixture(tmp_path)
+    before = NativeGraphSource(paths['old_train'], 'tokenizer-sha', required_split='train')
+    after = NativeGraphSource(paths['train'], 'tokenizer-sha', required_split='train')
+    def family_map(name, source):
+        p=tmp_path/name
+        write_json(p, {'schema':'natlang.logical-family-map/1','source_sha256':source.file_sha256,
+            'rows':[{'id':e['id'],'binding':e['binding'],'family':'ordinary'} for e in source.entries]})
+        return resident.binding(p)
+    oldmap,newmap=family_map('old-map.json',before),family_map('new-map.json',after)
+    family=lambda ref:{'key':'logical-family','max_scale':8.,'normalization':'declared/1','map':ref,'scales':{'ordinary':1.}}
+    a=json.loads(paths['old_ce'].read_text());b=json.loads(paths['new_ce'].read_text())
+    a['objective']=objective(mass='token',family_balance=family(oldmap));b['objective']=objective(mass='token',family_balance=family(newmap))
+    stale=tmp_path/'historical.json';write_json(stale,{'historical':True});a['inventory']=[resident.binding(stale)]
+    b['inventory']=[resident.binding(paths['train'])];b['objective_transition']={'from':identity(policy_objective(a))['sha256']}
+    write_json(paths['old_ce'],a);oldref={**resident.binding(paths['old_ce']),'binding':'ce'};old['stage_inputs']['sft']['ce_supervision_policy']=oldref
+    receipt=tmp_path/'quarantine.json';write_json(receipt,{'schema':'natlang.nested-semantic-child-quarantine-receipt/1',
+        'source_manifest_sha256':resident.sha(stale),'successor_manifest_sha256':before.file_sha256})
+    correction={'schema':'natlang.resident-ce-prior-inventory-correction/1','prior_policy_sha256':oldref['sha256'],
+        'historical_source_sha256':resident.sha(stale),'active_source_sha256':before.file_sha256,
+        'prior_family_map_sha256':oldmap['sha256'],'quality_receipt':resident.binding(receipt)}
+    def bind_new(doc):
+        write_json(paths['new_ce'],doc);new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
+    bind_new(b)
+    with pytest.raises(ValueError,match='lacks its exact correction'):
+        extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
+    b['prior_inventory_correction']=correction;bind_new(b)
+    assert extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
+    for key in ('prior_policy_sha256','historical_source_sha256','active_source_sha256','prior_family_map_sha256'):
+        bad=copy.deepcopy(b);bad['prior_inventory_correction'][key]='0'*64;bind_new(bad)
+        with pytest.raises(ValueError):extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
+    bad=copy.deepcopy(b);bad['prior_inventory_correction']['quality_receipt']['sha256']='0'*64;bind_new(bad)
+    with pytest.raises(ValueError):extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)

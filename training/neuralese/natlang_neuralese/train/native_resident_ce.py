@@ -29,7 +29,7 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
         raise ValueError('resident CE append is not a declared data continuation')
     prior, policy = load_policy(before), load_policy(after)
     a, b = _public(prior), _public(policy)
-    excluded = {'sources', 'source_contract', 'inventory', 'first_row_observations'}
+    excluded = {'sources', 'source_contract', 'inventory', 'first_row_observations', 'prior_inventory_correction'}
     old_objective,new_objective=a.get('objective'),b.get('objective')
     declared_transition = ((old_objective or {}).get('family_balance',{}).get('normalization') == 'bounded-mean-one/1' and (new_objective or {}).get('family_balance',{}).get('normalization') == 'declared/1')
     if same_source and not declared_transition:
@@ -121,11 +121,45 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
         if (not isinstance(item, dict) or not isinstance(item.get('path'), str)
                 or (str(Path(item['path']).resolve()), item.get('sha256')) not in declared):
             raise ValueError('resident CE observation is outside the exact active source DAG')
-    for policy, reference in ((a, old['native_graphs']), (b, train)):
-        top_inventory = policy.get('inventory')
-        if top_inventory is not None and (len(top_inventory) != 1 or
-                checked(top_inventory[0]) != checked(reference) or top_inventory[0]['sha256'] != reference['sha256']):
-            raise ValueError('resident CE inventory differs from its exact train input')
+    prior_inventory = a.get('inventory')
+    prior_matches = (prior_inventory is None or (len(prior_inventory) == 1 and
+        checked(prior_inventory[0]) == checked(old['native_graphs']) and
+        prior_inventory[0]['sha256'] == old['native_graphs']['sha256']))
+    correction = b.get('prior_inventory_correction')
+    if not prior_matches:
+        # The earned quality-quarantine transition kept a historical top-level
+        # inventory even though its active contract and family map moved. The
+        # exact quarantine receipt must authenticate both source identities;
+        # this exception never credits rows or changes the source contract.
+        import json
+        if (not isinstance(correction, dict) or correction.get('schema') != 'natlang.resident-ce-prior-inventory-correction/1'
+                or correction.get('prior_policy_sha256') != before['sha256']
+                or len(prior_inventory) != 1
+                or correction.get('historical_source_sha256') != prior_inventory[0]['sha256']
+                or correction.get('active_source_sha256') != old['native_graphs']['sha256']):
+            raise ValueError('resident CE prior inventory mismatch lacks its exact correction')
+        receipt = json.loads(checked(correction['quality_receipt']).read_text())
+        prior_map = (a.get('objective') or {}).get('family_balance', {}).get('map') or {}
+        from .native_logical_families import _verified_bytes
+        if correction.get('prior_family_map_sha256') != prior_map.get('sha256'):
+            raise ValueError('resident CE prior inventory correction lacks its exact family map')
+        prior_map_doc = json.loads(_verified_bytes(prior_map)[1])
+        if (prior_map_doc.get('schema') != 'natlang.logical-family-map/1'
+                or prior_map_doc.get('source_sha256') != old['native_graphs']['sha256']):
+            raise ValueError('resident CE prior inventory correction family map differs from its active source')
+        prior_contract = ac.get('inventory', [])
+        if (receipt.get('schema') != 'natlang.nested-semantic-child-quarantine-receipt/1'
+                or receipt.get('source_manifest_sha256') != prior_inventory[0]['sha256']
+                or receipt.get('successor_manifest_sha256') != old['native_graphs']['sha256']
+                or len(prior_contract) != 1 or checked(prior_contract[0]) != checked(old['native_graphs'])
+                or prior_contract[0]['sha256'] != old['native_graphs']['sha256']):
+            raise ValueError('resident CE prior inventory correction does not bind the actual quarantine transition')
+    elif correction is not None:
+        raise ValueError('resident CE prior inventory correction is not applicable')
+    top_inventory = b.get('inventory')
+    if top_inventory is not None and (len(top_inventory) != 1 or
+            checked(top_inventory[0]) != checked(train) or top_inventory[0]['sha256'] != train['sha256']):
+        raise ValueError('resident CE inventory differs from its exact train input')
     inventory = bc.get('inventory', [])
     if len(inventory) != 1 or checked(inventory[0]) != path or inventory[0]['sha256'] != train['sha256']:
         raise ValueError('resident CE contract inventory differs from its train input')
