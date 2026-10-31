@@ -247,7 +247,7 @@ def test_intake_folder_files_and_verifier_targets(tmp_path):
     assert case['semantics']['folder_files'] == {'src/app.ts': 'before'}
     assert case['semantics']['expected_files'] == {'src/app.ts': 'after'}
     assert 'after' not in json.dumps(case['semantics']['files'])
-    for bad in ('../escape', '/absolute', 'a/./b', 'a//b', 'a\\b'):
+    for bad in ('../escape', '/absolute', 'a/./b', 'a//b', 'a\\b', 'C:/absolute', 'a\x00b'):
         row['folder_files'] = {bad: 'content'}
         path.write_text(json.dumps(row) + '\n')
         with pytest.raises(ValueError, match='safe relative paths'):

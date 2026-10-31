@@ -144,7 +144,8 @@ def _worlds(root: Path, metadata: dict) -> list[dict]:
                     continue
                 files = row[field]
                 if not isinstance(files, dict) or any(
-                    not isinstance(name, str) or not name or name.startswith('/') or '\\' in name
+                    not isinstance(name, str) or not name or name.startswith('/') or '\\' in name or '\x00' in name
+                    or re.match(r'^[A-Za-z]:', name)
                     or any(part in {'', '.', '..'} for part in name.split('/'))
                     or not isinstance(value, str) for name, value in files.items()
                 ):
