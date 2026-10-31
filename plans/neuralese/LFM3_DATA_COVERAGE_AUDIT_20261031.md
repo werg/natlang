@@ -359,3 +359,30 @@ tokens.
 - **Logical-family objective.** On the v3 manifest the census finds communication own-output mass far below its 40%
   target (it would need a scale of 383). The true cap now holds that family at 8 and gives the remaining share to the
   others by target. The receipt records capped families and effective shares.
+
+### Running work and next steps (2026-10-31 03:50)
+
+Running at ledger priority low. The external disk `sda` is saturated: I/O pressure "some" is about 50%, from
+`archive_to_external.py` and e2e mining. An unbounded `bfs / -name llama-server` crawl that had run for 2 h 53 min was
+killed.
+
+| work | what it does / where it stands |
+|---|---|
+| render queue (`lfm3-data-queue-loop5`) | re-renders serving views; 24 items graphed, verify/subset/graph steps continue |
+| `score-renders` / `lfm3-cov-score-teachers` | rescoring into `scores/idiom-<sha>` |
+| `lfm3-cov-coding-v2` | coding mix at per-repo 12 |
+| `lfm3-cov-s4-subset` | S3 port records at 100k per family; now resumable per family (9885d7c91) |
+| `/tmp/cov-port-s4.sh` | starts `port_record_calls.sh` once all 45 families are written |
+| `lfm3-cov-acq-exports` | collects the receipt-bound export list |
+| `/tmp/cov-acq-chain.sh` | then starts `lfm3-cov-acq2-{0,1}` into `acquired-sessions-lfm3-20261031-v2` |
+
+Successor mixture, once these land:
+1. Run `convert_acquired_sessions_student.py summary`. Write its train outputs as a `--bounded` list
+   (`{mix: external-agent, path, family: <Dxx>}`).
+2. Add the port-record-calls-s4 corpus through `student_rerender add` (serving mix). Down-weight its single-shape
+   roots.
+3. Run `build_lfm3_joint_sft.py build --out runs/lfm3-mixture/joint-sft-v4 --include-teachers --bounded <list>`.
+   - It uses policy v4 by default.
+   - It verifies every train leaf (`build_prompt_view_mix.py verify`).
+   - It builds the CE and logical-family objectives, then geometry and learner inputs.
+4. Run the protection-union check, then register and write the composition report.
