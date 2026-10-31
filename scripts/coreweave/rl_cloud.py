@@ -50,6 +50,7 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
 import cwctl  # noqa: E402
+import rl_cloud_sandbox as sandbox  # noqa: E402
 import job as jobs  # noqa: E402
 
 PROJECT = ('werg', 'natlang')
@@ -137,48 +138,69 @@ def blob_run(run):
 
 
 def blobs(run):
-    return read_json(hub(run) / 'blobs.json', {})
+    """Committed blobs: {sha256: {"bytes", "parts": [{"index", "offset", "bytes", "sha256", "name"}]}}. Blobs travel as
+    parts of PART_BYTES (rl_cloud_sandbox.PART_BYTES), each its own private object, so a transfer failure repeats one
+    part. An entry without parts is not a usable blob."""
+    return {k: v for k, v in read_json(hub(run) / 'blobs.json', {}).items() if v.get('parts')}
 
 
-def record_blob(run, digest, size):
-    table = blobs(run)
-    table[digest] = {'bytes': size, 'name': f'blobs/{digest}', 'committed': time.time()}
+def record_parts(run, digest, size, parts, committed):
+    table = read_json(hub(run) / 'blobs.json', {})
+    entry = table.get(digest) if table.get(digest, {}).get('pending') else None
+    entry = entry or {'bytes': size, 'pending': [dict(p, name=sandbox.part_name(digest, p['index'])) for p in parts]}
+    done = {p['index'] for p in entry.get('done', [])} | set(committed)
+    entry['done'] = [p for p in entry['pending'] if p['index'] in done]
+    if len(entry['done']) == len(entry['pending']):
+        entry = {'bytes': size, 'parts': entry['pending'], 'committed': time.time()}
+    table[digest] = entry
     store_json(hub(run) / 'blobs.json', table)
 
 
-def upload_urls(run, digests):
-    """Signed PUT URLs for blobs/<sha256> in the blob run (W&B createRunFiles), with the headers the PUT must carry."""
+def missing_parts(run, digest, size, parts):
+    """The parts of a blob not yet committed (all of them for a new blob)."""
+    entry = read_json(hub(run) / 'blobs.json', {}).get(digest, {})
+    if entry.get('parts'):
+        return []
+    done = {p['index'] for p in entry.get('done', [])}
+    return [dict(p, name=sandbox.part_name(digest, p['index'])) for p in parts if p['index'] not in done]
+
+
+def upload_urls(run, names):
+    """Signed PUT URLs for run files ``names`` in the blob run (W&B createRunFiles), with the headers each PUT carries."""
     run_path = blob_run(run)
     mutation = ('mutation CreateRunFiles($entity:String!,$project:String!,$run:String!,$files:[String!]!) '
                 '{createRunFiles(input:{entityName:$entity,projectName:$project,runName:$run,files:$files}) '
                 '{runID uploadHeaders files {name uploadUrl}}}')
     out = {}
-    for start in range(0, len(digests), 50):
-        batch = digests[start:start + 50]
+    for start in range(0, len(names), 50):
+        batch = names[start:start + 50]
         data = _gql(mutation, {'entity': PROJECT[0], 'project': PROJECT[1], 'run': run_path.split('/')[-1],
-                               'files': [f'blobs/{d}' for d in batch]})['createRunFiles']
+                               'files': batch})['createRunFiles']
         headers = dict(h.split(':', 1) for h in data['uploadHeaders'])
         for item in data['files']:
-            out[item['name'].removeprefix('blobs/')] = {'url': item['uploadUrl'], 'headers': headers}
+            out[item['name']] = {'url': item['uploadUrl'], 'headers': headers}
     return out
 
 
-def commit_blob(run, digest, size):
+def commit_parts(run, digest, size, parts, names):
     import wandb
     from private_export_guard import commit_uploaded_run_file
-    commit_uploaded_run_file(wandb.Api(api_key=_key()), blob_run(run), f'blobs/{digest}')
-    record_blob(run, digest, size)
+    api = wandb.Api(api_key=_key())
+    for name in names:
+        commit_uploaded_run_file(api, blob_run(run), name)
+    by_name = {sandbox.part_name(digest, p['index']): p['index'] for p in parts}
+    record_parts(run, digest, size, parts, [by_name[n] for n in names])
 
 
-def get_url(run, digest):
+def get_url(run, name, size):
     """A signed GET URL (a capability for one private object, not a key) at storage.googleapis.com."""
     import requests
     import wandb
     from urllib.parse import urlparse
     key = _key()
-    remote = wandb.Api(api_key=key).run(blob_run(run)).file(f'blobs/{digest}')
-    if remote.size != blobs(run)[digest]['bytes']:
-        raise RuntimeError(f'blob {digest}: remote size {remote.size} differs')
+    remote = wandb.Api(api_key=key).run(blob_run(run)).file(name)
+    if remote.size != size:
+        raise RuntimeError(f'{name}: remote size {remote.size} differs from {size}')
     url = remote.url
     if urlparse(url).hostname == 'api.wandb.ai':
         response = requests.get(url, auth=('api', key), stream=True, timeout=60, allow_redirects=True)
@@ -191,49 +213,42 @@ def get_url(run, digest):
     return url
 
 
+def part_urls(run, digest):
+    entry = blobs(run)[digest]
+    return [dict(p, url=get_url(run, p['name'], p['bytes'])) for p in entry['parts']]
+
+
 def put_local(run, path):
-    """DGX file -> blob (a seed). Skips a blob already committed."""
+    """DGX file -> blob (a seed), part by part; a committed part is never sent again."""
     path = Path(path)
-    digest, size = file_digest(path), path.stat().st_size
-    if digest in blobs(run):
-        return digest, size
-    import requests
-    target = upload_urls(run, [digest])[digest]
+    digest, parts = sandbox.digest_parts(path)
+    size = path.stat().st_size
+    todo = missing_parts(run, digest, size, parts)
     started = time.time()
-    from private_export_guard import CacheBoundedReader
-    for attempt in range(4):
-        with CacheBoundedReader(path) as body:
-            response = requests.put(target['url'], data=body, timeout=7200,
-                                    headers={**target['headers'], 'Content-Length': str(size)})
-        if response.status_code in (200, 201, 204):
-            break
-        time.sleep(30 * (attempt + 1))
-    else:
-        raise RuntimeError(f'upload of {path} failed: HTTP {response.status_code}')
-    if file_digest(path) != digest:
+    for part in todo:
+        target = upload_urls(run, [part['name']])[part['name']]
+        if not sandbox.put_part(target['url'], target['headers'], path, part['offset'], part['bytes'],
+                                {'name': part['name'], 'path': str(path)}):
+            raise RuntimeError(f'upload of {part["name"]} ({path}) failed')
+        commit_parts(run, digest, size, parts, [part['name']])
+    if todo and sandbox.digest_parts(path)[0] != digest:
         raise RuntimeError(f'{path} changed during upload')
-    commit_blob(run, digest, size)
     seconds = time.time() - started
-    print(json.dumps({'event': 'blob_put', 'path': str(path), 'sha256': digest, 'bytes': size,
-                      'seconds': round(seconds, 1), 'mb_per_s': round(size / 1e6 / max(seconds, 0.1), 2)}), flush=True)
+    print(json.dumps({'event': 'blob_put', 'path': str(path), 'sha256': digest, 'bytes': size, 'parts': len(parts),
+                      'sent_parts': len(todo), 'seconds': round(seconds, 1),
+                      'mb_per_s': round(sum(p['bytes'] for p in todo) / 1e6 / max(seconds, 0.1), 2)}), flush=True)
     return digest, size
 
 
 def get_blob(run, digest, destination):
-    """Owner GET of one blob to the DGX, every byte verified before the file is renamed into place."""
-    import requests
-    from verified_download import verify_download_blocks
+    """Owner GET of one blob to the DGX: every part and the whole verified before the file is renamed into place."""
     destination = Path(destination)
     if destination.exists() and file_digest(destination) == digest:
         return 0.0
-    size = blobs(run)[digest]['bytes']
     started = time.time()
-    with requests.get(get_url(run, digest), stream=True, timeout=600) as response:
-        response.raise_for_status()
-        result = verify_download_blocks(response.iter_content(8 << 20), {'sha256': digest, 'bytes': size},
-                                        destination=destination)
-    if not (result.get('local') or {}).get('committed') and not destination.exists():
-        raise RuntimeError(f'blob {digest}: verified download was not retained: {result}')
+    temp = destination.with_name(f'.{destination.name}.get')
+    sandbox.download_parts(part_urls(run, digest), temp, digest, blobs(run)[digest]['bytes'])
+    temp.replace(destination)
     return time.time() - started
 
 
@@ -319,7 +334,7 @@ def newest_verified(run, name):
 def parent_capability(run, record):
     return {'schema': PARENT_SCHEMA, 'lineage_dir': record['lineage_dir'], 'seq': record['seq'],
             'trained_rounds': record['trained_rounds'], 'state_sha256': record.get('state_sha256'),
-            'blobs': [{**b, 'url': get_url(run, b['sha256'])} for b in record['blobs']],
+            'blobs': [{**b, 'parts': part_urls(run, b['sha256'])} for b in record['blobs']],
             'links': record.get('links', [])}
 
 
@@ -537,12 +552,11 @@ def export_lineage(run, name, live, log=print, get=True):
                       dgx_verified=False)
         store_json(exports / f'{int(seq):06d}.json', record)  # immutable intent before any byte moves
     if not record.get('cloud_committed'):
-        known = blobs(run)
-        missing = [b for b in record['blobs'] if b['sha256'] not in known]
-        if missing:
-            urls = upload_urls(run, [b['sha256'] for b in missing])
-            items = [{'sha256': b['sha256'], 'bytes': b['bytes'], 'source': f"{E}/cas/{b['sha256']}",
-                      **urls[b['sha256']]} for b in missing]
+        todo = [(b, p) for b in record['blobs'] for p in missing_parts(run, b['sha256'], b['bytes'], b['parts'])]
+        if todo:
+            urls = upload_urls(run, [p['name'] for _, p in todo])
+            items = [{'name': p['name'], 'sha256': p['sha256'], 'offset': p['offset'], 'bytes': p['bytes'],
+                      'source': f"{E}/cas/{b['sha256']}", **urls[p['name']]} for b, p in todo]
             cap = f'{E}/.capability-{seq}.json'
             box.write_file(cap, json.dumps({'items': items}).encode()).result(timeout=120)
             _exec(box, ['chmod', '600', cap], 60)
@@ -552,20 +566,22 @@ def export_lineage(run, name, live, log=print, get=True):
             finally:
                 _exec(box, ['rm', '-f', cap], 60)
             events = [json.loads(l) for l in result.stdout.splitlines() if l.startswith('{')]
-            ok = {e['sha256'] for e in events if e.get('event') == 'uploaded'}
-            for blob in missing:
-                if blob['sha256'] in ok:
-                    commit_blob(run, blob['sha256'], blob['bytes'])
-            if result.returncode != 0 or ok != {b['sha256'] for b in missing}:
+            ok = {e['name'] for e in events if e.get('event') == 'uploaded'}
+            for blob in record['blobs']:
+                names = [p['name'] for b, p in todo if b is blob and p['name'] in ok]
+                if names:
+                    commit_parts(run, blob['sha256'], blob['bytes'], blob['parts'], names)
+            if result.returncode != 0 or ok != {p['name'] for _, p in todo}:
                 raise RuntimeError(f'{name}: upload of export {seq} incomplete: {events[-3:]} {result.stderr[-500:]}')
-            record['upload'] = {'bytes': sum(b['bytes'] for b in missing), 'seconds': round(time.time() - started, 1),
-                                'events': [e for e in events if e.get('event') == 'uploaded']}
+            seconds = round(time.time() - started, 1)
+            sent = sum(p['bytes'] for _, p in todo)
+            record['upload'] = {'bytes': sent, 'parts': len(todo), 'seconds': seconds,
+                                'mb_per_s': round(sent / 1e6 / max(seconds, 0.1), 1)}
         record['cloud_committed'] = True
         store_json(exports / f'{int(seq):06d}.json', record)
         box.write_file(f'{E}/{seq}.uploaded', b'').result(timeout=120)
         log(json.dumps({'event': 'cloud_committed', 'lineage': name, 'seq': seq,
-                        'trained_rounds': record['trained_rounds'], **{k: v for k, v in record.get('upload', {}).items()
-                                                                       if k != 'events'}}))
+                        'trained_rounds': record['trained_rounds'], **record.get('upload', {})}))
     elif seq not in uploaded:
         box.write_file(f'{E}/{seq}.uploaded', b'').result(timeout=120)
     if get:

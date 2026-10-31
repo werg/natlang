@@ -32,6 +32,36 @@ import urllib.request
 from pathlib import Path
 
 SCHEMA = 'natlang.rl-cloud-export/1'
+# Blobs travel as parts (private objects blobs/<sha256>.p0000 ...): a failed transfer repeats one part, not a 15 GB
+# checkpoint (the DGX uplink is a few MB/s and drops long uploads).
+PART_BYTES = 1 << 30
+
+
+def part_name(digest, index):
+    return f'blobs/{digest}.p{index:04d}'
+
+
+def digest_parts(path, part_bytes=PART_BYTES):
+    """(whole sha256, [{'index', 'offset', 'bytes', 'sha256'}]) in one read of the file."""
+    whole, parts = hashlib.sha256(), []
+    with open(path, 'rb') as stream:
+        offset = 0
+        while True:
+            digest, size = hashlib.sha256(), 0
+            while size < part_bytes:
+                chunk = stream.read(min(8 << 20, part_bytes - size))
+                if not chunk:
+                    break
+                digest.update(chunk)
+                whole.update(chunk)
+                size += len(chunk)
+            if size == 0 and parts:
+                break
+            parts.append({'index': len(parts), 'offset': offset, 'bytes': size, 'sha256': digest.hexdigest()})
+            offset += size
+            if size < part_bytes:
+                break
+    return whole.hexdigest(), parts
 ROUND = re.compile(r'round-(\d{6})(-attempt-\d+)?$')
 SKIP = ('.pending', '.partial', '.tmp', '.reserve')
 
@@ -81,13 +111,15 @@ def _members(root, top_only=False, exclude=()):
 
 def _cas_put_archive(cas, base, members):
     temp = cas / f'.archive-{os.getpid()}-{time.time_ns()}'
-    digest, size = _tar_zst(base, members, temp)
+    _tar_zst(base, members, temp)
+    digest, parts = digest_parts(temp)
+    size = temp.stat().st_size
     target = cas / digest
     if target.exists():
         temp.unlink()
     else:
         temp.replace(target)
-    return digest, size
+    return digest, size, parts
 
 
 def stage(lineage, exports):
@@ -108,8 +140,8 @@ def stage(lineage, exports):
     top = [p.name for p in lineage.iterdir() if p.is_file() and p.name != 'controller.lock' and not p.name.endswith(SKIP)]
     if (lineage / 'actor-tokenizers').is_dir():
         top += ['actor-tokenizers'] + [f'actor-tokenizers/{m}' for m in _members(lineage / 'actor-tokenizers')]
-    digest, size = _cas_put_archive(cas, lineage, top)
-    blobs.append({'kind': 'top', 'sha256': digest, 'bytes': size, 'encoding': 'tar.zst'})
+    digest, size, parts = _cas_put_archive(cas, lineage, top)
+    blobs.append({'kind': 'top', 'sha256': digest, 'bytes': size, 'encoding': 'tar.zst', 'parts': parts})
     # completed rounds, once each (carried forward from the previous export)
     archived = {b['round']: b for b in prior.get('blobs', []) if b['kind'] == 'round'}
     current = int(state.get('round', 0))
@@ -124,19 +156,20 @@ def stage(lineage, exports):
             continue
         members = [path.name] + [f'{path.name}/{m}' for m in _members(path, exclude=('actor-store',))
                                  if not (m.startswith('learner/') and (m.endswith('.pt') or m == 'learner/rl-native-objective.json'))]
-        digest, size = _cas_put_archive(cas, lineage, members)
-        blobs.append({'kind': 'round', 'round': path.name, 'sha256': digest, 'bytes': size, 'encoding': 'tar.zst'})
+        digest, size, parts = _cas_put_archive(cas, lineage, members)
+        blobs.append({'kind': 'round', 'round': path.name, 'sha256': digest, 'bytes': size, 'encoding': 'tar.zst',
+                      'parts': parts})
     # parent checkpoint (raw, hard link) and its aliases in the same learner directory
     checkpoint = Path(state['checkpoint'])
     links = []
     if checkpoint.is_file():
         stat = checkpoint.stat()
-        digest = file_digest(checkpoint)
+        digest, parts = digest_parts(checkpoint)
         target = cas / digest
         if not target.exists():
             os.link(checkpoint, target)
         blobs.append({'kind': 'checkpoint', 'sha256': digest, 'bytes': stat.st_size, 'encoding': 'raw',
-                      'path': str(checkpoint)})
+                      'path': str(checkpoint), 'parts': parts})
         for alias in sorted(checkpoint.parent.glob('*.pt')):
             if alias != checkpoint:
                 a = alias.stat()
@@ -159,65 +192,84 @@ def stage(lineage, exports):
 
 
 class _Body:
-    """File body with a fixed length for urllib (streams; never reads the file into memory)."""
-    def __init__(self, path):
+    """A byte range of a file as a fixed-length urllib body (streams; never reads it into memory)."""
+    def __init__(self, path, offset, length):
         self.stream = open(path, 'rb')
+        self.stream.seek(offset)
+        self.left = length
 
     def read(self, size=-1):
-        return self.stream.read(size if size and size > 0 else 8 << 20)
+        size = self.left if size is None or size < 0 else min(size, self.left)
+        chunk = self.stream.read(min(size, 8 << 20))
+        self.left -= len(chunk)
+        return chunk
+
+
+def put_part(url, headers, path, offset, length, log_fields, attempts=4):
+    """PUT one part to its signed URL, with retries. True on success."""
+    for attempt in range(attempts):
+        started = time.time()
+        body = _Body(path, offset, length)
+        request = urllib.request.Request(url, data=body, method='PUT', headers={**headers, 'Content-Length': str(length)})
+        try:
+            with urllib.request.urlopen(request, timeout=900) as response:
+                status = response.status
+        except Exception as error:  # retried; the DGX re-verifies every byte on its GET
+            status = getattr(error, 'code', None) or f'{type(error).__name__}: {error}'[:200]
+        finally:
+            body.stream.close()
+        seconds = round(time.time() - started, 1)
+        event(event='uploaded' if status in (200, 201, 204) else 'upload_error', status=status, seconds=seconds,
+              attempt=attempt, bytes=length, mb_per_s=round(length / 1e6 / max(seconds, 0.1), 1), **log_fields)
+        if status in (200, 201, 204):
+            return True
+        time.sleep(10 * (attempt + 1))
+    return False
 
 
 def upload(capability):
+    """Items: one per part {name, sha256 (part), source, offset, bytes, url, headers}."""
     cap = json.loads(Path(capability).read_text())
     failed = 0
     for item in cap['items']:
         path = Path(item['source'])
-        if path.stat().st_size != item['bytes']:
-            raise ValueError(f'staged blob size changed: {path}')
-        for attempt in range(4):
-            started = time.time()
-            body = _Body(path)
-            request = urllib.request.Request(item['url'], data=body, method='PUT',
-                                             headers={**item.get('headers', {}), 'Content-Length': str(item['bytes'])})
-            try:
-                with urllib.request.urlopen(request, timeout=900) as response:
-                    status = response.status
-            except Exception as error:  # retried; the DGX re-verifies every byte on its GET
-                status = getattr(error, 'code', None) or f'{type(error).__name__}'
-            finally:
-                body.stream.close()
-            seconds = round(time.time() - started, 1)
-            event(event='uploaded' if status in (200, 201, 204) else 'upload_error', sha256=item['sha256'],
-                  bytes=item['bytes'], status=status, seconds=seconds, attempt=attempt,
-                  mb_per_s=round(item['bytes'] / 1e6 / max(seconds, 0.1), 1))
-            if status in (200, 201, 204):
-                break
-            time.sleep(10 * (attempt + 1))
-        else:
+        if path.stat().st_size < item['offset'] + item['bytes']:
+            raise ValueError(f'staged blob shorter than its parts: {path}')
+        if not put_part(item['url'], item.get('headers', {}), path, item['offset'], item['bytes'],
+                        {'name': item['name'], 'sha256': item['sha256']}):
             failed += 1
     return 1 if failed else 0
 
 
-def _download(url, destination, sha256, size):
-    for attempt in range(5):
-        digest, written = hashlib.sha256(), 0
-        started = time.time()
-        try:
-            with urllib.request.urlopen(url, timeout=900) as response, open(destination, 'wb') as out:
-                for chunk in iter(lambda: response.read(8 << 20), b''):
-                    digest.update(chunk)
-                    out.write(chunk)
-                    written += len(chunk)
-            if written == size and digest.hexdigest() == sha256:
-                seconds = round(time.time() - started, 1)
-                event(event='fetched', sha256=sha256, bytes=size, seconds=seconds,
-                      mb_per_s=round(size / 1e6 / max(seconds, 0.1), 1))
-                return
-            event(event='fetch_mismatch', sha256=sha256, written=written, attempt=attempt)
-        except Exception as error:
-            event(event='fetch_error', sha256=sha256, error=f'{type(error).__name__}: {error}'[:300], attempt=attempt)
-        time.sleep(10 * (attempt + 1))
-    raise RuntimeError(f'could not fetch blob {sha256}')
+def download_parts(parts, destination, sha256, size):
+    """GET every part (signed URL) into its offset of ``destination``, each part and the whole verified."""
+    with open(destination, 'wb') as out:
+        out.truncate(size)
+    for part in parts:
+        for attempt in range(5):
+            digest, written = hashlib.sha256(), 0
+            started = time.time()
+            try:
+                with urllib.request.urlopen(part['url'], timeout=900) as response, open(destination, 'r+b') as out:
+                    out.seek(part['offset'])
+                    for chunk in iter(lambda: response.read(8 << 20), b''):
+                        digest.update(chunk)
+                        out.write(chunk)
+                        written += len(chunk)
+                if written == part['bytes'] and digest.hexdigest() == part['sha256']:
+                    seconds = round(time.time() - started, 1)
+                    event(event='fetched', blob=sha256, part=part['index'], bytes=written, seconds=seconds,
+                          mb_per_s=round(written / 1e6 / max(seconds, 0.1), 1))
+                    break
+                event(event='fetch_mismatch', blob=sha256, part=part['index'], written=written, attempt=attempt)
+            except Exception as error:
+                event(event='fetch_error', blob=sha256, part=part['index'],
+                      error=f'{type(error).__name__}: {error}'[:300], attempt=attempt)
+            time.sleep(10 * (attempt + 1))
+        else:
+            raise RuntimeError(f'could not fetch part {part["index"]} of blob {sha256}')
+    if file_digest(destination) != sha256:
+        raise RuntimeError(f'blob {sha256}: parts verified but the whole differs')
 
 
 def fetch(parent, lineage):
@@ -233,7 +285,7 @@ def fetch(parent, lineage):
     for blob in parent['blobs']:
         temp = scratch / blob['sha256']
         if not (temp.exists() and temp.stat().st_size == blob['bytes'] and file_digest(temp) == blob['sha256']):
-            _download(blob['url'], temp, blob['sha256'], blob['bytes'])
+            download_parts(blob['parts'], temp, blob['sha256'], blob['bytes'])
         if blob['encoding'] == 'raw':
             target = Path(blob['path'])
             target.parent.mkdir(parents=True, exist_ok=True)
