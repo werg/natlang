@@ -43,6 +43,14 @@ export type ProgramSemantics = {
   required_root_iteration?: import('./required-iteration.js').RequiredRootIteration;
   /** Source-declared temperature control inside the actual root iteration. */
   required_greenhouse_control?: import('./greenhouse-control.js').RequiredGreenhouseControl;
+  /** Collector-owned deterministic application workflow that calls this package's semantic Natlang operations. */
+  application_controller?: {
+    schema: 'natlang.application-controller/1';
+    module: string;
+    export: string;
+    operations: string;
+    input_arguments: string[];
+  };
 };
 export type ProgramRecord = { version: string; id: string; kind: string; semantics: ProgramSemantics; [key: string]: unknown };
 

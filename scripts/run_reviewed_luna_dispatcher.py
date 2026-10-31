@@ -220,7 +220,8 @@ def _validate_runtime_semantics_capabilities(runtime, runtime_manifest, required
         raise ValueError('frozen collector returned malformed semantic capability evidence') from error
     versions = {'service_aliases': 'natlang.service-aliases/2',
                 'service_scopes': 'natlang.service-scopes/1',
-                'report_completeness': 'natlang.report-completeness/2'}
+                'report_completeness': 'natlang.report-completeness/2',
+                'application_controller': 'natlang.application-controller/1'}
     if (not isinstance(report, dict) or report.get('schema') != 'natlang.teacher-collector-capabilities/1' or
             not isinstance(report.get('probes'), dict)):
         raise ValueError('frozen collector returned an unsupported semantic capability schema')
@@ -244,6 +245,8 @@ def _required_runtime_semantics_features(rows, cases):
             required.add('service_scopes')
         if semantics.get('report_completeness'):
             required.add('report_completeness')
+        if semantics.get('application_controller'):
+            required.add('application_controller')
     return sorted(required)
 
 
@@ -312,8 +315,8 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
         if digest_fn(path) != expected:
             raise ValueError(f'Reviewed artifact changed: {path}')
     intake_binding = plan.get('intake_receipt_binding')
-    adapter_bindings = plan.get('execution_adapter_bindings', [])
-    adapter_trees = plan.get('execution_adapter_trees', [])
+    external_service_bindings = plan.get('external_service_bindings', [])
+    runtime_trees = plan.get('runtime_dependency_trees', [])
     if intake_binding is not None:
         if not isinstance(intake_binding, dict):
             raise ValueError('invalid intake receipt binding')
@@ -322,27 +325,55 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
         if pins.get(str(intake_path)) != intake_sha or digest_fn(intake_path) != intake_sha:
             raise ValueError('codebase intake receipt is not pinned by the reviewed plan')
         intake_record = json.loads(intake_path.read_text(encoding='utf-8'))
-        if (adapter_bindings != intake_record.get('execution_adapter_bindings', []) or
-                not isinstance(adapter_trees, list)):
-            raise ValueError('reviewed execution adapter declarations differ from authenticated intake')
-        intake_trees = intake_record.get('execution_adapter_trees', [])
+        if not isinstance(runtime_trees, list):
+            raise ValueError('reviewed collector dependency declarations differ from authenticated intake')
+        if plan.get('external_services') != intake_record.get('external_services', {}):
+            raise ValueError('reviewed external services differ from authenticated intake')
+        package_path = intake_record.get('package_path')
+        service_sources = intake_record.get('external_services', {})
+        if not isinstance(package_path, str) or not isinstance(service_sources, dict):
+            raise ValueError('authenticated intake has invalid collector service bindings')
+        codebase_root = Path(package_path).expanduser().resolve(strict=True).parent
+        expected_service_bindings = []
+        for alias, binding in sorted(service_sources.items()):
+            if not isinstance(alias, str) or not isinstance(binding, dict):
+                raise ValueError('authenticated intake contains an invalid collector service binding')
+            for role, path_key, hash_key in (('source', 'source_path', 'source_sha256'),
+                                             ('fixtures', 'fixtures_path', 'fixtures_sha256')):
+                relative, expected = binding.get(path_key), binding.get(hash_key)
+                if relative is None and expected is None and role == 'fixtures':
+                    continue
+                rel = Path(relative) if isinstance(relative, str) else Path('.')
+                if (not isinstance(relative, str) or not relative or rel.is_absolute() or
+                        any(part in {'', '.', '..'} for part in rel.parts) or
+                        not isinstance(expected, str)):
+                    raise ValueError(f'authenticated intake has an unsafe {role} path for service {alias}')
+                target = codebase_root / rel
+                resolved = target.resolve(strict=True)
+                record = {'alias': alias, 'role': role, 'path': str(resolved), 'sha256': expected}
+                expected_service_bindings.append(record)
+                traversed = codebase_root
+                symlinked = False
+                for part in rel.parts:
+                    traversed = traversed / part
+                    symlinked = symlinked or traversed.is_symlink()
+                if (symlinked or not resolved.is_relative_to(codebase_root) or
+                        resolved.is_relative_to(Path(package_path).resolve()) or
+                        pins.get(str(resolved)) != expected or digest_fn(resolved) != expected):
+                    raise ValueError(f'Reviewed collector service {role} changed: {resolved}')
+        if external_service_bindings != expected_service_bindings:
+            raise ValueError('reviewed collector service source pins differ from authenticated intake')
+        intake_trees = intake_record.get('runtime_dependency_trees', [])
         expected_trees = [{key: tree[key] for key in
                            ('name', 'root', 'manifest_path', 'manifest_sha256', 'tree_sha256', 'file_count', 'total_bytes')}
                           for tree in intake_trees]
-        if adapter_trees != expected_trees:
-            raise ValueError('reviewed runtime dependency trees differ from authenticated intake')
-        for binding in adapter_bindings:
-            if not isinstance(binding, dict):
-                raise ValueError('invalid reviewed execution adapter path binding')
-            path = Path(binding.get('path', '')).expanduser().resolve(strict=True)
-            expected = binding.get('sha256')
-            if pins.get(str(path)) != expected or digest_fn(path) != expected:
-                raise ValueError(f'Reviewed execution adapter changed: {path}')
-    elif adapter_bindings or adapter_trees:
-        raise ValueError('execution adapter pins cannot be used without an authenticated intake receipt')
-    if not isinstance(adapter_trees, list):
-        raise ValueError('execution_adapter_trees must be a list')
-    for record in adapter_trees:
+        if runtime_trees != expected_trees:
+            raise ValueError('reviewed collector runtime trees differ from authenticated intake')
+    elif external_service_bindings or plan.get('external_services') or runtime_trees:
+        raise ValueError('collector dependency pins cannot be used without an authenticated intake receipt')
+    if not isinstance(runtime_trees, list):
+        raise ValueError('runtime_dependency_trees must be a list')
+    for record in runtime_trees:
         if not isinstance(record, dict):
             raise ValueError('invalid reviewed execution adapter tree binding')
         manifest_path = Path(record.get('manifest_path', '')).expanduser().resolve(strict=True)

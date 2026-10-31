@@ -9,9 +9,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.rl_tasks.audit_natlang_packages import audit
 from scripts.rl_tasks.intake_natlang_codebase import intake
-from scripts.rl_tasks.execution_adapter import verify_execution_adapter_trees, verify_runtime_tree
+from scripts.rl_tasks.execution_adapter import verify_runtime_trees, verify_runtime_tree
 from scripts.rl_tasks.build_reviewed_luna_plan import (build_plan, select_balanced_train,
-                                                       _intake_execution_adapter_bindings)
+                                                       _intake_external_service_files)
 import scripts.rl_tasks.build_reviewed_luna_plan as plan_builder
 import run_reviewed_luna_dispatcher as dispatcher
 
@@ -98,11 +98,55 @@ def test_intake_binds_multiple_operations_and_preserves_exact_vs_judged(tmp_path
     assert judged_rows[0]['semantics']['oracle']['level'] == 'judged'
     assert judged_rows[0]['curriculum']['reference']['root'] == []
     assert 'reconcile.nl' in rows[0]['semantics']['files']
+
+
+def test_intake_binds_collector_executed_application_controller_to_actual_package(tmp_path):
+    package, root = _package(tmp_path)
+    worlds_path = root / 'worlds' / 'dev.jsonl'
+    dev = json.loads(worlds_path.read_text())
+    dev['operation'] = 'reconcile.nl'
+    worlds_path.write_text(json.dumps(dev) + '\n')
+    root_source = package / 'reconcile.nl'
+    root_source.write_text(root_source.read_text().replace('returns: Result\n', 'returns: Result\nuses: [workflow]\n'))
+    (package / 'workflow.ts').write_text('export async function run(state: State, operations: { step(): Promise<Result> }): Promise<Result> { return await operations.step(); }\n')
+    (package / 'reconcile').mkdir()
+    (package / 'reconcile' / 'step.nl').write_text('---\nargs: {}\nreturns: Result\n---\nChoose the response.\n')
+    metadata_path = root / 'metadata.json'
+    metadata = json.loads(metadata_path.read_text())
+    metadata['collector_controller'] = {'schema': 'natlang.application-controller/1', 'module': 'workflow',
+        'export': 'run', 'operations': 'step', 'input_arguments': ['state']}
+    metadata_path.write_text(json.dumps(metadata))
+    out = tmp_path / 'controller.jsonl'
+    receipt = intake(package, output=out)
+    rows = [json.loads(line) for line in out.read_text().splitlines()]
+    assert receipt['case_count'] == 2
+    assert all(row['semantics']['application_controller'] == metadata['collector_controller'] for row in rows)
     assert 'CC0' in rows[0]['semantics']['files']['LICENSE.notice']
     assert receipt['semantic_status'].startswith('fixture-backed, not yet runtime-verified')
+    assert 'application_controller' in dispatcher._required_runtime_semantics_features(rows, [{'index': 0}])
 
 
-def test_execution_adapter_hash_is_bound_at_intake_and_rechecked_for_plan(tmp_path):
+def test_intake_rejects_collector_controller_not_attached_to_public_root(tmp_path):
+    package, root = _package(tmp_path)
+    worlds_path = root / 'worlds' / 'dev.jsonl'
+    dev = json.loads(worlds_path.read_text())
+    dev['operation'] = 'reconcile.nl'
+    worlds_path.write_text(json.dumps(dev) + '\n')
+    root_source = package / 'reconcile.nl'
+    root_source.write_text(root_source.read_text().replace('returns: Result\n', 'returns: Result\nuses: [different]\n'))
+    (package / 'reconcile').mkdir(exist_ok=True)
+    (package / 'reconcile' / 'chooseAction.nl').write_text('---\nargs: {}\nreturns: Result\n---\nChoose an action.\n')
+    (package / 'workflow.ts').write_text('export async function run(state: State, operations: object): Promise<Result> { return {} as Result; }\n')
+    metadata_path = root / 'metadata.json'
+    metadata = json.loads(metadata_path.read_text())
+    metadata['collector_controller'] = {'schema': 'natlang.application-controller/1', 'module': 'workflow',
+        'export': 'run', 'operations': 'chooseAction', 'input_arguments': ['state']}
+    metadata_path.write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match='must expose controller module'):
+        intake(package, output=tmp_path / 'detached.jsonl')
+
+
+def test_uninvoked_execution_adapter_is_rejected_at_intake(tmp_path):
     package, root = _package(tmp_path)
     host = root / 'host' / 'runner.py'
     host.parent.mkdir()
@@ -113,14 +157,8 @@ def test_execution_adapter_hash_is_bound_at_intake_and_rechecked_for_plan(tmp_pa
     metadata['execution_adapter'] = {'paths': {'host/runner.py': digest}}
     metadata_path.write_text(json.dumps(metadata))
 
-    receipt = intake(package, output=tmp_path / 'bound.jsonl')
-    assert receipt['execution_adapter_bindings'] == [
-        {'path': str(host.resolve()), 'relative_path': 'host/runner.py', 'sha256': digest}]
-    assert _intake_execution_adapter_bindings(receipt) == [(host.resolve(), digest)]
-
-    host.write_text('def run(): return 2\n')
-    with pytest.raises(ValueError, match='changed since intake'):
-        _intake_execution_adapter_bindings(receipt)
+    with pytest.raises(ValueError, match='not invoked by'):
+        intake(package, output=tmp_path / 'bound.jsonl')
 
 
 def test_intake_rejects_tampered_execution_adapter_path(tmp_path):
@@ -132,7 +170,7 @@ def test_intake_rejects_tampered_execution_adapter_path(tmp_path):
     metadata = json.loads(metadata_path.read_text())
     metadata['execution_adapter'] = {'paths': {'host/runner.py': '0' * 64}}
     metadata_path.write_text(json.dumps(metadata))
-    with pytest.raises(ValueError, match='hash mismatch'):
+    with pytest.raises(ValueError, match='not invoked by'):
         intake(package, output=tmp_path / 'tampered.jsonl')
 
 
@@ -194,20 +232,20 @@ def test_runtime_dependency_tree_is_verified_and_bound_into_service(tmp_path):
     metadata['external_services'] = {'service': {
         'source_path': 'host/service.ts', 'source_sha256': digest(service),
         'fixtures_path': 'source/fixtures.jsonl', 'fixtures_sha256': digest(fixtures)}}
-    metadata['execution_adapter'] = {'runtime_trees': [{
+    metadata['collector_runtime'] = {'trees': [{
         'name': 'tau2_python_deps', 'root': str(deps), 'manifest_path': 'host/runtime-manifest.json',
         'manifest_sha256': manifest_sha}]}
     metadata_path.write_text(json.dumps(metadata))
     out = tmp_path / 'runtime-tree.jsonl'
     receipt = intake(package, output=out)
-    assert receipt['execution_adapter_trees'][0]['file_count'] == 1
+    assert receipt['runtime_dependency_trees'][0]['file_count'] == 1
     row = json.loads(out.read_text().splitlines()[0])
     bound_source = row['semantics']['services']['service']
     assert json.dumps(str(deps.resolve())) in bound_source
     assert '/*__NATLANG_RUNTIME_TREE_tau2_python_deps__*/' not in bound_source
     module.write_text('value = 8\n')
     with pytest.raises(ValueError, match='runtime dependency file is missing or changed'):
-        verify_execution_adapter_trees(metadata, root)
+        verify_runtime_trees(metadata, root)
 
 
 def test_related_worlds_cannot_cross_splits(tmp_path):
@@ -323,11 +361,18 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
         'build': build, 'files': plan_builder.tree_identity(runtime)}))
     authority = tmp_path / 'authority.json'
     authority.write_text('{}\n')
-    adapter = tmp_path / 'host' / 'runner.py'
-    adapter.parent.mkdir()
-    adapter.write_text('adapter-v1\n')
+    codebase = tmp_path / 'service-codebase'
+    package = codebase / 'package'
+    package.mkdir(parents=True)
+    service = codebase / 'host' / 'collector-service.ts'
+    service.parent.mkdir()
+    service.write_text('export function read(): number { return 1; }\n')
+    fixtures = codebase / 'source' / 'fixtures.jsonl'
+    fixtures.parent.mkdir()
+    fixtures.write_text('{"id":"fixture","fixture":{}}\n')
     intake_receipt = tmp_path / 'intake.json'
-    adapter_sha = hashlib.sha256(adapter.read_bytes()).hexdigest()
+    service_sha = hashlib.sha256(service.read_bytes()).hexdigest()
+    fixtures_sha = hashlib.sha256(fixtures.read_bytes()).hexdigest()
     runtime_tree_root = tmp_path / 'shared-runtime'
     runtime_module = runtime_tree_root / 'pkg' / 'module.py'
     runtime_module.parent.mkdir(parents=True)
@@ -341,10 +386,10 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     tree_binding = verify_runtime_tree(root=runtime_tree_root, manifest_path=tree_manifest,
                                        manifest_sha256=tree_sha)
     tree_binding['name'] = 'fixture-runtime'
-    intake_receipt.write_text(json.dumps({'admission_eligible': True,
-        'execution_adapter_bindings': [{'path': str(adapter.resolve()), 'relative_path': 'host/runner.py',
-                                        'sha256': adapter_sha}],
-        'execution_adapter_trees': [tree_binding]}))
+    intake_receipt.write_text(json.dumps({'admission_eligible': True, 'package_path': str(package.resolve()),
+        'external_services': {'telecom': {'source_path': 'host/collector-service.ts', 'source_sha256': service_sha,
+            'fixtures_path': 'source/fixtures.jsonl', 'fixtures_sha256': fixtures_sha}},
+        'runtime_dependency_trees': [tree_binding]}))
     calls = []
 
     class Protected:
@@ -370,8 +415,9 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     assert '--no-resumable' in report['dispatch_command_after_review']
     assert len(plan['cases']) == 2 and len(calls) == len(rows)
     assert plan['source_inventory']['sha256']
-    assert plan['artifact_hashes'][str(adapter.resolve())] == adapter_sha
-    assert plan['execution_adapter_trees'][0]['tree_sha256'] == tree_binding['tree_sha256']
+    assert plan['artifact_hashes'][str(service.resolve())] == service_sha
+    assert plan['artifact_hashes'][str(fixtures.resolve())] == fixtures_sha
+    assert plan['runtime_dependency_trees'][0]['tree_sha256'] == tree_binding['tree_sha256']
     assert report['operation_counts'] == {'audit.nl': 1, 'reconcile.nl': 1}
     reviewed = {**plan, 'root_approved': True}
     reviewed_path = tmp_path / 'reviewed-plan.json'
@@ -379,17 +425,17 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     validated, identity = dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
     assert validated['prompt_rendering'] == 'full'
     assert identity['slots'] == 6 and identity['source_inventory']['entries'] == 2
-    adapter.write_text('adapter-tampered\n')
+    service.write_text('export function read(): number { return 2; }\n')
     with pytest.raises(ValueError, match='Reviewed artifact changed'):
         dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
-    adapter.write_text('adapter-v1\n')
+    service.write_text('export function read(): number { return 1; }\n')
     runtime_module.write_text('value = 2\n')
     with pytest.raises(ValueError, match='runtime dependency file is missing or changed'):
         dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
     runtime_module.write_text('value = 1\n')
-    reviewed.pop('execution_adapter_bindings')
+    reviewed.pop('external_service_bindings')
     reviewed_path.write_text(json.dumps(reviewed, sort_keys=True))
-    with pytest.raises(ValueError, match='declarations differ from authenticated intake'):
+    with pytest.raises(ValueError, match='service source pins differ from authenticated intake'):
         dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
 
 

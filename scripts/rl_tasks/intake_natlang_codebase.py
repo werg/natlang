@@ -24,8 +24,7 @@ if str(REPO) not in sys.path:
 from scripts.rl_tasks.common import jsonl_write, slug, text_digest
 from scripts.rl_tasks.audit_natlang_packages import audit
 from scripts.rl_tasks.codebase_services import load_external_services, bind_world_services
-from scripts.rl_tasks.execution_adapter import (verify_execution_adapter_paths,
-                                                verify_execution_adapter_trees)
+from scripts.rl_tasks.execution_adapter import reject_uninvoked_execution_adapter, verify_runtime_trees
 
 
 def _sha(value: bytes) -> str:
@@ -296,6 +295,15 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
         for contract_field in ('service_aliases', 'service_scopes', 'report_completeness'):
             if contract_field in metadata:
                 case['semantics'][contract_field] = metadata[contract_field]
+        if metadata.get('collector_controller'):
+            controller = metadata['collector_controller']
+            root_dir = root[:-3] if root.endswith('.nl') else ''
+            if root_dir + '/' + controller['operations'] + '.nl' not in package:
+                raise ValueError(f'{row["id"]}: collector controller operations are not a child of {root}')
+            frontmatter = case_files[root].split('---', 2)[1]
+            if not re.search(rf'\buses\s*:\s*\[[^]]*\b{re.escape(controller["module"])}\b[^]]*\]', frontmatter):
+                raise ValueError(f'{row["id"]}: operation root must expose controller module with uses:')
+            case['semantics']['application_controller'] = controller
         for field in ('folder_files', 'expected_files'):
             if field in row:
                 case['semantics'][field] = row[field]
@@ -310,6 +318,23 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
 
 def _validate_runtime_contracts(package: dict[str, str], metadata: dict[str, Any],
                                 external_services: dict[str, str]) -> None:
+    if metadata.get('execution_adapter') is not None:
+        raise ValueError('metadata.execution_adapter is not invoked by the batch collector; declare collector_controller instead')
+    controller = metadata.get('collector_controller')
+    if controller is not None:
+        if (not isinstance(controller, dict) or controller.get('schema') != 'natlang.application-controller/1' or
+                any(not isinstance(controller.get(field), str) or
+                    not re.fullmatch(r'[A-Za-z_$][A-Za-z0-9_$]*', controller[field])
+                    for field in ('module', 'export', 'operations')) or
+                not isinstance(controller.get('input_arguments'), list) or not controller['input_arguments'] or
+                any(not isinstance(name, str) or not re.fullmatch(r'[A-Za-z_$][A-Za-z0-9_$]*', name)
+                    for name in controller['input_arguments']) or
+                len(set(controller['input_arguments'])) != len(controller['input_arguments'])):
+            raise ValueError('metadata.collector_controller must satisfy natlang.application-controller/1')
+        module_path = controller['module'] + '.ts'
+        if module_path not in package or not re.search(
+                rf'\bexport\s+(?:async\s+)?function\s+{re.escape(controller["export"])}\s*\(', package[module_path]):
+            raise ValueError('collector_controller must name an exported function in a packaged TypeScript module')
     aliases = metadata.get('service_aliases')
     if aliases is not None:
         if not isinstance(aliases, dict) or not aliases:
@@ -383,8 +408,8 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
     if not isinstance(metadata.get('split'), dict):
         raise ValueError('metadata.split is required, including held-world protections')
     metadata = _bound_dataset_paths(metadata, package_root.parent)
-    execution_adapter_bindings = verify_execution_adapter_paths(metadata, package_root.parent)
-    execution_adapter_trees = verify_execution_adapter_trees(metadata, package_root.parent)
+    reject_uninvoked_execution_adapter(metadata)
+    runtime_dependency_trees = verify_runtime_trees(metadata, package_root.parent)
     files = _project(package_root, metadata)
     external_services, service_bindings = load_external_services(package_root, metadata)
     _validate_runtime_contracts(files, metadata, external_services)
@@ -420,8 +445,7 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
         'package_path': str(package_root),
         'package_sha256': _sha(json.dumps({'files': files, 'services': external_services}, sort_keys=True, ensure_ascii=False).encode()),
         'external_services': service_bindings,
-        'execution_adapter_bindings': execution_adapter_bindings,
-        'execution_adapter_trees': execution_adapter_trees,
+        'runtime_dependency_trees': runtime_dependency_trees,
         'world_count': len(world_rows), 'case_count': len(cases),
         'exact_case_count': len(exact_cases), 'judged_case_count': len(judged_cases),
         'exact_cases_path': str(output), 'judged_cases_path': str(judged_output) if judged_cases else None,

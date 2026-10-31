@@ -4,6 +4,7 @@ import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import { nodePlatform } from '../runtime/node.js';
 import { bindServiceAliases } from './service-aliases.js';
 import { checkReportCompleteness } from './report-completeness.js';
+import { executeProgram } from './collector.js';
 
 /** Executable probes for collector semantics that must match the source rows being run. */
 export async function teacherCollectorCapabilities(): Promise<Record<string, unknown>> {
@@ -66,8 +67,28 @@ export async function teacherCollectorCapabilities(): Promise<Record<string, unk
       JSON.stringify(visible.deviceRead) !== '["device"]')
     throw new Error('service scope capability probe failed');
 
+  // Exercise the actual production collector route, including controller binding,
+  // task-frame preservation, model-driven Natlang child execution and graph export.
+  const controllerRun = await executeProgram({ version: 'natlang.program/2', id: 'capability-probe', kind: 'lambda_source',
+    semantics: { root: 'entry.nl', files: {
+      'natlang.json': '{}',
+      'entry.nl': '---\nargs:\n  value: number\nreturns: number\nuses: [workflow]\n---\nRun the typed controller.\n',
+      'entry/advance.nl': '---\nargs:\n  value: number\nreturns: number\n---\nAdvance the workflow.\n',
+      'entry/advance/step.nl': '---\nargs:\n  value: number\nreturns: number\n---\nReturn value plus one.\n',
+      'workflow.ts': 'export async function run(value: number, operations: { step(value: number): Promise<number> }): Promise<number> { return await operations.step(value); }\n',
+    }, inputs: { value: 41 }, expected: 42, oracle: 'exact',
+      application_controller: { schema: 'natlang.application-controller/1', module: 'workflow', export: 'run',
+        operations: 'advance', input_arguments: ['value'] } } },
+  async () => ({ calls: [['eval', { code: 'return value + 1;', finish: true }]] }),
+  { rootSeed: 5, systemPrompt: '', contextTokens: 4096, maxTurns: 3, runId: 'collector-controller-capability-probe' });
+  const controllerGraph = controllerRun.outcome.execution_graph as
+    { definition?: { id?: string } }[] | undefined;
+  if (controllerRun.outcome.accepted !== true || controllerRun.outcome.value !== 42 ||
+      !controllerGraph?.some(event => event.definition?.id === 'nl:entry/advance/step.nl'))
+    throw new Error('application controller collector probe did not execute and export its declared Natlang operation');
+
   return { schema: 'natlang.teacher-collector-capabilities/1',
     service_aliases: 'natlang.service-aliases/2', service_scopes: 'natlang.service-scopes/1',
-    report_completeness: 'natlang.report-completeness/2',
-    probes: { service_aliases: true, service_scopes: true, report_completeness: true } };
+    report_completeness: 'natlang.report-completeness/2', application_controller: 'natlang.application-controller/1',
+    probes: { service_aliases: true, service_scopes: true, report_completeness: true, application_controller: true } };
 }

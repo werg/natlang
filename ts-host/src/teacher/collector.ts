@@ -36,7 +36,7 @@ import { externalModule } from '../native/external.js';
 import { checkTrustedExactVerifier } from './trusted-exact-verifier.js';
 import { checkFunctionEffects } from './function-effects.js';
 import { findCodebaseItem } from '../native/runtime.js';
-import type { LambdaNode } from '../native/values.js';
+import type { LambdaNode, Value } from '../native/values.js';
 import { PROGRAM_VERSION, prepareProgramNode, type ProgramRecord } from './program.js';
 import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, FILE_CONTENT_COMPARISON_VERSION, checkOracle } from './oracle.js';
 import { modelOracleJudge } from './model-judge.js';
@@ -61,6 +61,9 @@ import { hostCaptures, type CaptureSource } from '../exact-capture/host-capture.
 import { checkItemResultBinding, type ItemResultBindingSpec } from './item-result-binding.js';
 import { RefinementChecker, type RefinementFailure } from '../native/refinement.js';
 import { createTeacherTextNeuralese, TEACHER_TEXT_NEURALESE_PROMPT } from '../model/teacher-text-neuralese.js';
+import { loadVirtualNatlang } from '../runtime/virtual-project.js';
+import { nodePlatform } from '../runtime/node.js';
+import { runInFrame } from '../runtime/context.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -201,6 +204,22 @@ export function validateFocusedRecord(record: ProgramRecord): void {
        (record.semantics.failure_seed.kind !== undefined &&
         !['compile', 'runtime', 'boundary'].includes(record.semantics.failure_seed.kind))))
     throw new Error('failure_seed must contain nonempty code and a supported failure kind');
+  const controller = record.semantics.application_controller;
+  if (controller !== undefined) {
+    if (!controller || controller.schema !== 'natlang.application-controller/1' ||
+        !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(controller.module) ||
+        !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(controller.export) ||
+        !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(controller.operations) ||
+        !Array.isArray(controller.input_arguments) || controller.input_arguments.some(name =>
+          typeof name !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) ||
+        new Set(controller.input_arguments).size !== controller.input_arguments.length)
+      throw new Error('application_controller must be a valid natlang.application-controller/1 declaration');
+    if (typeof record.semantics.files[`${controller.module}.ts`] !== 'string' ||
+        controller.input_arguments.some(name => !Object.hasOwn(record.semantics.inputs, name)) ||
+        !record.semantics.files[record.semantics.root]?.includes(`uses: [${controller.module}]`) ||
+        !record.semantics.files[`${record.semantics.root.slice(0, -3)}/${controller.operations}.nl`])
+      throw new Error('application_controller module or bound input is absent from the task package');
+  }
 }
 
 export async function loadRecords(path: string, start = 0, limit = 10, sourceText?: string): Promise<IndexedRecord[]> {
@@ -1709,7 +1728,46 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
   registerTrace(options.runId, runtime.trace, runtime.episodeBudget);
   try {
     let result: Awaited<ReturnType<typeof runtime.run>>;
-    try { result = await runtime.run(root); }
+    try {
+      const controller = record.semantics.application_controller;
+      if (!controller) result = await runtime.run(root);
+      else {
+        const mounted = loadVirtualNatlang(record.semantics.files, record.semantics.root, '/project', nodePlatform()) as
+          unknown as Record<string, unknown>;
+        const module = mounted[controller.module] as Record<string, unknown> | undefined;
+        const callable = module?.[controller.export];
+        const operations = mounted[controller.operations];
+        if (typeof callable !== 'function' || !operations ||
+            (typeof operations !== 'object' && typeof operations !== 'function'))
+          throw new Error('declared application controller is not attached to the loaded Natlang root');
+        const args = controller.input_arguments.map(name => {
+          if (!Object.hasOwn(record.semantics.inputs, name))
+            throw new Error(`application controller input ${name} is absent from the task`);
+          return record.semantics.inputs[name];
+        });
+        runtime.trace.emit('application_controller_call', { schema: controller.schema, phase: 'start',
+          module: controller.module, export: controller.export, operations: controller.operations,
+          root: record.semantics.root, task_id: record.id });
+        try {
+          if (!runtime.frame) throw new Error('application controller requires the collector task runtime frame');
+          const value = await runInFrame(runtime.frame,
+            () => (callable as (...values: unknown[]) => Promise<unknown>)(...args, operations));
+          const childCalls = runtime.frame.task.traces;
+          runtime.trace.emit('application_controller_call', { schema: controller.schema, phase: 'completed',
+            module: controller.module, export: controller.export, operations: controller.operations,
+            root: record.semantics.root, task_id: record.id, child_invocation_count: childCalls.length,
+            child_invocations: childCalls.map(call => ({ name: call.name, definition_id: call.definitionId,
+              call_id: call.callId, parent_call_id: call.parentCallId })) });
+          result = { outcome: { kind: 'done', detail: 'collector application controller completed' }, value: value as Value };
+        } catch (error) {
+          runtime.trace.emit('application_controller_call', { schema: controller.schema, phase: 'failed',
+            module: controller.module, export: controller.export, operations: controller.operations,
+            root: record.semantics.root, task_id: record.id,
+            error: error instanceof Error ? error.message : String(error) });
+          throw error;
+        }
+      }
+    }
     catch (error) {
       if (options.onPartialExecution) {
         try { await options.onPartialExecution({ schema: 'natlang.partial_execution_snapshot/1', run_id: options.runId,
@@ -1797,8 +1855,24 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     const reportCompleteness = checkReportCompleteness(
       (record.semantics as { report_completeness?: ReportCompletenessSpec }).report_completeness,
       actual, executionGraph, invocationLedger);
+    const controller = record.semantics.application_controller;
+    const controllerEvents = trace.filter(event => event.kind === 'application_controller_call');
+    const operationFolder = `${record.semantics.root.slice(0, -3)}/${controller?.operations}`;
+    const controllerCalls = controllerEvents.find(event => event.phase === 'completed')?.child_invocations;
+    const invokedDeclaredOperation = Array.isArray(controllerCalls) && controllerCalls.some(call => {
+      if (!call || typeof call !== 'object') return false;
+      const definition = (call as { definition_id?: unknown }).definition_id;
+      return typeof definition === 'string' &&
+        (definition === `nl:${operationFolder}.nl` || definition.startsWith(`nl:${operationFolder}/`));
+    });
+    const controllerOk = !controller || (controllerEvents.length === 2 &&
+      controllerEvents[0]?.phase === 'start' && controllerEvents[1]?.phase === 'completed' &&
+      controllerEvents.every(event => event.schema === controller.schema && event.module === controller.module &&
+        event.export === controller.export && event.operations === controller.operations && event.task_id === record.id) &&
+      Number(controllerEvents[1]?.child_invocation_count) > 0 && invokedDeclaredOperation);
     const checks = { seeded_failure_requirement: failureSeen, expected_status: result.outcome.kind === expectedKind,
       honest_stop: honestStop, ...(decisive.length && expectedKind === 'quiesced' ? { stop_evidence: stopEvidence } : {}),
+      ...(controller ? { application_controller: controllerOk } : {}),
       effects: effectsOk, files: filesOk, world: worldOk,
       file_return_consistency: !actualFiles || !record.semantics.files_oracle ||
         checkFileReturn(actual, actualFiles, folderFiles!, record.semantics.files_oracle),

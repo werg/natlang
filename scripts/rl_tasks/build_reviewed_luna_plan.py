@@ -91,51 +91,59 @@ def _primary_world_group(row: dict) -> str:
     return next((group for group in groups if not group.startswith(('codebase:', 'world:'))), groups[0])
 
 
-def _intake_execution_adapter_bindings(intake_receipt: dict | None) -> list[tuple[Path, str]]:
-    """Return and revalidate the host files authenticated by codebase intake.
-
-    Intake-time validation alone is insufficient: the executable adapter can
-    change between intake and campaign planning. These paths become ordinary
-    reviewed-plan artifact pins, so dispatcher validation checks them again
-    immediately before launch.
-    """
+def _intake_external_service_files(intake_receipt: dict | None) -> list[dict[str, str]]:
+    """Revalidate every host source and fixture injected into collector cases."""
     if intake_receipt is None:
         return []
-    bindings = intake_receipt.get('execution_adapter_bindings', [])
-    if not isinstance(bindings, list):
-        raise ValueError('intake execution_adapter_bindings must be a list')
-    checked: list[tuple[Path, str]] = []
-    seen: set[Path] = set()
-    for binding in bindings:
-        if not isinstance(binding, dict):
-            raise ValueError('invalid intake execution adapter binding')
-        path_value, expected = binding.get('path'), binding.get('sha256')
-        if not isinstance(path_value, str) or not isinstance(expected, str):
-            raise ValueError('incomplete intake execution adapter binding')
-        path = Path(path_value).expanduser().resolve(strict=True)
-        if path in seen or not path.is_file() or _sha(path) != expected:
-            raise ValueError(f'Execution adapter changed since intake: {path}')
-        seen.add(path)
-        checked.append((path, expected))
+    package = intake_receipt.get('package_path')
+    services = intake_receipt.get('external_services', {})
+    if not isinstance(package, str) or not isinstance(services, dict):
+        raise ValueError('intake receipt is missing its collector package or external service bindings')
+    root = Path(package).expanduser().resolve(strict=True).parent
+    checked: list[dict[str, str]] = []
+    for alias, binding in sorted(services.items()):
+        if not isinstance(alias, str) or not isinstance(binding, dict):
+            raise ValueError('invalid intake collector service binding')
+        for role, path_key, hash_key in (('source', 'source_path', 'source_sha256'),
+                                         ('fixtures', 'fixtures_path', 'fixtures_sha256')):
+            relative, expected = binding.get(path_key), binding.get(hash_key)
+            if relative is None and expected is None and role == 'fixtures':
+                continue
+            if not isinstance(relative, str) or not relative or not isinstance(expected, str):
+                raise ValueError(f'incomplete collector service {role} binding for {alias}')
+            rel = Path(relative)
+            if rel.is_absolute() or any(part in {'', '.', '..'} for part in rel.parts):
+                raise ValueError(f'unsafe collector service {role} path for {alias}')
+            target = root / rel
+            path = target.resolve(strict=True)
+            traversed = root
+            symlinked = False
+            for part in rel.parts:
+                traversed = traversed / part
+                symlinked = symlinked or traversed.is_symlink()
+            if (symlinked or not path.is_relative_to(root) or path.is_relative_to(Path(package).resolve()) or
+                    not path.is_file() or _sha(path) != expected):
+                raise ValueError(f'collector service {role} changed since intake: {target}')
+            checked.append({'alias': alias, 'role': role, 'path': str(path), 'sha256': expected})
     return checked
 
 
-def _intake_execution_adapter_trees(intake_receipt: dict | None) -> list[dict]:
+def _intake_runtime_trees(intake_receipt: dict | None) -> list[dict]:
     if intake_receipt is None:
         return []
-    trees = intake_receipt.get('execution_adapter_trees', [])
+    trees = intake_receipt.get('runtime_dependency_trees', [])
     if not isinstance(trees, list):
-        raise ValueError('intake execution_adapter_trees must be a list')
+        raise ValueError('intake runtime_dependency_trees must be a list')
     checked = []
     for record in trees:
         if not isinstance(record, dict):
-            raise ValueError('invalid intake execution adapter tree binding')
+            raise ValueError('invalid intake collector runtime tree binding')
         actual = verify_runtime_tree(root=Path(record.get('root', '')),
                                      manifest_path=Path(record.get('manifest_path', '')),
                                      manifest_sha256=record.get('manifest_sha256', ''))
         for field in ('tree_sha256', 'file_count', 'total_bytes', 'files'):
             if actual[field] != record.get(field):
-                raise ValueError(f'Execution adapter runtime tree changed since intake: {record.get("root")}')
+                raise ValueError(f'Collector runtime tree changed since intake: {record.get("root")}')
         checked.append({key: record[key] for key in
                         ('name', 'root', 'manifest_path', 'manifest_sha256', 'tree_sha256', 'file_count', 'total_bytes')})
     return checked
@@ -308,21 +316,21 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
                  Path(__file__).resolve(), Path(__file__).with_name('intake_natlang_codebase.py'),
                  Path(__file__).with_name('execution_adapter.py'),
                  Path(__file__).with_name('audit_natlang_packages.py'), verification.parent / 'verification.json',
-                 protection_receipt]
+                 Path(__file__).with_name('codebase_services.py'), protection_receipt]
     if intake_receipt:
         artifacts.append(intake_receipt.resolve(strict=True))
-        adapter_bindings = _intake_execution_adapter_bindings(intake_record)
-        artifacts.extend(path for path, _ in adapter_bindings)
-        adapter_trees = _intake_execution_adapter_trees(intake_record)
-        artifacts.extend(Path(tree['manifest_path']) for tree in adapter_trees)
+        external_service_files = _intake_external_service_files(intake_record)
+        artifacts.extend(Path(item['path']) for item in external_service_files)
+        runtime_trees = _intake_runtime_trees(intake_record)
+        artifacts.extend(Path(tree['manifest_path']) for tree in runtime_trees)
     if diversity_manifest:
         artifacts.append(diversity_manifest.resolve(strict=True))
     artifact_hashes = {str(path.resolve(strict=True)): _sha(path.resolve(strict=True))
                        for path in artifacts if path.is_file()}
     if intake_record:
-        for adapter_path, expected_sha in _intake_execution_adapter_bindings(intake_record):
-            if artifact_hashes.get(str(adapter_path)) != expected_sha:
-                raise ValueError(f'Execution adapter changed while the reviewed plan was being assembled: {adapter_path}')
+        for external_file in _intake_external_service_files(intake_record):
+            if artifact_hashes.get(external_file['path']) != external_file['sha256']:
+                raise ValueError(f'Collector service changed while the reviewed plan was being assembled: {external_file["path"]}')
     intake_binding = None
     if intake_receipt:
         intake_path = intake_receipt.resolve(strict=True)
@@ -336,8 +344,9 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'runtime': str(runtime), 'runtime_receipt_sha256': artifact_hashes[str(runtime_receipt.resolve(strict=True))],
         'artifact_hashes': artifact_hashes,
         'intake_receipt_binding': intake_binding,
-        'execution_adapter_bindings': (intake_record or {}).get('execution_adapter_bindings', []),
-        'execution_adapter_trees': _intake_execution_adapter_trees(intake_record),
+        'external_service_bindings': _intake_external_service_files(intake_record),
+        'external_services': (intake_record or {}).get('external_services', {}),
+        'runtime_dependency_trees': _intake_runtime_trees(intake_record),
         'source_inventory': {'path': str(inventory_output.resolve()), 'sha256': artifact_hashes[str(inventory_output.resolve())]},
         'campaign_root': str(campaign_root), 'claim_ledger': str(campaign_root / 'dispatch/claims.jsonl'),
         'storage_root': str(storage_root),
