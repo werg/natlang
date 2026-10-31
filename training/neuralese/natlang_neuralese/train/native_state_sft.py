@@ -375,8 +375,9 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     ``accumulate``: earlier micro-batches of the same optimizer update (``--accumulate-batches``). Their backwards
     run outside ``in_backward()``, so the gated MuonSR hooks stay idle and every gradient accumulates in ``.grad``;
     ``batch`` is the last micro-batch, whose backward steps each latent with the whole update's gradient. Each
-    micro-batch's loss is weighted by its share of the update's scored graphs, so the update optimizes the same
-    graph mean as one batch holding all of them. Without accumulation a 32k-token batch of ~4 graphs drove each
+    micro-batch's loss is weighted by its scored-graph count. Invocation-normalized objectives use an update
+    graph mean; token-mass objectives use a fixed 64-graph reference so packing cannot change graph coefficients.
+    Without accumulation a 32k-token batch of ~4 graphs drove each
     fixed-size Muon step and the weights random-walked (plans/neuralese/LFM3_REGRESSION_INVESTIGATION_20261029.md)."""
     if backend is not None:
         backend.reset_row_counts()
@@ -391,7 +392,14 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     scored = [len(micro) if objective is not None else
               sum(any(weight > 0 for weight in example.target_weights) or bool(example.decisions) for example in micro)
               for micro in micro_batches]
-    shares = ([count / sum(scored) for count in scored] if sum(scored) else [1. / len(micro_batches)] * len(micro_batches))
+    modes={getattr(example,'loss_normalization','graph') for micro in micro_batches for example in micro}
+    if len(modes)>1:raise ValueError('one update cannot mix token-mass and graph-normalized examples')
+    # Token-mass CE is an additive objective. A fixed recorded reference
+    # preserves each graph's coefficient when packed update sizes change.
+    if objective is None and modes=={'token'} and sum(scored):
+        shares=[count / 64.0 for count in scored]
+    else:
+        shares = ([count / sum(scored) for count in scored] if sum(scored) else [1. / len(micro_batches)] * len(micro_batches))
     loss_weight = None if precision is None or precision[3] == 1.0 else float(precision[3])
     losses, parts = [], []
     try:
@@ -2299,6 +2307,16 @@ def _main(argv=None, *, requested_refresh):
     train.set_ce_policy(ce_policy if objective is None else None)
     held.set_ce_policy(ce_policy if objective is None else None)
     checkpoint_options['ce_supervision_active'] = ce_policy is not None and objective is None
+    if ce_policy is not None and objective is None:
+        from .own_output_supervision import policy_objective
+        if policy_objective(ce_policy).get('mass') == 'token':
+            norm_history=list(saved_options.get('token_mass_update_normalization_history') or [])
+            norm={'schema':'natlang.token-mass-update-normalization/1','graph_reference':64,
+                  'policy':'fixed-graph-reference','stage_id':args.stage_id,
+                  'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))) if saved_training else 0,
+                  'preserved':'weights, optimizer, RNG and earned exposure'}
+            if not norm_history or any(norm_history[-1].get(k)!=norm[k] for k in ('graph_reference','policy','stage_id')):norm_history.append(norm)
+            checkpoint_options['token_mass_update_normalization_history']=norm_history
     previous_quota = (saved_options.get('communication_quota_policy') or {})
     requested_visits = args.communication_min_visits
     if requested_visits is None and previous_quota.get('stage_id') == args.stage_id:

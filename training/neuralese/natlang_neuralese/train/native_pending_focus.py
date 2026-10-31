@@ -80,12 +80,14 @@ def supersede_unearned_focus(history, old_frame, *, proof_sha256, global_step):
     doc, _ = dependencies(record['request'])
     bindings = old_frame.get('source_row_bindings') or {}
     counts = old_frame.get('exposure_counts') or {}
+    receipts=old_frame.get('source_receipts') or []
+    source_hashes={source.get('sha256') for source in (receipts[0].get('sources') or [])} if receipts else set()
     credits = record.get('initial_credits')
     if not isinstance(credits, dict) or set(credits) != {r['id'] for r in doc['rows']}:
         raise ValueError('pending focus initial credit inventory differs')
     for row in doc['rows']:
         ident = row['id']
-        if bindings.get(ident) != row['binding'] or counts.get(ident) != 0 or credits[ident] != 0:
+        if bindings.get(ident) != row['binding'] or row['source_sha256'] not in source_hashes or counts.get(ident) != 0 or credits[ident] != 0:
             raise ValueError('pending focus does not bind an unearned old-stage row')
     record.update({'state': 'superseded-unearned', 'superseded_at_global_step': int(global_step),
                    'supersession_proof_sha256': proof_sha256,
