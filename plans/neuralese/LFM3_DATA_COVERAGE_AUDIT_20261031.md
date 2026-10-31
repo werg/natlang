@@ -301,3 +301,32 @@ Neuralese over broad sources (item 6), in order of readiness:
   distinct call signatures and payloads per packed group, not row counts.
 - **Variant copies:** keep the 255k `:prompt-full` copies as prompt robustness, but count them as duplicates in
   diversity and family shares.
+
+## 6. Recovery progress (2026-10-31, supervisor order: fix delivery and recover the losses)
+
+Custody and held checks are unchanged throughout. Every recovered row still passes render verification, the
+current protection union and held closure before it is sealed.
+
+| defect | state | commit / unit |
+|---|---|---|
+| D1 register crash | fixed: graphed items with no or failed verification are skipped. The queue loop registers every 30 min; 92 renders are registered, including codeagent, rightfit, deepdive (+ref-qa), agentsynth and harness | a08e9eae6, 931242166 |
+| D2/D3 all-or-nothing verification, parts renders | per-document exact subset is the normal path for direct and parts renders. It reproduces the one-off repair's counts exactly. The queue launches `subset` for every eligible verify-failed item: 17 queued, post-step slots raised 3 → 6 | 892fb2986 |
+| reference-free renders (coding mix) | verify with `path: None` (decode, call markup, train/test overlap, target parse) | 3e4263c2d |
+| D4 gemini registry reason | `--registry-admits-reason` from the receipt or row hold reason; all 10 gemini renders re-queued as `-r2` | dd0eac29f |
+| v13-r2, static-s7k | stale state moved to `/mnt/external/natlang-lfm3-data-20261028/stale-render-state-20261031/`; re-rendering with `--serving-entry mix` | queue |
+| D5 Search/OWL | LFM3 parts render running (164 turn files, protected bgkit index, serving mix) | queue `external-expansion-search-owl-native-20261015-v1-render` |
+| D5 acquired sessions | `convert_acquired_sessions_student.py`: the same converter, protection v3 manifest and decision holds over all 14,767 admitted exports (D13 12,223, D14 2,493, D32 49; 15 D24 `/work` exports are missing). Two shards, output `/mnt/external/natlang-lfm3-data-20261028/acquired-sessions-lfm3-20261031/` | d66f2ce5a; `lfm3-cov-acq-{0,1}` |
+| D8 port records | S3 re-extract at 100k per family (superset of the 25k selection) is waiting for ledger memory. Conversion of all 45 families follows | `lfm3-cov-s4-subset` |
+| D9/D10 carve | component carve (one draw per component, max 3,000 held rows); overflow rows go back to train | policy v4 |
+| D11 un-awaited | named and bound-then-awaited templates are handled: folder-criteria 142 → 0 flagged | 78e232aed |
+| refine-judge (1,048 rows scored 0) | crisp-checker-label rows count as verified | a1dc24a4b |
+| D14 caps / mass | `balance()`: 24 rows per near-duplicate cluster, family share 4% with a 3,000-row floor, continuation families exempt. Logical-family declared/1 objective from an exact own-output census (communication 40 / natlang 40 / coding 12 / external-agent 8), with max_scale 8 as a true cap. This replaces source-cohort | d66f2ce5a, a1dc24a4b |
+| 255k `:prompt-full` copies | each decision appears once, in either its program-header or its full view (20% header share, policy `prompt_views`) | d66f2ce5a |
+| D15 coding | v2 sample at per-repo 12 (v1 had 2: 1,892 of 24,406 trajectories). v2 is a superset of v1, so v1 is retired from the queue when v2 graphs | `lfm3-cov-coding-v2` |
+| rescoring | scores now live in `runs/lfm3-mixture/scores/idiom-<sha12 of idiom_scores.py>`, so every scorer fix rescores. `score-renders` and `score-teachers` are running at low priority | `lfm3-score-*`, `lfm3-cov-score-teachers` |
+| D12 regrade, D13 answer-only | open (D12 is a hold; it is not relaxed) | |
+
+Next: `build_lfm3_joint_sft.py build --policy v4` once scoring completes. Held packets are dev v1/v2 and held v3/v4.
+The build then runs the protection-union check, CE, logical-family objective, geometry, learner inputs and
+registration, followed by a composition report by source and task shape. Target: ≥ ~900k docs and ~360M supervised
+tokens.
