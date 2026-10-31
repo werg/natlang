@@ -37,24 +37,24 @@ def exports(args):
     profile (the d32 history-keep entries were converted with --history-reasoning-policy keep). An audit's complete
     source accounting lists every export of the acquisition; only those with a converted receipt are bound here."""
     corpora = json.loads(REGISTRY.read_text())['corpora']
-    policies, unresolved = {}, set()
+    policies, unresolved, receipts = {}, set(), set()
     for entry in corpora:
         if entry.get('source_class') != SOURCE_CLASS or not entry.get('training_admission'):
             continue
         audit = (entry.get('build') or {}).get('audit')
-        if not audit:
+        if audit:
+            receipts.update(re.findall(r'"(/[^"]*?/lfm25/receipt\.json)"', (ROOT / entry['path'] / audit).read_text()))
+    print(json.dumps({'receipts': len(receipts)}), flush=True)
+    for receipt in sorted(receipts):
+        if not Path(receipt).exists():
+            unresolved.add(receipt)
             continue
-        text = (ROOT / entry['path'] / audit).read_text()
-        for receipt in set(re.findall(r'"(/[^"]*?/lfm25/receipt\.json)"', text)):
-            if not Path(receipt).exists():
-                unresolved.add(receipt)
-                continue
-            value = json.loads(Path(receipt).read_text())
-            export = value['export_receipt']['path']
-            policy = (value.get('prepared_tokenizer') or {}).get('explicit_history_reasoning_policy')
-            # One conversion per export: an export converted under both profiles takes the explicit one.
-            if export not in policies or policy is not None:
-                policies[export] = policy
+        value = json.loads(Path(receipt).read_text())
+        export = value['export_receipt']['path']
+        policy = (value.get('prepared_tokenizer') or {}).get('explicit_history_reasoning_policy')
+        # One conversion per export: an export converted under both profiles takes the explicit one.
+        if export not in policies or policy is not None:
+            policies[export] = policy
     listed = sorted(p for p in policies if Path(p).exists())
     Path(args.out).write_text(json.dumps({'schema': 'natlang.acquired-session-exports/2', 'exports': listed,
                                           'history_reasoning_policy': {e: policies[e] for e in listed if policies[e]},

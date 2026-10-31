@@ -199,6 +199,12 @@ def build(args):
              '--ce-policy', str(base_policy), '--targets', str(REPO / args.policy), '--fingerprint', fingerprint,
              '--role-ids', *role_ids, '--out', str(out / 'objective')])
     ce_policy = out / 'objective' / 'ce-policy.json' if logical else base_policy
+    if not (out / 'prompt-view-verify.json').exists():
+        # Trainer-load verification of every train leaf (build_prompt_view_mix.py verify): own-outputs/1 puts no weight
+        # before the first assistant decision, every row keeps a target, prompt-view distribution reported.
+        leaves = [str(mixture / s['path']) for s in json.loads((mixture / 'train-sources.json').read_text())['sources']]
+        run([PY, 'scripts/neuralese_data/build_prompt_view_mix.py', 'verify', '--source', *leaves,
+             '--base-tokenizer', tokenizer, '--out', str(out / 'prompt-view-verify.json')])
     run([PY, 'scripts/neuralese_data/build_native_packed_geometry.py', '--source', str(mixture / 'train-sources.json'),
          '--tokenizer-fingerprint', fingerprint, '--role-ids', *role_ids, '--out', str(out / 'geometry')])
     geometry = json.loads((out / 'geometry' / 'packed-geometry-build.json').read_text())
