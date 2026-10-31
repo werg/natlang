@@ -231,3 +231,27 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     validated, identity = dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
     assert validated['prompt_rendering'] == 'full'
     assert identity['slots'] == 6 and identity['source_inventory']['entries'] == 2
+
+
+def test_intake_folder_files_and_verifier_targets(tmp_path):
+    package, root = _package(tmp_path)
+    path = root / 'worlds/train.jsonl'
+    row = json.loads(path.read_text())
+    row['folder_files'] = {'src/app.ts': 'before'}
+    row['expected_files'] = {'src/app.ts': 'after'}
+    path.write_text(json.dumps(row) + '\n')
+    out = tmp_path / 'out.jsonl'
+    intake(package, output=out)
+    case = json.loads(out.read_text())
+    assert case['semantics']['folder_files'] == {'src/app.ts': 'before'}
+    assert case['semantics']['expected_files'] == {'src/app.ts': 'after'}
+    assert 'after' not in json.dumps(case['semantics']['files'])
+    for bad in ('../escape', '/absolute', 'a/./b', 'a//b', 'a\\b'):
+        row['folder_files'] = {bad: 'content'}
+        path.write_text(json.dumps(row) + '\n')
+        with pytest.raises(ValueError, match='safe relative paths'):
+            intake(package, output=out)
+    del row['folder_files']
+    path.write_text(json.dumps(row) + '\n')
+    with pytest.raises(ValueError, match='expected_files requires folder_files'):
+        intake(package, output=out)

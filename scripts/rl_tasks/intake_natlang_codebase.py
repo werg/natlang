@@ -139,6 +139,18 @@ def _worlds(root: Path, metadata: dict) -> list[dict]:
             seen_ids.add(row['id'])
             if not isinstance(row['inputs'], dict):
                 raise ValueError(f'{path}:{line_no}: inputs must be an object')
+            for field in ('folder_files', 'expected_files'):
+                if field not in row:
+                    continue
+                files = row[field]
+                if not isinstance(files, dict) or any(
+                    not isinstance(name, str) or not name or name.startswith('/') or '\\' in name
+                    or any(part in {'', '.', '..'} for part in name.split('/'))
+                    or not isinstance(value, str) for name, value in files.items()
+                ):
+                    raise ValueError(f'{path}:{line_no}: {field} must map safe relative paths to text')
+            if 'expected_files' in row and 'folder_files' not in row:
+                raise ValueError(f'{path}:{line_no}: expected_files requires folder_files')
             source_groups = row.get('source_groups')
             if (not isinstance(source_groups, list) or not source_groups or
                     any(not isinstance(group, str) or not group.strip() for group in source_groups) or
@@ -273,6 +285,9 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
         }
         if external_services:
             case['semantics']['services'] = external_services
+        for field in ('folder_files', 'expected_files'):
+            if field in row:
+                case['semantics'][field] = row[field]
         cases.append(case)
     return cases
 
