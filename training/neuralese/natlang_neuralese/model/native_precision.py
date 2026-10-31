@@ -95,14 +95,17 @@ def base_restore_transition(previous, current):
            'merges.txt','added_tokens.json'}
     expected={k:v for k,v in inventory.items() if k in names}
     def valid(receipt):
-        return (isinstance(receipt,dict) and receipt.get('schema')=='natlang.native-config-only-checkpoint-restore/1'
+        return (isinstance(receipt,dict) and set(receipt)=={'schema','mode','pinned_base_inventory_sha256','verified_local_files'}
+            and receipt.get('schema')=='natlang.native-config-only-checkpoint-restore/1'
             and receipt.get('mode')=='checkpoint-backbone-state+verified-config-tokenizer'
             and receipt.get('pinned_base_inventory_sha256')==digest and receipt.get('verified_local_files')==expected
             and 'config.json' in expected and any(k.endswith('.safetensors') for k in inventory))
-    if not valid(after) or (before is not None and not valid(before)):
+    if ((before is not None and not valid(before)) or (after is not None and not valid(after))
+            or (before is None and after is None)):
         raise ValueError('checkpoint restore receipt is not bound to the pinned base inputs')
     return {'from':before,'to':after,'base_inventory_sha256':digest,
-            'input_bytes':'verified config and tokenizer; backbone restored from full checkpoint'}
+            'input_bytes':'verified config and tokenizer; backbone restored from full checkpoint',
+            'receipt_location':'operational-metadata' if after is None else 'model-config'}
 
 def same_source_precision_identity(previous, current):
     """Only declared native arithmetic may change in an ordinary continuation."""
