@@ -272,8 +272,14 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
         'build': build, 'files': plan_builder.tree_identity(runtime)}))
     authority = tmp_path / 'authority.json'
     authority.write_text('{}\n')
+    adapter = tmp_path / 'host' / 'runner.py'
+    adapter.parent.mkdir()
+    adapter.write_text('adapter-v1\n')
     intake_receipt = tmp_path / 'intake.json'
-    intake_receipt.write_text(json.dumps({'admission_eligible': True}))
+    adapter_sha = hashlib.sha256(adapter.read_bytes()).hexdigest()
+    intake_receipt.write_text(json.dumps({'admission_eligible': True,
+        'execution_adapter_bindings': [{'path': str(adapter.resolve()), 'relative_path': 'host/runner.py',
+                                        'sha256': adapter_sha}]}))
     calls = []
 
     class Protected:
@@ -299,6 +305,7 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     assert '--no-resumable' in report['dispatch_command_after_review']
     assert len(plan['cases']) == 2 and len(calls) == len(rows)
     assert plan['source_inventory']['sha256']
+    assert plan['artifact_hashes'][str(adapter.resolve())] == adapter_sha
     assert report['operation_counts'] == {'audit.nl': 1, 'reconcile.nl': 1}
     reviewed = {**plan, 'root_approved': True}
     reviewed_path = tmp_path / 'reviewed-plan.json'
@@ -306,6 +313,9 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     validated, identity = dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
     assert validated['prompt_rendering'] == 'full'
     assert identity['slots'] == 6 and identity['source_inventory']['entries'] == 2
+    adapter.write_text('adapter-tampered\n')
+    with pytest.raises(ValueError, match='Reviewed artifact changed'):
+        dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
 
 
 def test_intake_folder_files_and_verifier_targets(tmp_path):
