@@ -23,6 +23,7 @@ if str(REPO) not in sys.path:
 
 from scripts.rl_tasks.common import jsonl_write, slug, text_digest
 from scripts.rl_tasks.audit_natlang_packages import audit
+from scripts.rl_tasks.codebase_services import load_external_services
 
 
 def _sha(value: bytes) -> str:
@@ -150,6 +151,17 @@ def _worlds(root: Path, metadata: dict) -> list[dict]:
                 pass
             else:
                 raise ValueError(f'{path}:{line_no}: oracle must be exact or a judged object with an independent rubric')
+            reference_action = row.get('reference_action')
+            if reference_action is not None:
+                if (not isinstance(reference_action, dict) or reference_action.get('tool') != 'eval' or
+                        not isinstance(reference_action.get('arguments'), dict) or
+                        not isinstance(reference_action['arguments'].get('code'), str) or
+                        reference_action['arguments'].get('finish') is not True):
+                    raise ValueError(f'{path}:{line_no}: reference_action must be a finishing eval tool action')
+            wrong_code = row.get('wrong_code', [])
+            if (not isinstance(wrong_code, list) or
+                    any(not isinstance(code, str) or not code.strip() for code in wrong_code)):
+                raise ValueError(f'{path}:{line_no}: wrong_code must be a list of nonempty eval programs')
             assigned = _split_for(row, split, metadata, row['group_id'])
             previous = group_splits.setdefault(row['group_id'], assigned)
             if previous != assigned:
@@ -161,7 +173,8 @@ def _worlds(root: Path, metadata: dict) -> list[dict]:
 
 
 def _make_cases(program_id: str, package_revision: str, package: dict[str, str], metadata: dict,
-                worlds: list[dict]) -> list[dict]:
+                worlds: list[dict], external_services: dict[str, str],
+                service_bindings: dict[str, dict[str, str]]) -> list[dict]:
     dataset = metadata.get('dataset')
     required_dataset = ('identity', 'revision', 'license', 'source_uri', 'artifact_path', 'artifact_sha256',
                         'provenance_path', 'provenance_sha256', 'license_evidence_path', 'license_evidence_sha256')
@@ -238,7 +251,9 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
                 'mode': row.get('mode', 'multi_call' if row.get('invocation_index', 0) else 'single_call'),
                 'inline': 'optional', 'evidence': {'world': [], 'retrieved': [], 'background': []},
                 'assumptions': [], 'decisive': [], 'plausible_actions': [], 'minimum_sequence': [],
-                'reference': {'root': [['return_result', {'status': 'success', 'value': row['expected']}]]},
+                'reference': {'root': [[row['reference_action']['tool'], row['reference_action']['arguments']]]
+                              if row.get('reference_action') else
+                              [['return_result', {'status': 'success', 'value': row['expected']}]]},
                 'rl': {'level': int(row.get('level', 2)), 'family': f'ext_natlang_codebase_{slug(program_id, 36)}_{slug(row["task_family"], 30)}',
                        'basis': 'independent-codebase-world-fixture'},
                 'external': {'source': 'natlang-codebase-intake', 'upstream': dataset['identity'],
@@ -249,11 +264,15 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
                              'operation': root, 'program_id': program_id, 'program_revision': package_revision,
                              'invocation_index': row.get('invocation_index'), 'entity_model_sha256': _sha(json.dumps(entity_model, sort_keys=True).encode()),
                              'workflow_ids': row.get('workflow_ids', []), 'instruction_sha256': text_digest(row['task']),
+                             'external_services': service_bindings,
+                             'checks': {'wrong_code': row.get('wrong_code', [])},
                              'oracle_kind': 'exact' if oracle == 'exact' else 'judged'},
             },
             'semantics': {'root': root, 'files': case_files, 'inputs': row['inputs'], 'expected': row['expected'],
                           'oracle': 'exact' if oracle == 'exact' else oracle},
         }
+        if external_services:
+            case['semantics']['services'] = external_services
         cases.append(case)
     return cases
 
@@ -271,9 +290,12 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
         raise ValueError('metadata.split is required, including held-world protections')
     metadata = _bound_dataset_paths(metadata, package_root.parent)
     files = _project(package_root, metadata)
+    external_services, service_bindings = load_external_services(package_root, metadata)
     world_rows = _worlds(package_root, metadata)
-    package_revision = metadata['source_revision']
-    cases = _make_cases(metadata['program_id'], package_revision, files, metadata, world_rows)
+    service_set_sha = _sha(json.dumps(service_bindings, sort_keys=True, separators=(',', ':')).encode())
+    package_revision = metadata['source_revision'] + (f'+services:{service_set_sha}' if service_bindings else '')
+    cases = _make_cases(metadata['program_id'], package_revision, files, metadata, world_rows,
+                        external_services, service_bindings)
     output.parent.mkdir(parents=True, exist_ok=True)
     exact_cases = [case for case in cases if case['semantics']['oracle'] == 'exact']
     judged_cases = [case for case in cases if isinstance(case['semantics']['oracle'], dict)]
@@ -282,14 +304,26 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
     if judged_cases:
         judged_output.parent.mkdir(parents=True, exist_ok=True)
         jsonl_write(judged_output, judged_cases)
+    worlds_dir = package_root.parent / 'worlds'
+    world_bindings = []
+    for filename in ('train.jsonl', 'dev.jsonl', 'confirmation.jsonl'):
+        path = worlds_dir / filename
+        if path.is_file():
+            world_bindings.append({'path': f'worlds/{filename}', 'sha256': _sha(path.read_bytes())})
     report = audit([package_root], max_near_partners=0)
     record = {
         'schema': 'natlang.codebase_intake_receipt/1', 'program_id': metadata['program_id'],
-        'source_revision': package_revision, 'dataset': metadata.get('dataset'),
-        'package_path': str(package_root), 'package_sha256': _sha(json.dumps(files, sort_keys=True, ensure_ascii=False).encode()),
+        'source_revision': package_revision, 'package_source_revision': metadata['source_revision'],
+        'dataset': metadata.get('dataset'),
+        'package_path': str(package_root),
+        'package_sha256': _sha(json.dumps({'files': files, 'services': external_services}, sort_keys=True, ensure_ascii=False).encode()),
+        'external_services': service_bindings,
         'world_count': len(world_rows), 'case_count': len(cases),
         'exact_case_count': len(exact_cases), 'judged_case_count': len(judged_cases),
         'exact_cases_path': str(output), 'judged_cases_path': str(judged_output) if judged_cases else None,
+        'exact_cases_sha256': _sha(output.read_bytes()),
+        'judged_cases_sha256': _sha(judged_output.read_bytes()) if judged_cases else None,
+        'world_bindings': world_bindings,
         'split_counts': {split: sum(1 for row in world_rows if row['split'] == split) for split in ('train', 'dev', 'confirmation')},
         'distinct_world_groups': len({row['group_id'] for row in world_rows}),
         'distinct_task_families': len({row['task_family'] for row in world_rows}),
