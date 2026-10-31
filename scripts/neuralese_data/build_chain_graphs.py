@@ -8,9 +8,9 @@ one-2-node-graph-per-edge conversion for communication data (audit D7, LFM3_DATA
 - **One graph per chain.** Every decision of a trajectory is a node; every producer span and consumer import sits at
   its recorded position, so a producer read by several consumers (fan-out) or a consumer reading several producers
   (fan-in) is one graph, trained in one pass, and the consumers' answer decisions stay in it.
-- **Reader cap per payload** (``--reader-cap``, E2E_DATA.md: 64; ``--result-reader-cap`` for computed child results).
-  Edges are kept for the first N reads (input order) of a given payload body; later reads of that body stay ordinary
-  text context in their node.
+- **Target dedupe** (``--target-cap``) limits repeated output loss while retaining every source dependency edge and
+  every decision in the trajectory. Reader-cap flags are retained in historical run receipts but do not remove
+  producer/consumer state dependencies.
 - **Identical-target dedupe** (``--target-cap``). A decision whose exact target (canonical JSON) has already been
   supervised N times keeps no weight (decisions writing a computed child result are exempt: their context differs); it stays in the graph only when it produces a kept edge, and then only its
   exported span keeps weight. Decisions with neither weight nor a kept edge are dropped from the chain.
@@ -69,6 +69,16 @@ STATE_INDEX_CACHE = None  # set from --index-cache: byte offsets of records.json
 
 def edge_digest(edge):
     return hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def dependency_edge_plan(edges):
+    """Keep the complete authenticated source dependency set, independent of loss caps."""
+    return {edge_digest(edge) for edge in edges}
+
+
+def source_chain_records(chain):
+    """Return every decision in its original order; dedupe never truncates graph context."""
+    return list(chain['records'])
 
 
 def render_plan_arguments(args):
@@ -331,7 +341,7 @@ def render(chain, records, edges, pieces, prompt):
 
 
 def convert_unit(task):
-    """Phase 2: render one capped chain. Returns (kind, split, graph-or-omission)."""
+    """Phase 2: render one source-complete chain; caps mask loss, not dependencies."""
     from natlang_neuralese.data.native_graph_schema import parse_graph, communication_classification
     chain, locations, edges, pieces_path, plan = task
     if locations is None:
@@ -369,50 +379,53 @@ def convert_unit(task):
     kept_edges, repairs = [], collections.Counter()
     for edge in edges:
         if edge_digest(edge) not in plan['edges']:
-            continue
+            return 'omission', chain['split'], {'trajectory': chain['trajectory'],
+                                                'reason': 'planned-source-edge-missing'}
         writer, reader = records.get(edge['writer_record_id']), records.get(edge['reader_record_id'])
         if writer is None or reader is None or order[edge['writer_record_id']] >= order[edge['reader_record_id']]:
-            repairs['edge-endpoint-order'] += 1; continue
-        try:  # the edge's own authentication; a failing edge leaves the chain, its decisions stay
+            repairs['edge-endpoint-order'] += 1
+            return 'omission', chain['split'], {'trajectory': chain['trajectory'],
+                                                'reason': 'source-edge-endpoint-order',
+                                                'repairs': dict(repairs)}
+        try:  # a failed source dependency invalidates the complete chain
             body = writer_payload(writer, edge['write_name'], edge['body_sha256'])
             source_occurrences(writer, reader, edge['write_name'], body, edge['body_sha256'],
                                writer_occurrence_id=edge.get('writer_occurrence_id'),
                                reader_occurrence_id=edge.get('reader_occurrence_id'))
         except (ValueError, KeyError, TypeError) as error:
-            repairs['edge-unauthenticated: ' + str(error)[:60]] += 1; continue
+            repairs['edge-unauthenticated: ' + str(error)[:60]] += 1
+            return 'omission', chain['split'], {'trajectory': chain['trajectory'],
+                                                'reason': 'source-edge-unauthenticated',
+                                                'repairs': dict(repairs)}
         kept_edges.append(edge)
     pieces = pieces_for(pieces_path)
-    dropped = set()
+    current = kept_edges
+    # Preserve each source decision, including context-only and deduped nodes.
+    keep = source_chain_records(chain)
+    if not keep or (not any(rid in plan['supervised'] for rid in keep) and not current):
+        return 'omission', chain['split'], {'trajectory': chain['trajectory'],
+                                            'reason': 'no-supervised-decision-after-dedupe'}
+    sub = {**chain, 'records': keep, 'edges': len(current)}
+    sub_records = {rid: records[rid] for rid in keep}
     graph, prompt, reason = None, None, None
-    for attempt in range(3):
-        current = [edge for edge in kept_edges if edge['writer_record_id'] not in dropped
-                   and edge['reader_record_id'] not in dropped]
-        writers = {edge['writer_record_id'] for edge in current}
-        keep = [rid for rid in chain['records'] if rid not in dropped and (rid in plan['supervised'] or rid in writers)]
-        if not keep or (not any(rid in plan['supervised'] for rid in keep) and not current):
-            return 'omission', chain['split'], {'trajectory': chain['trajectory'],
-                                                'reason': 'no-supervised-decision-after-dedupe'}
-        sub = {**chain, 'records': keep, 'edges': len(current)}
-        sub_records = {rid: records[rid] for rid in keep}
-        failed = None
-        for prompt in STATE['prompts']:
-            try:
-                graph = render(sub, sub_records, current, pieces, prompt)
-            except (ValueError, KeyError, TypeError, IndexError) as error:
-                graph, reason = None, 'render-error: ' + str(error)[:240]
-                # A decision the renderer cannot render leaves the chain with its edges; the rest is retried.
-                failed = set(re.findall(r'"id": "([^"]+)"', str(error))) & set(keep)
-                break
-            if sum(len(node['token_ids']) for node in graph['nodes']) <= STATE['max_tokens']:
-                reason = None; break
-            reason, graph = 'graph-over-token-cap', None
-        if graph is not None or not failed:
+    failed = None
+    for prompt in STATE['prompts']:
+        try:
+            graph = render(sub, sub_records, current, pieces, prompt)
+        except (ValueError, KeyError, TypeError, IndexError) as error:
+            graph, reason = None, 'render-error: ' + str(error)[:240]
+            failed = set(re.findall(r'"id": "([^"]+)"', str(error))) & set(keep)
             break
-        dropped |= failed
+        if sum(len(node['token_ids']) for node in graph['nodes']) <= STATE['max_tokens']:
+            reason = None; break
+        reason, graph = 'graph-over-token-cap', None
+    if graph is None and failed:
         repairs['decision-unrenderable'] += len(failed)
+        return 'omission', chain['split'], {'trajectory': chain['trajectory'],
+                                            'reason': 'source-decision-unrenderable',
+                                            'repairs': dict(repairs)}
     if graph is None:
         return 'omission', chain['split'], {'trajectory': chain['trajectory'], 'reason': reason}
-    kept_edges = current
     # Identical targets beyond the cap keep no weight; a kept producer keeps weight only on its exported span.
     names = {rid: f'n{index}' for index, rid in enumerate(keep)}
     for rid, node in zip(keep, graph['nodes']):
@@ -434,6 +447,8 @@ def convert_unit(task):
         'decisions_kept': len(keep), 'edges_in_source_chain': len(edges), 'edges_kept': len(kept_edges),
         'decisions_without_weight': sum(rid not in plan['supervised'] for rid in keep),
         'reader_cap': STATE['reader_cap'], 'target_cap': STATE['target_cap'],
+        'dependency_retention': 'all-source-edges-authenticated',
+        'loss_deduplication': 'target-weights-only',
         'repairs': dict(repairs)}
     stats = {'nodes': len(graph['nodes']), 'tokens': sum(len(n['token_ids']) for n in graph['nodes']),
              'supervised_tokens': sum(1 for n in graph['nodes'] for w in n['target_weights'] if w > 0),
@@ -638,13 +653,12 @@ def main():
                     supervised.add(rid)
                 elif rid in shas and target_count[shas[rid]] < args.target_cap:
                     target_count[shas[rid]] += 1; supervised.add(rid)
-            kept = set()
+            # Diversity caps govern target loss mass, not execution dependencies.
+            # Preserve every edge so deduped readers still consume their producer state.
+            kept = dependency_edge_plan(unit[2])
             for edge in unit[2]:
                 computed = edge.get('kind') in args.computed_kinds
-                key = (computed, edge['body_sha256'])
-                if edge['reader_record_id'] in supervised and body_count[key] < (
-                        args.result_reader_cap if computed else args.reader_cap):
-                    body_count[key] += 1; kept.add(edge_digest(edge))
+                body_count[(computed, edge['body_sha256'])] += 1
             plans.append({'supervised': supervised, 'edges': kept})
         totals['distinct_targets'] = len(target_count)
         totals['distinct_payloads'] = len({e['body_sha256'] for u in units for e in u[2]})
