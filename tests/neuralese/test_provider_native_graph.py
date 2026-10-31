@@ -11,6 +11,7 @@ from natlang_neuralese.data.provider_native_graph import (native_graph_from_luna
                                                           native_graph_from_luna_episode)
 from natlang_neuralese.data.native_graph import graph_loss
 from natlang_neuralese.serve.teacher_source_receipt import validate_provider_teacher_source
+from natlang_neuralese.data.provider_teacher_source import _rewrite_target_text_spans
 
 
 def _sha(data):
@@ -19,6 +20,30 @@ def _sha(data):
 
 def _canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+
+
+def test_luna_provider_return_result_wrapper_rewrites_to_bound_native_span():
+    body = '{"kind":"evidence","lineIds":[292]}'
+    wrapped = "<|neuralese|>" + body + "<|/neuralese|>"
+    source_turn = {"invocation_id": "case/12", "raw_response_sha256": "a" * 64,
+        "assistant": {"calls": [{"tool": "return_result", "arguments": {
+            "status": "success", "value": wrapped}}]}}
+    target = {"role": "assistant", "content": "", "tool_calls": [{"id": "teacher_12_0",
+        "type": "function", "function": {"name": "return_result",
+        "arguments": json.dumps({"status": "success", "value": wrapped}, separators=(",", ":"))}}]}
+    rewritten, spans, binding = _rewrite_target_text_spans(target, source_turn)
+    assert len(spans) == 1
+    span = spans[0]
+    assert span["path"] == ["tool_calls", 0, "arguments", "value"]
+    assert span["text"] == body
+    args = json.loads(rewritten["tool_calls"][0]["function"]["arguments"])
+    assert args["value"] == span["marker"] and "<|neuralese|>" not in args["value"]
+    assert binding["raw_target_sha256"] == _sha(_canonical(target))
+    assert binding["rewritten_target_sha256"] == _sha(_canonical(rewritten))
+    broken = copy.deepcopy(target)
+    broken["tool_calls"][0]["function"]["arguments"] = json.dumps({"status": "success", "value": "different"})
+    with pytest.raises(ValueError, match="does not map"):
+        _rewrite_target_text_spans(broken, source_turn)
 
 
 def test_luna_text_source_replays_as_student_encoder_and_full_gradient_graph(tmp_path):
@@ -78,6 +103,7 @@ def test_luna_text_source_replays_as_student_encoder_and_full_gradient_graph(tmp
         "transport_provenance_sha256": "d" * 64,
         "actor": {"model": "gpt-6-luna", "provider": "openai-codex",
                   "role": "teacher", "transport": "pi-provider"},
+        "target_text_spans": [],
         "typed_text_writes": [{"block_id": teacher_id, "body_sha256": _sha(body.encode()),
             "source": "eval-finish", "writer_call_id": source_call, "writer_node": source_node,
             "host_result_receipt_sha256": chr(101 + i) * 64,

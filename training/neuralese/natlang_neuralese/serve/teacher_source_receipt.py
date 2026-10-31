@@ -33,6 +33,7 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
         "plan_path", "plan_sha256", "runtime_path",
         "runtime_receipt_sha256", "split", "source_groups", "trace_sha256", "request_sha256",
         "response_sha256", "transport_provenance_sha256", "actor", "typed_text_writes",
+        "target_text_spans",
     }
     if not isinstance(source, dict) or source.get("schema") != "natlang.provider-teacher-turn-source/1" or set(source) != keys:
         raise ValueError("provider teacher source receipt needs the complete declared Luna source binding")
@@ -60,7 +61,8 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
         raise ValueError("provider teacher source receipt has incomplete source artifact locations")
     writes = source.get("typed_text_writes")
     spans = native_text_spans
-    if not isinstance(writes, list) or not isinstance(spans, list):
+    target_spans = source.get("target_text_spans")
+    if not isinstance(writes, list) or not isinstance(spans, list) or not isinstance(target_spans, list):
         raise ValueError("provider teacher source receipt needs its typed text write inventory")
     if _sha(_canonical({"messages": opening, "tools": tools or []})) != source["prompt_sha256"]:
         raise ValueError("provider teacher source prompt differs from the exact production prompt")
@@ -114,6 +116,37 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
             raise ValueError("provider teacher native prompt differs beyond the exact authenticated text encoder rewrite")
     if not isinstance(assistant, dict) or _sha(_canonical(assistant)) != source["target_sha256"]:
         raise ValueError("provider teacher source target differs from the exact normalized assistant action")
+    forced_span_by_key = {(tuple(span.get("path", [])), span.get("marker")): span
+                          for span in spans if isinstance(span, dict)}
+    for receipt in target_spans:
+        required = {"path", "marker", "body_sha256", "rewrite_sha256", "source_turn_sha256",
+                    "source_response_sha256", "raw_target_sha256"}
+        if (not isinstance(receipt, dict) or set(receipt) != required
+                or not isinstance(receipt.get("path"), list)
+                or any(not isinstance(part, (str, int)) or isinstance(part, bool) for part in receipt["path"])
+                or not isinstance(receipt.get("marker"), str)
+                or (tuple(receipt.get("path", [])), receipt.get("marker")) not in forced_span_by_key
+                or not all(_valid_sha(receipt.get(key)) for key in ("body_sha256", "rewrite_sha256",
+                    "source_turn_sha256", "source_response_sha256", "raw_target_sha256"))
+                or _sha(forced_span_by_key[(tuple(receipt.get("path", [])), receipt.get("marker"))]["text"].encode("utf-8"))
+                    != receipt["body_sha256"]):
+            raise ValueError("provider teacher target native span lacks its exact source rewrite receipt")
+        value = assistant
+        try:
+            path = receipt["path"]
+            if (len(path) >= 4 and path[0] == "tool_calls" and type(path[1]) is int
+                    and path[2] == "arguments"):
+                call = assistant["tool_calls"][path[1]]
+                value = json.loads(call["function"]["arguments"])
+                for part in path[3:]:
+                    value = value[part]
+            else:
+                for part in path:
+                    value = value[part]
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError):
+            raise ValueError("provider teacher target native span path is absent from the exact action")
+        if value != receipt["marker"]:
+            raise ValueError("provider teacher target native span marker differs from the exact action path")
     spans_by_path = {}
     for span in spans:
         if (not isinstance(span, dict) or not isinstance(span.get("path"), list)
@@ -124,6 +157,7 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
             raise ValueError("provider teacher native text span paths must be unique")
         spans_by_path[path] = span
     seen_paths = set()
+    target_receipt_paths = {tuple(item["path"]) for item in target_spans}
     for write in writes:
         if (not isinstance(write, dict)
                 or set(write) != {"block_id", "body_sha256", "source", "writer_call_id", "writer_node",
@@ -150,6 +184,6 @@ def validate_provider_teacher_source(source, assistant, opening, tools, native_t
             span = spans_by_path.get(tuple(path))
             if span is None or _sha(span["text"].encode("utf-8")) != write["body_sha256"]:
                 raise ValueError("provider teacher typed text write body differs from its exact target span")
-    if seen_paths != set(spans_by_path):
+    if seen_paths | target_receipt_paths != set(spans_by_path):
         raise ValueError("provider teacher source receipt does not cover every exact native text span")
     return True

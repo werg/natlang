@@ -95,7 +95,8 @@ def capture_luna_native_turn(engine, audit_path, record_id, *, seed=0, encoder_c
     source_receipt = copy.deepcopy(loaded["source_receipt"])
     source_receipt["prompt_sha256"] = _sha(_canonical({"messages": rewritten, "tools": tools}))
     forced = {"schema": "natlang.native-teacher-forced-turn/1", "assistant": record["target"],
-        "source_receipt": source_receipt, "native_text_spans": [], "source_opening": source_opening,
+        "source_receipt": source_receipt, "native_text_spans": loaded.get("native_text_spans", []),
+        "source_opening": source_opening,
         "native_text_bindings": bindings}
     response = engine.generate(GenerationRequest(messages=rewritten, tools=tools, max_tokens=4096,
         temperature=0.0, seed=seed, forced_message=forced, rl_capture=True, native_recording=True))

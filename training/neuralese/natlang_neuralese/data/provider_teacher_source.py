@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 
@@ -37,6 +38,80 @@ def _jsonl_by_id(data, ident):
     if len(matches) != 1:
         raise ValueError("provider teacher source row id is absent or ambiguous")
     return matches[0]
+
+
+_TEACHER_TEXT_WRAPPER = re.compile(r"<\|neuralese\|>([\s\S]+?)<\|/neuralese\|>")
+
+
+def _rewrite_target_text_spans(target, source_turn):
+    """Rewrite exact teacher Neuralese return values to forced native spans.
+
+    The raw provider target stays immutable. The replay target replaces only a
+    whole wrapped return_result.value with a collision-free marker; the body is
+    supervised by the engine's current produce-role span path.
+    """
+    assistant = (source_turn or {}).get("assistant") or {}
+    calls = assistant.get("calls") or []
+    if not isinstance(target, dict) or not isinstance(target.get("tool_calls"), list):
+        return copy_json(target), [], None
+    rewritten = copy_json(target)
+    spans = []
+    for ordinal, source_call in enumerate(calls):
+        if not isinstance(source_call, dict) or source_call.get("tool") != "return_result":
+            continue
+        arguments = source_call.get("arguments")
+        if not isinstance(arguments, dict) or not isinstance(arguments.get("value"), str):
+            continue
+        value = arguments["value"]
+        match = _TEACHER_TEXT_WRAPPER.fullmatch(value)
+        if match is None:
+            continue
+        body = match.group(1)
+        if not body:
+            raise ValueError("provider Neuralese result body is empty")
+        targets = []
+        for index, call in enumerate(rewritten["tool_calls"]):
+            function = call.get("function") or {}
+            if function.get("name") != "return_result":
+                continue
+            try:
+                parsed = json.loads(function.get("arguments"))
+            except (TypeError, json.JSONDecodeError) as error:
+                raise ValueError("provider target return_result arguments are not exact JSON") from error
+            if parsed.get("value") == value:
+                targets.append((index, parsed))
+        if len(targets) != 1:
+            raise ValueError("provider wrapped result does not map to one normalized return_result target")
+        index, parsed = targets[0]
+        marker = "NATLANG_TEACHER_TEXT_" + _sha_value({
+            "target": target, "turn": source_turn.get("invocation_id"), "ordinal": ordinal,
+            "body_sha256": _sha(body.encode("utf-8"))})[:32]
+        if marker in _canonical(target).decode("utf-8"):
+            raise ValueError("provider native span marker collides with its source target")
+        parsed["value"] = marker
+        rewritten["tool_calls"][index]["function"]["arguments"] = json.dumps(
+            parsed, ensure_ascii=False, separators=(",", ":"))
+        path = ["tool_calls", index, "arguments", "value"]
+        spans.append({"path": path, "marker": marker, "text": body})
+    if len(spans) > 1:
+        raise ValueError("provider turn has multiple wrapped results; explicit multi-span provenance is required")
+    if not spans:
+        return rewritten, [], None
+    original_sha = _sha_value(target)
+    rewritten_sha = _sha_value(rewritten)
+    span = spans[0]
+    binding = {"schema": "natlang.provider-return-result-native-span-rewrite/1",
+        "source_turn_id": source_turn.get("invocation_id"),
+        "source_turn_sha256": _sha_value(source_turn),
+        "source_response_sha256": source_turn.get("raw_response_sha256"),
+        "raw_target_sha256": original_sha, "rewritten_target_sha256": rewritten_sha,
+        "path": span["path"], "marker": span["marker"],
+        "body_sha256": _sha(span["text"].encode("utf-8"))}
+    return rewritten, spans, binding
+
+
+def copy_json(value):
+    return json.loads(json.dumps(value, ensure_ascii=False))
 
 
 def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, replay_tools=None):
@@ -142,6 +217,16 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
             or target_adapter.get("source_trajectory_index") != index
             or target_adapter.get("normalized_target_sha256") != target_sha):
         raise ValueError("provider teacher target is not bound to its exact normalized action")
+    rewritten_target, native_text_spans, target_span_binding = _rewrite_target_text_spans(
+        action_target, source_turn)
+    if target_span_binding is not None:
+        target_adapter = {**target_adapter,
+            "native_span_rewrite": target_span_binding,
+            "normalized_target_sha256": _sha_value(rewritten_target)}
+        action_target = rewritten_target
+        target_sha = _sha_value(action_target)
+        record = copy_json(record)
+        record["target"] = action_target
     source_groups = record.get("source_groups")
     if not isinstance(source_groups, list) or not source_groups:
         raise ValueError("provider teacher turn lacks its upstream source groups")
@@ -239,10 +324,17 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
         "transport_provenance_sha256": provider_context.get("transport_provenance_sha256"),
         "actor": {"model": "gpt-6-luna", "provider": "openai-codex", "role": "teacher",
                   "transport": "pi-provider"},
+        "target_text_spans": [{"path": item["path"], "marker": item["marker"],
+            "body_sha256": _sha(item["text"].encode("utf-8")),
+            "rewrite_sha256": _sha_value(target_span_binding),
+            "source_turn_sha256": target_span_binding["source_turn_sha256"],
+            "source_response_sha256": target_span_binding["source_response_sha256"],
+            "raw_target_sha256": target_span_binding["raw_target_sha256"]}
+            for item in native_text_spans],
             "typed_text_writes": [{key: item[key] for key in ("block_id", "body_sha256", "source", "writer_call_id",
             "writer_node", "host_result_receipt_sha256", "raw_response_sha256", "context_receipt_sha256",
             "target_span_path", "context_occurrences")} for item in typed_writes]}
-    return {"record": record, "source_receipt": receipt,
+    return {"record": record, "source_receipt": receipt, "native_text_spans": native_text_spans,
             "typed_text_bodies": [{key: item[key] for key in ("block_id", "body", "body_sha256", "source",
                 "writer_call_id", "writer_node", "host_result_receipt_sha256", "context_receipt_sha256",
                 "context_occurrences")}
