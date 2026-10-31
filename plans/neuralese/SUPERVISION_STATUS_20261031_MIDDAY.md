@@ -4,6 +4,77 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Corrected native runtime and actual RL collection, 21:00 CET
+
+The newest earned checkpoint remains global54, SHA256
+`7808deb6218128a07e1bd51bf740a063e47e9b900b502edfb37a865112bde6df`.
+It is independently backed up on Pop with complete disk readback; receipt
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/corrected54-peer-export-receipt-20261031.json`
+binds all15,293,669,538 bytes. Runtime/control/source recovery closure is a separate
+obligation; a checkpoint copy alone does not prove the whole closure recoverable.
+
+The first54 native certificate failed even after a clean restore without QAT.
+Tracing located the first forward difference at layer20 RMSNorm with identical
+inputs. The corrected128-row norm forward, gain-gradient products and input
+adjoint now share canonical arithmetic. Ordinary native inference uses the same
+forward as the differentiable carriers (commit3cc2556be). Exact54 no-scope forward
+and complete production-gradient certificates pass with zero optimizer updates:
+`runs/lfm3-sft-successors/joint-v4-restart52-20261031/shared-norm54-final-no-scope.json`
+and `shared-norm54-final-certificate.json`. Historical failed reports remain intact.
+SGLang is a separate implementation and has not passed this parity qualification;
+the active actor uses the qualified native Torch engine.
+
+On the earlier runtime, full-prompt development cases0/32/88/112 completed2/4:
+88/112 accepted;0/32 completed with incorrect answers. Case0 manually judged and
+summed tickets rather than using per-item semantic calls; case32 recovered from
+malformed eval then manually assembled an unqualified ownership list. These are
+actual failures, but do not establish causal weight regression against a different
+parent/runtime. Corrected-runtime first-action comparisons preserve the expected
+tools/arguments; they are not complete task outcomes or capability lift.
+
+The old noise repeat had1 success,1 semantic failure and2 infrastructure wall
+timeouts. The timeouts were incorrectly counted as model budget failures. Commit
+43498035c marks such unfinished observations unresolved and excludes them from
+noise estimation. Exact re-scoring receipt
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/corrected54-task-noise-correction-20261031.json`
+preserves all raw reports and invalidates that claimed noise measurement.
+Development repeats default to one pass; deliberate repeat experiments remain possible.
+
+The actual active service is `lfm3-corrected54-onpolicy-native-retry.service`, not
+the failed `lfm3-corrected54-onpolicy-rl.service`. Attempt0 failed its exact runtime
+helper guard before useful collection; attempt1 launched from the frozen runtime
+at20:51. At20:57 it had six completed collector result files and growing journals,
+with12 collector workers and66% observed GPU utilization. The round and optimizer
+update have not completed. Parent54, full explanatory prompt, actor probabilities,
+whole execution graphs and unfinished SFT obligations remain bound. Frozen runtime
+is `/home/werg/data/lfm3-rl-dgx-20261029/runtime-bcaca9df9`.
+
+Curriculum26cb4d944 reserves half of practice for unvisited current-source tasks
+from least-covered semantic families, retaining useful mixed-outcome practice and
+the exact physical breadth cursor. Actual16-row selection increased from15 to16
+families and included two native inline-program cases. This is selection diversity,
+not evidence of improved outcomes. The typed Natlang policy/options now describe
+the same exploration rule. Callable iteration guidance and actionable duplicate-
+step diagnostics are default in d74cad968; bcaca9df9 refreshed the actual prompt bank.
+
+Teacher-mine rendering reached8,289 chains:655 communication graphs,6,606 ordinary
+rows,1,028 omissions. Its final code-fingerprint check failed after a renderer edit;
+outputs survive but are not admitted. Luna A owns exact historical-code sealing
+followed by strict current source/pointer verification and source admission. Do not
+equate completed render counts or a prefix snapshot with an admitted source.
+
+Telecom contract tests exposed consent, cumulative-charge, repeated-effect and
+iteration-guidance defects. Version12 now has93 derived TRAIN contracts marked ready
+after actual simulator checks;52 conflicting originals remain quality-pending.
+Fresh169-row protection validation passed. These are service-contract checks,
+not teacher successes; no new telecom positive has yet been admitted.
+
+Storage cleanup removed88.5GiB of Megatoken state plus obsolete recovery staging,
+caches and synthetic benchmark gradients. At20:58 internal free space was92GiB.
+Three recovery worktrees still contain unintegrated changes and remain protected.
+The20:54 HDD thaw backstop restored the archive timer and ended its freeze watcher;
+old paused conversions must be checked by actual current process identity.
+
 ## Actual advancement, 19:47 CET
 
 Corrected branch earned global54/stage2 at19:43:47:105,499 supervised tokens,

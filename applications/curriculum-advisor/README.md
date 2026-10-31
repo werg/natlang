@@ -21,6 +21,11 @@ train-task descriptors, scored outcome telemetry, resource allocation and
 `TrainingCurriculumOptions`, and returns `{row,samples}[]`. The shared production
 controller provides a crisp default through the same JSON interface and validates
 row identities, group sizes and a rotating breadth reservation before collection.
+The resolved options include `family_exploration_fraction` (default `0.5`):
+half of practice explores unvisited tasks from least-covered semantic families.
+Coverage uses distinct scored current-source task IDs; missing family metadata
+remains one unknown bucket. Other practice preserves useful mixed outcomes while
+preferring distinct families, and rotating breadth still advances its exact cursor.
 An optional `select_tasks_command` can execute this natural-language function;
 it receives one JSON request on stdin and returns the typed array on stdout.
 The two advisory functions above retain their existing review-only behavior.

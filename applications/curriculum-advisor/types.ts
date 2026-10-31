@@ -44,4 +44,10 @@ export type TrainingGroupOutcome = { task_id: string; scored: number; mean: numb
 export type TrainingSelectionBudget = { rows: number; group: number; offset: number };
 export type TrainingTaskSelection = { row: number; samples: number };
 
-export type TrainingCurriculumOptions = { schema: "natlang.rl-task-curriculum/1"; breadth_fraction: number; promotion_success_rate: number };
+export type TrainingCurriculumOptions = {
+  schema: "natlang.rl-task-curriculum/1";
+  breadth_fraction: number;
+  promotion_success_rate: number;
+  /** Fraction of practice slots exploring unvisited tasks from least-covered families, normally 0.5. */
+  family_exploration_fraction: number;
+};

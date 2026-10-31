@@ -1,5 +1,21 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Native numerical and observation custody (engineering, 2026-10-31 evening)
+
+LFM3 normalization must share canonical row arithmetic in ordinary inference,
+stored/reference execution and differentiable carriers, including forward,
+gain-gradient products and input adjoints. A clean restore of corrected54 exposed
+forward drift at layer20 despite identical inputs; backward-only fixes were
+insufficient. The qualified native Torch path includes3cc2556be. SGLang is a
+separate implementation: actor checkpoint attestation alone does not qualify
+its numerical equivalence. Use the qualified engine while repairing faster ones.
+
+An infrastructure wall timeout without an accepted final answer is unresolved,
+not a scored model failure or measured policy noise. Preserve raw observations
+and exact re-scoring history. Deterministic model request/token exhaustion remains
+an actual budget outcome. A protocol first-action match or mathematical gradient
+certificate does not establish complete task success or capability improvement.
+
 ## Rejected 2026-10-31 SFT branch (supervision finding)
 
 The first SD52-to-SFT72 continuation is diagnostic only, including its learned
