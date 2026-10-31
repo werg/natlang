@@ -12,6 +12,7 @@ from natlang_neuralese.data.provider_native_graph import (native_graph_from_luna
 from natlang_neuralese.data.native_graph import graph_loss
 from natlang_neuralese.serve.teacher_source_receipt import validate_provider_teacher_source
 from natlang_neuralese.data.provider_teacher_source import _rewrite_target_text_spans
+from natlang_neuralese.data.provider_native_graph import capture_luna_native_turn
 
 
 def _sha(data):
@@ -20,6 +21,42 @@ def _sha(data):
 
 def _canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+
+
+def test_luna_capture_forces_the_authenticated_normalized_target(tmp_path, monkeypatch):
+    import natlang_neuralese.data.provider_teacher_source as source_loader
+    original = {"role": "assistant", "content": "", "tool_calls": [{"id": "teacher_12_0",
+        "type": "function", "function": {"name": "return_result",
+        "arguments": json.dumps({"status": "success", "value": "<|neuralese|>typed body<|/neuralese|>"})}}]}
+    normalized = copy.deepcopy(original)
+    normalized["tool_calls"][0]["function"]["arguments"] = json.dumps(
+        {"status": "success", "value": "NATLANG_TEACHER_TEXT_collision_free"})
+    messages = [{"role": "user", "content": "Return the verified result."}]
+    record = {"id": "teacher-program:fixture:decision:12", "target": original,
+        "messages": messages, "tools": [], "native_source_conversion": {"source_messages": messages}}
+    converted = tmp_path / "converted.jsonl"
+    converted.write_bytes(_canonical(record) + b"\n")
+    audit_path = tmp_path / "audit.json"
+    audit_path.write_bytes(_canonical({"python_corpus_conversion": {"path": str(converted),
+        "sha256": _sha(converted.read_bytes())}}))
+    receipt = {"schema": "natlang.provider-teacher-turn-source/1",
+        "target_sha256": _sha(_canonical(normalized))}
+    loaded = {"record": {**record, "target": normalized}, "source_receipt": receipt,
+        "native_text_spans": [], "typed_text_bodies": []}
+    monkeypatch.setattr(source_loader, "load_verified_luna_teacher_turn",
+        lambda *args, **kwargs: loaded)
+
+    class Engine:
+        native_identity = {"checkpoint_sha256": "1" * 64, "tokenizer_fingerprint": "2" * 64}
+        def generate(self, request):
+            self.forced = request.forced_message
+            return {"x_natlang_rl_capture": {"schema": "natlang.native-teacher-forced-capture/1",
+                "teacher_source_receipt": request.forced_message["source_receipt"]}}
+
+    engine = Engine()
+    capture_luna_native_turn(engine, str(audit_path), record["id"])
+    assert engine.forced["assistant"] == normalized
+    assert engine.forced["assistant"] != original
 
 
 def test_luna_provider_return_result_wrapper_rewrites_to_bound_native_span():

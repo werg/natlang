@@ -69,6 +69,10 @@ def capture_luna_native_turn(engine, audit_path, record_id, *, seed=0, encoder_c
     tools = record.get("tools") or []
     loaded = load_verified_luna_teacher_turn(audit_path, record_id,
         replay_messages=source_opening, replay_tools=tools, allow_context_only=allow_context_only)
+    # The verified loader rewrites authenticated inline teacher-text spans to
+    # collision-free placeholders. The receipt target_sha256 binds that exact
+    # normalized target; forcing the original wrapper would fail validation.
+    record = loaded["record"]
     encoder_cache = {} if encoder_cache is None else encoder_cache
     bindings, encoder_states, replacements, occurrences = [], [], {}, {}
     for typed in loaded["typed_text_bodies"]:
