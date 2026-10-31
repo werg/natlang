@@ -35,15 +35,26 @@ class _HttpNativeEngine:
         state = info.get("native_state") or {}
         self.native_identity = {key: state.get(key) for key in
             ("checkpoint_sha256", "tokenizer_fingerprint", "embedding_weight_sha256", "architecture")}
+        self.prompt_rendering_identity_sha256 = info.get("prompt_rendering_identity_sha256")
+        self.actor_runtime_identity = info.get("rl_policy_binding")
         self.serving_config = info.get("serving_config")
         self.serving_config_identity_sha256 = info.get("serving_config_identity_sha256")
         if (info.get("server") != "reference" or state.get("enabled") is not True
                 or not self.native_identity.get("checkpoint_sha256")
                 or not self.native_identity.get("tokenizer_fingerprint")
+                or info.get("prompt_rendering") != "full"
+                or not self.prompt_rendering_identity_sha256
+                or not isinstance(self.actor_runtime_identity, dict)
+                or self.actor_runtime_identity.get("schema") != "natlang.rl-policy-binding/2"
+                or self.actor_runtime_identity.get("native_identity") != self.native_identity
+                or self.actor_runtime_identity.get("checkpoint_sha256") != self.native_identity["checkpoint_sha256"]
+                or not isinstance(self.actor_runtime_identity.get("python_runtime"), dict)
+                or not self.actor_runtime_identity["python_runtime"].get("sha256")
                 or not isinstance(self.serving_config, dict)
                 or self.serving_config.get("schema") != "natlang.native-prefill-config/1"
+                or self.serving_config.get("full_prompt_preserved") is not True
                 or self.serving_config_identity_sha256 != self.serving_config.get("identity_sha256")):
-            raise ValueError("endpoint is not a ready reference actor with an identified native serving configuration")
+            raise ValueError("endpoint lacks a full-prompt native actor, runtime, or serving identity")
         self.store = self
 
     def _request(self, method, path, body=None, *, binary=False):
@@ -216,6 +227,10 @@ def main():
                 "source_index": index, "record_id": row["id"],
                 "source_receipt": captured["source_receipt"],
                 "native_identity": captured["native_identity"],
+                "actor_runtime_identity": getattr(engine, "actor_runtime_identity", None),
+                "prompt_rendering_identity_sha256": getattr(engine, "prompt_rendering_identity_sha256", None),
+                "serving_config": getattr(engine, "serving_config", None),
+                "serving_config_identity_sha256": getattr(engine, "serving_config_identity_sha256", None),
                 "response": captured["response"], "capture": captured["capture"],
                 "source_opening": captured["source_opening"],
                 "rewritten_messages": captured["rewritten_messages"],
@@ -254,6 +269,8 @@ def main():
             "consumer_action_count": sum(bool(item.get("consumer_native_block_ids"))
                                           for item in graph.get("teacher_episode_actions") or []),
             "native_checkpoint_sha256": engine.native_identity.get("checkpoint_sha256"),
+            "actor_runtime_identity": getattr(engine, "actor_runtime_identity", None),
+            "prompt_rendering_identity_sha256": getattr(engine, "prompt_rendering_identity_sha256", None),
             "actor_endpoint": args.endpoint,
             "tokenizer_fingerprint": engine.native_identity.get("tokenizer_fingerprint"),
             "serving_config": getattr(engine, "serving_config", None),
