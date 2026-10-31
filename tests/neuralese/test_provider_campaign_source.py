@@ -240,3 +240,53 @@ def test_text_emulation_runtime_requires_compiled_cli_and_effective_option(tmp_p
         lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout='Options: --prompt-rendering\n', stderr=''))
     with pytest.raises(ValueError, match='does not implement'):
         _validate_text_neuralese_emulation(runtime, manifest)
+
+
+def test_historical_dispatch_attestation_rejects_path_outside_repo(tmp_path, monkeypatch):
+    from scripts import run_reviewed_luna_dispatcher as dispatcher
+
+    repo = Path(__file__).resolve().parents[2]
+    target = str((tmp_path / 'outside.py').resolve())
+    pin = 'a' * 64
+    plan_path = tmp_path / 'plan.json'
+    plan_path.write_text(json.dumps({'artifact_hashes': {target: pin}}) + '\n')
+    attestation_path = tmp_path / 'dispatch-plan-history-attestation.json'
+    attestation_path.write_text(json.dumps({
+        'schema': 'natlang.reviewed-dispatch-history-attestation/1',
+        'plan_path': str(plan_path.resolve()),
+        'plan_sha256': hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+        'git_commit': '1' * 40,
+        'historical_artifacts': {target: {'git_path': '../outside.py',
+            'sha256': pin, 'git_commit': '1' * 40}},
+    }) + '\n')
+    monkeypatch.setattr(dispatcher, 'validate_plan',
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError(f'Missing or changed reviewed artifact pin: {target}')))
+    with pytest.raises(ValueError, match='outside the repository'):
+        source.validated_dispatch_plan(plan_path, hashlib.sha256(plan_path.read_bytes()).hexdigest())
+
+
+def test_historical_dispatch_attestation_rejects_wrong_git_object_hash(tmp_path, monkeypatch):
+    import subprocess
+    from scripts import run_reviewed_luna_dispatcher as dispatcher
+
+    repo = Path(__file__).resolve().parents[2]
+    commit = subprocess.run(['git', '-C', str(repo), 'rev-parse', 'HEAD'],
+                            capture_output=True, text=True, check=True).stdout.strip()
+    git_path = 'scripts/run_reviewed_luna_dispatcher.py'
+    target = str((repo / git_path).resolve())
+    pin = 'f' * 64
+    plan_path = tmp_path / 'plan.json'
+    plan_path.write_text(json.dumps({'artifact_hashes': {target: pin}}) + '\n')
+    attestation_path = tmp_path / 'dispatch-plan-history-attestation.json'
+    attestation_path.write_text(json.dumps({
+        'schema': 'natlang.reviewed-dispatch-history-attestation/1',
+        'plan_path': str(plan_path.resolve()),
+        'plan_sha256': hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+        'git_commit': commit,
+        'historical_artifacts': {target: {'git_path': git_path,
+            'sha256': pin, 'git_commit': commit}},
+    }) + '\n')
+    monkeypatch.setattr(dispatcher, 'validate_plan',
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError(f'Missing or changed reviewed artifact pin: {target}')))
+    with pytest.raises(ValueError, match='differs from its Git object'):
+        source.validated_dispatch_plan(plan_path, hashlib.sha256(plan_path.read_bytes()).hexdigest())
