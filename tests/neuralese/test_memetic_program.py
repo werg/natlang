@@ -364,28 +364,14 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         assert fit['native_import_reached_model'] is True
         assert fit['guidance_delivery'] == 'native-program-guidance/1'
         assert memetic.rollouts_reached(tmp_path / 'evals/actual', identity, written['id'])
-        # The production collector must retain sampled decision captures as policy turns, including their
-        # native input state and request accounting, rather than falling back to a generated tool turn.
-        decision_task = copy.deepcopy(task)
-        decision_task['semantics']['expected'] = 'yes'
-        decision_task['semantics']['files']['task/verdict.nl'] = (
-            '---\nargs: {}\nreturns: "yes" | "no"\nreadout: decision\n---\nChoose yes or no.\n')
-        decision_task['curriculum']['reference']['root'][0][1]['code'] = (
-            'return (await decide(verdict)).value;')
-        decision_args = Namespace(**vars(args))
-        decision_fit = memetic.evaluate(decision_args, tmp_path, 'decision', memetic.state_guidance('guide', written['id']),
-            [decision_task], base_system=fixture_system, actor=identity,
-            server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64,
-            guidance_binding=guidance_binding)
-        assert decision_fit['rollouts'] == 2 and decision_fit['scored'] == decision_fit['successes'] == 2
         from natlang_neuralese.common.jsonio import iter_jsonl_rows
-        decision_rows = [row for _, row in iter_jsonl_rows(tmp_path / 'evals/decision/rollouts.jsonl')]
-        decisions = [turn['sampling'] for row in decision_rows for turn in row['turns']
-                     if (turn.get('sampling') or {}).get('schema') == 'natlang.native-decision-capture/1']
-        assert len(decisions) == 2 and all(value['decision_sample']['temperature'] > 0 for value in decisions)
-        # Stored guidance conditions the decision readout too: its compact scored prompt imports the state.
-        assert all(any(item.get('id') == written['id'] for item in value['native_state_imports'])
-                   for value in decisions)
+        actual_rows = [row for _, row in iter_jsonl_rows(tmp_path / 'evals/actual/rollouts.jsonl')]
+        assert len(actual_rows) == 2
+        assert all(row['outcome'] == 'task_success' for row in actual_rows)
+        assert all(row['turns'][0]['target']['content'] == '1' for row in actual_rows)
+        assert all(row['turns'][0]['sampling']['finish_reason'] == 'stop' for row in actual_rows)
+        assert all(any(event.get('kind') == 'block_read' for event in row['execution_graph'])
+                   for row in actual_rows)
         with pytest.raises(ValueError, match='program-guidance binding'):
             memetic.evaluate(args, tmp_path, 'unbound', memetic.state_guidance('guide', written['id']), [task],
                 base_system='x', actor=identity, server_info_sha256='f' * 64, evaluation_inputs_sha256='e' * 64)

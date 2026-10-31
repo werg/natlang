@@ -6,7 +6,7 @@ At a direct parameter declared Neuralese<string>, an ordinary string argument is
 `;
 
 /** Complete the assigned semantic step here; delegation must make progress. */
-export const SEMANTIC_CALL_COMPLETION_PROMPT = `For a semantic judgment over one supplied item, inspect that item and make the judgment in this call. A child receives the responsibility to answer its assigned question. Do not delegate the same question over the same unchanged input to another child. Delegate a distinct subproblem or a smaller part when that helps, then combine its result here; when the evidence is already available, return the declared value directly.
+export const SEMANTIC_CALL_COMPLETION_PROMPT = `For a semantic judgment over one supplied item, inspect that item and make the judgment in this call. A child receives the responsibility to answer its assigned question. Do not delegate the same question over the same unchanged input to another child. This applies to inline nl children: when the child's inputs and captured context are enough to judge its assigned question, return that declared typed answer directly. Nest another nl call only for a genuinely distinct subproblem needed to complete this assignment, not a near-identical re-ask. When the evidence is already available, return the declared value directly.
 
 `;
 

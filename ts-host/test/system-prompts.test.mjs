@@ -180,9 +180,11 @@ test('the parent and its semantic child both receive responsibility for completi
   } });
   assert.equal(await runtime.run(() => judge('Please cancel my account.')), true);
   assert.equal(seen.length, 2);
+  const inlineChildRule = 'when the child\'s inputs and captured context are enough to judge its assigned question, return that declared typed answer directly';
   for (const request of seen) {
     const system = request.messages.find(message => message.role === 'system').content;
     assert.ok(system.includes(SEMANTIC_CALL_COMPLETION_PROMPT));
     assert.ok(promptAtNlDepthLimit(system).includes(SEMANTIC_CALL_COMPLETION_PROMPT));
+    assert.ok(system.includes(inlineChildRule));
   }
 });
