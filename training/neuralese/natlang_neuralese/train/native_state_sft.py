@@ -368,8 +368,14 @@ TOKEN_MASS_GRAPH_REFERENCE = 64.0
 
 
 def _communication_prefix_allowed(backend, precision):
-    """Communication aliasing is qualified only for the unquantized BF16 path."""
-    return backend is None and (precision is None or precision[1] == 'bf16')
+    """Alias identical pre-event raw context unless an external arithmetic backend owns execution.
+
+    Inline QAT transforms module operands but does not change the raw-prefix dependency:
+    every aliased context row has the same token, position and per-occurrence target map.
+    Its forward is evaluated once and its cotangent receives the fan-in from all original
+    occurrences. Precision-point differences are qualified by the sampled-point graph tests.
+    """
+    return backend is None
 
 
 def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_layers=True,

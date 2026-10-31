@@ -37,13 +37,19 @@
     ]
   },
   "created_utc": "2026-10-31",
-  "feature_version": "native-prefix-physical-alias-v2",
+  "feature_version": "native-prefix-physical-alias-v3-inline-qat",
   "implementation_scope": {
-    "communication_graphs": "Communication graph sharing is gated by current sampled QAT precision and backend: allowed only with no external backend and absent/BF16 precision; FP8/NVFP4 are disabled.",
+    "communication_graphs": "Exact initial raw-context aliasing is allowed for inline QAT precision points when no external arithmetic backend is active. Prefix rows are identical token/position histories; per-occurrence targets and producer/import suffixes remain separate. External backends remain gated pending separate arithmetic qualification.",
     "gradient": "Shared causal states receive cotangent fan-in from all original occurrences through their KV/convolution gathers.",
     "ordinary_sft": "Exact matching raw causal prefixes may share physical rows in all activation dtypes.",
     "ownership": "Original graph target maps, source identity, per-graph loss normalization and supervised target rows remain bound.",
     "readout": "BF16 readout rows remain unshared; per-use BF16 readout rounding behavior is preserved."
+  },
+  "inline_qat_followup_source_bindings": {
+    "communication_test_sha256": "55ff63067a4dd5fe200bea46b677143ad06cbbc27b0588d89ca42b56cc9434a7",
+    "gate_test_sha256": "3989a84f77e2154808c55bfb36efbee67752e3c2a8cbc36a8285298cb3b99d8c",
+    "native_state_sft_sha256": "10e5eb339f1116bac469202009cdee759b7403f57e8c3740cd41bb57026dca81",
+    "prefix_packing_module": "self-pinning constant updated to this receipt; intentionally excluded from file hash to avoid self-reference"
   },
   "limitations": [
     "CPU tiny-model qualification only; no full-model task-behavior or GPU speed measurement.",
@@ -188,6 +194,58 @@
     ]
   },
   "qat_gate": {
+    "cpu_tiny_graph_qualification": {
+      "acceptance_bounds": {
+        "gradient_cosine_min": 0.999,
+        "gradient_relative_error_max": 0.03,
+        "loss_atol_rtol": 0.002,
+        "primal_atol_rtol": 0.03
+      },
+      "command": "OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python -m pytest -q tests/neuralese/test_native_communication_prefix.py tests/neuralese/test_native_prefix_packing.py::test_bf16_ordinary_sft_reuses_exact_raw_prefixes_with_bounded_gradient_change tests/neuralese/test_native_prefix_qat_gate.py",
+      "custody_checks": [
+        "all input token IDs map to the same physical token",
+        "per-token producer flags preserved",
+        "every original history maps to the same physical history",
+        "per-graph supervised token counts and boundary target counts identical",
+        "per-graph loss normalization retained"
+      ],
+      "geometry": {
+        "graphs": 2,
+        "logical_forward_tokens": 100,
+        "physical_forward_tokens": 39,
+        "preserved_complete_graphs": true,
+        "shared_prefix_tokens": 61
+      },
+      "limitations": [
+        "tiny CPU LFM fixtures only",
+        "no CUDA capacity or throughput measurement",
+        "no large-source runtime/OOM qualification"
+      ],
+      "precision_points": {
+        "fp8": {
+          "activation_format": "fp8_group",
+          "gradient_cosine": 0.9999973773956299,
+          "gradient_relative_error": 0.007116766180843115,
+          "loss_abs_error": 0.0,
+          "primal_max_abs_error": 0.0,
+          "weight_format": "fp8_block"
+        },
+        "nvfp4": {
+          "activation_quantization": "none",
+          "gradient_cosine": 0.9999946355819702,
+          "gradient_relative_error": 0.0060335686430335045,
+          "loss_abs_error": 0.0,
+          "primal_max_abs_error": 0.0,
+          "weight_format": "nvfp4"
+        }
+      },
+      "result": "16 passed; CPU only; actual inline FP8 and NVFP4 contexts; full native_training_update path; no GPU or full-model training."
+    },
+    "external_backend_policy": "still disabled for communication prefix aliasing; this change qualifies only inline QAT with backend=None.",
+    "rationale": "QAT quantizes the same module operands for each identical prefix. The shared forward is evaluated once; original token mappings preserve each target occurrence, and the shared state gathers sum all consumer cotangents. This was checked on real inline quantization contexts, not by passing a synthetic point label only.",
+    "selection": "Current sampled inline QAT points (FP8 and NVFP4) share exact initial raw contexts when no external backend is active; external backends remain disabled."
+  },
+  "qat_gate_history_v1": {
     "live_update_basis": {
       "checkpoint_global_step": 61,
       "latest_completed_log_global_step": 63,
@@ -225,7 +283,7 @@
     ],
     "later_schedule_source": "resume53/run/learner/checkpoint.pt; metadata-loaded state was global_step 59 when reconstructing update 60",
     "oversize_gate_source_commit": "913bff106; native_state_sft.py hash above is the final combined source, including failure-path LR restoration and proof-history carry",
-    "prefix_packing_source_commit": "9e29372b5; source file not self-hashed because its constant pins this receipt",
+    "prefix_packing_source_commit": "uncommitted-reviewed-change; receipt-bound code and test file hashes below",
     "qualification_pin_commit": "1f90a8123",
     "recipe_path": "runs/lfm3-sft-successors/joint-v4-full-successor-20261031/recipe.json",
     "recipe_sha256": "32a814d1199b7598acb8161c02eb198a5665877e3bd40b4c565a599ed97cfdfb",

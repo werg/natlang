@@ -8,9 +8,9 @@ declare support read every action through the returned original-token row maps
 """
 from ..model.native_graph_plan import Invocation, ImportSpan, compile_graph
 
-PREFIX_ARITHMETIC_VERSION = 'native-prefix-physical-alias-v2'
+PREFIX_ARITHMETIC_VERSION = 'native-prefix-physical-alias-v3-inline-qat'
 PREFIX_ARITHMETIC_QUALIFICATION_PATH = 'plans/neuralese/native-prefix-arithmetic-qualification-20261031.json'
-PREFIX_ARITHMETIC_QUALIFICATION_SHA256 = '896daddd10c67168ea8ff33d9d1eea42f7494bb9e045783722a8efc2039debb1'
+PREFIX_ARITHMETIC_QUALIFICATION_SHA256 = '9b8ab874c5246ae591fcc970d5910db00a76082202cb0dd4b2a7a6f6699e840d'
 
 
 def pack_causal_prefixes(examples, *, allow_communication=True):

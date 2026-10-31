@@ -107,11 +107,11 @@ def test_bf16_sft_shares_only_raw_prefixes_and_preserves_producer_consumer_super
         checkpoint_layers=False,chunk_tokens=2)
     expected,expected_details=packed_graph_loss(reference,rows,share_causal_prefixes=False,
         checkpoint_layers=False,chunk_tokens=2)
-    actual.backward();expected.backward()
     assert actual_details[0]['packed_physical_tokens'] < actual_details[0]['original_physical_tokens']
     assert [item['supervised_tokens'] for item in actual_details] == [item['supervised_tokens'] for item in expected_details]
     assert [item['boundary_targets'] for item in actual_details] == [item['boundary_targets'] for item in expected_details]
     torch.testing.assert_close(actual.detach(),expected.detach(),atol=0,rtol=0)
+    actual.backward();expected.backward()
     actual_gradients=[];expected_gradients=[]
     for (name,left),(other_name,right) in zip(model.named_parameters(),reference.named_parameters()):
         assert name==other_name and (left.grad is None)==(right.grad is None),name
@@ -132,13 +132,112 @@ def test_qat_sampled_precision_gates_communication_prefix_packing_on_tiny_graphs
     bf16_precision=(object(),'bf16',0.0,1.5)
     fp8_precision=(object(),'fp8',.066,1.5)
     assert _communication_prefix_allowed(None,bf16_precision)
-    assert not _communication_prefix_allowed(None,fp8_precision)
+    assert _communication_prefix_allowed(None,fp8_precision)
     _,bf16_details=packed_graph_loss(model,rows,share_causal_prefixes=True,
         allow_communication_prefixes=_communication_prefix_allowed(None,bf16_precision))
     _,fp8_details=packed_graph_loss(model,rows,share_causal_prefixes=True,
         allow_communication_prefixes=_communication_prefix_allowed(None,fp8_precision))
     assert bf16_details[0]['packed_physical_tokens'] < bf16_details[0]['original_physical_tokens']
-    assert fp8_details[0]['packed_physical_tokens'] == fp8_details[0]['original_physical_tokens']
+    assert fp8_details[0]['packed_physical_tokens'] < fp8_details[0]['original_physical_tokens']
+
+
+@pytest.mark.parametrize('point,fmt,activation', [
+    ('fp8', 'fp8_block', {'format':'fp8_group','group':16}),
+    ('nvfp4', 'nvfp4', None),
+])
+def test_inline_qat_communication_prefixes_keep_primal_gradients_and_graph_custody(point,fmt,activation,record_property):
+    from natlang_neuralese.train.quantization import Quantization,SCHEMA,stage_component
+    from natlang_neuralese.train.native_state_sft import _communication_prefix_allowed
+    torch.manual_seed(81)
+    rows=episodes(empty_relay=True)
+    spec={'schema':SCHEMA,'stage_progress':{'tiny':[0.,1.]},'points':[
+        {'name':point,'ramp':{'start':0.,'end':1.},'modules':{'mlp':
+            ({'format':fmt,**({'activations':activation} if activation else {})})}}]}
+    component=stage_component(spec,'tiny',start=0,end=1)
+    if point=='fp8':
+        from transformers import Lfm2Config,Lfm2ForCausalLM
+        from natlang_neuralese.model.lfm2_port import PortBackbone,ControlTokens
+        cfg=Lfm2Config(vocab_size=64,hidden_size=128,intermediate_size=128,num_hidden_layers=2,
+            num_attention_heads=4,num_key_value_heads=2,layer_types=['conv','full_attention'],
+            conv_L_cache=4,max_position_embeddings=128)
+        port=PortBackbone(Lfm2ForCausalLM(cfg).eval(),ControlTokens(62,63),fast=False)
+    else:
+        port=tiny('lfm')
+    model=SharedStateModel(port.to(dtype=torch.bfloat16),(58,59,60,61),rank=4)
+    reference=copy.deepcopy(model)
+    for candidate in (model,reference):
+        for parameter in candidate.port.parameters():parameter.requires_grad_(True)
+    class ObserveOnlyOptimizer:
+        latent=None
+        def __init__(self,owner): self.owner=owner
+        def zero_grad(self,set_to_none=True):
+            for parameter in self.owner.parameters(): parameter.grad=None
+        def step(self): pass
+    model.share_causal_prefixes=True
+    reference.share_causal_prefixes=False
+    model.native_cotangent_accumulator_backend='plain'
+    reference.native_cotangent_accumulator_backend='plain'
+    actual_optimizer=ObserveOnlyOptimizer(model)
+    reference_optimizer=ObserveOnlyOptimizer(reference)
+    actual_q=Quantization(component);actual_q.install(model.port.hf,inline=True)
+    reference_q=Quantization(component);reference_q.install(reference.port.hf,inline=True)
+    precision=(actual_q,point,.5,1.)
+    assert _communication_prefix_allowed(None,precision)
+    from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
+    packed,maps=pack_causal_prefixes(rows)
+    primal_max_abs=0.
+    with torch.no_grad(),actual_q.context(point,.5):
+        packed_result=model(packed)
+    for row,mapping in zip(rows,maps):
+        with torch.no_grad(),reference_q.context(point,.5):
+            separate_result=reference(row.plan,reference=True)
+        primal_delta=(packed_result['h_final'][:,list(mapping)].float()-separate_result['h_final'].float()).abs().max()
+        primal_max_abs=max(primal_max_abs,float(primal_delta))
+        torch.testing.assert_close(packed_result['h_final'][:,list(mapping)],separate_result['h_final'],
+                                   atol=3e-2,rtol=3e-2)
+        for layer_index,(left_states,right_states) in enumerate(zip(packed_result['states'],separate_result['states'])):
+            dim=2 if model.port.is_attention(layer_index) else 1
+            index=torch.tensor(mapping,dtype=torch.long)
+            for left,right in zip(left_states,right_states):
+                primal_max_abs=max(primal_max_abs,float((left.index_select(dim,index).float()-right.float()).abs().max()))
+                torch.testing.assert_close(left.index_select(dim,index),right,atol=3e-2,rtol=3e-2)
+        assert row.id in {candidate.id for candidate in rows}
+        assert len(mapping)==row.plan.token_count
+    for row,mapping in zip(rows,maps):
+        oldtokens=[token for node in row.plan.invocations for token in node.token_ids]
+        newtokens=[token for node in packed.invocations for token in node.token_ids]
+        assert all(oldtokens[i]==newtokens[j] for i,j in enumerate(mapping))
+        assert all(row.plan.producing[i]==packed.producing[j] for i,j in enumerate(mapping))
+        assert all(tuple(mapping[p]for p in row.plan.history(i))==packed.history(j)
+                   for i,j in enumerate(mapping))
+    from natlang_neuralese.train.native_state_sft import native_training_update
+    actual,actual_details=native_training_update(model,actual_optimizer,rows,
+        checkpoint_layers=False,chunk_tokens=2,precision=precision)
+    expected,expected_details=native_training_update(reference,reference_optimizer,rows,
+        checkpoint_layers=False,chunk_tokens=2,precision=(reference_q,point,.5,1.))
+    # QAT GEMMs can change reduction order after packing, so compare bounded
+    # numerics while requiring identical supervised occurrences and graph loss.
+    assert actual_details[0]['packed_physical_tokens'] < actual_details[0]['original_physical_tokens']
+    assert [item['supervised_tokens'] for item in actual_details] == [item['supervised_tokens'] for item in expected_details]
+    assert [item['boundary_targets'] for item in actual_details] == [item['boundary_targets'] for item in expected_details]
+    loss_abs=float((actual.detach().float()-expected.detach().float()).abs())
+    torch.testing.assert_close(actual.detach(),expected.detach(),atol=2e-3,rtol=2e-3)
+    left=[];right=[]
+    for (name,a),(other,b) in zip(model.named_parameters(),reference.named_parameters()):
+        assert name==other and (a.grad is None)==(b.grad is None),name
+        if a.grad is not None:
+            left.append(a.grad.detach().float().flatten());right.append(b.grad.detach().float().flatten())
+    left=torch.cat(left);right=torch.cat(right)
+    rel=(left-right).norm()/right.norm().clamp_min(1e-12)
+    cosine=torch.nn.functional.cosine_similarity(left,right,dim=0)
+    record_property(f'{point}_physical_tokens',actual_details[0]['packed_physical_tokens'])
+    record_property(f'{point}_logical_tokens',actual_details[0]['original_physical_tokens'])
+    record_property(f'{point}_primal_max_abs_error',primal_max_abs)
+    record_property(f'{point}_loss_abs_error',loss_abs)
+    record_property(f'{point}_gradient_relative_error',float(rel))
+    record_property(f'{point}_gradient_cosine',float(cosine))
+    assert float(rel)<.03,(point,float(rel))
+    assert float(cosine)>.999,(point,float(cosine))
 
 
 @pytest.mark.parametrize('family',['lfm'])
