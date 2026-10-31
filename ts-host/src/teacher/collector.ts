@@ -1,6 +1,8 @@
 import { trajectoryTurn } from '../runtime/trajectory.js';
 import { checkRequiredActions } from './required-actions.js';
 import { checkRequiredServiceReceipt } from './service-receipt.js';
+import { checkReportCompleteness, type ReportCompletenessSpec } from './report-completeness.js';
+import { bindServiceAliases, type ServiceAliasSpec } from './service-aliases.js';
 import { observeRequiredServiceCalls } from './service-calls.js';
 import { checkRequiredRootIteration } from './required-iteration.js';
 import { observeGreenhouseControl } from './greenhouse-control.js';
@@ -1670,11 +1672,16 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
   // External modules (semantics.services: name -> TypeScript source) run in the host as services; the model sees
   // their declarations only (native/external.ts).
   const declarations: Record<string, string> = { ...effects.declarations };
+  const externalModules = new Map<string, { exports: Record<string, unknown>; declaration: string }>();
   for (const [name, source] of Object.entries((record.semantics as { services?: Record<string, string> }).services ?? {})) {
     const external = externalModule(name, source, createRequire(import.meta.url));
+    externalModules.set(name, external);
     services[name] = external.exports as object;
     declarations[name] = external.declaration;
   }
+  // Aliases partition a single instantiated host adapter into namespaces while preserving shared case state.
+  const serviceAliases = (record.semantics as { service_aliases?: Record<string, ServiceAliasSpec> }).service_aliases;
+  if (serviceAliases) bindServiceAliases(externalModules, serviceAliases, services, declarations);
   const worldSpec = (record.semantics as { world?: WorldSpec }).world;
   const world = worldSpec ? await WorldBridge.open(worldSpec) : undefined;
   if (world) { services.world = world.service(); declarations.world = WorldBridge.declaration(worldSpec!.kind); }
@@ -1786,6 +1793,10 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
         finalFunctionSource(root, runtime, functionSpec.function), actual, record.semantics.inputs ?? {}) : undefined;
     const requiredActions = checkRequiredActions(record.semantics.required_actions, options.runId,
       runtime.trace.events as unknown as Record<string, unknown>[]);
+    const invocationLedger = itemResultInvocationLedger(runtime, bindingSpec);
+    const reportCompleteness = checkReportCompleteness(
+      (record.semantics as { report_completeness?: ReportCompletenessSpec }).report_completeness,
+      actual, executionGraph, invocationLedger);
     const checks = { seeded_failure_requirement: failureSeen, expected_status: result.outcome.kind === expectedKind,
       honest_stop: honestStop, ...(decisive.length && expectedKind === 'quiesced' ? { stop_evidence: stopEvidence } : {}),
       effects: effectsOk, files: filesOk, world: worldOk,
@@ -1798,10 +1809,10 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
         record.semantics.required_root_iteration, runtime.trace.events as unknown as Record<string, unknown>[]) } : {}),
       ...(record.semantics.required_greenhouse_control ? { required_greenhouse_control: requiredGreenhouseControl(
         runtime.trace.events as unknown as Record<string, unknown>[]) } : {}),
+      ...(reportCompleteness.required ? { report_completeness: reportCompleteness.accepted } : {}),
       ...(functionEffects ? { function_effects: functionEffects.ok } : {}) };
     const rejectionReasons = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
     const accepted = rejectionReasons.length === 0;
-    const invocationLedger = itemResultInvocationLedger(runtime, bindingSpec);
     const itemResultBinding = bindingSpec ? checkItemResultBinding(bindingSpec, invocationLedger) : undefined;
     const bindingAccepted = !bindingSpec || itemResultBinding?.status === 'pass';
     const outcomeChecks = bindingSpec ? { ...checks, item_result_binding: bindingAccepted } : checks;
@@ -1815,6 +1826,7 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
       ...(hostCertificateRequired ? { host_completion_certificate: hostCertificateReadOk ? hostCertificate ?? null : { read_error: true } } : {}),
       ...(filesCheck ? { files_check: filesCheck } : {}),
       ...(functionEffects ? { function_effects: functionEffects } : {}),
+      ...(reportCompleteness.required ? { report_completeness: reportCompleteness } : {}),
       ...(qualityPending.length || filesCheck ? { quality_pending: qualityPending } : {}),
       oracle, accepted: accepted && bindingAccepted, checks: outcomeChecks, rejection_reasons: outcomeRejections,
       ...(seededFailure ? { seeded_failure: { observed: seededFailureObserved, replaced_by_handoff: replacesSeed } } : {}),

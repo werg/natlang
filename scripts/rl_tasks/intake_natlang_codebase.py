@@ -289,6 +289,11 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
         }
         if external_services:
             case['semantics']['services'] = {**external_services, **(world_services or {}).get(row['id'], {})}
+        # Optional source-bound capability partitions are copied verbatim into the runtime contract.  The TS
+        # collector validates that each alias only names exports from its bound external source.
+        for contract_field in ('service_aliases', 'service_scopes', 'report_completeness'):
+            if contract_field in metadata:
+                case['semantics'][contract_field] = metadata[contract_field]
         for field in ('folder_files', 'expected_files'):
             if field in row:
                 case['semantics'][field] = row[field]
@@ -299,6 +304,65 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
             case['semantics']['files_oracle'] = row['files_oracle']
         cases.append(case)
     return cases
+
+
+def _validate_runtime_contracts(package: dict[str, str], metadata: dict[str, Any],
+                                external_services: dict[str, str]) -> None:
+    aliases = metadata.get('service_aliases')
+    if aliases is not None:
+        if not isinstance(aliases, dict) or not aliases:
+            raise ValueError('metadata.service_aliases must be a non-empty namespace map')
+        alias_names = set()
+        source_methods: dict[str, set[str]] = {}
+        for alias, spec in aliases.items():
+            if not isinstance(alias, str) or not re.fullmatch(r'[A-Za-z_$][A-Za-z0-9_$]*', alias) or not isinstance(spec, dict):
+                raise ValueError(f'invalid service alias entry: {alias!r}')
+            source, methods = spec.get('source'), spec.get('methods')
+            if source not in external_services or not isinstance(methods, list) or not methods or \
+                    any(not isinstance(method, str) or not re.fullmatch(r'[A-Za-z_$][A-Za-z0-9_$]*', method) for method in methods) or \
+                    len(set(methods)) != len(methods):
+                raise ValueError(f'invalid source or method list for service alias {alias!r}')
+            source_methods.setdefault(source, set()).update(methods)
+            alias_names.add(alias)
+        for source, methods in source_methods.items():
+            for method in methods:
+                if not re.search(rf'\bexport\s+(?:async\s+)?function\s+{re.escape(method)}\s*\(', external_services[source]):
+                    raise ValueError(f'service alias method {source}.{method} is not an exported host function')
+    else:
+        alias_names = set(external_services)
+
+    scopes = metadata.get('service_scopes')
+    if scopes is not None:
+        if not isinstance(scopes, dict):
+            raise ValueError('metadata.service_scopes must map service namespaces to callable paths')
+        for service, paths in scopes.items():
+            if service not in alias_names or not isinstance(paths, list) or not paths or \
+                    any(not isinstance(path, str) for path in paths) or len(set(paths)) != len(paths):
+                raise ValueError(f'invalid service scope for namespace {service!r}')
+            for path in paths:
+                if not isinstance(path, str) or not path.endswith('.nl') or path not in package:
+                    raise ValueError(f'service scope {service!r} names a missing Natlang function: {path!r}')
+
+    gate = metadata.get('report_completeness')
+    if gate is not None:
+        required = ('mutating_methods', 'report_effects_path', 'checkpoint_effects_path',
+                    'report_diagnosis_path', 'diagnosis_function')
+        if not isinstance(gate, dict) or gate.get('schema') != 'natlang.report-completeness/1' or \
+                any(field not in gate for field in required):
+            raise ValueError('metadata.report_completeness must satisfy natlang.report-completeness/1')
+        methods = gate['mutating_methods']
+        if not isinstance(methods, list) or any(not isinstance(method, str) or not method for method in methods) or \
+                len(set(methods)) != len(methods):
+            raise ValueError('report_completeness.mutating_methods must be unique non-empty strings')
+        exposed = {method for spec in aliases.values() for method in spec['methods']} if aliases else set()
+        if not set(methods).issubset(exposed):
+            raise ValueError('report_completeness methods must be exposed through the declared aliases')
+        if gate['diagnosis_function'] not in package or not gate['diagnosis_function'].endswith('.nl'):
+            raise ValueError('report_completeness.diagnosis_function must name a package Natlang function')
+        for field in ('report_effects_path', 'checkpoint_effects_path', 'report_diagnosis_path'):
+            value = gate[field]
+            if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*', value):
+                raise ValueError(f'report_completeness.{field} must be a dotted value path')
 
 
 def intake(package_root: Path, *, output: Path, diversity_output: Path | None = None,
@@ -315,6 +379,7 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
     metadata = _bound_dataset_paths(metadata, package_root.parent)
     files = _project(package_root, metadata)
     external_services, service_bindings = load_external_services(package_root, metadata)
+    _validate_runtime_contracts(files, metadata, external_services)
     world_rows = _worlds(package_root, metadata)
     world_services = bind_world_services(package_root, metadata, external_services, service_bindings)
     fixture_aliases = {alias for alias, binding in service_bindings.items() if 'fixtures_path' in binding}
