@@ -256,7 +256,7 @@ def test_collect_stop_archives_new_partial_then_fresh_actor_restores_before_work
     def prepare(args):
         (args.out / 'queue.jsonl').write_text(''.join(json.dumps(x) + '\n' for x in entries))
     monkeypatch.setattr(production, 'prepare', prepare)
-    def score(out, path):
+    def score(out, path, neuralese_bonus=None):
         path.write_text('')
         return {}
     monkeypatch.setattr(production, 'score', score)
@@ -343,3 +343,34 @@ def test_wait_exception_drains_actual_child_before_native_partial_archive(tmp_pa
             if child.poll() is None:child.kill()
             child.wait()
         actor.store.close()
+
+
+def test_native_actor_client_put_bytes_sends_owner_and_returns_answer():
+    """The real client (not the test double) can upload: resume restores retained partial blocks through it."""
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from natlang_neuralese.rl.actor_client import NativeActorClient
+    from natlang_neuralese.serve.http import OWNER_HEADER
+    seen = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_PUT(self):
+            seen.update(path=self.path, owner=self.headers.get(OWNER_HEADER),
+                        body=self.rfile.read(int(self.headers['content-length'])))
+            raw = json.dumps({'id': self.path.rsplit('/', 1)[-1]}).encode()
+            self.send_response(200); self.send_header('content-length', str(len(raw))); self.end_headers()
+            self.wfile.write(raw)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        client = NativeActorClient(f'http://127.0.0.1:{server.server_address[1]}')
+        answer = client.put_bytes('/v1/neuralese/native-states/nzs1_x', b'abc', owner='retained-policy:p')
+    finally:
+        server.shutdown()
+    assert answer == {'id': 'nzs1_x'}
+    assert seen == {'path': '/v1/neuralese/native-states/nzs1_x', 'owner': 'retained-policy:p', 'body': b'abc'}
