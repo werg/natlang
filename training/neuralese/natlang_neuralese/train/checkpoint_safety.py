@@ -14,6 +14,10 @@ class CheckpointReserveError(RuntimeError):
     """There is not enough disk space to guarantee an atomic full checkpoint."""
 
 
+class CheckpointSpaceUnavailable(CheckpointReserveError):
+    """An authenticated atomic write is temporarily short of reserved disk space."""
+
+
 def checkpoint_size_upper_bound(state, *, margin=1.2, minimum_overhead=16 * 1024 * 1024):
     """Bound the next serialization without materializing another checkpoint copy.
 
@@ -176,7 +180,7 @@ class CheckpointWriteAdmission:
                     free = shutil.disk_usage(self.target.parent).free
                     required = self.write_bound_bytes + additional_transfer + self.minimum_free_bytes
                     if free < required:
-                        raise CheckpointReserveError(
+                        raise CheckpointSpaceUnavailable(
                             f'atomic checkpoint admission needs {required} free bytes '
                             f'(write={self.write_bound_bytes}, additional_transfer={additional_transfer}, '
                             f'safety={self.minimum_free_bytes}); only {free} are free')
@@ -195,7 +199,7 @@ class CheckpointWriteAdmission:
                 free = shutil.disk_usage(self.target.parent).free
                 required = self.write_bound_bytes + self.minimum_free_bytes
                 if free < required:
-                    raise CheckpointReserveError(
+                    raise CheckpointSpaceUnavailable(
                         f'atomic checkpoint admission needs {required} free bytes '
                         f'(write={self.write_bound_bytes}, safety={self.minimum_free_bytes}); only {free} are free')
             return self
@@ -480,3 +484,20 @@ def persist_postcommit_recovery(save, reserve, *, step, error, current_rng):
     recovery = postcommit_recovery_metadata(step, error)
     save(rng_state=current_rng, emergency_recovery=recovery, write_export=False)
     return recovery
+
+
+def save_with_space_retry(save, *, retry_seconds=15, sleep=time.sleep):
+    """Keep the exact committed in-memory state until an atomic save can be admitted."""
+    import errno
+    if not math.isfinite(retry_seconds) or retry_seconds <= 0:
+        raise ValueError('checkpoint retry interval must be positive and finite')
+    attempt = 0
+    while True:
+        try:
+            return save()
+        except (CheckpointSpaceUnavailable, OSError) as error:
+            if isinstance(error, OSError) and error.errno != errno.ENOSPC:
+                raise
+            attempt += 1
+            print(f'Checkpoint save is waiting for disk space (attempt {attempt}): {error}', flush=True)
+            sleep(retry_seconds)

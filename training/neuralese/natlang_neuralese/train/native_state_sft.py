@@ -1139,10 +1139,12 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
     # Preserve the synchronous CheckpointPolicy API for callers and test
     # adapters which predate async checkpoints. The extra arguments are only
     # meaningful when a cadence save was explicitly admitted asynchronously.
-    if async_allowed:
-        policy.save(state, metric=metric, async_allowed=True, async_optimizer=optimizer)
-    else:
-        policy.save(state, metric=metric)
+    from .checkpoint_safety import save_with_space_retry
+    def save_exact_state():
+        if async_allowed:
+            return policy.save(state, metric=metric, async_allowed=True, async_optimizer=optimizer)
+        return policy.save(state, metric=metric)
+    save_with_space_retry(save_exact_state)
     if torch.cuda.is_available() and torch.cuda.is_initialized():
         # Serialization staged tensors through the caching allocator; on unified memory its idle cache is host
         # memory other jobs cannot use. Return it; the next step re-maps what it needs.

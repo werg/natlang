@@ -375,3 +375,25 @@ def test_port_optimizer_steps_latents_with_lionsr_and_round_trips_its_state():
     again = build()
     again.load_state_dict(optimizer.state_dict())
     assert torch.equal(again.latent.state[latent]['momentum'], optimizer.latent.state[latent]['momentum'])
+
+
+def test_committed_state_save_waits_for_space_without_replaying_update():
+    import errno
+    from natlang_neuralese.train.checkpoint_safety import CheckpointReserveError, CheckpointSpaceUnavailable, save_with_space_retry
+    state = {'global_step': 54, 'exposure': {'row': 2}, 'optimizer': object(), 'rng': object()}
+    attempts = []
+    waits = []
+    def save():
+        attempts.append(state)
+        if len(attempts) == 1:
+            raise CheckpointSpaceUnavailable('full')
+        if len(attempts) == 2:
+            raise OSError(errno.ENOSPC, 'full')
+        return 'committed'
+    assert save_with_space_retry(save, retry_seconds=0.1, sleep=waits.append) == 'committed'
+    assert attempts == [state, state, state] and waits == [0.1, 0.1]
+    assert state['global_step'] == 54 and state['exposure'] == {'row': 2}
+    with pytest.raises(CheckpointReserveError, match='unowned'):
+        save_with_space_retry(lambda: (_ for _ in ()).throw(CheckpointReserveError('unowned')), sleep=waits.append)
+    with pytest.raises(OSError):
+        save_with_space_retry(lambda: (_ for _ in ()).throw(OSError(errno.EIO, 'io')), sleep=waits.append)
