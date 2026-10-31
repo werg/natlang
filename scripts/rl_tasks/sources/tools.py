@@ -208,6 +208,7 @@ def call_set_case(*, source, upstream, item, group, key, tools, answers, request
 # --- ToolACE: single-request function calling, same receipt-certified framing as xLAM -------------------------------
 
 TOOLACE = ARCHIVE_RAW / 'agentic-20260927/toolace/data.json'
+TOOLACE_SCHEMA_CONTRACT = 'natlang.toolace-schema-contract/1'
 JSON_TO_PY = {'string': 'str', 'str': 'str', 'integer': 'int', 'int': 'int', 'number': 'float', 'float': 'float',
               'double': 'float', 'boolean': 'bool', 'bool': 'bool', 'array': 'list', 'list': 'list', 'object': 'dict',
               'dict': 'dict'}
@@ -304,6 +305,10 @@ def toolace(cap=1800, seed=20261031):
                              key=item, tools=tools, answers=answers, request=conv[0]['value'],
                              license_='Apache-2.0', revision='6bda777')
         if case:
+            case['source_revisions'].append(TOOLACE_SCHEMA_CONTRACT)
+            case['curriculum']['external']['tool_schema_sha256'] = text_digest(json.dumps(
+                [{'name':tool['name'], 'parameters':tool['json_schema']} for tool in tools],
+                sort_keys=True, separators=(',', ':')))
             out.append(case)
         if len(out) >= cap:
             break
