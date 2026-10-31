@@ -4,6 +4,43 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Follow-up observation, 14:53 CET
+
+Attempt 5 is live (`lfm3-v4-joint-sft-20-attempt5.service`, trainer PID1071443).
+Real checkpoint CPU continuation passed through model/optimizer/RNG/focus/source
+schedule restoration. The actual trainer GPU memory qualification passed;
+packed-schedule qualification and the first optimizer update are still pending.
+Its frozen runtime is bf3b4f9b5. The identity defect was an added authenticated
+config-only checkpoint-restore receipt, resolved by exact base inventory and
+config/tokenizer hash checks, without bypassing the model identity guard.
+
+Root pushed through7bec5321a: learner templates now request8CPU/64GiB,
+contradictory older AGENTS CPU advice is corrected, CoreWeave environment-mutating
+tests are isolated, and the current renderer correctly rejects the old sealed
+builder-only migration proof. Targeted results:16render tests and121CoreWeave
+tests passed,2skipped. Quick main checks passed. The full suite was preempted
+and requeued for high-priority training; its three observed failures have these
+specific fixes, but the full suite has not yet finished. Disabled the stale
+30-minute full-check timer: it created worktrees, duplicated supervisor checks,
+and was repeatedly failing its temporary-directory ownership check. The canonical
+checkout's ledgered full suite remains queued.
+
+JOLT42 USB full-state verification completed. SD52 USB copy remains active, in
+addition to its already verified Pop copy. The short backup I/O priority window
+was explicitly ended; all observed data services are thawed. Memory admission
+preempted/requeued lower-priority work for the learner. NVMe has44GiB free;
+its old continuous-storage policy still targets a retired learner and does not
+establish protection for this new run. Current native checkpoint headroom and
+recovery dependencies need a correctly bound replacement policy.
+
+Pop's current-code actor is now running with exact runtime/source pins. Its live
+ledger claim was corrected under the ledger lock to attach the actual container;
+GPU use is now measured. LogHub capture passed receipt validation and reached
+actual model calls, then failed with CUDA OOM before any complete episode export.
+A is investigating the exact turn and retained state/logit allocations; no source
+truncation, reduced custody or partial-episode admission is authorized by that
+failure. C is also repairing the telecom helper topology before a new task.
+
 ## Follow-up observation, 14:37 CET
 
 **No new joint-SFT optimizer update has been earned yet.** The production parent
