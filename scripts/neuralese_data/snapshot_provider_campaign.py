@@ -11,11 +11,11 @@ from scripts.neuralese_data.provider_campaign_source import SCHEMA, validated_di
 from scripts.run_reviewed_luna_dispatcher import digest, _verify_ledger_identity, _verify_ledger_events
 
 
-def snapshot(campaign, output, *, limit=64, previous=()):
+def snapshot(campaign, output, *, limit=64, previous=(), plan_path=None):
     campaign, output = Path(campaign).resolve(strict=True), Path(output).resolve()
     if type(limit) is not int or limit < 1 or output.exists():
         raise ValueError('provider snapshot needs a positive limit and fresh output')
-    plan_path = campaign/'plan.json'
+    plan_path = (Path(plan_path) if plan_path is not None else campaign/'plan.json').resolve(strict=True)
     plan, identity = validated_dispatch_plan(plan_path, digest(plan_path))
     raw = Path(plan['claim_ledger']).read_bytes()
     raw = raw[:raw.rfind(b'\n')+1]  # A concurrent append may have an unfinished last line.
@@ -78,10 +78,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--campaign',required=True,type=Path)
     parser.add_argument('--out',required=True,type=Path)
+    parser.add_argument('--plan', type=Path, help='exact reviewed plan when stored outside campaign/plan.json')
     parser.add_argument('--limit',type=int,default=64)
     parser.add_argument('--previous',action='append',type=Path,default=[])
     args = parser.parse_args()
-    print(json.dumps(snapshot(args.campaign,args.out,limit=args.limit,previous=args.previous)))
+    print(json.dumps(snapshot(args.campaign,args.out,limit=args.limit,previous=args.previous,plan_path=args.plan)))
 
 
 if __name__=='__main__':main()

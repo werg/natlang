@@ -7,6 +7,8 @@ corpus registration, readiness or a claim of training exposure.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import hashlib
 import subprocess
 import sys
@@ -86,6 +88,31 @@ def validated_dispatch_plan(path, expected_sha256):
     return plan, identity
 
 
+def collector_program_digests(runtime, programs):
+    """Use the authenticated collector's wire digest, not Python key ordering.
+
+    The collector sorts keys with JavaScript localeCompare. Python canonical
+    JSON sorts Unicode code points, which differs for real source-file keys.
+    The caller has already verified this frozen runtime against its receipt.
+    """
+    module = (Path(runtime) / 'dist/teacher/collector.js').resolve(strict=True)
+    node = os.environ.get('NATLANG_NODE') or shutil.which(
+        'node', path=str(Path.home() / '.local/bin') + os.pathsep + os.environ.get('PATH', ''))
+    if not node:
+        raise ValueError('Node is required to verify the original collector program digests')
+    code = ('import fs from "node:fs";'
+            'const {recordDigest}=await import(process.argv[1]);'
+            'process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(0,"utf8")).map(recordDigest)));')
+    result = subprocess.run([node, '--input-type=module', '-e', code, module.as_uri()],
+        input=json.dumps(programs, ensure_ascii=False), text=True, capture_output=True, check=True, timeout=60)
+    digests = json.loads(result.stdout)
+    if (not isinstance(digests, list) or len(digests) != len(programs)
+            or any(not isinstance(item, str) or len(item) != 64
+                   or any(char not in '0123456789abcdef' for char in item) for item in digests)):
+        raise ValueError('frozen collector returned malformed program digests')
+    return digests
+
+
 def source_binding(args, *, protection_reader):
     from scripts.run_reviewed_luna_dispatcher import _verify_ledger_identity, _verify_ledger_events
 
@@ -116,6 +143,7 @@ def source_binding(args, *, protection_reader):
     source_files, selected_ids, groups, packet_programs = {}, set(), set(), {}
     collection_key = 'provider-campaign:' + declaration['plan']['sha256']
     combined = [json.loads(line) for line in source.read_text().splitlines() if line.strip()]
+    wire_digests = collector_program_digests(plan['runtime'], [row.get('task', {}).get('program_ir') for row in combined])
     entries = declaration.get('results')
     if not isinstance(entries, list) or not entries or len(entries) != len(combined):
         raise ValueError('provider source must enumerate every complete original trajectory')
@@ -151,7 +179,7 @@ def source_binding(args, *, protection_reader):
         accepted_block = exact_honest_root_block(row, program)
         if (row.get('version') != 'natlang.teacher_trajectory.native/1'
                 or row.get('task',{}).get('program_ir') != program
-                or trace.get('program_ir_sha256') != canonical_json_sha256_hex(program)
+                or trace.get('program_ir_sha256') != wire_digests[number]
                 or trace.get('model') != plan['model_id'] or trace.get('provider') != plan['provider']
                 or not row.get('execution_identity',{}).get('execution_run_id')
                 or not row.get('trajectory') or program.get('split') != 'train'

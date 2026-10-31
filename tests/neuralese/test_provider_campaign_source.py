@@ -56,6 +56,8 @@ def fixture(tmp_path, monkeypatch, mutation=None):
     plan_path=put('plan.json',{'fixture':'validated separately by dispatcher tests'})
     plan={'source':str(cases),'source_sha256':ref(cases)['sha256'],
           'model_id':'gpt-6-luna','provider':'openai-codex','runtime_receipt_sha256':'frozen-runtime'}
+    monkeypatch.setattr(source, 'collector_program_digests', lambda runtime, programs: [source.canonical_json_sha256_hex(p) for p in programs])
+    plan['runtime'] = str(tmp_path/'runtime')
     identity={'campaign_id':'campaign','source':str(cases),'runtime':str(tmp_path/'runtime'),
               'campaign_root':str(tmp_path),'slots':6,'cases':[{'index':0,'seed':7}]}
     identity['identity_sha256']=hashlib.sha256(json.dumps(identity,sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -290,3 +292,23 @@ def test_historical_dispatch_attestation_rejects_wrong_git_object_hash(tmp_path,
         lambda *args, **kwargs: (_ for _ in ()).throw(ValueError(f'Missing or changed reviewed artifact pin: {target}')))
     with pytest.raises(ValueError, match='differs from its Git object'):
         source.validated_dispatch_plan(plan_path, hashlib.sha256(plan_path.read_bytes()).hexdigest())
+
+
+def test_collector_wire_digest_uses_javascript_key_order(tmp_path):
+    import shutil
+    if not shutil.which('node'):
+        pytest.skip('Node required for collector interoperability test')
+    module = tmp_path / 'dist/teacher/collector.js'
+    module.parent.mkdir(parents=True)
+    (tmp_path / 'package.json').write_text('{"type":"module"}')
+    module.write_text("import {createHash} from 'node:crypto';\n"
+        "function canonical(v){if(Array.isArray(v))return '['+v.map(canonical).join(',')+']';"
+        "if(v&&typeof v==='object')return '{'+Object.entries(v).sort(([a],[b])=>a.localeCompare(b))"
+        ".map(([k,c])=>JSON.stringify(k)+':'+canonical(c)).join(',')+'}';return JSON.stringify(v);}"
+        "export const recordDigest=v=>createHash('sha256').update(canonical(v)).digest('hex');")
+    program = {'semantics': {'files': {'a_B.nl': 'typed body', 'a-b.nl': 'other body'}}}
+    digest, = source.collector_program_digests(tmp_path, [program])
+    assert digest != source.canonical_json_sha256_hex(program)
+    changed = copy.deepcopy(program)
+    changed['semantics']['files']['a_B.nl'] = 'tampered body'
+    assert source.collector_program_digests(tmp_path, [changed]) != [digest]
