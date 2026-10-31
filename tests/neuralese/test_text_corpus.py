@@ -1151,6 +1151,71 @@ def test_text_provider_read_coalesces_only_duplicate_views_of_same_authenticated
                 raise AssertionError(f"distinct eligible writer event accepted after tampering {field}")
 
 
+def test_configured_function_definition_context_uses_exact_read_receipt_without_writer_claim():
+    from natlang_neuralese.data.text_corpus import _attested_provider_expanded_reads
+
+    block_id = "nz1_" + "a" * 52
+    body = "Read the value and return it exactly."
+    body_sha = _sha(body)
+    call, row_sha, trace_sha = "trajectory/3", "b" * 64, "c" * 64
+    transport, raw, rendered = "d" * 64, "e" * 64, "f" * 64
+    source_request, source_response = "1" * 64, "2" * 64
+    read_node, turn_node = call + "#6", call + "#turn1"
+    receipt = {
+        "schema": "natlang.provider-expanded-read-context/1",
+        "origin": "configured-function-definition", "invocation_id": call,
+        "parent_invocation_id": "trajectory/2", "source_row_sha256": row_sha,
+        "trace_sha256": trace_sha, "transport_provenance_sha256": transport,
+        "raw_request_sha256": raw, "rendered_request_sha256": rendered,
+        "source_request_sha256": source_request, "source_response_sha256": source_response,
+        "block": {"id": block_id, "type": "Neuralese<(v: Neuralese<unknown>) => unknown>",
+                  "body": body, "body_sha256": body_sha, "learned_vectors": False},
+        "readout": {"schema": "natlang.text-template-readout/1", "read_body_id": block_id,
+                    "read_source_sha256": body_sha, "learned_vectors": False,
+                    "qualification_certificate": False, "training_admission": False},
+        "definition": {"id": "nz-fn:" + block_id, "revision": block_id},
+        "block_read": {"kind": "block_read", "call_id": call, "node": read_node,
+                       "block": block_id},
+        "model_turn": {"kind": "model_turn", "call_id": call, "node": turn_node,
+                       "inputs": [{"node": read_node, "block": block_id}]},
+        "context_occurrences": 1, "producer_write": None,
+    }
+    metadata = {"schema": "natlang.external-context-input/1",
+                "origin": "configured-function-definition",
+                "learner_representation": "crisp-external-function-context",
+                "block_id": block_id, "type": receipt["block"]["type"],
+                "body_sha256": body_sha, "invocation_id": call,
+                "source_row_sha256": row_sha, "trace_sha256": trace_sha,
+                "transport_provenance_sha256": transport,
+                "raw_request_sha256": raw, "rendered_request_sha256": rendered,
+                "source_request_sha256": source_request, "source_response_sha256": source_response,
+                "read_node": read_node, "model_turn_node": turn_node,
+                "runtime_definition_id": receipt["definition"]["id"],
+                "runtime_manifest_sha256": "3" * 64,
+                "runtime_definition_source_sha256": "4" * 64,
+                "runtime_definition_source": "function-definition.ts",
+                "writer_target_selected": False, "learned_vectors": False,
+                "qualification_certificate": False, "training_admission": False,
+                "context_occurrences": 1}
+    reader = {"id": "reader", "source_ref": {"invocation_id": call,
+                "source_row_sha256": row_sha, "trace_sha256": trace_sha,
+                "provider_expanded_read_contexts": [receipt]},
+              "neuralese_conversion": {"external_context_inputs": [metadata]},
+              "messages": [{"role": "user", "content": [{"type": "neuralese", "id": block_id}]}]}
+    result = _attested_provider_expanded_reads(reader, {}, split="train", source_groups=["g"])
+    assert len(result) == 1
+    assert result[0]["body"] == body
+    assert result[0]["source_kind"] == "provider-expanded-runtime-definition-context-only"
+    tampered = json.loads(json.dumps(reader))
+    tampered["source_ref"]["provider_expanded_read_contexts"][0]["block"]["body"] = "wrong body"
+    try:
+        _attested_provider_expanded_reads(tampered, {}, split="train", source_groups=["g"])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("altered configured definition body must fail its digest binding")
+
+
 def test_program_header_rendering_keeps_only_program_specific_system_paragraphs():
     from natlang_neuralese.data.prompt_rendering import apply_prompt_rendering, default_pieces, render_system_prompt
 

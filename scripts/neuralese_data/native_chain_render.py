@@ -24,26 +24,40 @@ def edge_digest(edge):
 
 
 def _plain_result_span(writer, occurrence, body):
-    """Producer span of a child's plain string result (`result:` writes, conversion /15).
+    """Producer span of a typed string result in the original return_result call.
 
     The converter's authenticated producer occurrence points at the string value inside the exact tool-call
     arguments (`/target/tool_calls/<i>/function/arguments<json>/<path>`). The whole call stays the supervised target;
     only that value is marked, exactly like a structured `Neuralese<string>` descriptor's value.
     """
-    if occurrence.get('writer_source_kind') != 'Neuralese<string>':
+    if occurrence.get('writer_source_kind') not in ('Neuralese<string>', 'typed-text-result'):
+        return None
+    if (occurrence.get('writer_source_kind') == 'typed-text-result'
+            and not str(occurrence.get('write_name', '')).startswith('soft-state:nz1_')):
         return None
     parts = [part.replace('~1', '/').replace('~0', '~') for part in occurrence['writer_json_pointer'].split('/')[1:]]
     json_index = next((index for index, part in enumerate(parts) if part.endswith('<json>')), None)
-    if (len(parts) < 6 or parts[:2] != ['target', 'tool_calls'] or not parts[2].isdigit() or json_index != 4
+    if (len(parts) != 6 or parts[:2] != ['target', 'tool_calls'] or not parts[2].isdigit() or json_index != 4
             or parts[3] != 'function' or parts[4] != 'arguments<json>' or json_index + 1 >= len(parts)):
         return None
     try:
-        value = json.loads(writer['target']['tool_calls'][int(parts[2])]['function']['arguments'])
+        call = writer['target']['tool_calls'][int(parts[2])]
+        function = call.get('function', call)
+        if function.get('name') != 'return_result':
+            return None
+        value = json.loads(function['arguments'])
         for part in parts[json_index + 1:]:
             value = value[int(part)] if isinstance(value, list) else value[part]
     except (KeyError, IndexError, TypeError, ValueError):
         return None
-    if value != body:
+    if (parts[json_index + 1:] != ['value'] or value != body or not isinstance(value, str)
+            or occurrence.get('payload_sha256') != hashlib.sha256(body.encode()).hexdigest()):
+        return None
+    try:
+        arguments = json.loads(function['arguments'])
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(arguments, dict) or arguments.get('status') != 'success':
         return None
     return {'call_index': int(parts[2]), 'argument_path': parts[json_index + 1:], 'body': body,
             'payload_sha256': occurrence['payload_sha256'], 'value_type': 'string'}
@@ -94,7 +108,8 @@ def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerpr
             seen_producers[key] = copy.deepcopy(descriptor)
             producer_entries[wid].append({'writer_occurrence_id': key[1], 'body': body,
                                           'span': copy.deepcopy(descriptor), 'edge_sha256': []})
-            if descriptor['value_type'] not in ('inline-string', 'assistant-text', 'unknown') and not plain_result:
+            if (descriptor['value_type'] not in ('inline-string', 'assistant-text', 'unknown')
+                    and not plain_result and not descriptor.get('source_target_pointer')):
                 targets[wid] = _replace_source_target_span(targets[wid], occurrence, body, ROLE_MARKERS)
         entry = next(x for x in producer_entries[wid] if x['writer_occurrence_id'] == key[1])
         entry['edge_sha256'].append(eid)

@@ -960,6 +960,13 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                     "typed-read-from-authenticated-runtime-writer-event-context-only"})
                      or (item.get("origin") == "runtime-definition-context-only"
                          and item.get("learner_representation") == "runtime-definition-context-only")
+                     # Older native-source conversions label a configured
+                     # function read as a crisp external function context.  The
+                     # exact same-source receipt still carries the definition,
+                     # read node and model-turn edge; accept this explicit
+                     # representation pair through the strict validator below.
+                     or (item.get("origin") == "configured-function-definition"
+                         and item.get("learner_representation") == "crisp-external-function-context")
                      or (item.get("origin") == "captured-provider-input-context-only"
                          and item.get("learner_representation") == "captured-expanded-provider-input-context-only"))]
     if not metadata:
@@ -1047,7 +1054,11 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 "block_id": block_id, "reader_record_id": record.get("id"), "body": body,
                 "source_kind": "provider_expanded_context_only_input"})
             continue
-        if item.get("origin") == "runtime-definition-context-only":
+        if (item.get("origin") == "runtime-definition-context-only"
+                or (item.get("origin") == "configured-function-definition"
+                    and item.get("learner_representation") == "crisp-external-function-context")):
+            legacy_configured_definition = (item.get("origin") == "configured-function-definition"
+                and item.get("learner_representation") == "crisp-external-function-context")
             refs = [receipt for receipt in ((record.get("source_ref") or {}).get(
                 "provider_expanded_read_contexts") or [])
                     if isinstance(receipt, dict)
@@ -1072,11 +1083,12 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                      (item.get("source_request_sha256"), receipt.get("source_request_sha256")),
                      (item.get("source_response_sha256"), receipt.get("source_response_sha256")),
                      (item.get("read_node"), read.get("node")),
-                     (item.get("model_turn_node"), turn.get("node")),
-                     (item.get("runtime_definition_id"), definition.get("id"))]
+                     (item.get("model_turn_node"), turn.get("node"))]
             if (any(left != right for left, right in pairs)
-                    or item.get("learner_representation") != "runtime-definition-context-only"
-                    or item.get("writer_target_selected") is not False
+                    or item.get("learner_representation") not in {
+                        "runtime-definition-context-only", "crisp-external-function-context"}
+                    or (item.get("writer_target_selected") is not False
+                        and not (legacy_configured_definition and item.get("writer_target_selected") is None))
                     or item.get("learned_vectors") is not False
                     or item.get("qualification_certificate") is not False
                     or item.get("training_admission") is not False
@@ -1084,10 +1096,14 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                     or item.get("source_row_sha256") != reader_source_row
                     or not isinstance(item.get("type"), str) or not item["type"].startswith("Neuralese<")
                     or not isinstance(body, str) or _sha(body.encode("utf-8")) != body_sha256
-                    or not isinstance(item.get("runtime_manifest_sha256"), str)
-                    or not isinstance(item.get("runtime_definition_source_sha256"), str)
-                    or not isinstance(item.get("runtime_definition_source"), str)
+                    or (not legacy_configured_definition and not isinstance(item.get("runtime_manifest_sha256"), str))
+                    or (not legacy_configured_definition and not isinstance(item.get("runtime_definition_source_sha256"), str))
+                    or (not legacy_configured_definition and not isinstance(item.get("runtime_definition_source"), str))
                     or readout.get("read_body_id") != block_id or readout.get("read_source_sha256") != body_sha256
+                    or (item.get("runtime_definition_id") is not None
+                        and item.get("runtime_definition_id") != definition.get("id"))
+                    or (legacy_configured_definition and definition.get("id") != "nz-fn:" + block_id)
+                    or (legacy_configured_definition and definition.get("revision") != block_id)
                     or any(readout.get(flag) is not False for flag in
                            ("learned_vectors", "qualification_certificate", "training_admission"))
                     or receipt.get("producer_write") is not None
@@ -1097,7 +1113,8 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                     or not any(isinstance(edge, dict) and edge.get("node") == read.get("node")
                                and edge.get("block") == block_id for edge in turn.get("inputs", []))
                     or typed_neuralese_ref_count(record.get("messages") or [], block_id)
-                       != item.get("context_occurrences")):
+                       != (item.get("context_occurrences") if item.get("context_occurrences") is not None
+                           else receipt.get("context_occurrences") if legacy_configured_definition else None)):
                 raise ValueError("runtime-definition context binding does not match its exact read and model turn")
             attestations.append({key: value for key, value in item.items() if key != "body"} | {
                 "block_id": block_id, "reader_record_id": record.get("id"), "body": body,
@@ -1922,7 +1939,9 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise ValueError('structured producer span does not resolve in the derived target') from exc
         if current != body_value:
-            raise ValueError('structured producer target differs from its authenticated source JSON')
+            raise ValueError('structured producer target differs from its authenticated source JSON '
+                             f'(type={producer_span["value_type"]}, path={producer_span["argument_path"]!r}, '
+                             f'current={current!r}, bound={body_value!r})')
         if producer_span['value_type'] != 'inline-string':
             producer_sentinel = '__natlang_native_producer_' + secrets.token_hex(24) + '__'
             parent[key] = producer_sentinel

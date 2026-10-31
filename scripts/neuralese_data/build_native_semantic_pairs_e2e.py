@@ -470,6 +470,117 @@ def structured_unknown_result_span(writer_record, occurrence, payload):
             'body': exact_json, 'payload_sha256': occurrence['payload_sha256'], 'value_type': 'unknown'}
 
 
+def structured_string_result_span(writer_record, occurrence, payload):
+    """Bind a typed text occurrence to one literal string inside return_result.value."""
+    if occurrence.get('writer_source_kind') != 'Neuralese<string>':
+        return None
+    parts = [part.replace('~1', '/').replace('~0', '~')
+             for part in occurrence['writer_json_pointer'].split('/')[1:]]
+    json_index = next((index for index, part in enumerate(parts) if part.endswith('<json>')), None)
+    try:
+        call_index = parts[2]
+        suffix = parts[json_index + 1:] if json_index is not None else []
+        if (len(parts) < 6 or parts[:2] != ['target', 'tool_calls'] or not call_index.isdigit()
+                or parts[3:5] != ['function', 'arguments<json>'] or json_index != 4
+                or not suffix or suffix[0] != 'value'):
+            raise ValueError
+        native = writer_record.get('native_source_conversion') or {}
+        ref = writer_record.get('source_ref') or {}
+        original = native.get('source_target')
+        target_digest = lambda value: hashlib.sha256(json.dumps(
+            value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        if (native.get('source_target_present') is not True or not isinstance(original, dict)
+                or target_digest(original) != native.get('source_target_sha256')
+                or target_digest(writer_record.get('target')) != native.get('source_target_sha256')
+                or (ref.get('native_target_sha256') is not None
+                    and ref.get('native_target_sha256') != native.get('source_target_sha256'))):
+            raise ValueError
+        function = original['tool_calls'][int(call_index)]['function']
+        if function.get('name') != 'return_result':
+            raise ValueError
+        value = json.loads(function['arguments'])
+        for part in suffix:
+            value = value[int(part)] if isinstance(value, list) else value[part]
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError('typed text producer is not bound inside the exact return_result value') from exc
+    if type(value) is not str or value != payload or occurrence.get('payload_sha256') != hashlib.sha256(payload.encode()).hexdigest():
+        raise ValueError('typed text producer differs from its exact authenticated return_result string')
+    return {'call_index': int(call_index), 'argument_path': suffix, 'body': payload,
+            'payload_sha256': occurrence['payload_sha256'], 'value_type': 'string',
+            'source_target_pointer': occurrence['writer_json_pointer']}
+
+
+def inline_instruction_target_span(writer_record, occurrence, payload):
+    """Bind an out-of-band inline-write receipt to its exact original eval code.
+
+    Older normalized teacher rows keep inline write sites in
+    ``native_source_conversion.source_receipts`` rather than in the assistant
+    target. This accepts only the exact receipt pointer, call id, reconstructed
+    code hash, single typed write, and backtick-delimited source span.
+    """
+    if occurrence.get('writer_source_kind') != 'inline-instruction':
+        return None
+    pointer = occurrence.get('writer_json_pointer')
+    if not isinstance(pointer, str):
+        return None
+    parts = [part.replace('~1', '/').replace('~0', '~') for part in pointer.split('/')[1:]]
+    if (len(parts) != 6 or parts[0] != 'source_receipts' or not parts[1].isdigit()
+            or parts[2:4] != ['sidecar', 'parts'] or not parts[4].isdigit() or parts[5] != '$write'):
+        return None
+    native = writer_record.get('native_source_conversion') or {}
+    receipts = native.get('source_receipts') or []
+    try:
+        receipt = receipts[int(parts[1])]
+        sidecar = receipt['sidecar']
+        write_part = sidecar['parts'][int(parts[4])]
+        write = write_part['$write']
+    except (KeyError, IndexError, TypeError):
+        return None
+    if (receipt.get('schema') != 'natlang.native-inline-instruction-source-receipt/1'
+            or write_part != {'$write': write}
+            or write.get('name') != occurrence.get('write_name')
+            or write.get('type') != 'Neuralese<string>'
+            or write.get('source_kind') != 'inline-instruction'
+            or write.get('source') != payload
+            or occurrence.get('payload_sha256') != hashlib.sha256(payload.encode()).hexdigest()):
+        return None
+    calls = (writer_record.get('target') or {}).get('tool_calls') or []
+    call_id = receipt.get('call_id')
+    matches = [(index, call) for index, call in enumerate(calls) if call.get('id') == call_id]
+    if len(matches) != 1 or not isinstance(call_id, str) or not call_id:
+        return None
+    call_index, call = matches[0]
+    function = call.get('function', call)
+    if function.get('name') != 'eval' or not isinstance(function.get('arguments'), str):
+        return None
+    from natlang_neuralese.train.inline_instructions import validate_inline_instruction_code
+    checked = validate_inline_instruction_code(function['arguments'], sidecar)
+    if not checked.valid or checked.value is None:
+        return None
+    writes = [item for item in checked.value.writes if item.name == write['name']]
+    if len(writes) != 1:
+        return None
+    source_write = writes[0]
+    sites = [site for site in (sidecar.get('sites') or [])
+             if isinstance(site, dict) and site.get('name') == write['name']]
+    site = sites[0] if len(sites) == 1 else None
+    code = checked.value.code
+    if (source_write.type != 'Neuralese<string>' or source_write.source != payload or site is None
+            or not isinstance(site.get('actual_tool_call_id'), str) or not site['actual_tool_call_id']
+            or site.get('code_span') != {'start': source_write.start - 1, 'end': source_write.end + 1}
+            or source_write.start <= 0 or source_write.end >= len(code)
+            or code[source_write.start - 1:source_write.end + 1] != '`' + payload + '`'):
+        return None
+    return {'call_index': call_index, 'argument_path': ['code'], 'body': payload,
+            'payload_sha256': occurrence['payload_sha256'], 'value_type': 'inline-string',
+            'source_start': source_write.start, 'source_end': source_write.end,
+            'sidecar_code_sha256': checked.value.code_sha256,
+            'site_name': write['name'], 'site_actual_tool_call_id': site['actual_tool_call_id'],
+            'source_receipt_sha256': hashlib.sha256(json.dumps(receipt, ensure_ascii=False,
+                sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+            'source_receipt_pointer': pointer}
+
+
 def reader_has_payload(record, write_name, body, expected_sha):
     metadata = record.get('native_source_conversion') or {}
     matches = [item for item in metadata.get('occurrences', [])
@@ -869,7 +980,12 @@ def pair_derivations(writer_record, reader_record, pieces, *, tokenizer, payload
         raise ValueError('writer target span lacks one exact source occurrence')
     writer_target_span = None
     inline_sidecar_span = None
-    if writer_source_kind != 'assistant-text-return':
+    if writer_source_kind == 'inline-instruction':
+        inline_sidecar_span = inline_instruction_target_span(writer_record, occurrence, payload)
+        if inline_sidecar_span is None:
+            raise ValueError('inline producer source receipt is not bound to the exact original eval target')
+        writer_target_span = inline_sidecar_span
+    elif writer_source_kind != 'assistant-text-return':
         source_values = dict(_walk_paths(writer_record))
         source_descriptor = source_values.get(occurrence['writer_json_pointer'])
         pointer_parts = [part.replace('~1', '/').replace('~0', '~')
@@ -877,7 +993,10 @@ def pair_derivations(writer_record, reader_record, pieces, *, tokenizer, payload
         inline_path = (len(pointer_parts) == 7 and pointer_parts[0] == 'target'
             and pointer_parts[1] == 'tool_calls' and pointer_parts[3:5] == ['neuralese_code', 'parts']
             and pointer_parts[6] == '$write')
-        if (isinstance(source_descriptor, dict)
+        if (writer_source_kind == 'Neuralese<string>'
+                and (source_descriptor is None or source_descriptor == payload)):
+            writer_target_span = structured_string_result_span(writer_record, occurrence, payload)
+        if (writer_target_span is None and isinstance(source_descriptor, dict)
                 and isinstance(source_descriptor.get('type'), str)
                 and source_descriptor.get('type') in {'Neuralese<string>', 'Neuralese<unknown>'}
                 and not inline_path):
@@ -945,7 +1064,9 @@ def pair_derivations(writer_record, reader_record, pieces, *, tokenizer, payload
             writer_target_span = inline_sidecar_span
     if writer_source_kind == 'assistant-text-return':
         writer_target = _assistant_text_target(writer_record, payload, role_markers)
-    elif inline_sidecar_span is not None or (writer_target_span and writer_target_span.get('value_type') == 'unknown'):
+    elif (inline_sidecar_span is not None
+          or (writer_target_span and (writer_target_span.get('value_type') == 'unknown'
+                                      or writer_target_span.get('source_target_pointer')))):
         # The sidecar describes source offsets; it is not the model's target.
         # Likewise, an unknown-typed structured result is marked by the normal
         # typed JSON target renderer; keep the original object-valued call.
