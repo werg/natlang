@@ -310,10 +310,17 @@ def natlang_codebases(per_package=60, repairs=24, seed=20261031):
                 'nl_functions': sum(p.endswith('.nl') for p in files)}
         questions = _explore_questions(files, rng)[:per_package]
         pool = [q[2] for q in questions if isinstance(q[2], list)]
-        # The package becomes the root's companion folder; package-root `uses` paths gain that folder's prefix.
+        # The source application becomes the root's companion folder. Keep a
+        # package marker at the fixture root so the loader resolves `uses`
+        # paths relative to this wrapper, not the companion directory itself.
+        # Without this file, packageRoot() falls back to `explore_program/`;
+        # the already-prefixed paths then resolve as
+        # `explore_program/explore_program/...` and valid source functions look
+        # missing at runtime.
         program = {f'explore_program/{p}': (re.sub(r'^uses:.*?(?=^\w+:|^---)', lambda m: re.sub(
             r'([\[\s,-])([A-Za-z_][\w/]*)', lambda u: u.group(1) + 'explore_program/' + u.group(2), m.group(0)[5:]).join(['uses:', '']),
             t, count=1, flags=re.M | re.S) if p.endswith('.nl') else t) for p, t in files.items() if p != 'natlang.json'}
+        program['natlang.json'] = '{"schema":"natlang.package/v2"}\n'
         for index, (kind, x, answer) in enumerate(questions):
             item = f'{unit_dir}:{kind}:{x}'
             text = pick(EXPLORE[kind], item).format(x=x)
