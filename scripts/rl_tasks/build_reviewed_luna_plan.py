@@ -97,7 +97,8 @@ def _program_id(row: dict) -> str:
 
 def select_balanced_train(rows: list[dict], *, max_cases: int, seed: int,
                           protected: ProtectedWorlds,
-                          include_judged: bool = False) -> tuple[list[dict], list[dict]]:
+                          include_judged: bool = False,
+                          case_ids: set[str] | None = None) -> tuple[list[dict], list[dict]]:
     candidates, receipts, seen_ids = [], [], set()
     for row in rows:
         if row.get('split') != 'train':
@@ -117,6 +118,13 @@ def select_balanced_train(rows: list[dict], *, max_cases: int, seed: int,
         candidates.append((_program_id(row), operation, _primary_world_group(row), row))
     if not candidates:
         raise ValueError('verified source has no train rows after split filtering')
+    if case_ids is not None:
+        by_id = {row['id']: (program, operation, group, row)
+                 for program, operation, group, row in candidates}
+        missing = sorted(case_ids - by_id.keys())
+        if missing:
+            raise ValueError(f'case-id selector did not match public TRAIN rows: {missing}')
+        candidates = [by_id[case_id] for case_id in sorted(case_ids)]
     if max_cases < 1:
         raise ValueError('max_cases must be positive')
     max_cases = min(max_cases, len(candidates))
@@ -171,6 +179,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
                selected_source: Path, protection_receipt: Path, max_cases: int = 42,
                seed: int = 20261031, intake_receipt: Path | None = None,
                diversity_manifest: Path | None = None,
+               case_ids: set[str] | None = None,
                judge_model: dict[str, str] | None = None,
                protected: ProtectedWorlds | None = None) -> dict:
     source = source.resolve(strict=True)
@@ -184,8 +193,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         raise ValueError('frozen runtime tree differs from its receipt')
     authority = authority.expanduser().resolve(strict=True)
     campaign_root = campaign_root.expanduser().resolve()
-    if ROOT / 'runs' not in campaign_root.parents:
-        raise ValueError('campaign root must be below this checkout runs/')
+    storage_root = dispatcher._campaign_storage_root(campaign_root)
     if campaign_root.exists():
         raise ValueError(f'campaign root already exists: {campaign_root}')
     intake_record = json.loads(intake_receipt.read_text(encoding='utf-8')) if intake_receipt else None
@@ -203,7 +211,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         run_bonsai_queue.judge_arguments({'judge_model': judge_model}, 'gpt-6-luna')
     selected, selected_receipts = select_balanced_train(
         rows, max_cases=max_cases, seed=seed, protected=protected,
-        include_judged=judge_model is not None)
+        include_judged=judge_model is not None, case_ids=case_ids)
     selected_source.parent.mkdir(parents=True, exist_ok=True)
     selected_source.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in selected), encoding='utf-8')
     cases = [{'index': index, 'seed': int(hashlib.sha256(f'{campaign_id}|{seed}|{row["id"]}'.encode()).hexdigest()[:8], 16)}
@@ -244,6 +252,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'artifact_hashes': artifact_hashes,
         'source_inventory': {'path': str(inventory_output.resolve()), 'sha256': artifact_hashes[str(inventory_output.resolve())]},
         'campaign_root': str(campaign_root), 'claim_ledger': str(campaign_root / 'dispatch/claims.jsonl'),
+        'storage_root': str(storage_root),
         'launch_record': str(campaign_root / 'dispatch/launch.json'), 'authority': str(authority),
         'provider': 'openai-codex', 'model_id': 'gpt-6-luna', 'model_concurrency': 1,
         'slots': 6, 'execution_plans': True, 'reasoning_effort': 'low',
@@ -299,6 +308,8 @@ def main() -> None:
     judge_transport.add_argument('--judge-provider')
     judge_transport.add_argument('--judge-server')
     parser.add_argument('--max-cases', type=int, default=42)
+    parser.add_argument('--case-id', action='append', dest='case_ids',
+                        help='select an exact authenticated public TRAIN row ID; repeat for multiple rows')
     parser.add_argument('--seed', type=int, default=20261031)
     args = parser.parse_args()
     if (args.judge_provider or args.judge_server) and not args.judge_model_id:
@@ -312,6 +323,7 @@ def main() -> None:
                          protection_receipt=args.protection_receipt, max_cases=args.max_cases,
                          seed=args.seed, intake_receipt=args.intake_receipt,
                          diversity_manifest=args.diversity_manifest,
+                         case_ids=set(args.case_ids) if args.case_ids else None,
                          judge_model=({'model_id': args.judge_model_id,
                                        **({'provider': args.judge_provider} if args.judge_provider else {}),
                                        **({'server': args.judge_server} if args.judge_server else {})}

@@ -91,6 +91,26 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
     assert entry['prompt_rendering'] == 'full'
 
 
+def test_external_campaign_root_is_allowlisted_and_bound_to_its_filesystem(reviewed_plan):
+    plan_path, _, _, plan = reviewed_plan
+    external_root = dispatcher.EXTERNAL_CAMPAIGN_ROOT / f'.dispatch-test-{uuid.uuid4().hex}'
+    plan['campaign_root'] = str(external_root)
+    plan['claim_ledger'] = str(external_root / 'dispatch/claims.jsonl')
+    plan['launch_record'] = str(external_root / 'dispatch/launch.json')
+    plan['min_free_mib'] = 40960
+    plan_path.write_text(json.dumps(plan, sort_keys=True))
+    validated, identity = dispatcher.validate_plan(plan_path, dispatcher.digest(plan_path))
+    assert identity['campaign_root'] == str(external_root.resolve())
+    assert identity['storage_root'] == str(dispatcher.EXTERNAL_CAMPAIGN_ROOT.resolve())
+    assert validated['min_free_mib'] == 40960
+    assert dispatcher._free_space_mib(identity['storage_root']) > 40960
+
+
+def test_campaign_root_rejects_non_allowlisted_external_paths():
+    with pytest.raises(ValueError, match='allowlisted external campaign root'):
+        dispatcher._campaign_storage_root(Path('/tmp/unreviewed-campaign'))
+
+
 def test_text_neuralese_capability_reads_isolated_typescript_seal_and_fails_closed(tmp_path, monkeypatch):
     runtime = tmp_path / 'isolated-runtime'
     (runtime / 'dist/teacher').mkdir(parents=True)

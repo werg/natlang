@@ -26,10 +26,31 @@ from run_bonsai_queue import judge_arguments
 
 
 ROOT = Path(__file__).resolve().parents[1]
+EXTERNAL_CAMPAIGN_ROOT = Path('/mnt/external/natlang-luna-campaigns')
 RUNNER = (ROOT / 'scripts/run_bonsai_queue.py').resolve()
 DISPATCHER = Path(__file__).resolve()
 ALLOWED_REASONING = {'low', 'medium', 'high'}
 _stop_requested = False
+
+
+def _campaign_storage_root(campaign_root):
+    """Validate an approved campaign root and return its disk-guard path.
+
+    Campaign artifacts may live in the repository's runs/ tree or in the one
+    dedicated external-volume root. The latter is deliberately allowlisted so
+    a plan cannot redirect durable ledgers and model output to an arbitrary
+    filesystem. Disk checks measure the filesystem that will receive output.
+    """
+    campaign_root = Path(campaign_root).expanduser().resolve()
+    runs_root = (ROOT / 'runs').resolve()
+    external_root = EXTERNAL_CAMPAIGN_ROOT.resolve()
+    if runs_root in campaign_root.parents:
+        return runs_root
+    if external_root in campaign_root.parents:
+        if not os.path.ismount('/mnt/external'):
+            raise ValueError('external campaign storage requires /mnt/external to be a mounted filesystem')
+        return external_root
+    raise ValueError('campaign_root must be below canonical runs/ or the allowlisted external campaign root')
 
 
 def _stop(signum, frame):
@@ -258,9 +279,7 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
         if not isinstance(plan.get(field), str) or not plan[field]:
             raise ValueError(f'Plan requires {field}')
     campaign_root = Path(plan['campaign_root']).expanduser().resolve()
-    runs_root = (ROOT / 'runs').resolve()
-    if runs_root not in campaign_root.parents:
-        raise ValueError('campaign_root must be a fresh directory below the canonical runs/ tree')
+    storage_root = _campaign_storage_root(campaign_root)
     for field in ('claim_ledger', 'launch_record'):
         target = Path(plan[field]).expanduser().resolve()
         if campaign_root not in target.parents:
@@ -292,6 +311,7 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
                   'runtime_receipt_sha256': required_pins[str(receipt)],
                   'supervisor': str(supervisor), 'supervisor_sha256': required_pins[str(supervisor)],
                   'campaign_root': str(campaign_root), 'ledger': str(Path(plan['claim_ledger']).resolve()),
+                  'storage_root': str(storage_root),
                   'launch_record': str(Path(plan['launch_record']).resolve()),
                   'authority': str(authority), 'slots': slots,
                   'max_transport_retries': transport_retries,
@@ -690,7 +710,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                         break
                     if slot in active:
                         continue
-                    free_mib = _free_space_mib(ROOT)
+                    free_mib = _free_space_mib(identity['storage_root'])
                     minimum = plan.get('min_free_mib', 1024)
                     if free_mib < minimum:
                         if not storage_paused:
@@ -698,12 +718,14 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                                                    'identity_sha256': identity['identity_sha256'],
                                                    'free_mib': free_mib,
                                                    'min_free_mib': minimum,
+                                                   'storage_root': identity['storage_root'],
                                                    'next_case_index': cases[next_case]['index'],
                                                    'paused_at': _now(),
                                                    'disposition': 'no case claimed; pending case list preserved'})
                             _set_launch_status(launch_record, identity, 'storage_paused',
                                                paused_at=_now(), free_mib=free_mib,
                                                min_free_mib=minimum,
+                                               storage_root=identity['storage_root'],
                                                pending_indices=[row['index'] for row in cases[next_case:]])
                             storage_paused = True
                         break
@@ -712,6 +734,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                                                'identity_sha256': identity['identity_sha256'],
                                                'free_mib': free_mib,
                                                'min_free_mib': minimum,
+                                               'storage_root': identity['storage_root'],
                                                'resumed_at': _now(),
                                                'disposition': 'pending case list retained'})
                         _set_launch_status(launch_record, identity, 'running', resumed_at=_now())
