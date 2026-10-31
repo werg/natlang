@@ -195,6 +195,8 @@ function replyContent(text: string): (AssistantMessage['content'][number] | Nati
   if (!hasNeuraleseSentinel(text)) return text ? [{ type: 'text', text }] : [];
   return textToParts(text).flatMap((part): (AssistantMessage['content'][number] | NativeStateContent)[] => {
     if (part.type === 'native_state') return [{ type: 'native_state', id: part.id }];
+    if (part.type === 'teacher_text')
+      throw new NeuraleseUnsupportedError('teacher-text references require their case-local teacher body store; return native state to the agent transport');
     return part.text ? [{ type: 'text', text: part.text }] : [];
   });
 }
