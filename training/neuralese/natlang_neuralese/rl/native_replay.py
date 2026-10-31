@@ -1289,6 +1289,9 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 **({'decision_actions': decisions} if decisions else {}),
                 **({'graph_nodes': [node.name for node in replay.plan.invocations]}
                    if {node.name for node in replay.plan.invocations} != set(episode_turns) else {}),
+                **({'text_result_writes': [{'source_turn': turn['graph_turn'], **write}
+                    for turn in turns for write in turn.get('text_result_writes',[])]}
+                   if any(turn.get('text_result_writes') for turn in turns) else {}),
                 'actions': actions, 'advantage': float(advantage or 0.),
                 # Self-distillation prefers successful Neuralese-using episodes: their sampled-output CE is
                 # weighted by the episode return (1 + bonus); other correct episodes keep weight 1.

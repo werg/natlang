@@ -86,6 +86,7 @@ def test_text_result_writer_replay_preserves_policy_and_consumer_gradient(tmp_pa
         episodes.append(row)
     graphs,spec=prepare_objective(episodes,identity=engine.native_identity,roles=roles,fetch_block=fetch)
     assert len(graphs)==2 and len(graphs[0]['nodes'])==3
+    assert next(iter(spec['rows'].values()))['text_result_writes'][0]['source_turn']=='producer#turn1'
     path=tmp_path/'objective.json'; path.write_text(json.dumps(spec))
     objective=NativePolicyObjective(path)
     example=parse_graph(graphs[0],tokenizer_fingerprint=engine.native_identity['tokenizer_fingerprint'])
