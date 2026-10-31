@@ -4,6 +4,40 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Follow-up observation, 17:15 CET
+
+Global72/stage20 is durable. The initial four-case development collection failed
+before any model call: frozen `folder-shell.js` could not resolve `just-bash`.
+Those four unresolved cases are infrastructure failures, not wrong answers.
+`lfm3-step72-eval-nodefix.service` is now making actual model calls against the
+same checkpoint/full prompt/cases/limits, using a separately recorded Node
+dependency closure (16,167files/194,301,745bytes; just-bash3.4.2). No extra SGD
+was performed. Runtime freeze now copies/hashes those dependencies and imports
+the actual frozen collector before launch (3eb73d76f; two focused tests passed).
+Model behavior remains unproven until this rerun finishes. The controller cannot
+automatically enter RL from this mandatory-SFT-only window, and an unmeasured
+base reference does not pass its behavioral eligibility gate.
+
+Confirmed a separate operational bug with a real detached ledger probe:
+systemd expanded `${shell_local}` before the job shell saw it, producing an
+empty output. Both direct and detached ledger launch layers now pass
+`--expand-environment=no` (5f1f25ba2); the same live probe now writes `preserved`,
+and70memory-ledger tests pass. The resident memory guard was restarted onto
+this code, retaining its ledger state and leaving useful jobs running.
+
+Fresh full check: general Python suite3,133passed/7skipped; native suite is
+still active. Quick checks pass, but this is not a completed full-suite claim.
+Current full protected-union assembly is advancing on the external volume;
+the downstream graph builder is being corrected to require current protection
+by default rather than an opt-in flag. Teacher V5.1 was stopped and its
+incomplete trace preserved. Generic staged-result and type-annotation feedback
+fixes passed25tests; the next teacher package is also fixing copied stale V2
+worker/journal/source paths before another actual call.
+
+Shared-main commit race was reconciled with normal merge a1f9f063a, preserving
+both histories and identical final contents. AGENTS now explicitly forbids
+amend/reset/rebase on shared main. No force push or content loss occurred.
+
 ## Follow-up observation, 17:02 CET
 
 Update17:06: global71/stage19 has committed. Its full checkpoint directly
