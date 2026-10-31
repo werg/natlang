@@ -92,3 +92,20 @@ def test_capacity_with_real_inline_quantization_preserves_state():
         cotangent_mode='plain',precision=(qat,'q4',0.5,1.5),production_packing=True)
     assert result['passed'] and result['qat_point']=={'point':'q4','mix':0.5,'loss_weight':1.5}
     assert_exact(before,model.state_dict());assert_exact(state,optimizer.state_dict());assert_exact(qat_state,qat.state_dict());assert torch.equal(rng,torch.get_rng_state())
+
+
+def test_failed_oversize_gate_preserves_gradients_and_records_no_update(tmp_path, monkeypatch):
+    from natlang_neuralese.eval import native_memory
+    def fail(*args,**kwargs):return {'passed':False,'optimizer_updates':0,'cases':[{'status':'out_of_memory'}]}
+    monkeypatch.setattr(native_memory,'qualify_capacity',fail)
+    parameter=torch.nn.Parameter(torch.ones(2));parameter.grad=torch.tensor([3.,4.]);gradient=parameter.grad
+    model=torch.nn.Linear(2,2);optimizer=SimpleNamespace(_native_named_parameters=[('p',parameter)])
+    example=SimpleNamespace(plan=SimpleNamespace(token_count=100,slot_sources=range(101)))
+    source=tmp_path/'source.json';source.write_text('{}')
+    args=SimpleNamespace(cotangent_accumulator_backend='plain',checkpoint_layers=True,chunk_tokens=16,accumulate_batches=16,out=tmp_path)
+    with pytest.raises(ValueError,match='failed live-model/QAT capacity'):
+        qualify_oversize_batches(model,optimizer,[[example]],args=args,backend=None,precision=None,
+            source_path=source,checkpoint_sha256='a'*64,global_step=62,baseline={'forward_tokens':10,'kv_slots':11})
+    assert parameter.grad is gradient
+    record=json.loads(next((tmp_path/'oversize-capacity').glob('*.json')).read_text())
+    assert not record['passed'] and record['optimizer_updates']==record['earned_exposure']==0
