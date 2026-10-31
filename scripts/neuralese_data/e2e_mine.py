@@ -149,7 +149,7 @@ def current_protected_source_groups():
         raise ValueError('current ProtectedWorlds registry lacks its quality-only source groups')
     if sha256_file_hex(registry_path) != registry_sha:
         raise ValueError('current ProtectedWorlds registry changed while resolving quality groups')
-    return categories, bindings
+    return categories, bindings, registry_sha
 
 
 def trajectory_of(row):
@@ -477,7 +477,11 @@ def cmd_assemble(a):
     review_sha = registry_sha256()
     held_decisions, decision_bindings = load_decision_holds(getattr(a, 'decision_hold_ids', []))
     held_decision_flags = []
-    current_group_categories, current_group_bindings = current_protected_source_groups()
+    protection_registry_path = ROOT / PROTECTED_REGISTRY
+    protection_registry_sha = sha256_file_hex(protection_registry_path)
+    current_group_categories, current_group_bindings, group_registry_sha = current_protected_source_groups()
+    if group_registry_sha != protection_registry_sha:
+        raise ValueError('current ProtectedWorlds registry changed while binding source-group classes')
     quality_groups = set(current_group_categories['quality-source-groups'])
     nonquality_protected_groups = set().union(*(groups for source_id, groups in current_group_categories.items()
                                                  if source_id != 'quality-source-groups'))
@@ -492,8 +496,8 @@ def cmd_assemble(a):
         quality_bindings.append({'path': str(path), 'sha256': before})
     work = Path(a.work)
     current_protection = load_current_protection()
-    protection_registry_path = ROOT / PROTECTED_REGISTRY
-    protection_registry_sha = sha256_file_hex(protection_registry_path)
+    if sha256_file_hex(protection_registry_path) != protection_registry_sha:
+        raise ValueError('current ProtectedWorlds registry changed while loading identity closure')
     archived = sorted({*work.glob('*/archived-source.json'), *work.glob('archived-source.json')})
     if archived:
         raise ValueError('Restore archived mined sources and verify every recorded member before assembly: '

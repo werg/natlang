@@ -423,7 +423,8 @@ def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_pa
         'quality-source-groups': {'quality:bad'},
         'lfm3-joint-v4-complete-reserved-worlds-20261031': {'current:reserved'},
     }, [{'id': 'quality-source-groups', 'sha256': 'e' * 64},
-        {'id': 'lfm3-joint-v4-complete-reserved-worlds-20261031', 'sha256': 'f' * 64}]))
+        {'id': 'lfm3-joint-v4-complete-reserved-worlds-20261031', 'sha256': 'f' * 64}],
+        module.sha256_file_hex(module.ROOT / module.PROTECTED_REGISTRY)))
     monkeypatch.setattr(module, 'held_union_groups', lambda *args:
                         ({'quality:bad'} if hold_kind == 'held-group' else set(), [{'sha256': 'b' * 64}]))
     work = tmp_path / 'work'; source = work / 'fixture'; source.mkdir(parents=True)
