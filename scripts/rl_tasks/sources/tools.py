@@ -44,6 +44,47 @@ def ts_type(text: str) -> str:
     return 'any'
 
 
+def schema_ts_type(schema, *, depth=0):
+    """Render upstream JSON Schema without inferring a contract from gold calls."""
+    if not isinstance(schema, dict) or depth > 20:
+        return 'unknown'
+    render = lambda value: schema_ts_type(value, depth=depth+1)
+    choices = schema.get('anyOf') or schema.get('oneOf')
+    if isinstance(choices, list) and choices:
+        return '('+' | '.join(render(value) for value in choices)+')'
+    values = schema.get('enum')
+    if isinstance(values, list) and values and all(value is None or isinstance(value, (str, int, float, bool))
+                                                  for value in values):
+        return '('+' | '.join(json.dumps(value, ensure_ascii=False) for value in values)+')'
+    kind = schema.get('type')
+    if isinstance(kind, list):
+        return '('+' | '.join(render({**schema, 'type':value}) for value in kind)+')'
+    if kind in ('object', 'dict') or 'properties' in schema:
+        properties = schema.get('properties') or {}
+        required = set(schema.get('required') or [])
+        fields = []
+        for name, value in properties.items():
+            doc = str((value or {}).get('description', '')).replace('*/', '* /').replace('\n', ' ')
+            fields.append(f'/** {doc} */ {json.dumps(name)}'+('' if name in required else '?')+': '+render(value)+';')
+        extra = schema.get('additionalProperties')
+        if not fields:
+            return 'Record<string, '+(render(extra) if isinstance(extra, dict) else 'unknown')+'>'
+        if isinstance(extra, dict):
+            # Unknown preserves compatibility between declared properties and
+            # an independently constrained extra-key schema; the full schema
+            # below remains authoritative for constraints TS cannot express.
+            fields.append('[key: string]: unknown;')
+        return '{ '+' '.join(fields)+' }'
+    if kind in ('array', 'list'):
+        items = schema.get('items')
+        if isinstance(items, list):
+            return '['+', '.join(render(value) for value in items)+']'
+        return 'Array<'+render(items)+'>'
+    return {'string':'string', 'str':'string', 'integer':'number', 'int':'number',
+            'number':'number', 'float':'number', 'double':'number', 'boolean':'boolean',
+            'bool':'boolean', 'null':'null'}.get(kind, 'unknown')
+
+
 SERVICE_HEAD = '''import { createHash } from 'node:crypto';
 type Spec = Record<string, { kind: string; default: unknown; optional: boolean }>;
 function canon(value: unknown): unknown {
@@ -87,8 +128,12 @@ def service(tools) -> tuple[str, dict]:
             doc = str(info.get('description', '')).replace('*/', '* /').replace('\n', ' ')
             default_note = f' Default: {json.dumps(default)}.' if default not in ('', None) else ''
             fields.append(f'  /** {doc}{default_note} */\n  {json.dumps(key)}{"?" if optional else ""}: '
-                          f'{ts_type(info.get("type", ""))};')
+                          f'{schema_ts_type(info["json_schema"]) if "json_schema" in info else ts_type(info.get("type", ""))};')
         doc = str(tool.get('description', '')).replace('*/', '* /').replace('\n', ' ')
+        if 'json_schema' in tool:
+            # Retain bounds, formats, references and other constraints beyond
+            # the TS type system, not just the subset represented by a type.
+            doc += ' Parameters JSON Schema: '+json.dumps(tool['json_schema'], ensure_ascii=False).replace('*/', '* /')
         parts.append(f'/** {doc} */\nexport function {name}(args: {{\n' + '\n'.join(fields) +
                      f'\n}}): string {{ return receipt({json.dumps(name)}, {json.dumps(spec)}, args as any); }}\n')
     return '\n'.join(parts), names
@@ -182,11 +227,12 @@ def _toolace_tools(system):
                 item = str(((info or {}).get('items') or {}).get('type', '')).lower()
                 kind = {'string': 'List[str]', 'integer': 'List[int]', 'number': 'List[float]'}.get(item, 'list')
             entry = {'type': kind + ('' if key in required else ', optional'),
-                     'description': (info or {}).get('description', '')}
+                     'description': (info or {}).get('description', ''), 'json_schema': info}
             if 'default' in (info or {}):
                 entry['default'] = info['default']
             params[key] = entry
-        out.append({'name': tool['name'], 'description': tool.get('description', ''), 'parameters': params})
+        out.append({'name': tool['name'], 'description': tool.get('description', ''), 'parameters': params,
+                    'json_schema': tool.get('parameters') or {}})
     return out
 
 

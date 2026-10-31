@@ -64,11 +64,10 @@ def stop_probe(sandbox_id):
 
 
 def probe(account, *, created=None):
-    """One minimal GPU sandbox create in ``account``; a created sandbox is stopped at once. True / False / None (other
-    error, unknown)."""
+    """Create one GPU probe; report entitlement only after verified cleanup."""
     cwctl = rl_cloud.cwctl
     job = rl_cloud.jobs.validate({**cwctl.smoke_job(True), 'id': f'gpu-entitlement-probe-{account}',
-                                  'lifetime_hours': 0.25, 'resources': {'gpu': 1, 'cpu': '1', 'memory': '2Gi'},
+                                  'lifetime_hours': 0.25, 'resources': {'gpu': 1},
                                   'placement': {'where': 'coreweave', 'reason': 'GPU entitlement probe (stopped at once)'}})
     try:
         entry = cwctl.launch(job, False, False, None, account=account)

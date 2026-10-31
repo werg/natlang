@@ -45,6 +45,7 @@ def test_unresolved_probe_is_durable_before_shutdown_and_blocks_new_allocations(
     monkeypatch.setattr(autopilot.rl_cloud.jobs, 'validate', lambda job: job)
     launches = []
     def launch(*args, **kwargs):
+        assert args[0]['resources'] == {'gpu':1}
         launches.append(kwargs['account'])
         return {'sandbox_id':'probe-1'}
     monkeypatch.setattr(autopilot.rl_cloud.cwctl, 'launch', launch)
