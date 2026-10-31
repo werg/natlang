@@ -8,9 +8,15 @@ import { compileVirtualProject, loadVirtualCallables, loadVirtualNatlang, type C
   type VirtualProjectOptions } from './runtime/virtual-project.js';
 import { projectEntry } from './app/playground.js';
 import type { NatlangCallable } from './runtime/callable.js';
+import * as lowered from './runtime/lowered.js';
+import type { NatlangRecord } from './runtime/loader.js';
 
 export function platformDefaults(defaultPlatform: () => Platform) {
   return {
+    // Compiled imports need the same module home as virtual/file loaders.
+    // This supplies an evaluator for crisp helpers, never an implicit task.
+    __natlang: Object.freeze({ ...lowered,
+      named: (name: string, record: NatlangRecord) => lowered.named(name, record, defaultPlatform()) }),
     /** A runtime on the entry's platform unless `platform` says otherwise. */
     createNatlangRuntime: (options: NatlangRuntimeOptions = {}): NatlangRuntime => createNatlangRuntime({ platform: defaultPlatform(), ...options }),
     /** Compile an in-memory project whose modules run on the entry's platform unless `platform` says otherwise. */

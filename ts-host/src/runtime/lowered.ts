@@ -423,9 +423,9 @@ export function instantiate(fn: unknown, representation: Representation, site: s
 }
 
 /** A named `.nl` import compiled into a module: the definition record embedded at build time. */
-export function named(name: string, record: NatlangRecord): NatlangCallable {
+export function named(name: string, record: NatlangRecord, home?: import('./platform.js').Platform): NatlangCallable {
   registerFileRecords(record);
-  return namedCallable(name, record);
+  return namedCallable(name, record, undefined, home);
 }
 
 /**

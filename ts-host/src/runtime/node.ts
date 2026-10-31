@@ -70,7 +70,7 @@ export function runFolderBash(folder: Folder, command: string, options: FolderBa
   return runBash(folder, command, { ...options, python: { watchdog: nodePythonWatchdog, ...options.python } });
 }
 
-export const { createNatlangRuntime, compileVirtualProject, projectEntry, loadVirtualNatlang, loadVirtualCallables } = platformDefaults(nodePlatform);
+export const { __natlang, createNatlangRuntime, compileVirtualProject, projectEntry, loadVirtualNatlang, loadVirtualCallables } = platformDefaults(nodePlatform);
 
 /**
  * Explicit opt-in for an *owned* guest interpreter: a platform (`base`, the Node platform by default) whose per-call

@@ -49,7 +49,7 @@ function createBrowserPlatform(): Platform {
   };
 }
 
-export const { createNatlangRuntime, compileVirtualProject, projectEntry, loadVirtualNatlang, loadVirtualCallables } = platformDefaults(browserPlatform);
+export const { __natlang, createNatlangRuntime, compileVirtualProject, projectEntry, loadVirtualNatlang, loadVirtualCallables } = platformDefaults(browserPlatform);
 export function buildStandardLibrary(options: Omit<Parameters<typeof buildLibrary>[0], 'platform'> & { platform?: Platform }) {
   return buildLibrary({ platform: browserPlatform(), ...options });
 }
