@@ -485,6 +485,7 @@ def graph_source_identities(row):
     values=set(row.get('source_ids') or ())|set(conversion.get('source_record_ids') or ())|set(pair.get('source_ids') or ())
     values.update(v for v in (row.get('id'),conversion.get('source_row_id'),teacher.get('source_row_id'),teacher.get('source_program_id'),pair.get('chain_id'),pair.get('consumer_source_row_id')) if isinstance(v,str))
     targets={v for v in (row.get('id'),conversion.get('source_row_id'),teacher.get('source_row_id')) if isinstance(v,str)}
+    if conversion.get('source_record_ids'):targets.add(conversion['source_record_ids'][-1])
     return values,targets
 
 

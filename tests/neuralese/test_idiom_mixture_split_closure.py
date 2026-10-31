@@ -173,3 +173,5 @@ def test_source_identity_custody_distinguishes_excluded_trajectory_and_recovery_
     assert reason({'id': 'x', 'conversion': {'source_row_id': 'decision:failed'}}, custody)
     assert reason({'id': 'x', 'source_ids': ['decision:failed'],
                    'conversion': {'source_row_id': 'decision:good'}}, custody) is None
+
+    assert reason({'id': 'x', 'conversion': {'source_record_ids': ['decision:good', 'decision:failed']}}, custody)
