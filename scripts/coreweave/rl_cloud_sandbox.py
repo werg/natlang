@@ -77,7 +77,8 @@ def event(**fields):
 
 
 def _tar_zst(base, members, out):
-    """Deterministic member order; zstd multi-threaded. Returns (sha256, bytes) of the compressed blob."""
+    """Deterministic member order; zstd multi-threaded (the CLI, else the Python zstandard module: the bootstrap's apt
+    install of the CLI can fail or hang)."""
     listing = tempfile.NamedTemporaryFile('w', delete=False, dir=out.parent)
     listing.write(''.join(f'{m}\n' for m in sorted(members)))
     listing.close()
@@ -85,14 +86,32 @@ def _tar_zst(base, members, out):
         tar = subprocess.Popen(['tar', '-C', str(base), '--no-recursion', '-cf', '-', '-T', listing.name],
                                stdout=subprocess.PIPE)
         with open(out, 'wb') as sink:
-            zstd = subprocess.run(['zstd', '-q', '-3', '-T0', '-c'], stdin=tar.stdout, stdout=sink)
+            if shutil.which('zstd'):
+                ok = subprocess.run(['zstd', '-q', '-3', '-T0', '-c'], stdin=tar.stdout, stdout=sink).returncode == 0
+            else:
+                import zstandard
+                zstandard.ZstdCompressor(level=3, threads=-1).copy_stream(tar.stdout, sink)
+                ok = True
         tar.stdout.close()
-        if tar.wait() != 0 or zstd.returncode != 0:
+        if tar.wait() != 0 or not ok:
             raise RuntimeError(f'archive of {base} failed')
     finally:
         os.unlink(listing.name)
-    digest = file_digest(out)
-    return digest, out.stat().st_size
+
+
+def untar_zst(blob, directory):
+    """Unpack a tar.zst blob into ``directory`` (zstd CLI, else the Python zstandard module)."""
+    tar = subprocess.Popen(['tar', '-x', '-C', str(directory)], stdin=subprocess.PIPE)
+    with open(blob, 'rb') as source:
+        if shutil.which('zstd'):
+            ok = subprocess.run(['zstd', '-q', '-dc'], stdin=source, stdout=tar.stdin).returncode == 0
+        else:
+            import zstandard
+            zstandard.ZstdDecompressor().copy_stream(source, tar.stdin)
+            ok = True
+    tar.stdin.close()
+    if tar.wait() != 0 or not ok:
+        raise RuntimeError(f'cannot unpack {blob}')
 
 
 def _members(root, top_only=False, exclude=()):
@@ -291,9 +310,7 @@ def fetch(parent, lineage):
             target.parent.mkdir(parents=True, exist_ok=True)
             os.replace(temp, target)
         else:
-            tar = subprocess.run(f'zstd -q -dc {temp} | tar -x -C {lineage}', shell=True)
-            if tar.returncode != 0:
-                raise RuntimeError(f'cannot unpack {blob["kind"]} blob {blob["sha256"]}')
+            untar_zst(temp, lineage)
             temp.unlink()
     for link in parent.get('links', []):
         target = Path(link['path'])

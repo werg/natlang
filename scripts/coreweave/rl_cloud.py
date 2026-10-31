@@ -520,7 +520,7 @@ def materialize(run, record):
                 os.link(source, temp)
                 temp.replace(target)
         else:
-            subprocess.run(f'zstd -q -dc {source} | tar -x -C {L}', shell=True, check=True)
+            sandbox.untar_zst(source, L)
     for link in record.get('links', []):
         target = Path(link['path'])
         if target.exists():

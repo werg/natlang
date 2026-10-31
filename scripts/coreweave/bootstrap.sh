@@ -48,7 +48,7 @@ fi
 # for before the job command.
 zstd_install=
 if ! command -v zstd >/dev/null 2>&1; then
-  { (apt-get update -qq && apt-get install -y -qq --no-install-recommends zstd) >/dev/null 2>&1 && log zstd \
+  { (timeout 300 apt-get update -qq && timeout 300 apt-get install -y -qq --no-install-recommends zstd) >/dev/null 2>&1 && log zstd \
       || log zstd-unavailable; } &
   zstd_install=$!
 fi
