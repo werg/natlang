@@ -5,7 +5,7 @@
  *
  *   node scripts/stage-vibestudio.mjs --out DIR [--only core|workerd|pi|llama|eval|dashboard]
  *       Build and write, under DIR, `core/natlang-core.js` (+ `.d.ts`, `types/`; workerd, npm packages external), `workerd/natlang-workerd.js` (the same core with TypeScript bundled in, for hosts that cannot install TypeScript 5), `llama/natlang-llama.js`
- *       (+ `.d.ts`; Node), `eval/natlang-eval.js` and `eval/worker-entry.js` (+ their shared `eval/chunks/`, one runtime instance for both; `.d.ts`; Node), `dashboard/` (the embeddable
+ *       (+ `.d.ts`; Node), `eval/natlang-eval.js` and `eval/worker-entry.js` (+ the `eval/chunk-*.js` they share, one runtime instance for both; `.d.ts`; Node), `dashboard/` (the embeddable
  *       page modules, styles and `types.d.ts`; copied files) and `natlang-pin.json`:
  *       { schema, commit, dirty: false, targets, toolchain, files: { "<path under DIR>": "<sha256>" } }.
  *       Refuses when any source file a bundle or its declarations were built from differs from HEAD (or is untracked), so
