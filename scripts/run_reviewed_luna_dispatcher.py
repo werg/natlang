@@ -29,6 +29,7 @@ from start_reviewed_generation_successor import atomic_json, digest
 from luna_source_inventory import verify as verify_luna_source_inventory
 from run_bonsai_queue import judge_arguments
 import memory_ledger
+from scripts.rl_tasks.execution_adapter import verify_runtime_tree
 
 
 RUNNER = (ROOT / 'scripts/run_bonsai_queue.py').resolve()
@@ -242,6 +243,22 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
     for path, expected in pins.items():
         if digest_fn(path) != expected:
             raise ValueError(f'Reviewed artifact changed: {path}')
+    adapter_trees = plan.get('execution_adapter_trees', [])
+    if not isinstance(adapter_trees, list):
+        raise ValueError('execution_adapter_trees must be a list')
+    for record in adapter_trees:
+        if not isinstance(record, dict):
+            raise ValueError('invalid reviewed execution adapter tree binding')
+        manifest_path = Path(record.get('manifest_path', '')).expanduser().resolve(strict=True)
+        manifest_sha = record.get('manifest_sha256')
+        if not isinstance(manifest_sha, str) or pins.get(str(manifest_path)) != manifest_sha:
+            raise ValueError('runtime dependency manifest is not explicitly pinned')
+        observed = verify_runtime_tree(root=Path(record.get('root', '')),
+                                       manifest_path=manifest_path,
+                                       manifest_sha256=manifest_sha)
+        for field in ('tree_sha256', 'file_count', 'total_bytes'):
+            if observed[field] != record.get(field):
+                raise ValueError(f'Reviewed runtime dependency tree changed: {record.get("root")}')
     if plan.get('system_file') is not None:
         system_file = Path(plan['system_file']).expanduser().resolve(strict=True)
         if not system_file.is_file() or str(system_file) not in pins:

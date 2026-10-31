@@ -101,5 +101,10 @@ def bind_world_services(package_root: Path, metadata: dict[str, Any], services: 
             root_marker = '/*__NATLANG_CODEBASE_ROOT__*/'
             if root_marker in source:
                 source = source.replace(root_marker, json.dumps(root.as_posix(), ensure_ascii=True))
+            for tree in (metadata.get('execution_adapter') or {}).get('runtime_trees', []):
+                name = re.sub(r'[^A-Za-z0-9_]', '_', tree['name'])
+                tree_marker = f'/*__NATLANG_RUNTIME_TREE_{name}__*/'
+                if tree_marker in source:
+                    source = source.replace(tree_marker, json.dumps(str(Path(tree['root']).resolve()), ensure_ascii=True))
             result.setdefault(row['id'], {})[alias] = source
     return result

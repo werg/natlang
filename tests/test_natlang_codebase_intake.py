@@ -8,6 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.rl_tasks.audit_natlang_packages import audit
 from scripts.rl_tasks.intake_natlang_codebase import intake
+from scripts.rl_tasks.execution_adapter import verify_execution_adapter_trees, verify_runtime_tree
 from scripts.rl_tasks.build_reviewed_luna_plan import (build_plan, select_balanced_train,
                                                        _intake_execution_adapter_bindings)
 import scripts.rl_tasks.build_reviewed_luna_plan as plan_builder
@@ -159,6 +160,47 @@ def test_fixture_binding_resolves_codebase_root_marker_for_runtime_service(tmp_p
     assert '/*__NATLANG_CODEBASE_ROOT__*/' not in bound_source
 
 
+def test_runtime_dependency_tree_is_verified_and_bound_into_service(tmp_path):
+    package, root = _package(tmp_path)
+    service = root / 'host' / 'service.ts'
+    service.parent.mkdir()
+    service.write_text('const fixture = /*__NATLANG_WORLD_FIXTURE__*/;\n'
+                       'const deps = /*__NATLANG_RUNTIME_TREE_tau2_python_deps__*/;\n')
+    fixtures = root / 'source' / 'fixtures.jsonl'
+    fixtures.parent.mkdir()
+    fixtures.write_text(''.join(json.dumps({'id': identifier, 'fixture': {'x': index}}) + '\n'
+                               for index, identifier in enumerate(('case-1', 'case-2'))))
+    deps = tmp_path / 'runtime-deps'
+    module = deps / 'package' / 'mod.py'
+    module.parent.mkdir(parents=True)
+    module.write_text('value = 7\n')
+    manifest_path = root / 'host' / 'runtime-manifest.json'
+    manifest = {'schema': 'natlang.telecom-python-dependency-tree/1', 'root': str(deps.resolve()),
+                'files': {'package/mod.py': hashlib.sha256(module.read_bytes()).hexdigest()}}
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + '\n')
+    manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    metadata_path = root / 'metadata.json'
+    metadata = json.loads(metadata_path.read_text())
+    digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    metadata['external_services'] = {'service': {
+        'source_path': 'host/service.ts', 'source_sha256': digest(service),
+        'fixtures_path': 'source/fixtures.jsonl', 'fixtures_sha256': digest(fixtures)}}
+    metadata['execution_adapter'] = {'runtime_trees': [{
+        'name': 'tau2_python_deps', 'root': str(deps), 'manifest_path': 'host/runtime-manifest.json',
+        'manifest_sha256': manifest_sha}]}
+    metadata_path.write_text(json.dumps(metadata))
+    out = tmp_path / 'runtime-tree.jsonl'
+    receipt = intake(package, output=out)
+    assert receipt['execution_adapter_trees'][0]['file_count'] == 1
+    row = json.loads(out.read_text().splitlines()[0])
+    bound_source = row['semantics']['services']['service']
+    assert json.dumps(str(deps.resolve())) in bound_source
+    assert '/*__NATLANG_RUNTIME_TREE_tau2_python_deps__*/' not in bound_source
+    module.write_text('value = 8\n')
+    with pytest.raises(ValueError, match='runtime dependency file is missing or changed'):
+        verify_execution_adapter_trees(metadata, root)
+
+
 def test_related_worlds_cannot_cross_splits(tmp_path):
     row_a = {'id': 'a', 'group_id': 'shared', 'task_family': 'state', 'operation': 'reconcile.nl',
              'task': 'Continue the previous decision.', 'inputs': {'state': {}}, 'expected': {}, 'oracle': 'exact',
@@ -277,9 +319,23 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     adapter.write_text('adapter-v1\n')
     intake_receipt = tmp_path / 'intake.json'
     adapter_sha = hashlib.sha256(adapter.read_bytes()).hexdigest()
+    runtime_tree_root = tmp_path / 'shared-runtime'
+    runtime_module = runtime_tree_root / 'pkg' / 'module.py'
+    runtime_module.parent.mkdir(parents=True)
+    runtime_module.write_text('value = 1\n')
+    tree_manifest = tmp_path / 'runtime-tree.json'
+    tree_manifest.write_text(json.dumps({'schema': 'natlang.telecom-python-dependency-tree/1',
+        'root': str(runtime_tree_root.resolve()),
+        'files': {'pkg/module.py': hashlib.sha256(runtime_module.read_bytes()).hexdigest()}},
+        sort_keys=True) + '\n')
+    tree_sha = hashlib.sha256(tree_manifest.read_bytes()).hexdigest()
+    tree_binding = verify_runtime_tree(root=runtime_tree_root, manifest_path=tree_manifest,
+                                       manifest_sha256=tree_sha)
+    tree_binding['name'] = 'fixture-runtime'
     intake_receipt.write_text(json.dumps({'admission_eligible': True,
         'execution_adapter_bindings': [{'path': str(adapter.resolve()), 'relative_path': 'host/runner.py',
-                                        'sha256': adapter_sha}]}))
+                                        'sha256': adapter_sha}],
+        'execution_adapter_trees': [tree_binding]}))
     calls = []
 
     class Protected:
@@ -306,6 +362,7 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     assert len(plan['cases']) == 2 and len(calls) == len(rows)
     assert plan['source_inventory']['sha256']
     assert plan['artifact_hashes'][str(adapter.resolve())] == adapter_sha
+    assert plan['execution_adapter_trees'][0]['tree_sha256'] == tree_binding['tree_sha256']
     assert report['operation_counts'] == {'audit.nl': 1, 'reconcile.nl': 1}
     reviewed = {**plan, 'root_approved': True}
     reviewed_path = tmp_path / 'reviewed-plan.json'
@@ -315,6 +372,10 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     assert identity['slots'] == 6 and identity['source_inventory']['entries'] == 2
     adapter.write_text('adapter-tampered\n')
     with pytest.raises(ValueError, match='Reviewed artifact changed'):
+        dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
+    adapter.write_text('adapter-v1\n')
+    runtime_module.write_text('value = 2\n')
+    with pytest.raises(ValueError, match='runtime dependency file is missing or changed'):
         dispatcher.validate_plan(reviewed_path, dispatcher.digest(reviewed_path))
 
 

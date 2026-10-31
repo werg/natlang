@@ -24,6 +24,8 @@ if str(REPO) not in sys.path:
 from scripts.rl_tasks.common import jsonl_write, slug, text_digest
 from scripts.rl_tasks.audit_natlang_packages import audit
 from scripts.rl_tasks.codebase_services import load_external_services, bind_world_services
+from scripts.rl_tasks.execution_adapter import (verify_execution_adapter_paths,
+                                                verify_execution_adapter_trees)
 
 
 def _sha(value: bytes) -> str:
@@ -57,43 +59,6 @@ def _bound_dataset_paths(metadata: dict, package_parent: Path) -> dict:
                     path = package_parent / path
                 dataset[key] = str(path.resolve(strict=True))
     return bound
-
-
-def _verify_execution_adapter_paths(metadata: dict, codebase_root: Path) -> list[dict[str, str]]:
-    adapter = metadata.get('execution_adapter')
-    if adapter is None:
-        return []
-    if not isinstance(adapter, dict):
-        raise ValueError('metadata.execution_adapter must be an object')
-    paths = adapter.get('paths', {})
-    if not isinstance(paths, dict):
-        raise ValueError('metadata.execution_adapter.paths must be an object')
-    bindings = []
-    root = codebase_root.resolve(strict=True)
-    for relative, expected in sorted(paths.items()):
-        rel = Path(relative) if isinstance(relative, str) else Path('.')
-        if (not isinstance(relative, str) or not relative or rel.is_absolute() or
-                any(part in {'', '.', '..'} for part in rel.parts) or '\\' in relative):
-            raise ValueError(f'unsafe execution_adapter path: {relative!r}')
-        if not isinstance(expected, str) or not re.fullmatch(r'[a-f0-9]{64}', expected):
-            raise ValueError(f'execution_adapter path requires a lowercase SHA-256: {relative}')
-        target = root / rel
-        current = root
-        for part in rel.parts:
-            current = current / part
-            if current.is_symlink():
-                raise ValueError(f'execution_adapter path cannot traverse a symlink: {relative}')
-        try:
-            target.resolve(strict=True).relative_to(root)
-        except (FileNotFoundError, ValueError) as exc:
-            raise ValueError(f'execution_adapter path is missing or escapes codebase root: {relative}') from exc
-        if not target.is_file():
-            raise ValueError(f'execution_adapter path is not a regular file: {relative}')
-        actual = _sha(target.read_bytes())
-        if actual != expected:
-            raise ValueError(f'execution_adapter path hash mismatch for {relative}: expected {expected}, got {actual}')
-        bindings.append({'path': str(target.resolve(strict=True)), 'relative_path': relative, 'sha256': actual})
-    return bindings
 
 
 def _load_json(path: Path, *, required: bool = True) -> dict[str, Any]:
@@ -414,7 +379,8 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
     if not isinstance(metadata.get('split'), dict):
         raise ValueError('metadata.split is required, including held-world protections')
     metadata = _bound_dataset_paths(metadata, package_root.parent)
-    execution_adapter_bindings = _verify_execution_adapter_paths(metadata, package_root.parent)
+    execution_adapter_bindings = verify_execution_adapter_paths(metadata, package_root.parent)
+    execution_adapter_trees = verify_execution_adapter_trees(metadata, package_root.parent)
     files = _project(package_root, metadata)
     external_services, service_bindings = load_external_services(package_root, metadata)
     _validate_runtime_contracts(files, metadata, external_services)
@@ -451,6 +417,7 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
         'package_sha256': _sha(json.dumps({'files': files, 'services': external_services}, sort_keys=True, ensure_ascii=False).encode()),
         'external_services': service_bindings,
         'execution_adapter_bindings': execution_adapter_bindings,
+        'execution_adapter_trees': execution_adapter_trees,
         'world_count': len(world_rows), 'case_count': len(cases),
         'exact_case_count': len(exact_cases), 'judged_case_count': len(judged_cases),
         'exact_cases_path': str(output), 'judged_cases_path': str(judged_output) if judged_cases else None,

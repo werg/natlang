@@ -28,6 +28,7 @@ from freeze_training_runtime import tree_identity  # noqa: E402
 from luna_source_inventory import inventory  # noqa: E402
 from natlang_neuralese.common.custody import ProtectedWorlds, REGISTRY  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex as sha_file  # noqa: E402
+from scripts.rl_tasks.execution_adapter import verify_runtime_tree  # noqa: E402
 import run_bonsai_queue  # noqa: E402
 import run_reviewed_luna_dispatcher as dispatcher  # noqa: E402
 
@@ -116,6 +117,27 @@ def _intake_execution_adapter_bindings(intake_receipt: dict | None) -> list[tupl
             raise ValueError(f'Execution adapter changed since intake: {path}')
         seen.add(path)
         checked.append((path, expected))
+    return checked
+
+
+def _intake_execution_adapter_trees(intake_receipt: dict | None) -> list[dict]:
+    if intake_receipt is None:
+        return []
+    trees = intake_receipt.get('execution_adapter_trees', [])
+    if not isinstance(trees, list):
+        raise ValueError('intake execution_adapter_trees must be a list')
+    checked = []
+    for record in trees:
+        if not isinstance(record, dict):
+            raise ValueError('invalid intake execution adapter tree binding')
+        actual = verify_runtime_tree(root=Path(record.get('root', '')),
+                                     manifest_path=Path(record.get('manifest_path', '')),
+                                     manifest_sha256=record.get('manifest_sha256', ''))
+        for field in ('tree_sha256', 'file_count', 'total_bytes', 'files'):
+            if actual[field] != record.get(field):
+                raise ValueError(f'Execution adapter runtime tree changed since intake: {record.get("root")}')
+        checked.append({key: record[key] for key in
+                        ('name', 'root', 'manifest_path', 'manifest_sha256', 'tree_sha256', 'file_count', 'total_bytes')})
     return checked
 
 
@@ -290,6 +312,8 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         artifacts.append(intake_receipt.resolve(strict=True))
         adapter_bindings = _intake_execution_adapter_bindings(intake_record)
         artifacts.extend(path for path, _ in adapter_bindings)
+        adapter_trees = _intake_execution_adapter_trees(intake_record)
+        artifacts.extend(Path(tree['manifest_path']) for tree in adapter_trees)
     if diversity_manifest:
         artifacts.append(diversity_manifest.resolve(strict=True))
     artifact_hashes = {str(path.resolve(strict=True)): _sha(path.resolve(strict=True))
@@ -306,6 +330,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'source': str(selected_source.resolve()), 'source_sha256': artifact_hashes[str(selected_source.resolve())],
         'runtime': str(runtime), 'runtime_receipt_sha256': artifact_hashes[str(runtime_receipt.resolve(strict=True))],
         'artifact_hashes': artifact_hashes,
+        'execution_adapter_trees': _intake_execution_adapter_trees(intake_record),
         'source_inventory': {'path': str(inventory_output.resolve()), 'sha256': artifact_hashes[str(inventory_output.resolve())]},
         'campaign_root': str(campaign_root), 'claim_ledger': str(campaign_root / 'dispatch/claims.jsonl'),
         'storage_root': str(storage_root),
