@@ -643,8 +643,21 @@ def register_graphed(args):
     """Register every graphed (verified) render not yet registered, in one registration commit."""
     import register_corpora
     queue = load(args.queue)
-    items = [i for i in queue['items'].values() if i['status'] == 'graphed'
-             and load(REPO / i['out'] / 'student-verification.json').get('passed')]
+    items, skipped = [], {}
+    for i in queue['items'].values():
+        if i['status'] != 'graphed':
+            continue
+        # A graphed item without a passed reference verification (e.g. an LFM3-only render queued by hand) is
+        # reported, not registered; it must not stop the registration of every other render.
+        path = REPO / i['out'] / 'student-verification.json'
+        if not path.exists():
+            skipped[i['id']] = 'no student-verification.json'
+        elif not load(path).get('passed'):
+            skipped[i['id']] = 'verification not passed'
+        else:
+            items.append(i)
+    if skipped:
+        print(json.dumps({'skipped': skipped}), flush=True)
     if args.limit:
         items = items[:args.limit]
     if not items:
