@@ -28,7 +28,6 @@ from natlang_neuralese.common.custody import REGISTRY, ProtectedWorlds, world_id
 from natlang_neuralese.common.hashing import sha256_file_hex as sha_file  # noqa: E402
 
 LEGACY = ROOT / 'runs/natlang-rl-train-curriculum-lfm3-20261030-stop-evidence/cases.jsonl'
-SOURCE_ID = 'natlang-rl-broad-external-20261031'
 
 
 def rows_of(path):
@@ -126,11 +125,20 @@ def main():
     ap.add_argument('--cap-override', default='reasoning-gym=4000',
                     help='source=rows,... for sources whose many families need more than --train-cap')
     ap.add_argument('--exclude', default='')
+    ap.add_argument('--exclude-ids', type=Path, action='append', default=[],
+                    help='JSON {"reason": label, "conflicts": [task ids]} (e.g. a held-set union check); those rows are '
+                         'left out of train and counted under the label; repeatable')
     ap.add_argument('--seed', type=int, default=20261031)
     a = ap.parse_args()
     excluded = set(filter(None, a.exclude.split(',')))
     caps = {k: int(v) for k, v in (item.split('=') for item in a.cap_override.split(',') if item)}
     out = a.out
+    source_id = out.name
+    exclusions = {}
+    for path in a.exclude_ids:
+        value = json.loads(path.read_text())
+        for task_id in value['conflicts']:
+            exclusions[task_id] = value.get('reason', 'held-set-union-group')
     if out.exists():
         raise SystemExit(f'{out} exists; task sources are immutable')
     (out / 'held').mkdir(parents=True)
@@ -166,6 +174,8 @@ def main():
         for r in train[source]:
             # One identity computation per row (inputs can be large); the same relation ProtectedWorlds.related uses.
             kinds = sorted({kind for kind, _ in world_identities(r, evidence_items=False) & blocked})
+            if r['id'] in exclusions:
+                kinds.append(exclusions[r['id']])
             if kinds:
                 dropped[f'{source}:{",".join(kinds)}'] += 1
             else:
@@ -191,7 +201,7 @@ def main():
         'schema': 'natlang.broad-rl-assembly-verification/1', 'cases': len(rows), 'failures': [],
         **verification_summary}, indent=1) + '\n')
     proof = {
-        'schema': 'natlang.rl-additional-task-source-qualification/1', 'source_id': SOURCE_ID,
+        'schema': 'natlang.rl-additional-task-source-qualification/1', 'source_id': source_id,
         'source_cases_sha256': sha_file(out / 'cases.jsonl'), 'qualified_task_rows': len(rows),
         'all_train': True, 'all_source_bound': all(r.get('source_ids') and r.get('source_groups') for r in rows),
         'qualification_kind': ('External dataset items converted to typed natlang root functions; every external row '
@@ -211,13 +221,16 @@ def main():
         'task_ids': ids, 'union_task_row_sha256': {r['id']: row_sha(r) for r in rows},
     }
     (out / 'qualification.json').write_text(json.dumps(proof, indent=1) + '\n')
-    receipt = {'schema': 'natlang.broad-rl-task-source/1', 'source_id': SOURCE_ID, 'builder': 'scripts/rl_tasks',
+    receipt = {'schema': 'natlang.broad-rl-task-source/1', 'source_id': source_id, 'builder': 'scripts/rl_tasks',
                'cases': {'path': 'cases.jsonl', 'sha256': proof['source_cases_sha256'], 'rows': len(rows)},
                'held': {split: {'path': f'held/{split}.jsonl', 'sha256': sha_file(out / 'held' / f'{split}.jsonl'),
                                 'rows': len(items)} for split, items in held.items()},
                'legacy_slice': {'source': str(LEGACY.relative_to(ROOT)), 'cases_sha256': sha_file(LEGACY),
                                 'rows': len([r for r in rows if r['family'].startswith('curriculum_')])},
                'excluded_sources': sorted(excluded), 'custody_dropped': dict(dropped),
+               'id_exclusions': [{'path': str(path), 'sha256': sha_file(path),
+                                  'reason': json.loads(path.read_text()).get('reason', 'held-set-union-group'),
+                                  'rows': len(json.loads(path.read_text())['conflicts'])} for path in a.exclude_ids],
                'assets_note': 'SQL databases and DataBench tables referenced by SHA-256 from service sources; set '
                               'NATLANG_RL_TASK_ASSETS to another copy of assets/ when this directory moves.'}
     (out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')

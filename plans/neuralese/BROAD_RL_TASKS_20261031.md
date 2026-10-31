@@ -137,14 +137,20 @@ tables, code, tool calls, short logic). `curriculum.external.framing` records it
 
 ## First mixture (registered)
 
-- Train task source: `natlang-rl-broad-external-20261031` (`runs/natlang-rl-broad-external-20261031/`,
-  manifest `training/corpus-manifests/natlang-rl-broad-external-20261031.json`): **33,047 train cases** from 23
+- Train task source: **`natlang-rl-broad-external-20261031-v2`** (`runs/natlang-rl-broad-external-20261031-v2/`,
+  manifest `training/corpus-manifests/natlang-rl-broad-external-20261031-v2.json`): **32,947 train cases** from 23
   external sources plus a 1,394-row slice (whole split units, about 30 rows per family, byte-identical rows) of the
   procedural curriculum `natlang-rl-train-curriculum-lfm3-20261030-stop-evidence` for natlang-specific skills (4.2%).
   161 families, 777 family shapes, 317 distinct instruction texts (the old curriculum: 49 families), levels
-  0/1/2/3 = 1,958/16,995/10,316/3,778, 6,390 rows with the Neuralese-helper framing. Per-source rows, families,
+  0/1/2/3 = 1,958/16,950/10,261/3,778, 6,370 rows with the Neuralese-helper framing. Per-source rows, families,
   shapes, instruction texts, levels, framings and oracle kinds: `diversity.json`. Rows are interleaved source by
   source and family by family. Per-source cap 1,500 train rows (reasoning-gym 3,520 for its 59 families).
+  The first assembly (`natlang-rl-broad-external-20261031`, 33,047 rows, registered and removed the same night with
+  no consumer) had 45 rows (SQuAD 43, HotpotQA 2) related to LFM3 held SFT sets through `wiki:`/question groups,
+  found by the held-set group closure below; v2 excludes them, and also 55 full-table DataBench cases on six tables
+  (Twitter/ID-style data) holding integers beyond 2^53: the runtime rejects binding such a table page in eval
+  (`let/first/0/0: type-mismatch, expected number | ...` for 1390763244713922561), so no trajectory could read the
+  table. That is a runtime limitation to fix (unsafe integers from a service), found by an end-to-end service check.
 - `qualification.json` is `natlang.rl-additional-task-source-qualification/1` (task ids, row hashes, protected-world
   bindings, zero intersections), so a lineage can append the packet as an additional admitted train source through
   the existing `natlang.rl-task-source/1` manifest (`training/neuralese/natlang_neuralese/rl/task_source.py`).
@@ -154,13 +160,22 @@ tables, code, tool calls, short logic). `curriculum.external.framing` records it
   (HotpotQA/MuSiQue/2Wiki/SQuAD/DROP/QuALITY/TriviaQA/HybridQA validation, Spider/BIRD dev and Spider test-only DBs,
   GSM8K/MATH/MBPP test, WTQ test, TAT-QA dev+test, FinQA dev+test, LogiQA dev+test, K&K test, bAbI test, CLUTRR test)
   or a 6% unit carve-out (xLAM, DataBench, reasoning-gym).
-- Custody: ProtectedWorlds (registry union) plus this source's own held rows, by ids, groups, world bindings,
-  world and visible fingerprints; dropped before assembly: xLAM 32 (tool sets shared with held items), HybridQA 30
-  (tables shared with held questions), reasoning-gym 20, TAT-QA 12, LogiQA 7, MBPP 4, Spider 2; MuSiQue protected seeds
-  skipped at build time. The LFM3 held-set union check (`protection_union.py`: joint-SFT held graph sets, big2 held
-  tranches, packet holds) is recorded in `/home/werg/data/broad-rl-tasks-20261031/protection-union.json`.
+- Custody: (1) ProtectedWorlds (registry union, now including the two held packets) plus this source's own held rows,
+  by ids, groups, world bindings, world and visible fingerprints — dropped before assembly: xLAM 32 (tool sets shared
+  with held items), HybridQA 30 (tables shared with held questions), reasoning-gym 20, TAT-QA 12, LogiQA 7, MBPP 4,
+  Spider 2; MuSiQue protected seeds skipped at build time; after registration ProtectedWorlds relates 0 rows of this
+  source and 0 of the stop-evidence curriculum. (2) The LFM3 held-set group closure of
+  `/home/werg/data/lfm3-rl-dgx-20261029/scripts/protection_union.py` (joint-SFT train/held graph sets, big2 held
+  tranches, packet holds, acquired-source protection): 0 conflicts for v2 (`held-set-union.json`, 32,947 rows). The original
+  script also recomputes per-row world receipts, which takes over an hour on 33k large rows; the group closure was
+  run with `/home/werg/data/broad-rl-tasks-20261031/union_groups_fast.py` (the script's own loading code, without
+  the receipts, which (1) covers), and agreed with the original script on a 200-row sample (1 conflict each).
 - Assets: 52 BIRD + 157 Spider SQLite databases and 20 DataBench tables (613 MB) in `assets/`, read by each case's
   service with a SHA-256 check; set `NATLANG_RL_TASK_ASSETS` when the source directory moves (cloud sandboxes).
+  The assets are their own registry entry, `natlang-rl-broad-external-assets-20261031`, at
+  `runs/natlang-rl-broad-external-20261031/assets` — the default path compiled into every case service (train and
+  held). End-to-end check with that default path: gold SQL through the `db` service and paging through the `table`
+  service succeeded on 69/70 sampled train and dev cases (the failure is the unsafe-integer table above).
 
 Using it: the controller runtime must contain ts-host at 542df3c08 or later (the new `result-set`,
 `numeric-tolerance`, `answer-list` and `qa-alias-map` normalizations; an older runtime rejects them as unknown

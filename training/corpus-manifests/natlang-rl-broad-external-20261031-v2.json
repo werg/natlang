@@ -1,0 +1,155 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-broad-external-20261031-v2",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-broad-external-20261031-v2",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 292500686,
+      "sha256": "ebad1fc5339aacd40cef8da25ba1408933a9e1dc3307c3f60eb782de7a4b2baa",
+      "lines": 32947
+    },
+    {
+      "path": "diversity.json",
+      "bytes": 8627,
+      "sha256": "4c4d01bb46ce50e7e924be52daac2e5ed921eeb48cadb08e589fe581ae5819d6"
+    },
+    {
+      "path": "held-set-union.json",
+      "bytes": 2127,
+      "sha256": "2f9b5bf705621654e60a2422292fce5f76fcdd5307b0fffc07659625d4ac52a5"
+    },
+    {
+      "path": "qualification.json",
+      "bytes": 6623688,
+      "sha256": "5d8250f6ba62f3d35e1e27604d0860af82aa21f7830d7ed91074c26da7f4fc2b"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 2536,
+      "sha256": "1dc5ee61cfa749df1102476c63b8246b36c56e9bef57f2ca89215bc1051482da"
+    },
+    {
+      "path": "verification/2wikimultihopqa.json",
+      "bytes": 924486,
+      "sha256": "34549cc9be1452a6a96133cf057e1e2462b6c7fe971e22d02d6db7d68e0bd290"
+    },
+    {
+      "path": "verification/babi.json",
+      "bytes": 680240,
+      "sha256": "30e35beee241b889b6396b002cf855413cfc57947942bc2e51594ea350115ada"
+    },
+    {
+      "path": "verification/bird.json",
+      "bytes": 1195465,
+      "sha256": "d6f6bc33791cb5db1dd0e6f73e9a6906eede38c7ae4a05011983e4b5b2b0bc76"
+    },
+    {
+      "path": "verification/clutrr.json",
+      "bytes": 533201,
+      "sha256": "58b57312812bf2f2603f28796175d2a1738078fcfb59bd840b98f1f029dacf27"
+    },
+    {
+      "path": "verification/databench.json",
+      "bytes": 1091770,
+      "sha256": "aa02f22085de8dfa2248fbf8df37b993196b9277c4910a5620325588f4b9f104"
+    },
+    {
+      "path": "verification/drop.json",
+      "bytes": 695753,
+      "sha256": "1848f3b165a1d8fbc4b514fc41e56c3f6d6b084d0909ec812d2ff58ea503dbd8"
+    },
+    {
+      "path": "verification/finqa.json",
+      "bytes": 664693,
+      "sha256": "44a3d4c0fe660a5ddc281bcdeeb6b7bee98da6baf91127b92d3abed2016a2e86"
+    },
+    {
+      "path": "verification/gsm8k.json",
+      "bytes": 613065,
+      "sha256": "bbc5d2cd3d5aae0acc6211a1878ebb8756158a85779e93183cd43dc84592495c"
+    },
+    {
+      "path": "verification/hotpotqa.json",
+      "bytes": 907387,
+      "sha256": "731fbbe67ebc3874c35784914d9bfe6d3782efaa3b6a543d33c3da892a72ae12"
+    },
+    {
+      "path": "verification/hybridqa.json",
+      "bytes": 779675,
+      "sha256": "87f12be7470f9f83f21e5d0e8993b95ce28b4dcbd9dd596af83af54c0f2b21e0"
+    },
+    {
+      "path": "verification/knights-knaves.json",
+      "bytes": 1104190,
+      "sha256": "21d238d745e9226f53bde20c26c48e29db306d7dab87d1f8b9f94e01bc6ff18d"
+    },
+    {
+      "path": "verification/logiqa2.json",
+      "bytes": 508341,
+      "sha256": "31d2f61e55d09e11987e27e90a5365d676365df6e9c258ecc2f48250ac2f17c6"
+    },
+    {
+      "path": "verification/math.json",
+      "bytes": 523604,
+      "sha256": "6861ac1caa7ef781ff73d968c798a981de5e30b80f5c6c958ded7429d015a159"
+    },
+    {
+      "path": "verification/mbpp.json",
+      "bytes": 465380,
+      "sha256": "7c17c64685b9ef018d3b989da2e8982a21c803f827a9d3079c4a835596afbe0d"
+    },
+    {
+      "path": "verification/musique.json",
+      "bytes": 818995,
+      "sha256": "684d842452251d9c51e85366a86ad210c2a894a0e0c1b3583581cdb1f02aba6d"
+    },
+    {
+      "path": "verification/quality.json",
+      "bytes": 565283,
+      "sha256": "2e420788db9e999277b56ed9ffefd59ffe229c902973a998188e82ac640faeb4"
+    },
+    {
+      "path": "verification/reasoning-gym.json",
+      "bytes": 2021543,
+      "sha256": "a3cf9deda09120cb77862486d62c095aae06ab9231ad9682cbe1001f8f086e78"
+    },
+    {
+      "path": "verification/spider.json",
+      "bytes": 1226555,
+      "sha256": "2cf045243511ffbe51a7152c06c2e4157fd7dacb3f941a795832c578c14c77d5"
+    },
+    {
+      "path": "verification/squad.json",
+      "bytes": 759899,
+      "sha256": "27af96fa6a8b4d188c24eddd6a414926bd671f61342515e0eda4a9acb401ae1a"
+    },
+    {
+      "path": "verification/tatqa.json",
+      "bytes": 817506,
+      "sha256": "2b674ac3dc96c2352e96b33fcfc5566389191596d99e683783ea7b91fd0539ca"
+    },
+    {
+      "path": "verification/triviaqa.json",
+      "bytes": 683431,
+      "sha256": "b31297bcf3cbf51b0cb76f2b71390ade61c08717f5f1dc088dfd2b6c3bbfe56e"
+    },
+    {
+      "path": "verification/wikitablequestions.json",
+      "bytes": 805986,
+      "sha256": "aade62f7700ba936154e92d1a16c567fe09f0c00e608db359cf038255b9a6503"
+    },
+    {
+      "path": "verification/xlam.json",
+      "bytes": 995892,
+      "sha256": "392d551122bd7879b05d680839a9d24ab385aa13217737e026f5ab4e5acb564d"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 11537,
+      "sha256": "b7b7ee089372581c9cd6f1b851a1aa35d9626678c78d6c1a2b0ed4fb815f780b"
+    }
+  ],
+  "bytes": 318531541
+}
