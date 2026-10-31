@@ -268,6 +268,21 @@ class PersistentCheckpointReservation:
         self._lock_fd = None
         self._fd = None
         self.bound = 0
+        self._allocated_bound = 0
+
+    def _check_pending_identity(self):
+        st = os.fstat(self._fd)
+        path_st = self.pending.stat(follow_symlinks=False)
+        if (not stat.S_ISREG(st.st_mode) or st.st_nlink != 1
+                or (st.st_dev, st.st_ino) != (path_st.st_dev, path_st.st_ino)):
+            raise CheckpointReserveError('checkpoint reservation path or link count changed')
+        try:
+            target_st = self.target.stat(follow_symlinks=False)
+        except FileNotFoundError:
+            target_st = None
+        if target_st is not None and (st.st_dev, st.st_ino) == (target_st.st_dev, target_st.st_ino):
+            raise CheckpointReserveError('checkpoint reservation aliases the committed checkpoint')
+        return st
 
     def acquire(self, bound):
         bound = int(bound)
@@ -329,13 +344,15 @@ class PersistentCheckpointReservation:
                     self._fd = None
                     self.pending.unlink(missing_ok=True)
                     raise
-        st = os.fstat(self._fd)
-        path_st = self.pending.stat(follow_symlinks=False)
-        if (st.st_dev, st.st_ino) != (path_st.st_dev, path_st.st_ino):
-            raise CheckpointReserveError('checkpoint reservation path was replaced')
-        # Existing size is not evidence of allocated blocks after a crash or
-        # partial write; fallocate the entire requested range again.
-        additional = max(0, bound - st.st_size)
+        st = self._check_pending_identity()
+        if st.st_size < self._allocated_bound:
+            # A failed final truncate or an external truncation invalidates
+            # our prior allocation proof for the whole logical range.
+            self._allocated_bound = 0
+        # Only allocations completed by this owner count. An existing inode's
+        # size (or aggregate st_blocks) cannot prove its logical range is
+        # allocated after a crash: admit the whole bound conservatively.
+        additional = max(0, bound - self._allocated_bound)
         if additional:
             transfer = self.transfer_bytes
             if transfer is None:
@@ -350,15 +367,15 @@ class PersistentCheckpointReservation:
         else:
             os.posix_fallocate(self._fd, 0, bound)
             os.fsync(self._fd)
+        self._allocated_bound = max(self._allocated_bound, bound)
         self.bound = bound
         return self
 
     def stream(self):
         if self._fd is None or not self.bound:
             raise CheckpointReserveError('checkpoint reservation is not allocated')
-        st = os.fstat(self._fd)
-        path_st = self.pending.stat(follow_symlinks=False)
-        if (st.st_dev, st.st_ino) != (path_st.st_dev, path_st.st_ino) or st.st_size < self.bound:
+        st = self._check_pending_identity()
+        if st.st_size < self.bound or self._allocated_bound < self.bound:
             raise CheckpointReserveError('checkpoint reservation changed before write')
         stream = os.fdopen(os.dup(self._fd), 'r+b')
         stream.seek(0)
@@ -369,6 +386,7 @@ class PersistentCheckpointReservation:
         os.close(self._fd)
         self._fd = None
         self.bound = 0
+        self._allocated_bound = 0
         self.receipt.unlink(missing_ok=True)
         self._sync_directory()
 
@@ -388,6 +406,7 @@ class PersistentCheckpointReservation:
             os.close(self._lock_fd)
             self._lock_fd = None
         self.bound = 0
+        self._allocated_bound = 0
 
 
 class CheckpointDiskReserve:

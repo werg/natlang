@@ -150,3 +150,59 @@ def test_fresh_composite_native_optimizer_lazy_bound():
     bound = optimizer_state_size_upper_bound(optimizer, lazy=True)
     assert bound >= 2 * ordinary.numel() * 2 + 4 + latent.numel() * 2
     assert optimizer_state_size_upper_bound(optimizer, lazy=False) == 0
+
+
+def test_recovered_hardlink_to_parent_cannot_overwrite_parent(tmp_path):
+    import json
+    path = tmp_path / 'checkpoint.pt'
+    path.write_bytes(b'last durable checkpoint')
+    owner = reservation(path).acquire(1024)
+    owner.close()
+    owner.pending.unlink()
+    os.link(path, owner.pending)
+    st = path.stat()
+    owner.receipt.write_text(json.dumps({'schema':'natlang.checkpoint-reservation/1',
+                                        'device':st.st_dev, 'inode':st.st_ino}))
+    with pytest.raises(CheckpointReserveError, match='link count'):
+        reservation(path).acquire(1024)
+    assert path.read_bytes() == b'last durable checkpoint'
+
+
+def test_sparse_crash_recovery_rechecks_full_admission(tmp_path, monkeypatch):
+    import shutil
+    from collections import namedtuple
+    from natlang_neuralese.train.checkpoint_safety import CheckpointSpaceUnavailable
+    path = tmp_path / 'checkpoint.pt'
+    path.write_bytes(b'last durable checkpoint')
+    owner = reservation(path).acquire(1024 * 1024)
+    owner.close()
+    with owner.pending.open('wb') as stream:
+        stream.truncate(1024 * 1024)
+    Usage = namedtuple('Usage', 'total used free')
+    monkeypatch.setattr(shutil, 'disk_usage', lambda _: Usage(100, 100, 0))
+    retry = reservation(path)
+    with pytest.raises(CheckpointSpaceUnavailable):
+        retry.acquire(1024 * 1024)
+    assert path.read_bytes() == b'last durable checkpoint'
+    retry.close()
+
+
+def test_post_rename_receipt_enospc_retries_without_losing_parent(tmp_path, monkeypatch):
+    import errno
+    from natlang_neuralese.train.checkpoint_safety import save_with_space_retry
+    path = tmp_path / 'checkpoint.pt'
+    torch.save({'step': 1}, path)
+    owner = reservation(path).acquire(20 * 1024 * 1024)
+    real_unlink = Path.unlink
+    attempts = []
+    def unlink_once(target, *args, **kwargs):
+        if target == owner.receipt and not attempts:
+            attempts.append(True)
+            raise OSError(errno.ENOSPC, 'injected receipt failure')
+        return real_unlink(target, *args, **kwargs)
+    monkeypatch.setattr(Path, 'unlink', unlink_once)
+    save_with_space_retry(lambda: atomic_checkpoint(path, {'step': 2}, reservation=owner),
+                          sleep=lambda _: None)
+    assert attempts
+    assert torch.load(path, weights_only=True)['step'] == 2
+    owner.close()

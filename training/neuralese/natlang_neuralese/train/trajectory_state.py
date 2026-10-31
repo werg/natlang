@@ -155,8 +155,15 @@ def atomic_checkpoint(path, state, *, reservation=None):
         # allocation before retrying without touching the committed parent.
         if os.fstat(reservation._fd).st_size < reservation.bound:
             reservation.acquire(reservation.bound)
-        with io_quiet(f'checkpoint write {Path(path).name}'):
-            _atomic_checkpoint(path, state, write_bound_bytes=reservation.bound, reservation=reservation)
+        try:
+            with io_quiet(f'checkpoint write {Path(path).name}'):
+                _atomic_checkpoint(path, state, write_bound_bytes=reservation.bound, reservation=reservation)
+        finally:
+            # Once committed, no pending inode remains to protect. Reacquire
+            # the target lock when reserving the next update, and avoid
+            # retaining locks when a trainer returns in a long-lived process.
+            if reservation.bound == 0:
+                reservation.close()
     # The verified copy to the external disk runs in the background (checkpoint_offload; never fails the write).
     from .checkpoint_offload import after_write
     after_write(path)
