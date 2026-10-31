@@ -38,3 +38,11 @@ def test_interrupted_group_projection_is_authenticated(tmp_path):
     p=json.loads(proof.read_text());p['filtered_rollouts']=bind(projected);proof.write_text(json.dumps(p))
     with pytest.raises(ValueError,match='projection'):
         resume_amended_collection(bind(proof),request,validate_actors=lambda *a,**kw:None)
+
+def test_policy_arguments_do_not_apply_sft_communication_quota():
+    from natlang_neuralese.rl.production import native_policy_trainer_args
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    parameters={'communication_min_visits':7,'learning_rate':1e-6}
+    assert '--communication-min-visits' not in native_policy_trainer_args(parameters,{})
+    assert '--communication-min-visits' in stage_parameter_args(parameters)
+    assert parameters['communication_min_visits']==7

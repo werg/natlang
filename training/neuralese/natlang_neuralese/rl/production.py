@@ -283,6 +283,8 @@ def native_policy_trainer_args(parameters, expected_native):
     """Bind sampled-policy admission independently of future ordinary rendering."""
     from ..train.recipe import stage_parameter_args
     actual = dict(parameters)
+    # This quota belongs to the preserved SFT source, not sampled RL graphs.
+    actual.pop('communication_min_visits', None)
     for key in ('history_reasoning_policy', 'history_reasoning_binding_path',
                 'history_reasoning_binding_sha256'):
         actual.pop(key, None)

@@ -2382,7 +2382,7 @@ def _main(argv=None, *, requested_refresh):
             checkpoint_options['token_mass_update_normalization_history']=norm_history
     previous_quota = (saved_options.get('communication_quota_policy') or {})
     requested_visits = args.communication_min_visits
-    if requested_visits is None and previous_quota.get('stage_id') == args.stage_id:
+    if requested_visits is None and objective is None and previous_quota.get('stage_id') == args.stage_id:
         requested_visits = previous_quota.get('visits')
     if requested_visits is not None:
         if objective is not None or ce_policy is None:
