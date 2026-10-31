@@ -149,3 +149,43 @@ def cohort_head_merge(entries,batches,cohorts,*,priority_ids=(),focus_ids=(),bat
     else:result=focused+other
     last={visit:i for i,(visit,_,_) in enumerate(result)}
     return [(visit,indices,last[visit]==i) for i,(visit,indices,_) in enumerate(result)]
+
+
+def sustained_communication_interleave(entries, batches, *, focus_ids=(), schedule_offset=0):
+    """Spread repeated communication visits across the remaining ordinary epoch.
+
+    Reorders complete packed batches only; each (visit, row) remains exactly
+    once. Within ordinary work the existing four-urgent/one-debt service rule
+    is preserved. No randomness or graph contents are consumed.
+    """
+    focus = set(focus_ids or ())
+    focused, comm, urgent, debt = [], [], [], []
+    for batch in batches:
+        indices = batch[1]
+        if not indices:
+            raise ValueError('sustained interleave received an empty batch')
+        if any(entries[i]['id'] in focus for i in indices):
+            focused.append(batch)
+        elif entries[indices[0]].get('communication'):
+            if not all(entries[i].get('communication') for i in indices):
+                raise ValueError('sustained interleave requires homogeneous communication batches')
+            comm.append(batch)
+        elif entries[indices[0]].get('training_priority', 0) > 0:
+            urgent.append(batch)
+        else:
+            debt.append(batch)
+    ordinary=[];u=d=0;cursor=schedule_offset%5
+    while u<len(urgent) or d<len(debt):
+        if cursor!=4 and u<len(urgent):ordinary.append(urgent[u]);u+=1
+        elif cursor==4 and d<len(debt):ordinary.append(debt[d]);d+=1
+        elif u<len(urgent):ordinary.append(urgent[u]);u+=1
+        else:ordinary.append(debt[d]);d+=1
+        cursor=(cursor+1)%5
+    result=list(focused);c=o=0
+    while c<len(comm) or o<len(ordinary):
+        if c<len(comm) and (o==len(ordinary) or c*len(ordinary)<=o*len(comm)):
+            result.append(comm[c]);c+=1
+        else:
+            result.append(ordinary[o]);o+=1
+    last={visit:i for i,(visit,_,_) in enumerate(result)}
+    return [(visit,indices,last[visit]==i) for i,(visit,indices,_) in enumerate(result)]

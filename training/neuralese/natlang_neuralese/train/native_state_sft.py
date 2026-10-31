@@ -3131,6 +3131,11 @@ def _main(argv=None, *, requested_refresh):
     checkpoint_options['native_diversity_history']=diversity_history
     pending_batches=cohort_head_merge(train.entries,pending_batches,urgent_cohort_ids,
         priority_ids=foundation_priority_ids,focus_ids=focus_ids,batch_tokens=args.batch_tokens,batch_graphs=args.batch_graphs,schedule_offset=global_step)
+    if checkpoint_options.get('communication_quota_policy'):
+        from .native_diversity import sustained_communication_interleave
+        pending_batches=sustained_communication_interleave(train.entries,pending_batches,
+            focus_ids=focus_ids,schedule_offset=global_step)
+        checkpoint_options['communication_quota_policy']['interleave']='sustained-packed-batch-proportional/1'
     if policy_focus_ids:
         pending_batches=promote_focus(pending_batches,train.entries,policy_focus_ids)
     if args.memory_qualification and objective is None:
@@ -3514,6 +3519,10 @@ def _main(argv=None, *, requested_refresh):
                         urgent_cohort_ids=source_cohort_ids(train)
                     pending_batches=cohort_head_merge(train.entries,pending_batches,urgent_cohort_ids,
                         priority_ids=foundation_priority_ids,focus_ids=focus_ids,batch_tokens=args.batch_tokens,batch_graphs=args.batch_graphs,schedule_offset=global_step)
+                    if checkpoint_options.get('communication_quota_policy'):
+                        from .native_diversity import sustained_communication_interleave
+                        pending_batches=sustained_communication_interleave(train.entries,pending_batches,
+                            focus_ids=focus_ids,schedule_offset=global_step)
                     if args.memory_qualification and objective is None:
                         # The committed source can change actual packed KV topology.
                         # Qualify the transformed schedule before the next update.
