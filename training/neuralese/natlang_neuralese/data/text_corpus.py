@@ -871,6 +871,30 @@ def _provider_expanded_writer_source_valid(source_class, write, witness, block_t
         and _sha256_hex(witness.get("raw_response_sha256"))
         and _sha256_hex(witness.get("typed_result_receipt_sha256"))
     ) or (
+        source_class == "teacher-text-executed-eval-finish"
+        and write.get("producer") == "teacher-text-emulation"
+        and write.get("format") == "teacher-text"
+        and write.get("source_kind") == "typed-text-result"
+        and write.get("source") == "eval-finish"
+        and write.get("marker_context") == "return-result"
+        and write.get("learned_vectors") is False
+        and write.get("tokenizer_ids") is False
+        and witness.get("kind") == "teacher-text-executed-eval-finish/1"
+        and witness.get("source") == "eval-finish"
+        and witness.get("transport_schema") == "natlang.teacher-text-neuralese-transport/1"
+        and witness.get("transport_mode") == "teacher-text/1"
+        and witness.get("learned_vectors") is False
+        and witness.get("qualification_certificate") is False
+        and witness.get("training_admission") is False
+        and witness.get("host_result_call_id") == write.get("call_id")
+        and witness.get("host_result_type") == block_type
+        and witness.get("writer_node") == write.get("node")
+        and witness.get("body_sha256") == write.get("text_body_sha256")
+        and _sha256_hex(witness.get("host_result_value_sha256"))
+        and _sha256_hex(witness.get("raw_response_sha256"))
+        and _sha256_hex(witness.get("transport_provenance_sha256"))
+        and _sha256_hex(witness.get("raw_eval_call_sha256"))
+    ) or (
         source_class in (None, "modern-typed-text-result")
         and write.get("producer") == "text-marker-emulation"
         and write.get("source_kind") == "typed-text-result"
@@ -1265,7 +1289,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 and any(isinstance(inp, dict) and inp.get("node") == pair_write.get("node")
                         and inp.get("block") == block_id for inp in pair_read.get("inputs", []))
                 and any(isinstance(inp, dict) and inp.get("node") == pair_read.get("node")
-                        and inp.get("port") == "read" and inp.get("block") == block_id
+                        and inp.get("port") == "read"
                         for inp in pair_turn.get("inputs", [])))
 
         valid_repeated_pairs = isinstance(repeated_pairs, list) and all(
@@ -1294,7 +1318,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 or read.get("block") != block_id or turn.get("node") != item.get("model_turn_node")
                 or turn.get("call_id") != reader_invocation
                 or not any(inp.get("node") == read.get("node") and inp.get("port") == "read"
-                           and inp.get("block") == block_id for inp in turn.get("inputs", []))
+                           for inp in turn.get("inputs", []))
                 or write.get("kind") != "block_write" or write.get("block") != block_id
                 or write.get("call_id") != item.get("producer_call_id")
                 or write.get("node") != item.get("producer_write_node")
@@ -1313,7 +1337,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                                   inp.get("block") == block_id
                                   for inp in pair.get("block_read", {}).get("inputs", []))
                        or not any(inp.get("node") == pair.get("block_read", {}).get("node")
-                                  and inp.get("port") == "read" and inp.get("block") == block_id
+                                  and inp.get("port") == "read"
                                   for inp in pair.get("model_turn", {}).get("inputs", []))
                        for pair in repeated_pairs)
                 or not isinstance(receipt.get("transport_provenance_sha256"), str)
@@ -1654,6 +1678,15 @@ def authenticated_crisp_context_messages(record, piece_map, writer_sources, *, s
             authentication_record["neuralese_conversion"]=copy.deepcopy(meta.get("source_neuralese_conversion"))
         else:
             authentication_record.pop("neuralese_conversion",None)
+        # The source message/target snapshot predates this conversion, so it
+        # cannot contain the exact provider-context receipts created by the
+        # current compiler pass. Carry over only those new receipts after the
+        # occurrence ledger has been independently reconstructed above; their
+        # hashes and graph edges are checked by _attested_provider_expanded_reads.
+        current_conversion = record.get("neuralese_conversion") or {}
+        current_external = current_conversion.get("external_context_inputs")
+        if isinstance(current_external, list) and current_external:
+            authentication_record["neuralese_conversion"] = copy.deepcopy(current_conversion)
 
     split = record.get("split")
     groups = sorted(set(g for g in (record.get("source_groups") or []) if isinstance(g, str) and g))

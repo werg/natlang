@@ -777,10 +777,17 @@ export class NativeToolAgent {
             if (!teacherText.writer_node || use.source && use.source !== teacherText.writer_node)
               throw new NeuraleseUnsupportedError(`teacher-text consumer ${block} has no exact recorded writer occurrence`);
             const source = teacherText.writer_node;
+            // A teacher-text value can cross from a child invocation into its
+            // parent. The case-local store has already bound this exact ID to
+            // the writer node, but blockInput's per-trace producer index cannot
+            // see that sibling trace and would incorrectly mark the read
+            // external. Preserve the authenticated store edge here; the
+            // materializer separately requires the unique matching writer
+            // node and its typed-result/transport evidence in the full graph.
             const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block,
               format: 'teacher-text', producer: 'teacher-text-emulation', result_type: teacherText.type,
               text_body_sha256: teacherText.body_sha256, learned_vectors: false, tokenizer_ids: false,
-              positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source, producerScopeForTrace(trace))]);
+              positions: [index + preparedMessageOffset, part] }, [{ node: source, port: 'block', block }]);
             if (node) reads.push({ node, port: 'read', block, source, stop: false });
           } else {
             const artifact = await this.options.neuralese?.store.getNativeState?.(block);

@@ -1327,7 +1327,7 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
     if (!reads.length || reads.some(event => typeof event.node !== 'string')) continue;
     const readTurnPairs = reads.map(read => ({ read, turn: graph.find(event => event.kind === 'model_turn' &&
       event.call_id === invocationId && Array.isArray(event.inputs) && (event.inputs as Dict[]).some(input =>
-        input.node === read.node && input.port === 'read' && input.block === blockId)) })).
+        input.node === read.node && input.port === 'read')) })).
       filter((pair): pair is { read: Dict; turn: Dict } => !!pair.turn);
     if (readTurnPairs.length !== reads.length) continue;
     const selectedTurnPairs = readTurnPairs.filter(pair => pair.turn.node === currentTurns[0]!.node);
@@ -1344,6 +1344,69 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
     // Sequence numbers are scoped to each invocation. The exact block input edge into this read is the causal
     // proof across invocations; comparing writer/read seq values from different calls would reject valid links.
     const legacyResultWitness = (event: Dict): { writerSourceClass: string; witness: Dict } | undefined => {
+      // In teacher-text/1, eval-finish is a real executed producer result. The
+      // source text is captured in the consumer's expanded input, while the
+      // writer graph event commits to its digest and the host capture commits
+      // to the returned typed reference. Bind those facts to the exact raw Pi
+      // response that supplied the eval action; do not pretend this was a
+      // provider-emitted Neuralese marker.
+      if (event.format === 'teacher-text' && event.producer === 'teacher-text-emulation' &&
+          event.block === blockId && event.result_type === block.type &&
+          event.text_body_sha256 === block.body_sha256 && event.source === 'eval-finish' &&
+          event.source_kind === 'typed-text-result' && event.marker_context === 'return-result' &&
+          event.learned_vectors === false && event.tokenizer_ids === false &&
+          typeof event.call_id === 'string' && typeof event.node === 'string') {
+        const ledger = Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger as Dict[] : [];
+        const entries = ledger.filter(item => item.invocation_id === event.call_id);
+        const steps = (row.trajectory as Dict[]).filter(step => step.invocation_id === event.call_id);
+        const resultSourceInputs = Array.isArray(event.inputs) ? (event.inputs as Dict[]).filter(input =>
+          input.port === 'result-source' && typeof input.node === 'string') : [];
+        const sourceTurns = resultSourceInputs.length === 1 ? graph.filter(candidate =>
+          candidate.kind === 'model_turn' && candidate.call_id === event.call_id &&
+          candidate.node === resultSourceInputs[0]!.node && Number.isSafeInteger(candidate.turn)) : [];
+        const sourceStep = sourceTurns.length === 1 ? steps[Number(sourceTurns[0]!.turn) - 1] : undefined;
+        const response = sourceStep?.model_response && typeof sourceStep.model_response === 'object' ?
+          sourceStep.model_response as Dict : {};
+        const transport = response.transport_provenance && typeof response.transport_provenance === 'object' ?
+          response.transport_provenance as Dict : {};
+        const rawCalls = Array.isArray(response.raw_calls) ? response.raw_calls as Dict[] : [];
+        const calls = Array.isArray(response.calls) ? response.calls.filter(Array.isArray) as unknown[][] : [];
+        const rawEval = rawCalls.filter(raw => {
+          const fn = raw.function && typeof raw.function === 'object' ? raw.function as Dict : {};
+          if (fn.name !== 'eval' || typeof fn.arguments !== 'string') return false;
+          try { return canonical(JSON.parse(fn.arguments)) === canonical(calls[0]?.[1]); }
+          catch { return false; }
+        });
+        const entry = entries[0];
+        const host = entry?.host_result && typeof entry.host_result === 'object' ? entry.host_result as Dict : {};
+        const hostRef = host.value && typeof host.value === 'object' ? neuraleseReference(host.value) : undefined;
+        const idWrites = graph.filter(candidate => candidate.kind === 'block_write' &&
+          candidate.producer === 'teacher-text-emulation' && candidate.format === 'teacher-text' &&
+          candidate.block === blockId);
+        if (entries.length !== 1 || steps.length < Number(sourceTurns[0]?.turn ?? 0) ||
+            sourceTurns.length !== 1 || event.turn !== sourceTurns[0]!.node || rawCalls.length !== 1 ||
+            calls.length !== 1 || rawEval.length !== 1 || idWrites.length !== 1 ||
+            transport.schema !== 'natlang.teacher-text-neuralese-transport/1' || transport.mode !== 'teacher-text/1' ||
+            transport.learned_vectors !== false || transport.qualification_certificate !== false ||
+            transport.training_admission !== false || transport.raw_response_sha256 !== sourceStep?.raw_response_sha256 ||
+            typeof sourceStep?.raw_response_sha256 !== 'string' ||
+            entry?.completion_status !== 'done' || entry.completion_source !== 'execution_graph' ||
+            host.kind !== 'host_capture' || host.capture_kind !== 'invocation_output' || host.call_id !== event.call_id ||
+            host.complete !== true || host.result_type !== block.type || hostRef?.id !== blockId ||
+            hostRef.type !== block.type || hostRef.teacher_text !== true || hostRef.source_occurrence !== event.node ||
+            typeof host.value_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(host.value_sha256)) return;
+        return { writerSourceClass: 'teacher-text-executed-eval-finish', witness: {
+          kind: 'teacher-text-executed-eval-finish/1', source: 'eval-finish',
+          transport_schema: transport.schema, transport_mode: transport.mode,
+          learned_vectors: transport.learned_vectors, qualification_certificate: transport.qualification_certificate,
+          training_admission: transport.training_admission,
+          host_result_call_id: event.call_id, host_result_type: block.type, writer_node: event.node,
+          body_sha256: block.body_sha256, host_result_value_sha256: host.value_sha256,
+          raw_response_sha256: sourceStep.raw_response_sha256,
+          transport_provenance_sha256: hexDigest(canonical(transport)),
+          raw_eval_call_sha256: hexDigest(canonical(rawCalls[0])),
+        } };
+      }
       if (event.format === 'teacher-text' && event.producer === 'teacher-text-emulation' &&
           event.block === blockId && event.result_type === block.type && event.text_body_sha256 === block.body_sha256 &&
           event.text_body === block.body && event.source === 'return_result' && event.source_kind === 'typed-text-result' &&

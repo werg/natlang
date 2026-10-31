@@ -804,6 +804,22 @@ function providerContextWriterSourceValid(writer: Record<string, unknown> | null
       witness.writer_node === writer.node && witness.body_sha256 === writer.text_body_sha256 &&
       /^[0-9a-f]{64}$/.test(String(witness.raw_response_sha256)) &&
       /^[0-9a-f]{64}$/.test(String(witness.typed_result_receipt_sha256)) :
+    sourceClass === 'teacher-text-executed-eval-finish' ?
+      writer?.producer === 'teacher-text-emulation' && writer.format === 'teacher-text' &&
+        writer.source_kind === 'typed-text-result' && writer.source === 'eval-finish' &&
+        writer.marker_context === 'return-result' && writer.learned_vectors === false &&
+        writer.tokenizer_ids === false && writer.result_type === blockType && writer.block === blockId &&
+        writer.truncated === false && witness?.kind === 'teacher-text-executed-eval-finish/1' &&
+        witness.source === 'eval-finish' && witness.host_result_call_id === writer.call_id &&
+        witness.host_result_type === blockType && witness.writer_node === writer.node &&
+        witness.body_sha256 === writer.text_body_sha256 &&
+        witness.transport_schema === 'natlang.teacher-text-neuralese-transport/1' &&
+        witness.transport_mode === 'teacher-text/1' && witness.learned_vectors === false &&
+        witness.qualification_certificate === false && witness.training_admission === false &&
+        /^[0-9a-f]{64}$/.test(String(witness.host_result_value_sha256)) &&
+        /^[0-9a-f]{64}$/.test(String(witness.raw_response_sha256)) &&
+        /^[0-9a-f]{64}$/.test(String(witness.transport_provenance_sha256)) &&
+        /^[0-9a-f]{64}$/.test(String(witness.raw_eval_call_sha256)) :
     sourceClass === 'legacy-text-marker-standin-eval-code' ?
       writer?.emulation_version === 'text-marker-standin/2' && writer.marker_context === 'eval-code' &&
         writer.learned_vectors === false :
@@ -894,7 +910,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
           receipt.model_turn === null || typeof receipt.model_turn !== 'object' ||
           !Array.isArray((receipt.model_turn as Record<string, unknown>).inputs) ||
           !((receipt.model_turn as Record<string, unknown>).inputs as Record<string, unknown>[]).some(input =>
-            input.node === (receipt.block_read as Record<string, unknown>).node && input.port === 'read' && input.block === block.id) ||
+            input.node === (receipt.block_read as Record<string, unknown>).node && input.port === 'read') ||
           !['configured-function-definition', 'same-run-producer'].includes(String(receipt.origin)))
         throw new Error(`provider-expanded context provenance mismatch for ${rowId}`);
       if (sourceBindingPresent &&
@@ -914,7 +930,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         throw new Error(`provider-expanded context graph or transport binding mismatch for ${id}`);
       if (['natlang.provider-expanded-read-context/2', 'natlang.provider-expanded-read-context/3'].includes(String(receipt.schema)) &&
           (receipt.origin !== 'same-run-producer' || receipt.writer_target_selected !== false ||
-          !['native-positional-state-writer', 'modern-typed-text-result', 'teacher-text-exact-provider-output', 'legacy-text-marker-standin-eval-code',
+          !['native-positional-state-writer', 'modern-typed-text-result', 'teacher-text-exact-provider-output',
+             'teacher-text-executed-eval-finish', 'legacy-text-marker-standin-eval-code',
              'legacy-text-marker-standin-return-result', 'legacy-text-marker-standin-eval-finish',
              'legacy-text-marker-standin-eval-return']
              .includes(String(receipt.writer_source_class)) ||
@@ -973,7 +990,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
               !providerContextWriterSourceValid(pairWriter, pairWriterClass, pairWitness, block.type, id) ||
               !pairInputs.some(input => input.node === pairWriter.node && input.block === id) ||
               !pairTurn || pairTurn.kind !== 'model_turn' || pairTurn.call_id !== invocation ||
-              !turnInputs.some(input => input.node === pairRead.node && input.port === 'read' && input.block === id);
+              !turnInputs.some(input => input.node === pairRead.node && input.port === 'read');
           })) throw new Error(`provider-expanded context has an invalid repeated read/turn binding: ${id}`);
         }
       }
