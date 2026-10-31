@@ -1140,17 +1140,39 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         return;
       }
     }
-    if (ts.isCallExpression(node)) {
+    const chainedMethodCall = ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.parent) &&
+      node.parent.expression === node && ts.isCallExpression(node.parent.parent) && node.parent.parent.expression === node.parent;
+    const iterateOnCall = ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'iterateOn';
+    // A generic instance changes the callee at the same source offset where an outer promise
+    // observer would open. Its lowering adds that observer after the instance edits below.
+    const instance = ts.isCallExpression(node) ? instantiationAt.get(`${rel(node).start}:${rel(node).end}`) : undefined;
+    // iterateOn is lowered by edits that open at the receiver and span a fluent chain. Wrapping
+    // any call in that chain at its source offsets would interleave with those edits; the awaited
+    // terminal .until() result is already owned by the surrounding eval.
+    const inIterateOnChain = (call: ts.CallExpression): boolean => {
+      let expression: ts.Expression = call.expression;
+      while (true) {
+        if (ts.isPropertyAccessExpression(expression)) expression = expression.expression;
+        else if (ts.isCallExpression(expression)) {
+          if (ts.isPropertyAccessExpression(expression.expression) && expression.expression.name.text === 'iterateOn') return true;
+          expression = expression.expression;
+        } else return false;
+      }
+    };
+    if (ts.isCallExpression(node) && !instance && !chainedMethodCall && !iterateOnCall && !inIterateOnChain(node)) {
       const at = rel(node);
       primitive.push({ start: at.start, end: at.start, text: '__natlang_own((' },
         { start: at.end, end: at.end, text: '))' });
     }
     // A call of a function with a representation-generic result runs the instance its expected type picked.
-    const instance = ts.isCallExpression(node) ? instantiationAt.get(`${rel(node).start}:${rel(node).end}`) : undefined;
     if (instance && ts.isCallExpression(node)) {
       const callee = rel(node.expression);
       primitive.push({ start: callee.start, end: callee.start, text: '__live.instantiate(' },
         { start: callee.end, end: callee.end, text: `, ${JSON.stringify(instance.representation)}, ${JSON.stringify(`eval line ${instance.line}`)})` });
+      const at = rel(node);
+      primitive.push({ start: at.start, end: at.start, text: '__natlang_own((' },
+        { start: at.end, end: at.end, text: '))' });
     }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'iterateOn' &&
         !ts.isTaggedTemplateExpression(node.expression.expression)) {
@@ -1171,7 +1193,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         const method = iterableExpression.expression.name.text as 'entries' | 'keys' | 'values';
         const receiver = iterableExpression.expression.expression;
         lowerNodes(receiver);
-        primitive.push({ ...at, text: `__natlang_finiteArrayIterator(${lowerSpan(rel(receiver).start, rel(receiver).end)}, ` +
+        primitive.push({ ...at, composed: true, text: `__natlang_finiteArrayIterator(${lowerSpan(rel(receiver).start, rel(receiver).end)}, ` +
           `${JSON.stringify(method)}, ${JSON.stringify(loopLabel(analysisSource.slice(at.start, at.end)))})` });
         lowerNodes(node.statement);
         return;

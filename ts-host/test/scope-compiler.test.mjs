@@ -34,6 +34,45 @@ test('scope compiler records top-level bindings and preserves final-expression R
     { result: 'v5', returned: false, bindings: { selected: 5, label: 'v5' } });
 });
 
+test('owned promise observation preserves the original promise identity', async () => {
+  const compiled = compileScopeSnippet('const original = value; value === __natlang_own(original)', { inputBindings: ['value'] });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  const promise = Promise.resolve('settled');
+  const output = await load(compiled)({ value: promise }, {}, {});
+  assert.equal(output.result, true);
+});
+
+test('owned promise observation preserves optional-call semantics', async () => {
+  const compiled = compileScopeSnippet('const result = await api?.fetch?.(value); result', {
+    inputBindings: ['api', 'value'],
+  });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  const calls = [];
+  const run = load(compiled);
+  const present = await run({ api: { fetch: async value => { calls.push(value); return value + 1; } }, value: 4 }, {}, {});
+  assert.equal(present.result, 5);
+  assert.deepEqual(calls, [4]);
+  const absent = await run({ api: undefined, value: 4 }, {}, {});
+  assert.equal(absent.result, null);
+});
+
+test('owned promise observation composes with generic call instantiation', async () => {
+  const source = 'const result: string = await choose(value);\nresult';
+  const start = source.indexOf('choose(value)');
+  const compiled = compileScopeSnippet(source, {
+    inputBindings: ['value'], helperBindings: ['choose'], neuralese: true,
+    analyze: () => ({ plans: [], diagnostics: [], instantiations: [{ start, end: start + 'choose(value)'.length,
+      line: 1, representation: { kind: 'crisp' } }] }),
+  });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  let output;
+  const live = { callables: { choose: value => value.toUpperCase() }, instantiate: fn => fn,
+    finish: value => { output = value; } };
+  const entry = Function('__live', `${prelude}\n${compiled.program}\nreturn ${compiled.entrypoint};`)(live);
+  await entry({ value: 'actual' }, {}, {});
+  assert.equal(output.result, 'ACTUAL');
+});
+
 test('scope compiler maps stock TypeScript annotations to portable result types', () => {
   const compiled = compileScopeSnippet(
     'const count: number = 2;\nconst labels: string[] = ["a"];\n' +
