@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -32,8 +33,54 @@ def bound(reference):
 
 
 def validated_dispatch_plan(path, expected_sha256):
-    from scripts.run_reviewed_luna_dispatcher import validate_plan
-    plan, identity = validate_plan(path, expected_sha256)
+    from scripts.run_reviewed_luna_dispatcher import digest as original_digest, validate_plan
+    try:
+        plan, identity = validate_plan(path, expected_sha256)
+    except ValueError as error:
+        # Old closed campaigns pin the exact dispatcher and queue code used at
+        # collection. Verify those bytes from Git history while still applying
+        # the current plan validator to the frozen plan, case list, runtime and
+        # output ledger. This is an explicit continuation; never rewrite the
+        # historical plan or treat current source files as its execution code.
+        attestation_path = Path(path).with_name('dispatch-plan-history-attestation.json')
+        if 'Missing or changed reviewed artifact pin:' not in str(error) or not attestation_path.is_file():
+            raise
+        attestation = json.loads(attestation_path.read_text())
+        plan_sha = sha256_file_hex(path)
+        commit = attestation.get('git_commit')
+        artifacts = attestation.get('historical_artifacts')
+        if (attestation.get('schema') != 'natlang.reviewed-dispatch-history-attestation/1'
+                or attestation.get('plan_path') != str(Path(path).resolve())
+                or attestation.get('plan_sha256') != plan_sha
+                or not isinstance(commit, str) or len(commit) != 40
+                or not isinstance(artifacts, dict) or not artifacts):
+            raise ValueError('historical dispatcher attestation does not bind this frozen plan') from error
+        repo = Path(__file__).resolve().parents[2]
+        expected_pins = json.loads(Path(path).read_text()).get('artifact_hashes', {})
+        if set(artifacts) - set(expected_pins):
+            raise ValueError('historical dispatcher attestation names unpinned artifacts') from error
+        historical = {}
+        for absolute, binding in artifacts.items():
+            target = Path(absolute).resolve(strict=False)
+            if target != repo and repo not in target.parents:
+                raise ValueError('historical dispatcher artifact is outside the repository') from error
+            relative = str(target.relative_to(repo))
+            if (not isinstance(binding, dict) or binding.get('git_path') != relative
+                    or binding.get('sha256') != expected_pins[absolute]
+                    or binding.get('git_commit') != commit):
+                raise ValueError('historical dispatcher artifact binding differs from plan pins') from error
+            result = subprocess.run(['git', '-C', str(repo), 'show', f'{commit}:{relative}'],
+                                    capture_output=True, check=True)
+            if hashlib.sha256(result.stdout).hexdigest() != binding['sha256']:
+                raise ValueError('historical dispatcher artifact differs from its Git object') from error
+            historical[str(target)] = binding['sha256']
+        def bound_digest(target):
+            absolute = str(Path(target).resolve(strict=False))
+            if absolute in historical:
+                return historical[absolute]
+            return original_digest(target)
+        plan, identity = validate_plan(path, expected_sha256, digest_fn=bound_digest)
+        identity['dispatch_plan_history_attestation'] = str(attestation_path.resolve())
     identity['identity_sha256'] = hashlib.sha256(json.dumps(
         identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     return plan, identity
@@ -63,6 +110,9 @@ def source_binding(args, *, protection_reader):
     proof_paths = {'provider_source': manifest_path, 'source': source,
                    'dispatch_plan': plan_path, 'claim_ledger': ledger_path,
                    'transfer': manifest_path}
+    history = identity.get('dispatch_plan_history_attestation')
+    if history:
+        proof_paths['dispatch_plan_history_attestation'] = history
     source_files, selected_ids, groups, packet_programs = {}, set(), set(), {}
     collection_key = 'provider-campaign:' + declaration['plan']['sha256']
     combined = [json.loads(line) for line in source.read_text().splitlines() if line.strip()]

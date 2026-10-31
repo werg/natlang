@@ -740972,6 +740972,68 @@
           }
         }
       }
+    },
+    {
+      "id": "luna-design-briefs-six-20261026-v8-tranche000004-lfm25-reference",
+      "owner": "dgx",
+      "path": "runs/lfm3-teacher-graphs/luna-design-briefs-six-20261026-v8-tranche000004",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst"
+      ],
+      "source_class": "verified-provider-teacher-positive-native-full-trajectory",
+      "split": "Train only; 114 source trajectories are train-only; current held/quality/pending groups checked; this LFM2.5-tokenized bridge is used only to create and verify the LFM3 twin.",
+      "license_provenance": "Owner-authorized project-collected openai-codex/gpt-6-luna trajectories; original teacher actor/runtime/source record hashes retained; provider weight revision unavailable.",
+      "admission": "Historical tokenizer reference for the qualified LFM3 student twin. Current native teacher materializer admitted 288 sampled actions from 114 accepted Luna trajectories; 11 failed/unexecuted proposals omitted. Not a claim of LFM3 learner exposure.",
+      "training_admission": false,
+      "source_binding": {
+        "model_key": "lfm25",
+        "model_id": "lfm2:becd44942637909e2239d0701ee5c6350050c7cbb19f924dd970594e4720724f",
+        "source_trajectories_sha256": "6a772a83000b675066806b9e03f9b7c62a4a4e79c3e5f08e82001e462b7ed2cc",
+        "receipt_sha256": "30878634afccf6f69ad8d01670d6abd351f4e62aff9572f54225f586723a11e2",
+        "rows": 288,
+        "omitted_rows": 11
+      }
+    },
+    {
+      "id": "luna-design-briefs-six-20261026-v8-tranche000004-lfm3",
+      "owner": "dgx",
+      "path": "runs/lfm3-teacher-graphs/luna-design-briefs-six-20261026-v8-tranche000004",
+      "include": [
+        "lfm3/receipt.json",
+        "lfm3/train/native-graphs.jsonl.zst",
+        "lfm3/test/native-graphs.jsonl.zst"
+      ],
+      "source_class": "verified-provider-teacher-positive-native-full-trajectory",
+      "split": "Train only; all 114 source task groups were checked against current held/quality/pending protection; the 53 application worlds are a subset of the 60 train applications in the design-brief gate/workflow packet, with no dev/confirmation overlap; empty held views.",
+      "license_provenance": "Owner-authorized project-collected openai-codex/gpt-6-luna trajectories; original teacher actor/runtime/source record hashes retained; provider weight revision unavailable.",
+      "admission": "LFM3 full-prompt student twin of the exact Luna teacher trajectories, re-rendered from source records with the current parser. 288 rows, 0 twin omissions; exact teacher raw tool calls, token decode and groups checked. No student capability or exposure claim.",
+      "training_admission": true,
+      "derived_from": [
+        "luna-design-briefs-six-20261026-v8-tranche000004-lfm25-reference"
+      ],
+      "source_binding": {
+        "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+        "model_key": "lfm3",
+        "prompt_rendering": "full",
+        "tokenizer": {
+          "source_fingerprint": "8818b793a02e560d72d2bafee3a1ca9cfedd9b84518bce89800fc4db80ca967a",
+          "expanded_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "source_trajectories_sha256": "6a772a83000b675066806b9e03f9b7c62a4a4e79c3e5f08e82001e462b7ed2cc",
+        "reference_receipt_sha256": "30878634afccf6f69ad8d01670d6abd351f4e62aff9572f54225f586723a11e2",
+        "rows": 288,
+        "omitted_rows": 0,
+        "verification_passed": true
+      },
+      "snapshot_manifest": "training/corpus-manifests/luna-design-briefs-six-20261026-v8-tranche000004-lfm3.json"
     }
   ],
   "coverage_backlog": [

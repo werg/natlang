@@ -149,6 +149,8 @@ def test_only_expected_honest_root_block_has_blocked_admission_exception():
     child_blocked['trajectory'][1]['assistant']['calls'][0]['arguments']['status'] = 'blocked'
     child_blocked['outcome']['invocation_ledger'][1]['completion_status'] = 'quiesced'
     assert not exact_honest_root_block(child_blocked, program)
+
+
     unexpected = copy.deepcopy(program)
     unexpected['curriculum']['reference']['root'][-1][1]['status'] = 'success'
     assert not exact_honest_root_block(row, unexpected)
@@ -173,3 +175,68 @@ def test_expected_root_block_requires_explicit_parentless_capture():
     row, program = _blocked_root_fixture()
     del row['outcome']['invocation_ledger'][0]['parent_invocation_id']
     assert not exact_honest_root_block(row, program)
+
+
+def test_historical_dispatch_attestation_uses_local_digest_override(tmp_path, monkeypatch):
+    import subprocess
+    from scripts import run_reviewed_luna_dispatcher as dispatcher
+
+    repo = Path(__file__).resolve().parents[2]
+    commit = subprocess.run(['git', '-C', str(repo), 'rev-parse', 'HEAD'],
+                            capture_output=True, text=True, check=True).stdout.strip()
+    git_path = 'scripts/run_reviewed_luna_dispatcher.py'
+    historical = subprocess.run(['git', '-C', str(repo), 'show', f'{commit}:{git_path}'],
+                                capture_output=True, check=True).stdout
+    historical_sha = hashlib.sha256(historical).hexdigest()
+    target = str((repo / git_path).resolve())
+    plan_path = tmp_path / 'plan.json'
+    plan_path.write_text(json.dumps({'artifact_hashes': {target: historical_sha}}) + '\n')
+    attestation_path = tmp_path / 'dispatch-plan-history-attestation.json'
+    attestation_path.write_text(json.dumps({
+        'schema': 'natlang.reviewed-dispatch-history-attestation/1',
+        'plan_path': str(plan_path.resolve()),
+        'plan_sha256': hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+        'git_commit': commit,
+        'historical_artifacts': {target: {'git_path': git_path,
+            'sha256': historical_sha, 'git_commit': commit}},
+    }) + '\n')
+    calls = []
+
+    def validator(path, expected, *, digest_fn=None):
+        calls.append(digest_fn)
+        if len(calls) == 1:
+            raise ValueError(f'Missing or changed reviewed artifact pin: {target}')
+        assert digest_fn(target) == historical_sha
+        assert digest_fn(plan_path) == hashlib.sha256(plan_path.read_bytes()).hexdigest()
+        return {'campaign_id': 'test'}, {'identity_sha256': 'fixture'}
+
+    monkeypatch.setattr(dispatcher, 'validate_plan', validator)
+    original_digest = dispatcher.digest
+    _, identity = source.validated_dispatch_plan(plan_path, hashlib.sha256(plan_path.read_bytes()).hexdigest())
+    assert identity['dispatch_plan_history_attestation'] == str(attestation_path.resolve())
+    assert dispatcher.digest is original_digest
+    assert calls[0] is None and callable(calls[1])
+
+
+def test_text_emulation_runtime_requires_compiled_cli_and_effective_option(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from scripts.run_reviewed_luna_dispatcher import _validate_text_neuralese_emulation
+
+    runtime = tmp_path / 'runtime'
+    (runtime / 'dist/teacher').mkdir(parents=True)
+    bindings = {}
+    for rel, body in [('teacher/cli.js', b'cli'), ('teacher/collector.js', b'collector')]:
+        target = runtime / 'dist' / rel
+        target.write_bytes(body)
+        bindings[rel] = hashlib.sha256(body).hexdigest()
+    (runtime / 'frozen-runtime.json').write_text('{}\n')
+    manifest = {'build': {'compiled_dist_files': bindings}}
+    monkeypatch.setattr('scripts.run_reviewed_luna_dispatcher.subprocess.run',
+        lambda *args, **kwargs: SimpleNamespace(returncode=0,
+            stdout='Options: --text-neuralese-emulation\n', stderr=''))
+    proof = _validate_text_neuralese_emulation(runtime, manifest)
+    assert proof['option'] == '--text-neuralese-emulation'
+    monkeypatch.setattr('scripts.run_reviewed_luna_dispatcher.subprocess.run',
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout='Options: --prompt-rendering\n', stderr=''))
+    with pytest.raises(ValueError, match='does not implement'):
+        _validate_text_neuralese_emulation(runtime, manifest)

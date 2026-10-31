@@ -42,3 +42,4 @@ apigen-mt-airline agentic:apigen_airline
 codebase-py codebase:python_packages
 codebase-natlang codebase:natlang_modules
 natlang-codebase natcode:natlang_codebases
+design-brief-gates design_brief_gates:cases

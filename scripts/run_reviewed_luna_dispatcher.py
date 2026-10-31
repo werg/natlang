@@ -101,9 +101,39 @@ def _source_rows(source):
     return rows
 
 
-def validate_plan(plan_path, expected_sha256):
+def _validate_text_neuralese_emulation(runtime, runtime_manifest):
+    """Require the pinned runtime to implement the requested transport end to end."""
+    runtime = Path(runtime)
+    compiled = runtime_manifest.get('build', {}).get('compiled_dist_files', {})
+    required = ('teacher/cli.js', 'teacher/collector.js')
+    if not isinstance(compiled, dict) or any(not isinstance(compiled.get(name), str) for name in required):
+        raise ValueError('text Neuralese emulation requires CLI and collector entries in the frozen build manifest')
+    for name in required:
+        path = runtime / 'dist' / name
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != compiled[name]:
+            raise ValueError(f'text Neuralese emulation build manifest does not bind {name}')
+    try:
+        result = subprocess.run(['node', str(runtime / 'dist/teacher/cli.js'), '--help'],
+                                capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ValueError('could not verify text Neuralese emulation on the frozen collector CLI') from error
+    if result.returncode != 0 or '--text-neuralese-emulation' not in result.stdout:
+        raise ValueError('frozen collector CLI does not implement --text-neuralese-emulation')
+    return {'schema': 'natlang.text-neuralese-emulation-runtime-capability/1',
+            'runtime_receipt_sha256': hashlib.sha256(
+                (runtime / 'frozen-runtime.json').read_bytes()).hexdigest(),
+            'build_manifest_sha256': hashlib.sha256(
+                json.dumps(compiled, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+            'cli_sha256': compiled['teacher/cli.js'],
+            'collector_sha256': compiled['teacher/collector.js'],
+            'cli_help_sha256': hashlib.sha256(result.stdout.encode()).hexdigest(),
+            'option': '--text-neuralese-emulation'}
+
+
+def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
+    digest_fn = digest_fn or digest
     plan_path = Path(plan_path).resolve(strict=True)
-    if digest(plan_path) != expected_sha256:
+    if digest_fn(plan_path) != expected_sha256:
         raise ValueError('Reviewed dispatcher plan SHA-256 mismatch')
     plan = json.loads(plan_path.read_text(encoding='utf-8'))
     schema = plan.get('schema')
@@ -145,14 +175,17 @@ def validate_plan(plan_path, expected_sha256):
                      str(supervisor): plan.get('supervisor_sha256'),
                      str(receipt): plan.get('runtime_receipt_sha256')}
     for path, expected in required_pins.items():
-        if not isinstance(expected, str) or pins.get(path) != expected or digest(path) != expected:
+        if not isinstance(expected, str) or pins.get(path) != expected or digest_fn(path) != expected:
             raise ValueError(f'Missing or changed reviewed artifact pin: {path}')
     for path, expected in pins.items():
-        if digest(path) != expected:
+        if digest_fn(path) != expected:
             raise ValueError(f'Reviewed artifact changed: {path}')
     runtime_manifest = json.loads(receipt.read_text(encoding='utf-8'))
     if tree_identity(runtime) != runtime_manifest.get('files'):
         raise ValueError('Frozen runtime tree changed')
+    text_emulation_capability = None
+    if plan.get('text_neuralese_emulation', False):
+        text_emulation_capability = _validate_text_neuralese_emulation(runtime, runtime_manifest)
 
     cases = plan.get('cases')
     if not isinstance(cases, list) or not cases:
@@ -184,7 +217,7 @@ def validate_plan(plan_path, expected_sha256):
             raise ValueError('Plan v2 requires a source_inventory binding')
         inventory_path = Path(source_inventory.get('path', '')).expanduser().resolve(strict=True)
         inventory_sha = source_inventory.get('sha256')
-        if not isinstance(inventory_sha, str) or pins.get(str(inventory_path)) != inventory_sha or digest(inventory_path) != inventory_sha:
+        if not isinstance(inventory_sha, str) or pins.get(str(inventory_path)) != inventory_sha or digest_fn(inventory_path) != inventory_sha:
             raise ValueError('Source inventory must be pinned in artifact_hashes')
         verified_inventory = verify_luna_source_inventory(inventory_path, source, normalized_cases)
         if verified_inventory.get('schema') != 'natlang.luna-source-row-inventory/1':
@@ -242,7 +275,8 @@ def validate_plan(plan_path, expected_sha256):
                   'launch_record': str(Path(plan['launch_record']).resolve()),
                   'authority': str(authority), 'slots': slots,
                   'max_transport_retries': transport_retries,
-                  'cases': normalized_cases, 'source_inventory': inventory_record}
+                  'cases': normalized_cases, 'source_inventory': inventory_record,
+                  'text_neuralese_emulation_capability': text_emulation_capability}
 
 
 def _verify_ledger_identity(events, identity):
@@ -474,6 +508,8 @@ def _claim_queue(plan, identity, slot, case):
         'transport_retries': identity['max_transport_retries'],
         'text_neuralese_emulation': bool(plan.get('text_neuralese_emulation', False)),
     }
+    if identity.get('text_neuralese_emulation_capability') is not None:
+        entry['text_neuralese_emulation_capability'] = identity['text_neuralese_emulation_capability']
     for field in ('program_id', 'source_group', 'source_groups', 'split', 'source_row_sha256'):
         if field in case:
             entry[field] = case[field]

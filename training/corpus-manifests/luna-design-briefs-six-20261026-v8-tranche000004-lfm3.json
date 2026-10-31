@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-design-briefs-six-20261026-v8-tranche000004-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/luna-design-briefs-six-20261026-v8-tranche000004",
+  "files": [
+    {
+      "path": "lfm3/receipt.json",
+      "bytes": 3286,
+      "sha256": "d0ee2f99b4e7dfdfb92b75b5a79b9bd0306fb0ab23a3a5cd0e221a96a18e6a9a"
+    },
+    {
+      "path": "lfm3/train/native-graphs.jsonl.zst",
+      "bytes": 243227,
+      "sha256": "57f2b8d0c85b5c45122c00d1201eb5420b2fc1b6c620818f74d4b361fd783375"
+    },
+    {
+      "path": "lfm3/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    }
+  ],
+  "bytes": 246526
+}
