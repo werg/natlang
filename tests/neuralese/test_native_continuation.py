@@ -39,6 +39,21 @@ def test_unearned_stage_replacement_is_bound_and_rejects_earned_rows():
             parent_sha256='parent', train_sha256='new', held_sha256='held', new_stage='new')
 
 
+def test_cumulative_policy_history_must_bind_actual_parent(tmp_path):
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    from natlang_neuralese.train.native_continuation import checked_policy_history
+    path = tmp_path / 'history.json'
+    path.write_text(json.dumps({'schema': 'natlang.cumulative-policy-exposure-custody/1',
+        'status': 'verified', 'through_checkpoint': {'sha256': 'parent'}}))
+    reference = {'path': str(path), 'sha256': sha256_file_hex(path)}
+    assert checked_policy_history({'parent_sha256': 'parent', 'cumulative_policy_history': reference}) == reference
+    with pytest.raises(ValueError, match='exact parent'):
+        checked_policy_history({'parent_sha256': 'different', 'cumulative_policy_history': reference})
+    path.write_text('{}')
+    with pytest.raises(ValueError, match='exact cumulative'):
+        checked_policy_history({'parent_sha256': 'parent', 'cumulative_policy_history': reference})
+
+
 def progress():
     return {'schema':'natlang.neuralese-native-sft-training/1','step':3,'global_step':3,'epoch':0,'cursor':1,
         'identity':{'objective':None},'source_row_bindings':{'old':'binding0','new':'binding1'},

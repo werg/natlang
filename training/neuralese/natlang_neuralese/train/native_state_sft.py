@@ -2016,6 +2016,8 @@ def _main(argv=None, *, requested_refresh):
     if args.supersede_unearned_sft_stage:
         proof = json.loads(args.supersede_unearned_sft_stage.read_text())
         proof_sha = sha256_file_hex_cached(args.supersede_unearned_sft_stage)
+        from .native_continuation import checked_policy_history
+        history_ref = checked_policy_history(proof)
         if not parent_continuation:
             if (not any(item.get('proof_sha256') == proof_sha for item in replacement_history)
                     or proof.get('new_stage') != args.stage_id
@@ -2032,6 +2034,7 @@ def _main(argv=None, *, requested_refresh):
                 held_sha256=sha256_file_hex_cached(args.held_native_graphs), new_stage=args.stage_id)
             record['proof_path'] = str(args.supersede_unearned_sft_stage.resolve())
             record['proof_sha256'] = proof_sha
+            record['cumulative_policy_history'] = dict(history_ref)
             replacement_history.append(record)
     checkpoint_options['unearned_sft_replacement_history'] = replacement_history
     restored_progress = False

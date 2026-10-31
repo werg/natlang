@@ -296,6 +296,22 @@ def restore_sft_progress(current,stage,*,collected_progress=None):
     return result
 
 
+def checked_policy_history(proof):
+    from pathlib import Path
+    import json
+    from ..common.hashing import sha256_file_hex_cached
+    reference = proof.get('cumulative_policy_history') or {}
+    path = Path(reference.get('path') or '')
+    if not path.is_file() or sha256_file_hex_cached(path) != reference.get('sha256'):
+        raise ValueError('unearned SFT replacement lacks its exact cumulative policy history')
+    history = json.loads(path.read_text())
+    if (history.get('schema') != 'natlang.cumulative-policy-exposure-custody/1'
+            or history.get('status') != 'verified'
+            or (history.get('through_checkpoint') or {}).get('sha256') != proof.get('parent_sha256')):
+        raise ValueError('cumulative policy history does not bind the exact parent')
+    return dict(reference)
+
+
 def supersede_unearned_stage(progress, training, proof, *, parent_sha256, train_sha256, held_sha256, new_stage):
     """Replace an unstarted plan while retaining its exact parent and disposition in history."""
     if proof.get('schema') != 'natlang.unearned-sft-source-replacement/1':
