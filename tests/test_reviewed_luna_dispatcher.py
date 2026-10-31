@@ -194,6 +194,23 @@ def test_prompt_rendering_is_forwarded_into_each_queue(reviewed_plan):
     assert entry['prompt_rendering'] == 'program-header'
 
 
+def test_bound_system_file_is_forwarded_into_each_queue(reviewed_plan, tmp_path):
+    plan_path, _, _, plan = reviewed_plan
+    system_file = tmp_path / 'system-with-attempt-feedback.md'
+    system_file.write_text('Use the bound previous-attempt feedback as diagnostic evidence only.')
+    plan['system_file'] = str(system_file)
+    plan['artifact_hashes'][str(system_file)] = dispatcher.digest(system_file)
+    plan_path.write_text(json.dumps(plan, sort_keys=True))
+    validated, identity = dispatcher.validate_plan(plan_path, dispatcher.digest(plan_path))
+    entry, _, _, _, _, payload = dispatcher._claim_queue(validated, identity, 1, identity['cases'][0])
+    assert entry['system_file'] == str(system_file.resolve())
+    assert json.loads(payload)['system_file'] == str(system_file.resolve())
+
+    system_file.write_text('tampered feedback')
+    with pytest.raises(ValueError, match='Reviewed artifact changed'):
+        dispatcher.validate_plan(plan_path, dispatcher.digest(plan_path))
+
+
 def test_judged_workflows_require_and_preserve_independent_judge_binding(reviewed_plan):
     plan_path, _, _, plan = reviewed_plan
     source = Path(plan['source'])

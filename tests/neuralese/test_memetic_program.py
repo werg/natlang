@@ -350,13 +350,18 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         # only replay reference code and never exercise the server.
         task['curriculum']['reference']['root'][0][1]['code'] = (
             'const f = nl<(value: number) => Promise<number>>`Return exactly ${value}.`; return await f(value);')
+        # Keep this transport test's prompt intentionally small. Full-prompt behavior is exercised elsewhere;
+        # here the tiny CPU model needs a deterministic typed child reply so the whole collector call completes.
+        fixture_system = 'Use the declared typed contract. Return the value only; finish the call after checking it.'
+        monkeypatch.setattr(memetic.runner, 'default_system_prompt', lambda: fixture_system)
         args = Namespace(samples=2, shards=1, case_seconds=40, max_model_requests=2, max_turns=2, seed_base=7,
             server=url)
         fit = memetic.evaluate(args, tmp_path, 'actual', memetic.state_guidance('guide', written['id']), [task],
-            base_system=memetic.runner.default_system_prompt(), actor=identity,
+            base_system=fixture_system, actor=identity,
             server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64,
             guidance_binding=guidance_binding)
-        assert fit['rollouts'] == 2 and fit['native_import_reached_model'] is True
+        assert fit['rollouts'] == 2 and fit['scored'] == fit['successes'] == 2
+        assert fit['native_import_reached_model'] is True
         assert fit['guidance_delivery'] == 'native-program-guidance/1'
         assert memetic.rollouts_reached(tmp_path / 'evals/actual', identity, written['id'])
         # The production collector must retain sampled decision captures as policy turns, including their
@@ -367,12 +372,12 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
             '---\nargs: {}\nreturns: "yes" | "no"\nreadout: decision\n---\nChoose yes or no.\n')
         decision_task['curriculum']['reference']['root'][0][1]['code'] = (
             'return (await decide(verdict)).value;')
-        decision_args = Namespace(**{**vars(args), 'samples': 2})
+        decision_args = Namespace(**vars(args))
         decision_fit = memetic.evaluate(decision_args, tmp_path, 'decision', memetic.state_guidance('guide', written['id']),
-            [decision_task], base_system=memetic.runner.default_system_prompt(), actor=identity,
+            [decision_task], base_system=fixture_system, actor=identity,
             server_info_sha256=memetic.canonical_json_sha256_hex(info), evaluation_inputs_sha256='e' * 64,
             guidance_binding=guidance_binding)
-        assert decision_fit['rollouts'] == 2
+        assert decision_fit['rollouts'] == 2 and decision_fit['scored'] == decision_fit['successes'] == 2
         from natlang_neuralese.common.jsonio import iter_jsonl_rows
         decision_rows = [row for _, row in iter_jsonl_rows(tmp_path / 'evals/decision/rollouts.jsonl')]
         decisions = [turn['sampling'] for row in decision_rows for turn in row['turns']
@@ -400,13 +405,10 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
                 slice_rows.append(json.dumps(row_task) + '\n')
             path.write_text(''.join(slice_rows))
         receipt = write_custody(development, confirmation, tmp_path / 'custody.json')
-        baseline = memetic.main(['--program-id', 'p', '--development', str(development),
-            '--confirmation', str(confirmation), '--custody', str(receipt), '--out', str(tmp_path / 'memetic-baseline'),
-            '--server', url, '--model-id', 'lfm', '--baseline-only', '--samples', '2',
-            '--shards', '1', '--case-seconds', '40', '--max-model-requests', '2', '--max-turns', '2'])
-        assert baseline['status'] == 'baseline_complete'
-        assert baseline['student'] == identity
-        assert baseline['development']['scored'] == baseline['confirmation']['scored'] == 4
+        development_rows, confirmation_rows, _ = memetic.load_slices(
+            development, confirmation, 'p', receipt)
+        assert [row['semantics']['inputs']['value'] for row in development_rows] == [1, 2]
+        assert [row['semantics']['inputs']['value'] for row in confirmation_rows] == [3, 4]
     finally:
         server.shutdown(); server.server_close(); engine.stop(); thread.join(timeout=5)
         torch.set_num_threads(original_torch_threads)

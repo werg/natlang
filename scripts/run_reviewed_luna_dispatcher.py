@@ -233,6 +233,11 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
     for path, expected in pins.items():
         if digest_fn(path) != expected:
             raise ValueError(f'Reviewed artifact changed: {path}')
+    if plan.get('system_file') is not None:
+        system_file = Path(plan['system_file']).expanduser().resolve(strict=True)
+        if not system_file.is_file() or str(system_file) not in pins:
+            raise ValueError('system_file must be a file explicitly bound by artifact_hashes')
+        plan['system_file'] = str(system_file)
     runtime_manifest = json.loads(receipt.read_text(encoding='utf-8'))
     if tree_identity(runtime) != runtime_manifest.get('files'):
         raise ValueError('Frozen runtime tree changed')
@@ -571,6 +576,8 @@ def _claim_queue(plan, identity, slot, case):
             entry[field] = case[field]
     if plan.get('surface') is not None:
         entry['surface'] = plan['surface']
+    if plan.get('system_file') is not None:
+        entry['system_file'] = plan['system_file']
     if plan.get('judge_model') is not None:
         entry['judge_model'] = dict(plan['judge_model'])
     payload = (json.dumps(entry, sort_keys=True, ensure_ascii=False) + '\n').encode('utf-8')
