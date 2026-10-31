@@ -175,7 +175,13 @@ def _countdown_case(*, source, upstream, item, numbers, target, use_all, express
                     upstream_split='train-carve'):
     use = 'Use every number exactly once' if use_all else 'Use each number at most once; you need not use them all'
     instance = {'numbers': list(numbers), 'target': target, 'use_all': use_all}
-    wrong = [f'{expression} + 1', ' * '.join(str(n) for n in numbers), f'({expression}) * {numbers[0]}']
+    def value(text):
+        try:
+            return eval(text, {'__builtins__': {}}, {})  # build-time check of our own arithmetic strings only
+        except ZeroDivisionError:
+            return None
+    wrong = [w for w in (f'{expression} + 1', ' * '.join(str(n) for n in numbers), f'({expression}) * {numbers[0]}')
+             if value(w) is None or abs(value(w) - target) > 1e-9]
     unit = f'{source}:{item}'
     return make_case(
         source=source, family='reach_target', shape=f'{source}-{len(numbers)}numbers', upstream=upstream,
@@ -283,6 +289,8 @@ def rg_multi_solution(per_family=500, eval_per_family=40, seed=20261031):
             common = dict(upstream='open-thought/reasoning-gym', upstream_id=item, upstream_split=split, unit=unit,
                           groups=[unit], license_='Apache-2.0', domain='logic', slice_='inline_placement',
                           revision=getattr(rg, '__version__', ''))
+            if name in ('puzzle24', 'countdown') and ('(-' in gold.replace(' ', '') or gold.strip().startswith('-')):
+                continue  # negated given numbers are outside the stated rules
             if name in ('puzzle24', 'countdown'):
                 use_all = name == 'puzzle24'
                 target = 24 if name == 'puzzle24' else meta['target']
@@ -299,9 +307,15 @@ def rg_multi_solution(per_family=500, eval_per_family=40, seed=20261031):
                             for c, ch in enumerate(line.split()) if ch == 'Q']
                 if len(solution) != n:
                     continue
+                if len(fixed) >= n:
+                    continue
+                free_index = next(i for i, q in enumerate(solution) if [q['row'], q['col']] not in fixed)
                 moved = [dict(q) for q in solution]
-                free = next(q for q in moved if [q['row'], q['col']] not in fixed)
-                free['col'] = (free['col'] + 1) % n
+                moved[free_index]['col'] = (moved[free_index]['col'] + 1) % n
+                cells = [(q['row'], q['col']) for q in moved]
+                if all(len({f(r, c) for r, c in cells}) == n for f in (lambda r, c: r, lambda r, c: c,
+                                                                         lambda r, c: r - c, lambda r, c: r + c)):
+                    continue  # the moved placement happens to be another solution
                 case = make_case(
                     source='rg-n-queens', family='place_queens', shape=f'rg-n-queens-{n}', root_name='place_queens',
                     args={'n': 'number', 'fixed': 'number[][]'}, returns='{ row: number; col: number }[]',
@@ -309,7 +323,7 @@ def rg_multi_solution(per_family=500, eval_per_family=40, seed=20261031):
                     expected={'n': n, 'fixed': fixed},
                     oracle={'level': 'normalized', 'normalization': 'puzzle-solution', 'puzzle': 'n-queens'},
                     level=1 + (n >= 8), reference_root=[['return_result', {'status': 'success', 'value': solution}]],
-                    wrong=[moved, solution[:-1]], aliases=[list(reversed(solution)), [[q['row'], q['col']] for q in solution]],
+                    wrong=[moved, solution[:free_index] + solution[free_index + 1:]], aliases=[list(reversed(solution))],
                     **common)
             else:
                 grid = _sokoban_xsb(meta['gamestr'])

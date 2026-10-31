@@ -43,6 +43,7 @@ import type { Handoff } from './handoff.js';
 import { replacesPlantedFailure } from './seeded-failure.js';
 import { quarantineReason, retiredFamily, generationHoldReason } from './curriculum-policy.js';
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
+import { checkCodebase, type CodebaseCheckSpec } from './codebase-check.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
 import { ANSWER_COMPARISON_VERSION } from '../evaluation/oracles.js';
 import type { DecisionRequest, DecisionScores, ModelStreamProgress, ModelTurn, ModelTurnRequest } from '../contracts.js';
@@ -1641,7 +1642,13 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     const effectsOk = same(effects.observed, effects.expected);
     // An authoring task is judged by running what was written, not by the files' exact text or the call's reply.
     const authoringSpec = (record.semantics as { authoring?: AuthoringSpec }).authoring;
-    const authoring = authoringSpec && actualFiles ? await checkAuthoring(actualFiles, authoringSpec) : undefined;
+    const authoringRun = authoringSpec && actualFiles ? await checkAuthoring(actualFiles, authoringSpec) : undefined;
+    // A natlang codebase repair is judged by loading the edited package with the actual loader (teacher/codebase-check.ts).
+    const codebaseSpec = (record.semantics as { codebase_check?: CodebaseCheckSpec }).codebase_check;
+    const codebaseRun = codebaseSpec && actualFiles ? checkCodebase(actualFiles, codebaseSpec, folderFiles ?? {}) : undefined;
+    const authoring = authoringRun && codebaseRun ? { ...authoringRun, ok: authoringRun.ok && codebaseRun.ok,
+      problems: [...authoringRun.problems, ...codebaseRun.problems] } :
+      authoringRun ?? (codebaseRun ? { ...codebaseRun, results: [] } : undefined);
     // Default JSON file grading compares content, preserving every semantic field.
     // Explicit exact oracles still cover byte-sensitive fixture/edit contracts.
     const filesCheck = folder && !authoring && actualFiles ?
@@ -1681,7 +1688,7 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     const worldOk = (!worldScore || worldScore.score >= 100) && hostCertificateOk && serviceReceiptOk;
     const answerExpected = actualFiles && record.semantics.files_oracle?.return_count === 'changed' ?
       fileReturnValue(actualFiles, folderFiles!, record.semantics.files_oracle) : record.semantics.expected;
-    const oracle = authoring ? { accepted: authoring.ok, level: 'exact' as const, verdict: 'executable-authoring/1' } : record.semantics.trusted_exact_verifier ?
+    const oracle = authoring ? { accepted: authoring.ok, level: 'exact' as const, verdict: authoringRun ? 'executable-authoring/1' : 'codebase-load/1' } : record.semantics.trusted_exact_verifier ?
       await checkTrustedExactVerifier(record.semantics.trusted_exact_verifier,
         { value: actual, oracle: record.semantics.trusted_exact_verifier.oracle,
           inputs: record.semantics.inputs, fixture: folderFiles ?? {} }) :

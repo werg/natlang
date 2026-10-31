@@ -202,3 +202,32 @@ normalizations) and run Node 22.16+/24 (`node:sqlite` `setReturnArrays`). Select
 License note: bAbI rows carry `license: BSD-3-Clause` (the code license of the original repo); the downloaded en-10k
 data's PROVENANCE.json records CC-BY-3.0 (Keras mirror of the official tarball). Both are recorded as facts; no row
 is held for licensing. CLUTRR's card states no license (rows record CC-BY-NC-4.0 of the original release).
+
+## v3 (in progress, 2026-10-31): runtime fix, new sources, multi-solution verifiers
+
+Coordinator order: (1) unsafe-integer runtime bug, (2) TabFact, tool-use sets, MultiHiertt/ConvFinQA/WikiSQL/MSR-SQA,
+(3) multi-answer puzzle verifiers; publish as a new source `natlang-rl-broad-external-20261031-v3` (v2 unchanged
+while lineages read it).
+
+- Runtime (66a9b1374): `coerce` accepted only safe integers for `number`, while `inferValueType` and `schemaOf` call
+  every finite JS number `number`; binding DataBench rows with tweet ids (`databench-054_Joe`, `table.rows(0,500)`)
+  failed with `let/first/0/0: type-mismatch`. JSON.parse has already chosen the double, so the typed boundary now keeps
+  it (JS semantics; no skill text described the old rule). Re-verified: all 113 previously failing DataBench cases pass
+  (113/113 reference, 0/226 wrong accepted); v3 re-verifies all DataBench cases under the fixed runtime.
+- Oracle `puzzle-solution` (3ae1bf1fa, `ts-host/src/evaluation/puzzle-solutions.ts`): `expected` is the instance;
+  countdown/24 expressions evaluated with exact rationals over the given numbers (each at most once, or all with
+  `use_all`), n-queens placements including the fixed queens, sokoban move strings simulated (XSB grid). RL runtimes
+  must be built from 3ae1bf1fa or later for these rows.
+- New sources (builders c6c18fa5c): TabFact, WikiSQL (gold SQL executed over its table), MSR-SQA (WTQ table units,
+  so an SQA item shares its WTQ table's split), ConvFinQA (FinQA page units/splits; history of earlier answers),
+  MultiHiertt (pages sharing a long sentence with FinQA/TAT-QA dropped: 30), ToolACE (xLAM receipt framing; type-name
+  mapping fixed after a 16% alias false-negative rate), NESTFUL (port of its executable arithmetic functions; 56 items
+  whose gold_answer disagrees with execution dropped), tau-bench retail and airline (tools ported to a `store` service
+  over a fresh database per run; answer `store.finish()` = final-state digest, tau-bench's own reward; held tau users
+  never in training; tasks with required spoken outputs skipped), APIGen-MT-5k retail/airline trajectories (customer
+  messages as the request; trajectories touching held tau users dropped), Countdown-3to4 and reasoning-gym puzzle24 /
+  n-queens / sokoban / countdown.
+- tau-bench store databases are v3 assets (`assets/stores/`), read from this source's `assets/` by default; override
+  with `NATLANG_RL_TASK_ASSETS_V3`. v2 rows keep reading the v2 asset entry (`NATLANG_RL_TASK_ASSETS`).
+- tau2-bench: its retail/airline tasks are revised tau-bench v1 test tasks, which stay held here; telecom needs its
+  user-side tools and simulator and is not converted.
