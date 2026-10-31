@@ -10,6 +10,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import time
 import urllib.error
 import urllib.request
 from types import SimpleNamespace
@@ -78,6 +79,14 @@ class _HttpNativeEngine:
             raise ValueError("native actor returned a state with a mismatched content address")
         return SimpleNamespace(id=actual_id, block=block)
 
+    def metrics(self):
+        raw = self._request("GET", "/metrics", binary=True)
+        return {key: int(value) for line in raw.decode().splitlines()
+                if len(parts := line.split()) == 2
+                and parts[0] in {"natlang_native_decode_tokens_total", "natlang_active_sequences",
+                                "natlang_queued_requests", "natlang_native_open_produce_spans"}
+                for key, value in (parts,)}
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -128,8 +137,33 @@ def main():
             index = row["source_ref"]["provider_input_context"]["source_trajectory_index"]
             if index != len(captures):
                 raise ValueError("v8 episode decisions are not in exact contiguous source-turn order")
-            captures.append(capture_luna_native_turn(engine, str(audit_path), row["id"],
-                seed=2650766063 + index, encoder_cache=encoder_cache, allow_context_only=True))
+            started = time.monotonic()
+            before = engine.metrics() if args.endpoint else {}
+            print(json.dumps({"event": "native_turn_start", "source_index": index,
+                "record_id": row["id"], "source_prompt_json_bytes": len(canonical_json_bytes(row["messages"])),
+                "source_prompt_message_count": len(row["messages"]), "decode_tokens_before":
+                    before.get("natlang_native_decode_tokens_total")}), flush=True)
+            try:
+                captured = capture_luna_native_turn(engine, str(audit_path), row["id"],
+                    seed=2650766063 + index, encoder_cache=encoder_cache, allow_context_only=True)
+            except Exception as error:
+                after = engine.metrics() if args.endpoint else {}
+                print(json.dumps({"event": "native_turn_error", "source_index": index,
+                    "record_id": row["id"], "elapsed_seconds": round(time.monotonic() - started, 3),
+                    "error": str(error), "metrics_before": before, "metrics_after": after}), flush=True)
+                raise
+            captures.append(captured)
+            after = engine.metrics() if args.endpoint else {}
+            usage = captured["response"].get("usage") or {}
+            print(json.dumps({"event": "native_turn_complete", "source_index": index,
+                "record_id": row["id"], "elapsed_seconds": round(time.monotonic() - started, 3),
+                "prompt_tokens": usage.get("prompt_tokens"),
+                "completion_tokens": usage.get("completion_tokens"),
+                "target_supervision": captured["source_receipt"]["target_supervision"],
+                "native_writes": len(captured["capture"].get("writes") or []),
+                "native_imports": sum(segment.get("kind") == "native_state"
+                    for segment in captured["capture"].get("prompt") or []),
+                "metrics_before": before, "metrics_after": after}), flush=True)
         graph, example = native_graph_from_luna_episode(captures)
         graph_bytes = canonical_json_bytes(graph) + b"\n"
         graph_path = output / "native-episode.jsonl"
