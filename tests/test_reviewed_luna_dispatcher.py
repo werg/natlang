@@ -93,7 +93,8 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
 
 def test_external_campaign_root_is_allowlisted_and_bound_to_its_filesystem(reviewed_plan):
     plan_path, _, _, plan = reviewed_plan
-    external_root = dispatcher.EXTERNAL_CAMPAIGN_ROOT / f'.dispatch-test-{uuid.uuid4().hex}'
+    approved_root = dispatcher._external_campaign_root()
+    external_root = approved_root / f'.dispatch-test-{uuid.uuid4().hex}'
     plan['campaign_root'] = str(external_root)
     plan['claim_ledger'] = str(external_root / 'dispatch/claims.jsonl')
     plan['launch_record'] = str(external_root / 'dispatch/launch.json')
@@ -101,9 +102,33 @@ def test_external_campaign_root_is_allowlisted_and_bound_to_its_filesystem(revie
     plan_path.write_text(json.dumps(plan, sort_keys=True))
     validated, identity = dispatcher.validate_plan(plan_path, dispatcher.digest(plan_path))
     assert identity['campaign_root'] == str(external_root.resolve())
-    assert identity['storage_root'] == str(dispatcher.EXTERNAL_CAMPAIGN_ROOT.resolve())
+    assert identity['storage_root'] == str(approved_root)
     assert validated['min_free_mib'] == 40960
     assert dispatcher._free_space_mib(identity['storage_root']) > 40960
+
+
+def test_external_campaign_root_uses_configured_data_hdd_mount(reviewed_plan, tmp_path, monkeypatch):
+    data_hdd = tmp_path / 'configured-volume'
+    data_hdd.mkdir()
+    expected = (data_hdd / 'natlang-luna-campaigns').resolve()
+    monkeypatch.setattr(dispatcher, 'machine_resolve', lambda name, *parts: data_hdd.joinpath(*parts))
+    mounted_paths = []
+    monkeypatch.setattr(dispatcher.os.path, 'ismount', lambda path: mounted_paths.append(Path(path)) or True)
+
+    actual = dispatcher._campaign_storage_root(expected / 'campaign-a')
+
+    assert actual == expected
+    assert mounted_paths == [data_hdd.resolve()]
+
+
+def test_external_campaign_root_requires_configured_data_hdd_mount(reviewed_plan, tmp_path, monkeypatch):
+    data_hdd = tmp_path / 'configured-volume'
+    data_hdd.mkdir()
+    monkeypatch.setattr(dispatcher, 'machine_resolve', lambda name, *parts: data_hdd.joinpath(*parts))
+    monkeypatch.setattr(dispatcher.os.path, 'ismount', lambda path: False)
+
+    with pytest.raises(ValueError, match='configured data_hdd root to be mounted'):
+        dispatcher._campaign_storage_root(data_hdd / 'natlang-luna-campaigns' / 'campaign-a')
 
 
 def test_campaign_root_rejects_non_allowlisted_external_paths():

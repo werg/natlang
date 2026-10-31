@@ -15,8 +15,13 @@ import re
 import signal
 import shutil
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'training/neuralese'))
+from natlang_neuralese.common.paths import resolve as machine_resolve
 
 from generation_authority import authority_lock, reconcile_luna_authority
 from freeze_training_runtime import tree_identity
@@ -25,12 +30,14 @@ from luna_source_inventory import verify as verify_luna_source_inventory
 from run_bonsai_queue import judge_arguments
 
 
-ROOT = Path(__file__).resolve().parents[1]
-EXTERNAL_CAMPAIGN_ROOT = Path('/mnt/external/natlang-luna-campaigns')
 RUNNER = (ROOT / 'scripts/run_bonsai_queue.py').resolve()
 DISPATCHER = Path(__file__).resolve()
 ALLOWED_REASONING = {'low', 'medium', 'high'}
 _stop_requested = False
+
+
+def _external_campaign_root():
+    return machine_resolve('data_hdd', 'natlang-luna-campaigns').expanduser().resolve(strict=False)
 
 
 def _campaign_storage_root(campaign_root):
@@ -43,12 +50,13 @@ def _campaign_storage_root(campaign_root):
     """
     campaign_root = Path(campaign_root).expanduser().resolve()
     runs_root = (ROOT / 'runs').resolve()
-    external_root = EXTERNAL_CAMPAIGN_ROOT.resolve()
+    data_hdd_root = machine_resolve('data_hdd').expanduser().resolve(strict=False)
+    external_root = _external_campaign_root()
     if runs_root in campaign_root.parents:
         return runs_root
     if external_root in campaign_root.parents:
-        if not os.path.ismount('/mnt/external'):
-            raise ValueError('external campaign storage requires /mnt/external to be a mounted filesystem')
+        if not os.path.ismount(data_hdd_root):
+            raise ValueError(f'external campaign storage requires configured data_hdd root to be mounted: {data_hdd_root}')
         return external_root
     raise ValueError('campaign_root must be below canonical runs/ or the allowlisted external campaign root')
 
