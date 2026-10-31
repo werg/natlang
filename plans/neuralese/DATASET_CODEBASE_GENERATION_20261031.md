@@ -98,3 +98,39 @@ Natlang's Luna credential had expired while the current authenticated Codex
 session retained a valid same-account access token. The supervisor synchronized
 access and actual expiry under the credential lock, preserving the prior private
 credential and refresh policy. No secrets were logged. Verify a real request.
+
+## Review findings during the first authoring pass
+
+- LogHub produced a candidate application with seven public operations and 247
+  source-derived calls. Static checks and scripted/helper execution are useful,
+  but are not sampled teacher behavior. Its operations still share a template
+  inference child; seven roots do not prove seven independent computational
+  strategies or a sufficiently deep codebase.
+- Its first exact tasks asked for dataset `EventTemplate` annotations from full
+  raw log lines. Those annotations describe message content rather than all log
+  headers, and wildcard placement need not be uniquely inferable from one line.
+  Resolve this mismatch with faithful parsing/context and an appropriate verifier
+  before mass collection. Do not train arbitrary annotation choices as the only
+  correct behavior. Preserve the original candidate for diagnosis.
+- The telecom worker initially authored a task-contract auditor. That may be
+  useful supplemental data, but is not a telecom operating application. The
+  primary application is being redirected to actual environment state and tools;
+  source expected actions and acceptance criteria remain verifier-side.
+- A third worker is authoring a relational application from a real acquired
+  training database. These three lanes are authoring in progress, not three
+  admitted sources or six active harness collectors.
+- The initial diversity audit lost callable degree values and erased ordinary
+  prose into identical tokens. Both issues were returned for correction and
+  targeted tests. Structural fingerprints remain heuristics, never a semantic
+  diversity certificate.
+- Intake must preserve actual upstream protection groups and intentional package
+  assets/notices. Different artifact-file hashes and aggregate provenance hashes
+  must not be conflated. Loading, reference replay, live execution and admission
+  are separate evidence stages.
+
+The scheduled GPU measurement was accidentally stopped immediately after admission:
+its caller mistook `memory_ledger.py run` returning for job completion. The
+supervisor stopped that driver, cancelled the conflicting unstarted RL waiter and
+started `codex-rl-gpu-window-2`. The dormant driver was corrected to wait for the
+actual systemd unit's terminal state. Its `.done` suffix is not a success receipt.
+Actual measurement results and the subsequent RL resumption still need checking.
