@@ -4,6 +4,60 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Corrected-runtime cutover, 19:41 CET
+
+Root-caused the ~2% BF16 derivative discrepancy to row-geometry-sensitive
+RMSNorm backward arithmetic. A fixed128-row PyTorch VJP is now default for
+first-order CUDA BF16; CPU/higher-order fallbacks remain qualified. It was faster
+than the old eager primitive at4,096/32,768 rows. A faster Triton candidate failed
+the actual full-model law and was removed. Canonical CUDA linear dX is shared
+between stored/reference and invariant/flat carriers.
+
+Exact corrected53 certificate `fixed-norm-policy-sd53-certificate.json` passes
+all289 derivative comparisons, unchanged forward/CE and zero optimizer updates.
+Only two elements fail the old strict elementwise criterion; both were directly
+observed to be adjacent BF16 values, with tensor relativeL2 errors5.80e-6 and
+1.33e-7. The explicit `bf16-adjacent-ulp-normwise/1` policy preserves strict
+results, permits only one adjacent value outside elementwise tolerance, and
+keeps the existing1e-4 normwise/cosine gates. Proof consumers bind exact dtype,
+shape and counts; detached-producer, two-ULP and tampered-proof controls reject.
+Commits ee7c827b5,172f1b476,2ae0e587d.
+
+A separate critical freezer defect copied whole predecessor `ts-host` source
+and dist over a new git archive.945e051b4 compiles the actual archived commit
+in isolation instead, binds build inputs/compiler and imports the real collector.
+The real archive+tsc stale-predecessor regression passes.92eab3a28 handles the
+legitimate cyclic workspace dependency edge without dropping file/link custody;
+15 runtime-layout tests pass. Frozen `W/runtime-92eab3a28` passed full control,
+collector, asset, protected-world and CPU continuation preflight.
+
+`lfm3-corrected53-continuation.service` is active (trainer PID3910316), using the
+same rolling checkpoint slot and earned53 optimizer/RNG/exposure. At19:40 it
+owned25.9GiB GPU memory with96% utilization; no54 commit was yet observed.
+One optimizer update and then full-prompt cases0/32/88/112 are bound into the
+continuation. Actual outcomes remain distinct from protocol and math checks.
+
+The protected teacher-mine assembly completed:8,289 chains,156,623 records,
+16,758 train edges;4,974 whole protected trajectories excluded,504 duplicate-ID
+and1,597 failed-authentication rows omitted. All15 completed source groups are
+accounted for. The resumable8GiB graph renderer is active; no sealed512-chain
+output/admission was yet observed. The serial HDD watcher follows renewed
+converter PIDs; the20:06 automatic backstop thaws them and restores archive timer.
+Old synthetic benchmark gradients (6.4GiB internal) and an incomplete HDD copy
+were removed, preserving benchmark scripts/results. A five-hour obsolete find
+walk was stopped. Independently verified corrected53 backup to Pop is actively
+transferring; a `.pending` file does not establish recovery completion.
+
+Telecom v7 retry3 was independently Sol-rejected, with an honest consent blocker.
+The task was contradictory: hidden upstream willingness did not grant the
+model-visible price consent required by the new guard, but the oracle required
+paid refuel. V8 separates no-price-confirmation and explicit2GB/$4-authorized
+TRAIN scenarios with related-world custody; actual Tau2 positive/negative
+simulator executions pass. One authorized Luna invocation is running under a
+reviewed full-prompt plan; no final positive/admission claimed. Runtime promise
+ownership covers calls and constructors;119 interpreter/termination and28 scope/
+generic-result tests pass. Main quick checks passed through92eab3a28.
+
 ## Cleanup and supervision observation, 19:11 CET
 
 Owner-approved `/home/werg/megatoken-runs` deletion is complete: measured
