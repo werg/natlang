@@ -367,6 +367,11 @@ def pack_native_graphs(examples):
 TOKEN_MASS_GRAPH_REFERENCE = 64.0
 
 
+def _communication_prefix_allowed(backend, precision):
+    """Communication aliasing is qualified only for the unquantized BF16 path."""
+    return backend is None and (precision is None or precision[1] == 'bf16')
+
+
 def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_layers=True,
                            chunk_tokens=128, objective=None, precision=None, accumulate=()):
     """One shared complete production update, also used by throughput diagnostics.
@@ -424,7 +429,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                     loss, details = packed_graph_loss(model, micro,
                         checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
                         objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
-                        collect_accuracy=False, allow_communication_prefixes=backend is None)
+                        collect_accuracy=False, allow_communication_prefixes=_communication_prefix_allowed(backend, precision))
                 parts.append(details)
                 # The last backward arms in-backward optimizer steps. Validate
                 # all telemetry first, while prior micros have only gradients.
@@ -3850,7 +3855,7 @@ def _main(argv=None, *, requested_refresh):
                     'physical_prefix_savings': batch_tokens - physical_tokens,
                     'activation_dtype': str(model.port.embedding_weight.dtype),
                     'ordinary_loss_normalization': batch[0].loss_normalization if batch else None,
-                    'communication_prefixes_enabled': backend is None,
+                    'communication_prefixes_enabled': _communication_prefix_allowed(backend, precision_pass),
                     'readout_forward_rows': details[0]['readout_forward_rows'],
                     'readout_original_rows': details[0]['readout_original_rows'],
                     'ownership': 'original-graph-target-maps-and-loss-normalization-preserved/1',
@@ -3867,7 +3872,7 @@ def _main(argv=None, *, requested_refresh):
                             logical_forward_tokens=batch_tokens, physical_forward_tokens=physical_tokens,
                             physical_prefix_savings=batch_tokens - physical_tokens,
                             activation_dtype=str(model.port.embedding_weight.dtype),
-                            communication_prefixes_enabled=backend is None)
+                            communication_prefixes_enabled=_communication_prefix_allowed(backend, precision_pass))
                         break
                 progress['boundary_targets'] = {
                     token: {'count': sum(item['boundary_targets'][token]['count'] for item in details),
