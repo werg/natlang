@@ -4,6 +4,76 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Latest observation, 12:53 CET (supersedes the historical snapshot below)
+
+SD round9 finished at global52; actual full parent is
+`/home/werg/data/lfm3-rl-dgx-20261029/sd-r1/round-000009/learner/checkpoint.pt`,
+SHA `4be241a84b96d4c336b01c390da69122134389b784874a45fddeaf6818786784`.
+All ten SD round receipts reconstruct234 historical graph visits. They are not
+joint foundation SFT exposure: that stage still has zero earned visits.
+The cumulative policy archive is bound into the proposed source transition.
+
+Step52 development cases0/32/88/112:2/4 exact, no invalid action, repetition,
+budget or infrastructure failure. Evidence is `eval-sd52-dev4/budget-probe.json`
+below the local work root. This is not demonstrated lift: the case set differs
+from the earlier eight-case result. The later eight-sample train-world codebase
+collection completed0/8 (seven request-budget32, one semantic mismatch). Traces
+repeatedly search for the external reducer caller `repair_program` in the edited
+project and confuse runtime function lookup with on-disk source inspection.
+Guidance/tool affordances are being corrected without exposing hidden repairs.
+No positive training or capability claim follows from this collection. Its actor
+owner exited after collection and native block archival; GPU was idle when checked.
+The Neuralese bridge helper has been assigned the next real GPU qualification.
+
+The first curated v4 mixture sealed82,773 train rows, including251 of288 recovered
+design-brief graphs and122 communication graphs. It is **not accepted as the full
+best recipe**: only27,412 of48,345,116 supervised tokens are communication. The
+remaining eligible port-record rows also repeat heavily:112,782 share one normalized
+root instruction, and95.5% share one measured graph shape. Dataset-domain labels
+will not be used to disguise this repetition. Terra is selecting authenticated
+predecessor communication with chain/payload caps, complete current protection,
+and explicit successor/CE/geometry verification before actual SFT launch. The
+old uncurated591k candidate remains quarantined. A prepared source or numerical
+preflight is not a production learner or completed training stage.
+
+Pop is online: RTX4060Laptop8188MiB,14GiB host RAM, about76GiB internal free when
+checked. Node24 and the existing reviewed CUDA image work. Native attention,
+gather/shared execution passed; batch-import and text-result replay were rerun
+with the **actual** `NATLANG_NATIVE_ADAPTER_TEST_DEVICE=cuda` fixture setting:
+8/8passed after fixing a test CPU tensor passed to GPU embeddings. The first
+30-pass batch alone did not establish CUDA coverage for those two files. Pop's
+three untracked corpus manifests remain untouched. It is assigned bounded
+validation and source qualification, not full1.7B learner work on8GiB VRAM.
+
+Luna v5 ordinary deep applications provide51 eligible verified/regraded turns;
+v6 adds one exact accepted six-turn Neuralese text episode. Actual authenticated
+writer/read custody and prompt transport are established. Ordinary text-context
+conversion still has zero native gradient edges and is not Neuralese training.
+The current bridge is implementing a separate real student text encoder and
+teacher-forced consumer, preserving the external Luna actor separately from
+student captures. Actual receipt-backed full-graph backward qualification and
+source admission remain unfinished; synthetic tests do not discharge them.
+
+The step40 full optimizer/RNG/exposure checkpoint now has an independently
+reread, committed `checkpoint-recovery.json` under
+`/mnt/external/natlang-supervision-recovery-20261031/sd-r1/391a28d192939fb3e26ac8df8c968e2c1ab651cb1645010ea02c4d35de984ff3`.
+The original backup job continues with JOLT42. A second serialized job,
+`codex-earned-parent-backup-latest-1031`, waits on the same lock then backs up the
+newest SD parent52. These receipts explicitly exclude complete source dependency
+closure; preserve originals until that audit and durable replacement finish.
+The destructive old pruner remains disabled. Internal free space is51GiB;
+external free620GiB. Do not create unbounded checkpoint/scratch copies.
+
+Retired two idle historical report watchers whose sequential conditions waited
+on intentionally paused old JOLT7; no learner or recovery work was stopped.
+Current historical outcome inventory is
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/current-lineage-outcomes-20261031.json`.
+Cloud entitlement probes continue hourly, but actual launches remain held against
+the stale runtime/source/fresh-init configuration pending the earned-parent recipe.
+Main is pushed throughd9a1d1651; current Neuralese helper edits remain under review.
+
+## Historical 10:43–11:29 observation
+
 ## Actual training and behavior
 
 SD round8 completed, global step40, trained_rounds9. Full parent:
