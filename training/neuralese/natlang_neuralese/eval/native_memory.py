@@ -6,6 +6,7 @@ import hashlib
 import json
 import copy
 import math
+import os
 import threading
 import time
 import traceback
@@ -247,7 +248,8 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
         for name,parameter in named:
             hooks.append(parameter.register_post_accumulate_grad_hook(lambda p,name=name:capture(p,name=name)))
         model.train()
-        for example in cases:
+        for case_index, example in enumerate(cases):
+            print(json.dumps({'kind':'native_capacity_case','event':'start','index':case_index,'total':len(cases)}),flush=True)
             restore_training_rng_state(rng,rng_device)
             observed={}
             loss=None
@@ -312,6 +314,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                 row['pinned_host_allocator'] = ({key:value for key,value in host_stats().items()
                     if key in {'allocated_bytes.current','allocated_bytes.peak','active_bytes.current','active_bytes.peak'}}
                     if host_stats is not None and torch.cuda.is_initialized() else {'available':False})
+            print(json.dumps({'kind':'native_capacity_case','event':'finish','index':case_index,'total':len(cases),'status':row['status'],'seconds':row['seconds']}),flush=True)
             if row['status']!='passed':break
         after=backend.collect_row_counts() if backend is not None else {}
         return {'schema':'natlang.native-memory-capacity-check/1',
@@ -423,6 +426,8 @@ def capacity_identity(config,args,backend):
                 beta=getattr(args,'preference_beta',None),margin=getattr(args,'preference_margin',None))
         objective={'objective':value.binding()}
     return {**objective,
+        'execution_arithmetic':{'native_compile':os.environ.get('NATLANG_NATIVE_COMPILE','1'),
+            'bf16_reduced_precision_reduction':torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction},
         **({'optimizer_state_storage':args.optimizer_state_storage}
            if getattr(args,'optimizer_state_storage','device')=='cpu' else {}),
         **({'checkpoint_input_offload_directory':args.checkpoint_input_offload_directory}
