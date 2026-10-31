@@ -10,7 +10,8 @@ to OUT/receipt.json. Selection never changes row bytes, ids, splits or source bi
 
 ``verify``: load native graph files the way the trainer does (``NativeGraphSource`` parse/validation, the packed
 geometry index ``prepare_source``) and apply the default ``own-outputs/1`` objective to every row: no position before
-the first assistant decision may carry raw or objective weight, every row must keep a target. Reports rows, tokens,
+the first assistant decision may carry objective weight, and every row must keep a target. Raw context weights are
+reported separately because witnessed native pairs can carry legacy context weights that the objective masks. Reports rows, tokens,
 prompt tokens (before the first assistant turn), the token count of the prefix trie of all rows and of their prompts
 (every shared causal prefix counted once) and the prompt-view distribution.
 
@@ -168,10 +169,19 @@ def verify(args):
             sequences.extend(array('I', node['token_ids']) for node in row['nodes'])
             prompts.append(array('I', ids[:first]))
             stats['objective_target_tokens'] += sum(1 for w in weights if w > 0)
-            view = (row['conversion'].get('prompt_view') or {})
+            # Native communication graphs carry source_pairing provenance and
+            # need not have the ordinary-render conversion object.
+            view = ((row.get('conversion') or {}).get('prompt_view') or {})
             modes[f"{view.get('prompt_rendering', 'undeclared')}/{view.get('system_prompt_mode', 'none')}"] += 1
-            if any(w > 0 for w in raw[:first]) or any(w > 0 for w in weights[:first]):
-                problems.append({'id': row['id'], 'problem': 'weight before the first assistant turn'})
+            offset = 0
+            for node in row['nodes']:
+                node_ids = node['token_ids']
+                node_first = next((i for i in range(len(node_ids) - 1)
+                    if node_ids[i] == start and node_ids[i + 1] == assistant), len(node_ids))
+                stats['raw_context_weighted_tokens'] += sum(w > 0 for w in raw[offset:offset + node_first])
+                if any(w > 0 for w in weights[offset:offset + node_first]):
+                    problems.append({'id': row['id'], 'problem': 'objective weight before the first assistant turn'})
+                offset += len(node_ids)
             if not any(w > 0 for w in weights):
                 problems.append({'id': row['id'], 'problem': 'no own-output target'})
             other = compared.get(row['id'])
