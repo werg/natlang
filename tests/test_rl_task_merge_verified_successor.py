@@ -1,4 +1,6 @@
-from scripts.rl_tasks.merge_verified_successor import _correct_ordered_sql, _treatment_update
+import pytest
+
+from scripts.rl_tasks.merge_verified_successor import _correct_ordered_sql, _treatment_update, replay_summary
 
 
 def test_ordered_sql_correction_preserves_answer_and_rejects_reversed_alias():
@@ -35,3 +37,13 @@ def test_verified_treatment_keeps_original_task_identity_and_groups():
     assert updated['source_ids'] == old['source_ids']
     assert updated['source_groups'] == old['source_groups']
     assert updated['semantics'] == candidate['semantics']
+
+
+def test_replay_gate_reads_nested_verifier_summary_and_requires_all_rows():
+    report = {'summary': {'cases': 710, 'kept': 710, 'wrong_accepted': 0, 'wrong_errors': 0}}
+    assert replay_summary(report)['cases'] == 710
+
+    with pytest.raises(ValueError):
+        replay_summary({'summary': {'cases': 710, 'kept': 709, 'wrong_accepted': 0, 'wrong_errors': 0}})
+    with pytest.raises(ValueError):
+        replay_summary({'summary': {'cases': 710, 'kept': 710, 'wrong_accepted': 1, 'wrong_errors': 0}})

@@ -43,6 +43,15 @@ def row_sha(row):
     return hashlib.sha256(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
+def replay_summary(report):
+    """Extract and validate the nested summary emitted by rl_tasks/verify.mjs."""
+    summary = report.get('summary', {})
+    if (summary.get('cases') != summary.get('kept') or summary.get('wrong_accepted', 0) or
+            summary.get('wrong_errors', 0)):
+        raise ValueError(f'transition replay rejected changes: {summary}')
+    return summary
+
+
 def sem_sha(row):
     return hashlib.sha256(json.dumps(row.get('semantics'), ensure_ascii=False, sort_keys=True,
                                      separators=(',', ':')).encode()).hexdigest()
@@ -577,14 +586,17 @@ def main():
                             text=True, capture_output=True)
     if replay.returncode:
         raise SystemExit(f'transition replay failed ({replay.returncode}): {replay.stderr[-3000:]}')
-    replay_summary = json.loads((replay_dir / 'verification.json').read_text())
-    if (replay_summary.get('kept') != len(transition_changes) or
-            replay_summary.get('wrong_accepted', 0) or replay_summary.get('wrong_errors', 0)):
-        raise SystemExit(f'transition replay rejected changes: {replay_summary}')
+    replay_report = json.loads((replay_dir / 'verification.json').read_text())
+    try:
+        replay_summary_value = replay_summary(replay_report)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if replay_summary_value.get('cases') != len(transition_changes):
+        raise SystemExit(f'transition replay case count mismatch: {replay_summary_value.get("cases")} != {len(transition_changes)}')
     qualification['verification']['correction_replay'] = {
         'input_sha256': sha_file(transition_path), 'report_sha256': sha_file(replay_dir / 'verification.json'),
-        'cases': len(transition_changes), 'kept': replay_summary.get('kept'),
-        'wrong_accepted': replay_summary.get('wrong_accepted'), 'wrong_errors': replay_summary.get('wrong_errors'),
+        'cases': len(transition_changes), 'kept': replay_summary_value.get('kept'),
+        'wrong_accepted': replay_summary_value.get('wrong_accepted'), 'wrong_errors': replay_summary_value.get('wrong_errors'),
         'status': 'passed'}
     qualification['verification']['replay_status'] = 'all changed rows replayed and passed; unchanged additions retain their source-level verifier receipts'
     (out / 'qualification.json').write_text(json.dumps(qualification, indent=1) + '\n')
@@ -608,5 +620,51 @@ def _load_source_case(source, case_id):
     return None
 
 
+def finalize_existing(out: Path):
+    """Resume publication for a fully assembled directory whose transition replay finished."""
+    out = out.resolve()
+    cases = rows(out / 'transition-change-cases.jsonl')
+    replay_dir = out / 'transition-replay'
+    env = os.environ.copy()
+    node_bin = Path('/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin')
+    env.update({'NATLANG_RL_TASK_ASSETS': str(out / 'assets'),
+                'NATLANG_RL_TASK_ASSETS_V3': str(out / 'assets-v3'),
+                'NATLANG_HASH_CACHE': str(out / '.transition-replay-hash-cache.jsonl'),
+                'NODE_OPTIONS': '--max-old-space-size=1400', 'OMP_NUM_THREADS': '1',
+                'PATH': str(node_bin) + os.pathsep + env.get('PATH', '')})
+    replay = subprocess.run(['node', 'scripts/rl_tasks/verify.mjs', str(ROOT / 'ts-host'),
+                             str(out / 'transition-change-cases.jsonl'), str(replay_dir), '4'], cwd=ROOT, env=env,
+                            text=True, capture_output=True)
+    if replay.returncode:
+        raise SystemExit(f'transition replay failed ({replay.returncode}): {replay.stderr[-3000:]}')
+    report_path = replay_dir / 'verification.json'
+    report = json.loads(report_path.read_text())
+    try:
+        summary = replay_summary(report)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if summary.get('cases') != len(cases):
+        raise SystemExit(f'transition replay case count mismatch: {summary.get("cases")} != {len(cases)}')
+    qualification = json.loads((out / 'qualification.json').read_text())
+    qualification['verification']['correction_replay'] = {
+        'input_sha256': sha_file(out / 'transition-change-cases.jsonl'),
+        'report_sha256': sha_file(report_path), 'cases': len(cases), 'kept': summary['kept'],
+        'wrong_accepted': summary.get('wrong_accepted'), 'wrong_errors': summary.get('wrong_errors'),
+        'status': 'passed'}
+    qualification['verification']['replay_status'] = \
+        'all changed rows replayed and passed; unchanged additions retain their source-level verifier receipts'
+    (out / 'qualification.json').write_text(json.dumps(qualification, indent=1) + '\n')
+    prefix = Path(str(out).rsplit('-', 2)[0])
+    ready = prefix.with_suffix(prefix.suffix + '.ready.json')
+    ready.write_text(json.dumps({'schema': 'natlang.retryable-assembly-ready/1', 'output': str(out),
+        'qualification_sha256': sha_file(out / 'qualification.json'), 'cases_sha256': sha_file(out / 'cases.jsonl'),
+        'cases_rows': sum(1 for _ in iter_rows(out / 'cases.jsonl')),
+        'sql_corrections': qualification['source_transition']['oracle_corrections']}, indent=2) + '\n')
+    print(json.dumps({'output': str(out), 'ready': str(ready), 'replay': summary}, indent=2))
+
+
 if __name__ == '__main__':
+    if len(sys.argv) == 3 and sys.argv[1] == '--finalize-existing':
+        finalize_existing(Path(sys.argv[2]))
+        raise SystemExit(0)
     main()
