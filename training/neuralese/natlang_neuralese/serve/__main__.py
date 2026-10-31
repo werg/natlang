@@ -42,8 +42,8 @@ def main(argv=None):
                         help="with --store-dir: payload memory kept resident (least recently used blocks are evicted)")
     parser.add_argument("--prefix-cache-gb", type=float, default=2.0,
                         help="reuse prompt-prefix model state across requests within this memory (serve/prefix_cache.py); "
-                             "prefill then runs on a --prefix-block token grid, so numerics differ from single-chunk "
-                             "prefill (default 2, on by default like the managed host; 0 opts out for actors whose exact "
+                             "prefill runs on the bound --prefix-block grid; a non-default grid can change numerics "
+                             "(default 2; 0 opts out for actors whose exact "
                              "prefill numerics are bound elsewhere)")
     parser.add_argument("--prefix-block", type=int, default=None, help="prefix cache grid in tokens (default: existing prefill chunk size)")
     parser.add_argument("--guidance", default=None,
