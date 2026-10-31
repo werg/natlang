@@ -378,14 +378,17 @@ test('failed eval reports its console output and commits no partial locals', asy
   assert.equal(lam.return, 5); assert.equal(session.failureDebug, undefined);
 });
 
-test('compile failure reports source diagnostics and redeclaring a parameter says to use it', async () => {
+test('compile failures explain repairs and only an identical input redeclaration is removed', async () => {
   const { session } = open({ type: '(ticket: string) => number', instructions: 'Return two.', args: { ticket: 'x' } });
   const failed = await session.applyAsync('eval', { code: 'const answer = ;' });
   assert.equal(failed.kind, 'rejected'); assert.equal(session.failureDebug.kind, 'compile');
   assert.match(failed.text, /typescript-syntax/);
   const redeclared = await session.applyAsync('eval', { code: 'const ticket = "x"; return 2;' });
-  assert.equal(redeclared.kind, 'rejected');
-  assert.match(redeclared.text, /ticket is this call's input and already holds the caller's value; use it directly/);
+  assert.equal(redeclared.kind, 'ok');
+  assert.equal(session.failureDebug, undefined);
+  const changed = await session.applyAsync('eval', { code: 'const ticket = "different"; return 2;' });
+  assert.equal(changed.kind, 'rejected');
+  assert.match(changed.text, /ticket is this call's input and already holds the caller's value; use it directly/);
 });
 
 test('model repairs an eval failure under an unchanged system prompt', async () => {
