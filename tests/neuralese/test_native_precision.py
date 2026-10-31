@@ -314,3 +314,21 @@ def test_production_stock_arithmetic_uses_tf32_tensor_cores(monkeypatch):
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
+
+
+def test_checkpoint_backed_base_restore_requires_exact_inventory():
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from natlang_neuralese.model.native_precision import base_restore_transition
+    inventory = {'config.json': 'a' * 64, 'tokenizer.json': 'b' * 64, 'model.safetensors': 'c' * 64}
+    digest = canonical_json_sha256_hex(inventory)
+    old = {'base': '/base', 'base_inventory': inventory, 'base_inventory_sha256': digest}
+    receipt = {'schema': 'natlang.native-config-only-checkpoint-restore/1',
+               'mode': 'checkpoint-backbone-state+verified-config-tokenizer',
+               'pinned_base_inventory_sha256': digest,
+               'verified_local_files': {'config.json': 'a' * 64, 'tokenizer.json': 'b' * 64}}
+    new = {**old, 'base_restore': receipt}
+    assert same_source_precision_identity(old, new)
+    assert base_restore_transition(old, new)['base_inventory_sha256'] == digest
+    assert not same_source_precision_identity(old, {**new, 'base_restore': {**receipt, 'verified_local_files': {'config.json': 'z' * 64}}})
+    assert not same_source_precision_identity(old, {**new, 'base_inventory_sha256': '0' * 64})
+    assert not same_source_precision_identity(old, {**new, 'rank': 4})

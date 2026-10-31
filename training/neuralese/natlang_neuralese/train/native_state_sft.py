@@ -2515,6 +2515,13 @@ def _main(argv=None, *, requested_refresh):
                 'history_reasoning_policy':config['history_reasoning_policy']}
         if not same_source_precision_identity(previous_config, config):
             raise ValueError('native SFT continuation changes model identity beyond declared GEMM arithmetic')
+        from ..model.native_precision import base_restore_transition
+        restore_transition=base_restore_transition(previous_config,config)
+        if restore_transition is not None:
+            restore_history=list((saved_options or {}).get('base_restore_history') or [])
+            restore_history.append({**restore_transition,'at_global_step':int(saved_training.get('global_step',0)),
+                                    'weights_optimizer_rng_exposure':'preserved'})
+            checkpoint_options['base_restore_history']=restore_history
         if previous.get('schedule') not in {'source-order-stream/1', 'row-visit-deficit/2'}:
             raise ValueError('native SFT checkpoint has an unsupported row-credit schedule')
         offline_tweak=mandatory_objective and args.objective_continuation and previous.get('objective_kind')==objective.kind

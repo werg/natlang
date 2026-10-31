@@ -79,10 +79,41 @@ def base_location_transition(previous, current):
             'base_inventory_sha256': digest, 'input_bytes': 'identical'}
 
 
+def base_restore_transition(previous, current):
+    """Validate a checkpoint-backed restore receipt without changing model identity."""
+    before=previous.get('base_restore');after=current.get('base_restore')
+    if before==after:return None
+    from ..common.hashing import canonical_json_sha256_hex
+    inventory=current.get('base_inventory')
+    if not isinstance(inventory,dict) or not inventory or previous.get('base_inventory')!=inventory:
+        raise ValueError('checkpoint restore requires identical complete base inventory')
+    digest=canonical_json_sha256_hex(inventory)
+    if previous.get('base_inventory_sha256')!=digest or current.get('base_inventory_sha256')!=digest:
+        raise ValueError('checkpoint restore inventory digest differs')
+    names={'config.json','generation_config.json','model.safetensors.index.json','tokenizer.json','tokenizer.model',
+           'spiece.model','tokenizer_config.json','special_tokens_map.json','chat_template.jinja','vocab.json',
+           'merges.txt','added_tokens.json'}
+    expected={k:v for k,v in inventory.items() if k in names}
+    def valid(receipt):
+        return (isinstance(receipt,dict) and receipt.get('schema')=='natlang.native-config-only-checkpoint-restore/1'
+            and receipt.get('mode')=='checkpoint-backbone-state+verified-config-tokenizer'
+            and receipt.get('pinned_base_inventory_sha256')==digest and receipt.get('verified_local_files')==expected
+            and 'config.json' in expected and any(k.endswith('.safetensors') for k in inventory))
+    if not valid(after) or (before is not None and not valid(before)):
+        raise ValueError('checkpoint restore receipt is not bound to the pinned base inputs')
+    return {'from':before,'to':after,'base_inventory_sha256':digest,
+            'input_bytes':'verified config and tokenizer; backbone restored from full checkpoint'}
+
 def same_source_precision_identity(previous, current):
     """Only declared native arithmetic may change in an ordinary continuation."""
     # `precision` is the process's stock arithmetic policy (configure_native_precision), also declared arithmetic.
     arithmetic = {'native_linear_precision', 'native_attention_precision', 'native_shared_execution', 'precision'}
+    if previous.get('base_restore') != current.get('base_restore'):
+        try:
+            base_restore_transition(previous,current)
+        except ValueError:
+            return False
+        arithmetic.add('base_restore')
     if previous.get('base') != current.get('base'):
         try:
             base_location_transition(previous, current)
