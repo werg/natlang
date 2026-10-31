@@ -74,6 +74,7 @@ def materialize(rendered, records, edges, *, tokenizer, role_ids, context_weight
         if weights: weights[0] = 0.0
         node = {'token_ids': new_ids, 'target_weights': weights, 'supervised_suffix_start': suffix,
                 'source_record_sha256': digest(records[rid]), 'source_target_sha256': digest(records[rid]['target']),
+                'static_derivations': row.get('static_derivations', []),
                 'producing': [], 'producer_bindings': [], 'reads': []}
         for spec, start, stop in positions:
             if spec['kind'] == 'producer':
