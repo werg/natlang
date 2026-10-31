@@ -34,10 +34,15 @@ class _HttpNativeEngine:
         state = info.get("native_state") or {}
         self.native_identity = {key: state.get(key) for key in
             ("checkpoint_sha256", "tokenizer_fingerprint", "embedding_weight_sha256", "architecture")}
+        self.serving_config = info.get("serving_config")
+        self.serving_config_identity_sha256 = info.get("serving_config_identity_sha256")
         if (info.get("server") != "reference" or state.get("enabled") is not True
                 or not self.native_identity.get("checkpoint_sha256")
-                or not self.native_identity.get("tokenizer_fingerprint")):
-            raise ValueError("endpoint is not a ready reference native-state actor")
+                or not self.native_identity.get("tokenizer_fingerprint")
+                or not isinstance(self.serving_config, dict)
+                or self.serving_config.get("schema") != "natlang.native-prefill-config/1"
+                or self.serving_config_identity_sha256 != self.serving_config.get("identity_sha256")):
+            raise ValueError("endpoint is not a ready reference actor with an identified native serving configuration")
         self.store = self
 
     def _request(self, method, path, body=None, *, binary=False):
@@ -81,11 +86,17 @@ class _HttpNativeEngine:
 
     def metrics(self):
         raw = self._request("GET", "/metrics", binary=True)
-        return {key: int(value) for line in raw.decode().splitlines()
-                if len(parts := line.split()) == 2
-                and parts[0] in {"natlang_native_decode_tokens_total", "natlang_active_sequences",
-                                "natlang_queued_requests", "natlang_native_open_produce_spans"}
-                for key, value in (parts,)}
+        result = {}
+        for line in raw.decode().splitlines():
+            parts = line.split(maxsplit=1)
+            if len(parts) != 2:
+                continue
+            key, value = parts
+            if (key in {"natlang_native_decode_tokens_total", "natlang_active_sequences",
+                        "natlang_queued_requests", "natlang_native_open_produce_spans"}
+                    or key.startswith("natlang_cuda_")):
+                result[key] = int(value) if value.isdigit() else value
+        return result
 
 
 def main():
@@ -185,6 +196,8 @@ def main():
             "native_checkpoint_sha256": engine.native_identity.get("checkpoint_sha256"),
             "actor_endpoint": args.endpoint,
             "tokenizer_fingerprint": engine.native_identity.get("tokenizer_fingerprint"),
+            "serving_config": getattr(engine, "serving_config", None),
+            "serving_config_identity_sha256": getattr(engine, "serving_config_identity_sha256", None),
             "graph_path": str(graph_path), "graph_sha256": sha256_hex(graph_bytes),
             "native_graph_invocations": len(example.plan.invocations),
             "source_groups": graph["source_groups"], "oracle_level": "judged",
