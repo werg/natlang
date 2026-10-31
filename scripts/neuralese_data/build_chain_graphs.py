@@ -182,6 +182,31 @@ def target_shas(unit):
     return {rid: canonical_json_sha256_hex(row.get('target')) for rid, row in read_records(locations).items()}
 
 
+def phase1_shas(pool, units, path, inputs_sha, batch):
+    """Target identities per unit, appended to ``path`` in batches so a killed run resumes phase 1 too."""
+    done = []
+    if path.exists():
+        lines = path.read_text().splitlines()
+        if lines and json.loads(lines[0]).get('inputs_sha256') == inputs_sha:
+            for line in lines[1:]:
+                try:
+                    done.append(json.loads(line))
+                except json.JSONDecodeError:
+                    break  # a torn final line from a kill
+    with open(path, 'w') as stream:
+        stream.write(json.dumps({'inputs_sha256': inputs_sha, 'units': len(units)}) + '\n')
+        for shas in done:
+            stream.write(json.dumps(shas) + '\n')
+        stream.flush()
+        if done:
+            print(f'phase 1 resuming after {len(done)}/{len(units)} chains', flush=True)
+        for start in range(len(done), len(units), batch):
+            for shas in pool.map(target_shas, units[start:start + batch], chunksize=8):
+                done.append(shas); stream.write(json.dumps(shas) + '\n')
+            stream.flush(); os.fsync(stream.fileno())
+    return done
+
+
 def pieces_for(path):
     if path not in STATE['pieces']:
         STATE['pieces'] = {path: [json.loads(line) for line in open(path) if line.strip()]}
@@ -424,7 +449,8 @@ def main():
         before_targets, before_bodies = collections.Counter(target_count), collections.Counter(body_count)
         cap_state_before = {'targets': sum(target_count.values()), 'bodies': sum(body_count.values())}
         plans = []
-        for unit, shas in zip(units, pool.map(target_shas, units, chunksize=8)):
+        for unit, shas in zip(units, phase1_shas(pool, units, args.out / 'target-shas.jsonl',
+                                                  canonical_json_sha256_hex(binding['inputs']), args.batch_chains * 4)):
             # A child result is computed from content only its call saw: its decision is never deduped away.
             exempt = {edge['writer_record_id'] for edge in unit[2] if edge.get('kind') in args.computed_kinds}
             supervised = set()
@@ -506,6 +532,7 @@ def main():
                'files': files, 'omissions': omission_files}
     (args.out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
     (args.out / 'progress.json').unlink(missing_ok=True)
+    (args.out / 'target-shas.jsonl').unlink(missing_ok=True)
     print(json.dumps({'totals': dict(totals)}))
 
 
