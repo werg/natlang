@@ -98,8 +98,9 @@ def _program_id(row: dict) -> str:
 def select_balanced_train(rows: list[dict], *, max_cases: int, seed: int,
                           protected: ProtectedWorlds,
                           include_judged: bool = False,
-                          case_ids: set[str] | None = None) -> tuple[list[dict], list[dict]]:
-    candidates, receipts, seen_ids = [], [], set()
+                          case_ids: set[str] | None = None,
+                          quality_exclusions_out: list[dict] | None = None) -> tuple[list[dict], list[dict]]:
+    candidates, receipts, seen_ids, quality_exclusions = [], [], set(), {}
     for row in rows:
         if row.get('split') != 'train':
             continue
@@ -111,7 +112,19 @@ def select_balanced_train(rows: list[dict], *, max_cases: int, seed: int,
             raise ValueError(f'duplicate training case identity: {row.get("id")}')
         seen_ids.add(row.get('id'))
         receipt = protected.check(row)
-        receipts.append({'case_id': row['id'], 'source_groups': row['source_groups'], 'receipt': receipt})
+        external = (row.get('curriculum', {}).get('external') or {})
+        quality_status = external.get('quality_status', 'ready')
+        if quality_status != 'ready':
+            exclusion = {'case_id': row['id'], 'quality_status': quality_status,
+                         'quality_reason': external.get('quality_reason'),
+                         'source_groups': row['source_groups'], 'receipt': receipt}
+            quality_exclusions[row['id']] = exclusion
+            if quality_exclusions_out is not None:
+                quality_exclusions_out.append(exclusion)
+            receipts.append({**exclusion, 'excluded': True})
+            continue
+        receipts.append({'case_id': row['id'], 'source_groups': row['source_groups'], 'receipt': receipt,
+                         'quality_status': 'ready', 'excluded': False})
         operation = (row.get('curriculum', {}).get('external') or {}).get('operation')
         if not isinstance(operation, str) or not operation.endswith('.nl'):
             raise ValueError(f'{row.get("id")}: actual operation path is required')
@@ -119,6 +132,10 @@ def select_balanced_train(rows: list[dict], *, max_cases: int, seed: int,
     if not candidates:
         raise ValueError('verified source has no train rows after split filtering')
     if case_ids is not None:
+        pending_requested = sorted(case_ids & quality_exclusions.keys())
+        if pending_requested:
+            reasons = [quality_exclusions[item] for item in pending_requested]
+            raise ValueError(f'explicit case-id selection includes quality-pending rows: {reasons}')
         by_id = {row['id']: (program, operation, group, row)
                  for program, operation, group, row in candidates}
         missing = sorted(case_ids - by_id.keys())
@@ -202,6 +219,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         raise ValueError('codebase dataset has an unresolved rights hold')
     protected = protected or ProtectedWorlds.load()
     judged_train = [row for row in rows if row.get('split') == 'train' and
+                    (row.get('curriculum', {}).get('external') or {}).get('quality_status', 'ready') == 'ready' and
                     (row.get('semantics', {}).get('oracle') == 'judged' or
                      isinstance(row.get('semantics', {}).get('oracle'), dict) and
                      row['semantics']['oracle'].get('level') == 'judged')]
@@ -209,9 +227,11 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         raise ValueError('judged train rows require an explicit independent judge_model')
     if judge_model is not None:
         run_bonsai_queue.judge_arguments({'judge_model': judge_model}, 'gpt-6-luna')
+    quality_exclusions = []
     selected, selected_receipts = select_balanced_train(
         rows, max_cases=max_cases, seed=seed, protected=protected,
-        include_judged=judge_model is not None, case_ids=case_ids)
+        include_judged=judge_model is not None, case_ids=case_ids,
+        quality_exclusions_out=quality_exclusions)
     selected_source.parent.mkdir(parents=True, exist_ok=True)
     selected_source.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in selected), encoding='utf-8')
     cases = [{'index': index, 'seed': int(hashlib.sha256(f'{campaign_id}|{seed}|{row["id"]}'.encode()).hexdigest()[:8], 16)}
@@ -224,6 +244,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'observed_at_source': str(REGISTRY), 'protected_worlds_digest': protected.digest,
         'registry_sha256': _sha(ROOT / REGISTRY), 'checked_train_rows': len(rows) - sum(1 for row in rows if row.get('split') != 'train'),
         'selected_train_rows': len(selected), 'selected_receipts': selected_receipts,
+        'quality_excluded_train_rows': quality_exclusions,
         'all_candidate_train_rows_checked_before_balanced_selection': True,
     }
     protection_receipt.parent.mkdir(parents=True, exist_ok=True)
@@ -291,6 +312,8 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'rows_with_unknown_codebase': counts_program.get('__unknown_codebase__', 0),
         'operation_counts': dict(counts_operation),
         'world_group_counts': dict(counts_world), 'source_groups_preserved': True,
+        'quality_excluded_rows': sum(1 for row in rows if row.get('split') == 'train' and
+                                     (row.get('curriculum', {}).get('external') or {}).get('quality_status', 'ready') != 'ready'),
         'prompt_rendering': 'full', 'slots': 6, 'root_approved': False,
         'dispatch_command_after_review': (
             f'python3 scripts/memory_ledger.py run --unit {campaign_id} --budget-gb 2 --class collection '
