@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { NativeToolAgent, modelTurnsSoFar } from '../dist/native/agent.js';
 import { TrainingGuidance, requestText } from '../dist/native/training-guidance.js';
-import { loadGuidanceWriter } from '../dist/teacher/guidance-writer.js';
+import { loadGuidanceWriter } from '../dist/runtime/node-guidance-writer.js';
 import { chatCompletionModelTurn } from '../dist/model/chat-completion.js';
 import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { ModelTurnRecorder, setRecorderSource } from '../dist/native/model-recording.js';

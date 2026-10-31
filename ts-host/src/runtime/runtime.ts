@@ -1,11 +1,11 @@
 import type { WeightBinding } from '../adaptation/weights/binding.js';
 import { setLexicalNativeAdapterSource, setLexicalSoftStateSource, type NativeAdapterBinding } from '../native/model-recording.js';
 import { ProgramView } from '../adaptation/program-view.js';
-import { nativeProgramGuidance as validateNativeProgramGuidance } from '../adaptation/prompts.js';
+import { nativeProgramGuidance as validateNativeProgramGuidance } from '../guidance/program.js';
 import { isAdaptationBinding, bindAdaptation } from '../adaptation/compatibility.js';
 import { fingerprint } from '../adaptation/identity.js';
 import type { ProgramDescriptor, AdaptationBinding, ExecutorIdentity } from '../adaptation/types.js';
-import type { MemeticGuidanceBinding, NativeProgramGuidance } from '../adaptation/prompts.js';
+import type { MemeticGuidanceBinding, NativeProgramGuidance } from '../guidance/program.js';
 import { declarationNamespace } from '../native/external.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';

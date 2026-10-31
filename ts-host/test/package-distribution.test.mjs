@@ -43,6 +43,24 @@ test('staged Node npm contents include Ax provenance and license notices', { ski
   assert.ok(manifest.sourcePaths.some(entry => entry.path === 'LICENSE'));
 });
 
+test('installed self-teaching resolves its shipped guidance-writer definitions', { skip: !isStaged(nodeRoot, 'dist/runtime/node-guidance-writer.js') }, async () => {
+  const pkg = JSON.parse(readFileSync(join(nodeRoot, 'package.json'), 'utf8'));
+  assert.ok(pkg.files.includes('applications'));
+  const writer = await import(pathToFileURL(join(nodeRoot, 'dist/runtime/node-guidance-writer.js')));
+  const override = process.env.NATLANG_GUIDANCE_WRITER;
+  delete process.env.NATLANG_GUIDANCE_WRITER;
+  try {
+    assert.equal(writer.guidanceWriterDirectory(), join(nodeRoot, 'applications/guidance-writer'));
+    const loaded = writer.loadGuidanceWriter();
+    assert.ok(loaded.selection.definition && loaded.writer.definition);
+    assert.equal(typeof loaded.visibleFacts, 'function');
+    assert.equal(typeof loaded.crispSelection, 'function');
+  } finally {
+    if (override === undefined) delete process.env.NATLANG_GUIDANCE_WRITER;
+    else process.env.NATLANG_GUIDANCE_WRITER = override;
+  }
+});
+
 test('staged browser package keeps portable adaptation types and omits optimizer assets', { skip: !isStaged(browserRoot, 'dist/types/browser/index.d.ts') }, () => {
   const typeRoot = join(browserRoot, 'dist/types');
   const files = directory => readdirSync(directory).flatMap(name => {

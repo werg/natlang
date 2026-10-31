@@ -6,7 +6,7 @@
  * the consumer then carries the `natlang.guidance-request/1` the engine renders (rl/privileged_context `guidance_plan`,
  * whose `_request_parts` is the exact contract), and every turn of the policy calls carries `x_natlang_guidance_policy`.
  *
- * The package's crisp parts and definitions are loaded by the host (teacher/guidance-writer.ts, Node); this module is the
+ * The package's crisp parts and definitions are loaded by the host (runtime/node-guidance-writer.ts, Node); this module is the
  * platform-neutral mechanism around them.
  */
 import type { CallableDefinition } from '../runtime/kernel.js';

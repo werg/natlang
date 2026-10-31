@@ -1,7 +1,7 @@
 import { nativeProtocolFailure, nativeProtocolFeedback } from './native-protocol.js';
-import { renderAuthoredTextGuidance } from '../adaptation/prompts.js';
+import { renderAuthoredTextGuidance } from '../guidance/program.js';
 import { fingerprint } from '../adaptation/identity.js';
-import type { AuthoredTextGuidance, NativeProgramGuidance } from '../adaptation/prompts.js';
+import type { AuthoredTextGuidance, NativeProgramGuidance } from '../guidance/program.js';
 import { formatType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
 import { MISSING, Reject, coerce, isLive, liveId, liveLabel, problems } from './values.js';

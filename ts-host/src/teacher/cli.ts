@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { chatRequestControls, wireControls } from './chat-request-controls.js';
 import type { GuidanceRun } from '../native/training-guidance.js';
-import { nativeProgramGuidance } from '../adaptation/prompts.js';
+import { nativeProgramGuidance } from '../guidance/program.js';
 import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';

@@ -73,6 +73,7 @@
   },
   "files": [
     "dist",
+    "applications",
     "model-assets",
     "dashboard",
     "vendor",

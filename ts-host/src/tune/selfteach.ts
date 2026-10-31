@@ -28,7 +28,7 @@ import type { ModelDriver } from '../runtime/runtime.js';
 import type { DecisionRequest, DecisionScorer, ModelTurnRequest } from '../contracts.js';
 import { wrapDriver } from '../runtime/driver.js';
 import { currentFrame } from '../runtime/context.js';
-import { loadGuidanceWriter } from '../teacher/guidance-writer.js';
+import { loadGuidanceWriter } from '../runtime/node-guidance-writer.js';
 import type { GuidanceFact } from '../native/training-guidance.js';
 import { canonicalJson } from '../package/archive.js';
 import { tuneDirectory } from '../adaptation/weights/release.js';

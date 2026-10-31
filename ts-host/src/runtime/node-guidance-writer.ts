@@ -7,15 +7,15 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { callableMeta } from '../runtime/callable.js';
-import { loadCallables } from '../runtime/node-files.js';
+import { callableMeta } from './callable.js';
+import { loadCallables } from './node-files.js';
 import { TrainingGuidance, type GuidanceRun, type GuidanceWriterPackage } from '../native/training-guidance.js';
 
 const sha256 = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 /** The package in this checkout (`NATLANG_GUIDANCE_WRITER` overrides). */
 export function guidanceWriterDirectory(): string {
-  const candidates = [process.env.NATLANG_GUIDANCE_WRITER, fileURLToPath(new URL('../../../applications/guidance-writer', import.meta.url))];
+  const candidates = [process.env.NATLANG_GUIDANCE_WRITER, fileURLToPath(new URL('../../applications/guidance-writer', import.meta.url)), fileURLToPath(new URL('../../../applications/guidance-writer', import.meta.url))];
   const found = candidates.find(item => item && existsSync(join(item, 'writeGuidance.nl')));
   if (!found) throw Object.assign(new Error('guidance-writer-missing: the guidance-writer package was not found; ' +
     'set NATLANG_GUIDANCE_WRITER to its directory'), { code: 'guidance-writer-missing' });

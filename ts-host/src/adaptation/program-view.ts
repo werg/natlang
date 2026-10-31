@@ -3,7 +3,7 @@ import type { ItemRecord, NatlangRecord } from '../runtime/loader.js';
 import { fingerprint } from './identity.js';
 import type { InlineLambdaPlan } from '../compiler/inline.js';
 import { inlineDescriptor } from './inventory.js';
-import { nativeProgramGuidance, type NativeProgramGuidance } from './prompts.js';
+import { nativeProgramGuidance, type NativeProgramGuidance } from '../guidance/program.js';
 /** Frontmatter is copied byte for byte. */
 export function replaceNamedBody(source: string, body: string): string {
   const match = /^(---\r?\n[\s\S]*?\r?\n---\r?\n?)/.exec(source);

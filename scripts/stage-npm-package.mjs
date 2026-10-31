@@ -29,6 +29,13 @@ if (kind === 'node') {
   copyTree(join(root, 'examples', 'adaptation'), adaptationExamples, () => true);
   // The whole Node build, without the browser bundle and the repository's teacher tooling.
   copyTree(source, destination, () => true, [join(source, 'browser'), join(source, 'teacher')]);
+  // Program self-teaching loads these runtime definitions in installed packages
+  // too; repository-only teacher tooling remains excluded.
+  const guidanceAssets = join(root, 'npm-packages', 'node', 'applications', 'guidance-writer');
+  rmSync(guidanceAssets, { recursive: true, force: true });
+  mkdirSync(guidanceAssets, { recursive: true });
+  copyTree(join(root, 'applications', 'guidance-writer'), guidanceAssets,
+    path => /\.(?:nl|ts|json)$/.test(path), ['node_modules'].map(name => join(root, 'applications', 'guidance-writer', name)));
   const pythonAssets = join(root, 'npm-packages', 'node', 'vendor', 'pyodide');
   mkdirSync(pythonAssets, { recursive: true });
   for (const name of readdirSync(join(root, 'ts-host', 'vendor', 'pyodide')))

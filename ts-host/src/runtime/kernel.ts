@@ -4,7 +4,7 @@
  * with the interpreter in the caller's task, and returns the checked value or throws `NatlangCallError`.
  */
 import { DECISION_SYSTEM_PROMPT } from '../native/decision.js';
-import { authoredTextGuidance } from '../adaptation/prompts.js';
+import { authoredTextGuidance } from '../guidance/program.js';
 import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
