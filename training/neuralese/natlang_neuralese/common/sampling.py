@@ -86,8 +86,11 @@ def encode_top_k(log_probs, k):
             'logps': base64.b64encode(logps.tobytes()).decode('ascii')}
 
 
-def decode_top_k(receipt):
-    """(int64 IDs, float32 log-probs) of one encoded receipt, validated."""
+def decode_top_k_arrays(receipt):
+    """(int64 IDs, float32 log-probs) numpy arrays of one encoded receipt, validated.
+
+    Validation runs in numpy: a learner admission decodes every sampled position's receipt (millions per round),
+    where per-receipt torch operator overhead dominated the preparation time."""
     import base64
     import numpy as np
     if not isinstance(receipt, dict) or set(receipt) != {'ids', 'logps'}:
@@ -99,11 +102,18 @@ def decode_top_k(receipt):
         raise ValueError('behavior top-k receipt is not valid packed base64') from error
     if not len(ids) or len(ids) != len(logps) or len(ids) > MAX_BEHAVIOR_TOP_K:
         raise ValueError('behavior top-k receipt has inconsistent or empty lengths')
-    ids = torch.from_numpy(ids.astype(np.int64))
-    logps = torch.from_numpy(logps.astype(np.float32))
-    if (ids < 0).any() or len(set(ids.tolist())) != len(ids):
+    ids = ids.astype(np.int64)
+    logps = logps.astype(np.float32)
+    ordered = np.sort(ids)
+    if ordered[0] < 0 or (ordered[1:] == ordered[:-1]).any():
         raise ValueError('behavior top-k receipt must name distinct nonnegative token IDs')
-    if (torch.isnan(logps).any() or (logps == float('inf')).any() or (logps > 1e-3).any()
+    if (np.isnan(logps).any() or (logps == np.inf).any() or (logps > 1e-3).any()
             or (logps[1:] > logps[:-1]).any()):
         raise ValueError('behavior top-k log-probabilities must be nonpositive and sorted')
     return ids, logps
+
+
+def decode_top_k(receipt):
+    """(int64 IDs, float32 log-probs) tensors of one encoded receipt, validated."""
+    ids, logps = decode_top_k_arrays(receipt)
+    return torch.from_numpy(ids), torch.from_numpy(logps)

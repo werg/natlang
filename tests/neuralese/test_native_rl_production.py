@@ -286,27 +286,18 @@ def test_long_graph_limit_records_and_refuses_on_the_real_stage(tmp_path):
 def test_long_graph_deferral_keeps_deferred_episodes_whole(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from natlang_neuralese.rl import native_stage
-    import natlang_neuralese.data.native_sources as sources
-    import natlang_neuralese.rl.native_replay as replay
+    import natlang_neuralese.data.native_graph_schema as schema
     sizes = {'short': 10, 'long': 500}
-    class Source:
-        def __init__(self, path, *_, **__): self.rows = [json.loads(line) for line in Path(path).read_text().splitlines()]
-        def iter_from(self, _):
-            return [SimpleNamespace(id=row['id'], plan=SimpleNamespace(token_count=sizes[row['id']], slot_sources=()))
-                    for row in self.rows]
-    monkeypatch.setattr(sources, 'NativeGraphSource', Source)
-    monkeypatch.setattr(replay, 'NativePolicyObjective', lambda path: SimpleNamespace(
-        identity={'tokenizer_fingerprint': 'f'}, shares_causal_prefixes=lambda examples: False))
+    monkeypatch.setattr(schema, 'parse_graph', lambda row, tokenizer_fingerprint: SimpleNamespace(
+        id=row['id'], external_states={}, plan=SimpleNamespace(token_count=sizes[row['id']], slot_sources=())))
     graphs = [{'id': 'short', 'nodes': []}, {'id': 'long', 'nodes': [{'token_ids': [1]}]}]
-    objective = {'rows': {'short': {'task_id': 't1', 'sample': 0, 'actions': [1]},
+    objective = {'policy': {'tokenizer_fingerprint': 'f'},
+                 'rows': {'short': {'task_id': 't1', 'sample': 0, 'actions': [1]},
                           'long': {'task_id': 't2', 'sample': 1, 'actions': [1, 2]}}}
-    graph_path, objective_path = tmp_path/'g.jsonl', tmp_path/'o.json'
-    graph_path.write_text(''.join(json.dumps(row) + '\n' for row in graphs)); objective_path.write_text(json.dumps(objective))
+    # Deferral runs on the admitted graphs in memory, before the round's graph/objective files are written.
     record = native_stage._defer_long_graphs(SimpleNamespace(max_graph_forward_tokens=100, out=tmp_path),
-                                             graphs, objective, graph_path, objective_path)
+                                             graphs, objective, share=False)
     assert [row['id'] for row in graphs] == ['short'] and set(objective['rows']) == {'short'}
-    assert [json.loads(line)['id'] for line in graph_path.read_text().splitlines()] == ['short']
-    assert set(json.loads(objective_path.read_text())['rows']) == {'short'}
     assert record['episodes'] == [{'id': 'long', 'task_id': 't2', 'sample': 1, 'forward_tokens': 500,
                                    'original_tokens': 500, 'sampled_tokens': 2}]
     kept = [json.loads(line) for line in (tmp_path/'deferred-long-graphs.jsonl').read_text().splitlines()]

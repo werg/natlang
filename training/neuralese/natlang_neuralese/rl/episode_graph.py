@@ -99,8 +99,13 @@ def validate_rollout_graph(rollout):
 
 
 def whole_episode_turns(rollout):
-    """Authenticate all captures and preserve explicit external-vs-local origins."""
-    import copy
+    """Authenticate all captures and preserve explicit external-vs-local origins.
+
+    Captures are returned as independent copies. They are JSON trees (no shared or cyclic references), so a
+    pickle round trip is an exact deep copy, several times faster than copy.deepcopy on per-token captures."""
+    import pickle
+    def copy_tree(value):
+        return pickle.loads(pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL))
     names, nodes = validate_rollout_graph(rollout)
     result = []
     for name, turn in zip(names, rollout['turns']):
@@ -110,6 +115,6 @@ def whole_episode_turns(rollout):
         outside={block:node for block,node in binding['read_bindings'].items() if node not in captured_writers}
         binding['read_bindings']={block:node for block,node in binding['read_bindings'].items() if block not in outside}
         result.append({'messages': turn['messages'], 'tools': turn.get('tools'), 'reply': turn['target'],
-            **({'response_tools':copy.deepcopy(turn['response_tools']), 'native_xml_turn':copy.deepcopy(turn['native_xml_turn'])} if turn.get('native_xml_turn') else {}),
-            **binding,'external_read_bindings':outside,'sampling':copy.deepcopy(turn.get('sampling') or {})})
+            **({'response_tools':copy_tree(turn['response_tools']), 'native_xml_turn':copy_tree(turn['native_xml_turn'])} if turn.get('native_xml_turn') else {}),
+            **binding,'external_read_bindings':outside,'sampling':copy_tree(turn.get('sampling') or {})})
     return result

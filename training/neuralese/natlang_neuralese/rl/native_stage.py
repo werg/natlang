@@ -228,12 +228,12 @@ def _admit_and_train(args,trainer):
         raise ValueError('no useful native policy episodes: route flat failures to verified graph SFT seeding')
     args.out.mkdir(parents=True, exist_ok=True)
     graph_path, objective_path = args.out/'rl-native-graphs.jsonl', args.out/'rl-native-objective.json'
-    write_bytes_durable(graph_path, ''.join(json.dumps(row) + '\n' for row in graphs).encode())
-    write_json_durable(objective_path, objective)
-    deferred = _defer_long_graphs(args, graphs, objective, graph_path, objective_path,
-                                  share='--no-share-causal-prefixes' not in trainer)
+    # Deferral runs on the admitted graphs in memory, so the (large) graph and objective files are written once.
+    deferred = _defer_long_graphs(args, graphs, objective, share='--no-share-causal-prefixes' not in trainer)
     if not graphs:
         raise ValueError('every admitted native policy episode exceeds --max-graph-forward-tokens')
+    write_bytes_durable(graph_path, ''.join(json.dumps(row) + '\n' for row in graphs).encode())
+    write_json_durable(objective_path, objective)
     write_json_durable(args.out/'rl-data-receipt.json', {
         'schema': 'natlang.native-rl-admission/1',
         **({'base_native_identity':objective['base_native_identity'],'behavior_policy_sha256':objective['behavior_policy_sha256']}
@@ -307,23 +307,27 @@ def _defer_text_result_state_groups(rows, out):
     return [row for row in rows if (row.get('task_id'), row.get('group')) not in keys], record
 
 
-def _defer_long_graphs(args, graphs, objective, graph_path, objective_path, *, share=True):
-    """Apply --max-graph-forward-tokens in place: keep deferred episodes whole beside the round, return the record.
+def _defer_long_graphs(args, graphs, objective, *, share=True):
+    """Apply --max-graph-forward-tokens to the admitted graphs in place (before they are written): keep deferred
+    episodes whole beside the round, return the record.
 
     The limit applies to the forward tokens the learner actually runs: the exact causal-prefix packing of the
-    episode's turns (on by default) when the objective supports it, else every turn's full rendered rows."""
+    episode's turns (on by default) when the objective supports it (NativePolicyObjective.shares_causal_prefixes:
+    no per-invocation behavior actors, no archived external states), else every turn's full rendered rows."""
     limit = args.max_graph_forward_tokens
     if limit is None:
         return None
     if type(limit) is not int or limit < 1:
         raise ValueError('--max-graph-forward-tokens must be a positive integer')
-    from ..data.native_sources import NativeGraphSource
+    from ..data.native_graph_schema import parse_graph
     from ..train.native_prefix_packing import causal_prefix_geometry
-    from .native_replay import NativePolicyObjective
-    policy = NativePolicyObjective(objective_path)
-    source = NativeGraphSource(graph_path, policy.identity['tokenizer_fingerprint'], required_split='train')
-    sizes = {example.id: (causal_prefix_geometry(example, share=share and policy.shares_causal_prefixes([example]))[0],
-                          example.plan.token_count) for example in source.iter_from(0)}
+    behavior = objective.get('schema') == 'natlang.native-policy-objective/2'
+    fingerprint = (objective['base_native_identity'] if behavior else objective['policy'])['tokenizer_fingerprint']
+    sizes = {}
+    for row in graphs:
+        example = parse_graph(row, tokenizer_fingerprint=fingerprint)
+        supported = share and not behavior and not getattr(example, 'external_states', None)
+        sizes[example.id] = (causal_prefix_geometry(example, share=supported)[0], example.plan.token_count)
     long = {key for key, (size, _) in sizes.items() if size > limit}
     record = {'reason': 'packed episode graph exceeds the learner forward-token limit',
               'max_graph_forward_tokens': limit, 'path': None, 'share_causal_prefixes': share,
@@ -339,8 +343,6 @@ def _defer_long_graphs(args, graphs, objective, graph_path, objective_path, *, s
     record['path'] = {'path': str(deferred_path.resolve()), 'sha256': sha256_file_hex_cached(deferred_path)}
     graphs[:] = [row for row in graphs if row['id'] not in long]
     objective['rows'] = {key: row for key, row in objective['rows'].items() if key not in long}
-    write_bytes_durable(graph_path, ''.join(json.dumps(row) + '\n' for row in graphs).encode())
-    write_json_durable(objective_path, objective)
     return record
 
 

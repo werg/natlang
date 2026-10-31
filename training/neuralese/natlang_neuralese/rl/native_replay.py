@@ -102,14 +102,14 @@ def _input_stream(capture, prompt_length):
 
 def _behavior_top_k(sample, token, law):
     """Validated sampler top-k receipt, consistent with the exact sampled token's log-probability."""
-    from ..common.sampling import decode_top_k
-    ids, logps = decode_top_k(sample['top_k'])
+    from ..common.sampling import decode_top_k_arrays
+    ids, logps = decode_top_k_arrays(sample['top_k'])
     expected = law['k']
     if len(ids) > expected:
         raise ValueError('native RL behavior top-k receipt exceeds its declared k')
     # float16 storage: relative precision 2^-11 of |log q|.
     tolerance = 2e-3 * (1 + abs(sample['logp']))
-    hits = (ids == token).nonzero()
+    hits = (ids == token).nonzero()[0]
     if len(hits):
         if abs(float(logps[int(hits[0])]) - sample['logp']) > tolerance:
             raise ValueError('native RL behavior top-k disagrees with the sampled token log-probability')
@@ -538,17 +538,17 @@ _CENTERING_FIELDS = ('rho', 'alpha', 'tail_q', 'tail_p', 'w_y', 'y_in_top_k')
 
 def behavior_top_k_tensors(actions, k, device):
     """Padded [n, k] sampler top-k IDs (-1) and log q (-inf), truncated to the loss k."""
-    from ..common.sampling import decode_top_k
+    from ..common.sampling import decode_top_k_arrays
     ids = torch.full((len(actions), k), -1, dtype=torch.long)
     logq = torch.full((len(actions), k), float('-inf'), dtype=torch.float32)
     for row, action in enumerate(actions):
         receipt = action.get('behavior_top_k')
         if not isinstance(receipt, dict) or receipt.get('k', 0) < k:
             raise ValueError('score-centered action lacks its sampler top-k with k >= the declared loss k')
-        values, logps = decode_top_k({'ids': receipt['ids'], 'logps': receipt['logps']})
+        values, logps = decode_top_k_arrays({'ids': receipt['ids'], 'logps': receipt['logps']})
         width = min(k, len(values))
-        ids[row, :width] = values[:width]
-        logq[row, :width] = logps[:width]
+        ids[row, :width] = torch.from_numpy(values[:width])
+        logq[row, :width] = torch.from_numpy(logps[:width])
     return ids.to(device), logq.to(device)
 
 
@@ -669,13 +669,35 @@ def _validate_adapter_transition(engine,before_identity,before_binding,after_ide
             raise ValueError('native-policy behavior archive does not bind its actual frozen basis')
 
 
+_ADMITTED_OBJECTIVE = {}
+
+
+def _admitted_objective(path):
+    """(sha256 of the file bytes, parsed spec) of an admitted objective file.
+
+    A policy update opens its objective several times in one process (admission, capacity request, trainer,
+    capacity identity). The file is large (per-action sampler top-k), so its parse is shared by file hash; the
+    parsed spec is read-only by contract (nothing mutates rows or actions)."""
+    import hashlib
+    import json
+    data = path.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    cached = _ADMITTED_OBJECTIVE.get(str(path))
+    if cached is not None and cached[0] == digest:
+        return cached
+    _ADMITTED_OBJECTIVE.clear()  # keep at most one parsed objective alive
+    value = (digest, json.loads(data))
+    _ADMITTED_OBJECTIVE[str(path)] = value
+    return value
+
+
 class NativePolicyObjective:
     """Native GRPO/RFT loss plugged into the shared native trainer's ONE forward."""
     def __init__(self, spec_path):
         import json
         from pathlib import Path
         self.path = Path(spec_path).resolve()
-        self.spec = json.loads(self.path.read_text())
+        self.file_sha256, self.spec = _admitted_objective(self.path)
         if (self.spec.get('schema') not in {'natlang.native-policy-objective/1','natlang.native-policy-objective/2'}
                 or self.spec.get('kind') != 'native-policy' or self.spec.get('mode') not in {'grpo', 'rft'}):
             raise ValueError('native policy objective schema/kind/mode is unsupported')
@@ -756,7 +778,8 @@ class NativePolicyObjective:
     def binding(self):
         import json
         from ..common.hashing import canonical_json_sha256_hex,sha256_file_hex_cached
-        if canonical_json_sha256_hex(json.loads(self.path.read_text()))!=canonical_json_sha256_hex(self.spec):
+        # The spec was parsed from exactly the bytes with file_sha256: an unchanged file hash is an unchanged spec.
+        if sha256_file_hex_cached(self.path,trust_archive_receipt=False)!=self.file_sha256:
             raise ValueError('native policy objective changed after admission')
         result={'kind':'native-policy','sha256':sha256_file_hex_cached(self.path),'mode':self.spec['mode'],
                 **({'policy_loss':self.policy_loss} if self.policy_loss is not None else {})}
@@ -1159,11 +1182,14 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
         for rollout, advantage in zip(members, advantages):
             if mode == 'rft' and rollout['reward']['quality'] < min_quality:
                 continue
+            # One content hash and one authenticated turn list per episode (both are pure functions of the rollout;
+            # compile_replay and the JOLT+ twin only read the turns).
             episode_key=canonical_json_sha256_hex(rollout)
             invocation_actors=behavior_policy['episodes'].get(episode_key) if behavior_policy is not None else None
             if behavior_policy is not None and invocation_actors is None:
                 raise ValueError('native invocation behavior descriptor omits an admitted source episode')
-            replay = compile_replay(whole_episode_turns(rollout), identity=identity, roles=roles, fetch_block=fetch_block,
+            turns = whole_episode_turns(rollout)
+            replay = compile_replay(turns, identity=identity, roles=roles, fetch_block=fetch_block,
                                     invocation_actors=invocation_actors,actors=actors)
             from .episode_graph import rollout_turn_names
             episode_turns = rollout_turn_names(rollout['turns'])
@@ -1176,7 +1202,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             adapter_binding, binding_seen = replay.adapter_binding, True
             if replay.adapter_binding and block_bundle is None:
                 raise ValueError('adapted native RL requires its durable coefficient/basis actor bundle')
-            identifier = canonical_json_sha256_hex(rollout)
+            identifier = episode_key
             if identifier in objective_rows:
                 raise ValueError('native RL episodes duplicated without distinct sampling provenance')
             weights = [0.] * replay.plan.token_count
@@ -1199,8 +1225,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             jolt_row = None
             if jolt is not None:
                 from .jolt import add_privileged_twin
-                actions, jolt_row = add_privileged_twin(replay, rollout, graph, privileged,
-                    turns=whole_episode_turns(rollout))
+                actions, jolt_row = add_privileged_twin(replay, rollout, graph, privileged, turns=turns)
                 for action, queries in zip(decisions, jolt_row.pop('decision_twin_queries', None) or ()):
                     if queries is not None:
                         action['twin_options'] = queries
