@@ -182,7 +182,7 @@ class _HostPeak:
 
 def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers=True,
                      chunk_tokens=1024, checkpoint_sha256, source_binding, gradient_observer=None, objective=None,
-                     production_packing=False, retained_gradients=False):
+                     production_packing=False, retained_gradients=False, cotangent_mode='vjp', precision=None):
     """Cases are whole, source-authenticated graphs chosen by the supervisor.
 
     The existing gated optimizer hooks stay installed but unarmed. Temporary
@@ -193,7 +193,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
     accumulated ``.grad`` of the earlier micro-batches is held in production.
     CUDA lifetime peaks are not reset. This is capacity, not task qualification.
     """
-    from ..train.native_state_sft import packed_graph_loss
+    from ..train.native_state_sft import packed_graph_loss, _communication_prefix_allowed
+    if cotangent_mode not in ('vjp', 'plain'):
+        raise ValueError('capacity qualification needs vjp or plain cotangents')
     if not cases:
         raise ValueError('capacity qualification needs actual complete source graphs')
     # Use the actual optimizer inventory, including functional native HF
@@ -260,18 +262,26 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                     for _,parameter in named:
                         if parameter.requires_grad:parameter.grad=torch.zeros_like(parameter)
                 with _HostPeak() as host:
-                    from ..model.native_weight_carrier import ParameterCotangentScope
-                    with ParameterCotangentScope.for_model(model,mode='vjp') as cotangents:
+                    from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
+                    if cotangent_mode == 'plain':
+                        cotangent_context = contextlib.ExitStack()
+                        cotangent_context.enter_context(plain_training_arithmetic())
+                        cotangent_context.finish = lambda: None
+                        cotangent_context.allocation_report = lambda: {'mode':'plain'}
+                    else:
+                        cotangent_context = ParameterCotangentScope.for_model(model,mode='vjp')
+                    qat_context = precision[0].context(precision[1],precision[2]) if precision is not None else contextlib.nullcontext()
+                    with cotangent_context as cotangents, qat_context:
                         with backend.autocast() if backend is not None else contextlib.nullcontext():
                             packing = ({'share_causal_prefixes':True}
                                 if getattr(model,'share_causal_prefixes',False) else {})
                             if production_packing:
-                                packing.update(collect_accuracy=False, allow_communication_prefixes=backend is None)
+                                packing.update(collect_accuracy=False, allow_communication_prefixes=_communication_prefix_allowed(backend,precision))
                             if objective is not None:packing['objective']=objective
                             loss,_=packed_graph_loss(model,batch,checkpoint_layers=checkpoint_layers,
                                 chunk_tokens=chunk_tokens,**packing)
                         phase='backward'
-                        loss.backward()
+                        (loss if precision is None else loss * float(precision[3])).backward()
                         phase='cotangent-finish'
                         cotangents.finish()
                         row['cotangent_accumulators'] = cotangents.allocation_report()
@@ -306,6 +316,8 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             **({'objective':objective.binding()} if objective is not None else {}),
             'optimizer_updates':0,'gradients_released_per_parameter':True,'whole_graphs':True,
             'retained_accumulation_gradients':bool(retained_gradients),
+            'cotangent_mode':cotangent_mode,
+            'qat_point':({'point':precision[1],'mix':float(precision[2]),'loss_weight':float(precision[3])} if precision is not None else None),
             'task_quality_qualified':False,'cpu_and_all_cuda_rng_restored':True,
             'checkpoint_layers':checkpoint_layers,'chunk_tokens':chunk_tokens,
             'backend':backend.configuration() if backend is not None else {'enabled':False},

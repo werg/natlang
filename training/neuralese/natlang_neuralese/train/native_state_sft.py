@@ -2802,6 +2802,7 @@ def _main(argv=None, *, requested_refresh):
     # retaining them through gradient and capacity checks wastes gigabytes.
     prior_policy_capacity = ((resume or {}).get('options') or {}).get('policy_capacity')
     prior_packed_capacity = ((resume or {}).get('options') or {}).get('sft_packed_capacity') or {}
+    prior_oversize_baseline = ((resume or {}).get('options') or {}).get('oversize_capacity_baseline')
     admission_record = ((resume or saved_training).get('options') or {}).get('_pending_source_admission')
     prior_foundations = set((resume or {}).get('completed_foundations') or
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('completed_foundations') or [])
@@ -3270,6 +3271,13 @@ def _main(argv=None, *, requested_refresh):
         default_bind={'stage': args.stage_id or 'native-graph-ce', 'start': global_step,
                       'end': global_step + max(1, accumulated_updates(len(pending_batches), args.accumulate_batches))}
         if config.get('source_architecture') == 'lfm3' and objective is None else None)
+    # Retain the last authenticated source-prefix geometry as the boundary
+    # for newly larger whole graphs. Only those groups pay a fresh live gate.
+    from .native_packed_capacity import oversize_baseline
+    prior_geometry = ((prior_oversize_baseline or {}).get('geometry')
+        if prior_oversize_baseline else prior_packed_capacity.get('geometry'))
+    oversize_limits = oversize_baseline(train, prior_geometry, fallback_tokens=args.batch_tokens)
+    checkpoint_options['oversize_capacity_baseline'] = oversize_limits
     # A policy round samples the unquantized actor, while QAT is retained for
     # the continuing SFT lineage. Carry the pending refresh across resumes.
     policy_qat_refresh = saved_quantization_options.get('policy_qat_refresh_required')
@@ -3665,6 +3673,7 @@ def _main(argv=None, *, requested_refresh):
                 sft_progress=carried_progress, reserve_only=True)
             update_started = time.monotonic()
             fetch_rng = capture_training_rng_state(args.device)
+            previous_cursor = cursor
             try:
                 fetched = [next(schedule) for _ in range(min(args.accumulate_batches, batches_left))]
             except Exception as error:
@@ -3700,7 +3709,6 @@ def _main(argv=None, *, requested_refresh):
             batch = [example for micro in micro_batches for example in micro]
             batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
             cursor = indices[-1] + 1
-            exception_boundary_safe = False
             anneal_factor = anneal.scale(global_step) if anneal is not None else None
             warmup_factor = warmup.scale(global_step) if warmup is not None else None
             telemetry_due = telemetry_spec is not None and (step + 1) % telemetry_spec['every'] == 0
@@ -3721,10 +3729,25 @@ def _main(argv=None, *, requested_refresh):
                             collect_accuracy=False, allow_communication_prefixes=backend is None))
                 finally:
                     restore_training_rng_state(calibration_rng, args.device)
+            # A newly larger complete graph is measured on this very model
+            # with the selected QAT point and actual cotangent path before SGD.
+            from .native_packed_capacity import qualify_oversize_batches
+            try:
+                oversize_proof = qualify_oversize_batches(model, optimizer, micro_batches,
+                    args=args, backend=backend, precision=precision_pass, source_path=train.path,
+                    checkpoint_sha256=sha256_file_hex_cached(policy.slot) if policy.slot.exists() else config['base_inventory_sha256'],
+                    global_step=global_step, baseline=oversize_limits)
+            except BaseException:
+                cursor = previous_cursor
+                restore_training_rng_state(fetch_rng, args.device)
+                raise
+            if oversize_proof is not None:
+                checkpoint_options.setdefault('oversize_capacity_history', []).append(oversize_proof)
             # Continue locally while peers boot; pause only if unmerged residual
             # reaches the configured offline-history bound.
             if diloco is not None and not diloco.await_update_capacity(stop_requested=lambda: policy.signaled):
                 break
+            exception_boundary_safe = False
             try:
                 if logit_probe is not None:
                     from ..model.attention_probe import probing

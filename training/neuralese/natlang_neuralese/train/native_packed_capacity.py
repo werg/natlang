@@ -201,3 +201,58 @@ def qualify_pending(model, optimizer, train, pending_batches, args, *, backend, 
     if not path.exists():write_json_durable(path,record)
     if not report['passed']:raise ValueError('actual pending packed batch exceeded its learner capacity')
     return {'proof':binding(path),'geometry':geometry,'model_boundary':record['model_boundary']}
+
+
+def oversize_baseline(source, prior_geometry, *, fallback_tokens):
+    """Derive a source-prefix-bound boundary for newly larger complete graphs."""
+    from .native_resident import bound
+    if prior_geometry is None:
+        return {'forward_tokens':int(fallback_tokens),'kv_slots':int(fallback_tokens),
+                'basis':'configured-batch-token-fallback'}
+    saved=json.loads(bound(prior_geometry).read_text())
+    values=saved.get('kv_slots')
+    if (not isinstance(values,list) or not values or len(values)>len(source.entries)
+            or any(type(value) is not int or value<1 for value in values)
+            or saved.get('rows_sha256')!=_rows_digest(source.entries[:len(values)])):
+        raise ValueError('oversize capacity baseline does not bind the exact source prefix')
+    bound(saved['source'])
+    return {'forward_tokens':max(row['forward_tokens'] for row in source.entries[:len(values)]),
+            'kv_slots':max(values),'basis':'authenticated-prior-source-geometry',
+            'geometry':dict(prior_geometry),'prefix_rows':len(values)}
+
+
+def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, precision,
+                             source_path, checkpoint_sha256, global_step, baseline):
+    """Gate newly larger actual groups on the live model and actual QAT point, before SGD."""
+    from ..eval.native_memory import qualify_capacity
+    from ..common.hashing import canonical_json_sha256_hex
+    from ..common.jsonio import write_json_durable
+    from .native_resident import binding
+    batches=[]
+    for batch in micro_batches:
+        tokens=sum(example.plan.token_count for example in batch)
+        slots=sum(len(example.plan.slot_sources) for example in batch)
+        if tokens>baseline['forward_tokens'] or slots>baseline['kv_slots']:
+            batches.append(batch)
+    if not batches:return None
+    named=getattr(optimizer,'_native_named_parameters',list(model.named_parameters()))
+    prior={id(parameter):(parameter,parameter.grad) for _,parameter in named if parameter.grad is not None}
+    for parameter,_ in prior.values():parameter.grad=None
+    try:
+        mode='plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp'
+        report=qualify_capacity(model,optimizer,batches,backend=backend,
+            checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
+            checkpoint_sha256=checkpoint_sha256,source_binding=binding(source_path),
+            production_packing=True,retained_gradients=args.accumulate_batches>1,
+            cotangent_mode=mode,precision=precision)
+    finally:
+        for parameter,gradient in prior.values():parameter.grad=gradient
+    record={'schema':'natlang.native-oversize-live-capacity/1','global_step':global_step,
+            'parent_checkpoint_sha256':checkpoint_sha256,'source':binding(source_path),
+            'baseline':baseline,'model_boundary':'current-live-model-before-update',
+            'capacity':report,'passed':report['passed'],'optimizer_updates':0,'earned_exposure':0}
+    path=Path(args.out)/'oversize-capacity'/(canonical_json_sha256_hex(record)+'.json')
+    path.parent.mkdir(parents=True,exist_ok=True)
+    if not path.exists():write_json_durable(path,record)
+    if not report['passed']:raise ValueError('actual oversize graph failed live-model/QAT capacity qualification: '+str(path))
+    return binding(path)
