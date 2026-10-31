@@ -303,7 +303,7 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
                    'scripts/neuralese_data/render_native_turn_corpus.sh', str(part), '--corpus-id', corpus_id,
                    '--source', str(plain), '--workers', str(cpus), '--shards', '32',
                    '--full-sample', '1' if serving_entry else '0.05',
-                   *(['--serving-entry', serving_entry] if serving_entry else []),
+                   '--serving-entry', serving_entry or 'recorded',
                    '--protected', str(protected), '--reserved', str(reserved),
                    '--held-text', *[str(p) for p in held_text]]
             if decision_exclude_ids:
@@ -639,12 +639,20 @@ def main() -> None:
                    help='reviewed JSONL {id, reason_code?} whole-program exclusions; repeatable')
     p.add_argument('--students', help='render_native_turn_corpus.sh STUDENTS (student_tokenizers.py names, space separated); '
                    'default the wrapper\'s production pair, e.g. "lfm3" for an LFM3-1.7B render of the same parts')
-    p.add_argument('--serving-entry', choices=('collector', 'runtime', 'mix'),
+    p.add_argument('--serving-entry', choices=('collector', 'runtime', 'mix', 'recorded'),
                    help='render full and whole-trajectory views with the current ts-host serving prompt of this entry '
-                        'point for every program (render_native_turn_corpus.py --serving-entry)')
+                        'point for every program (render_native_turn_corpus.py --serving-entry). Default mix '
+                        '(2026-10-31 cutover); recorded = the recorded prompt; an in-flight pre-cutover parts render '
+                        '(existing parts plan, no explicit entry) keeps recorded')
     p.add_argument('--link', action='store_true',
                    help='with --register: create the REL_PATH symlink to OUT in the shared checkout')
     args = ap.parse_args()
+    if getattr(args, 'serving_entry', 'absent') is None:
+        in_flight = (Path(args.out) / 'parts.json').exists()
+        args.serving_entry = 'recorded' if in_flight else 'mix'
+        print(json.dumps({'serving_entry_default': args.serving_entry, 'in_flight_pre_cutover': in_flight}), flush=True)
+    if getattr(args, 'serving_entry', None) == 'recorded':
+        args.serving_entry = None
     receipt = render(args.source, args.out, args.corpus_id, args.unit_prefix or f'render-{args.corpus_id}'[:60],
                      args.cpus, args.budget_gb, args.docker_gb, compress_all=args.compress_all,
                      protected=args.protected, reserved=args.reserved, held_text=args.held_text,

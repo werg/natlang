@@ -20,7 +20,7 @@ from natlang_neuralese.data.native_graph_conversion import text_row_graph, whole
 from natlang_neuralese.data.text_corpus import (native_gold_document, native_gold_packet,
     native_gold_rendered_text, tokenizer_fingerprint)
 from natlang_neuralese.model.native_model import tokenizer_inventory
-from natlang_neuralese.serve.chat import (RequestError, bind_history_reasoning,
+from natlang_neuralese.serve.chat import (RequestError, bind_history_reasoning, check_xml_call,
     normalize_tool_call_arguments)
 from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter, numerical_runtime
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision
@@ -77,15 +77,25 @@ def prevalidate_session_tool_arguments(value, *, template_backbone=None):
                     raise RequestError('tool-arguments',
                         f'tool-call arguments at messages/{message_index}/tool_calls/{call_index} '
                         f'must decode to a mapping for the {template_backbone} tokenizer template')
+    if template_backbone == 'lfm3':  # LFM3 writes calls as <function=NAME>: the name must survive that markup
+        for message in normalized:
+            for call in message.get('tool_calls') or []:
+                function = call.get('function', call)
+                check_xml_call(function.get('name'), function.get('arguments') or {}, types=False)
     return normalized, conversions
+
+
+# Source rows a tokenizer template cannot render faithfully: non-mapping arguments (LFM templates) and call names the
+# LFM3 XML markup cannot carry (e.g. a leaked 'assistant<|channel|>analysis' name). Omitted with their reason.
+RENDER_PENDING_CODES = ('tool-arguments', 'tool-call-unrepresentable')
 
 
 def source_render_pending_omission(value, error):
     """Describe only a proven serving tool-argument parse failure for this source row."""
-    if not isinstance(error, RequestError) or error.code != 'tool-arguments':
+    if not isinstance(error, RequestError) or error.code not in RENDER_PENDING_CODES:
         raise error
     return {'id': value['trajectory']['id'], 'source_row': value['source_row'],
-        'reason': 'source-render-pending:tool-arguments',
+        'reason': 'source-render-pending:' + error.code,
         'pending_status': 'source-faithful-review-pending',
         'normalized_source_sha256': canonical_json_sha256_hex(value),
         'original_source_file': value['source_file'],
@@ -649,7 +659,7 @@ def _convert(args, prepared):
                 try:
                     prevalidate_session_tool_arguments(value, template_backbone=template_backbone)
                 except RequestError as error:
-                    if error.code == 'tool-arguments':
+                    if error.code in RENDER_PENDING_CODES:
                         raise ValueError('prior committed source prefix contains a newly render-pending row') from error
                     raise
             compatible_bindings[canonical_json_sha256_hex(parent_binding)] = previous_state_frontier
@@ -779,7 +789,8 @@ def _convert(args, prepared):
         raise ValueError(f'conversion did not reach the complete source frontier: {frontier}/{source_rows}')
     if sum(counts[key] for key in ('positive_sessions', 'source-reported-non-positive',
             'current-source-quality-or-pending-protection', 'current-decision-hold',
-            'source-session-without-assistant-target', 'source-render-pending:tool-arguments')) != export['complete_sessions']:
+            'source-session-without-assistant-target',
+            *('source-render-pending:' + code for code in RENDER_PENDING_CODES))) != export['complete_sessions']:
         raise ValueError('complete normalized source session accounting differs')
     if sha256_file_hex(source) != digest:
         raise ValueError('source changed during rendering')

@@ -2270,13 +2270,15 @@ def main(argv=None):
     p.add_argument('--renderings', nargs='+', choices=RENDERINGS, default=list(RENDERINGS),
                    help='renderings to produce (e.g. whole-trajectory alone for long agent trajectories, where one '
                         'document per decision repeats the context)')
-    p.add_argument('--serving-entry', choices=('collector', 'runtime', 'mix'),
-                   help='render every view from the current ts-host serving request of this entry point '
+    p.add_argument('--serving-entry', choices=('collector', 'runtime', 'mix', 'recorded'),
+                   help='default mix (2026-10-31 broad re-render cutover); recorded = the recorded prompt (the '
+                        'pre-cutover renderer). A resumed render whose work directory predates the cutover and passes '
+                        'no --serving-entry keeps recorded (its bound inputs). Render every view from the current ts-host serving request of this entry point '
                         '(data/serving_prompt.py) instead of the recorded prompt: full and whole-trajectory show its '
                         'system prompt and tool schemas, program-header its header with the schemas out of band; '
                         'collector = eval/RL/teacher collection, runtime = natlang run, mix = per record by '
                         'serving_prompt.ENTRY_SHARES')
-    p.add_argument('--full-sample', type=float, default=0.05,
+    p.add_argument('--full-sample', type=float, default=None,
                    help='fraction of programs (stratified by family) that also get the full rendering, the warm-up '
                         'share; 1.0 renders full for every program (the old behaviour)')
     p.add_argument('--render-shards', nargs='*', default=None,
@@ -2335,6 +2337,18 @@ def main(argv=None):
                 p.error(f'explicit piece table conflicts with registered source piece {name}')
             pieces[name] = text
     out = a.out_dir
+    if a.serving_entry is None:
+        # Default transition (2026-10-31): new renders use the serving prompt (mix); an in-flight pre-cutover render
+        # (existing work directory, no explicit entry) keeps its recorded-prompt binding.
+        in_flight = (out / 'work').is_dir() and any((out / 'work').iterdir())
+        a.serving_entry = 'recorded' if in_flight else 'mix'
+        print(json.dumps({'serving_entry_default': a.serving_entry, 'in_flight_pre_cutover': in_flight}), flush=True)
+    if a.serving_entry == 'recorded':
+        a.serving_entry = None
+    if a.full_sample is None:
+        # Serving renders feed the prompt-view mixture (build_prompt_view_mix.py), which needs every decision in both
+        # its program-header and full views; recorded renders keep the 5% warm-up full sample.
+        a.full_sample = 1.0 if a.serving_entry else 0.05
     with acquire_output_lease(out):
         if (out / 'receipt.json').exists():
             p.error(f'refusing to overwrite a finished render: {out}')

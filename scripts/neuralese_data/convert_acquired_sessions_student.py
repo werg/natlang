@@ -33,8 +33,11 @@ SOURCE_CLASS = 'source-curated-complete-acquired-agent-native-session-graphs'
 
 
 def exports(args):
+    """The exports the admitted LFM2.5 conversions actually read, each with that conversion's history-reasoning
+    profile (the d32 history-keep entries were converted with --history-reasoning-policy keep). An audit's complete
+    source accounting lists every export of the acquisition; only those with a converted receipt are bound here."""
     corpora = json.loads(REGISTRY.read_text())['corpora']
-    found = set()
+    policies, unresolved = {}, set()
     for entry in corpora:
         if entry.get('source_class') != SOURCE_CLASS or not entry.get('training_admission'):
             continue
@@ -42,15 +45,23 @@ def exports(args):
         if not audit:
             continue
         text = (ROOT / entry['path'] / audit).read_text()
-        found.update(re.findall(r'"(/[^"]*?/export\.json)"', text))
-        # Older audits bind the converted graph receipts, which name their export receipt.
         for receipt in set(re.findall(r'"(/[^"]*?/lfm25/receipt\.json)"', text)):
-            if Path(receipt).exists():
-                found.add(json.loads(Path(receipt).read_text())['export_receipt']['path'])
-    listed = sorted(p for p in found if Path(p).exists())
-    Path(args.out).write_text(json.dumps({'schema': 'natlang.acquired-session-exports/1', 'exports': listed,
-                                          'missing': sorted(found - set(listed))}, indent=1) + '\n')
-    print(json.dumps({'exports': len(listed), 'missing': len(found) - len(listed)}))
+            if not Path(receipt).exists():
+                unresolved.add(receipt)
+                continue
+            value = json.loads(Path(receipt).read_text())
+            export = value['export_receipt']['path']
+            policy = (value.get('prepared_tokenizer') or {}).get('explicit_history_reasoning_policy')
+            # One conversion per export: an export converted under both profiles takes the explicit one.
+            if export not in policies or policy is not None:
+                policies[export] = policy
+    listed = sorted(p for p in policies if Path(p).exists())
+    Path(args.out).write_text(json.dumps({'schema': 'natlang.acquired-session-exports/2', 'exports': listed,
+                                          'history_reasoning_policy': {e: policies[e] for e in listed if policies[e]},
+                                          'missing': sorted(set(policies) - set(listed)),
+                                          'unresolved_receipts': sorted(unresolved)}, indent=1) + '\n')
+    print(json.dumps({'exports': len(listed), 'keep': sum(1 for e in listed if policies[e]),
+                      'missing': len(policies) - len(listed), 'unresolved_receipts': len(unresolved)}))
 
 
 def output_dir(root: Path, export: str) -> Path:
@@ -65,10 +76,16 @@ def convert(args):
     from scripts.neuralese_data import build_acquired_full_session_graphs as builder
     sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
     from student_tokenizers import resolve
-    listed = json.loads(Path(args.exports).read_text())['exports']
+    doc = json.loads(Path(args.exports).read_text())
+    listed, profiles = doc['exports'], doc.get('history_reasoning_policy') or {}
     mine = [e for i, e in enumerate(listed) if i % args.shards == args.shard]
     tokenizer = Path(resolve(args.student)['path'])
-    prepared = builder.prepare_tokenizer(tokenizer)
+    prepared_by = {}
+
+    def prepared_for(policy):
+        if policy not in prepared_by:
+            prepared_by[policy] = builder.prepare_tokenizer(tokenizer, history_reasoning_policy=policy)
+        return prepared_by[policy]
     # The protection projection is the same for every export: verify and load it once per process (the converter
     # reloads it per call; 14k small exports would spend hours re-hashing it). The cached value is never mutated.
     loaded = builder.current_protection(Path(args.protection))
@@ -82,15 +99,20 @@ def convert(args):
     done = skipped = 0
     for export in mine:
         out = output_dir(Path(args.out_root), export)
+        policy = profiles.get(export)
         if (out / 'receipt.json').exists():
+            done_policy = (json.loads((out / 'receipt.json').read_text()).get('prepared_tokenizer') or {}).get(
+                'explicit_history_reasoning_policy')
+            if done_policy != policy:
+                raise ValueError(f'{out} was converted with history policy {done_policy}, export needs {policy}')
             skipped += 1
             continue
         argv = ['--export-receipt', export, '--base-tokenizer', str(tokenizer), '--protection', args.protection,
-                '--output', str(out)]
+                '--output', str(out), *(['--history-reasoning-policy', policy] if policy else [])]
         for hold in holds:
             argv += ['--decision-hold', str(hold)]
         out.parent.mkdir(parents=True, exist_ok=True)
-        builder.main(argv, prepared=prepared)
+        builder.main(argv, prepared=prepared_for(policy))
         done += 1
         print(json.dumps({'converted': export, 'out': str(out)}), flush=True)
     print(json.dumps({'shard': args.shard, 'converted': done, 'skipped_complete': skipped}))

@@ -14,3 +14,13 @@ def test_cohort_leaves_map_to_logical_families():
     assert family_of(Path('c/t2-scope-11.jsonl.zst')) == 'natlang'
     with pytest.raises(ValueError):
         family_of(Path('elsewhere/native-graphs.jsonl.zst'))
+
+
+def test_capped_scales_keep_mean_one_and_true_cap():
+    from build_logical_family_objective import capped_scales
+    mass = {'native-communication': 1.0, 'natlang': 99.0}
+    scales, capped = capped_scales({'native-communication': 0.4, 'natlang': 0.6}, mass, 8)
+    assert capped == ['native-communication'] and scales['native-communication'] == 8
+    assert abs(sum(scales[f] * mass[f] for f in mass) - sum(mass.values())) < 1e-9
+    scales, capped = capped_scales({'a': 0.5, 'b': 0.5}, {'a': 40.0, 'b': 60.0}, 8)
+    assert not capped and abs(scales['a'] * 40 - 50) < 1e-9

@@ -58,6 +58,24 @@ def leaf_paths(source) -> list[Path]:
     return paths
 
 
+def capped_scales(targets: dict, mass: dict, cap: float) -> tuple[dict, list]:
+    """Declared scales giving each family its target share of the total own-output mass M, with ``cap`` a true cap: a
+    family whose target needs a scale above the cap gets the cap (and less than its target share), and the remaining
+    share goes to the other families in proportion to their targets; total scaled mass stays M (mean one)."""
+    total = sum(mass.values())
+    capped = {}
+    while True:
+        free = {f: t for f, t in targets.items() if f not in capped}
+        share_left = 1 - sum(capped[f] * mass[f] / total for f in capped)
+        norm = sum(free.values())
+        scales = {f: free[f] / norm * share_left * total / mass[f] for f in free}
+        over = [f for f in scales if scales[f] > cap]
+        if not over:
+            return {**scales, **capped}, sorted(capped)
+        for f in over:
+            capped[f] = cap
+
+
 def bind(path: Path) -> dict:
     return {'path': str(path), 'sha256': sha256_file_hex(path)}
 
@@ -118,7 +136,9 @@ def main():
     census_policy = json.loads(json.dumps(ce))
     census_policy['objective'].pop('family_balance', None)
     (out / 'census-policy.json').write_text(json.dumps(census_policy, indent=1, sort_keys=True) + '\n')
-    leaves = json.loads(manifest_path.read_text())['sources']
+    # Leaf paths are relative to the manifest's directory unless absolute.
+    leaves = [{**s, 'path': str(manifest_path.parent / s['path'])}
+              for s in json.loads(manifest_path.read_text())['sources']]
     if any(s.get('kind') != 'native-graphs' for s in leaves):
         raise ValueError('census reads flat native-graph manifests only')
     results = {}
@@ -140,10 +160,7 @@ def main():
         raise ValueError(f'families without targets: {extra}')
     # A declared family absent from this manifest gets no mass; the remaining targets are renormalized.
     present = {f: t for f, t in targets.items() if mass.get(f)}
-    norm = sum(present.values())
-    scales = {f: present[f] / norm * total / mass[f] for f in present}
-    if max(scales.values()) > cap:
-        raise ValueError(f'logical family scale above the true cap {cap}: {scales}')
+    scales, capped = capped_scales(present, {f: mass[f] for f in present}, cap)
     census = {'schema': 'natlang.own-output-mass-census/1', 'manifest': bind(manifest_path), 'rows': len(rows),
               'policy': bind(out / 'census-policy.json'), 'objective_without_family_scales': True,
               'families': {f: {'rows': count[f], 'zero_mass_rows': zero[f], 'unscaled_mass': mass[f],
@@ -157,12 +174,13 @@ def main():
     (out / 'ce-policy.json').write_text(json.dumps(policy, indent=1, sort_keys=True) + '\n')
     receipt = {'schema': 'natlang.logical-family-objective/1', 'train_sources': bind(manifest_path),
                'base_ce_policy': bind(Path(args.ce_policy)), 'targets': bind(Path(args.targets)),
-               'target_shares': targets, 'absent_families': missing, 'map': bind(out / 'families.json'),
+               'target_shares': targets, 'absent_families': missing, 'capped_families': capped, 'max_scale': cap, 'map': bind(out / 'families.json'),
                'census': bind(out / 'census.json'), 'ce_policy': bind(out / 'ce-policy.json'), 'scales': scales,
                'effective_shares': {f: scales[f] * mass[f] / total for f in scales},
                'rule': [[p.pattern, f] for p, f in FAMILY_RULES]}
     (out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
-    print(json.dumps({k: receipt[k] for k in ('scales', 'effective_shares', 'absent_families')}, indent=1))
+    print(json.dumps({k: receipt[k] for k in ('scales', 'effective_shares', 'absent_families', 'capped_families')},
+                     indent=1))
 
 
 if __name__ == '__main__':
