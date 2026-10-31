@@ -11,4 +11,6 @@ export { executorIdentityForChoice } from '../model/config.js';
 export { loadModelConfiguration, createResolvedModelSession, localModelPrerequisites, wrapDriver,
   // A session as the driver `evaluate`/`optimize` take: its turns, decision scorer, context window and native runtime.
   sessionDriver } from '../model/index.js';
-export { createNatlangRuntime, nodePlatform } from '../runtime/node.js';
+// The runtime a suite's compiled program imports from the package root: `nl`, `iterateOn`, the lowering support
+// (`__natlang`), `createNatlangRuntime`, the Node platform.
+export * from '../runtime/node.js';
