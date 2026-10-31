@@ -86,6 +86,10 @@ def launch_on_entitled(run, name, auto, rounds=None):
     """Seed if needed, then launch on the entitled account with the fewest of our running lineages."""
     if rl_cloud.newest_verified(run, name) is None:
         rl_cloud.seed(run, name)
+    head = subprocess.run(['git', '-C', str(rl_cloud.REPO), 'rev-parse', 'HEAD'], capture_output=True, text=True,
+                          check=True).stdout.strip()
+    if rl_cloud.read_json(rl_cloud.hub(run) / 'run-state.json', {}).get('code_sha') != head:
+        rl_cloud.bundle(run)  # launches run the current main commit (fixes since the last bundle)
     state = rl_cloud.read_json(rl_cloud.hub(run) / 'run-state.json', {})
     busy = [v.get('account') for v in state.get('lineages', {}).values() if v.get('status') == 'running']
     entitled = sorted(auto['entitled'], key=lambda a: (busy.count(a), a))
