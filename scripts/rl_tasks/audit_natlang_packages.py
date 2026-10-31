@@ -9,9 +9,9 @@ reported as unknown. It never converts author labels into semantic coverage.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -21,8 +21,8 @@ WORD = re.compile(r"[a-z][a-z0-9]+")
 NL_SUFFIX = '.nl'
 
 
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha  # noqa: E402
 
 
 def _read_package(root: Path) -> tuple[dict[str, str], dict]:
