@@ -414,6 +414,8 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
     external_services, service_bindings = load_external_services(package_root, metadata)
     _validate_runtime_contracts(files, metadata, external_services)
     world_rows = _worlds(package_root, metadata)
+    controller = metadata.get('collector_controller')
+    controller_frontend_receipts = []
     world_services = bind_world_services(package_root, metadata, external_services, service_bindings)
     fixture_aliases = {alias for alias, binding in service_bindings.items() if 'fixtures_path' in binding}
     if fixture_aliases and (set(world_services) != {row['id'] for row in world_rows} or
@@ -423,6 +425,13 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
     package_revision = metadata['source_revision'] + (f'+services:{service_set_sha}' if service_bindings else '')
     cases = _make_cases(metadata['program_id'], package_revision, files, metadata, world_rows,
                         external_services, service_bindings, world_services)
+    if controller is not None:
+        from scripts.rl_tasks.application_controller_frontend import validate_controller_frontend
+        roots = sorted({row['operation'] for row in world_rows})
+        if not roots:
+            raise ValueError('collector_controller requires at least one reviewed invocation root')
+        for root in roots:
+            controller_frontend_receipts.append(validate_controller_frontend(files, root, controller))
     output.parent.mkdir(parents=True, exist_ok=True)
     exact_cases = [case for case in cases if case['semantics']['oracle'] == 'exact']
     judged_cases = [case for case in cases if isinstance(case['semantics']['oracle'], dict)]
@@ -445,6 +454,8 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
         'package_path': str(package_root),
         'package_sha256': _sha(json.dumps({'files': files, 'services': external_services}, sort_keys=True, ensure_ascii=False).encode()),
         'external_services': service_bindings,
+        **({'controller_frontend_preflight': controller_frontend_receipts}
+           if controller_frontend_receipts else {}),
         'runtime_dependency_trees': runtime_dependency_trees,
         'world_count': len(world_rows), 'case_count': len(cases),
         'exact_case_count': len(exact_cases), 'judged_case_count': len(judged_cases),
