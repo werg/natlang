@@ -1514,7 +1514,12 @@ class _TorchStoredLinear(torch.autograd.Function):
     def backward(ctx, grad):
         x, stored = ctx.saved_tensors
         flat_grad, flat_x = grad.reshape(-1, grad.shape[-1]), x.reshape(-1, x.shape[-1])
-        dx = (grad @ stored) if ctx.needs_input_grad[0] else None
+        if (ctx.needs_input_grad[0] and grad.is_cuda and grad.dtype == stored.dtype == torch.bfloat16
+                and not torch.is_grad_enabled()):
+            from ..maple.fused_moe import invariant_input_gradient
+            dx = invariant_input_gradient(grad, stored)
+        else:
+            dx = (grad @ stored) if ctx.needs_input_grad[0] else None
         dw = None
         if ctx.needs_input_grad[1]:
             def contribution(section):

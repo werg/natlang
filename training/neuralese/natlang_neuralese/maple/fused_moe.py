@@ -704,6 +704,16 @@ def _invariant_linear_forward(x, w, precision):
                      inference_output=torch.is_inference_mode_enabled())
 
 
+def invariant_input_gradient(gradient, weight, *, precision='ieee'):
+    """Use the same fixed-row CUDA arithmetic for every linear input adjoint."""
+    shape = gradient.shape
+    flat = gradient.reshape(-1, shape[-1]).contiguous()
+    rows = flat.shape[0]
+    plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK)
+    return _dense_mm(flat, None, weight[None], plan, transpose=True,
+                     precision=precision, single_expert=True).reshape(*shape[:-1], weight.shape[-1])
+
+
 class _InvariantLinear(torch.autograd.Function):
     """x @ wᵀ with qualified row tiles and unchanged per-row reductions."""
 
@@ -738,8 +748,7 @@ class _InvariantLinear(torch.autograd.Function):
         # flat/cached forward acquire branch-dependent backward discontinuities.
         backward_w = w.to(torch.bfloat16).float() if w.dtype == torch.float32 and ctx.precision == 'bf16' else w
         backward_precision = 'ieee' if ctx.precision == 'bf16' else ctx.precision
-        dx = _dense_mm(grad.contiguous(), None, backward_w[None], plan, transpose=True,
-            precision=backward_precision, single_expert=True) if ctx.needs_input_grad[0] else None
+        dx = invariant_input_gradient(grad, backward_w, precision=backward_precision) if ctx.needs_input_grad[0] else None
         dw = None
         if ctx.needs_input_grad[1]:
             from ..model.native_gradient_partitions import token_slices

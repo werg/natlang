@@ -616,3 +616,21 @@ def test_first_order_checkpoint_context_crosses_worker_and_refuses_expired_scope
         scope.finish()
     with pytest.raises(RuntimeError,match='outlived'):
         callback()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
+@pytest.mark.parametrize('parts', [(18,14), (129,14), (129,150), (255,257)])
+def test_stored_and_invariant_cuda_input_adjoints_match_across_partitions(parts):
+    from natlang_neuralese.model.native_weight_carrier import stored_linear
+    from natlang_neuralese.maple.fused_moe import invariant_linear
+    torch.manual_seed(914)
+    a,b=parts
+    weight=torch.randn(512,512,device='cuda',dtype=torch.bfloat16)
+    inputs=torch.randn(a+b,512,device='cuda',dtype=torch.bfloat16,requires_grad=True)
+    upstream=torch.randn(a+b,512,device='cuda',dtype=torch.bfloat16)
+    flat=invariant_linear(inputs,weight,forward_storage_dtype=torch.bfloat16)
+    cached=torch.cat([stored_linear(part,weight,storage_dtype=torch.bfloat16)
+                      for part in (inputs[:a],inputs[a:])])
+    actual=torch.autograd.grad(flat,inputs,upstream,retain_graph=True)[0]
+    reference=torch.autograd.grad(cached,inputs,upstream)[0]
+    assert torch.equal(actual,reference)
