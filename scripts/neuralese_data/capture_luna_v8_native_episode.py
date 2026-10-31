@@ -7,6 +7,7 @@ source audit; three non-admitted decisions are retained with zero target loss.
 from __future__ import annotations
 
 import argparse
+import os
 import json
 from pathlib import Path
 import sys
@@ -136,16 +137,59 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         raise ValueError("native episode output directory must be empty to preserve prior captures")
+    partial_path = output / "partial-turns.jsonl"
+    # Create exclusively: a failed capture is evidence and must never be resumed
+    # or overwritten in place.
+    with partial_path.open("xb") as stream:
+        stream.flush()
+        os.fsync(stream.fileno())
+    _fsync_dir(output)
+
+    def append_partial(row):
+        payload = canonical_json_bytes(row) + b"\n"
+        with partial_path.open("ab") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+
+    def persist_encoder_states(captured, index):
+        from natlang_neuralese.serve.store import encode_native_state, native_state_id
+        state_dir = output / "encoder-states"
+        state_files = []
+        for ordinal, (binding, block) in enumerate(zip(
+                captured.get("encoder_bindings") or [], captured.get("encoder_states") or [])):
+            state_id = native_state_id(block)
+            if state_id != binding.get("native_block_id"):
+                raise ValueError("captured encoder state ID differs from its authenticated binding")
+            state_dir.mkdir(exist_ok=True)
+            state_path = state_dir / f"{state_id}.safetensors"
+            encoded = encode_native_state(block)
+            if state_path.exists():
+                if state_path.read_bytes() != encoded:
+                    raise ValueError("native state content-address collision in partial capture")
+            else:
+                with state_path.open("xb") as stream:
+                    stream.write(encoded)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                _fsync_dir(state_dir)
+            state_files.append({"ordinal": ordinal, "native_block_id": state_id,
+                "path": str(state_path.relative_to(output)), "sha256": sha256_hex(encoded),
+                "bytes": len(encoded)})
+        return state_files
+
     engine = (_HttpNativeEngine(args.endpoint) if args.endpoint else
         load_native_engine(args.checkpoint, base=args.base, device=args.device, dtype=dtype))
     if args.endpoint and engine.native_identity.get("checkpoint_sha256") is None:
         raise ValueError("native endpoint did not report a checkpoint identity")
     engine.start()
+    active_index = None
     try:
         encoder_cache = {}
         captures = []
         for row in rows:
             index = row["source_ref"]["provider_input_context"]["source_trajectory_index"]
+            active_index = index
             if index != len(captures):
                 raise ValueError("v8 episode decisions are not in exact contiguous source-turn order")
             started = time.monotonic()
@@ -166,6 +210,20 @@ def main():
             captures.append(captured)
             after = engine.metrics() if args.endpoint else {}
             usage = captured["response"].get("usage") or {}
+            state_files = persist_encoder_states(captured, index)
+            append_partial({"event": "turn_complete", "audit_sha256": sha256_hex(audit_path.read_bytes()),
+                "source_index": index, "record_id": row["id"],
+                "source_receipt": captured["source_receipt"],
+                "native_identity": captured["native_identity"],
+                "response": captured["response"], "capture": captured["capture"],
+                "source_opening": captured["source_opening"],
+                "rewritten_messages": captured["rewritten_messages"],
+                "loaded": captured["loaded"], "encoder_bindings": captured["encoder_bindings"],
+                "encoder_occurrence_counts": captured["encoder_occurrence_counts"],
+                "encoder_state_files": state_files,
+                "elapsed_seconds": round(time.monotonic() - started, 3),
+                "prompt_tokens": usage.get("prompt_tokens"), "completion_tokens": usage.get("completion_tokens"),
+                "metrics_before": before, "metrics_after": after})
             print(json.dumps({"event": "native_turn_complete", "source_index": index,
                 "record_id": row["id"], "elapsed_seconds": round(time.monotonic() - started, 3),
                 "prompt_tokens": usage.get("prompt_tokens"),
@@ -175,6 +233,7 @@ def main():
                 "native_imports": sum(segment.get("kind") == "native_state"
                     for segment in captured["capture"].get("prompt") or []),
                 "metrics_before": before, "metrics_after": after}), flush=True)
+            active_index = None
         graph, example = native_graph_from_luna_episode(captures)
         graph_bytes = canonical_json_bytes(graph) + b"\n"
         graph_path = output / "native-episode.jsonl"
@@ -198,6 +257,9 @@ def main():
             "tokenizer_fingerprint": engine.native_identity.get("tokenizer_fingerprint"),
             "serving_config": getattr(engine, "serving_config", None),
             "serving_config_identity_sha256": getattr(engine, "serving_config_identity_sha256", None),
+            "partial_turns_path": str(partial_path),
+            "partial_turns_sha256": sha256_hex(partial_path.read_bytes()),
+            "partial_turn_count": len(captures), "partial_turns_complete": True,
             "graph_path": str(graph_path), "graph_sha256": sha256_hex(graph_bytes),
             "native_graph_invocations": len(example.plan.invocations),
             "source_groups": graph["source_groups"], "oracle_level": "judged",
@@ -205,8 +267,25 @@ def main():
         receipt_path = output / "receipt.json"
         receipt_path.write_bytes(canonical_json_bytes(receipt) + b"\n")
         print(json.dumps({"receipt": str(receipt_path), **receipt}, indent=2))
+    except Exception as error:
+        try:
+            after_error = engine.metrics() if args.endpoint else {}
+        except Exception as metrics_error:
+            after_error = {"metrics_error": str(metrics_error)}
+        append_partial({"event": "error", "audit_sha256": sha256_hex(audit_path.read_bytes()),
+            "source_index": active_index, "error": str(error),
+            "metrics_after": after_error})
+        raise
     finally:
         engine.stop()
+
+
+def _fsync_dir(path):
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 if __name__ == "__main__":
