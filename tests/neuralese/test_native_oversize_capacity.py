@@ -9,11 +9,14 @@ from natlang_neuralese.train.native_packed_capacity import _rows_digest, oversiz
 def test_oversize_baseline_authenticates_exact_prefix(tmp_path):
     sourcefile=tmp_path/'old.json';sourcefile.write_text('{}')
     entries=[{'id':'old','binding':'a'*64,'forward_tokens':7},{'id':'new','binding':'b'*64,'forward_tokens':50}]
-    geometry={'source':{'path':str(sourcefile),'sha256':sha256_file_hex(sourcefile)},'kv_slots':[9],
+    geometry={'identity':{'parser':'pinned'},'source':{'path':str(sourcefile),'sha256':sha256_file_hex(sourcefile)},'kv_slots':[9],
               'rows_sha256':_rows_digest(entries[:1])}
     p=tmp_path/'geometry.json';p.write_text(json.dumps(geometry))
     result=oversize_baseline(SimpleNamespace(entries=entries),{'path':str(p),'sha256':sha256_file_hex(p)},fallback_tokens=3)
     assert result['forward_tokens']==7 and result['kv_slots']==9 and result['prefix_rows']==1
+    changed=tmp_path/'changed.json';changed.write_text(json.dumps({'identity':{'parser':'different'}}))
+    with pytest.raises(ValueError,match='parser or tokenizer'):
+        oversize_baseline(SimpleNamespace(entries=entries),{'path':str(p),'sha256':sha256_file_hex(p)},fallback_tokens=3,current_geometry={'path':str(changed),'sha256':sha256_file_hex(changed)})
     entries[0]['binding']='c'*64
     with pytest.raises(ValueError,match='exact source prefix'):
         oversize_baseline(SimpleNamespace(entries=entries),{'path':str(p),'sha256':sha256_file_hex(p)},fallback_tokens=3)

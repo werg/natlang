@@ -3276,7 +3276,8 @@ def _main(argv=None, *, requested_refresh):
     from .native_packed_capacity import oversize_baseline
     prior_geometry = ((prior_oversize_baseline or {}).get('geometry')
         if prior_oversize_baseline else prior_packed_capacity.get('geometry'))
-    oversize_limits = oversize_baseline(train, prior_geometry, fallback_tokens=args.batch_tokens)
+    oversize_limits = oversize_baseline(train, prior_geometry, fallback_tokens=args.batch_tokens,
+        current_geometry=json.loads(args.sft_packed_geometry) if args.sft_packed_geometry else None)
     checkpoint_options['oversize_capacity_baseline'] = oversize_limits
     # A policy round samples the unquantized actor, while QAT is retained for
     # the continuing SFT lineage. Carry the pending refresh across resumes.

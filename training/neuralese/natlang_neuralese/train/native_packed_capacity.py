@@ -203,13 +203,17 @@ def qualify_pending(model, optimizer, train, pending_batches, args, *, backend, 
     return {'proof':binding(path),'geometry':geometry,'model_boundary':record['model_boundary']}
 
 
-def oversize_baseline(source, prior_geometry, *, fallback_tokens):
+def oversize_baseline(source, prior_geometry, *, fallback_tokens, current_geometry=None):
     """Derive a source-prefix-bound boundary for newly larger complete graphs."""
     from .native_resident import bound
     if prior_geometry is None:
         return {'forward_tokens':int(fallback_tokens),'kv_slots':int(fallback_tokens),
                 'basis':'configured-batch-token-fallback'}
     saved=json.loads(bound(prior_geometry).read_text())
+    if current_geometry is not None:
+        current=json.loads(bound(current_geometry).read_text())
+        if saved.get('identity') != current.get('identity'):
+            raise ValueError('oversize baseline parser or tokenizer identity changed')
     values=saved.get('kv_slots')
     if (not isinstance(values,list) or not values or len(values)>len(source.entries)
             or any(type(value) is not int or value<1 for value in values)
