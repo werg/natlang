@@ -3,6 +3,7 @@ import random
 import sqlite3
 
 from scripts.rl_tasks.sources import reading, sql
+from scripts.rl_tasks.build_verified_successors import _guided_rows, _sql_rows
 
 
 def test_sql_profile_distinguishes_simple_rows_from_compositional_queries():
@@ -112,3 +113,43 @@ def test_clutrr_guided_successor_keeps_only_multi_hop_and_preserves_world_group(
     assert case['curriculum']['external']['framing'] == 'neuralese-helper'
     assert 'await nl(sentence)' in case['semantics']['files']['find_relation.nl']
     assert 'clutrr:long' in case['source_groups']
+
+
+def test_verified_successor_transform_keeps_groups_and_filters_sql_to_real_composition(tmp_path):
+    base = {
+        'version': 1, 'id': 'old', 'kind': 'natlang.program/2', 'family': 'ext_spider_sql_qa',
+        'source': 'external-rl:spider', 'split': 'train', 'source_ids': ['spider:q1'],
+        'source_groups': ['sql-db:spider:db-a', 'upstream-family:a'],
+        'source_revisions': ['spider@fixture'], 'curriculum': {
+            'family': 'ext_spider_sql_qa', 'shape': 'spider-plain-L2', 'variant': 'plain',
+            'rl': {'level': 2}, 'external': {'source': 'spider', 'gold_sql':
+                'SELECT a.id FROM a JOIN b ON a.id=b.id JOIN c ON b.id=c.id'}},
+        'semantics': {'inputs': {'question': 'Find related ids'}, 'expected': [[1]],
+            'root': 'answer_from_database.nl', 'files': {'answer_from_database.nl': '---\n---\nReturn rows.'},
+            'oracle': {'level': 'normalized', 'normalization': 'result-set'}}}
+    easy = json.loads(json.dumps(base))
+    easy['id'] = 'easy'
+    easy['curriculum']['external']['gold_sql'] = 'SELECT id FROM a'
+    path = tmp_path / 'spider.jsonl'
+    _write_jsonl(path, [easy, base])
+    [hard] = _sql_rows('spider', path, 4)
+    assert hard['source_groups'] == base['source_groups']
+    assert hard['source'] == 'external-rl:spider-hard'
+    assert hard['curriculum']['external']['sql_profile']['joins'] == 2
+
+
+def test_verified_guidance_variant_preserves_exact_world_and_answer(tmp_path):
+    row = {'id': 'babi:task3', 'source': 'external-rl:babi', 'split': 'train', 'source_ids': ['babi:q'],
+           'source_groups': ['babi:story-1'], 'source_revisions': ['babi@fixture'], 'family': 'ext_babi_task03',
+           'curriculum': {'family': 'ext_babi_task03', 'shape': 'babi-three-supporting-facts', 'rl': {'level': 2},
+               'external': {'source': 'babi', 'framing': 'plain'}},
+           'semantics': {'inputs': {'facts': ['1. Anna moved to garden.'], 'question': 'Where was Anna?'},
+               'expected': 'garden', 'root': 'answer_from_facts.nl', 'files': {'answer_from_facts.nl':
+                   '---\n---\nfacts is a numbered story, in order. Answer question from it, taking into account that later facts can change earlier ones. Return only the answer word or words (comma-separated when there are several).'}}}
+    path = tmp_path / 'babi.jsonl'
+    _write_jsonl(path, [row])
+    [guided] = _guided_rows('babi', path, 48)
+    assert guided['source_groups'] == row['source_groups']
+    assert guided['semantics']['inputs'] == row['semantics']['inputs']
+    assert guided['semantics']['expected'] == row['semantics']['expected']
+    assert 'await nl(facts, question)' in guided['semantics']['files']['answer_from_facts.nl']
