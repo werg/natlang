@@ -1011,6 +1011,71 @@ def test_unknown_producer_keeps_structured_tool_value_and_all_exact_reader_occur
         _replace_source_target_span(malformed['target'], bad_occurrence, bad_source, ROLE_MARKERS)
 
 
+def test_joint_unknown_result_occurrence_derives_only_exact_original_json_target(monkeypatch):
+    import copy
+    import hashlib
+    import json
+    from scripts.neuralese_data import build_native_semantic_pairs_e2e as pairs
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+
+    body = '{"source_id":"p1","evidence":[{"quote":"All accounts are enabled."}]}'
+    body_sha = hashlib.sha256(body.encode()).hexdigest()
+    value = json.loads(body)
+    write_name = 'result:structured'
+    writer = {'id': 'writer', 'target': {'role': 'assistant', 'content': '', 'tool_calls': [
+        {'id': 'call', 'type': 'function', 'function': {'name': 'return_result',
+         'arguments': json.dumps({'status': 'success', 'result': [{'value': value}]}, separators=(',', ':'))}}]},
+        'native_source_conversion': {'occurrences': [{'schema': 'natlang.native-source-occurrence/1',
+            'id': 'write-occ', 'role': 'producer', 'reference': write_name, 'path': ['target', 'tool_calls', '0',
+            'function', 'arguments<json>', 'result', '0', 'value'], 'body': body, 'body_sha256': body_sha,
+            'source_kind': 'Neuralese<unknown>'}]}}
+    reader = {'id': 'reader', 'messages': [{'role': 'user', 'content': [
+        {'type': 'read', 'name': write_name, 'source': body}]}],
+        'native_source_conversion': {'occurrences': [{'schema': 'natlang.native-source-occurrence/1',
+            'id': 'read-occ', 'role': 'consumer', 'reference': write_name, 'path': ['messages', '0', 'content', '0'],
+            'body': body, 'body_sha256': body_sha}]}}
+    monkeypatch.setattr(pairs, 'authenticated_context_writer_sources', lambda rows: ({}, []))
+    monkeypatch.setattr(pairs, 'authenticated_crisp_context_messages', lambda *args, **kwargs: None)
+    occurrence = pairs.source_occurrences(writer, reader, write_name, body, body_sha,
+        writer_occurrence_id='write-occ', reader_occurrence_id='read-occ')
+    derived = pairs.pair_derivations(writer, reader, {}, tokenizer=None, payload=body,
+        occurrence=occurrence, role_markers=ROLE_MARKERS, tokenizer_sha256='f' * 64,
+        source_records=[writer, reader])
+    span = derived['writer']['producer_span']
+    assert span == {'call_index': 0, 'argument_path': ['result', '0', 'value'], 'body': body,
+                    'payload_sha256': body_sha, 'value_type': 'unknown'}
+    assert derived['writer']['target'] == writer['target']
+
+    changed = copy.deepcopy(writer)
+    changed['target']['tool_calls'][0]['function']['arguments'] = json.dumps(
+        {'status': 'success', 'result': [{'value': {'source_id': 'wrong',
+            'evidence': [{'quote': 'All accounts are enabled.'}]}}]},
+        separators=(',', ':'))
+    bad_occurrence = pairs.source_occurrences(changed, reader, write_name, body, body_sha,
+        writer_occurrence_id='write-occ', reader_occurrence_id='read-occ')
+    with pytest.raises(ValueError, match='structured source producer differs'):
+        pairs.pair_derivations(changed, reader, {}, tokenizer=None, payload=body,
+            occurrence=bad_occurrence, role_markers=ROLE_MARKERS, tokenizer_sha256='f' * 64,
+            source_records=[changed, reader])
+
+    wrong_prefix = copy.deepcopy(writer)
+    wrong_prefix['native_source_conversion']['occurrences'][0]['path'] = [
+        'target', 'metadata', 'arguments<json>', 'value']
+    wrong_prefix_occurrence = pairs.source_occurrences(wrong_prefix, reader, write_name, body, body_sha,
+        writer_occurrence_id='write-occ', reader_occurrence_id='read-occ')
+    with pytest.raises(ValueError, match='structured source producer is not bound'):
+        pairs.pair_derivations(wrong_prefix, reader, {}, tokenizer=None, payload=body,
+            occurrence=wrong_prefix_occurrence, role_markers=ROLE_MARKERS, tokenizer_sha256='f' * 64,
+            source_records=[wrong_prefix, reader])
+
+    wrong_function = copy.deepcopy(writer)
+    wrong_function['target']['tool_calls'][0]['function']['name'] = 'eval'
+    with pytest.raises(ValueError, match='structured source producer is not bound'):
+        pairs.pair_derivations(wrong_function, reader, {}, tokenizer=None, payload=body,
+            occurrence=occurrence, role_markers=ROLE_MARKERS, tokenizer_sha256='f' * 64,
+            source_records=[wrong_function, reader])
+
+
 def test_inline_producer_span_preserves_escaped_eval_target_and_uses_raw_source_tokens():
     import hashlib
     import json

@@ -869,6 +869,36 @@ def pair_derivations(writer_record, reader_record, pieces, *, tokenizer, payload
             writer_target_span = {'call_index': int(call_index), 'argument_path': argument_path,
                 'body': payload, 'payload_sha256': occurrence['payload_sha256'],
                 'value_type': ('unknown' if source_descriptor.get('type') == 'Neuralese<unknown>' else 'string')}
+        elif writer_source_kind == 'Neuralese<unknown>':
+            # The authenticated source converter can bind a structured return
+            # value directly at its JSON pointer rather than leaving an
+            # explicit `$write` descriptor in the final assistant target. In
+            # that representation the pointer itself is the typed witness;
+            # admit it only when it resolves inside the exact return_result
+            # arguments and compact JSON is byte-for-byte the source payload.
+            json_index = next((index for index, part in enumerate(pointer_parts)
+                               if part.endswith('<json>')), None)
+            try:
+                call_index = pointer_parts[pointer_parts.index('tool_calls') + 1]
+                if (json_index != 4 or pointer_parts[:2] != ['target', 'tool_calls']
+                        or not call_index.isdigit() or pointer_parts[3] != 'function'
+                        or pointer_parts[4] != 'arguments<json>'
+                        or json_index + 1 >= len(pointer_parts)):
+                    raise ValueError
+                function = writer_record['target']['tool_calls'][int(call_index)]['function']
+                if function.get('name') != 'return_result':
+                    raise ValueError
+                arguments = json.loads(function['arguments'])
+                value = arguments
+                for part in pointer_parts[json_index + 1:]:
+                    value = value[int(part)] if isinstance(value, list) else value[part]
+            except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise ValueError('structured source producer is not bound inside the exact result target') from exc
+            exact_json = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+            if exact_json != payload or sha256_bytes(exact_json.encode()) != occurrence['payload_sha256']:
+                raise ValueError('structured source producer differs from its exact authenticated target value')
+            writer_target_span = {'call_index': int(call_index), 'argument_path': pointer_parts[json_index + 1:],
+                'body': payload, 'payload_sha256': occurrence['payload_sha256'], 'value_type': 'unknown'}
         elif (isinstance(source_descriptor, dict)
                 and source_descriptor.get('type') == 'Neuralese<string>'
                 and inline_path):
@@ -910,8 +940,10 @@ def pair_derivations(writer_record, reader_record, pieces, *, tokenizer, payload
             writer_target_span = inline_sidecar_span
     if writer_source_kind == 'assistant-text-return':
         writer_target = _assistant_text_target(writer_record, payload, role_markers)
-    elif inline_sidecar_span is not None:
+    elif inline_sidecar_span is not None or (writer_target_span and writer_target_span.get('value_type') == 'unknown'):
         # The sidecar describes source offsets; it is not the model's target.
+        # Likewise, an unknown-typed structured result is marked by the normal
+        # typed JSON target renderer; keep the original object-valued call.
         # The original assistant/tool call, including its complete eval code,
         # remains the supervised target.
         import copy

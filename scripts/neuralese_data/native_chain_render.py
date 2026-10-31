@@ -94,7 +94,7 @@ def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerpr
             seen_producers[key] = copy.deepcopy(descriptor)
             producer_entries[wid].append({'writer_occurrence_id': key[1], 'body': body,
                                           'span': copy.deepcopy(descriptor), 'edge_sha256': []})
-            if descriptor['value_type'] not in ('inline-string', 'assistant-text') and not plain_result:
+            if descriptor['value_type'] not in ('inline-string', 'assistant-text', 'unknown') and not plain_result:
                 targets[wid] = _replace_source_target_span(targets[wid], occurrence, body, ROLE_MARKERS)
         entry = next(x for x in producer_entries[wid] if x['writer_occurrence_id'] == key[1])
         entry['edge_sha256'].append(eid)

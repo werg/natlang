@@ -71,6 +71,27 @@ def edge_digest(edge):
     return hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
+def render_plan_arguments(args):
+    """Arguments that alter target/edge dedupe, excluding render-only continuation policy."""
+    return {key: str(sorted(value) if isinstance(value, (set, frozenset)) else value)
+            for key, value in sorted(vars(args).items())
+            if key not in ('workers', 'batch_chains', 'continuation_max_tokens')}
+
+
+def split_overcap_retry_rows(committed_bytes, attempted):
+    """Separate only exact over-cap omissions eligible for a recorded render continuation."""
+    rows = [json.loads(line) for line in committed_bytes.splitlines() if line]
+    retry = [row for row in rows if row.get('reason') == 'graph-over-token-cap'
+             and row.get('trajectory') not in attempted]
+    retry_ids = [row.get('trajectory') for row in retry]
+    if any(not isinstance(trajectory, str) or not trajectory for trajectory in retry_ids):
+        raise ValueError('over-cap omission lacks an exact trajectory identity')
+    retry_set = set(retry_ids)
+    retained = [row for row in rows if not (row.get('reason') == 'graph-over-token-cap'
+                and row.get('trajectory') in retry_set)]
+    return retained, retry_ids
+
+
 def decision_index(record_id):
     return int(record_id.rsplit(':', 1)[1])
 
@@ -439,6 +460,9 @@ def main():
     parser.add_argument('--fallback', choices=('program-header', 'none'), default='program-header')
     parser.add_argument('--max-tokens', type=int, default=64000,
                         help='raw node-token cap; identical prompt prefixes are shared physically in training')
+    parser.add_argument('--continuation-max-tokens', type=int,
+                        help='resume a committed build with this higher render cap; retries prior over-cap chains '
+                             'from the immutable all-chain dedupe plan before processing remaining chains')
     parser.add_argument('--reader-cap', type=int, default=64)
     parser.add_argument('--result-reader-cap', type=int, default=512,
                         help='reader cap per payload of computed child results (--computed-kinds)')
@@ -503,8 +527,11 @@ def main():
     from natlang_neuralese.data.serving_prompt import load_surface, surface_identity
     serving_entry = None if args.serving_entry == 'recorded' else args.serving_entry
     binding['serving_surface'] = surface_identity(load_surface()) if serving_entry else None
+    effective_max_tokens = args.continuation_max_tokens or args.max_tokens
+    if effective_max_tokens < args.max_tokens:
+        raise SystemExit('--continuation-max-tokens must not reduce the original graph cap')
     config = {'serving_entry': serving_entry, 'binding': binding, 'excluded_families': excluded,
-              'held_sources': held_sources, 'prompts': prompts, 'max_tokens': args.max_tokens, 'holds': holds,
+              'held_sources': held_sources, 'prompts': prompts, 'max_tokens': effective_max_tokens, 'holds': holds,
               'acquired_protection': protection, 'current_worlds': current_worlds,
               'current_quality_groups': current_quality_groups,
               'current_nonquality_groups': current_nonquality_groups,
@@ -554,8 +581,7 @@ def main():
             os.replace(tmp, args.cap_state)
         # Phase 2 runs in bounded batches committed to progress.json, so a kill resumes after the last batch.
         # Phase 1 is deterministic (other outputs' cap-state only), so the plans identity must match to resume.
-        plans_sha = canonical_json_sha256_hex({'binding': binding, 'args': {k: str(sorted(v) if isinstance(v, (set, frozenset)) else v)  # set order varies per process
-                                                        for k, v in sorted(vars(args).items()) if k not in ('workers', 'batch_chains')},
+        plans_sha = canonical_json_sha256_hex({'binding': binding, 'args': render_plan_arguments(args),
                                                'plans': [{'supervised': sorted(p['supervised']), 'edges': sorted(p['edges'])} for p in plans]})
         progress_path = args.out / 'progress.json'
         progress = json.loads(progress_path.read_text()) if progress_path.exists() else None
@@ -565,6 +591,39 @@ def main():
         if not progress:
             for stale in args.out.glob('*.jsonl.tmp'):
                 stale.unlink()
+        # A cap change is a render-policy continuation, not a new dedupe plan.
+        # Retry only already committed over-cap chains, preserving every other
+        # committed output and all original plan decisions. The continuation
+        # cursor is committed with output offsets after each bounded batch.
+        if progress and args.continuation_max_tokens and not progress.get('render_continuation'):
+            attempted = {trajectory for item in progress.get('render_continuation_history', [])
+                         for trajectory in item.get('retried_trajectories', [])}
+            omission_path = args.out / 'omissions.jsonl.tmp'
+            old_offset = progress['omissions']['offsets'].get('omissions', 0)
+            with omission_path.open('rb') as stream:
+                committed = stream.read(old_offset)
+            if len(committed) != old_offset:
+                raise ValueError('committed omission stream is shorter than its progress offset')
+            retained, retry_ids = split_overcap_retry_rows(committed, attempted)
+            if retry_ids:
+                tmp = omission_path.with_suffix('.retry.tmp')
+                with tmp.open('wb') as stream:
+                    for row in retained:
+                        stream.write(json.dumps(row, ensure_ascii=False, separators=(',', ':')).encode() + b'\n')
+                    stream.flush(); os.fsync(stream.fileno())
+                os.replace(tmp, omission_path)
+                retained_bytes = omission_path.stat().st_size
+                progress['omissions'] = {'offsets': {'omissions': retained_bytes},
+                                         'counts': {'omissions': len(retained)}}
+                progress['totals']['omitted:graph-over-token-cap'] = max(
+                    0, progress['totals'].get('omitted:graph-over-token-cap', 0) - len(retry_ids))
+                progress['render_continuation'] = {'schema': 'natlang.chain-render-continuation/1',
+                    'old_max_tokens': args.max_tokens, 'new_max_tokens': effective_max_tokens,
+                    'retried_trajectories': retry_ids, 'cursor': 0}
+                progress_path.with_suffix('.tmp').write_text(json.dumps(progress))
+                os.replace(progress_path.with_suffix('.tmp'), progress_path)
+            elif progress.get('render_continuation_history'):
+                progress['render_continuation'] = None
         writer = Writer(args.out, progress and progress['graphs'])
         omissions = Writer(args.out, progress and progress['omissions'])
         done = progress['done'] if progress else 0
@@ -574,6 +633,51 @@ def main():
                 families[family].update(counts)
             print(f'resuming after {done}/{len(units)} chains', flush=True)
         tasks = [(*unit, plan) for unit, plan in zip(units, plans)]
+        continuation = progress.get('render_continuation') if progress else None
+        if continuation:
+            retry_ids = continuation['retried_trajectories']
+            by_trajectory = {unit[0]['trajectory']: task for unit, task in zip(units, tasks)}
+            missing = [trajectory for trajectory in retry_ids if trajectory not in by_trajectory]
+            if missing:
+                raise ValueError('render continuation names trajectories absent from immutable source plan')
+            cursor = continuation['cursor']
+            while cursor < len(retry_ids):
+                batch_ids = retry_ids[cursor:cursor + args.batch_chains]
+                batch = [by_trajectory[trajectory] for trajectory in batch_ids]
+                for kind, split, value in pool.map(convert_unit, batch, chunksize=4):
+                    if kind == 'omission':
+                        totals['omitted:' + value['reason'].split(':')[0]] += 1
+                        omissions.write('omissions', value)
+                        continue
+                    name = f'{"graphs" if kind == "graph" else "ordinary"}-{split}'
+                    writer.write(name, value['graph'])
+                    totals[name] += 1
+                    totals[f'prompt:{value["prompt"]}'] += 1
+                    for key, number in value['stats'].items():
+                        totals[f'{name}:{key}'] += number
+                    families[value['family']][name] += 1
+                    families[value['family']][f'{name}:imports'] += value['stats']['imports']
+                cursor += len(batch)
+                continuation['cursor'] = cursor
+                state = {'plans_sha256': plans_sha, 'done': done, 'graphs': writer.commit(),
+                         'omissions': omissions.commit(), 'totals': dict(totals),
+                         'families': {k: dict(v) for k, v in families.items()},
+                         'render_continuation': continuation,
+                         'render_continuation_history': progress.get('render_continuation_history', [])}
+                progress_path.with_suffix('.tmp').write_text(json.dumps(state))
+                os.replace(progress_path.with_suffix('.tmp'), progress_path)
+                print(f'committed over-cap retry {cursor}/{len(retry_ids)}', flush=True)
+            history = list(progress.get('render_continuation_history', []))
+            history.append({'schema': continuation['schema'], 'old_max_tokens': continuation['old_max_tokens'],
+                'new_max_tokens': continuation['new_max_tokens'],
+                'retried_trajectories': continuation['retried_trajectories'],
+                'retried_count': len(continuation['retried_trajectories'])})
+            progress = {'plans_sha256': plans_sha, 'done': done, 'graphs': writer.commit(),
+                        'omissions': omissions.commit(), 'totals': dict(totals),
+                        'families': {k: dict(v) for k, v in families.items()},
+                        'render_continuation_history': history}
+            progress_path.with_suffix('.tmp').write_text(json.dumps(progress))
+            os.replace(progress_path.with_suffix('.tmp'), progress_path)
         while done < len(tasks):
             batch = tasks[done:done + args.batch_chains]
             for kind, split, value in pool.map(convert_unit, batch, chunksize=4):
@@ -591,7 +695,8 @@ def main():
                 families[value['family']][f'{name}:imports'] += value['stats']['imports']
             done += len(batch)
             state = {'plans_sha256': plans_sha, 'done': done, 'graphs': writer.commit(), 'omissions': omissions.commit(),
-                     'totals': dict(totals), 'families': {k: dict(v) for k, v in families.items()}}
+                     'totals': dict(totals), 'families': {k: dict(v) for k, v in families.items()},
+                     'render_continuation_history': (progress or {}).get('render_continuation_history', [])}
             progress_path.with_suffix('.tmp').write_text(json.dumps(state))
             os.replace(progress_path.with_suffix('.tmp'), progress_path)
             print(f'committed {done}/{len(tasks)} chains', flush=True)
@@ -600,7 +705,8 @@ def main():
     if any(sha256_file_hex(ROOT / path) != digest for path, digest in code.items()):
         raise ValueError('chain renderer code changed during this conversion')
     receipt = {'schema': 'natlang.chain-graphs/1', 'corpus_id': args.corpus_id, 'source_binding': binding,
-               'prompt_rendering': prompts, 'context_weight': 0.0, 'max_tokens': args.max_tokens,
+               'prompt_rendering': prompts, 'context_weight': 0.0, 'max_tokens': effective_max_tokens,
+               'render_continuation_history': (progress or {}).get('render_continuation_history', []),
                'reader_cap': args.reader_cap, 'result_reader_cap': args.result_reader_cap,
                'computed_kinds': sorted(args.computed_kinds), 'target_cap': args.target_cap, 'chains': len(units),
                'cap_state': {'path': str(args.cap_state) if args.cap_state else None, 'before': cap_state_before},
