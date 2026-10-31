@@ -21,6 +21,7 @@ const rows = fs.readFileSync(input, 'utf8').split('\n').filter(Boolean).map(JSON
 async function materializeCallSets(record) {
   const sets = record.curriculum?.external?.call_sets;
   if (!sets) return;
+  if (sets.mode === 'state') return materializeStates(record, sets);
   const api = externalModule(sets.service, record.semantics.services[sets.service], requireModule).exports;
   const receipts = async calls => { const out = []; for (const call of calls) out.push(await api[sets.names[call.name]](call.arguments ?? {})); return out; };
   record.semantics.expected = await receipts(sets.gold);
@@ -30,6 +31,22 @@ async function materializeCallSets(record) {
   for (const calls of sets.wrong) { const value = await receipts(calls); if (JSON.stringify([...value].sort()) !== goldKey) checks.wrong_answers.push(value); }
   checks.alias_answers = [];
   for (const calls of sets.alias) checks.alias_answers.push(await receipts(calls));
+}
+// Stateful services (tau-bench store): the answer is the service's final-state code after the gold actions run on a
+// fresh instance; wrong answers are the codes after the wrong action sets, each on its own fresh instance.
+async function materializeStates(record, sets) {
+  const finalState = async actions => {
+    const store = externalModule(sets.service, record.semantics.services[sets.service], requireModule).exports;
+    for (const action of actions) await store[action.name](action.kwargs ?? {});
+    return store[sets.finish]();
+  };
+  record.semantics.expected = await finalState(sets.gold);
+  const checks = record.curriculum.external.checks;
+  checks.wrong_answers = [];
+  for (const actions of sets.wrong) { const value = await finalState(actions); if (value !== record.semantics.expected) checks.wrong_answers.push(value); }
+  // Doing nothing is always a negative control: a gold whose writes all fail leaves the store unchanged and is dropped.
+  checks.wrong_answers.push(await finalState([]));
+  checks.alias_answers = [];
 }
 for (const record of rows) await materializeCallSets(record);
 const concurrency = Number(concurrencyArg || 8);
@@ -103,18 +120,31 @@ async function qualify(record) {
   result.ok = result.reference_ok && result.wrong_rejected;
   return result;
 }
+// Resumable: each result is appended to OUT_DIR/partial.jsonl under the input's SHA-256, so a preempted run (ledger
+// low priority) continues where it stopped instead of starting over.
 const results = new Array(rows.length);
-let next = 0, done = 0;
+fs.mkdirSync(out, { recursive: true });
+const inputSha = crypto.createHash('sha256').update(fs.readFileSync(input)).digest('hex');
+const partialPath = out + '/partial.jsonl';
+if (fs.existsSync(partialPath)) {
+  const lines = fs.readFileSync(partialPath, 'utf8').split('\n').filter(Boolean);
+  if (lines.length && JSON.parse(lines[0]).input_sha256 === inputSha)
+    for (const line of lines.slice(1)) { try { const { index, result } = JSON.parse(line); results[index] = result; } catch {} }
+  else fs.rmSync(partialPath);
+}
+if (!fs.existsSync(partialPath)) fs.writeFileSync(partialPath, JSON.stringify({ input_sha256: inputSha }) + '\n');
+const todo = rows.map((_, i) => i).filter(i => results[i] === undefined);
+let next = 0, done = rows.length - todo.length;
 async function worker() {
-  while (next < rows.length) {
-    const index = next++;
+  while (next < todo.length) {
+    const index = todo[next++];
     results[index] = await qualify(rows[index]);
+    fs.appendFileSync(partialPath, JSON.stringify({ index, result: results[index] }) + '\n');
     if (++done % 50 === 0) console.error(JSON.stringify({ done, of: rows.length }));
   }
 }
 await Promise.all(Array.from({ length: concurrency }, worker));
 const kept = rows.filter((_, i) => results[i].ok);
-fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(out + '/cases.jsonl', kept.map(r => JSON.stringify(r) + '\n').join(''));
 fs.writeFileSync(out + '/materialized-input.jsonl', rows.map(r => JSON.stringify(r) + '\n').join(''));
 const sha = p => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');

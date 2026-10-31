@@ -207,3 +207,194 @@ def tatqa(cap_train=1500, cap_eval=150, seed=20261031):
             if n >= cap:
                 break
     return out
+
+
+# --- v3 additions: ConvFinQA and MultiHiertt ------------------------------------------------------------------------
+
+def _finqa_page_splits():
+    """FinQA's own split of each report page; ConvFinQA reuses FinQA pages, so a page keeps FinQA's split unit
+    (`finqa-page:<filename>`) and split class."""
+    splits = {}
+    for split in ('train', 'dev', 'test'):
+        with open(f'{BASE}/finqa/{split}.jsonl') as handle:
+            for line in handle:
+                splits[json.loads(line)['filename']] = 'train' if split == 'train' else 'validation'
+    return splits
+
+
+CONVFINQA_INSTRUCTIONS = [
+    'question continues a conversation about a financial report excerpt (text and table). history holds the earlier '
+    'questions with their answers; question may refer to them ("that", "the change"). Compute the answer exactly in '
+    'eval and return it as a number.',
+    'Answer the next question in this conversation about report text and table. Earlier questions and the numbers '
+    'they were answered with are in history. Calculate in code and return the number.',
+]
+FIN_TOLERANCE = {'level': 'normalized', 'normalization': 'numeric-tolerance', 'tolerance': 5e-3,
+                 'percent_equivalent': True}
+
+
+def convfinqa(cap_train=1500, cap_eval=150, seed=20261031):
+    pages = _finqa_page_splits()
+    out = []
+    for split, cap in (('train', cap_train), ('dev', cap_eval * 2)):
+        rows = json.load(open(f'{BASE}/convfinqa/files/{split}_turn.json'))
+        random.Random(seed).shuffle(rows)
+        n = 0
+        for r in rows:
+            a = r['annotation']
+            turn = int(a['turn_ind'])
+            questions = list(a['dialogue_break'])
+            answers = __import__('ast').literal_eval(a['exe_ans_list']) if isinstance(a['exe_ans_list'], str) else a['exe_ans_list']
+            if turn < 1 or turn >= len(questions) or len(answers) != len(questions):
+                continue
+            value = answers[turn]
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                continue
+            upstream_split = pages.get(r['filename'])
+            if upstream_split is None:
+                continue  # a page FinQA does not list: no split unit to share
+            value = round(float(value), 6)
+            value = int(value) if value.is_integer() else value
+            unit = f'finqa-page:{r["filename"]}'
+            history = [{'question': q, 'answer': v} for q, v in zip(questions[:turn], answers[:turn])]
+            text = [s for s in r['pre_text'] + r['post_text'] if s.strip() not in ('', '.')]
+            if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in answers[:turn]):
+                continue  # a yes/no turn in the history: the history type holds numbers only
+            wrong = [w for w in [answers[turn - 1], value * 1.5 + 1] if round(float(w), 4) != round(float(value), 4)]
+            out.append(make_case(
+                source='convfinqa', family='report_conversation', shape=f'convfinqa-turn{min(turn, 4)}',
+                upstream='czyssrs/ConvFinQA', upstream_id=r['id'], upstream_split=upstream_split, unit=unit,
+                groups=[unit, f'convfinqa-dialogue:{r["id"].rsplit("_", 1)[0]}'], root_name='answer_next_question',
+                args={'question': 'string', 'history': '{ question: string; answer: number }[]', 'text': 'string[]',
+                      'table': 'string[][]'}, returns='number', instruction=pick(CONVFINQA_INSTRUCTIONS, r['id']),
+                inputs={'question': questions[turn], 'history': history, 'text': text, 'table': r['table_ori']},
+                expected=value, oracle=FIN_TOLERANCE, level=min(3, 1 + turn // 2), license_='MIT', domain='relational',
+                wrong=wrong, aliases=[float(value)], revision=''))
+            n += 1
+            if n >= cap:
+                break
+    return out
+
+
+def html_table_rows(html):
+    from html.parser import HTMLParser
+
+    class Rows(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.rows, self.row, self.cell, self.span = [], None, None, 1
+
+        def handle_starttag(self, tag, attrs):
+            if tag == 'tr':
+                self.row = []
+            elif tag in ('td', 'th'):
+                self.cell, self.span = [], int(dict(attrs).get('colspan') or 1)
+
+        def handle_endtag(self, tag):
+            if tag in ('td', 'th') and self.row is not None and self.cell is not None:
+                self.row.extend([' '.join(''.join(self.cell).split())] * self.span)
+                self.cell = None
+            elif tag == 'tr' and self.row is not None:
+                self.rows.append(self.row)
+                self.row = None
+
+        def handle_data(self, data):
+            if self.cell is not None:
+                self.cell.append(data)
+
+    parser = Rows()
+    parser.feed(html)
+    return parser.rows
+
+
+def _sentence_keys(sentences):
+    return {text_digest(' '.join(s.lower().split()))[:16] for s in sentences if len(s) > 60}
+
+
+MULTIHIERTT_INSTRUCTIONS = [
+    'Answer question from a financial report: paragraphs holds its text and tables its tables (each a list of rows). '
+    'The figures may sit in different tables. Compute arithmetic exactly in eval and return a number, or for a '
+    'question that asks which item or year, return its text as written in the report.',
+    'question is about a report with several hierarchical tables and paragraphs. Find the rows and columns it needs '
+    'across tables, calculate in code, and return the answer.',
+]
+MULTIHIERTT_NEURALESE = {
+    'helper': 'read_table', 'args': {'question': 'string', 'table': 'string[][]'}, 'returns': 'Neuralese<string>',
+    'instruction': 'Read table for the figures question needs and write a private note of the relevant rows, '
+                   'columns and values, or that the table has none of them.',
+    'root_note': 'read_table gives a private note on one table. You may read each table with it and combine the '
+                 'notes before computing the answer in eval.',
+}
+
+
+def multihiertt(cap_train=1500, cap_eval=150, seed=20261031):
+    """MultiHiertt (train and dev; test answers are withheld upstream). Report pages that share a long sentence with
+    any FinQA/ConvFinQA or TAT-QA page are dropped, so one report never sits on two splits across sources."""
+    import ast
+    seen = set()
+    for split in ('train', 'dev', 'test'):
+        with open(f'{BASE}/finqa/{split}.jsonl') as handle:
+            for line in handle:
+                r = json.loads(line)
+                seen |= _sentence_keys(r['pre_text'] + r['post_text'])
+    for path in ('train', 'dev', 'test_gold'):
+        with open(f'{BASE}/tatqa/{path}.jsonl') as handle:
+            for line in handle:
+                seen |= _sentence_keys(p['text'] for p in json.loads(line)['paragraphs'])
+    parse = lambda v: ast.literal_eval(v) if isinstance(v, str) else v
+    out, overlapped = [], 0
+    for split, cap in (('train', cap_train), ('dev', cap_eval * 2)):
+        n = 0
+        rows, rng = [], random.Random(seed)
+        with open(f'{BASE}/multihiertt/{split}.jsonl') as handle:  # streamed: seeded reservoir of 3x the cap
+            for count, line in enumerate(handle):
+                if len(rows) < cap * 3:
+                    rows.append(line)
+                elif (j := rng.randrange(count + 1)) < cap * 3:
+                    rows[j] = line
+        rng.shuffle(rows)
+        for line in rows:
+            r = json.loads(line)
+            qa, paragraphs = parse(r['qa']), [p for p in parse(r['paragraphs']) if p.strip()]
+            if _sentence_keys(paragraphs) & seen:
+                overlapped += 1
+                continue
+            tables = [html_table_rows(t) for t in parse(r['tables'])]
+            if len(json.dumps(tables)) + len(json.dumps(paragraphs)) > 60000:
+                continue
+            answer = qa['answer']
+            if qa['question_type'] == 'arithmetic':
+                value = round(float(answer), 6)
+                value = int(value) if value.is_integer() else value
+                returns, expected, oracle = 'number', value, FIN_TOLERANCE
+                wrong, aliases = [value * 1.5 + 1, -value - 1], [float(value)]
+            else:
+                text = str(answer).strip()
+                number = _plain_number(text)
+                if number is not None:
+                    returns, expected = 'number | string', number
+                    oracle = {'level': 'normalized', 'normalization': 'numeric-tolerance', 'tolerance': 1e-6}
+                    wrong, aliases = [number + 1], [text]
+                elif 0 < len(text.split()) <= 8:
+                    returns, expected = 'string', text
+                    oracle = {'level': 'span', 'normalization': 'qa', 'threshold': 0.8}
+                    wrong, aliases = ['none', paragraphs[0][:60]], [text.lower()]
+                else:
+                    continue
+            unit = f'multihiertt:{r["uid"]}'
+            out.append(make_case(
+                source='multihiertt', family=f'multi_table_{qa["question_type"]}',
+                shape=f'multihiertt-{qa["question_type"]}-{min(len(tables), 4)}tables', upstream='psunlpgroup/MultiHiertt',
+                upstream_id=r['uid'], upstream_split='train' if split == 'train' else 'validation', unit=unit,
+                groups=[unit], root_name='answer_from_report',
+                args={'question': 'string', 'paragraphs': 'string[]', 'tables': 'string[][][]'}, returns=returns,
+                instruction=pick(MULTIHIERTT_INSTRUCTIONS, r['uid']),
+                inputs={'question': qa['question'], 'paragraphs': paragraphs, 'tables': tables}, expected=expected,
+                oracle=oracle, level=2 + (len(tables) > 2), license_='MIT', domain='relational', wrong=wrong,
+                aliases=aliases, revision='', neuralese_room='per-table notes fanned in to the computation',
+                neuralese=MULTIHIERTT_NEURALESE))
+            n += 1
+            if n >= cap:
+                break
+    print(json.dumps({'multihiertt_dropped_shared_report_sentences': overlapped}))
+    return out

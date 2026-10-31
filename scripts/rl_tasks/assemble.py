@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Assemble the broad external RL task source from per-source verified cases (plans/neuralese/BROAD_RL_TASKS_20261031.md).
 
-  assemble.py --build BUILD_DIR --out runs/natlang-rl-broad-external-20261031 [--legacy-per-family 30]
+  assemble.py --build BUILD_DIR [--build LATER_BUILD_DIR ...] --out runs/<source id> [--assets DIR] [--legacy-per-family 30]
+
+A later --build directory's verified source replaces an earlier one of the same name (re-verification under a newer
+runtime, or a rebuilt source).
 
 Train rows: every source's verified train cases (reference accepted, all negative controls rejected), minus any row
 related to a protected world (ProtectedWorlds over training/protected-worlds.json) or to this source's own held dev /
@@ -118,7 +121,10 @@ def diversity(rows):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--build', required=True, type=Path)
+    ap.add_argument('--build', required=True, type=Path, action='append',
+                    help='build directory of <source>/verified/; repeatable, later directories win per source')
+    ap.add_argument('--assets', type=Path, default=None,
+                    help='asset directory copied to OUT/assets (default: the first build directory\'s ../assets)')
     ap.add_argument('--out', required=True, type=Path)
     ap.add_argument('--legacy-per-family', type=int, default=30)
     ap.add_argument('--train-cap', type=int, default=1500)
@@ -144,8 +150,11 @@ def main():
     (out / 'held').mkdir(parents=True)
     (out / 'verification').mkdir()
     train, held, per_source = collections.defaultdict(list), {'dev': [], 'confirmation': []}, {}
-    for verified in sorted(a.build.glob('*/verified/verification.json')):
-        source = verified.parent.parent.name
+    latest = {}
+    for build in a.build:
+        for verified in sorted(build.glob('*/verified/verification.json')):
+            latest[verified.parent.parent.name] = verified
+    for source, verified in sorted(latest.items()):
         if source in excluded:
             continue
         report = json.loads(verified.read_text())
@@ -191,8 +200,9 @@ def main():
     write(out / 'cases.jsonl', rows)
     for split, items in held.items():
         write(out / 'held' / f'{split}.jsonl', items)
-    if (a.build.parent / 'assets').exists():
-        shutil.copytree(a.build.parent / 'assets', out / 'assets')
+    assets = a.assets or a.build[0].parent / 'assets'
+    if assets.exists():
+        shutil.copytree(assets, out / 'assets')
     div = diversity(rows)
     div['held'] = {split: diversity(items)['total'] for split, items in held.items()}
     (out / 'diversity.json').write_text(json.dumps(div, indent=1) + '\n')
@@ -231,8 +241,11 @@ def main():
                'id_exclusions': [{'path': str(path), 'sha256': sha_file(path),
                                   'reason': json.loads(path.read_text()).get('reason', 'held-set-union-group'),
                                   'rows': len(json.loads(path.read_text())['conflicts'])} for path in a.exclude_ids],
-               'assets_note': 'SQL databases and DataBench tables referenced by SHA-256 from service sources; set '
-                              'NATLANG_RL_TASK_ASSETS to another copy of assets/ when this directory moves.'}
+               'builds': [str(build) for build in a.build],
+               'assets_note': 'Service sources read assets by SHA-256: v2 rows (SQL databases, DataBench tables) from '
+                              'runs/natlang-rl-broad-external-20261031/assets (override NATLANG_RL_TASK_ASSETS); rows '
+                              'added in v3 (tau-bench store databases) from this source\'s assets/ (override '
+                              'NATLANG_RL_TASK_ASSETS_V3) when it holds any.'}
     (out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
     print(json.dumps({'train': len(rows), 'held': {k: len(v) for k, v in held.items()}, 'dropped': dict(dropped),
                       'total': div['total']}, indent=1))

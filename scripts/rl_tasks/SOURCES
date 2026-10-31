@@ -22,3 +22,16 @@ databench tables:databench
 tatqa numeric:tatqa
 hybridqa multihop:hybridqa
 triviaqa multihop:triviaqa
+tabfact tables:tabfact
+wikisql tables:wikisql
+msr-sqa tables:msr_sqa
+convfinqa numeric:convfinqa
+multihiertt numeric:multihiertt
+toolace tools:toolace
+nestful tools:nestful
+countdown puzzles:countdown
+rg-multi-solution puzzles:rg_multi_solution
+tau-retail agentic:tau_retail
+apigen-mt-retail agentic:apigen_retail
+tau-airline agentic:tau_airline
+apigen-mt-airline agentic:apigen_airline
