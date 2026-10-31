@@ -264,3 +264,19 @@ def test_corrected_task_source_rejects_arbitrary_row_omission(tmp_path):
     cases.write_bytes(b''.join(cases.read_bytes().splitlines(keepends=True)[1:]))
     with pytest.raises(ValueError, match='exact predicate complement|binding'):
         resolve_task_source(output / 'task-source-manifest.json')
+
+
+def test_declared_oracle_requires_and_uses_actual_runtime(tmp_path, monkeypatch):
+    copied = make_v3_fixture(tmp_path)
+    manifest_path = copied / 'task-source-manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest['oracle_validation'] = {'path': 'oracle.json', 'sha256': '0' * 64}
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match='requires the exact collector runtime'):
+        resolve_task_source(manifest_path, as_correction_parent=True)
+    from natlang_neuralese.rl import task_oracle_custody
+    seen = []
+    monkeypatch.setattr(task_oracle_custody, 'verify_task_oracle_runtime', lambda *args: seen.append(args))
+    runtime = tmp_path / 'runtime'
+    resolved = resolve_task_source(manifest_path, as_correction_parent=True, oracle_runtime=runtime)
+    assert seen == [(manifest_path.resolve(), runtime, resolved['cases_sha256'])]

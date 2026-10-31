@@ -74,7 +74,7 @@ def _no_protection_intersections(value):
             and set(value) in ({'protected_worlds'}, {'decision_ids', 'held_groups', 'quality_groups'}))
 
 
-def _resolve_corrected_task_source(manifest_path, manifest):
+def _resolve_corrected_task_source(manifest_path, manifest, oracle_runtime):
     """Validate a successor packet as the exact predicate complement of its parent.
 
     The parent is the registered source packet itself, bound by its manifest
@@ -94,7 +94,7 @@ def _resolve_corrected_task_source(manifest_path, manifest):
         return path
 
     parent_manifest = bound('parent_manifest', 'parent_manifest_sha256', member=False)
-    parent = resolve_task_source(parent_manifest, as_correction_parent=True)
+    parent = resolve_task_source(parent_manifest, as_correction_parent=True, oracle_runtime=oracle_runtime)
     cases = bound('cases', 'cases_sha256')
     proof_path = bound('correction_proof', 'correction_proof_sha256')
     proof = json.loads(proof_path.read_text())
@@ -144,7 +144,7 @@ def _resolve_corrected_task_source(manifest_path, manifest):
             'source_correction_excluded_rows': len(expected_excluded)}
 
 
-def resolve_task_source(manifest_path, *, as_correction_parent=False):
+def resolve_task_source(manifest_path, *, as_correction_parent=False, oracle_runtime=None, _skip_oracle_validation=False):
     """Verify and return one exact train-only task packet and its provenance.
 
     A plain packet holding ill-posed continuation tasks resolves only as the
@@ -153,7 +153,7 @@ def resolve_task_source(manifest_path, *, as_correction_parent=False):
     manifest_path = Path(manifest_path).resolve(strict=True)
     manifest = json.loads(manifest_path.read_text())
     if manifest.get('schema') == _QUARANTINE_SCHEMA:
-        return _resolve_corrected_task_source(manifest_path, manifest)
+        return _resolve_corrected_task_source(manifest_path, manifest, oracle_runtime)
     if manifest.get('schema') != 'natlang.rl-task-source/1':
         raise ValueError('RL task source manifest has an unsupported schema')
 
@@ -268,6 +268,11 @@ def resolve_task_source(manifest_path, *, as_correction_parent=False):
                 or any(
                     row_sha256_by_id.get(task_id) != digest for task_id, digest in expected_rows.items())):
             raise ValueError('RL task source qualified task payload differs from its bound union rows')
+    if not _skip_oracle_validation and ('oracle_validation' in manifest or 'oracle_components' in manifest):
+        if oracle_runtime is None:
+            raise ValueError('declared task-oracle evidence requires the exact collector runtime')
+        from .task_oracle_custody import verify_task_oracle_runtime
+        verify_task_oracle_runtime(manifest_path, oracle_runtime, manifest['cases_sha256'])
     return {'manifest': manifest_path, 'manifest_sha256': sha256_file_hex(manifest_path),
             'cases': cases, 'cases_sha256': manifest['cases_sha256'], 'rows': count,
             'audit': audit, 'audit_sha256': manifest['source_audit_sha256'],

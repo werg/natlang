@@ -66,7 +66,8 @@ def _task_cases(declaration):
     task_descriptors(cases)
     if declaration.get('task_source'):
         from .task_source import resolve_task_source
-        declared=declaration['task_source'];actual=resolve_task_source(declared['manifest'])
+        declared=declaration['task_source'];actual=resolve_task_source(
+            declared['manifest'], oracle_runtime=declaration.get('runtime'))
         if (any(actual[key]!=declared[key] for key in ('manifest_sha256','cases_sha256','rows','audit_sha256','selection_proof_sha256'))
                 or actual['cases']!=path):
             raise ValueError('raw bootstrap task-source admission binding changed')
