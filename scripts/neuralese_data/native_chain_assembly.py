@@ -122,7 +122,9 @@ def assemble(chain, records, edges, rendered, *, tokenizer, tokenizer_fingerprin
                               'record_bindings': {rid: {'source_record_sha256': rendered[rid]['source_record_sha256'],
                                   'source_target_sha256': rendered[rid]['source_target_sha256'],
                                   'source_ref': records[rid].get('source_ref'),
-                                  'provenance': records[rid].get('provenance')} for rid in custody['records']},
+                                  'provenance': records[rid].get('provenance'),
+                                  'static_derivations': rendered[rid].get('static_derivations', [])}
+                                  for rid in custody['records']},
                               'producer_bindings': {rid: rendered[rid].get('producer_bindings', []) for rid in custody['records']},
                               'consumer_bindings': {rid: rendered[rid].get('reads', []) for rid in custody['records']}}}
     parse_graph(graph, tokenizer_fingerprint=tokenizer_fingerprint)

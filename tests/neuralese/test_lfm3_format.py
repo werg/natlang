@@ -626,3 +626,40 @@ def test_rendered_packet_keeps_history_reasoning_in_program_header_mode(tokenize
     assert tokenizer.decode(ids[:boundary]).endswith('<think>')
     assert 'final reasoning R3' in tokenizer.decode(ids[boundary:])
     assert 'first reasoning R1' in tokenizer.decode(ids[:boundary])
+
+
+@needs_lfm3
+def test_approved_embedded_think_projection_is_source_bound_and_generation_prefix_safe(tokenizer):
+    from natlang_neuralese.data.text_corpus import native_gold_packet, project_embedded_thinking_target
+    raw_target = {'role': 'assistant',
+        'content': '\n\nThe evidence supports the requested intent.\n</think>\n\n',
+        'tool_calls': [{'type': 'function', 'function': {'name': 'return_result',
+            'arguments': json.dumps({'status': 'success', 'value': 'intent'})}}]}
+    record = {'id': 'approved-turn', 'training_admission': {'approved': True}, 'target': raw_target}
+    source_bytes = json.dumps(raw_target, sort_keys=True)
+    projected = project_embedded_thinking_target(record)
+    assert projected is not None
+    target, receipt = projected
+    assert target['reasoning_content'] == '\n\nThe evidence supports the requested intent.\n'
+    assert target['content'] == '\n\n'
+    assert record['target'] == raw_target and json.dumps(raw_target, sort_keys=True) == source_bytes
+    assert receipt['schema'] == 'natlang.lfm3-embedded-thinking-projection/1'
+    assert receipt['marker_offset'] == len(target['reasoning_content'])
+
+    history = [{'role': 'user', 'content': 'Classify the request.'}]
+    with pytest.raises(ValueError, match='does not continue'):
+        native_gold_packet(tokenizer, history, raw_target, EVAL_TOOLS)
+    text, ids, boundary = native_gold_packet(tokenizer, history, target, EVAL_TOOLS)
+    assert '</think>' in text
+    assert 'The evidence supports the requested intent.' in tokenizer.decode(ids[boundary:])
+    assert '"intent"' in tokenizer.decode(ids[boundary:])
+
+    # The normalizer refuses rows without approval, ambiguous terminators,
+    # preexisting reasoning fields, or non-whitespace post-marker content.
+    assert project_embedded_thinking_target({**record, 'training_admission': {'approved': False}}) is None
+    assert project_embedded_thinking_target({**record, 'target': {**raw_target,
+        'content': raw_target['content'].replace('</think>', '</think></think>')}}) is None
+    assert project_embedded_thinking_target({**record, 'target': {**raw_target,
+        'content': raw_target['content'] + 'tail'}}) is None
+    assert project_embedded_thinking_target({**record, 'target': {**raw_target,
+        'reasoning_content': 'already separated'}}) is None

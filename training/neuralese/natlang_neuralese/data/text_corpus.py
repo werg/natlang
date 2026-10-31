@@ -2183,6 +2183,46 @@ def target_with_teacher_reasoning(record):
     return target
 
 
+def project_embedded_thinking_target(record):
+    """Normalize one authenticated assistant target that embeds an LFM3 think terminator.
+
+    Some admitted source turns store generated reasoning and its ``</think>``
+    delimiter inside ``target.content``. LFM3's serving template represents
+    the same bytes using ``reasoning_content`` plus post-thought ``content``;
+    otherwise the target cannot continue the template's ``<think>`` prompt.
+    This narrow projection is only available for approved rows with a single
+    terminator followed by whitespace and no preexisting reasoning field.
+    It returns a deterministic source-bound receipt and never mutates input.
+    """
+    if not isinstance(record, Mapping) or record.get('training_admission', {}).get('approved') is not True:
+        return None
+    source = record.get('target')
+    if not isinstance(source, Mapping) or source.get('reasoning_content'):
+        return None
+    content = source.get('content')
+    marker = '</think>'
+    if not isinstance(content, str) or content.count(marker) != 1:
+        return None
+    before, after = content.split(marker, 1)
+    if not before.strip() or after.strip():
+        return None
+    projected = copy.deepcopy(dict(source))
+    projected['content'] = after
+    projected['reasoning_content'] = before
+    source_target_sha256 = _sha(_canonical(dict(source)).encode())
+    receipt = {
+        'schema': 'natlang.lfm3-embedded-thinking-projection/1',
+        'source_target_sha256': source_target_sha256,
+        'source_content_sha256': _sha(content.encode()),
+        'marker': marker,
+        'marker_offset': len(before),
+        'reasoning_sha256': _sha(before.encode()),
+        'content_sha256': _sha(after.encode()),
+        'derived_target_sha256': _sha(_canonical(projected).encode()),
+    }
+    return projected, receipt
+
+
 def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer,
                    require_independent_splits: bool = True,
                    ordinary_text_admission_receipt: Mapping[str, Any] | None = None,
@@ -2412,6 +2452,13 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                 if "target" in derivation:
                     if derivation.get("source_target_sha256")!=_sha(_canonical(record["target"]).encode()):
                         raise ValueError("static target derivation source target changed")
+                    projection = derivation.get('target_projection')
+                    if projection is not None:
+                        expected_projection = project_embedded_thinking_target(record)
+                        if (expected_projection is None
+                                or projection != expected_projection[1]
+                                or _canonical(derivation['target']) != _canonical(expected_projection[0])):
+                            raise ValueError('embedded-thinking projection does not bind the exact approved source target')
                     target=crisp_messages([derivation["target"]],piece_map,notes)[0]
                 transformation={"schema":"natlang.native-pair-static-derivation-receipt/1",
                     "binding_scope":"original-authenticated-source-to-explicit-derived-render",
@@ -2422,6 +2469,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                     "original_context_attestations":copy.deepcopy(context_attestations),
                     "original_capture_augmentation_attestations":copy.deepcopy(capture_augmentation_attestations),
                     "context":context_evidence}
+                if derivation is not None and derivation.get('target_projection') is not None:
+                    transformation['target_projection'] = copy.deepcopy(derivation['target_projection'])
                 # These attest the original source, not the transformed bytes.
                 context_attestations=[]
         except (KeyError, TypeError, ValueError, IndexError) as exc:

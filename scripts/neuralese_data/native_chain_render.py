@@ -6,7 +6,8 @@ import hashlib
 import json
 
 from natlang_neuralese.common.jsonio import canonical_json_str
-from natlang_neuralese.data.text_corpus import gold_text_rows, target_with_teacher_reasoning
+from natlang_neuralese.data.text_corpus import (gold_text_rows, project_embedded_thinking_target,
+                                                target_with_teacher_reasoning)
 from natlang_neuralese.model.shared_state import ROLE_MARKERS
 from scripts.neuralese_data.native_chain_sources import bind_chain
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import (
@@ -72,6 +73,17 @@ def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerpr
     """
     custody = bind_chain(chain, records, edges)
     targets = {rid: copy.deepcopy(target_with_teacher_reasoning(records[rid])) for rid in custody['records']}
+    target_projections = {}
+    outgoing = {edge['writer_record_id'] for edge in edges}
+    for rid in custody['records']:
+        # Structured tool-call values are outside target.content, so the
+        # projection cannot disturb their source-bound spans. An assistant
+        # text producer can bind content offsets and must keep the source form.
+        if rid in outgoing and not (records[rid].get('target', {}).get('tool_calls')):
+            continue
+        projection = project_embedded_thinking_target(records[rid])
+        if projection is not None:
+            targets[rid], target_projections[rid] = projection
     producer_entries = {rid: [] for rid in custody['records']}
     reads = {rid: [] for rid in custody['records']}
     seen_producers, seen_reads = {}, {}
@@ -129,11 +141,14 @@ def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerpr
     derivations = {}
     for rid in custody['records']:
         record = records[rid]
-        if not producer_entries[rid] and not reads[rid]: continue
+        if not producer_entries[rid] and not reads[rid] and rid not in target_projections: continue
         item = {'schema': 'natlang.native-pair-static-derivation/1', 'source_record_sha256': digest(record)}
         if producer_entries[rid]:
             item.update(source_target_sha256=digest(record['target']), target=targets[rid],
                         producer_spans=[x['span'] for x in producer_entries[rid]])
+        if rid in target_projections:
+            item.update(source_target_sha256=digest(record['target']), target=targets[rid],
+                        target_projection=copy.deepcopy(target_projections[rid]))
         if reads[rid]: item['context_replacements'] = [x['replacement'] for x in reads[rid]]
         derivations[rid] = item
     rows, receipt, omissions, provenance = gold_text_rows(source_rows, pieces, tokenizer=tokenizer,

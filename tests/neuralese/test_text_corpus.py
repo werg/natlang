@@ -3,7 +3,8 @@ import json
 import copy
 
 from natlang_neuralese.data.text_corpus import (authenticated_context_writer_sources,
-                                                gold_text_preview_rows, gold_text_rows)
+                                                gold_text_preview_rows, gold_text_rows,
+                                                project_embedded_thinking_target)
 from natlang_neuralese.data.context_refs import context_ref_count, typed_neuralese_ref_count
 from natlang_neuralese.train.write_sites import extract_write_sites
 from natlang_neuralese.data.trajectory_text import handover_notes, native_writer_prefix, producer_text_target
@@ -174,6 +175,38 @@ def _sha(text):
 
 def _canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def test_embedded_thinking_projection_requires_exact_approved_static_derivation():
+    source = {
+        "id": "embedded-thinking", "split": "train", "source_groups": ["public:train"],
+        "training_admission": {"approved": True},
+        "messages": [{"role": "user", "content": "Classify this request."}],
+        "target": {"role": "assistant", "content": "\n\nReasoned answer.\n</think>\n\n"},
+    }
+    projected = project_embedded_thinking_target(source)
+    assert projected is not None
+    target, proof = projected
+    plan = {source["id"]: {
+        "schema": "natlang.native-pair-static-derivation/1",
+        "source_record_sha256": hashlib.sha256(_canonical(source).encode()).hexdigest(),
+        "source_target_sha256": hashlib.sha256(_canonical(source["target"]).encode()).hexdigest(),
+        "target": target, "target_projection": proof,
+    }}
+    rows, _, omissions, provenance = gold_text_rows(
+        [source], [], tokenizer=_Tokenizer(), require_independent_splits=False,
+        target_reasoning=True, static_derivations=plan)
+    assert not omissions and len(rows) == 1
+    recorded = provenance[0]["static_derivations"][0]["target_projection"]
+    assert recorded == proof
+    assert source["target"]["content"].endswith("</think>\n\n")
+
+    forged = json.loads(json.dumps(plan))
+    forged[source["id"]]["target"]["content"] = "dropped source reasoning"
+    _, _, rejected, _ = gold_text_rows(
+        [source], [], tokenizer=_Tokenizer(), require_independent_splits=False,
+        target_reasoning=True, static_derivations=forged)
+    assert rejected and "exact approved source target" in rejected[0].get("detail", "")
 
 
 def test_held_text_preview_accepts_single_split_without_weakening_production_renderer():
