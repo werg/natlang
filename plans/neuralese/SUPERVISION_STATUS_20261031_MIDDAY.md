@@ -4,6 +4,73 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Follow-up observation, 17:02 CET
+
+Update17:06: global71/stage19 has committed. Its full checkpoint directly
+confirms exact LogHub episode
+`luna-native-episode:teacher-program:75d4e2efd9317f43a449` exposure=1 and the
+successor source receipt. The real update processed743,096logical/429,609physical
+tokens, reusing313,487prefix tokens (42.2%), in281.43seconds. This is an actual
+packing reduction, not a controlled speedup comparison. Checkpoint write took
+86.42seconds; next pending inode is allocated and stage20 is computing.
+
+Global70/stage18 committed in the same rolling slot, SHA
+`d42cfa8ed03f48b47507e26909026f62c80e3492b76f5e0cf9699b8cf569c548`,
+with1,173 earned SFT graph visits. SIGUSR1 requested the stop; the actual trainer
+finished its update and111-second write before exiting. No120-second systemd
+stop timeout was used. Controller incomplete-refresh exit was expected: two
+updates remain before the initial stage20 development boundary.
+
+The intact LogHub addition is now in the actual continuation, successor source
+`dd467ee358719537f40ee189e3762e8c2bccb22fa91d0bc604e610a3d1eb8b31`.
+Frozen runtime is `data_nvme/lfm3-rl-dgx-20261029/runtime-a05129b10`;
+service `lfm3-v4-loghub-append.service`, trainer PID2697951. Exact-parent CPU
+preflight, restored-model GPU qualification, packed-schedule qualification and
+the actual selected-QAT oversized graph gate passed. The latter used BF16,
+plain cotangents and retained gradients, with332,981tokens/335,563KV slots;
+it made zero updates and explicitly excludes optimizer-step workspace. A
+new optimizer update was still underway at this observation: do not credit
+LogHub exposure or a prefix speedup until actual update telemetry proves them.
+The continuation retains optimizer/RNG/QAT state and the two-update dev window.
+
+Global70 independent Pop export is active in
+`codex-sft70-peer-export-1031.service`. Its open source descriptor pins the exact
+immutable inode across rolling replacement; no second DGX checkpoint or RAM
+snapshot was created. This is not yet a completed backup. Global53 and SD52 Pop
+copies remain independently verified. SD52 USB copy is also still progressing.
+
+The checkpoint-window benchmark made four actual1GiB writes:64MiB windows took
+10.15/8.01seconds,512MiB windows13.20/8.86seconds, all identical SHA. Do not
+increase the window on this evidence. The more important performance gap is
+that persistent reservations disable existing async snapshots (`save` excludes
+reservations; `reserve_next` drains the writer). Complete bounded async/reserve
+integration is assigned after the live continuation is qualified, retaining
+pre-SGD allocation and accounting for detached snapshot RAM and pending inodes.
+
+Main quick checks now pass. Portable spool fixture and real-process recovery
+test diagnostics are fixed;41 focused tests passed before the latter change,
+and3 final focused tests passed afterward. A fresh full main check is active
+in `codex-main-full-clean-current-1031.service`; both real-process recovery
+tests passed within it. No full-suite-green claim yet. Main through c90389343
+was pushed; the subsequent storage-policy rewrite still needs the next sync.
+
+Telecom V5.1 corrected V4's TS-only eval syntax and inaccessible helper scope;
+actual execution made35turns, repaired the SIM and verified it active, with no
+parser/scope errors. It still did not complete. The teacher proposed a next
+state without completing its typed invocation, then continued using the old
+input. Generation was stopped and preserved, not admitted as positive SFT.
+Invocation identity and finishing semantics are being checked before claiming
+a runtime state-propagation bug; generic feedback and source guidance fixes
+remain necessary. Only one teacher worker ran.
+
+Legacy acquired conversion, teacher mining, port-record preparation and queued
+renders have been checked for actual output advancement. Current protection
+adapter work is correcting `e2e_mine assemble`, which previously only loaded
+the old held-union views. New assembly must bind the complete current
+ProtectedWorlds union, preserve whole trajectories and distinguish quality-only
+exclusions from held connections. Raw conversion intermediates remain useful;
+they are not admitted training supply merely because conversion completed.
+
 ## Follow-up observation, 16:05 CET
 
 The owner explicitly authorized deleting `/home/werg/megatoken-runs`. Completed
