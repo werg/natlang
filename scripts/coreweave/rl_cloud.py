@@ -17,6 +17,7 @@ DGX: the sandbox gets per-object signed URLs (capabilities) for the private W&B 
                                                W&B by signed PUT), then GETs it to the DGX hub (ROOT/<lineage>,
                                                verified), the resume point of the next launch
   rl_cloud.py status RUN.json
+  rl_cloud.py deliver-parent RUN.json LINEAGE  the parent of a sandbox launched with --parent-later
   rl_cloud.py stop RUN.json LINEAGE
 
 RUN.json (schema natlang.rl-cloud-run/1):
@@ -383,7 +384,7 @@ def render_job(run, name, rounds):
     return jobs.validate(json.loads(text))
 
 
-def launch(run, name, account=None, dry_run=False, rounds=None):
+def launch(run, name, account=None, dry_run=False, rounds=None, parent_later=False):
     state = read_json(hub(run) / 'run-state.json', {})
     if not state.get('bundle'):
         raise SystemExit('no bundle: rl_cloud.py bundle RUN.json first')
@@ -391,8 +392,9 @@ def launch(run, name, account=None, dry_run=False, rounds=None):
     if live.get('sandbox_id') and live.get('status') == 'running':
         raise SystemExit(f'{name} already runs in {live["sandbox_id"]}: stop it first')
     record = newest_verified(run, name)
-    if record is None:
+    if record is None and not parent_later:
         raise SystemExit(f'{name}: no verified export or seed; rl_cloud.py seed RUN.json {name}')
+    record = record or {'seq': 'later', 'trained_rounds': None}
     job = render_job(run, name, run.get('rounds', 0) if rounds is None else rounds)
     account = account or run['lineages'][name].get('account')
     if account in (None, 'auto'):
@@ -408,7 +410,8 @@ def launch(run, name, account=None, dry_run=False, rounds=None):
     if dry_run:
         return {'dry_run': True, 'account': account, 'reason': reason, 'parent_seq': record['seq'],
                 'trained_rounds': record['trained_rounds'], 'job': job['id'], 'resources': job['resources']}
-    secrets = {'rl-parent': json.dumps(parent_capability(run, record)).encode()}
+    # A parent delivered later (deliver-parent) lets the sandbox build its environments while a seed still uploads.
+    secrets = {} if parent_later else {'rl-parent': json.dumps(parent_capability(run, record)).encode()}
 
     def created(sandbox_id):
         state.setdefault('lineages', {})[name] = {'sandbox_id': sandbox_id, 'account': account, 'status': 'running',
@@ -420,6 +423,25 @@ def launch(run, name, account=None, dry_run=False, rounds=None):
     note(run, f'{name} launched in {entry["sandbox_id"]} ({account}: {reason}) from export {record["seq"]} '
               f'(trained_rounds {record["trained_rounds"]}), job {job["id"]}')
     return entry
+
+
+def deliver_parent(run, name):
+    """Write the rl-parent capability of the newest verified export into a running sandbox that waits for it."""
+    state = read_json(hub(run) / 'run-state.json', {})
+    live = state['lineages'][name]
+    record = newest_verified(run, name)
+    if record is None:
+        raise SystemExit(f'{name}: nothing verified to deliver')
+    box = cwctl.read_sandbox(live['sandbox_id'], patience=300)
+    secrets = f"{json.loads(Path(REPO / run['job']).read_text())['scratch']['path']}/.coreweave/secrets"
+    capability = json.dumps(parent_capability(run, record)).encode()
+    cwctl.cwaccounts.refuse_credentials({'rl-parent': capability})
+    box.write_file(f'{secrets}/.rl-parent.tmp', capability).result(timeout=120)
+    _exec(box, ['sh', '-c', f'chmod 600 {secrets}/.rl-parent.tmp && mv {secrets}/.rl-parent.tmp {secrets}/rl-parent'], 60)
+    live['parent_seq'] = record['seq']
+    store_json(hub(run) / 'run-state.json', state)
+    note(run, f'{name}: parent export {record["seq"]} (trained_rounds {record["trained_rounds"]}) delivered to '
+              f'{live["sandbox_id"]}')
 
 
 def stop(run, name):
@@ -607,7 +629,7 @@ def status(run):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
-    for command in ('seed', 'launch', 'stop'):
+    for command in ('seed', 'launch', 'stop', 'deliver-parent'):
         p = sub.add_parser(command)
         p.add_argument('run')
         p.add_argument('lineage')
@@ -615,6 +637,7 @@ def main(argv=None):
             p.add_argument('--account')
             p.add_argument('--rounds', type=int)
             p.add_argument('--dry-run', action='store_true')
+            p.add_argument('--parent-later', action='store_true', help='deliver the parent with deliver-parent')
     for command in ('bundle', 'status', 'export'):
         p = sub.add_parser(command)
         p.add_argument('run')
@@ -628,7 +651,10 @@ def main(argv=None):
     elif args.command == 'bundle':
         print(bundle(run))
     elif args.command == 'launch':
-        print(json.dumps(launch(run, args.lineage, args.account, args.dry_run, args.rounds), indent=1, default=str))
+        print(json.dumps(launch(run, args.lineage, args.account, args.dry_run, args.rounds, args.parent_later),
+                         indent=1, default=str))
+    elif args.command == 'deliver-parent':
+        deliver_parent(run, args.lineage)
     elif args.command == 'stop':
         stop(run, args.lineage)
     elif args.command == 'export':

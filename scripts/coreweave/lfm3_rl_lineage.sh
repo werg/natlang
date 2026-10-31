@@ -78,7 +78,8 @@ NODE_BIN=$(dirname "$(command -v node)")
 # 3. parent
 if [ ! -f "$L/state.json" ] && [ ! -f "$L/parent/checkpoint.pt" ]; then
   P="${NATLANG_CW_SECRETS:-$NATLANG_CW_CONTROL_DIR/secrets}/rl-parent"
-  [ -f "$P" ] || { log '"event":"failed","step":"no parent capability"'; exit 2; }
+  [ -f "$P" ] || log '"event":"await_parent","note":"rl_cloud.py deliver-parent writes the capability"'
+  while [ ! -f "$P" ]; do sleep 20; done
   s=$(date +%s)
   python3 "$HELPER" fetch "$P" "$L" || { log '"event":"failed","step":"parent-fetch"'; exit 2; }
   log "\"event\":\"parent_ready\",\"seconds\":$(since $s)"
