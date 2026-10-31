@@ -104,7 +104,7 @@ export const TARGETS = {
   // The evaluation runner starts `./worker-entry.js` beside its own file (evaluation/worker.ts).
   dashboard: { directory: 'dashboard', assets: true },
   // `splitting`: a suite's compiled program imports the runtime from `natlang-eval.js` while the worker starts the runtime
-  // from `worker-entry.js`; they must be one module instance (the task context lives in it), so the two entries share chunks.
+  // from `worker-entry.js`; they must be one module instance (the task context lives in it), so the two entries share chunks, written beside them (the bundle finds its model templates by its own path).
   eval: { directory: 'eval', entries: { 'natlang-eval': 'src/entry/evaluation.ts', 'worker-entry': 'src/evaluation/worker-entry.ts' }, platform: 'node', splitting: true },
 };
 
@@ -159,12 +159,12 @@ export async function buildTarget(name, outdir) {
   mkdirSync(outdir, { recursive: true });
   rmSync(join(outdir, 'types'), { recursive: true, force: true });
   for (const bundle of [...Object.keys(target.entries)]) rmSync(join(outdir, `${bundle}.js`), { force: true });
-  rmSync(join(outdir, 'chunks'), { recursive: true, force: true });
+  for (const stale of existsSync(outdir) ? readdirSync(outdir) : []) if (/^chunk-.*\.js$/.test(stale)) rmSync(join(outdir, stale), { force: true });
   const bundled = target.typesOnly ? { metafile: { inputs: {} } } : await esbuild({ entryPoints: Object.fromEntries(Object.entries(target.entries).map(([bundle, source]) => [bundle, join(root, source)])),
     bundle: true, format: 'esm', platform: target.platform, target: target.platform === 'node' ? 'node22' : 'es2022',
     ...(target.selfContained ? { external: ['yaml', '@noble/hashes', '@noble/hashes/*'], mainFields: ['module', 'main'], conditions: ['workerd', 'worker', 'browser'] }
       : { packages: 'external' }),
-    ...(target.splitting ? { splitting: true, chunkNames: 'chunks/[name]-[hash]' } : {}),
+    ...(target.splitting ? { splitting: true, chunkNames: 'chunk-[name]-[hash]' } : {}),
     outdir, absWorkingDir: root, metafile: true, legalComments: 'none', logLevel: 'silent',
     plugins: target.plugins?.(entrySource) ?? [], define: target.define?.() ?? {} });
   // esbuild names each bundled module in a comment by its path relative to the working directory (and keys its CommonJS wrapper by it); a package that resolves
@@ -187,7 +187,7 @@ export async function buildTarget(name, outdir) {
     writeFileSync(join(outdir, `${entryName}.d.ts`), `export * from './types/${entryDeclaration.replace(/\.d\.ts$/, '.js')}';\n`);
     const sources = new Set(Object.keys(bundled.metafile.inputs).filter(path => !/^[^/]*:/.test(path) && !path.startsWith('node_modules/') && !path.includes('/node_modules/')));
     for (const file of emitted) sources.add(`src/${file.replace(/\.d\.ts$/, '.ts')}`);
-    const chunks = target.splitting ? Object.keys(bundled.metafile.outputs).map(path => relative(outdir, resolve(root, path)).split('\\').join('/')).filter(path => path.startsWith('chunks/')) : [];
+    const chunks = target.splitting ? Object.keys(bundled.metafile.outputs).map(path => relative(outdir, resolve(root, path)).split('\\').join('/')).filter(path => path.startsWith('chunk-')) : [];
     const files = [...(target.typesOnly ? [] : Object.keys(target.entries).map(bundle => `${bundle}.js`)), ...chunks, `${entryName}.d.ts`, ...emitted.map(file => `types/${file}`)];
     return { files: files.sort(), sources: [...sources].sort(), metafile: bundled.metafile };
   } finally { rmSync(declarations, { recursive: true, force: true }); }
