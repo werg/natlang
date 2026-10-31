@@ -112,6 +112,13 @@ def direct_command(entry: dict, receipt: dict, out: Path, student: str) -> tuple
         args += ['--pieces', *pieces]
     if 'omitted:held_split_kept_out' in selection:
         args.append('--train-only')
+    if selection.get('approved_by_registry_admission'):
+        # Rows held for a reason the registry entry admits; without the reason the student render drops them all
+        # (gemini-clinc LFM3 renders: 0 of 20,140 rows, 2026-10-28). Older receipts did not record the reason.
+        reason = receipt.get('registry_admits_reason') or row_hold_reason(sources)
+        if not reason:
+            return None, 'registry-admitted rows but no single recorded or source hold reason'
+        args += ['--registry-admits-reason', reason]
     renderings = receipt.get('renderings')
     if isinstance(renderings, list):
         args += ['--renderings', *renderings]
@@ -119,6 +126,18 @@ def direct_command(entry: dict, receipt: dict, out: Path, student: str) -> tuple
     if fraction is not None:
         args += ['--full-sample', str(fraction)]
     return [WRAPPER, str(out), *args, '--compress-text'], None
+
+
+def row_hold_reason(sources: list[str]) -> str | None:
+    """The one training-admission hold reason of the unapproved rows of SOURCES, or None if absent or ambiguous."""
+    from natlang_neuralese.common.jsonio import iter_jsonl_rows
+    reasons = set()
+    for source in sources:
+        for _, row in iter_jsonl_rows(REPO / source):
+            admission = row.get('training_admission')
+            if isinstance(admission, dict) and admission.get('approved') is False and admission.get('reason'):
+                reasons.add(str(admission['reason']))
+    return reasons.pop() if len(reasons) == 1 else None
 
 
 def parts_command(entry: dict, path: Path, out: Path, student: str, cpus: int) -> tuple[list[str] | None, str | None]:
