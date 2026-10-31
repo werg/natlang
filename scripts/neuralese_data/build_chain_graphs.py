@@ -174,6 +174,28 @@ def init_worker(config):
     STATE.update(config, tokenizer=tokenizer, roles=roles, fingerprint=LFM3_FINGERPRINT, pieces={})
 
 
+def bind_current_protection_receipt(receipt_path):
+    """Require an e2e cohort's exact current-ProtectedWorlds assembly receipt for graph admission."""
+    sys.path[:0] = [str(ROOT / 'training' / 'neuralese'), str(ROOT)]
+    from natlang_neuralese.common.custody import REGISTRY, ProtectedWorlds
+    receipt_path = Path(receipt_path)
+    receipt_sha = sha256_file_hex(receipt_path)
+    receipt = json.loads(receipt_path.read_text())
+    proof = receipt.get('current_protected_worlds') or {}
+    registry_path = ROOT / REGISTRY
+    registry_sha = sha256_file_hex(registry_path)
+    protected = ProtectedWorlds.load()
+    if (receipt.get('schema') != 'natlang.neuralese-e2e-cohort/2'
+            or proof.get('registry') != REGISTRY
+            or proof.get('registry_sha256') != registry_sha
+            or proof.get('protected_sha256') != protected.digest):
+        raise ValueError('e2e cohort receipt is not bound to the exact current ProtectedWorlds union')
+    return {'source_receipt': {'path': str(receipt_path.resolve()), 'sha256': receipt_sha},
+            'registry': REGISTRY, 'registry_sha256': registry_sha,
+            'protected_sha256': protected.digest,
+            'source_categories': [json.loads(item) for item in protected.sources]}
+
+
 def target_shas(unit):
     """Phase 1: exact target identity of every decision of a chain (for the global dedupe)."""
     chain, locations, edges, _ = unit
@@ -395,6 +417,8 @@ def main():
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--batch-chains', type=int, default=512, help='chains per committed (resumable) batch')
     parser.add_argument('--protection', type=Path, default=PROTECTION)
+    parser.add_argument('--require-current-protection', action='store_true',
+                        help='require an assembled e2e corpus receipt authenticated against the exact current ProtectedWorlds union')
     parser.add_argument('--exclude-families', type=lambda v: set(v.split(',')), default=set(),
                         help='record families excluded from training (e.g. graded by a since-repaired oracle)')
     args = parser.parse_args()
@@ -411,14 +435,25 @@ def main():
     if args.corpus:
         inputs = {name: {'path': str(args.corpus / name), 'sha256': sha256_file_hex(args.corpus / name)}
                   for name in ('records.jsonl', 'edges.jsonl', 'chains.jsonl', 'pieces.jsonl')}
+        current_protection_binding = None
+        if args.require_current_protection:
+            if not (args.corpus / 'receipt.json').is_file():
+                raise ValueError('--require-current-protection needs the assembled corpus receipt.json')
+            current_protection_binding = bind_current_protection_receipt(args.corpus / 'receipt.json')
+            inputs['receipt.json'] = current_protection_binding['source_receipt']
         units = list(corpus_units(args.corpus))
     else:
+        if args.require_current_protection:
+            raise ValueError('--require-current-protection requires --corpus, not raw work shards')
         inputs = {'work': str(args.work / args.source)}
+        current_protection_binding = None
         units = list(shard_units(args.work, args.source))
     if args.limit_chains:
         units = units[:args.limit_chains]
     binding = {'source_corpus_id': args.corpus_id, 'inputs': inputs, 'protection': protection['proof'],
                'decision_holds': hold_bindings}
+    if current_protection_binding:
+        binding['current_protected_worlds'] = current_protection_binding
     prompts = [args.prompt] + ([args.fallback] if args.fallback != 'none' and args.fallback != args.prompt else [])
     family_holds = json.loads((ROOT / 'training/source-reviews/family-holds.json').read_text())['holds']
     excluded = set(args.exclude_families) | {'curriculum_' + hold['family'] for hold in family_holds
@@ -531,6 +566,15 @@ def main():
                'tokenizer': {'path': str(LFM3), 'fingerprint': LFM3_FINGERPRINT, 'role_ids': LFM3_ROLES},
                'code': code, 'totals': dict(totals), 'families': {k: dict(v) for k, v in sorted(families.items())},
                'files': files, 'omissions': omission_files}
+    if current_protection_binding:
+        from natlang_neuralese.common.custody import ProtectedWorlds
+        current = ProtectedWorlds.load()
+        if (current.digest != current_protection_binding['protected_sha256']
+                or sha256_file_hex(ROOT / current_protection_binding['registry']) !=
+                current_protection_binding['registry_sha256']
+                or sha256_file_hex(args.corpus / 'receipt.json') !=
+                current_protection_binding['source_receipt']['sha256']):
+            raise ValueError('current protected union or assembled source receipt changed during graph conversion')
     (args.out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
     (args.out / 'progress.json').unlink(missing_ok=True)
     (args.out / 'target-shas.jsonl').unlink(missing_ok=True)
