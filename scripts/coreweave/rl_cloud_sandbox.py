@@ -142,7 +142,9 @@ def _cas_put_archive(cas, base, members):
 
 
 def stage(lineage, exports):
-    lineage, exports = Path(lineage).resolve(), Path(exports)
+    # The logical (DGX) path, never resolved: in a sandbox /home/werg is a symlink onto the scratch volume, and the
+    # export names the paths the DGX hub copy and a resumed sandbox use.
+    lineage, exports = Path(os.path.abspath(lineage)), Path(exports)
     cas = exports / 'cas'
     cas.mkdir(parents=True, exist_ok=True)
     has_state = (lineage / 'state.json').is_file()
