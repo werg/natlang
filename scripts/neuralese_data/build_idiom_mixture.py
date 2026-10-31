@@ -975,7 +975,7 @@ def main(argv=None):
                     composition['communication'].update(not_train=1)
                     continue
                 graphs = [v['graph'] for v in row['models'].values()] if 'models' in row else [row]
-                if any(source_custody_reason(graph,custody) for graph in graphs):
+                if source_custody_reason(row,custody) or any(source_custody_reason(graph,custody) for graph in graphs):
                     composition['communication'].update(dropped_protected_source_identity=1)
                     continue
                 if communication_is_held(row, graphs, held, carve_set):
