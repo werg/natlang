@@ -19,10 +19,13 @@ def test_unearned_stage_replacement_is_bound_and_rejects_earned_rows():
     proof = {'schema': 'natlang.unearned-sft-source-replacement/1', 'old_stage': 'old',
              'new_stage': 'new', 'parent_sha256': 'parent', 'old_source_sha256': 'old',
              'new_source_sha256': 'new', 'held_source_sha256': 'held', 'old_planned_rows': 1, 'disposition': 'curated'}
-    training = {'optimizer': {'state': 1}, 'rng': {'state': 1}}
+    training = {'optimizer': {'state': 1}, 'rng': {'state': 1}, 'identity': {'objective': {'kind': 'policy'}},
+                'source_row_bindings': {'r': 'b'}, 'source_row_order': ['r'],
+                'exposure_counts': {'r': 3}, 'source_receipts': [{'sha256': 'rl'}]}
     result, record = supersede_unearned_stage({'old': frame}, training, proof,
         parent_sha256='parent', train_sha256='new', held_sha256='held', new_stage='new')
     assert result == {} and record['old_graph_visits'] == 0 and frame['exposure_counts']['a'] == 0
+    assert record['policy_exposure_archive']['exposure_counts'] == {'r': 3}
     for change in ({'exposure_counts': {'a': 1}}, {'step': 1}, {'accumulated_gradients': {}},
                    {'pending_source_rows': {'a': {}}}, {'exposure_counts': {}}):
         with pytest.raises(ValueError):
@@ -31,6 +34,9 @@ def test_unearned_stage_replacement_is_bound_and_rejects_earned_rows():
     with pytest.raises(ValueError):
         supersede_unearned_stage({'old': frame}, training, proof,
             parent_sha256='other', train_sha256='new', held_sha256='held', new_stage='new')
+    with pytest.raises(ValueError):
+        supersede_unearned_stage({'old': frame}, {**training, 'exposure_counts': {}}, proof,
+            parent_sha256='parent', train_sha256='new', held_sha256='held', new_stage='new')
 
 
 def progress():

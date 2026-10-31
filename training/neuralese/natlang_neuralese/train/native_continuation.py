@@ -327,13 +327,25 @@ def supersede_unearned_stage(progress, training, proof, *, parent_sha256, train_
             or set(counts) != set(rows) or not isinstance(order, list)
             or len(order) != len(rows) or set(order) != set(rows)):
         raise ValueError('unearned SFT replacement row inventory differs')
+    policy_rows = training.get('source_row_bindings') or {}
+    policy_order = training.get('source_row_order')
+    policy_counts = training.get('exposure_counts')
+    if ((training.get('identity') or {}).get('objective') is None or not policy_rows
+            or not isinstance(policy_order, list) or len(policy_order) != len(policy_rows)
+            or set(policy_order) != set(policy_rows) or not isinstance(policy_counts, dict)
+            or set(policy_counts) != set(policy_rows) or not training.get('source_receipts')):
+        raise ValueError('unearned SFT replacement needs exact earned policy exposure custody')
+    policy_archive = {key: deepcopy_metadata(training.get(key)) for key in
+        ('schema', 'identity', 'step', 'global_step', 'epoch', 'cursor', 'source_hash',
+         'source_receipts', 'source_row_bindings', 'source_row_order', 'held_row_bindings',
+         'exposure_counts', 'required_visits') if key in training}
     result = dict(progress)
     result.pop(old)
     return result, {'schema': proof['schema'], 'old_stage': old, 'new_stage': new_stage,
         'parent_sha256': parent_sha256, 'old_source_sha256': proof['old_source_sha256'],
         'new_source_sha256': train_sha256, 'held_source_sha256': held_sha256, 'old_planned_rows': len(rows),
         'old_graph_visits': 0, 'disposition': proof.get('disposition'),
-        'weights_optimizer_rng_rl_exposure': 'preserved',
+        'weights_optimizer_rng_rl_exposure': 'preserved', 'policy_exposure_archive': policy_archive,
         'old_frame_custody': 'exact parent checkpoint; no completion claimed'}
 
 
