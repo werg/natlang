@@ -1,6 +1,6 @@
 {
   "cpu_tiny_qualification": {
-    "command": "OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python -m pytest -q tests/neuralese/test_native_prefix_packing.py::test_bf16_ordinary_sft_reuses_exact_raw_prefixes_with_bounded_gradient_change tests/neuralese/test_native_communication_prefix.py::test_bf16_sft_shares_only_raw_prefixes_and_preserves_producer_consumer_supervision",
+    "command": "OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python -m pytest -q tests/neuralese/test_native_prefix_packing.py::test_bf16_ordinary_sft_reuses_exact_raw_prefixes_with_bounded_gradient_change tests/neuralese/test_native_communication_prefix.py::test_bf16_sft_shares_only_raw_prefixes_and_preserves_producer_consumer_supervision tests/neuralese/test_native_communication_prefix.py::test_qat_sampled_precision_gates_communication_prefix_packing_on_tiny_graphs tests/neuralese/test_native_prefix_qat_gate.py",
     "ordinary_case": {
       "global_gradient_relative_error": 0.005559381563216448,
       "gradient_cosine": 1.000015377998352,
@@ -9,8 +9,8 @@
       "scalar_ce_equal": true,
       "supervised_tokens_equal": true
     },
-    "output_path": "/tmp/native-prefix-bf16-cpu-smokes-final.log",
-    "output_sha256": "645bdf2488a99450af625ebe1b68b67513aa8c36540a4e4e1e36f3b9f82b344c",
+    "output_path": "/tmp/native-prefix-qattiny-regression.log",
+    "output_sha256": "b3a90065bfca6a71412c651d4dd7f1b82a11914a0c4815c1dc394a67f8875e5a",
     "producer_consumer_case": {
       "global_gradient_relative_error": 0.005145328585058451,
       "gradient_cosine": 0.9999986886978149,
@@ -19,7 +19,8 @@
       "physical_tokens": 39,
       "scalar_ce_equal": true
     },
-    "result": "2 passed in 3.33s; CPU tiny LFM; bfloat16; no CUDA; final source state.",
+    "qat_point_effect": "BF16 sampled point packs the complete tested producer/consumer DAG (100\u219239 tokens); FP8 sampled point keeps communication DAG at 100 physical tokens. Ordinary single-invocation BF16 case remains 24\u219210 tokens.",
+    "result": "4 passed in 3.65s; CPU tiny LFM; bfloat16; no CUDA.",
     "test_source_bindings": [
       {
         "path": "tests/neuralese/test_native_prefix_packing.py",
@@ -27,14 +28,18 @@
       },
       {
         "path": "tests/neuralese/test_native_communication_prefix.py",
-        "sha256": "ce7af86a2a537bd782ae3f9b6242d90cf7ff3d66aac6a36bf1c3d4e2dde7990e"
+        "sha256": "f14d7820b2c848df520dc64568931e39908361aed6998120e3bad563723d765a"
+      },
+      {
+        "path": "tests/neuralese/test_native_prefix_qat_gate.py",
+        "sha256": "d90c62d1c3616418fb4f4fb6745301bfdce4fe76c4a9f45b0ed9506800c24595"
       }
     ]
   },
   "created_utc": "2026-10-31",
   "feature_version": "native-prefix-physical-alias-v2",
   "implementation_scope": {
-    "communication_graphs": "Remain disabled when the active backend cannot qualify imported/adapted suffix handling; runtime gate is backend is None.",
+    "communication_graphs": "Communication graph sharing is gated by current sampled QAT precision and backend: allowed only with no external backend and absent/BF16 precision; FP8/NVFP4 are disabled.",
     "gradient": "Shared causal states receive cotangent fan-in from all original occurrences through their KV/convolution gathers.",
     "ordinary_sft": "Exact matching raw causal prefixes may share physical rows in all activation dtypes.",
     "ownership": "Original graph target maps, source identity, per-graph loss normalization and supervised target rows remain bound.",
@@ -43,43 +48,100 @@
   "limitations": [
     "CPU tiny-model qualification only; no full-model task-behavior or GPU speed measurement.",
     "The training runner had imported the prior code before this audit; transition applies after a checkpoint-preserving restart/cutover.",
-    "Exact geometry is not an observed speedup; communication sharing remains contingent on backend capability."
+    "The qualified arithmetic change must be activated through the checkpoint-preserving runtime transition; this receipt itself does not establish that a live runner adopted it."
   ],
   "measured_training_geometry": {
+    "bf16_update_59_geometry": {
+      "actual_eligible_savings": 100252,
+      "actual_eligible_savings_fraction": 0.2223,
+      "actual_sampled_point": "bf16",
+      "graphs": 64,
+      "logical_forward_tokens": 450987,
+      "microbatches": 16,
+      "notes": "Reconstructed from checkpoint state at global step 58; current source schedule output matched the update-59 log.",
+      "physical_forward_tokens_if_enabled": 350735,
+      "sample_step": 58
+    },
+    "current_next_update_64_geometry": {
+      "actual_fp8_eligible_physical_tokens": 417022,
+      "actual_fp8_eligible_savings": 37566,
+      "actual_fp8_eligible_savings_fraction": 0.0826,
+      "actual_next_sampled_point": "fp8",
+      "all_graph_kinds_potential_savings": 111834,
+      "all_graph_kinds_potential_savings_fraction": 0.246,
+      "checkpoint_global_step": 61,
+      "foundation_graphs": 11,
+      "fp8_mix": 0.06661379857256146,
+      "graphs": 71,
+      "latest_completed_log_global_step": 63,
+      "logical_forward_tokens": 454588,
+      "microbatches": 16,
+      "next_sample_step": 63,
+      "notes": "Exact schedule group was reconstructed at offset 2 from checkpoint global step 61 to account for two completed but not checkpointed updates. Eleven multi-node communication graphs are excluded at FP8."
+    },
+    "fp8_update_60_geometry": {
+      "actual_fp8_eligible_physical_tokens": 418224,
+      "actual_fp8_eligible_savings": 27224,
+      "actual_fp8_eligible_savings_fraction": 0.06112,
+      "actual_sampled_point": "fp8",
+      "all_graph_kinds_potential_savings": 112637,
+      "all_graph_kinds_potential_savings_fraction": 0.25286,
+      "foundation_graphs": 12,
+      "fp8_mix": 0.06238435104414486,
+      "graphs": 56,
+      "logical_forward_tokens": 445448,
+      "microbatches": 16,
+      "notes": "Exact trie upper bound includes 12 multi-node communication graphs that must remain unshared at FP8. The actual permitted subset saves 27,224 rows.",
+      "sample_step": 59
+    },
     "historical_update_53": {
-      "active_backend_compatible_savings": 53653,
-      "active_backend_compatible_savings_fraction": 0.10343,
-      "active_fp8_backend_compatible_physical_tokens": 464920,
-      "all_graph_kinds_potential_savings": 150463,
-      "all_graph_kinds_potential_savings_fraction": 0.29003,
-      "exact_prefix_trie_physical_tokens_if_all_graph_kinds_supported": 368110,
+      "actual_eligible_physical_tokens": 368110,
+      "actual_eligible_savings": 150463,
+      "actual_eligible_savings_fraction": 0.29003,
+      "actual_sampled_point": "bf16",
       "foundation_graphs": 11,
       "graphs": 82,
       "initial_raw_context_tokens": 504259,
       "logical_forward_tokens": 518573,
       "microbatches": 16,
-      "notes": "Reconstruction matched logged update graph count and total forward tokens exactly. One 45,920-token single graph exceeded the 32,768 token budget and remained unsplit; this was pre-existing scheduler behavior."
-    },
-    "next_update_60_schedule": {
-      "active_backend_compatible_savings": 27224,
-      "active_backend_compatible_savings_fraction": 0.06112,
-      "active_fp8_backend_compatible_physical_tokens": 418224,
-      "all_graph_kinds_potential_savings": 112637,
-      "all_graph_kinds_potential_savings_fraction": 0.25286,
-      "exact_prefix_trie_physical_tokens_if_all_graph_kinds_supported": 332811,
-      "foundation_graphs": 12,
-      "graphs": 56,
-      "initial_raw_context_tokens": 439155,
-      "logical_forward_tokens": 445448,
-      "microbatches": 16,
-      "notes": "Checkpoint schedule changed during the audit as training advanced. Geometry was recomputed from the metadata-loaded state at global_step 59; 12 multi-node communication graphs are excluded under the current FP8/QAT backend gate."
+      "notes": "Reconstruction matched logged update graph count, total forward tokens, point BF16, and 11 foundation graphs exactly. One 45,920-token single graph exceeded the 32,768 token budget and remained unsplit; unrelated to prefix sharing.",
+      "sample_step": 52
     },
     "performance_claim": "Geometry only. No full model or GPU throughput benchmark was run."
+  },
+  "qat_gate": {
+    "live_update_basis": {
+      "checkpoint_global_step": 61,
+      "latest_completed_log_global_step": 63,
+      "latest_completed_sampled_point": "bf16 at sample step 62",
+      "next_sample_step": 63,
+      "next_sampled_fp8_mix": 0.06661379857256146,
+      "next_sampled_point": "fp8",
+      "schedule_reconstruction": "checkpoint step 61 plus two completed but uncheckpointed optimizer schedule groups; no source changes between groups"
+    },
+    "selection": "communication aliasing is allowed only when the external backend is absent and this optimizer update\u2019s selected precision is absent/BF16; FP8 and NVFP4 sampled points are gated off.",
+    "telemetry_fallback": "Source examples lacking an explicit loss_normalization field are recorded as graph normalized; this prevents telemetry-only access from failing while graph semantics already default to graph normalization."
   },
   "schema": "natlang.native-prefix-arithmetic-qualification/1",
   "source_snapshot": {
     "base_checkpoint_path": "runs/lfm3-sft-successors/joint-v4-full-successor-20261031/run-20-attempt-5/learner/checkpoint.pt",
+    "implementation_commits": [
+      "9e29372b5",
+      "a21e1d77323a7463ae30cc33b4ed6ee587ae5199",
+      "14c20617c9be99415f6887b5eb69a1bc48854c4d",
+      "8cf6ce3d7",
+      "57345a84b",
+      "913bff106"
+    ],
+    "implementation_files": [
+      {
+        "path": "training/neuralese/natlang_neuralese/train/native_state_sft.py",
+        "sha256": "eaa828abaf78eb37498a1481edee9beb1c74e651ab7a9761b62434564572029e"
+      }
+    ],
     "later_schedule_source": "resume53/run/learner/checkpoint.pt; metadata-loaded state was global_step 59 when reconstructing update 60",
+    "oversize_gate_source_commit": "913bff106; native_state_sft.py hash above is the final combined source, including failure-path LR restoration and proof-history carry",
+    "prefix_packing_source_commit": "9e29372b5; source file not self-hashed because its constant pins this receipt",
     "recipe_path": "runs/lfm3-sft-successors/joint-v4-full-successor-20261031/recipe.json",
     "recipe_sha256": "32a814d1199b7598acb8161c02eb198a5665877e3bd40b4c565a599ed97cfdfb",
     "reconstructed_pre_update": "global_step 52 with zero exposure credits; post-update checkpoint states global_step 53 and 82 first-visit credits",

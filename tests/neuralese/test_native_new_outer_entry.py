@@ -80,14 +80,14 @@ def test_native_entry_saves_full_transition_before_readiness(tmp_path, monkeypat
     monkeypatch.setattr(native_diloco, 'attach_learner', lambda *args, **kwargs: FakeLearner())
     settings = json.dumps({'run_id':'new', 'workers':4, 'worker_id':0, 'coordinator_url':'http://127.0.0.1:1'})
     with pytest.raises(Ready):
-        trainer.main([*argv, '--continue-from',str(seed), '--diloco',settings,
+        trainer.main([*argv, '--continue-from',str(slot), '--diloco',settings,
                       '--diloco-new-outer',str(declaration)])
     with pytest.raises(Ready):
-        trainer.main([*argv, '--continue-from',str(seed), '--diloco',settings,
+        trainer.main([*argv, '--continue-from',str(slot), '--diloco',settings,
                       '--diloco-new-outer',str(declaration)])
 
 
-def test_existing_full_slot_wins_over_original_continue_from(tmp_path, monkeypatch):
+def test_explicit_parent_conflicting_with_existing_slot_is_rejected(tmp_path, monkeypatch):
     from test_native_serve import _tiny_source
     from test_native_state_sft import graph
     from natlang_neuralese.model.native_model import load_native_model
@@ -136,7 +136,8 @@ def test_existing_full_slot_wins_over_original_continue_from(tmp_path, monkeypat
         for key in ('backbone_state','interface_state'):assert same(state[key],full[key])
         raise Loaded()
     monkeypatch.setattr(trainer,'load_native_checkpoint',observe)
-    with pytest.raises(Loaded):trainer.main([*argv,'--continue-from',str(parent)])
+    with pytest.raises(ValueError,match='explicit continuation parent differs'):
+        trainer.main([*argv,'--continue-from',str(parent)])
 
 
 def test_first_outer_saves_full_transition_before_readiness(tmp_path, monkeypatch):
@@ -213,10 +214,10 @@ def test_first_outer_saves_full_transition_before_readiness(tmp_path, monkeypatc
     monkeypatch.setattr(native_diloco, 'attach_learner', lambda *args, **kwargs: FakeLearner())
     settings = json.dumps({'run_id':'new', 'workers':4, 'worker_id':0, 'coordinator_url':'http://127.0.0.1:1'})
     with pytest.raises(Ready):
-        trainer.main([*argv, '--continue-from',str(seed), '--diloco',settings,
+        trainer.main([*argv, '--continue-from',str(slot), '--diloco',settings,
                       '--diloco-new-outer',str(declaration)])
     with pytest.raises(Ready):
-        trainer.main([*argv, '--continue-from',str(seed), '--diloco',settings,
+        trainer.main([*argv, '--continue-from',str(slot), '--diloco',settings,
                       '--diloco-new-outer',str(declaration)])
 
 
@@ -298,9 +299,9 @@ def test_first_outer_clone_rng_commits_once_before_barrier(tmp_path, monkeypatch
     monkeypatch.setattr(native_diloco, 'attach_learner', lambda *args, **kwargs: FakeLearner())
     settings = json.dumps({'run_id':'new', 'workers':4, 'worker_id':0, 'coordinator_url':'http://127.0.0.1:1'})
     with pytest.raises(Ready):
-        trainer.main([*argv, '--continue-from',str(seed), '--diloco',settings,
+        trainer.main([*argv, '--continue-from',str(slot), '--diloco',settings,
                       '--diloco-new-outer',str(declaration)])
     with pytest.raises(Ready):
-        trainer.main([*argv, '--continue-from',str(seed), '--diloco',settings,
+        trainer.main([*argv, '--continue-from',str(slot), '--diloco',settings,
                       '--diloco-new-outer',str(declaration)])
 

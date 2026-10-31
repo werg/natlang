@@ -45,6 +45,9 @@ def test_drain_request_yields_registrable_source_append(tmp_path,monkeypatch):
         out.mkdir();request={'schema':trainer.DILOCO_DRAIN_SCHEMA,'id':uuid.uuid4().hex,'worker':0,'fingerprint':'0'*64}
         write_json_durable(out/trainer.DILOCO_DRAIN_REQUEST,request)
         with pytest.raises(ValueError,match='exact worker'):trainer.main(argv)
+        # The rejected request may finish its current update; resume only from
+        # the exact rolling slot rather than silently discarding its visits.
+        argv[argv.index('--continue-from')+1]=str(out/'checkpoint.pt')
         request['fingerprint']=manifest['fingerprint'];write_json_durable(out/trainer.DILOCO_DRAIN_REQUEST,request)
         assert trainer.main(argv)==0
         state=torch.load(out/'checkpoint.pt',weights_only=False)['training'];saved=state['diloco']
@@ -53,7 +56,7 @@ def test_drain_request_yields_registrable_source_append(tmp_path,monkeypatch):
         receipt=json.loads((out/f"diloco-drained-stop-{request['id']}.json").read_text())
         assert receipt['checkpoint']['sha256']==resident.sha(out/'checkpoint.pt') and receipt['global_step']==state['global_step']
         assert not (out/trainer.DILOCO_DRAIN_REQUEST).exists() and (out/f"diloco-drain-request-{request['id']}.consumed.json").exists()
-        relaunch=common+['--native-graphs',str(new),'--continued-native-graphs',str(old),'--out',str(out),'--continue-from',str(seed),'--diloco',json.dumps(settings.__dict__)]
+        relaunch=common+['--native-graphs',str(new),'--continued-native-graphs',str(old),'--out',str(out),'--continue-from',str(out/'checkpoint.pt'),'--diloco',json.dumps(settings.__dict__)]
         assert trainer.main(relaunch)==0
         final=torch.load(out/'checkpoint.pt',weights_only=False)['training']
         assert final['exposure_counts']==dict.fromkeys('abcdefg',1) and final['global_step']>state['global_step']

@@ -125,6 +125,22 @@ def test_bf16_sft_shares_only_raw_prefixes_and_preserves_producer_consumer_super
     assert float(cosine)>.999
 
 
+def test_qat_sampled_precision_gates_communication_prefix_packing_on_tiny_graphs():
+    from natlang_neuralese.train.native_state_sft import _communication_prefix_allowed
+    model=SharedStateModel(tiny('lfm').to(dtype=torch.bfloat16),(58,59,60,61),rank=4)
+    rows=episodes(empty_relay=True)
+    bf16_precision=(object(),'bf16',0.0,1.5)
+    fp8_precision=(object(),'fp8',.066,1.5)
+    assert _communication_prefix_allowed(None,bf16_precision)
+    assert not _communication_prefix_allowed(None,fp8_precision)
+    _,bf16_details=packed_graph_loss(model,rows,share_causal_prefixes=True,
+        allow_communication_prefixes=_communication_prefix_allowed(None,bf16_precision))
+    _,fp8_details=packed_graph_loss(model,rows,share_causal_prefixes=True,
+        allow_communication_prefixes=_communication_prefix_allowed(None,fp8_precision))
+    assert bf16_details[0]['packed_physical_tokens'] < bf16_details[0]['original_physical_tokens']
+    assert fp8_details[0]['packed_physical_tokens'] == fp8_details[0]['original_physical_tokens']
+
+
 @pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
 def test_cuda_native_stateful_prefixes_against_cached_reference(family,dtype):
