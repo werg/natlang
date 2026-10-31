@@ -254,17 +254,6 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
       ...(custody?.stop_gradient ? { stop_gradient: true as const } : {}),
       ...(custody?.source_occurrence ? { source_occurrence: custody.source_occurrence } : {}) });
   };
-  for (const [index, write] of selectedRuntimeResultWrites.entries()) {
-    if (typeof write.target_write_name !== 'string' || typeof write.body_source !== 'string' ||
-        typeof write.source_row_sha256 !== 'string')
-      throw new Error('selected native runtime writer lacks its exact source body and occurrence identity');
-    add('producer', write.target_write_name, write.body_source,
-      typeof write.source_kind === 'string' ? write.source_kind : 'typed-text-result',
-      ['selected_runtime_result_writes', String(index), 'body_source'], {
-        ...(write.stop_gradient === true ? { stop_gradient: true as const } : {}),
-        ...(typeof write.source_occurrence === 'string' ? { source_occurrence: write.source_occurrence } : {}),
-      });
-  }
   const rewrite = (value: unknown, path: string[]): unknown => {
     if (Array.isArray(value)) return value.map((item, index) => rewrite(item, [...path, String(index)]));
     if (!value || typeof value !== 'object') return value;
@@ -360,6 +349,18 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
   let plainTarget: Message | undefined;
   if (target) {
     plainTarget = rewrite(target, ['target']) as Message;
+    // A selected direct typed-text result is written into the target as a `$write`; that exact target position is its
+    // producer occurrence. The selection receipt stays metadata (text_corpus authenticates it); a receipt whose write
+    // is absent from the target cannot be placed and stays unresolved.
+    for (const write of selectedRuntimeResultWrites) {
+      if (typeof write.target_write_name !== 'string' || typeof write.body_source !== 'string' ||
+          typeof write.source_row_sha256 !== 'string')
+        throw new Error('selected native runtime writer lacks its exact source body and occurrence identity');
+      if (!occurrences.some(item => item.role === 'producer' && item.reference === write.target_write_name &&
+          item.path[0] === 'target' && item.body === write.body_source))
+        unresolved.push({ schema: 'natlang.unresolved-native-source-reference/1', path: ['target'],
+          id: write.target_write_name, reason: 'selected runtime result write is not in the target' });
+    }
     const sourceCalls = Array.isArray(target.tool_calls) ? target.tool_calls : [];
     const targetCalls = Array.isArray(plainTarget.tool_calls) ? plainTarget.tool_calls : [];
     for (let index = 0; index < sourceCalls.length; index++) {
