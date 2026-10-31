@@ -200,3 +200,28 @@ def test_cached_forward_is_lazy_after_flat_vjp_for_stateful_backend():
         atol=1e-5,rtol=1e-4,cached_factory=cached)
     assert report['passed']
     assert events==[('forward',0),('backward',0),('forward',1),('backward',1)]
+
+
+def test_complete_gradient_check_rejects_disconnected_import_with_same_forward():
+    torch.manual_seed(19)
+    model = SharedStateModel(tiny('lfm'), (58, 59, 60, 61), rank=4)
+    model.port.checkpoint_layers = False
+    with torch.no_grad():
+        model.adapter.up.weight.normal_(std=.03)
+    _, named = make_native_optimizer(model, lr=3e-6, in_backward=False)
+    named, _ = production_inventory(model, named)
+    def plan(stop):
+        return compile_graph([Invocation('producer', (2,58,3,4,59), producing=((2,4),)),
+            Invocation('consumer', (5,60,61,6,7),
+                imports=(ImportSpan(2,'producer',2,4,stop_gradient=stop),))])
+    good, broken = plan(False), plan(True)
+    ids = good.tensor([t for node in good.invocations for t in node.token_ids], model.input_rows.device)
+    a_input, b_input = model.embed(ids[None]), model.embed(ids[None])
+    a = model(good, embeddings=a_input)['h_final']
+    b = model(broken, embeddings=b_input, reference=True)['h_final']
+    assert torch.allclose(a, b, atol=1e-5, rtol=1e-4)
+    a_loss = F.cross_entropy(model.logits(a[:,-1]).float(), torch.tensor([7]))
+    b_loss = F.cross_entropy(model.logits(b[:,-1]).float(), torch.tensor([7]))
+    result = compare_complete_gradients(a_loss, b_loss, named, a_input, b_input, atol=1e-5, rtol=1e-4)
+    assert result['passed'] is False
+    assert any(not row['passed'] for row in result['comparisons'].values())
