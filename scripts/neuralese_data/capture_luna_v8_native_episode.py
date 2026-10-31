@@ -178,13 +178,14 @@ def main():
                 "bytes": len(encoded)})
         return state_files
 
-    engine = (_HttpNativeEngine(args.endpoint) if args.endpoint else
-        load_native_engine(args.checkpoint, base=args.base, device=args.device, dtype=dtype))
-    if args.endpoint and engine.native_identity.get("checkpoint_sha256") is None:
-        raise ValueError("native endpoint did not report a checkpoint identity")
-    engine.start()
+    engine = None
     active_index = None
     try:
+        engine = (_HttpNativeEngine(args.endpoint) if args.endpoint else
+            load_native_engine(args.checkpoint, base=args.base, device=args.device, dtype=dtype))
+        if args.endpoint and engine.native_identity.get("checkpoint_sha256") is None:
+            raise ValueError("native endpoint did not report a checkpoint identity")
+        engine.start()
         encoder_cache = {}
         captures = []
         for row in rows:
@@ -269,7 +270,7 @@ def main():
         print(json.dumps({"receipt": str(receipt_path), **receipt}, indent=2))
     except Exception as error:
         try:
-            after_error = engine.metrics() if args.endpoint else {}
+            after_error = engine.metrics() if args.endpoint and engine is not None else {}
         except Exception as metrics_error:
             after_error = {"metrics_error": str(metrics_error)}
         append_partial({"event": "error", "audit_sha256": sha256_hex(audit_path.read_bytes()),
@@ -277,7 +278,8 @@ def main():
             "metrics_after": after_error})
         raise
     finally:
-        engine.stop()
+        if engine is not None:
+            engine.stop()
 
 
 def _fsync_dir(path):
