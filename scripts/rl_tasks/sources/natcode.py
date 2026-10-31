@@ -67,10 +67,14 @@ EXPLORE = {
     'field-type': ['In the program in your callable folder, what is the declared type of the field {x}? Return the '
                    'type exactly as declared.'],
 }
-REPAIR = ('The folder is a natlang program that no longer loads: {hint} Repair it so that the program loads again. '
-          'Change only what is broken; keep every function\'s declared parameters, result and uses as intended, and '
-          'leave all other files unchanged. Read the loader\'s complaint by inspecting the files, fix the file, and '
-          'return a one-line description of the fix.')
+REPAIR = ('The supplied folder is the project to repair. The `repair_program` operation is the task entrypoint '
+          'outside that project; it is not a file or helper to search for in the folder. The `read_code` tool shows '
+          'the active callable scope, not the project files. Inspect the project with the folder tools (`list_files`, '
+          '`read_file`, `search_files`); edit the relevant project file with `write_file` or `editor`, then review '
+          'your change with `diff_files`. The harness checks that the project loads after you finish.\n\n'
+          'The project no longer loads: {hint} Repair it so that the program loads again. Change only what is '
+          'broken; keep every function\'s declared parameters, result and uses as intended, and leave all other '
+          'files unchanged. Return a one-line description of the change.')
 HINTS = {
     'type-typo': 'one function declares a parameter or result type with a misspelled name.',
     'uses-typo': 'one function lists a `uses` entry whose path is misspelled.',
