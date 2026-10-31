@@ -4,6 +4,25 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Actual advancement, 19:47 CET
+
+Corrected branch earned global54/stage2 at19:43:47:105,499 supervised tokens,
+199.73s update time (528.2 supervised tokens/s), FP8 point with actual v3 inline
+prefix sharing enabled. Different batch geometry prevents attributing a speedup
+from this number alone. Full15,293,669,538byte checkpoint committed atomically
+at19:45:49 in the existing rolling slot; SHA256
+`7808deb6218128a07e1bd51bf740a063e47e9b900b502edfb37a865112bde6df`.
+Four full-prompt evaluation collectors are active under
+`run/learner/task-eval/step-0000002`; no final capability outcome yet.
+
+Teacher supervision found a second concrete telecom defect: per-call refuel
+checks allowed two2GB/$4 calls against a cumulative2GB/$4 authorization. Simulator
+session counters were monotonic (world reset ruled out). The v8 teacher run was
+stopped after the second charge was observed, preserving its partial as a
+negative; no positive was admitted. Luna C is enforcing cumulative atomic budgets
+and diagnosing still-failing MMS/semantic repeats before another versioned run.
+No Luna teacher is currently authorized to continue that broken v8 workflow.
+
 ## Corrected-runtime cutover, 19:41 CET
 
 Root-caused the ~2% BF16 derivative discrepancy to row-geometry-sensitive
