@@ -12,6 +12,27 @@ from natlang_neuralese.data.native_sources import NativeGraphSource
 from test_native_state_sft import graph, authenticated_pair, source_manifest
 
 
+def test_unearned_stage_replacement_is_bound_and_rejects_earned_rows():
+    from natlang_neuralese.train.native_continuation import supersede_unearned_stage
+    frame = {'step': 0, 'epoch': 0, 'cursor': 0, 'source_row_bindings': {'a': 'b'},
+             'exposure_counts': {'a': 0}, 'source_receipts': [{'sha256': 'old'}]}
+    proof = {'schema': 'natlang.unearned-sft-source-replacement/1', 'old_stage': 'old',
+             'new_stage': 'new', 'parent_sha256': 'parent', 'old_source_sha256': 'old',
+             'new_source_sha256': 'new', 'held_source_sha256': 'held', 'old_planned_rows': 1, 'disposition': 'curated'}
+    training = {'optimizer': {'state': 1}, 'rng': {'state': 1}}
+    result, record = supersede_unearned_stage({'old': frame}, training, proof,
+        parent_sha256='parent', train_sha256='new', held_sha256='held', new_stage='new')
+    assert result == {} and record['old_graph_visits'] == 0 and frame['exposure_counts']['a'] == 0
+    for change in ({'exposure_counts': {'a': 1}}, {'step': 1}, {'accumulated_gradients': {}},
+                   {'pending_source_rows': {'a': {}}}):
+        with pytest.raises(ValueError):
+            supersede_unearned_stage({'old': {**frame, **change}}, training, proof,
+                parent_sha256='parent', train_sha256='new', held_sha256='held', new_stage='new')
+    with pytest.raises(ValueError):
+        supersede_unearned_stage({'old': frame}, training, proof,
+            parent_sha256='other', train_sha256='new', held_sha256='held', new_stage='new')
+
+
 def progress():
     return {'schema':'natlang.neuralese-native-sft-training/1','step':3,'global_step':3,'epoch':0,'cursor':1,
         'identity':{'objective':None},'source_row_bindings':{'old':'binding0','new':'binding1'},

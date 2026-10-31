@@ -1299,6 +1299,8 @@ def build_parser():
     parser.add_argument('--native-participant')
     parser.add_argument('--objective-continuation', action='store_true',
         help='explicit new source/objective stage; preserve full optimizer/RNG and start local exposure at zero')
+    parser.add_argument('--supersede-unearned-sft-stage', type=Path,
+        help='bound proof replacing a zero-exposure SFT plan with a new stage')
     parser.add_argument('--policy-source-continuation', type=Path,
         help='authenticated append of a rolling policy source, preserving its exact per-row exposure')
     parser.add_argument('--device', default='cuda')
@@ -2010,6 +2012,28 @@ def _main(argv=None, *, requested_refresh):
             'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0)))})
     checkpoint_options['history_reasoning_policy_history'] = history_profile_history
     carried_progress = collect_sft_progress(saved_training)
+    replacement_history = list((saved_training.get('options') or {}).get('unearned_sft_replacement_history') or [])
+    if args.supersede_unearned_sft_stage:
+        proof = json.loads(args.supersede_unearned_sft_stage.read_text())
+        proof_sha = sha256_file_hex_cached(args.supersede_unearned_sft_stage)
+        if not parent_continuation:
+            if (not any(item.get('proof_sha256') == proof_sha for item in replacement_history)
+                    or proof.get('new_stage') != args.stage_id
+                    or proof.get('new_source_sha256') != sha256_file_hex_cached(args.native_graphs)
+                    or proof.get('held_source_sha256') != sha256_file_hex_cached(args.held_native_graphs)):
+                raise ValueError('rolling SFT replacement does not match its committed proof')
+        else:
+            if args.continue_from is None or not args.objective_continuation:
+                raise ValueError('unearned SFT replacement requires an exact parent objective continuation')
+            from .native_continuation import supersede_unearned_stage
+            carried_progress, record = supersede_unearned_stage(carried_progress, saved_training, proof,
+                parent_sha256=sha256_file_hex_cached(args.continue_from),
+                train_sha256=sha256_file_hex_cached(args.native_graphs),
+                held_sha256=sha256_file_hex_cached(args.held_native_graphs), new_stage=args.stage_id)
+            record['proof_path'] = str(args.supersede_unearned_sft_stage.resolve())
+            record['proof_sha256'] = proof_sha
+            replacement_history.append(record)
+    checkpoint_options['unearned_sft_replacement_history'] = replacement_history
     restored_progress = False
     precision_history = list((saved_training.get('options') or {}).get('native_precision_history') or [])
     transition = {'from': previous_precision, 'to': requested_precision,

@@ -296,6 +296,43 @@ def restore_sft_progress(current,stage,*,collected_progress=None):
     return result
 
 
+def supersede_unearned_stage(progress, training, proof, *, parent_sha256, train_sha256, held_sha256, new_stage):
+    """Replace an unstarted plan while retaining its exact parent and disposition in history."""
+    if proof.get('schema') != 'natlang.unearned-sft-source-replacement/1':
+        raise ValueError('invalid unearned SFT replacement proof')
+    old = proof.get('old_stage')
+    if (not old or old == new_stage or proof.get('new_stage') != new_stage
+            or proof.get('parent_sha256') != parent_sha256 or proof.get('new_source_sha256') != train_sha256
+            or proof.get('held_source_sha256') != held_sha256
+            or not isinstance(proof.get('disposition'), str) or not proof['disposition'].strip()):
+        raise ValueError('unearned SFT replacement bindings differ')
+    frame = progress.get(old)
+    if not isinstance(frame, dict) or new_stage in progress:
+        raise ValueError('unearned SFT replacement requires exactly the old unstarted frame')
+    receipts = frame.get('source_receipts') or []
+    if not receipts or receipts[0].get('sha256') != proof.get('old_source_sha256'):
+        raise ValueError('unearned SFT replacement old source differs')
+    if (any(int(frame.get(k, 0)) != 0 for k in ('step', 'epoch', 'cursor'))
+            or any(int(v) != 0 for v in (frame.get('exposure_counts') or {}).values())
+            or frame.get('completed_foundations') or frame.get('pending_source_rows')
+            or any('grad' in str(k).lower() for k in frame)):
+        raise ValueError('SFT stage has earned exposure, progress, or accumulated gradients')
+    if (not training.get('optimizer') or not training.get('rng')
+            or any('grad' in str(k).lower() and training[k] is not None for k in training)):
+        raise ValueError('unearned SFT replacement needs preserved optimizer and RNG')
+    rows = frame.get('source_row_bindings') or {}
+    if not rows or len(rows) != proof.get('old_planned_rows'):
+        raise ValueError('unearned SFT replacement row inventory differs')
+    result = dict(progress)
+    result.pop(old)
+    return result, {'schema': proof['schema'], 'old_stage': old, 'new_stage': new_stage,
+        'parent_sha256': parent_sha256, 'old_source_sha256': proof['old_source_sha256'],
+        'new_source_sha256': train_sha256, 'held_source_sha256': held_sha256, 'old_planned_rows': len(rows),
+        'old_graph_visits': 0, 'disposition': proof.get('disposition'),
+        'weights_optimizer_rng_rl_exposure': 'preserved',
+        'old_frame_custody': 'exact parent checkpoint; no completion claimed'}
+
+
 def progress_obligations(progress):
     """Truthful deficits for every stage, including sources absent from RL rows."""
     stages={}
