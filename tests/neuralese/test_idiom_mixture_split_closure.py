@@ -142,3 +142,23 @@ def test_component_carve_draws_once_per_component(tmp_path, monkeypatch):
 def test_header_view_split_is_deterministic():
     share = sum(mod.header_view(f'd{i}', 0.2) for i in range(5000)) / 5000
     assert 0.17 < share < 0.23 and mod.header_view('x', 0.2) == mod.header_view('x', 0.2)
+
+
+def test_held_identity_retains_colliding_views_and_world_custody():
+    import copy
+    first = {'id': 'same-source-id', 'split': 'test', 'source_groups': ['world-a'],
+             'tokenizer_fingerprint': 'fixture',
+             'nodes': [{'name': 'n', 'token_ids': [1, 2], 'target_weights': [0, 1]}]}
+    different_view = copy.deepcopy(first)
+    different_view['nodes'][0]['token_ids'] = [3, 2]
+    different_world = copy.deepcopy(first)
+    different_world['source_groups'] = ['world-b']
+    assert mod.content_key(first) == mod.content_key(different_world)
+    seen = set()
+    rows = [mod.held_graph_identity(row, seen) for row in (first, different_view, different_world)]
+    assert len({row['id'] for row in rows}) == 3
+    assert set().union(*(set(row['source_groups']) for row in rows)) == {'world-a', 'world-b'}
+    assert all(row['held_identity']['original_id'] == 'same-source-id' for row in rows)
+    assert all('same-source-id' in row['source_record_ids'] for row in rows)
+    assert mod.held_graph_identity(copy.deepcopy(first), seen) is None
+    assert first['id'] == 'same-source-id' and 'held_identity' not in first

@@ -26,6 +26,7 @@ build_native_ce_supervision_policy.py and the policy's objective.
 from __future__ import annotations
 
 import argparse
+import copy
 import collections
 import hashlib
 import json
@@ -40,7 +41,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
 sys.path.insert(0, str(REPO / 'scripts' / 'neuralese_data'))
-from natlang_neuralese.common.hashing import sha256_file_hex, sha256_file_hex_cached  # noqa: E402
+from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex, sha256_file_hex_cached  # noqa: E402
 from build_verified_teacher_trajectory_graphs import graph_content_sha256  # noqa: E402
 
 SCHEMA = 'natlang.idiom-mixture/2'
@@ -272,6 +273,30 @@ def keep_prompt_view(view, owner, has_full, has_header, header):
 
 def content_key(row) -> str:
     return graph_content_sha256(row)
+
+
+def held_graph_identity(row, seen):
+    """Keep each exact held record once, retaining every distinct view and world.
+
+    Content-only deduplication loses held custody when different worlds have the
+    same token sequence; source IDs can also collide between prompt views.
+    Preserve the original identities and groups, while naming each exact held
+    record by its full immutable record digest. This does not create new worlds.
+    """
+    original_id = row.get('id')
+    if not isinstance(original_id, str) or not original_id:
+        raise ValueError('held graph requires its original source identity')
+    digest = canonical_json_sha256_hex(row)
+    if digest in seen:
+        return None
+    seen.add(digest)
+    result = copy.deepcopy(row)
+    result['id'] = 'held-record:' + digest
+    result['source_record_ids'] = sorted(set([original_id, *(row.get('source_record_ids') or [])]))
+    result['held_identity'] = {'schema': 'natlang.held-record-identity/1',
+                               'original_id': original_id, 'original_record_sha256': digest,
+                               'scope': 'exact source record; prompt views and worlds remain distinct'}
+    return result
 
 
 def carved(groups, carve) -> bool:
@@ -934,10 +959,10 @@ def main(argv=None):
     for path in held_rows:
         for _, raw in iter_lines(path):
             row = json.loads(raw)
-            key = content_key(row)
-            if row.get('split') == 'test' and key not in held_seen:
-                held_seen.add(key)
-                held_writer.write(raw)
+            if row.get('split') == 'test':
+                unique = held_graph_identity(row, held_seen)
+                if unique is not None:
+                    held_writer.write(json.dumps(unique, ensure_ascii=False, separators=(',', ':')).encode())
     carve_lines = collections.defaultdict(set)
     for path, number in carve_out:
         carve_lines[path].add(number)
@@ -948,10 +973,9 @@ def main(argv=None):
                 row['split'] = 'test'  # the permanent held slice (policy held_carve); its groups never train
                 row.setdefault('conversion', {})['held_carve'] = {'policy': policy['id'],
                                                                   'rule': 'sha256(salt+source_group) < fraction'}
-                key = content_key(row)
-                if key not in held_seen:
-                    held_seen.add(key)
-                    held_writer.write(json.dumps(row, ensure_ascii=False, separators=(',', ':')).encode())
+                unique = held_graph_identity(row, held_seen)
+                if unique is not None:
+                    held_writer.write(json.dumps(unique, ensure_ascii=False, separators=(',', ':')).encode())
     held_output = held_writer.close()
 
     priority = {int(k): v for k, v in policy['tier_training_priority'].items()}
