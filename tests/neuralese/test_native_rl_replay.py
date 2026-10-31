@@ -258,22 +258,37 @@ def test_self_distillation_prefers_successful_neuralese_using_episodes(tmp_path)
         prepare_objective([forged], identity=identity, roles=roles, fetch_block=lambda key: block, mode='rft')
 
 
-def test_outcome_stays_primary_in_normalized_grpo():
+def test_neuralese_bonus_is_added_after_outcome_centering_never_to_groupmates():
+    from natlang_neuralese.rl.native_replay import group_episode_advantages
+    from natlang_neuralese.rl.rollout_math import group_advantages
+    def rows(rewards):
+        return [{'reward': reward} for reward in rewards]
+    used, plain, failed = {'quality': 1, 'neuralese_bonus': .1}, {'quality': 1}, {'quality': 0}
+    for jolt, mode in ((True, 'grpo'), (False, 'grpo')):
+        # All correct, one with a real Neuralese import: exactly +bonus for it, exactly 0 for the others.
+        assert group_episode_advantages(rows([used, plain, plain, plain]), jolt=jolt, mode=mode) == [.1, 0., 0., 0.]
+        # Mixed group: centering is identical to the no-bonus case; only the qualifying correct one gains.
+        mixed = group_episode_advantages(rows([used, plain, failed, failed]), jolt=jolt, mode=mode)
+        reference = group_episode_advantages(rows([plain, plain, failed, failed]), jolt=jolt, mode=mode)
+        assert mixed == [reference[0] + .1, *reference[1:]]
+        assert reference[1] > 0 > reference[2]
+    expected, _ = group_advantages([1, 1, 0, 0])
+    assert group_episode_advantages(rows([plain, plain, failed, failed]), jolt=False, mode='grpo') == expected
+    assert group_episode_advantages(rows([plain, plain]), jolt=False, mode='grpo') is None  # nothing to learn
+
+
+def test_grpo_objective_records_bonus_after_outcome_centering():
     from natlang_neuralese.rl.native_replay import prepare_objective
+    from natlang_neuralese.rl.rollout_math import group_advantages
     from test_rl_episode_graph import attach_execution_graph
     _, roles, identity, _, block, turns = actor_rollout('lfm')
     raw_turns = [{'messages': [], 'target': {}, 'invocation_id': turn['graph_turn'],
                   'sampling': turn['sampling'], 'replay': {'raw_calls_retained': True}} for turn in turns]
-    def group(rewards):
-        rows = [{'task_id': 'train-task', 'sample': sample, 'split': 'train', 'group': 'g', 'reward': reward,
-                 'policy': {'checkpoint_sha256': identity['checkpoint_sha256']}, 'turns': copy.deepcopy(raw_turns)}
-                for sample, reward in enumerate(rewards)]
-        return attach_execution_graph(rows)
-    options = dict(identity=identity, roles=roles, fetch_block=lambda key: block)
-    # A bonus difference alone (all correct) is no outcome spread for std-normalized GRPO.
-    graphs, _ = prepare_objective(group([{'quality': 1, 'neuralese_bonus': .1}, {'quality': 1}]), **options)
-    assert graphs == []
-    _, spec = prepare_objective(group([{'quality': 1, 'neuralese_bonus': .1}, {'quality': 1}, {'quality': 0}]),
-                                **options)
-    advantages = [row['advantage'] for row in spec['rows'].values()]
-    assert advantages[0] > advantages[1] > 0 > advantages[2]
+    rewards = [{'quality': 1, 'neuralese_bonus': .1}, {'quality': 1}, {'quality': 0}]
+    episodes = attach_execution_graph([{'task_id': 'train-task', 'sample': sample, 'split': 'train', 'group': 'g',
+        'reward': reward, 'policy': {'checkpoint_sha256': identity['checkpoint_sha256']},
+        'turns': copy.deepcopy(raw_turns)} for sample, reward in enumerate(rewards)])
+    _, spec = prepare_objective(episodes, identity=identity, roles=roles, fetch_block=lambda key: block)
+    expected, _ = group_advantages([1, 1, 0])
+    assert [row['advantage'] for row in spec['rows'].values()] == pytest.approx(
+        [expected[0] + .1, expected[1], expected[2]])

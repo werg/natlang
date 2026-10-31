@@ -1083,6 +1083,25 @@ def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
         'base_native_identity':dict(identity),'collector_policy_role':'base-runtime-metadata','episodes':episodes},identity)
 
 
+def group_episode_advantages(members, *, jolt, mode):
+    """Advantages of one scored group, or None when std-normalized GRPO has nothing to learn from it.
+
+    Centering uses the task outcome (``quality``) only: JOLT+ subtracts the group mean, GRPO normalizes by the
+    group std. The success-gated Neuralese-use bonus (``reward.neuralese_bonus``) is then added to the qualifying
+    episode's own advantage, so a groupmate's bonus never lowers a correct episode's advantage and never changes
+    a failed episode's advantage."""
+    from .rollout_math import group_advantages
+    qualities = [row['reward']['quality'] for row in members]
+    bonuses = [float(row['reward'].get('neuralese_bonus') or 0.) for row in members]
+    advantages, stats = group_advantages(qualities)
+    if jolt:
+        mean = sum(qualities) / len(qualities)
+        advantages = [quality - mean if len(qualities) > 1 else 0. for quality in qualities]
+    elif mode == 'grpo' and not stats['spread'] and not any(bonuses):
+        return None
+    return [None if advantage is None else advantage + bonus for advantage, bonus in zip(advantages, bonuses)]
+
+
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,
                       min_quality=1., policy_loss=None, privileged=None, actors=None):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
@@ -1134,18 +1153,8 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     graphs, objective_rows = [], {}
     adapter_binding, binding_seen = None, False
     for members in grouped.values():
-        # Returns are the task outcome plus any recorded Neuralese-use bonus (only ever on correct episodes).
-        # The outcome stays primary: std-normalized GRPO admits a group only for real outcome spread, so a
-        # bonus difference alone never becomes a full-scale normalized advantage.
-        returns = [rollout_return(row) for row in members]
-        advantages, stats = group_advantages([row['reward']['quality'] for row in members])
-        if stats['spread']:
-            advantages, _ = group_advantages(returns)
-        if jolt is not None:
-            # JOLT+: returns minus the group mean; the dense self-teaching term needs no spread.
-            mean = sum(returns) / len(returns)
-            advantages = [value - mean if len(returns) > 1 else 0. for value in returns]
-        elif mode == 'grpo' and not stats['spread']:
+        advantages = group_episode_advantages(members, jolt=jolt is not None, mode=mode)
+        if advantages is None:
             continue
         for rollout, advantage in zip(members, advantages):
             if mode == 'rft' and rollout['reward']['quality'] < min_quality:
