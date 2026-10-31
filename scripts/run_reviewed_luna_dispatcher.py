@@ -422,6 +422,9 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
         normalized_cases.append({'index': index, 'seed': seed})
     runtime_semantics_capability = _validate_runtime_semantics_capabilities(
         runtime, runtime_manifest, _required_runtime_semantics_features(rows, normalized_cases))
+    if (plan.get('controller_frontend_preflight') and
+            plan.get('runtime_semantics_capability') != runtime_semantics_capability):
+        raise ValueError('Reviewed application-controller runtime capability evidence differs from the frozen collector')
 
     inventory_record = None
     if schema == 'natlang.reviewed_luna_dispatch_plan/2':

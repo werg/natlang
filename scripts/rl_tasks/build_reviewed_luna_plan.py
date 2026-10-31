@@ -357,6 +357,8 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
     selected_source.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in selected), encoding='utf-8')
     cases = [{'index': index, 'seed': int(hashlib.sha256(f'{campaign_id}|{seed}|{row["id"]}'.encode()).hexdigest()[:8], 16)}
              for index, row in enumerate(selected)]
+    runtime_semantics_capability = dispatcher._validate_runtime_semantics_capabilities(
+        runtime, runtime_manifest, dispatcher._required_runtime_semantics_features(rows, cases))
     inventory_output.parent.mkdir(parents=True, exist_ok=True)
     inventory_data = inventory(selected_source, cases)
     inventory_output.write_text(json.dumps(inventory_data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
@@ -409,6 +411,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'artifact_hashes': artifact_hashes,
         'intake_receipt_binding': intake_binding,
         'controller_frontend_preflight': controller_preflight,
+        'runtime_semantics_capability': runtime_semantics_capability,
         'external_service_bindings': _intake_external_service_files(intake_record),
         'external_services': (intake_record or {}).get('external_services', {}),
         'runtime_dependency_trees': _intake_runtime_trees(intake_record),
@@ -456,6 +459,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'quality_excluded_rows': sum(1 for row in rows if row.get('split') == 'train' and
                                      (row.get('curriculum', {}).get('external') or {}).get('quality_status', 'ready') != 'ready'),
         'prompt_rendering': 'full', 'slots': slots, 'root_approved': False,
+        'runtime_semantics_capability': runtime_semantics_capability,
         'dispatch_command_after_review': (
             f'python3 scripts/memory_ledger.py run --unit {campaign_id} --budget-gb 2 --class collection '
             f'--priority low --no-resumable -- python3 scripts/run_reviewed_luna_dispatcher.py '
