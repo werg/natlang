@@ -490,26 +490,35 @@ def verify(args):
     item = queue['items'][args.id]
     student, reference = queue['student'], queue['reference']
     tok = AutoTokenizer.from_pretrained(str(resolve(student)['path']), local_files_only=True, trust_remote_code=False)
-    new, old = REPO / item['out'], REPO / item['path']
+    # A student-only render (no registered reference render: item path None, e.g. a corpus that only had graph
+    # views for the older students) gets the reference-free checks: decode, call markup, train/held group overlap
+    # and target parse-back. Its selection is the renderer's own (registry admission, reservations, held groups).
+    if item.get('path') is None:
+        reference = None
+    new = REPO / item['out']
+    old = REPO / item['path'] if reference else None
     report = {'schema': 'natlang.student-rerender-verification/1', 'id': item['id'], 'student': student,
               'reference': reference, 'views': {}, 'problems': []}
-    new_receipt, old_receipt = load(new / 'receipt.json'), load(old / 'receipt.json')
+    new_receipt = load(new / 'receipt.json')
+    old_receipt = load(old / 'receipt.json') if old else {}
     from natlang_neuralese.common.hashing import sha256_file_hex
     report['render_receipt_sha256'] = sha256_file_hex(new / 'receipt.json')
-    report['reference_receipt_sha256'] = sha256_file_hex(old / 'receipt.json')
-    if item['kind'] == 'direct':
+    if old:
+        report['reference_receipt_sha256'] = sha256_file_hex(old / 'receipt.json')
+    if item['kind'] == 'direct' and old:
         if new_receipt.get('sources') != old_receipt.get('sources'):
             report['problems'].append('source identities differ from the reference render receipt')
     wanted_targets = set()
     view_rows = {}
     for view in item['views']:
-        ref_path, new_path = view_file(old, view, reference), view_file(new, view, student)
-        if ref_path is None:
+        ref_path = view_file(old, view, reference) if old else None
+        new_path = view_file(new, view, student)
+        if ref_path is None and old:
             continue
         if new_path is None:
             report['problems'].append(f'{view}: no {student} rendering')
             continue
-        ref_ids = [identity(r) for r in rows(ref_path)]
+        ref_ids = [identity(r) for r in rows(ref_path)] if ref_path else None
         stats = collections.Counter()
         new_ids, groups = [], {'train': set(), 'test': set()}
         for row in rows(new_path):
@@ -526,6 +535,14 @@ def verify(args):
                 reply = tok.decode(row['token_ids'][start:], skip_special_tokens=False)
                 view_rows.setdefault(row['source_record_ids'][0], []).append((view, reply))
                 wanted_targets.add(row['source_record_ids'][0])
+        if ref_ids is None:  # reference-free
+            stats.update(documents=len(new_ids),
+                         train_test_group_overlap=len(groups['train'] & groups.get('test', set())))
+            report['views'][view] = dict(stats)
+            for key in ('decode_mismatch', 'pythonic_call_marker', 'train_test_group_overlap'):
+                if stats[key]:
+                    report['problems'].append(f'{view}: {key} {stats[key]}')
+            continue
         ref_set, new_set = set(ref_ids), set(new_ids)
         stats.update(documents=len(new_ids), reference_documents=len(ref_ids),
                      same_order=int(ref_ids == new_ids), only_reference=len(ref_set - new_set),
@@ -680,6 +697,24 @@ def serving_view_file(item: dict, view: str, student: str) -> Path | None:
     return path if path.exists() else view_file(out, view, student)
 
 
+def add(args):
+    """Queue a student-only render (no registered reference render) of an admitted source corpus."""
+    registry = {c['id']: c for c in load(REGISTRY)['corpora']}
+    source = registry[args.source_corpus]
+    if not source.get('training_admission'):
+        raise SystemExit(f'{args.source_corpus} is not training-admitted')
+    command = args.command[1:] if args.command[:1] == ['--'] else args.command
+    with Queue(args.queue) as queue:
+        if args.id in queue['items'] and not args.replace:
+            raise SystemExit(f'{args.id} is already queued')
+        queue['items'][args.id] = {
+            'id': args.id, 'new_id': f'{args.id}-{queue["student"]}', 'kind': args.kind, 'status': 'pending',
+            'tier': args.tier, 'out': rel(args.out), 'path': None, 'source_corpus': args.source_corpus,
+            'views': args.views, 'reference_tokens': args.reference_tokens, 'missing': [], 'command': command,
+            'note': args.note or 'student-only render of an admitted corpus (reference-free verification)'}
+    print(json.dumps({'queued': args.id}))
+
+
 def entry(args):
     queue = load(args.queue)
     item = queue['items'][args.id]
@@ -690,7 +725,7 @@ def entry(args):
 def registry_entry(item: dict, student: str) -> dict:
     from natlang_neuralese.common.hashing import sha256_file_hex
     registry = {c['id']: c for c in load(REGISTRY)['corpora']}
-    source = registry[item['id']]
+    source = registry[item.get('source_corpus') or item['id']]
     out = REPO / item['out']
     receipt = load(out / 'receipt.json')
     verification = load(out / 'student-verification.json')
@@ -717,13 +752,13 @@ def registry_entry(item: dict, student: str) -> dict:
                        'parts/*/*/*/omissions.jsonl.zst', 'parts/*/render-omissions/*/omissions.jsonl',
                        'native-graphs.sh', 'native-graphs/*/receipt.json', 'exact-subset/*/*/text-data.jsonl.zst', 'native-graphs/*/*/native-graphs.jsonl.zst'],
            **{k: source[k] for k in keep if k in source},
-           'admission': (f'{student} render of the registered render {item["id"]} (scripts/neuralese_data/'
+           'admission': (f'{student} render of the registered corpus {item.get("source_corpus") or item["id"]} (scripts/neuralese_data/'
                          f'student_rerender.py: its receipt\'s exact selection arguments, {student} tokenizer only); '
                          'inherits that render\'s admission, splits and held decisions; no new example admission'),
            'training_admission': source.get('training_admission'),
-           'derived_from': [item['id'], *(source.get('derived_from') or [])],
+           'derived_from': [item.get('source_corpus') or item['id'], *(source.get('derived_from') or [])],
            'renders': renders,
-           'student_rerender': {'reference_render': item['id'], 'student': student,
+           'student_rerender': {'reference_render': item['id'] if item.get('path') else None, 'student': student,
                                 'identical_documents': verification['identical_documents'],
                                 'views': {v: {k: s.get(k) for k in ('documents', 'reference_documents', 'same_order',
                                                                     'only_reference', 'only_student')}
@@ -816,6 +851,18 @@ def main():
     p = sub.add_parser('verify')
     p.add_argument('--queue', required=True)
     p.add_argument('--id', required=True)
+    p = sub.add_parser('add')
+    p.add_argument('--queue', required=True)
+    p.add_argument('--id', required=True)
+    p.add_argument('--source-corpus', required=True, help='the training-admitted registry corpus rendered')
+    p.add_argument('--out', required=True)
+    p.add_argument('--kind', choices=('direct', 'parts'), required=True)
+    p.add_argument('--views', nargs='+', default=['full', 'program-header', 'whole-trajectory'])
+    p.add_argument('--tier', type=int, default=1)
+    p.add_argument('--reference-tokens', type=int, default=0, help='size estimate for ordering and budgets')
+    p.add_argument('--note')
+    p.add_argument('--replace', action='store_true')
+    p.add_argument('command', nargs=argparse.REMAINDER, help='-- the render command')
     p = sub.add_parser('subset')
     p.add_argument('--queue', required=True)
     p.add_argument('--id', required=True)
@@ -826,7 +873,7 @@ def main():
     p.add_argument('--queue', required=True)
     p.add_argument('--limit', type=int)
     args = ap.parse_args()
-    {'plan': plan, 'launch': launch, 'status': status, 'verify': verify, 'entry': entry, 'subset': subset,
+    {'plan': plan, 'launch': launch, 'status': status, 'verify': verify, 'entry': entry, 'subset': subset, 'add': add,
      'register': register_graphed}[args.cmd](args)
 
 
