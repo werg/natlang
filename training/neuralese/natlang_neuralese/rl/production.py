@@ -389,6 +389,9 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
     """Drain exactly this collector's session before partial custody can run."""
     import os
     import inspect
+    repo_root = str(root('repo').resolve(strict=True))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
     from scripts.coreweave import teacher_engine_guard as guard
     from ..common.hashing import sha256_file_hex
     helper=Path(guard.__file__).resolve(strict=True)

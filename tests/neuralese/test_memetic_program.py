@@ -127,6 +127,26 @@ def test_author_provenance_binds_the_served_native_author():
         memetic.author_provenance('http://student', 'native', other)
 
 
+def test_collector_imports_session_guard_from_configured_repo_root(monkeypatch):
+    import sys
+    from natlang_neuralese.rl import production
+
+    repo = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv('NATLANG_REPO', str(repo))
+    monkeypatch.setattr(sys, 'path', [item for item in sys.path
+        if Path(item or '.').resolve() != repo])
+    for name in tuple(sys.modules):
+        if name == 'scripts' or name.startswith('scripts.coreweave'):
+            monkeypatch.delitem(sys.modules, name, raising=False)
+
+    def stop_before_launch(*args, **kwargs):
+        raise OSError('stopped after guard import')
+
+    monkeypatch.setattr(production.subprocess, 'Popen', stop_before_launch)
+    with pytest.raises(OSError, match='stopped after guard import'):
+        production._run_collector(['unused'], None, None)
+
+
 def test_author_attempt_context_is_retry_stable_and_generation_distinct(monkeypatch):
     prompts = []
     monkeypatch.setattr(memetic.runner, 'author_call', lambda url, model, prompt: (
