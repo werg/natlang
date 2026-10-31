@@ -155,13 +155,26 @@ def test_native_policy_objective_prepares_whole_episode_and_uses_supplied_forwar
     # Keep both outcomes in the group to obtain a genuine relative-policy signal.
     raw_turns = [{'messages': [], 'target': {}, 'invocation_id': turn['graph_turn'],
                   'sampling': turn['sampling'], 'replay': {'raw_calls_retained': True}} for turn in turns]
-    episodes = [{'task_id': 'train-task', 'sample': sample, 'split': 'train', 'group': 'g',
+    import hashlib
+    packet_row = b'{"id":"train-task","source_groups":["sms_spam:source-world"],"source_ids":["sms_spam:source-row"],"source_revisions":["sms_spam/v1"]}\n'
+    packet_sha = hashlib.sha256(packet_row).hexdigest()
+    packet_row_sha = hashlib.sha256(packet_row).hexdigest()
+    source_custody = {'schema':'natlang.rollout-source-custody/1','task_id':'train-task',
+        'packet_sha256':packet_sha,'packet_row_index':0,'packet_row_sha256':packet_row_sha,
+        'source_ids':['sms_spam:source-row'],'source_groups':['sms_spam:source-world'],
+        'source_revisions':['sms_spam/v1']}
+    episodes = [{'task_id': 'train-task', 'source_ids':['sms_spam:source-row'],
+                 'source_groups':['sms_spam:source-world'], 'source_revisions':['sms_spam/v1'],
+                 'source_custody':copy.deepcopy(source_custody), 'sample': sample, 'split': 'train', 'group': 'g',
                  'reward': {'quality': reward}, 'policy': {'checkpoint_sha256': identity['checkpoint_sha256']},
                  'turns': copy.deepcopy(raw_turns)} for sample, reward in enumerate((1, 0))]
     from test_rl_episode_graph import attach_execution_graph
     attach_execution_graph(episodes)
     graphs, spec = prepare_objective(episodes, identity=identity, roles=roles, fetch_block=lambda key: block)
     assert len(graphs) == 2 and all(len(graph['nodes']) == 2 for graph in graphs)
+    assert all('sms_spam:source-world' in graph['source_groups'] for graph in graphs)
+    assert all(graph['source_custody']['packet_row_sha256'] == packet_row_sha for graph in graphs)
+    assert all(row['source_custody']['status'] == 'packet-row-bound' for row in spec['rows'].values())
     spec_path = tmp_path / 'objective.json'
     spec_path.write_text(json.dumps(spec))
     objective = NativePolicyObjective(spec_path)
@@ -179,6 +192,18 @@ def test_native_policy_objective_prepares_whole_episode_and_uses_supplied_forwar
     context['examples'] = [parse_graph(changed, tokenizer_fingerprint=identity['tokenizer_fingerprint'])]
     with pytest.raises(ValueError, match='graph/masks'):
         objective(model, result, context)
+
+
+def test_native_graph_rejects_rollout_source_metadata_drift():
+    from natlang_neuralese.rl.native_replay import _rollout_source_custody
+    rollout = {'task_id':'task', 'source_groups':['upstream:train'], 'source_ids':['record:1'],
+        'source_revisions':['source/v1'], 'source_custody':{'schema':'natlang.rollout-source-custody/1',
+            'task_id':'task', 'packet_sha256':'a'*64, 'packet_row_index':0, 'packet_row_sha256':'b'*64,
+            'source_groups':['upstream:train'], 'source_ids':['record:1'], 'source_revisions':['source/v1']}}
+    assert _rollout_source_custody(rollout)['status'] == 'packet-row-bound'
+    rollout['source_groups'] = ['upstream:held']
+    with pytest.raises(ValueError, match='source_groups differ'):
+        _rollout_source_custody(rollout)
 
 
 def receipt_v2(capture, *, forced_tokens=(), force_all=False):

@@ -72,6 +72,40 @@ def neuralese_exchanges(rollout: dict[str, Any]) -> int:
     return count
 
 
+def _packet_source_custody(task: dict[str, Any], *, packet_sha256: str, row_index: int,
+                           row_bytes: bytes) -> dict[str, Any]:
+    """Bind source labels to the exact task row scored by this collector packet.
+
+    The packet artifact digest authenticates the containing task set; the raw
+    JSONL line digest identifies the exact row without reserializing it. Source
+    identifiers are copied from that row and validated before they can be used
+    to label a rollout or native graph.
+    """
+    task_id = task.get("id")
+    if not isinstance(task_id, str) or not task_id:
+        raise ValueError(f"packet row {row_index} has no stable task id")
+    result: dict[str, Any] = {}
+    for field in ("source_ids", "source_groups", "source_revisions"):
+        values = task.get(field)
+        if (not isinstance(values, list) or not values or
+                any(not isinstance(value, str) or not value.strip() for value in values) or
+                len(values) != len(set(values))):
+            raise ValueError(f"packet task {task_id} needs complete unique {field}")
+        result[field] = list(values)
+    if (not re.fullmatch(r"[0-9a-f]{64}", packet_sha256) or
+            not isinstance(row_bytes, bytes) or not row_bytes.endswith(b"\n")):
+        raise ValueError("packet source custody needs exact newline-terminated JSONL bytes")
+    return {
+        "schema": "natlang.rollout-source-custody/1",
+        "task_id": task_id,
+        "packet_sha256": packet_sha256,
+        "packet_row_index": row_index,
+        "packet_row_sha256": hashlib.sha256(row_bytes).hexdigest(),
+        **result,
+        **({"source": task["source"]} if isinstance(task.get("source"), str) else {}),
+    }
+
+
 def reward_of(outcome: str, finish: dict[str, Any] | None = None) -> float | None:
     """Binary task-success reward; infrastructure outcomes are unscored, never 0. A host wall-clock stop
     (`case_wall_budget`) is a collection resource limit that depends on server load, not on the policy (the journal
@@ -356,6 +390,10 @@ def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: 
         raise ValueError("a GRPO group needs at least two rollouts")
     if temperature <= 0:
         raise ValueError("group rollouts need temperature > 0; greedy samples are identical")
+    packet_tasks = read_jsonl(packet) if packet.is_file() else []
+    packet_sha256 = hashlib.sha256(packet.read_bytes()).hexdigest() if packet.is_file() else None
+    if packet_tasks and len(packet_tasks) != rows:
+        raise ValueError("queue row count must match the authenticated task packet")
     entries = []
     for index in range(rows):
         for sample in range(group):
@@ -366,6 +404,8 @@ def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: 
                 "case_seconds": case_seconds, "max_model_requests": max_model_requests, "max_turns": max_turns,
                 "jobs": str(case / "jobs"), "log": str(case / "collector.log"), "output": str(case / "results.jsonl"),
                 "group": index, "sample": sample,
+                **({"task_id": packet_tasks[index]["id"], "packet_sha256": packet_sha256}
+                   if packet_tasks else {}),
             })
     return entries
 
@@ -427,10 +467,16 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
     emitted: list[dict[str, Any]] = []
     packet_path = run_dir / "packet.jsonl"
     packet = read_jsonl(packet_path)
-    packet_sha256 = hashlib.sha256(packet_path.read_bytes()).hexdigest()
+    packet_bytes = packet_path.read_bytes()
+    packet_sha256 = hashlib.sha256(packet_bytes).hexdigest()
+    packet_lines = packet_bytes.splitlines(keepends=True)
+    if len(packet_lines) != len(packet) or any(not line.endswith(b"\n") for line in packet_lines):
+        raise ValueError("task packet must have one newline-terminated JSONL record per row")
     preparation_path = run_dir / "preparation.json"
     preparation = json.loads(preparation_path.read_text()) if preparation_path.exists() else {"root_mode": "authored"}
     root_mode = preparation["root_mode"]
+    if emit is not None and preparation.get("packet_sha256") != packet_sha256:
+        raise ValueError("scored rollout export requires a packet hash matching its preparation receipt")
     if root_mode == "student":
         for index, task in enumerate(packet):
             if ((task.get("curriculum") or {}).get("trajectory_contract") or {}).get("authored_root_eval"):
@@ -457,6 +503,9 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
             if result is None and outcome == "budget_exhaustion" and \
             (finishes.get(entry["key"]) or {}).get("resource_limit_reason") == "model_request_budget" else None
         task = packet[entry["index"]]
+        if emit is not None and (entry.get("task_id") != task.get("id") or
+                                 entry.get("packet_sha256") != packet_sha256):
+            raise ValueError(f"queue entry {entry.get('key')} is not bound to its exact task packet row")
         detail = ((result or {}).get("outcome") or {}).get("detail") if result else None
         turns = budget_prefix["turns"] if budget_prefix else rollout_turns(result)
         execution_graph = budget_prefix["execution_graph"] if budget_prefix else \
@@ -472,9 +521,16 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                 # Preserve the task-level failure score in this report, but never
                 # offer an empty or unverified partial as a native policy sample.
                 training_reward = None
+            source_custody = _packet_source_custody(
+                task, packet_sha256=packet_sha256, row_index=int(entry["index"]),
+                row_bytes=packet_lines[int(entry["index"])])
             emitted.append({"schema": "natlang.rollout/1", "round": round_, "task_id": task["id"],
                             "family": task.get("family"), "group": entry["group"], "sample": entry["sample"],
                             "seed": entry["seed"], "split": task.get("split"),
+                            "source_ids": source_custody["source_ids"],
+                            "source_groups": source_custody["source_groups"],
+                            "source_revisions": source_custody["source_revisions"],
+                            "source_custody": source_custody,
                             **({"jolt_role": entry["jolt_role"]} if "jolt_role" in entry else {}),
                             "policy": {"temperature": entry.get("temperature"),
                                 "checkpoint_sha256": preparation.get("policy_checkpoint_sha256"),

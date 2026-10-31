@@ -1141,6 +1141,37 @@ def _require_scored_training_episode(rollout, identity,*,actors=None):
     validate_rollout_graph(rollout)
 
 
+def _rollout_source_custody(rollout):
+    """Return the authenticated packet source labels, or explicitly mark a historical unbound row.
+
+    New score exports carry both the packet artifact and exact JSONL-row digests.
+    A partial or inconsistent binding is corruption and must fail closed. Old
+    immutable rollout/1 records remain readable, but their synthetic task ID is
+    labeled as legacy-unbound rather than mistaken for an upstream source group.
+    """
+    custody = rollout.get('source_custody')
+    task_id = rollout.get('task_id')
+    if custody is None:
+        return {'status': 'legacy-unbound', 'task_id': task_id,
+                'source_groups': ['s7-task:' + task_id]}
+    if (not isinstance(custody, dict) or custody.get('schema') != 'natlang.rollout-source-custody/1' or
+            custody.get('task_id') != task_id):
+        raise ValueError('rollout packet source custody has an invalid schema or task identity')
+    for field in ('packet_sha256', 'packet_row_sha256'):
+        value = custody.get(field)
+        if not isinstance(value, str) or len(value) != 64 or any(c not in '0123456789abcdef' for c in value):
+            raise ValueError(f'rollout packet source custody has invalid {field}')
+    if type(custody.get('packet_row_index')) is not int or custody['packet_row_index'] < 0:
+        raise ValueError('rollout packet source custody has invalid row index')
+    for field in ('source_ids', 'source_groups', 'source_revisions'):
+        values = custody.get(field)
+        if (not isinstance(values, list) or not values or
+                any(not isinstance(value, str) or not value.strip() for value in values) or
+                len(set(values)) != len(values) or rollout.get(field) != values):
+            raise ValueError(f'rollout {field} differ from authenticated packet source custody')
+    return {'status': 'packet-row-bound', **custody}
+
+
 def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
     """Bind actual scored train calls; a collector base header is not behavior."""
     from .episode_graph import whole_episode_turns
@@ -1268,8 +1299,10 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 nodes.append(value)
             external = {name: {'id': native_state_id(block),
                                'token_count': len(block.token_ids)} for name, block in replay.external_blocks.items()}
+            source_custody = _rollout_source_custody(rollout)
+            graph_source_groups = sorted(set(source_custody['source_groups']) | {'s7-task:' + rollout['task_id']})
             graph = {'schema': SCHEMA, 'id': identifier, 'split': 'train',
-                'source_groups': ['s7-task:' + rollout['task_id']],
+                'source_groups': graph_source_groups, 'source_custody': source_custody,
                 'tokenizer_fingerprint': identity['tokenizer_fingerprint'], 'nodes': nodes,
                 'external_states': external}
             actions = list(replay.actions)
@@ -1304,6 +1337,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 'external_consumption_receipts': replay.external_receipts or {},
                 **({'external_invocations':replay.external_invocations or {}} if replay.invocation_actors is not None else {}),
                 'task_id': rollout['task_id'], 'sample': rollout.get('sample'),
+                'source_custody': source_custody,
                 **({'actor_checkpoint_sha256': actor} if (actor := rollout['policy']['checkpoint_sha256'])
                    != identity['checkpoint_sha256'] or actor in (actors or {}).get('actors', {}) else {}),
                 **({'invocation_actors':replay.invocation_actors} if replay.invocation_actors is not None else {})}

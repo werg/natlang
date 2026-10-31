@@ -11,6 +11,8 @@ from natlang_neuralese.rl.task_rollouts import (_budget_terminated_prefix, autho
 
 def _row(split="train", code="return await f(task);"):
     return {"id": f"row-{split}", "split": split, "family": "fam",
+            "source_ids": [f"fixture:{split}"], "source_groups": [f"fixture-group:{split}"],
+            "source_revisions": ["fixture/v1"],
             "curriculum": {"reference": {"root": [["eval", {"code": code}], ["return_result", {}]]}}}
 
 
@@ -224,6 +226,11 @@ def test_scored_model_budget_prefix_reconstructs_exact_whole_graph(tmp_path):
     assert any(event.get("kind") == "invocation" and event.get("node", "").startswith("call:root/")
                for event in row["execution_graph"])
     assert row["budget_termination_evidence"]["attempt_id"] == "evidence-attempt"
+    assert row["source_groups"] == ["fixture-group:train"]
+    assert row["source_ids"] == ["fixture:train"]
+    assert row["source_revisions"] == ["fixture/v1"]
+    assert row["source_custody"]["packet_sha256"] == hashlib.sha256((tmp_path / "packet.jsonl").read_bytes()).hexdigest()
+    assert row["source_custody"]["packet_row_sha256"] == hashlib.sha256((tmp_path / "packet.jsonl").read_bytes()).hexdigest()
 
 
 def test_budget_prefix_keeps_producer_and_consumer_as_one_graph(tmp_path):
@@ -294,6 +301,8 @@ def test_stale_self_consistent_terminal_is_rejected_when_current_packet_changes(
     preparation = json.loads((tmp_path / "preparation.json").read_text())
     preparation["packet_sha256"] = hashlib.sha256(packet_path.read_bytes()).hexdigest()
     (tmp_path / "preparation.json").write_text(json.dumps(preparation) + "\n")
+    for entry in entries:
+        entry["packet_sha256"] = preparation["packet_sha256"]
     (tmp_path / "queue.jsonl").write_text("".join(json.dumps(row) + "\n" for row in entries))
     (tmp_path / "journal.jsonl").write_text(json.dumps(finish) + "\n")
     emitted = tmp_path / "native-rollouts.jsonl"
@@ -301,6 +310,15 @@ def test_stale_self_consistent_terminal_is_rejected_when_current_packet_changes(
     row = json.loads(emitted.read_text().splitlines()[0])
     assert row["reward"] is None and row["unscored"] == "budget_prefix_capture_unavailable"
     assert row["turns"] == [] and row["execution_graph"] == []
+
+
+def test_score_rejects_queue_rebound_to_another_source_task(tmp_path):
+    task, entries, _ = _budget_prefix_fixture(tmp_path)
+    (tmp_path / "packet.jsonl").write_text(json.dumps(task) + "\n")
+    entries[0]["task_id"] = "different-task"
+    (tmp_path / "queue.jsonl").write_text("".join(json.dumps(row) + "\n" for row in entries))
+    with pytest.raises(ValueError, match="not bound to its exact task packet row"):
+        score(tmp_path, emit=tmp_path / "rollouts.jsonl")
 
 
 def test_student_root_score_rejects_host_authored_action(tmp_path):
@@ -416,8 +434,10 @@ def _neuralese_result(*, accepted, consumer_imports=True, external_writer=False,
 def _score_results(tmp_path, results, roles=None, **options):
     tmp_path.mkdir(parents=True, exist_ok=True)
     packet = [student_root_row(authored_root_row(_row()))]
-    (tmp_path / "packet.jsonl").write_text("".join(json.dumps(r) + "\n" for r in packet))
-    (tmp_path / "preparation.json").write_text(json.dumps({"root_mode": "student"}))
+    packet_bytes = "".join(json.dumps(r) + "\n" for r in packet).encode()
+    (tmp_path / "packet.jsonl").write_bytes(packet_bytes)
+    (tmp_path / "preparation.json").write_text(json.dumps({"root_mode": "student",
+        "packet_sha256": hashlib.sha256(packet_bytes).hexdigest()}))
     entries = build_queue(tmp_path / "packet.jsonl", 1, len(results), tmp_path, temperature=1.0, case_seconds=60,
                           max_model_requests=8, max_turns=4, seed_base=0)
     for entry, role in zip(entries, roles or []):
