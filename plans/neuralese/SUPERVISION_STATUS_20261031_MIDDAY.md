@@ -4,6 +4,94 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Follow-up observation, 18:57 CET
+
+The rejected SFT72 branch is diagnostic only. Exact controlled same-engine,
+same-request replay proved SD52 emits a clean read_code action while72 itself
+generates prose inside eval code (before parser extraction). Initial72 task
+outcomes were88/112 accepted,32 incorrect,0 incomplete at1200s; the automatic
+noise repeat was stopped for diagnosis. This is not a universal capability
+collapse claim. AGENTS records the production-parent decision explicitly.
+
+All1,261 actually earned SFT graphs were audited;1,527 supervised eval snippets
+parse as TypeScript. The audit found88 inline-child nested-nl candidates;
+individual review confirmed87 redundant same-judgment delegations and retained
+one defensible evidence-ledger task. The corrected source has182,119 rows,
+SHA`ea0b1791571fcd5765d4113263a07f62961cd40a9ea7e2cc49b8ccf16b7ca7b3`.
+Bundle is`data_nvme/lfm3-nested-quality-successor-20261031/mixture`;
+held data is unchanged, all source/family/geometry bindings validated, and the
+actual SD52 objective required its own explicit CE transition. No rejected
+SFT exposure was inherited as earned credit.
+
+Corrected SD52 restart in canonical
+`runs/lfm3-sft-successors/joint-v4-restart52-20261031/run` committed global53,
+stage1, SHA`93ebefe62a97c8857d282625cd65755bb512bd131b62968fd44ff43c2bae8f52`,
+77 earned SFT visits including one intact LogHub episode, plus234 historical
+policy visits. Actual model, packed and BF16 selected-QAT oversized gates passed
+before that update. The four-prompt first-action check matches SD52 tool/args in
+all four cases, three token-identically. This is protocol evidence, not four task
+successes or broad capability lift.
+
+Further SGD is stopped because the controller correctly refuses a failed full
+gradient certificate. Forward values are exact but BF16 flat-versus-cached
+gradient comparisons differ broadly (~2% relative). Fresh no-QAT restore
+reproduces the same199 failures, ruling out live stale grads and QAT installation
+as necessary causes. Full FP32/no-TF32 greatly reduces largest relative error
+to1.68e-5 but still fails53 strict elementwise checks. Exact layer traces locate
+the first backward divergence inside layer16, despite equal layer-output
+cotangents. Terra owns targeted arithmetic diagnosis; no tolerance was loosened,
+no second SFT update or production readiness is claimed.
+
+Async/reservation pool is implemented and tested with two bounded independently
+allocated inodes, shared lock custody, immutable snapshots, crash and failure
+recovery, explicit close and observer roles. A standalone snapshot-plus-unshared
+full graph capacity test OOM-killed at96GiB with zero SGD; its38GB scratch files
+were deleted. Actual prefix-packed training gates passed. Current code drains a
+writer before oversized calibration/forward and saves oversized updates
+synchronously; ordinary async admission includes measured future GPU growth.
+Inline FP8/NVFP4 communication prefix reuse now has separate tiny actual-QAT
+arithmetic/custody tests (73ca1651b; bounded gradient differences, no full GPU
+claim); it still requires an explicit qualified runtime continuation.
+
+Step70 Pop full-state export completed independent readback at17:41, receipt
+`ops/sft70-peer-export-receipt-20261031.json`. A remote Python3.10 file_digest
+compatibility bug initially caused retransmission; corrected export retained
+the exact open source inode, resumed13,227,622,400 already downloaded bytes,
+and manually hashed the full file. SD52 and old53 independent copies remain.
+Runtime/control/source recovery closure is still a separate obligation.
+
+Teacher partials are not positive data. The nine-fault Telecom world exhausted
+96 requests; hinted attempts were also lost to priority preemption because
+captures were wrongly marked resumable. Dispatcher now requires non-resumable,
+no-backfill plans and checks the actual ledger claim (9df6d1b87;30tests).
+Retry3 is queued as one2GiB Luna worker after actual SFT admission, with256
+requests/3600s, the same V7 program and hash-bound failure guidance. No new
+teacher success or Sol judgment is claimed. Inline-child direct-answer guidance
+is default and tested in actual request openings.
+
+Broad teacher assembly was globally OOM-killed during the failed96GiB probe,
+not shown to exceed its4GiB limit (kernel recorded~480MiB anonymous RSS).
+Automatic restart had overwritten earlier incomplete progress; raw shards are
+intact. A preserved the187MiB failed attempt and launched one honest
+non-resumable4GiB assembly. Exact current authority is the user systemd unit
+`e2e-teacher-mine-v3-current-protected-retry-20261031.service`. A owns completion
+and graph conversion/admission. A15-minute exclusive HDD window froze only
+owned Natlang converters; exact receipt is
+`data_nvme/hdd-serialization-assembly-20261031/freeze-receipt.json`; guaranteed
+thaw timer is`natlang-hdd-thaw-assembly-20261031.timer`, due19:09:52CET.
+Check thaw actually occurs and do not delete any incomplete source as admitted.
+
+Main full check found several real/stale API issues and is not green. Fixes now
+cover preference-objective capacity probes, async shutdown/lock release,
+source/held recovery fixture accounting, real native-state collector imports,
+packaged guidance writer/assets and layer ordering, Pi teacher-reference typing,
+and compiled crisp module platform ownership. The latter passes51 actual
+application tests; guidance/package tests pass15 plus a separate3 installed
+asset tests. Root is fixing remaining TS tests (explicit platform fixtures,
+termination handling, core/workerd dependency setup); do not rerun the entire
+suite merely to rediscover known failures. Work lands on main with own-path
+commits; shared history was reconciled without force push or content loss.
+
 ## Follow-up observation, 17:15 CET
 
 Global72/stage20 is durable. The initial four-case development collection failed
