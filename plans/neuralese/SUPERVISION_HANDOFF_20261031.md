@@ -35,12 +35,12 @@ Authoritative logs (read these first, newest at the bottom):
   `logs/par-jolt.log`, `logs/par-sd.log`). Budget file `ops/runner-budget-gb` = 100.
 - State at handoff: jolt-r1 round 6 learner update running (~64 of ~77 episodes; ~3 h per update);
   sd-r1 round 8 (v2, `round-000008-attempt-1`) collected, its update waits.
-- **Pending automatic action**: `/home/werg/.claude/jobs/8018b402/tmp/restart-after-jolt6.sh` (PID was 3351943)
-  waits for jolt-r1 `trained_rounds >= 7`, stops the runner, runs the cloud helper's GPU measurement
-  `ops/gpu-window-command.sh` once as ledger unit `rl-gpu-window-1` (≤25 min; output `logs/gpu-window-1.log`,
-  result `debug/gpu-window-1/result.json`), then relaunches as `lfm3-rl-par-10`. **If this Claude session ends,
-  that script dies with it** — do it by hand: after jolt r6 trains, stop the runner unit, optionally run the
-  window script, relaunch:
+- **Pending automatic action**: ledger unit `lfm3-rl-restart-after-jolt6` (script
+  `$W/scripts/restart-after-jolt6.sh`; survives the Claude session) waits for jolt-r1 `trained_rounds >= 7`, stops
+  the runner, runs the cloud helper's GPU measurement `ops/gpu-window-command.sh` once as ledger unit
+  `rl-gpu-window-1` (≤25 min; output `logs/gpu-window-1.log`, result `debug/gpu-window-1/result.json`), renames it
+  `.done`, then relaunches both lineages as `lfm3-rl-par-10` and writes `ops/runner-unit`. Verify it fired (decisions.log
+  line "runner ... restarted as lfm3-rl-par-10"). Manual equivalent: stop the runner unit, relaunch with
   `python3 scripts/memory_ledger.py run --unit lfm3-rl-par-N --budget-gb 100 --priority high --wait 3600 --detach -- /usr/bin/bash -c "exec $W/scripts/alt_par.sh 6 > $W/logs/par-N.log 2>&1"` and update `ops/runner-unit`.
 - Runtimes (immutable git-archive copies, `scripts/build_runtime.sh COMMIT /abs/path/FROM_RUNTIME`):
   `runtime-5b9a0a6c5` (jolt r6, bound), `runtime-afb13bb47` (sd fallback), `runtime-cd5416516` (current main fixes:
