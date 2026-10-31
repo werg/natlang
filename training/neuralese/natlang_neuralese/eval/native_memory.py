@@ -320,7 +320,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             **({'objective':objective.binding()} if objective is not None else {}),
             'optimizer_updates':0,'gradients_released_per_parameter':not retained_gradients,'whole_graphs':True,
             'retained_accumulation_gradients':bool(retained_gradients),
-            'cotangent_mode':cotangent_mode,
+            'cotangent_mode':cotangent_mode,'production_packing':production_packing,
             'qat_point':({'point':precision[1],'mix':float(precision[2]),'loss_weight':float(precision[3])} if precision is not None else None),
             'task_quality_qualified':False,'cpu_and_all_cuda_rng_restored':True,
             'checkpoint_layers':checkpoint_layers,'chunk_tokens':chunk_tokens,
@@ -542,7 +542,8 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
             examples=list(source.iter_indices([row['index'] for row in selected]))
             result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,chunk_tokens=args.chunk_tokens,
                 checkpoint_layers=args.checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=request['source'],objective=objective,
-                retained_gradients=getattr(args,'accumulate_batches',1)>1)
+                retained_gradients=getattr(args,'accumulate_batches',1)>1,production_packing=True,
+            cotangent_mode='plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp')
             result['passed']=result['capacity']['passed']
     except (RuntimeError,FloatingPointError,MemoryError) as error:
         if isinstance(error,CapacityStateChangedError):raise

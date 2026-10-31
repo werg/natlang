@@ -3298,6 +3298,17 @@ def _main(argv=None, *, requested_refresh):
         if prior_oversize_baseline else prior_packed_capacity.get('geometry'))
     oversize_limits = oversize_baseline(train, prior_geometry, fallback_tokens=args.batch_tokens,
         current_geometry=json.loads(args.sft_packed_geometry) if args.sft_packed_geometry else None)
+    policy_initial_capacity_step = None
+    if objective is not None and not mandatory_objective:
+        from .native_packed_capacity import policy_capacity_baseline
+        from .native_resident import binding as native_binding
+        policy_parent = sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
+        oversize_limits = policy_capacity_baseline(checkpoint_options['policy_capacity'],
+            checkpoint_sha256=policy_parent,objective_binding=objective.binding(),
+            source_binding=native_binding(train.path),
+            cotangent_mode='plain' if args.cotangent_accumulator_backend=='plain' else 'vjp',
+            retained_gradients=args.accumulate_batches>1)
+        policy_initial_capacity_step=global_step
     checkpoint_options['oversize_capacity_baseline'] = oversize_limits
     checkpoint_options['oversize_capacity_history'] = prior_oversize_history
     # A policy round samples the unquantized actor, while QAT is retained for
@@ -3732,6 +3743,11 @@ def _main(argv=None, *, requested_refresh):
             # ordinary workload, but not an as-yet-unqualified oversized
             # graph. Drain before calibration, its capacity gate, or forward.
             from .native_packed_capacity import checkpoint_overlap_barrier
+            if policy_initial_capacity_step is not None and global_step != policy_initial_capacity_step:
+                # A later optimizer state is not the original exact proof parent.
+                oversize_limits={'forward_tokens':args.batch_tokens,'kv_slots':args.batch_tokens,
+                                 'basis':'new-policy-checkpoint-requires-live-gate'}
+                policy_initial_capacity_step=None
             oversized_update = checkpoint_overlap_barrier(policy, micro_batches, oversize_limits)
             indices = [index for item in fetched for index in item[1]]
             pass_end = any(item[2] for item in fetched)

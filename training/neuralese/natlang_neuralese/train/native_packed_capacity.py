@@ -226,6 +226,29 @@ def oversize_baseline(source, prior_geometry, *, fallback_tokens, current_geomet
             'geometry':dict(prior_geometry),'prefix_rows':len(values)}
 
 
+def policy_capacity_baseline(reference, *, checkpoint_sha256, objective_binding, source_binding,
+                             cotangent_mode, retained_gradients):
+    """Use only the just-qualified exact policy/objective as the first-update boundary."""
+    from ..common.hashing import canonical_json_sha256_hex
+    from .native_resident import bound
+    proof=reference.get('proof') or {}
+    if (canonical_json_sha256_hex(proof)!=reference.get('proof_sha256')
+            or json.loads(bound(reference).read_text())!=proof):
+        raise ValueError('policy capacity proof binding changed')
+    capacity=proof.get('capacity') or {}; limits=proof.get('packing_limits') or {}
+    if (proof.get('schema')!='natlang.native-policy-capacity-proof/1' or proof.get('passed') is not True
+            or proof.get('parent_checkpoint_sha256')!=checkpoint_sha256
+            or capacity.get('passed') is not True or capacity.get('objective')!=objective_binding
+            or capacity.get('source')!=source_binding or capacity.get('cotangent_mode')!=cotangent_mode
+            or capacity.get('production_packing') is not True
+            or capacity.get('retained_accumulation_gradients') is not retained_gradients
+            or capacity.get('qat_point') is not None
+            or any(type(limits.get(k)) is not int or limits[k]<1 for k in ('forward_tokens','kv_slots'))):
+        raise ValueError('policy capacity proof does not bind the actual first-update execution')
+    return {**limits,'basis':'actual-policy-capacity-proof','proof':{'path':reference['path'],'sha256':reference['sha256']},
+            'parent_checkpoint_sha256':checkpoint_sha256}
+
+
 def oversized_batches(micro_batches, baseline):
     """Return actual complete microbatches exceeding the authenticated baseline."""
     return [batch for batch in micro_batches
