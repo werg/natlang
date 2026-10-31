@@ -86,6 +86,17 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
     assert identity['runtime_receipt_sha256'] == plan['runtime_receipt_sha256']
     assert identity['max_transport_retries'] == 0
     assert [row['index'] for row in identity['cases']] == [0, 1, 2]
+    entry, *_ = dispatcher._claim_queue(plan, identity, 1, identity['cases'][0])
+    assert entry['prompt_rendering'] == 'full'
+
+
+def test_prompt_rendering_is_forwarded_into_each_queue(reviewed_plan):
+    plan_path, _, _, plan = reviewed_plan
+    plan['prompt_rendering'] = 'program-header'
+    plan_path.write_text(json.dumps(plan, sort_keys=True))
+    validated, identity = dispatcher.validate_plan(plan_path, dispatcher.digest(plan_path))
+    entry, *_ = dispatcher._claim_queue(validated, identity, 1, identity['cases'][0])
+    assert entry['prompt_rendering'] == 'program-header'
 
 
 def test_judged_workflows_require_and_preserve_independent_judge_binding(reviewed_plan):

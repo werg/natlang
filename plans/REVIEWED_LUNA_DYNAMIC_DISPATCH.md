@@ -14,17 +14,21 @@ The plan is immutable and invoked with its SHA-256:
 python3 scripts/run_reviewed_luna_dispatcher.py PLAN.json --sha256 PLAN_SHA256
 ```
 
-It must declare schema `natlang.reviewed_luna_dispatch_plan/1`,
+It must declare schema `natlang.reviewed_luna_dispatch_plan/2`,
 `root_approved: true`, a unique `campaign_id`, the canonical checkout as `cwd`,
 and the exact pinned dispatcher, queue supervisor, source, and frozen runtime
 receipt. Its `cases` array is the complete approved master list; every row has one unique
-source `index` and a deterministic integer `seed`. `slots` is one through five,
+source `index` and a deterministic integer `seed`. `slots` is one through six,
 and provider/model/concurrency must be `openai-codex`, `gpt-6-luna`, and one.
 The plan also names `campaign_root`, `claim_ledger`, `launch_record`, and the
 generation `authority` file. `campaign_root` must be fresh below `runs/`.
 Optional provider request configuration is also
-hash-pinned. The plan's SHA binds all paths, limits, source indices, and runtime
-identity before any claim is made.
+hash-pinned. The plan's SHA binds all paths, limits, source indices, source-row
+inventory, and runtime identity before any claim is made. The inventory binds
+each exact source row, package/world groups, split, program identity, and root
+invocation. `prompt_rendering` defaults to `full`; production plans should pin
+`full` explicitly so the system prompt and tool schemas match serving. The
+dispatcher forwards the setting to every queue.
 
 The dispatcher fails closed if authority shows another live Luna campaign. This
 keeps its slot count within the existing provider capacity while it owns the

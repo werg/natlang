@@ -123,6 +123,8 @@ def validate_plan(plan_path, expected_sha256):
         raise ValueError('slots must be an integer from one through six')
     if plan.get('reasoning_effort', 'low') not in ALLOWED_REASONING:
         raise ValueError('Invalid reasoning effort')
+    if plan.get('prompt_rendering', 'full') not in {'full', 'program-header'}:
+        raise ValueError('prompt_rendering must be full or program-header')
     if plan.get('execution_plans') is not True:
         raise ValueError('Reviewed Luna dispatch requires execution plans')
 
@@ -467,6 +469,7 @@ def _claim_queue(plan, identity, slot, case):
         'max_turns': plan.get('max_turns', 60),
         'max_model_requests': plan.get('max_model_requests', 384),
         'context_tokens': plan.get('context_tokens', 32768),
+        'prompt_rendering': plan.get('prompt_rendering', 'full'),
         'case_seconds': plan.get('case_seconds', 1800),
         'transport_retries': identity['max_transport_retries'],
         'text_neuralese_emulation': bool(plan.get('text_neuralese_emulation', False)),
