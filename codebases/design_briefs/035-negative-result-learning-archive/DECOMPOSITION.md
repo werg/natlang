@@ -6,6 +6,8 @@ The causal view connects one demonstrated process defect to all affected attempt
 
 Five exact gate roots retain their original typed input and finite verdict, relocated to `negativeResultDossier/{attempt,inference,causes,followups,lessons}/audit/qualify.nl`. Case inputs, observed records, and expected verdicts are preserved; only root paths change.
 
+The qualification drafts are partial records, not aliases of completed archive records. Each `Draft*` type carries an optional `value` with the corresponding archive fields, `missingFields`, typed `FieldConflict[]`, and `evidenceRefs`; the gate compares that proposal with the separate authoritative candidate, evidence pages, and policy selection.
+
 `reconcileFollowupExecution.nl` accepts the independent run receipt against the registered prediction reference. It compares the observed result to both forecasts under actual conditions, carries invalid and incomplete runs without directional inference, and opens lesson review only for a valid discriminating result. The archive never rewrites previous lessons from one follow-up.
 
 The unreferenced inference, cause, follow-up, and lesson qualification leaves were removed from the packaged source. Their original invariants remain owned by `adjudicateInferenceValidity.nl` (completion, measurement integrity, and registered-prediction comparison), `compareRivalMechanisms.nl` (demonstrated causes versus plausible rivals), `designDiscriminatingFollowups.nl` (predeclared predictions and safe bounds), and `reviseScopedLessons.nl` (tested-condition scope and append-only history). The `attempt/audit/qualify.nl` root remains because the unchanged exact gate cases invoke it.

@@ -6,4 +6,6 @@ The diagnostic branch hides hypothesis labels. Authorized accommodations change 
 
 Five exact gate procedures are relocated beneath `learningRepairSession/{response,hypotheses,diagnostic,repair,transfer}/audit/qualify.nl`. Their typed cases and expected verdicts are unchanged; only root paths move.
 
+Each gate's `Draft*` input is a partial domain record inside `values`, with typed `missingFields`, `FieldConflict[]`, `EvidenceBinding[]`, and follow-up `Question[]`. Qualification keeps the draft distinct from prepared evidence and explicit decision atoms; absent diagnosis fields cannot be mistaken for confirmed learner evidence.
+
 The unreferenced hypothesis, diagnostic, repair, and transfer qualification leaves were removed from the packaged source. Their invariants remain in the active operations: `testCompetingExplanations.nl` keeps identity and single-response evidence tentative; `buildUnbiasedProbe.nl` varies one concept feature, checks answer classes, and rejects prerequisite leakage; `planContrastiveRepair.nl` uses verified explanations and bounded fading practice; and `assessNovelUnassistedTransfer.nl` requires novel unhinted evidence and conservative updates. The `response/audit/qualify.nl` root remains for the unchanged exact gate cases.

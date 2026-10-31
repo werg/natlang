@@ -77,3 +77,7 @@ export type ProjectRevision = RecordMeta & {
   preservedGoals: string[];
 };
 export type DraftProjectLearningGoal = { values: { caseId?: ID; competencyId?: ID; observableEvidence?: string; prerequisiteIds?: ID[]; assessmentBoundary?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftProjectConcept = { values: { caseId?: ID; setting?: string; roles?: string[]; centralChallenge?: string; deliverables?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftProjectMilestone = { values: { caseId?: ID; deliverable?: string; prerequisiteIds?: ID[]; evidenceCriteria?: string[]; dueAt?: DateTime }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftScaffoldingPlan = { values: { caseId?: ID; learnerGroupId?: ID; observedGap?: string; support?: string; fadingCondition?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftProjectRevision = { values: { caseId?: ID; milestoneId?: ID; complication?: string; recoveryOptions?: string[]; preservedGoals?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };

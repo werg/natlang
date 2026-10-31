@@ -54,6 +54,10 @@ export type PortfolioDisposition = RecordMeta & {
   approvalRef: Ref;
 };
 export type DraftPortfolioEvidence = { values: { caseId?: ID; artifactId?: ID; contribution?: string; context?: string; authorshipStatus?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftCompetencyMapping = { values: { caseId?: ID; evidenceId?: ID; competencyId?: ID; demonstratedFacet?: string; missingFacet?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftCompetencyFinding = { values: { caseId?: ID; competencyId?: ID; evidenceIds?: ID[]; sufficiency?: 'met' | 'partial' | 'insufficient'; limitation?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftEvidenceTask = { values: { caseId?: ID; competencyId?: ID; task?: string; requiredDemonstration?: string; acceptanceCriteria?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftPortfolioDisposition = { values: { caseId?: ID; findingIds?: ID[]; assessorNotes?: string; nextTaskIds?: ID[]; approvalRef?: Ref }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
 
 export type PortfolioAssessmentRequest = { caseId: ID; requestedOutcome: string; sourceEvidence: Evidence[]; priorPortfolioEvidence: PortfolioEvidence; frameworkStandard: string; frameworkVersion: string; policyClauses: string[]; authorityStatus: 'authorized' | 'unclear' | 'unauthorized'; recencyRule: string; accommodationRule: string; stakes: 'high' | 'ordinary' | 'unknown'; priorFinding: PortfolioAssessmentFinding | null; changedEvidenceIds: ID[]; assessmentState?: PortfolioAssessmentState };
 export type IndexedPortfolioEvidence = { evidenceId: ID; evidenceType: string; artifactId: ID; author: string; contribution: string; sourceLocation: string; authorshipStatus: 'individual' | 'shared-known' | 'unresolved' | 'self-report'; contradictoryRefs: ID[] };

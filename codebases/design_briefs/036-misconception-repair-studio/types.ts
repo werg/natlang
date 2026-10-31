@@ -54,6 +54,10 @@ export type TransferFinding = RecordMeta & {
   remainingUncertainty: string;
 };
 export type DraftResponseObservation = { values: { caseId?: ID; taskId?: ID; responseRef?: Ref; observedStrategy?: string; errorLocation?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftMisconceptionHypothesis = { values: { caseId?: ID; observationIds?: ID[]; hypothesis?: string; rivalHypotheses?: string[]; discriminatingFeature?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftDiagnosticTask = { values: { caseId?: ID; hypothesisIds?: ID[]; prompt?: string; expectedResponseClasses?: string[]; prerequisiteIds?: ID[] }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftLearningIntervention = { values: { caseId?: ID; hypothesisId?: ID; explanation?: string; workedExample?: string; practiceTaskIds?: ID[] }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftTransferFinding = { values: { caseId?: ID; competencyId?: ID; novelTaskIds?: ID[]; demonstratedSkill?: string; remainingUncertainty?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
 
 export type TaskQualityReview = { taskId: ID; clear: boolean; ambiguitySources: string[]; accessibilityBarriers: string[]; competencyPreserved: string; repairQuestions: Question[]; sourceRefs: Ref[] };
 export type LearnerEvidence = { taskId: ID; responseRef: Ref; acceptedStrategyIds: string[]; demonstratedSteps: string[]; errorClass: 'conceptual' | 'arithmetic' | 'reading' | 'incomplete' | 'unresolved'; confidence: 'supported' | 'tentative' | 'unknown'; hintLevel: number; sourceRefs: Ref[] };

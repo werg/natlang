@@ -54,6 +54,10 @@ export type ModerationDecision = RecordMeta & {
   evidenceReason: string;
 };
 export type DraftAssessmentBlueprint = { values: { caseId?: ID; competencyIds?: ID[]; taskKinds?: string[]; coverageWeights?: Ratio[]; excludedConstructs?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftAssessmentItem = { values: { caseId?: ID; competencyIds?: ID[]; prompt?: string; responseFormat?: string; allowedResources?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftScoringRubric = { values: { caseId?: ID; itemId?: ID; criteria?: string[]; scoreLevels?: string[]; validAlternativeAnswers?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftItemChallenge = { values: { caseId?: ID; itemId?: ID; ambiguousInterpretation?: string; counterexampleAnswer?: string; proposedRepair?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+export type DraftModerationDecision = { values: { caseId?: ID; responseId?: ID; originalScore?: number; reviewedScore?: number; evidenceReason?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
 
 export type CompetencyTrace = { competencyId: ID; evidenceTasks: ID[]; weight: Ratio; excludedConstructs: string[]; accommodationRules: string[]; durationMinutes: number };
 export type AssessmentItemDraft = { itemId: ID; prompt: string; competencyIds: ID[]; intendedEvidence: string[]; contextRequired: string[]; allowedResources: string[]; alternateReadings: string[]; exposureStatus: 'clean' | 'leaked' | 'unknown' };
