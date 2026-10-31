@@ -81,11 +81,64 @@ def execute(path: Path, sql: str, seconds=10.0):
         con.close()
 
 
+def sql_profile(sql: str) -> dict:
+    """Small lexical feature profile for curriculum routing, not a SQL parser or correctness proof."""
+    # Ignore quoted literals and comments so words like "join" in a text constant do not change the profile.
+    s = re.sub(r"--[^\n]*|/\*.*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"", ' ', sql,
+               flags=re.S).upper()
+    joins = len(re.findall(r'\bJOIN\b', s))
+    selects = len(re.findall(r'\bSELECT\b', s))
+    group_by = bool(re.search(r'\bGROUP\s+BY\b', s))
+    having = bool(re.search(r'\bHAVING\b', s))
+    set_operation = bool(re.search(r'\b(?:INTERSECT|UNION|EXCEPT)\b', s))
+    order_by = bool(re.search(r'\bORDER\s+BY\b', s))
+    where_predicates = len(re.findall(r'\b(?:WHERE|AND|OR)\b', s))
+    aggregate = bool(re.search(r'\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\(', s))
+    nested_selects = max(0, selects - 1)
+    # Scores distinct operations rather than merely SELECT count. Hard eligibility below requires composition.
+    score = 2 * joins + 3 * nested_selects + 2 * (group_by and having) + 2 * set_operation + \
+        (aggregate and joins > 0) + (order_by and where_predicates > 0 and joins > 0)
+    return {'joins': joins, 'nested_selects': nested_selects, 'group_by': group_by, 'having': having,
+            'set_operation': set_operation, 'order_by': order_by, 'where_predicates': where_predicates,
+            'aggregate': aggregate, 'score': int(score),
+            'compositional': bool(joins >= 2 or (nested_selects >= 1 and (joins >= 1 or group_by)) or
+                                  (group_by and having) or (set_operation and (joins or nested_selects)) or
+                                  (aggregate and joins >= 1 and where_predicates >= 2))}
+
+
 def complexity(sql: str) -> int:
-    s = sql.upper()
-    score = s.count(' JOIN ') + 2 * max(0, s.count('SELECT') - 1) + ('GROUP BY' in s) + ('HAVING' in s) + \
-        (' INTERSECT ' in s or ' UNION ' in s or ' EXCEPT ' in s) * 2
-    return 0 if score == 0 else 1 if score <= 1 else 2 if score <= 3 else 3
+    p = sql_profile(sql)
+    score = p['score'] + int(p['order_by'])
+    return 0 if score == 0 else 1 if score <= 2 else 2 if score <= 5 else 3
+
+
+def operation_signature(sql: str) -> tuple:
+    """Bounded family signature used to spread hard examples across distinct SQL operations."""
+    p = sql_profile(sql)
+    return (min(p['joins'], 3), min(p['nested_selects'], 2), p['group_by'], p['having'],
+            p['set_operation'], p['order_by'], p['aggregate'], min(p['where_predicates'], 3))
+
+
+def diverse_query_order(items, rng):
+    """Round-robin deterministic query-signature buckets; query text remains the correctness oracle."""
+    buckets = defaultdict(list)
+    for item in items:
+        buckets[operation_signature(item[3])].append(item)
+    signatures = sorted(buckets)
+    for bucket in buckets.values():
+        rng.shuffle(bucket)
+    rng.shuffle(signatures)
+    ordered = []
+    while signatures:
+        next_signatures = []
+        for signature in signatures:
+            bucket = buckets[signature]
+            if bucket:
+                ordered.append(bucket.pop())
+            if bucket:
+                next_signatures.append(signature)
+        signatures = next_signatures
+    return ordered
 
 
 def usable(rows) -> bool:
@@ -106,7 +159,8 @@ def _asset(db_path: Path, name: str, out_assets: Path):
     return f'sql/{name}', hashlib.sha256(target.read_bytes()).hexdigest()
 
 
-def _build(source, items, db_dir_of, per_db, out_assets, upstream, revision, seed, max_mb=40):
+def _build(source, items, db_dir_of, per_db, out_assets, upstream, revision, seed, max_mb=40,
+           compositional_only=False, group_source=None):
     """items: (upstream_split, db_id, question, sql, hint, difficulty, item_id); split by database."""
     by_db = defaultdict(list)
     for item in items:
@@ -117,7 +171,11 @@ def _build(source, items, db_dir_of, per_db, out_assets, upstream, revision, see
         db_path = db_dir_of(split, db_id)
         if not db_path.exists() or db_path.stat().st_size > max_mb * 2**20:
             continue
-        rng.shuffle(members)
+        if compositional_only:
+            members = [item for item in members if sql_profile(item[3])['compositional']]
+            members = diverse_query_order(members, rng)
+        else:
+            rng.shuffle(members)
         results = []
         for item in members:
             sql = item[3]
@@ -133,7 +191,7 @@ def _build(source, items, db_dir_of, per_db, out_assets, upstream, revision, see
                 break
         if not results:
             continue
-        rel, digest = _asset(db_path, f'{source}-{split}-{db_id}.sqlite', out_assets)
+        rel, digest = _asset(db_path, f'{group_source or source}-{split}-{db_id}.sqlite', out_assets)
         service = service_source(rel, digest)
         golds = [rows for _, rows in results]
         for index, ((_, _, question, sql, hint, difficulty, item_id), rows) in enumerate(results):
@@ -147,17 +205,20 @@ def _build(source, items, db_dir_of, per_db, out_assets, upstream, revision, see
                 args['hint'] = 'string'
                 inputs['hint'] = hint
                 instruction += BIRD_NOTE
-            aliases = [[[str(c) if isinstance(c, (int, float)) else c for c in row] for row in rows],
-                       list(reversed(rows))]
+            ordered = sql_profile(sql)['order_by']
+            aliases = [[[str(c) if isinstance(c, (int, float)) else c for c in row] for row in rows]]
+            if not ordered:
+                aliases.append(list(reversed(rows)))
             out.append(make_case(
                 source=source, family='sql_qa', shape=f'{source}-{"hint" if hint else "plain"}-L{level}',
                 upstream=upstream, upstream_id=item_id, upstream_split=split, unit=f'db:{db_id}',
-                groups=[f'sql-db:{source}:{db_id}'], root_name='answer_from_database', args=args, returns=ROW_TYPE,
+                groups=[f'sql-db:{group_source or source}:{db_id}'], root_name='answer_from_database', args=args, returns=ROW_TYPE,
                 instruction=instruction, inputs=inputs, expected=rows,
-                oracle={'level': 'normalized', 'normalization': 'result-set'}, level=level,
+                oracle={'level': 'normalized', 'normalization': 'result-set', **({'ordered': True} if ordered else {})}, level=level,
                 license_='CC-BY-SA-4.0', services={'db': service}, domain='relational', wrong=wrong, aliases=aliases,
                 neuralese_room='query planning and per-table inspection can be delegated; parent checks rows',
                 revision=revision, difficulty=difficulty, neuralese=NEURALESE))
+            out[-1]['curriculum']['external']['sql_profile'] = sql_profile(sql)
             out[-1]['curriculum']['external']['gold_sql'] = sql
     return out
 
@@ -190,3 +251,44 @@ def bird(out_assets=BUILD_ASSETS, per_db=40, seed=20261031):
         return RAW / ('bird/train/train_databases' if split == 'train' else 'bird/dev_20240627/dev_databases') / \
             db_id / f'{db_id}.sqlite'
     return _build('bird', items, db_dir, per_db, Path(out_assets), 'bird-bench', 'train.zip+dev_20240627', seed)
+
+
+def _focused(source, items, db_dir, per_db, out_assets, upstream, revision, seed, group_source):
+    """Build a new, disjoint-ID hard SQL successor with multi-operation queries only."""
+    # A database is the related-world unit. If a DB has any held rows, keep its
+    # whole DB group held; never split train queries from dev queries by row.
+    held_databases = {item[1] for item in items if item[0] != 'train'}
+    items = [item for item in items if item[0] != 'train' or item[1] not in held_databases]
+    return _build(source, items, db_dir, per_db, Path(out_assets), upstream,
+                  revision + '+compositional-sql-v1', seed, compositional_only=True,
+                  group_source=group_source)
+
+
+def spider_hard(out_assets=BUILD_ASSETS, per_db=12, seed=20261031):
+    base = RAW / 'spider/official/spider_data'
+    train = json.load(open(base / 'train_spider.json')) + json.load(open(base / 'train_others.json'))
+    dev = json.load(open(base / 'dev.json'))
+    test = json.load(open(base / 'test.json'))
+    seen_dbs = {r['db_id'] for r in train} | {r['db_id'] for r in dev}
+    items = [('train', r['db_id'], r['question'], r['query'], '', None, f'train-{i}') for i, r in enumerate(train)]
+    items += [('dev', r['db_id'], r['question'], r['query'], '', None, f'dev-{i}') for i, r in enumerate(dev)]
+    items += [('test', r['db_id'], r['question'], r['query'], '', None, f'test-{i}') for i, r in enumerate(test)
+              if r['db_id'] not in seen_dbs]
+    def db_dir(split, db_id):
+        return (base / ('test_database' if split == 'test' else 'database') / db_id / f'{db_id}.sqlite')
+    return _focused('spider-hard', items, db_dir, per_db, out_assets, 'spider',
+                    'spider_data.zip-00636695', seed, 'spider')
+
+
+def bird_hard(out_assets=BUILD_ASSETS, per_db=24, seed=20261031):
+    train = json.load(open(RAW / 'bird/train/train.json'))
+    dev = json.load(open(RAW / 'bird/dev_20240627/dev.json'))
+    items = [('train', r['db_id'], r['question'], r['SQL'], r.get('evidence') or '', None, f'train-{i}')
+             for i, r in enumerate(train)]
+    items += [('dev', r['db_id'], r['question'], r['SQL'], r.get('evidence') or '', r.get('difficulty'),
+               f'dev-{r.get("question_id", i)}') for i, r in enumerate(dev)]
+    def db_dir(split, db_id):
+        return RAW / ('bird/train/train_databases' if split == 'train' else 'bird/dev_20240627/dev_databases') / \
+            db_id / f'{db_id}.sqlite'
+    return _focused('bird-hard', items, db_dir, per_db, out_assets, 'bird-bench',
+                    'train.zip+dev_20240627', seed, 'bird')

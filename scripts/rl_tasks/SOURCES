@@ -4,6 +4,8 @@ musique multihop:musique
 2wikimultihopqa multihop:twowiki
 spider sql:spider
 bird sql:bird
+spider-hard sql:spider_hard
+bird-hard sql:bird_hard
 xlam tools:xlam
 knights-knaves puzzles:knights
 reasoning-gym puzzles:reasoning_gym
@@ -12,6 +14,8 @@ drop reading:drop
 quality reading:quality
 babi reading:babi
 clutrr reading:clutrr
+babi-temporal3 reading:babi_temporal3
+clutrr-guided reading:clutrr_guided
 logiqa2 reading:logiqa
 gsm8k numeric:gsm8k
 math numeric:math
