@@ -149,6 +149,59 @@ def _intake_runtime_trees(intake_receipt: dict | None) -> list[dict]:
     return checked
 
 
+def _verify_intake_controller_frontend(rows: list[dict], intake_receipt: dict | None,
+                                      runtime: Path) -> list[dict]:
+    """Re-run the real package loader against the exact frozen runtime selected for collection."""
+    controllers = [row.get('semantics', {}).get('application_controller') for row in rows]
+    has_controller = any(controller is not None for controller in controllers)
+    if not has_controller:
+        if isinstance(intake_receipt, dict) and intake_receipt.get('controller_frontend_preflight'):
+            raise ValueError('intake receipt has controller preflight evidence but rows declare no application controller')
+        return []
+    if (not isinstance(intake_receipt, dict) or
+            any(not isinstance(controller, dict) for controller in controllers) or
+            any(controller != controllers[0] for controller in controllers[1:])):
+        raise ValueError('controller rows need one consistent controller declaration and its intake receipt')
+
+    row_roots = {row.get('semantics', {}).get('root') for row in rows}
+    if any(not isinstance(root, str) or not root for root in row_roots):
+        raise ValueError('controller cases must declare their actual Natlang invocation roots')
+    roots = sorted(row_roots)
+    recorded = intake_receipt.get('controller_frontend_preflight')
+    if not isinstance(recorded, list) or not recorded:
+        raise ValueError('controller codebase intake is missing actual Natlang loader preflight evidence')
+    if sorted(item.get('root') for item in recorded if isinstance(item, dict)) != roots:
+        raise ValueError('intake controller preflight roots do not cover all candidate invocation roots')
+
+    package_path = intake_receipt.get('package_path')
+    if not isinstance(package_path, str):
+        raise ValueError('controller intake receipt is missing its source package path')
+    from scripts.rl_tasks.intake_natlang_codebase import _load_json, _project
+    from scripts.rl_tasks.codebase_services import load_external_services
+    package_root = Path(package_path).resolve(strict=True)
+    metadata = _load_json(package_root.parent / 'metadata.json')
+    controller = controllers[0]
+    if metadata.get('collector_controller') != controller:
+        raise ValueError('controller declaration changed after codebase intake')
+    files = _project(package_root, metadata)
+    external_services, _bindings = load_external_services(package_root, metadata)
+    package_sha = hashlib.sha256(json.dumps(
+        {'files': files, 'services': external_services}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    if package_sha != intake_receipt.get('package_sha256'):
+        raise ValueError('controller package or declared services changed after codebase intake')
+
+    from scripts.rl_tasks.application_controller_frontend import validate_controller_frontend
+    fresh = [validate_controller_frontend(files, root, controller, runtime_dist=runtime / 'dist')
+             for root in roots]
+    def binding(record: dict) -> tuple:
+        return (record.get('root'), record.get('module'), record.get('export'), record.get('operations'),
+                record.get('loaded_by'), record.get('node_version'), record.get('frontend_files'),
+                record.get('frontend_sha256'), record.get('accepted'))
+    if [binding(item) for item in fresh] != [binding(item) for item in recorded]:
+        raise ValueError('frozen-runtime Natlang loader preflight differs from the authored intake proof')
+    return fresh
+
+
 def _program_id(row: dict) -> str:
     identifier = (row.get('curriculum', {}).get('external') or {}).get('program_id')
     return identifier if isinstance(identifier, str) and identifier else '__unknown_codebase__'
@@ -274,6 +327,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         raise ValueError(f'campaign root already exists: {campaign_root}')
     intake_record = json.loads(intake_receipt.read_text(encoding='utf-8')) if intake_receipt else None
     rows, verify_record = _verify_rows(source, verification, intake_receipt=intake_record)
+    controller_preflight = _verify_intake_controller_frontend(rows, intake_record, runtime)
     if intake_record and not intake_record.get('admission_eligible'):
         raise ValueError('codebase dataset has an unresolved rights hold')
     protected = protected or ProtectedWorlds.load()
@@ -316,7 +370,9 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
                  Path(__file__).resolve(), Path(__file__).with_name('intake_natlang_codebase.py'),
                  Path(__file__).with_name('execution_adapter.py'),
                  Path(__file__).with_name('audit_natlang_packages.py'), verification.parent / 'verification.json',
-                 Path(__file__).with_name('codebase_services.py'), protection_receipt]
+                 Path(__file__).with_name('codebase_services.py'),
+                 Path(__file__).with_name('application_controller_frontend.py'),
+                 Path(__file__).with_name('validate_controller_frontend.mjs'), protection_receipt]
     if intake_receipt:
         artifacts.append(intake_receipt.resolve(strict=True))
         external_service_files = _intake_external_service_files(intake_record)
@@ -344,6 +400,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'runtime': str(runtime), 'runtime_receipt_sha256': artifact_hashes[str(runtime_receipt.resolve(strict=True))],
         'artifact_hashes': artifact_hashes,
         'intake_receipt_binding': intake_binding,
+        'controller_frontend_preflight': controller_preflight,
         'external_service_bindings': _intake_external_service_files(intake_record),
         'external_services': (intake_record or {}).get('external_services', {}),
         'runtime_dependency_trees': _intake_runtime_trees(intake_record),

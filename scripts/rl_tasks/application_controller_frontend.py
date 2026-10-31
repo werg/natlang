@@ -11,12 +11,14 @@ FRONTEND = REPO / 'scripts/rl_tasks/validate_controller_frontend.mjs'
 
 
 def validate_controller_frontend(files: dict[str, str], root: str, controller: dict[str, object], *,
-                                 node: str | None = None) -> dict[str, object]:
+                                 node: str | None = None, runtime_dist: Path | None = None) -> dict[str, object]:
     """Compile and attach the actual declared controller through the collector's Natlang loader."""
     executable = node or shutil.which('node')
     if not executable:
         raise RuntimeError('Node is required to preflight an application controller with the collector loader')
-    request = json.dumps({'files': files, 'root': root, 'controller': controller}, ensure_ascii=False)
+    request = json.dumps({'files': files, 'root': root, 'controller': controller,
+                          'runtime_dist': str(runtime_dist.resolve(strict=True)) if runtime_dist else None},
+                         ensure_ascii=False)
     result = subprocess.run([executable, str(FRONTEND)], input=request, text=True,
                             capture_output=True, cwd=REPO, timeout=120, check=False)
     if result.returncode:
