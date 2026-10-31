@@ -19,8 +19,10 @@ one-2-node-graph-per-edge conversion for communication data (audit D7, LFM3_DATA
 
 Custody: a train chain touching current held/quality/pending groups (acquired-connected protection projection) or a
 native decision hold is omitted; test chains are written as held graphs. Context weight is zero (own outputs only).
-Prompt rendering: the recorded full serving prompt with its tool schemas (``full``); ``--fallback program-header``
-re-renders a chain whose full graph exceeds ``--max-tokens``. Graphs are never truncated.
+Prompt rendering: each tool-loop call is rebuilt with the current ts-host serving prompt and tool schemas
+(``data/serving_prompt.py``; ``--serving-entry mix`` draws collector/runtime per record as the SFT re-render does) and
+rendered ``full``; ``--fallback program-header``
+re-renders a chain whose full graph exceeds ``--max-tokens`` raw tokens. Graphs are never truncated.
 
 Inputs (one of):
   --work W --source S     converted e2e_mine shards (W/S/shard-NNNN.{records,edges,pieces}.jsonl)
@@ -54,7 +56,8 @@ CODE = ('scripts/neuralese_data/build_chain_graphs.py', 'scripts/neuralese_data/
         'scripts/neuralese_data/native_chain_assembly.py', 'scripts/neuralese_data/build_native_semantic_pairs_e2e.py',
         'training/neuralese/natlang_neuralese/data/text_corpus.py',
         'training/neuralese/natlang_neuralese/data/native_graph_schema.py',
-        'training/neuralese/natlang_neuralese/serve/chat.py')
+        'training/neuralese/natlang_neuralese/serve/chat.py',
+        'training/neuralese/natlang_neuralese/data/serving_prompt.py', 'training/prompt-pieces/serving-surface.json')
 ID_PATTERN = re.compile(rb'"id"\s*:\s*"([^"]+)"')
 STATE = {}
 STATE_INDEX_CACHE = None  # set from --index-cache: byte offsets of records.jsonl, bound to its size/mtime
@@ -190,12 +193,14 @@ def render(chain, records, edges, pieces, prompt):
     from scripts.neuralese_data.native_chain_materialize import materialize
     from scripts.neuralese_data.native_chain_assembly import assemble
     rendered = render_chain(chain, records, edges, pieces, tokenizer=STATE['tokenizer'],
-        tokenizer_fingerprint=STATE['fingerprint'], prompt_rendering=prompt, retain_prompt_tools=prompt == 'full')
+        tokenizer_fingerprint=STATE['fingerprint'], prompt_rendering=prompt,
+        retain_prompt_tools=prompt == 'full' and STATE['serving_entry'] is None, serving_entry=STATE['serving_entry'])
     nodes = materialize(rendered, records, edges, tokenizer=STATE['tokenizer'], role_ids=STATE['roles'],
                         context_weight=0.0)
     return assemble(chain, records, edges, nodes, tokenizer=STATE['tokenizer'],
                     tokenizer_fingerprint=STATE['fingerprint'], role_ids=STATE['roles'],
-                    source_binding={**STATE['binding'], 'prompt_rendering': prompt})
+                    source_binding={**STATE['binding'], 'prompt_rendering': prompt,
+                                    'serving_entry': STATE['serving_entry']})
 
 
 def convert_unit(task):
@@ -247,10 +252,12 @@ def convert_unit(task):
                 inside.update(range(start, stop))
             node['target_weights'] = [w if i in inside else 0.0 for i, w in enumerate(node['target_weights'])]
     parsed = parse_graph(graph, tokenizer_fingerprint=STATE['fingerprint'])
+    from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
+    packed = pack_causal_prefixes([parsed], allow_communication=True)
     communicating = bool(kept_edges) and communication_classification(parsed)['producer_consumer']
     first = records[keep[0]]
     graph['chain_conversion'] = {'schema': 'natlang.chain-graph-conversion/1', 'prompt_rendering': prompt,
-        'context_weight': 0.0, 'family': first.get('family') or chain.get('family'), 'source': chain['source'],
+        'context_weight': 0.0, 'serving_entry': STATE['serving_entry'], 'family': first.get('family') or chain.get('family'), 'source': chain['source'],
         'source_ids': first.get('source_ids'), 'decisions_in_source_chain': len(chain['records']),
         'decisions_kept': len(keep), 'edges_in_source_chain': len(edges), 'edges_kept': len(kept_edges),
         'decisions_without_weight': sum(rid not in plan['supervised'] for rid in keep),
@@ -258,7 +265,8 @@ def convert_unit(task):
     stats = {'nodes': len(graph['nodes']), 'tokens': sum(len(n['token_ids']) for n in graph['nodes']),
              'supervised_tokens': sum(1 for n in graph['nodes'] for w in n['target_weights'] if w > 0),
              'imports': sum(len(n['imports']) for n in graph['nodes']),
-             'producer_spans': sum(len(n['producing']) for n in graph['nodes'])}
+             'producer_spans': sum(len(n['producing']) for n in graph['nodes']),
+             'prefix_shared_tokens': packed[0].token_count if packed is not None else parsed.plan.token_count}
     if stats['supervised_tokens'] == 0:
         return 'omission', chain['split'], {'trajectory': chain['trajectory'], 'reason': 'no-weight-after-dedupe'}
     return ('graph' if communicating else 'ordinary'), chain['split'], {'graph': graph, 'stats': stats,
@@ -299,8 +307,12 @@ def main():
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--corpus-id', required=True)
     parser.add_argument('--prompt', choices=('full', 'program-header'), default='full')
+    parser.add_argument('--serving-entry', choices=('mix', 'collector', 'runtime', 'recorded'), default='mix',
+                        help='rebuild each tool-loop call with the current ts-host serving prompt and tool schemas '
+                             '(data/serving_prompt.py); "recorded" keeps the recorded prompt')
     parser.add_argument('--fallback', choices=('program-header', 'none'), default='program-header')
-    parser.add_argument('--max-tokens', type=int, default=40000)
+    parser.add_argument('--max-tokens', type=int, default=64000,
+                        help='raw node-token cap; identical prompt prefixes are shared physically in training')
     parser.add_argument('--reader-cap', type=int, default=64)
     parser.add_argument('--result-reader-cap', type=int, default=512,
                         help='reader cap per payload of computed child results (--computed-kinds)')
@@ -346,7 +358,10 @@ def main():
     binding['family_holds'] = {'path': 'training/source-reviews/family-holds.json',
                                'sha256': sha256_file_hex(ROOT / 'training/source-reviews/family-holds.json'),
                                'excluded_families': sorted(excluded)}
-    config = {'binding': binding, 'excluded_families': excluded, 'held_sources': held_sources, 'prompts': prompts, 'max_tokens': args.max_tokens, 'holds': holds,
+    from natlang_neuralese.data.serving_prompt import load_surface, surface_identity
+    serving_entry = None if args.serving_entry == 'recorded' else args.serving_entry
+    binding['serving_surface'] = surface_identity(load_surface()) if serving_entry else None
+    config = {'serving_entry': serving_entry, 'binding': binding, 'excluded_families': excluded, 'held_sources': held_sources, 'prompts': prompts, 'max_tokens': args.max_tokens, 'holds': holds,
               'blocked': protection['held'] | protection['quality'] | protection['pending'],
               'reader_cap': args.reader_cap, 'target_cap': args.target_cap}
     writer, omissions, totals = Writer(args.out), Writer(args.out), collections.Counter()

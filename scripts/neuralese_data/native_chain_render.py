@@ -50,7 +50,7 @@ def _plain_result_span(writer, occurrence, body):
 
 
 def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerprint,
-                 prompt_rendering='program-header', retain_prompt_tools=False):
+                 prompt_rendering='program-header', retain_prompt_tools=False, serving_entry=None):
     """Render each complete source decision once, with every witnessed write and read.
 
     Returned rows are not yet native graphs: role marker materialization and
@@ -123,7 +123,7 @@ def render_chain(chain, records, edges, pieces, *, tokenizer, tokenizer_fingerpr
         derivations[rid] = item
     rows, receipt, omissions, provenance = gold_text_rows(source_rows, pieces, tokenizer=tokenizer,
         require_independent_splits=False, prompt_rendering=prompt_rendering, target_reasoning=True, include_token_offsets=True,
-        retain_prompt_tools=retain_prompt_tools,
+        retain_prompt_tools=retain_prompt_tools, serving_entry=serving_entry,
         tokenizer_sha256=tokenizer_fingerprint, static_derivations=derivations, writer_context_records=source_rows)
     by_id = {row['id']: row for row in rows}
     if omissions or set(by_id) != set(custody['records']) or len(rows) != len(custody['records']):
