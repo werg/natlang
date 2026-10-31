@@ -51,7 +51,7 @@ function open(): any {{
     const root = process.env.NATLANG_RL_TASK_ASSETS ?? {json.dumps(ASSET_ROOT)};
     const path = root + '/' + FILE;
     if (createHash('sha256').update(readFileSync(path)).digest('hex') !== SHA256) throw new Error('database asset changed: ' + FILE);
-    cache.set(SHA256, new DatabaseSync(path, {{ readOnly: true }}));
+    cache.set(SHA256, new DatabaseSync(path, {{ readOnly: true, enableDoubleQuotedStringLiterals: true }}));
   }}
   return cache.get(SHA256);
 }}
@@ -63,7 +63,8 @@ export function schema(): string {{
 export function query(sql: string): (string | number | null)[][] {{
   const statement = open().prepare(sql);
   if (!statement.columns().length) throw new Error('only SELECT queries are allowed');
-  return statement.all().map((row: any) => Object.values(row).map((value: any) =>
+  statement.setReturnArrays(true);
+  return statement.all().map((row: any) => row.map((value: any) =>
     typeof value === 'bigint' ? Number(value) : value instanceof Uint8Array ? '<blob>' : value));
 }}
 '''

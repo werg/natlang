@@ -8,7 +8,7 @@ import glob
 import json
 import random
 
-from ..common import ARCHIVE_RAW, SOURCES_DIR, distinct_wrong, make_case, pick
+from ..common import ARCHIVE_RAW, SOURCES_DIR, distinct_wrong, make_case, pick, resolve_str
 
 ARGS = {'question': 'string', 'documents': '{ title: string; text: string }[]'}
 INSTRUCTIONS = [
@@ -73,7 +73,13 @@ def hotpot(cap_train=1500, cap_eval=150, seed=20261031):
     return out
 
 
-def musique(base=f'{SOURCES_DIR}/musique', cap_train=1500, cap_eval=150, seed=20261031):
+def musique(base=f'{SOURCES_DIR}/musique', cap_train=1500, cap_eval=150, seed=20261031,
+            protected_groups=resolve_str('data_nvme', 'broad-rl-tasks-20261031', 'protected-musique-groups.txt')):
+    """Most MuSiQue train questions share single-hop seed questions with protected held MuSiQue worlds; a snapshot
+    of those protected `musique:` groups (written from ProtectedWorlds.load) is skipped here so the cap fills with
+    usable items. Assembly still runs the full custody check."""
+    import os
+    blocked = set(open(protected_groups).read().split()) if os.path.exists(protected_groups) else set()
     out = []
     files = {'train': glob.glob(f'{base}/*train*.jsonl'), 'validation': glob.glob(f'{base}/*dev*.jsonl') +
              glob.glob(f'{base}/*validation*.jsonl')}
@@ -83,15 +89,21 @@ def musique(base=f'{SOURCES_DIR}/musique', cap_train=1500, cap_eval=150, seed=20
         random.Random(seed).shuffle(rows)
         pool = [r['answer'] for r in rows[:2000]]
         random.Random(seed + 1).shuffle(pool)
-        for r in rows[:cap_train if split == 'train' else cap_eval * 2]:
+        taken = 0
+        for r in rows:
+            if taken >= (cap_train if split == 'train' else cap_eval * 2):
+                break
             docs = [{'title': p['title'], 'text': p['paragraph_text']} for p in r['paragraphs']]
             hops = r['id'].split('hop')[0]
             seeds = [part for part in r['id'].split('__', 1)[1].split('_') if part.isdigit()] if '__' in r['id'] else []
             groups = [f'musique:{r["id"]}'] + [f'musique:seed:{s}' for s in seeds]
+            if blocked.intersection(groups):
+                continue
             level = {'2': 1, '3': 2, '4': 3}.get(hops, 2)
             out.append(_case('musique', 'MuSiQue', '', 'CC-BY-4.0', r['id'], split, r['question'], docs, r['answer'],
                              r.get('answer_aliases') or [], level, f'musique-{hops}hop-{len(docs)}docs', groups, pool,
                              difficulty=f'{hops}hop'))
+            taken += 1
     return out
 
 

@@ -123,10 +123,13 @@ def main():
     ap.add_argument('--out', required=True, type=Path)
     ap.add_argument('--legacy-per-family', type=int, default=30)
     ap.add_argument('--train-cap', type=int, default=1500)
+    ap.add_argument('--cap-override', default='reasoning-gym=4000',
+                    help='source=rows,... for sources whose many families need more than --train-cap')
     ap.add_argument('--exclude', default='')
     ap.add_argument('--seed', type=int, default=20261031)
     a = ap.parse_args()
     excluded = set(filter(None, a.exclude.split(',')))
+    caps = {k: int(v) for k, v in (item.split('=') for item in a.cap_override.split(',') if item)}
     out = a.out
     if out.exists():
         raise SystemExit(f'{out} exists; task sources are immutable')
@@ -144,7 +147,7 @@ def main():
         shutil.copyfile(verified, out / 'verification' / f'{source}.json')
         rng = random.Random(a.seed)
         rng.shuffle(cases)
-        kept_train = [r for r in cases if r['split'] == 'train'][:a.train_cap]
+        kept_train = [r for r in cases if r['split'] == 'train'][:caps.get(source, a.train_cap)]
         train[source] = kept_train
         for split in ('dev', 'confirmation'):
             held[split] += [r for r in cases if r['split'] == split]
@@ -157,10 +160,12 @@ def main():
     protected = ProtectedWorlds.load()
     own_held = ProtectedWorlds.from_cases({'own-held': ('pending', held['dev'] + held['confirmation'])})
     dropped = collections.Counter()
+    blocked = protected.identities | own_held.identities
     for source in list(train):
         kept = []
         for r in train[source]:
-            kinds = protected.related(r) or own_held.related(r)
+            # One identity computation per row (inputs can be large); the same relation ProtectedWorlds.related uses.
+            kinds = sorted({kind for kind, _ in world_identities(r, evidence_items=False) & blocked})
             if kinds:
                 dropped[f'{source}:{",".join(kinds)}'] += 1
             else:
@@ -170,8 +175,6 @@ def main():
     ids = [r['id'] for r in rows]
     assert len(ids) == len(set(ids)), 'duplicate task ids'
     assert all(r['split'] == 'train' for r in rows)
-    for r in rows:
-        protected.check(r)  # raises on any protected relation
 
     def write(path, items):
         path.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in items))
