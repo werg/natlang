@@ -674,7 +674,9 @@ def launch(spec):
     unit, budget = spec['unit'], spec['budget']
     host_max = spec.get('host_max_gb') or budget / GIB
     subprocess.run(['systemctl', '--user', 'reset-failed', unit], capture_output=True)
-    command = ['systemd-run', '--user', '--unit', unit, '-p', f'MemoryMax={int(host_max * GIB)}',
+    # Arguments are already an argv vector. In particular, a shell script's
+    # ${local} belongs to that shell, not the systemd manager's environment.
+    command = ['systemd-run', '--user', '--expand-environment=no', '--unit', unit, '-p', f'MemoryMax={int(host_max * GIB)}',
                '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={PRIORITY_OOM[spec["priority"]]}',
                '-p', f'OOMPolicy={spec["oom_policy"]}',
                '--working-directory', os.path.abspath(spec['workdir']),
@@ -728,7 +730,7 @@ def detached_waiter_command(argv, unit):
     split = rest.index('--') if '--' in rest else len(rest)
     head = [a for a in rest[:split] if a != '--detach']
     name = unit.removesuffix('.service') + '-waiter'
-    return ['systemd-run', '--user', '--quiet', '--collect', '--unit', name, '--working-directory', os.getcwd(),
+    return ['systemd-run', '--user', '--quiet', '--collect', '--unit', name, '--expand-environment=no', '--working-directory', os.getcwd(),
             sys.executable, os.path.abspath(rest[0])] + head[1:] + rest[split:]
 
 

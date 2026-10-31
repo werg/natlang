@@ -639,6 +639,17 @@ def test_launch_puts_local_bin_first_on_path(monkeypatch):
     assert 'docker stop -t 5 u c1' in ' '.join(cmd)
 
 
+def test_launch_preserves_shell_local_expansion_for_the_actual_child(monkeypatch):
+    seen = []
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda cmd, **k: seen.append(cmd) or type('R', (), {'returncode': 0})())
+    script = 'only_in_shell=preserved; printf "%s" "${only_in_shell}"'
+    spec = {'unit': 'u.service', 'budget': GIB, 'priority': 'low', 'oom_policy': 'stop',
+            'workdir': '.', 'env': [], 'command': ['bash', '-c', script], 'stop_seconds': 5}
+    ledger.launch(spec)
+    assert '--expand-environment=no' in seen[-1]
+    assert seen[-1][-1] == script
+
+
 def test_relative_executable_uses_admitted_workdir_and_preserves_resume_spec(monkeypatch, tmp_path):
     seen = []
     monkeypatch.setattr(ledger.subprocess, 'run', lambda cmd, **k: seen.append(cmd) or type('R', (), {'returncode': 0})())
@@ -1010,6 +1021,7 @@ def test_detached_waiter_runs_as_its_own_unit_without_the_detach_flag():
     command = ledger.detached_waiter_command(argv, 'job-1.service')
     assert command[:5] == ['systemd-run', '--user', '--quiet', '--collect', '--unit']
     assert command[5] == 'job-1-waiter'
+    assert '--expand-environment=no' in command[:command.index('--working-directory')]
     inner = command[command.index('--working-directory') + 2:]
     assert inner[2:] == ['run', '--unit', 'job-1', '--budget-gb', '8', '--wait', '3600', '--', 'sh', '-c', 'echo --detach']
 
