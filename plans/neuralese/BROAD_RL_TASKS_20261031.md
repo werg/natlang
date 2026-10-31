@@ -198,3 +198,7 @@ normalizations) and run Node 22.16+/24 (`node:sqlite` `setReturnArrays`). Select
   between builds). BIRD databases over 40 MB are not included (about 17 of 69 train DBs).
 - MBPP contributes only 350 train items (its upstream test split is held). More code needs KodCode with a Python
   test runner.
+
+License note: bAbI rows carry `license: BSD-3-Clause` (the code license of the original repo); the downloaded en-10k
+data's PROVENANCE.json records CC-BY-3.0 (Keras mirror of the official tarball). Both are recorded as facts; no row
+is held for licensing. CLUTRR's card states no license (rows record CC-BY-NC-4.0 of the original release).
