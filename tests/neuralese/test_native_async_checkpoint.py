@@ -380,3 +380,29 @@ def test_reserved_hook_failure_surfaces_after_durable_commit(tmp_path, monkeypat
         policy.drain_async()
     assert torch.load(policy.slot, weights_only=False)['step'] == 3
     policy._persistent_reservation.close()
+
+
+def test_failed_reserved_writer_recovers_newer_full_state_in_spare(tmp_path, monkeypatch):
+    from natlang_neuralese.train import trajectory_state
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)
+    original = trajectory_state.atomic_checkpoint
+    calls = []
+    def fail_first(path, state, **kwargs):
+        calls.append(state['step'])
+        if len(calls) == 1:
+            raise OSError(errno.EIO, 'injected writer error')
+        return original(path, state, **kwargs)
+    monkeypatch.setattr(trajectory_state, 'atomic_checkpoint', fail_first)
+    optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
+    state = {'step': 4, 'training': {'optimizer': optimizer.state_dict(), 'rng': {},
+                                    'exposure_counts': {'graph': 4}, 'options': {}}}
+    policy = CheckpointPolicy(tmp_path, async_checkpoint=True)
+    policy.reserve_next(state, optimizer)
+    policy.save(state, async_allowed=True, async_optimizer=optimizer)
+    state['step'] = 5
+    state['training']['exposure_counts']['graph'] = 5
+    event = policy.save(state, async_allowed=True, async_optimizer=optimizer)
+    assert event['async_writer_recovery']['recovered_synchronously']
+    saved = torch.load(policy.slot, weights_only=False)
+    assert saved['step'] == 5 and saved['training']['exposure_counts']['graph'] == 5
+    assert calls == [4]
