@@ -159,6 +159,37 @@ def _restore_original_provenance(candidate, original, variant):
     return row
 
 
+def inherit_versioned_assets(base_dir, additions, out, explicit=None):
+    """Retain predecessor v3 assets as well as each addition's assets."""
+    roots = [Path(base_dir) / 'assets-v3', *(Path(p) / 'assets-v3' for p in additions)]
+    if explicit is not None:
+        roots.insert(0, Path(explicit))
+    roots = list(dict.fromkeys(p.resolve() for p in roots if p.is_dir()))
+    if not roots:
+        return None
+    files = {}
+    for source_root in roots:
+        for source in sorted(source_root.rglob('*')):
+            if not source.is_file():
+                continue
+            relative = source.relative_to(source_root).as_posix()
+            digest = sha_file(source)
+            if relative in files:
+                if files[relative]['sha256'] != digest:
+                    raise ValueError('v3 asset collision requires an explicit task/source rewrite: ' + relative)
+                continue
+            target = Path(out) / 'assets-v3' / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            if sha_file(target) != digest:
+                raise ValueError('v3 asset copy did not retain its exact bytes: ' + relative)
+            files[relative] = {'path': relative, 'sha256': digest, 'bytes': source.stat().st_size}
+    manifest = Path(out) / 'assets-v3.manifest.json'
+    manifest.write_text(json.dumps({'schema': 'natlang.rl-versioned-assets-union/1',
+        'source_roots': [str(p) for p in roots], 'files': list(files.values())}, indent=2) + '\n')
+    return {'path': manifest.name, 'sha256': sha_file(manifest)}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--prefix', required=True, type=Path)
@@ -167,6 +198,7 @@ def main():
     ap.add_argument('--base-confirmation', required=True, type=Path)
     ap.add_argument('--append', required=True, type=Path, action='append', help='assembled verified additions directory')
     ap.add_argument('--base-assets', type=Path, help='existing production task asset directory')
+    ap.add_argument('--base-assets-v3', type=Path, help='explicit retained v3 assets when an older package omitted its asset tree')
     ap.add_argument('--correction-candidate', type=Path, help='four-source corrected variants package')
     ap.add_argument('--legacy-per-family', type=int, default=0)
     args = ap.parse_args()
@@ -500,17 +532,7 @@ def main():
                     'output_path': str(target.relative_to(out)), 'sha256': sha_file(source_file),
                     'requires_task_specific_asset_root': False})
             shutil.copyfile(source_file, target)
-    v3_dir = next((p / 'assets-v3' for p in inputs if (p / 'assets-v3').is_dir()), None)
-    if v3_dir:
-        shutil.copytree(v3_dir, out / 'assets-v3')
-        source_manifest = v3_dir.parent / 'assets-v3.manifest.json'
-        if source_manifest.is_file():
-            shutil.copyfile(source_manifest, out / 'assets-v3.manifest.json')
-            asset_manifest = {'path': 'assets-v3.manifest.json', 'sha256': sha_file(out / 'assets-v3.manifest.json')}
-        else:
-            asset_manifest = None
-    else:
-        asset_manifest = None
+    asset_manifest = inherit_versioned_assets(base_dir, inputs, out, args.base_assets_v3)
 
     # Bind the actual predecessor, each admitted addition, protected registry, and held packets.
     candidate_receipts = []

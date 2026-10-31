@@ -47,3 +47,17 @@ def test_replay_gate_reads_nested_verifier_summary_and_requires_all_rows():
         replay_summary({'summary': {'cases': 710, 'kept': 709, 'wrong_accepted': 0, 'wrong_errors': 0}})
     with pytest.raises(ValueError):
         replay_summary({'summary': {'cases': 710, 'kept': 710, 'wrong_accepted': 1, 'wrong_errors': 0}})
+
+
+def test_successor_keeps_predecessor_and_new_versioned_assets(tmp_path):
+    from scripts.rl_tasks.merge_verified_successor import inherit_versioned_assets
+    base, addition, out = [tmp_path/name for name in ('base', 'addition', 'out')]
+    for root, name, text in ((base, 'old.txt', 'old payload'), (addition, 'new.txt', 'new payload')):
+        path=root/'assets-v3'/name;path.parent.mkdir(parents=True);path.write_text(text)
+    ref=inherit_versioned_assets(base,[addition],out)
+    assert (out/'assets-v3/old.txt').read_text()=='old payload'
+    assert (out/'assets-v3/new.txt').read_text()=='new payload'
+    assert ref['path']=='assets-v3.manifest.json'
+    (addition/'assets-v3/old.txt').write_text('conflicting payload')
+    with pytest.raises(ValueError,match='explicit task/source rewrite'):
+        inherit_versioned_assets(base,[addition],tmp_path/'other')
