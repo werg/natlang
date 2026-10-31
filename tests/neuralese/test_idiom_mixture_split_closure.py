@@ -59,6 +59,17 @@ def test_held_closure_applies_without_carve(tmp_path, monkeypatch):
     assert carve == set() and held == {'a','b'}
 
 
+def test_held_closure_includes_full_teacher_and_bounded_inputs(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, 'REPO', tmp_path)
+    full = tmp_path / 'full.jsonl'; bounded = tmp_path / 'bounded.jsonl'
+    put(full, [{'split': 'train', 'source_groups': ['held', 'bridge']}])
+    put(bounded, [{'split': 'train', 'source_groups': ['bridge', 'end']}])
+    config = {'renders': [], 'teacher_graphs_full': [str(full)],
+              'bounded_graphs': [{'path': str(bounded)}]}
+    _, held = mod.carve_groups(config, {}, held_groups={'held'})
+    assert held == {'held', 'bridge', 'end'}
+
+
 def cand(i, family, cluster, tier=2, tokens=10):
     return {'id': f'r{i}', 'tier': tier, 'target_tokens': tokens,
             'features': {'family': family, 'near_duplicate_cluster': cluster}}

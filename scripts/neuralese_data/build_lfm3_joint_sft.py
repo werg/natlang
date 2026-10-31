@@ -42,6 +42,12 @@ HELD_PACKETS = ['runs/natlang-dev-task-packet-v1-20261028/cases.jsonl',
                 'runs/natlang-held-task-packet-v3-20261012/cases.jsonl',
                 'runs/natlang-dev-task-packet-v2-20261028/cases.jsonl',
                 'runs/natlang-held-task-packet-v4-20261012/cases.jsonl']
+HELD_GRAPHS = [
+    'runs/lfm3-mixture/joint-sft-v3/mixture/held/native-graphs.jsonl.zst',
+    '/home/werg/data/dgxops/claude-recovery-20261028/data/clef-exact-mixture-v2/held/native-graphs.jsonl.zst',
+    '/home/werg/data/dgxops/claude-recovery-20261028/data/repaired-fourteen-mixture-v1/held/native-graphs.jsonl.zst',
+    *[f'/mnt/external/natlang-lfm3-data-20261028/communication/big2-stream-tranche-{n:03d}/graphs/test/native-graphs.jsonl.zst' for n in range(3)],
+]
 
 
 def run(cmd):
@@ -162,6 +168,8 @@ def build(args):
     config = {'policy': args.policy, 'renders': sorted(renders), 'scores': scores, 'teacher_graphs': teacher_graphs,
               'teacher_graphs_full': teacher_full, 'bounded_graphs': bounded,
               'teacher_graphs_test': teacher_test, 'communication': communication, 'held_packets': HELD_PACKETS,
+              'protected_held_graphs': HELD_GRAPHS,
+              'protection_manifest': '/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/protection-manifest.json',
               'objective_tokenizer': tokenizer, 'expanded_tokenizer_fingerprint': fingerprint,
               'renders_waiting_for_scores': waiting,
               'prior': [str((REPO / prior).resolve().relative_to(REPO)) for prior in args.prior]}

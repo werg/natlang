@@ -231,7 +231,9 @@ def held_groups_of(config) -> tuple[set, dict]:
     for packet in config.get('held_packets', []):
         n = 0
         for _, raw in iter_lines(REPO / packet):
-            groups.update(json.loads(raw).get('source_groups') or [])
+            row = json.loads(raw)
+            groups.update(row.get('source_groups') or [])
+            groups.update(row.get('split_groups') or [])
             n += 1
         sources[packet] = {'sha256': sha256_file_hex(REPO / packet), 'cases': n}
     return groups, sources
@@ -312,6 +314,8 @@ def carve_groups(config, policy, trained_groups=frozenset(), held_groups=frozens
                 parent[max(a, b)] = min(a, b)
     paths = [path for render in config['renders'] for _, path in graph_files(render, 'train')]
     paths += [REPO / item for item in config.get('teacher_graphs', [])]
+    paths += [REPO / item for item in config.get('teacher_graphs_full', [])]
+    paths += [REPO / item['path'] for item in config.get('bounded_graphs', [])]
     for path in paths:
         for _, raw in iter_lines(path):
             add_groups(json.loads(raw).get('source_groups') or (), count=True)
@@ -738,9 +742,25 @@ def main(argv=None):
 
     decisions, trajectories, score_census = load_scores(config['scores'])
     held, packet_sources = held_groups_of(config)
+    if config.get('protection_manifest'):
+        from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
+        from natlang_neuralese.common.custody import ProtectedWorlds
+        projection = current_protection(Path(config['protection_manifest']))
+        worlds = ProtectedWorlds.load(root=REPO)
+        held.update(projection['held'] | projection['quality'] | projection['pending'])
+        held.update(value for kind, value in worlds.identities if kind == 'group')
+        packet_sources['current_protection_union'] = {
+            'projection': projection['proof'],
+            'held_groups': len(projection['held']), 'quality_groups': len(projection['quality']),
+            'pending_groups': len(projection['pending']), 'protected_worlds_sha256': worlds.digest,
+            'scope': 'source-group closure, with held, quality and pending origins separately counted'}
     held_rows = [path for render in config['renders'] for _, path in graph_files(render, 'test')]
     held_rows += [REPO / item for item in config.get('teacher_graphs_test', [])]
+    protected_held_rows = [REPO / item for item in config.get('protected_held_graphs', [])]
+    held_rows += protected_held_rows
     for path in held_rows:
+        if path in protected_held_rows:
+            packet_sources[str(path)] = {'sha256': sha256_file_hex(path), 'kind': 'protected-held-graphs'}
         for _, raw in iter_lines(path):
             held.update(json.loads(raw).get('source_groups') or [])
 
