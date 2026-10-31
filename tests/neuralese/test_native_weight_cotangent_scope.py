@@ -548,13 +548,54 @@ def test_stored_rmsnorm_cuda_input_adjoint_preserves_row_geometry(first, second)
 
     torch.manual_seed(first * 1000 + second)
     layer = RMSNorm(2048, 1e-5).cuda().bfloat16()
+    from natlang_neuralese.model.native_parameter_precision import rowwise_norm_forward
+    original_forward = layer.forward
+    layer.forward = lambda value: rowwise_norm_forward(original_forward, value)
+    layer.native_rowwise_norm = True
     values = torch.randn(1, first + second, 2048, device='cuda', dtype=torch.bfloat16)
     incoming = torch.randn_like(values)
     def adjoint(x, grad):
         x = x.detach().requires_grad_(True)
         out = _TorchStoredRMSNorm.apply(x, layer.weight, layer.eps, layer, layer.forward)
         return torch.autograd.grad(out, x, grad)[0]
+    def forward(x):
+        return _TorchStoredRMSNorm.apply(x, layer.weight, layer.eps, layer, layer.forward)
+    assert torch.equal(forward(values), torch.cat((forward(values[:, :first]),
+                                                  forward(values[:, first:])), dim=1))
     full = adjoint(values, incoming)
     split = torch.cat((adjoint(values[:, :first], incoming[:, :first]),
                        adjoint(values[:, first:], incoming[:, first:])), dim=1)
     assert torch.equal(full, split)
+
+
+@pytest.mark.parametrize('first,second', [(18, 14), (129, 150)])
+def test_stored_rmsnorm_cuda_gain_cotangent_preserves_invocation_geometry(first, second, tmp_path):
+    if not torch.cuda.is_available():
+        pytest.skip('CUDA is required for the BF16 row geometry path')
+    from natlang_neuralese.maple.model import RMSNorm
+    from natlang_neuralese.model.native_gradient_partitions import GradientPartitions, gradient_partitions
+
+    torch.manual_seed(first * 1000 + second + 1)
+    layer = RMSNorm(2048, 1e-5).cuda().bfloat16()
+    from natlang_neuralese.model.native_parameter_precision import rowwise_norm_forward
+    original_forward = layer.forward
+    layer.forward = lambda value: rowwise_norm_forward(original_forward, value)
+    layer.native_rowwise_norm = True
+    x = torch.randn(1, first + second, 2048, device='cuda', dtype=torch.bfloat16, requires_grad=True)
+    grad = torch.randn_like(x)
+    (tmp_path / 'flat').mkdir()
+    (tmp_path / 'cached').mkdir()
+    with ParameterCotangentScope.for_model(layer, mode='vjp', directory=tmp_path / 'flat') as scope:
+        with gradient_partitions(GradientPartitions((first, second))):
+            layer(x).backward(grad)
+        scope.finish()
+    expected = layer.weight.grad.detach().clone()
+    layer.weight.grad = None
+    with ParameterCotangentScope.for_model(layer, mode='vjp', directory=tmp_path / 'cached') as scope:
+        with gradient_partitions(GradientPartitions((first,))):
+            left = layer(x[:, :first])
+        with gradient_partitions(GradientPartitions((second,))):
+            right = layer(x[:, first:])
+        torch.autograd.backward((left, right), (grad[:, :first], grad[:, first:]))
+        scope.finish()
+    torch.testing.assert_close(layer.weight.grad.float(), expected.float(), atol=1e-5, rtol=1e-4)

@@ -251,3 +251,25 @@ def test_bf16_complete_gradient_policy_accepts_only_adjacent_rounding_within_nor
     assert not gradient_metrics(actual, expected, atol=1e-5, rtol=1e-4)['passed']
     actual = torch.nextafter(expected, torch.full_like(expected, float('inf')))
     assert not gradient_metrics(actual, expected, atol=1e-5, rtol=1e-4)['passed']
+
+
+def test_lfm3_native_norm_inference_and_carrier_share_row_geometry():
+    if not torch.cuda.is_available():
+        pytest.skip('CUDA is required for LFM3 BF16 row geometry')
+    from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope
+
+    port = tiny('lfm')
+    port.config.model_type = 'lfm3'
+    model = SharedStateModel(port, (58, 59, 60, 61), rank=4).cuda().bfloat16()
+    norm = model.port.layers[0].operator_norm
+    assert norm.__dict__.get('native_rowwise_norm') is True
+    width = norm.weight.numel()
+    x = torch.randn(1, 32, width, device='cuda', dtype=torch.bfloat16)
+    ordinary = norm(x)
+    split = torch.cat((norm(x[:, :18]), norm(x[:, 18:])), dim=1)
+    assert torch.equal(ordinary, split)
+    with ParameterCotangentScope.for_model(model, mode='vjp'):
+        carrier = norm(x)
+        carrier_split = torch.cat((norm(x[:, :18]), norm(x[:, 18:])), dim=1)
+    assert torch.equal(ordinary, carrier)
+    assert torch.equal(ordinary, carrier_split)

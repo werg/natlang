@@ -1151,26 +1151,21 @@ class _TorchStoredRMSNorm(torch.autograd.Function):
         ctx.save_for_backward(x, weight)
         ctx.eps, ctx.anchors = float(eps), anchors
         ctx.parameter, ctx.scope = weight, active_cotangent_scope() if anchors else None
-        # Run the source module implementation, preserving its exact backend
-        # dispatch and forward casts. The custom Function owns only dW fan-in.
+        # The configured native LFM3 forward is also used by this carrier;
+        # other architectures keep their own declared source implementation.
         return original_forward(x)
 
     @staticmethod
     def backward(ctx, gradient):
         x, weight = ctx.saved_tensors
-        xf = x.float()
-        inverse = torch.rsqrt(xf.square().mean(dim=-1, keepdim=True) + ctx.eps)
-        normalized = (xf * inverse).to(x.dtype)
-        products = gradient.float() * normalized.float()
-        dw, anchor_grads = _stored_norm_gain_gradient(x, products, ctx.partitions,
-            ctx.parameter, ctx.anchors, ctx.scope)
-        if x.is_cuda and x.dtype == gradient.dtype == torch.bfloat16 and not torch.is_grad_enabled():
-            # Keep token-local reduction geometry fixed across flat and cached
-            # graphs. CUDA reductions can otherwise round differently when the
-            # same rows arrive in differently sized invocations.
+        if (x.is_cuda and x.dtype == gradient.dtype == torch.bfloat16
+                and not torch.is_grad_enabled() and x.numel()):
+            # Use one geometry for both the gain cotangent and input adjoint;
+            # independently recomputing the gain at the unpadded row count can
+            # move BF16 normalized values across rounding boundaries.
             rows = x.reshape(-1, x.shape[-1])
             grads = gradient.reshape(-1, gradient.shape[-1])
-            pieces = []
+            input_parts, normalized_parts = [], []
             for start in range(0, rows.shape[0], 128):
                 part, incoming = rows[start:start + 128], grads[start:start + 128]
                 count = part.shape[0]
@@ -1179,13 +1174,21 @@ class _TorchStoredRMSNorm(torch.autograd.Function):
                     incoming = F.pad(incoming, (0, 0, 0, 128 - count))
                 value = part.float()
                 inv = torch.rsqrt(value.square().mean(dim=-1, keepdim=True) + ctx.eps)
+                normalized_parts.append((value * inv)[:count].to(x.dtype))
                 dy = (incoming * weight).to(x.dtype).float()
                 result = (dy - value * inv.square() * (dy * value).mean(dim=-1, keepdim=True)) * inv
-                pieces.append(result[:count].to(x.dtype))
-            dx = torch.cat(pieces, dim=0).reshape(x.shape)
+                input_parts.append(result[:count].to(x.dtype))
+            normalized = torch.cat(normalized_parts, dim=0).reshape(x.shape)
+            dx = torch.cat(input_parts, dim=0).reshape(x.shape)
         else:
+            xf = x.float()
+            inverse = torch.rsqrt(xf.square().mean(dim=-1, keepdim=True) + ctx.eps)
+            normalized = (xf * inverse).to(x.dtype)
             dy = (gradient * weight).to(x.dtype).float()
             dx = ((dy - xf * inverse.square() * (dy * xf).mean(dim=-1, keepdim=True)) * inverse).to(x.dtype)
+        products = gradient.float() * normalized.float()
+        dw, anchor_grads = _stored_norm_gain_gradient(x, products, ctx.partitions,
+            ctx.parameter, ctx.anchors, ctx.scope)
         return dx, dw, None, None, None, *anchor_grads
 
 

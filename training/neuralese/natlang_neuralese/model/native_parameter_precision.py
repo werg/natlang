@@ -20,6 +20,22 @@ _NORMS = {'RMSNorm', 'Lfm2RMSNorm', 'Lfm3RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm
 NORM_EXECUTIONS = ('source-v1', 'stable-v1')
 
 
+def rowwise_norm_forward(original_forward, x):
+    """Keep LFM3 CUDA BF16 normalization independent of invocation packing."""
+    if not x.is_cuda or x.dtype != torch.bfloat16 or x.numel() == 0:
+        return original_forward(x)
+    import torch.nn.functional as F
+    rows = x.reshape(-1, x.shape[-1])
+    pieces = []
+    for start in range(0, rows.shape[0], 128):
+        part = rows[start:start + 128]
+        count = part.shape[0]
+        if count < 128:
+            part = F.pad(part, (0, 0, 0, 128 - count))
+        pieces.append(original_forward(part)[:count])
+    return torch.cat(pieces, dim=0).reshape(x.shape)
+
+
 def configure_norm_execution(model, profile=None):
     """Absent legacy declarations retain source constructor/recompute dispatch."""
     selected = 'source-v1' if profile is None else profile
@@ -29,6 +45,15 @@ def configure_norm_execution(model, profile=None):
     for module in model.port.modules():
         if isinstance(module, RMSNorm):
             module.native_stable_norm = selected == 'stable-v1'
+        if (getattr(getattr(model.port, 'config', None), 'model_type', None) == 'lfm3'
+                and type(module).__name__ in {'RMSNorm', 'Lfm2RMSNorm', 'Lfm3RMSNorm'}
+                and isinstance(getattr(module, 'weight', None), torch.nn.Parameter)
+                and not module.__dict__.get('native_rowwise_norm', False)):
+            original = module.forward
+            def forward(x, original_forward=original):
+                return rowwise_norm_forward(original_forward, x)
+            module.forward = forward
+            module.native_rowwise_norm = True
     model.native_norm_execution = selected
     model.port.native_norm_execution = selected
     return selected
