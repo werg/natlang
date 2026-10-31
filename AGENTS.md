@@ -1,5 +1,26 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Rejected 2026-10-31 SFT branch (supervision finding)
+
+The first SD52-to-SFT72 continuation is diagnostic only, including its learned
+interface and optimizer state. Do not resume steps53–72 as production parents.
+Exact controlled first-request replay under one Torch engine produced valid
+`read_code` from SD52 and malformed prose inside `eval` from SD72. This proves
+one weight-dependent protocol defect, not universal capability collapse.
+The production successor starts from independently recovered SD52
+`4be241a84b96d4c336b01c390da69122134389b784874a45fddeaf6818786784`,
+retaining its earned RL history and honestly zero exposure from the rejected
+SFT branch. Preserve branch72 and its traces for diagnosis until recovery and
+repair dependencies are durable. Code fixes and useful prepared data survive.
+
+Bind the next executable restart manifest to the actual corrected recipe and
+latest qualified runtime. Review/quarantine semantically redundant inline-child
+self-delegation by exact whole-graph identity; legitimate distinct subproblems
+and deep program call graphs remain supported. The 88-candidate review is not
+a blanket ban on nested `nl`. Raw targets' syntactic validity alone does not
+prove useful teaching. See the exact replay, full1,261-earned-graph audit and
+classification receipts under the current `loghub-append-stage` directory.
+
 ## Machine-wide storage and bounded run state (owner, 2026-10-31)
 
 Account for all project roots and shared stores, not just Natlang's data directory.
