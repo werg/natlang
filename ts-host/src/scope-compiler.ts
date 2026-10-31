@@ -291,8 +291,20 @@ function portableAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | un
 }
 
 function unsupportedUtilityAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | undefined {
-  const text = node.getText(file);
-  return /\b(?:Awaited|ReturnType|Parameters|ConstructorParameters|InstanceType|Partial|Required|Readonly|Pick|Omit|Exclude|Extract|NonNullable)\s*</.test(text) ? text : undefined;
+  const names = new Set(['Awaited', 'ReturnType', 'Parameters', 'ConstructorParameters', 'InstanceType',
+    'Partial', 'Required', 'Readonly', 'Pick', 'Omit', 'Exclude', 'Extract', 'NonNullable']);
+  let unsupported: ts.TypeReferenceNode | undefined;
+  const visit = (current: ts.Node): void => {
+    if (unsupported) return;
+    if (ts.isTypeReferenceNode(current) && ts.isIdentifier(current.typeName) && names.has(current.typeName.text) &&
+        (current.typeArguments?.length ?? 0) > 0) {
+      unsupported = current;
+      return;
+    }
+    ts.forEachChild(current, visit);
+  };
+  visit(node);
+  return unsupported?.getText(file);
 }
 
 function isPropertyName(node: ts.Identifier): boolean {

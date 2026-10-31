@@ -116,6 +116,13 @@ test('unsupported TypeScript utility annotations get plain-JavaScript guidance w
   const literalAssertion = await script([['eval', { code: 'const label = "ready" as const; return label;' }]]);
   assert.match(literalAssertion.results[0], /Staged "ready" as the result/);
   assert.doesNotMatch(literalAssertion.results[0], /utility type|annotation/);
+
+  const lookalike = await script([['eval', { code:
+    '// ReturnType<typeof f> in this comment is not an annotation.\n' +
+    'const metadata: { note: "Awaited<ReturnType<typeof f>>"; values: Map<string, number> } = ' +
+    '{ note: "Awaited<ReturnType<typeof f>>", values: new Map() }; return metadata.note;' }]]);
+  assert.match(lookalike.results[0], /Staged "Awaited<ReturnType<typeof f>>" as the result/);
+  assert.doesNotMatch(lookalike.results[0], /Eval cannot type-check the TypeScript utility annotation/);
 });
 
 test('reaching for what the scope lacks is answered with what it has', async () => {
