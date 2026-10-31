@@ -865,8 +865,9 @@ def full_sample(strata: dict, fraction: float) -> list[str] | None:
 
 # ---------------------------------------------------------------- rendering (workers)
 
-def _init(tokenizers, pieces=None, history_policies=None):
+def _init(tokenizers, pieces=None, history_policies=None, serving_entry=None):
     from build_neuralese_gold_text_delta import load_pinned_tokenizer
+    _G['serving_entry'] = serving_entry
     from natlang_neuralese.serve.chat import bind_history_reasoning
     from system_tool_sections import strip_row  # legacy strip_row plus the LFM3 closing tool section
     _G['strip_row'] = strip_row
@@ -886,7 +887,16 @@ def _init(tokenizers, pieces=None, history_policies=None):
         _G['tokenizer_paths'][name] = Path(path).resolve()
 
 
-def _render_input_binding(tokenizers, pieces, history_policies=None):
+def _serving_binding(serving_entry):
+    """The serving prompt rebuild of the full and whole-trajectory views (``--serving-entry``), or None."""
+    if serving_entry is None:
+        return None
+    from natlang_neuralese.data.serving_prompt import ENTRY_SHARES, load_surface, surface_identity
+    return {'entry': serving_entry, 'surface': surface_identity(load_surface()),
+            **({'entry_shares': [list(item) for item in ENTRY_SHARES]} if serving_entry == 'mix' else {})}
+
+
+def _render_input_binding(tokenizers, pieces, history_policies=None, serving_entry=None):
     from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
     tokenizer_inputs = {name: _tokenizer_input_binding(name, path, tokenizer_fingerprint)
                         for name, path in sorted(tokenizers.items())}
@@ -896,6 +906,8 @@ def _render_input_binding(tokenizers, pieces, history_policies=None):
     if history_policies:
         result['history_reasoning_policies'] = {
             name: history_policies.get(name, 'backbone-default') for name in sorted(tokenizers)}
+    if serving_entry is not None:
+        result['serving_prompt'] = _serving_binding(serving_entry)
     return result
 
 
@@ -1221,7 +1233,9 @@ def _render_shard_materialized(job):
         r, receipt, omitted, provenance = gold_text_rows(decision_records, _G['pieces'], tokenizer=tok,
                                                          require_independent_splits=False, prompt_rendering=mode,
                                                          target_reasoning=True,
-                                                         writer_context_records=writer_context_records)
+                                                         writer_context_records=writer_context_records,
+                                                         serving_entry=_G.get('serving_entry') if mode == 'full'
+                                                         else None)
         for row, prov in zip(r, provenance):
             row['corpus'] = corpus
             row['prompt_rendering'] = mode
@@ -1239,7 +1253,12 @@ def _render_shard_materialized(job):
     by_id = {row['id']: row for row in rows.get('program-header', [])}
     parity = Counter()
     kept_ph = []
-    for full in ([] if header_as_full or not per_decision else rows['full']):
+    serving = _G.get('serving_entry') is not None
+    if serving and not header_as_full and per_decision:
+        # The full view carries the current serving prompt, not the recorded one, so the strip derivation of the
+        # recorded prompt is not comparable; program-header rows are the renderer's own rendering of the recording.
+        parity['serving_full_view_not_compared'] = len(rows.get('program-header', []))
+    for full in ([] if header_as_full or not per_decision or serving else rows['full']):
         ph = by_id.get(full['id'])
         if ph is None:
             parity['program_header_missing'] += 1
@@ -1276,7 +1295,7 @@ def _render_shard_materialized(job):
         parity['equal'] += 1
         ph['system_prompt_mode'] = stripped['system_prompt_mode']
         kept_ph.append(ph)
-    if not header_as_full and per_decision:
+    if not header_as_full and per_decision and not serving:
         rows['program-header'] = kept_ph
     result['parity'] = dict(parity)
     # The full rendering is rendered for every decision (the program-header parity check needs it) but kept only for
@@ -1307,8 +1326,14 @@ def _render_shard_materialized(job):
             target = crisp_messages([target_with_teacher_reasoning(record)], piece_map, handover_notes(record))[0]
             reasoning_holds = whole_trajectory_reasoning_holds(record, members, messages, target,
                 records_by_id, source_hashes)
-            text, ids = native_gold_document(tok, messages, target, record.get('tools') or [],
-                                             prompt_rendering='full' if header_as_full else 'program-header')
+            render_messages, render_tools, serving_report = messages, record.get('tools') or [], None
+            if serving and not header_as_full:
+                # Whole trajectories carry the serving prompt (``--serving-entry``) in place of the program header.
+                from natlang_neuralese.data.serving_prompt import entry_for, serving_messages
+                render_messages, render_tools, serving_report = serving_messages(
+                    messages, render_tools, target=target, entry=entry_for(record['id'], _G['serving_entry']))
+            text, ids = native_gold_document(tok, render_messages, target, render_tools,
+                                             prompt_rendering='full' if header_as_full or serving else 'program-header')
         except (KeyError, TypeError, ValueError, IndexError) as exc:
             omissions.append({'id': record['id'], 'rendering': 'whole-trajectory', 'stage': 'render',
                               'reason': 'native_chat_render_failed', 'detail': str(exc)[:240]})
@@ -1332,8 +1357,12 @@ def _render_shard_materialized(job):
                                             for m in members},
                    **target_holds,
                    **reasoning_holds,
-                   'corpus': corpus, 'prompt_rendering': 'program-header', 'supervision': 'whole-trajectory',
-                   **({'system_prompt_mode': 'program-own'} if header_as_full else {})}))
+                   'corpus': corpus, 'supervision': 'whole-trajectory',
+                   'prompt_rendering': 'full' if serving_report else 'program-header',
+                   **({'system_prompt_mode': 'program-own'} if header_as_full else {}),
+                   **({'system_prompt_mode': serving_report['mode'],
+                       'serving_prompt': {key: value for key, value in serving_report.items() if key != 'mode'}}
+                      if serving_report else {})}))
     rows['whole-trajectory'] = wt
     for mode in [m for m in rows if m not in renderings]:  # rendered only for the parity check
         del rows[mode]
@@ -1709,6 +1738,8 @@ def render_shard(job):
         if _G.get('history_policies'):
             actual_input_binding['history_reasoning_policies'] = _history_profiles_for_tokenizers(
                 _G['tokenizer_paths'], _G['history_policies'])
+        if input_binding.get('serving_prompt') != _serving_binding(_G.get('serving_entry')):
+            raise ValueError('serving prompt entry or surface changed since the render was bound')
         expected_model_binding = input_binding.get('tokenizers', {}).get(tok_name)
         if (not isinstance(expected_model_binding, dict)
                 or expected_model_binding != actual_input_binding['tokenizers'][tok_name]
@@ -2240,6 +2271,11 @@ def main(argv=None):
     p.add_argument('--renderings', nargs='+', choices=RENDERINGS, default=list(RENDERINGS),
                    help='renderings to produce (e.g. whole-trajectory alone for long agent trajectories, where one '
                         'document per decision repeats the context)')
+    p.add_argument('--serving-entry', choices=('collector', 'runtime', 'mix'),
+                   help='render the full and whole-trajectory views with the current ts-host serving prompt and tool '
+                        'schemas of this entry point (data/serving_prompt.py) instead of the recorded prompt; '
+                        'collector = eval/RL/teacher collection, runtime = natlang run, mix = per record by '
+                        'serving_prompt.ENTRY_SHARES')
     p.add_argument('--full-sample', type=float, default=0.05,
                    help='fraction of programs (stratified by family) that also get the full rendering, the warm-up '
                         'share; 1.0 renders full for every program (the old behaviour)')
@@ -2343,8 +2379,8 @@ def main(argv=None):
         for path in a.target_exclude_ids:
             target_exclude.update(json.loads(line)['id'] for line in jsonl_lines(path) if line.strip())
         full_set = None if full_programs is None else set(full_programs)
-        _init(tokenizers, pieces, history_policies)
-        input_binding = _render_input_binding(tokenizers, pieces, history_policies)
+        _init(tokenizers, pieces, history_policies, a.serving_entry)
+        input_binding = _render_input_binding(tokenizers, pieces, history_policies, a.serving_entry)
         all_jobs = [(str(shard_paths[s]), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
                      a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text, target_exclude,
                      a.legacy_renderer_sha256, input_binding, str(a.sqlite_temp_root) if a.sqlite_temp_root else None,
@@ -2414,7 +2450,7 @@ def main(argv=None):
         # without first draining a corpus-sized executor queue.  Completed
         # shard receipts remain the durable resume frontier.
         with ProcessPoolExecutor(a.workers, initializer=_init,
-                                 initargs=(tokenizers, pieces, history_policies)) as pool:
+                                 initargs=(tokenizers, pieces, history_policies, a.serving_entry)) as pool:
             def record_result(completed, res):
                 results.append(res)
                 if completed % 8 == 1:
@@ -2495,6 +2531,11 @@ def main(argv=None):
                  for res in results), key=lambda item: (item['shard'], item['tokenizer'])),
             'selection': dict(counts),
             'renderings': list(a.renderings),
+            **({'serving_prompt': {**_serving_binding(a.serving_entry),
+                                   'views': 'full and whole-trajectory documents carry the current ts-host serving '
+                                            'prompt and tool schemas (data/serving_prompt.py); program-header keeps '
+                                            'the recorded program header'}}
+               if a.serving_entry else {}),
             'full_sample': {'fraction': a.full_sample, 'programs': None if full_programs is None else len(full_programs),
                             'rule': 'full rendering only for a warm-up sample: per family the ceil(fraction*n) programs with '
                                     'the smallest sha256(program id), at least one per family; program-header and '

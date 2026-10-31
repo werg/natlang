@@ -72,7 +72,7 @@ def render_binding(sources: list[Path], corpus_id: str, cpus: int, budget_gb: in
                    part_decisions: int, compress_all: bool, protected: Path | None, reserved: Path | None,
                    held_text: list[Path] | None, decision_exclude_ids: list[Path] | None,
                    exclude_programs: list[Path] | None, target_exclude_ids: list[Path] | None = None,
-                   students: str | None = None) -> dict:
+                   students: str | None = None, serving_entry: str | None = None) -> dict:
     """Identity of every semantic input/control used by a resumable render output."""
     effective_protected = protected or REPO / PROTECTED
     effective_reserved = reserved or REPO / 'training/source-split-reservations.json'
@@ -97,7 +97,9 @@ def render_binding(sources: list[Path], corpus_id: str, cpus: int, budget_gb: in
                         'full_sample': 0.05, 'shards': 32, 'program_header_as_full': False,
                         'cpus': cpus, 'budget_gb': budget_gb, 'docker_gb': docker_gb,
                         # Only a non-default student set is bound, so existing (default-pair) outputs keep resuming.
-                        **({'students': students} if students else {})}}
+                        **({'students': students} if students else {}),
+                        # A serving-prompt render renders every program's full view (full sample 1).
+                        **({'serving_entry': serving_entry, 'full_sample': 1.0} if serving_entry else {})}}
 
 
 def validate_binding(path: Path, expected: dict, *, legacy_description: str) -> str:
@@ -247,7 +249,8 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
                 protected: Path | None = None, reserved: Path | None = None,
                 held_text: list[Path] | None = None, decision_exclude_ids: list[Path] | None = None,
                 exclude_programs: list[Path] | None = None, policy_binding_sha256: str | None = None,
-                target_exclude_ids: list[Path] | None = None, students: str | None = None) -> None:
+                target_exclude_ids: list[Path] | None = None, students: str | None = None,
+                serving_entry: str | None = None) -> None:
     part = out / 'parts' / f'p{k:02d}'
     if (part / 'receipt.json').exists():
         if policy_binding_sha256 is not None:
@@ -298,7 +301,9 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
                    'env', f'MEM={docker_gb}g', f'CPUS={cpus}', *([f'STUDENTS={students}'] if students else []),
                    'nice', '-n', '10',
                    'scripts/neuralese_data/render_native_turn_corpus.sh', str(part), '--corpus-id', corpus_id,
-                   '--source', str(plain), '--workers', str(cpus), '--shards', '32', '--full-sample', '0.05',
+                   '--source', str(plain), '--workers', str(cpus), '--shards', '32',
+                   '--full-sample', '1' if serving_entry else '0.05',
+                   *(['--serving-entry', serving_entry] if serving_entry else []),
                    '--protected', str(protected), '--reserved', str(reserved),
                    '--held-text', *[str(p) for p in held_text]]
             if decision_exclude_ids:
@@ -489,7 +494,8 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
            protected: Path | None = None, reserved: Path | None = None,
            held_text: list[Path] | None = None, decision_exclude_ids: list[Path] | None = None,
            exclude_programs: list[Path] | None = None, stream_source_parts: bool = False,
-           target_exclude_ids: list[Path] | None = None, students: str | None = None) -> dict:
+           target_exclude_ids: list[Path] | None = None, students: str | None = None,
+           serving_entry: str | None = None) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     custom_policy_requested = any(value is not None for value in
                                    (protected, reserved, held_text, decision_exclude_ids, exclude_programs, target_exclude_ids))
@@ -516,7 +522,7 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
     else:
         binding = render_binding(sources, corpus_id, cpus, budget_gb, docker_gb, part_decisions, compress_all,
                                  protected, reserved, held_text, decision_exclude_ids, exclude_programs, target_exclude_ids,
-                                 students)
+                                 students, serving_entry)
         binding_sha256 = validate_binding(binding_path, binding, legacy_description='render output')
     if (out / 'receipt.json').exists():
         receipt = load(out / 'receipt.json')
@@ -529,7 +535,7 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
                     compress_all=compress_all, protected=protected, reserved=reserved,
                     held_text=held_text, decision_exclude_ids=decision_exclude_ids,
                     exclude_programs=exclude_programs, policy_binding_sha256=binding_sha256,
-                    target_exclude_ids=target_exclude_ids, students=students)
+                    target_exclude_ids=target_exclude_ids, students=students, serving_entry=serving_entry)
         if compress_all:
             compress_part_views(out / 'parts' / f'p{k:02d}')
         receipts.append(load(out / 'parts' / f'p{k:02d}' / 'receipt.json'))
@@ -633,6 +639,9 @@ def main() -> None:
                    help='reviewed JSONL {id, reason_code?} whole-program exclusions; repeatable')
     p.add_argument('--students', help='render_native_turn_corpus.sh STUDENTS (student_tokenizers.py names, space separated); '
                    'default the wrapper\'s production pair, e.g. "lfm3" for an LFM3-1.7B render of the same parts')
+    p.add_argument('--serving-entry', choices=('collector', 'runtime', 'mix'),
+                   help='render full and whole-trajectory views with the current ts-host serving prompt of this entry '
+                        'point for every program (render_native_turn_corpus.py --serving-entry)')
     p.add_argument('--link', action='store_true',
                    help='with --register: create the REL_PATH symlink to OUT in the shared checkout')
     args = ap.parse_args()
@@ -641,7 +650,7 @@ def main() -> None:
                      protected=args.protected, reserved=args.reserved, held_text=args.held_text,
                      decision_exclude_ids=args.decision_exclude_ids, exclude_programs=args.exclude_programs,
                      stream_source_parts=args.stream_source_parts, target_exclude_ids=args.target_exclude_ids,
-                     students=args.students)
+                     students=args.students, serving_entry=args.serving_entry)
     print(json.dumps({'rendered': args.corpus_id, 'parts': receipt['parts']}), flush=True)
     if args.register:
         sys.path.insert(0, str(Path(__file__).resolve().parent))

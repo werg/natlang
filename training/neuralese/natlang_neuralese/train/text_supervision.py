@@ -190,13 +190,15 @@ def segmented_position_weights(span, spans, *, roles=None, context_weight=1., fe
     (segment j runs from the previous suffix end to suffix j's end; positions after the last suffix are a context-only
     segment), and each segment gets half of its mass on all of its positions (role-weighted, as the context term) and
     half on its observed suffix, its mass equal to its length. The window is then normalized to its size, as one
-    document. One span that ends at the window's end gives exactly ``balanced_position_weights``. ``span`` is [1, S]."""
+    document. One span that ends at the window's end gives exactly ``balanced_position_weights``. ``span`` is [1, S].
+    ``context_weight=0`` (own outputs only, owner 2026-10-28) drops the context half: only observed suffixes carry
+    mass and every other position, including a suffix-free trailing segment, has weight 0."""
     import torch
     if span.shape[0] != 1:
         raise ValueError('segmented weights take one window')
     size = span.shape[1]
-    if not math.isfinite(context_weight) or context_weight <= 0:
-        raise ValueError('context weight must be finite and positive')
+    if not math.isfinite(context_weight) or context_weight < 0:
+        raise ValueError('context weight must be finite and nonnegative')
     if not math.isfinite(feedback_weight) or not 0 <= feedback_weight <= 1:
         raise ValueError('feedback weight must be finite and between zero and one')
     importance = torch.ones_like(span, dtype=torch.float32)
@@ -221,7 +223,7 @@ def segmented_position_weights(span, spans, *, roles=None, context_weight=1., fe
         last, length = end, end - first
         part = importance[:, first:last]
         mass = part.sum()
-        if exclude is None and mass <= 0:
+        if exclude is None and mass <= 0 and context_weight > 0:
             raise ValueError('a complete window has zero context supervision; use positive feedback weight')
         context = part * length / mass.clamp_min(1e-12)
         mask = torch.zeros_like(part, dtype=torch.bool)
@@ -230,7 +232,7 @@ def segmented_position_weights(span, spans, *, roles=None, context_weight=1., fe
             mask = mask & ~exclude[:, first:last]
         count = int(mask.sum())
         weighted[:, first:last] = (.5 * context_weight * context + .5 * mask.float() * length / count
-                                   if count > 0 else context)
+                                   if count > 0 else context if context_weight > 0 else torch.zeros_like(context))
     return weighted * size / weighted.sum(1, keepdim=True).clamp_min(1e-12)
 
 

@@ -77,6 +77,13 @@ def unambiguous_chat_input_guard(context, target, tools, *, capture=None):
             'input_sha256': canonical_json_sha256_hex(values),
             'forbidden_markers': list(_CHAT_BOUNDARIES)}
 
+def _prompt_view(row: Mapping[str, Any]) -> dict:
+    """The rendered prompt view of a text row (``prompt_rendering``, ``system_prompt_mode``, serving rebuild report),
+    carried into the graph's conversion so mixtures can select and audit views; empty for rows that declare none."""
+    view = {key: row[key] for key in ("prompt_rendering", "system_prompt_mode", "serving_prompt") if key in row}
+    return {"prompt_view": view} if view else {}
+
+
 def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
                    tokenizer, expanded_tokenizer_fingerprint: str,
                    context_weight: float = 0.05,
@@ -166,6 +173,7 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
             "context_weight": context_weight,
             **({"assistant_history_target_mask": mask_proof} if mask_proof else {}),
             **({"supervision_policy": objective_policy} if objective_policy else {}),
+            **_prompt_view(row),
             "context_attestations": row.get("neuralese_context_attestations", [])},
     }
 
@@ -467,6 +475,7 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
             'runtime_opening_assistant_turns': row.get('runtime_opening_assistant_turns', 0),
             **({key: row[key] for key in (*hold_fields, 'context_only_assistant_turns')} if held_turns is not None else {}),
             **({key: row[key] for key in (*reasoning_fields, 'context_only_reasoning_turns')} if reasoning_turns is not None else {}),
+            **_prompt_view(row),
             'context_attestations': row.get('neuralese_context_attestations', [])},
     }
 

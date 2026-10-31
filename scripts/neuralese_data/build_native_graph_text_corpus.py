@@ -83,7 +83,11 @@ def main():
     parser.add_argument('--base-tokenizer', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--model-id', required=True)
-    parser.add_argument('--context-weight', type=float, default=.05)
+    # Own outputs only (owner 2026-10-28): prompts, instructions, inputs, tool output and feedback carry no loss.
+    parser.add_argument('--context-weight', type=float, default=0.,
+                        help='raw weight of non-target positions (default 0: own outputs only)')
+    parser.add_argument('--feedback-weight', type=float, default=0.,
+                        help='raw tool-output weight of whole trajectories (no effect at context weight 0)')
     parser.add_argument('--source-sha256', required=True)
     args = parser.parse_args()
     if sha256(args.source) != args.source_sha256:
@@ -126,7 +130,7 @@ def main():
                        if row.get('supervision') == 'whole-trajectory' else text_row_graph)
             graph = convert(row, source_tokenizer_fingerprint=source_fingerprint,
                 tokenizer=tokenizer, expanded_tokenizer_fingerprint=expanded_fingerprint,
-                **({'context_weight': args.context_weight, 'feedback_weight': 0.25}
+                **({'context_weight': args.context_weight, 'feedback_weight': args.feedback_weight}
                    if convert is whole_trajectory_text_row_graph
                    else {'context_weight': args.context_weight}))
             writer = writers[split]
@@ -154,9 +158,11 @@ def main():
         'source_tokenizer_fingerprint': source_fingerprint,
         'expanded_tokenizer_fingerprint': expanded_fingerprint,
         'role_token_ids': list(role_ids), 'context_weight': args.context_weight,
+        'feedback_weight': args.feedback_weight,
         'outputs': summaries,
         'conversion': ('static one-node graphs; whole-trajectory rows preserve all roles, weight assistant targets, '
-                       'downweight prompt/runtime-opening/tool context, and exclude failed assistant actions; '
+                       'give prompt/runtime-opening/tool context the declared context/feedback weights (0: no loss), and '
+                       'exclude failed assistant actions; '
                        'no inferred native edges'),
         'whole_trajectory_supervision': whole_policy if any(row['rows'] for row in whole_policy.values()) else None,
         'numerical_runtime': numerical_runtime()}

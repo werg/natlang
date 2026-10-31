@@ -2079,8 +2079,13 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                    include_token_offsets: bool = False, tokenizer_sha256: str | None = None,
                    static_derivations: Mapping[str, Any] | None = None,
                    writer_context_records: Iterable[Mapping[str, Any]] | None = None,
-                   retain_prompt_tools: bool = False):
+                   retain_prompt_tools: bool = False, serving_entry: str | None = None):
     """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
+
+    ``serving_entry`` (with ``prompt_rendering='full'``): render each tool-loop call with the current ts-host serving
+    system prompt and tool schemas of that entry point, or per record for ``mix`` (``data/serving_prompt.py``) instead of the recorded ones; rows
+    record ``system_prompt_mode`` and the rebuild report. Calls that are not rebuildable keep their recorded prompt
+    (``system_prompt_mode: recorded`` with the reason).
 
     Each row has the shared ``native_text_rows.load_native_text_rows`` schema. Text is a
     native chat rendering of crisp messages plus the actual gold target,
@@ -2101,7 +2106,7 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                            prompt_rendering=prompt_rendering, target_reasoning=target_reasoning,
                            include_token_offsets=include_token_offsets, tokenizer_sha256=tokenizer_sha256,
                            static_derivations=static_derivations,writer_context_records=writer_context_records,
-                           retain_prompt_tools=retain_prompt_tools)
+                           retain_prompt_tools=retain_prompt_tools, serving_entry=serving_entry)
 
 
 def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
@@ -2199,11 +2204,14 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                     ordinary_text_admission_receipt=None,
                     ordinary_text_admission_receipt_sha256=None, prompt_rendering="full",
                     target_reasoning=False, include_token_offsets=False, tokenizer_sha256=None, static_derivations=None, writer_context_records=None,
-                    retain_prompt_tools=False):
+                    retain_prompt_tools=False, serving_entry=None):
     from .trajectory_text import crisp_messages, handover_notes
     from .prompt_rendering import PROMPT_RENDERINGS
     if prompt_rendering not in PROMPT_RENDERINGS:
         raise ValueError(f"unknown prompt_rendering {prompt_rendering!r} (declared: {PROMPT_RENDERINGS})")
+    if serving_entry is not None and (prompt_rendering != "full" or retain_prompt_tools):
+        raise ValueError("serving prompt rebuild renders the full prompt; it excludes other prompt renderings")
+    serving_reports = {}
 
     from ..serve.chat import bind_history_reasoning
     fingerprint = tokenizer_sha256 or tokenizer_fingerprint(tokenizer)
@@ -2318,6 +2326,11 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             context_tags = [item['render_tag'] for item in ((derivation or {}).get('context_replacements') or [])
                             if item.get('render_tag') is not None]
             render_messages, render_tools = messages, record.get("tools") or []
+            if serving_entry is not None and not native_xml:
+                from .serving_prompt import entry_for, serving_messages
+                render_messages, render_tools, serving_report = serving_messages(
+                    render_messages, render_tools, target=target, entry=entry_for(rid, serving_entry))
+                serving_reports[rid] = serving_report
             render_mode = 'full' if native_xml else prompt_rendering
             if retain_prompt_tools and not native_xml:
                 from .prompt_rendering import apply_prompt_rendering
@@ -2352,6 +2365,10 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                          "capture_context_augmentation_attestations": capture_augmentation_attestations})
         if transformation is not None:
             prepared[-1]["static_derivations"]=[transformation]
+        if rid in serving_reports:
+            serving_report = serving_reports[rid]
+            prepared[-1]["system_prompt_mode"] = serving_report["mode"]
+            prepared[-1]["serving_prompt"] = {key: value for key, value in serving_report.items() if key != "mode"}
         if capture_rendered_span:
             if not isinstance(rendered_producer_body, str):
                 omitted.append({"id": rid, "reason": "inline_producer_rendered_span_missing"})
@@ -2426,6 +2443,9 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                   for row in rows]
     for row,entry in zip(rows,provenance):
         entry['supervised_suffix_start']=row['supervised_suffix_start']
+    serving_modes = {}
+    for row in rows if serving_entry is not None else ():
+        serving_modes[row.get("system_prompt_mode")] = serving_modes.get(row.get("system_prompt_mode"), 0) + 1
     omissions_bytes = "".join(_canonical(row) + "\n" for row in omitted).encode("utf-8")
     provenance_bytes = "".join(_canonical(row) + "\n" for row in provenance).encode("utf-8")
     receipt = {
@@ -2440,6 +2460,9 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
         "rendering": "natlang.native_gold_chat/3", "tokenizer_sha256": fingerprint,
         **({"prompt_rendering": prompt_rendering} if prompt_rendering != "full" else {}),
         **({"retain_supplied_tool_schemas": True} if retain_prompt_tools else {}),
+        **({"serving_prompt": {"entry": serving_entry,
+                               "modes": serving_modes}}
+           if serving_entry is not None else {}),
         "history_reasoning": history_reasoning,
         "supervision": "serving generation prompt is context-only; loss begins at the exact token length of that prompt and covers the assistant_reply-rendered target; no historical tool outputs or prior assistant turns are target tokens",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,
