@@ -323,7 +323,7 @@ def test_provider_expanded_soft_read_is_crisp_and_provenance_bound_to_existing_w
     assert "<|neuralese|>" not in rendered
     reader_provenance = next(row for row in provenance if row["id"] == "provider-reader")
     attest = reader_provenance["neuralese_context_attestations"]
-    assert len(attest) == 1
+    assert len(attest) == 1, repr(attest)
     assert attest[0]["source_kind"] == "provider-expanded-same-run-read"
     assert attest[0]["writer_record_id"] == "provider-writer"
     assert attest[0]["read_node"] == "call-reader#7"
@@ -334,6 +334,120 @@ def test_provider_expanded_soft_read_is_crisp_and_provenance_bound_to_existing_w
     _, _, rejected, _ = gold_text_rows([writer, corrupt, anchor], [], tokenizer=_Tokenizer())
     assert any(item["id"] == "provider-reader" and "digest mismatch" in item.get("detail", "")
                for item in rejected)
+
+
+def test_teacher_text_nzt1_receipts_reencode_exact_native_text_and_preserve_producer_reader_edge():
+    from natlang_neuralese.data.text_corpus import _direct_result_event_name
+
+    block_id = "nzt1_" + "e" * 52
+    body = "Inspection history: verified visit, score unresolved."
+    body_sha = _sha(body)
+    group = ["sql-db:bird:food_inspection"]
+    writer_row_sha, reader_row_sha = "1" * 64, "2" * 64
+    trace_sha, transport_sha = "3" * 64, "4" * 64
+    request_sha, response_sha = "5" * 64, "6" * 64
+    sampled_target_sha = _sha(json.dumps(
+        {"role": "assistant", "content": "Reconcile the prior note with the current visit."},
+        sort_keys=True, separators=(",", ":")))
+    writer_call, writer_node = "inspection-writer-call", "inspection-writer-call#9"
+    reader_call, read_node, turn_node = "inspection-reader-call", "inspection-reader-call#6", "inspection-reader-call#turn1"
+    writer_name = _direct_result_event_name(block_id, "inspection-run", writer_call, writer_node)
+    write_receipt = {
+        "schema": "natlang.typed-result-write/1", "trajectory_id": "inspection-run",
+        "source_row_sha256": writer_row_sha, "invocation_id": writer_call,
+        "writer_call_id": writer_call, "writer_node": writer_node, "block_id": block_id,
+        "source_kind": "typed-text-result", "source": "return_result", "result_type": "Neuralese<string>",
+        "result_path": ["return"], "body_sha256": body_sha, "body_source": body,
+        "body_source_basis": "exact-teacher-text-result-marker", "request_sha256": request_sha,
+        "raw_response_sha256": response_sha, "source_occurrence": writer_node,
+        "format": "teacher-text", "producer": "teacher-text-emulation", "teacher_text": True,
+        "learned_vectors": False, "tokenizer_ids": False, "training_admission": False,
+    }
+    writer = {"id": "teacher-text-writer", "split": "train", "source_groups": group,
+        "source_ref": {"trajectory_id": "inspection-run", "source_row_sha256": writer_row_sha,
+                       "invocation_id": writer_call},
+        "training_admission": {"approved": True},
+        "decision": {"training_approved": True, "failed_action": False,
+                     "assistant": {"content": "", "calls": [], "typed_result_writes": [write_receipt]}},
+        "messages": [{"role": "user", "content": "Write the verified inspection note."}],
+        "target": {"role": "assistant", "content": body}}
+    write_event = {"kind": "block_write", "call_id": writer_call, "node": writer_node, "seq": 9,
+        "block": block_id, "truncated": False, "format": "teacher-text", "producer": "teacher-text-emulation",
+        "source_kind": "typed-text-result", "source": "return_result", "marker_context": "return-result",
+        "result_type": "Neuralese<string>", "text_body": body, "text_body_sha256": body_sha,
+        "learned_vectors": False, "tokenizer_ids": False, "training_admission": False}
+    read = {"kind": "block_read", "call_id": reader_call, "node": read_node, "turn": turn_node, "seq": 7,
+        "block": block_id, "format": "teacher-text", "producer": "teacher-text-emulation",
+        "result_type": "Neuralese<string>", "text_body_sha256": body_sha, "learned_vectors": False,
+        "tokenizer_ids": False, "inputs": [{"node": writer_node, "block": block_id, "port": "block"}]}
+    turn = {"kind": "model_turn", "call_id": reader_call, "node": turn_node,
+        "inputs": [{"node": read_node, "port": "read", "block": block_id}]}
+    witness = {"kind": "teacher-text-exact-provider-output/1", "source": "return_result",
+        "host_result_call_id": writer_call, "host_result_type": "Neuralese<string>", "writer_node": writer_node,
+        "body_sha256": body_sha, "raw_response_sha256": response_sha,
+        "typed_result_receipt_sha256": _sha(json.dumps(write_receipt, sort_keys=True, separators=(",", ":")))}
+    provider_receipt = {"schema": "natlang.provider-expanded-read-context/3", "origin": "same-run-producer",
+        "invocation_id": reader_call, "parent_invocation_id": "inspection-root",
+        "source_row_sha256": reader_row_sha, "trace_sha256": trace_sha,
+        "transport_provenance_sha256": transport_sha, "raw_request_sha256": request_sha,
+        "rendered_request_sha256": response_sha,
+        "source_request_sha256": request_sha, "source_response_sha256": response_sha,
+        "source_trajectory_index": 0, "source_action_target_sha256": sampled_target_sha,
+        "source_request_sha256": request_sha, "source_response_sha256": response_sha,
+        "block": {"id": block_id, "type": "Neuralese<string>", "body": body, "body_sha256": body_sha,
+                  "format": "teacher-text", "teacher_text": True, "producer_call_id": writer_call,
+                  "writer_node": writer_node, "learned_vectors": False, "tokenizer_ids": False},
+        "block_read": read, "model_turn": turn, "producer_write": write_event,
+        "writer_source_class": "teacher-text-exact-provider-output", "writer_witness": witness,
+        "context_occurrences": 1, "serialized_literal_id_mentions": 0, "writer_target_selected": False,
+        "learned_vectors": False, "qualification_certificate": False, "training_admission": False}
+    reader = {"id": "teacher-text-reader", "split": "train", "source_groups": group,
+        "source_ref": {"trajectory_id": "inspection-run", "source_row_sha256": reader_row_sha,
+            "invocation_id": reader_call, "parent_invocation_id": "inspection-root",
+            "provider_expanded_read_contexts": [provider_receipt]},
+        "provenance": {"trace_sha256": trace_sha}, "training_admission": {"approved": True},
+        "decision": {"training_approved": True, "failed_action": False, "index": 0},
+        "neuralese_conversion": {"external_context_inputs": [{
+            "schema": "natlang.external-context-input/1", "origin": "same-run-producer",
+            "learner_representation": "typed-read-from-authenticated-runtime-writer-event-context-only",
+            "block_id": block_id, "type": "Neuralese<string>", "body_sha256": body_sha,
+                "format": "teacher-text", "teacher_text": True, "learned_vectors": False, "tokenizer_ids": False,
+            "qualification_certificate": False, "training_admission": False,
+            "invocation_id": reader_call, "parent_invocation_id": "inspection-root",
+            "source_row_sha256": reader_row_sha, "trace_sha256": trace_sha,
+            "source_action_target_sha256": sampled_target_sha, "source_trajectory_index": 0,
+            "source_request_sha256": request_sha, "source_response_sha256": response_sha,
+            "read_node": read_node, "model_turn_node": turn_node, "producer_write_node": writer_node,
+            "producer_call_id": writer_call, "writer_source_class": "teacher-text-exact-provider-output",
+            "writer_witness": witness, "writer_target_selected": False, "context_occurrences": 1,
+            "source_action_target_sha256": sampled_target_sha, "source_trajectory_index": 0,
+            "source_request_sha256": request_sha, "source_response_sha256": response_sha,
+            "target_write_name": writer_name, "transport_provenance_sha256": transport_sha,
+            "raw_request_sha256": request_sha, "rendered_request_sha256": response_sha,
+        }]},
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "Prior inspection note: "},
+            {"type": "teacher_text", "id": block_id, "value_type": "Neuralese<string>",
+             "source_occurrence": writer_node}]}],
+        "target": {"role": "assistant", "content": "Reconcile the prior note with the current visit."}}
+    anchor = {"id": "teacher-text-anchor", "split": "test", "source_groups": ["case:independent"],
+        "training_admission": {"approved": True}, "decision": {"training_approved": True, "failed_action": False},
+        "messages": [{"role": "user", "content": "Independent anchor."}],
+        "target": {"role": "assistant", "content": "Anchor."}}
+    rows, _, omissions, provenance = gold_text_rows([writer, reader, anchor], [], tokenizer=_Tokenizer())
+    assert not omissions
+    reader_text = next(item["text"] for item in rows if item["id"] == "teacher-text-reader")
+    assert f"Prior inspection note: <|neuralese|>{body}<|/neuralese|>" in reader_text
+    attest = next(item for item in provenance if item["id"] == "teacher-text-reader")["neuralese_context_attestations"]
+    assert len(attest) == 1
+    assert attest[0]["source_kind"] == "provider-expanded-context-only-same-run-read"
+    assert attest[0]["writer_invocation_id"] == writer_call
+    assert attest[0]["writer_write_node"] == writer_node
+    assert attest[0]["read_node"] == read_node
+
+    forged = json.loads(json.dumps(reader))
+    forged["source_ref"]["provider_expanded_read_contexts"][0]["block_read"]["inputs"][0]["node"] = "orphan-writer"
+    _, _, rejected, _ = gold_text_rows([writer, forged, anchor], [], tokenizer=_Tokenizer())
+    assert any(item["id"] == "teacher-text-reader" for item in rejected)
 
 
 def test_provider_expanded_context_only_read_hydrates_without_selected_writer_target():

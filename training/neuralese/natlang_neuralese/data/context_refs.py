@@ -7,7 +7,7 @@ import json
 def context_ref_count(value, block_id: str, expected_read_name: str | None = None) -> int:
     """Count a typed Neuralese marker or a read with its exact registered name."""
     if isinstance(value, dict):
-        count = int((value.get("type") == "neuralese" and value.get("id") == block_id)
+        count = int((value.get("type") in {"neuralese", "teacher_text"} and value.get("id") == block_id)
                     or (expected_read_name is not None and value.get("type") == "read"
                         and value.get("name") == expected_read_name))
         for key, child in value.items():
@@ -27,7 +27,7 @@ def context_ref_count(value, block_id: str, expected_read_name: str | None = Non
 def typed_neuralese_ref_count(value, block_id: str) -> int:
     """Count only explicit typed Neuralese message markers."""
     if isinstance(value, dict):
-        count = int(value.get("type") == "neuralese" and value.get("id") == block_id)
+        count = int(value.get("type") in {"neuralese", "teacher_text"} and value.get("id") == block_id)
         for key, child in value.items():
             if key == "arguments" and isinstance(child, str):
                 try:

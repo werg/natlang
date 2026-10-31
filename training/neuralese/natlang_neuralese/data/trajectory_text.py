@@ -46,10 +46,10 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], *, neuralese_
                 elif kind == "read":
                     name = part.get("name")
                     parts.append(part.get("source", notes.get(name, "")))
-                elif kind == "neuralese":
+                elif kind in {"neuralese", "teacher_text"}:
                     body = bodies.get(part.get("id"))
                     if not isinstance(body, str):
-                        raise ValueError("opaque native state requires authenticated graph/source conversion")
+                        raise ValueError("typed state/text part requires authenticated graph/source conversion")
                     parts.append(body)
                 elif kind == "text" and isinstance(part.get("text"), str):
                     parts.append(part["text"])

@@ -285,7 +285,7 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
         holder: item.holder, value_type: item.value_type, instructions: item.instructions, note: item.note });
       return { type: 'text', text: item.preview };
     }
-    if (item.type === 'neuralese' || item.type === 'native_state') {
+    if (item.type === 'neuralese' || item.type === 'native_state' || item.type === 'teacher_text') {
       const unresolvedId = typeof item.id === 'string' ? item.id : null;
       const exact = unresolvedId ? externalSources.get(sourceUseKey(unresolvedId, item.stop_gradient === true,
         typeof item.source_occurrence === 'string' ? item.source_occurrence : undefined)) : undefined;
@@ -794,6 +794,16 @@ function providerContextWriterSourceValid(writer: Record<string, unknown> | null
       !!writer.native_identity && typeof writer.native_identity === 'object' :
     sourceClass === 'modern-typed-text-result' ?
     writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' :
+    sourceClass === 'teacher-text-exact-provider-output' ?
+    writer?.producer === 'teacher-text-emulation' && writer.format === 'teacher-text' &&
+      writer.source_kind === 'typed-text-result' && writer.source === 'return_result' &&
+      writer.marker_context === 'return-result' && writer.learned_vectors === false &&
+      writer.tokenizer_ids === false && writer.training_admission === false &&
+      witness?.kind === 'teacher-text-exact-provider-output/1' && witness.source === 'return_result' &&
+      witness.host_result_call_id === writer.call_id && witness.host_result_type === blockType &&
+      witness.writer_node === writer.node && witness.body_sha256 === writer.text_body_sha256 &&
+      /^[0-9a-f]{64}$/.test(String(witness.raw_response_sha256)) &&
+      /^[0-9a-f]{64}$/.test(String(witness.typed_result_receipt_sha256)) :
     sourceClass === 'legacy-text-marker-standin-eval-code' ?
       writer?.emulation_version === 'text-marker-standin/2' && writer.marker_context === 'eval-code' &&
         writer.learned_vectors === false :
@@ -904,7 +914,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         throw new Error(`provider-expanded context graph or transport binding mismatch for ${id}`);
       if (['natlang.provider-expanded-read-context/2', 'natlang.provider-expanded-read-context/3'].includes(String(receipt.schema)) &&
           (receipt.origin !== 'same-run-producer' || receipt.writer_target_selected !== false ||
-          !['native-positional-state-writer', 'modern-typed-text-result', 'legacy-text-marker-standin-eval-code',
+          !['native-positional-state-writer', 'modern-typed-text-result', 'teacher-text-exact-provider-output', 'legacy-text-marker-standin-eval-code',
              'legacy-text-marker-standin-return-result', 'legacy-text-marker-standin-eval-finish',
              'legacy-text-marker-standin-eval-return']
              .includes(String(receipt.writer_source_class)) ||
@@ -1576,15 +1586,21 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
           }
           const sourceSha = sourceRef?.source_row_sha256;
           const typedReceipts = typedResultReceipts.filter(({ action, outcome: actionOutcome, receipt }) => {
+            const teacherText = receipt.format === 'teacher-text' && receipt.producer === 'teacher-text-emulation' &&
+              receipt.teacher_text === true && receipt.learned_vectors === false && receipt.tokenizer_ids === false &&
+              receipt.training_admission === false;
             if (receipt.schema !== 'natlang.typed-result-write/1' || receipt.invocation_id !== invocation ||
                 receipt.writer_call_id !== invocation || receipt.source_row_sha256 !== sourceSha ||
                 !['typed-text-result', 'typed-text-result-field', 'typed-json-result'].includes(String(receipt.source_kind)) ||
                 typeof receipt.block_id !== 'string' ||
-                !(/^nzs1_[a-z2-7]{52}$/.test(receipt.block_id) || /^nz1_[a-z2-7]{20,}$/.test(receipt.block_id)) ||
+                !(/^nzs1_[a-z2-7]{52}$/.test(receipt.block_id) || /^nz1_[a-z2-7]{20,}$/.test(receipt.block_id) ||
+                  teacherText && /^nzt1_[a-z2-7]{52}$/.test(receipt.block_id)) ||
                 (receipt.block_id.startsWith('nzs1_') && (receipt.source_occurrence !== receipt.writer_node ||
                   receipt.stop_gradient !== undefined && receipt.stop_gradient !== true)) ||
                 (receipt.block_id.startsWith('nz1_') &&
                   (receipt.source_occurrence !== undefined || receipt.stop_gradient !== undefined)) ||
+                (receipt.block_id.startsWith('nzt1_') && (!teacherText || receipt.source_occurrence !== receipt.writer_node ||
+                  receipt.stop_gradient !== undefined)) ||
                 typeof receipt.writer_node !== 'string' || typeof receipt.result_type !== 'string' ||
                 !receipt.result_type.startsWith('Neuralese<') || typeof receipt.body_sha256 !== 'string' ||
                 !/^[0-9a-f]{64}$/.test(receipt.body_sha256) || typeof receipt.body_source !== 'string' ||
@@ -1712,7 +1728,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     if (!externalBodies.size || !Array.isArray(message.content)) return message;
     const parts = message.content as Record<string, unknown>[];
     return { ...message, content: parts.map(part => {
-      if (part.type !== 'neuralese' || typeof part.id !== 'string' || !externalBodies.has(part.id)) return part;
+      if (!['neuralese', 'teacher_text'].includes(String(part.type)) || typeof part.id !== 'string' || !externalBodies.has(part.id)) return part;
       const external = externalBodies.get(part.id)!;
       // A producer that this actual invocation reads is a causal recurrence edge,
       // even though the stand-in backend supplied its body as crisp text. Preserve
@@ -1734,7 +1750,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     if (Array.isArray(value)) return value.reduce((count, item) => count + countReferences(item, id), 0);
     if (!value || typeof value !== 'object') return 0;
     const item = value as Record<string, unknown>;
-    let count = (item.type === 'neuralese' || item.type === 'native_state') && item.id === id ? 1 : 0;
+    let count = (item.type === 'neuralese' || item.type === 'native_state' || item.type === 'teacher_text') && item.id === id ? 1 : 0;
     for (const [key, child] of Object.entries(item)) {
       if (key === 'arguments' && typeof child === 'string') {
         try { count += countReferences(JSON.parse(child), id); } catch { /* Preserve opaque arguments. */ }
@@ -1810,6 +1826,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       source_row_sha256: receipt.source_row_sha256,
       trace_sha256: (record as Record<string, unknown>).provenance &&
         ((record as Record<string, unknown>).provenance as Record<string, unknown>).trace_sha256,
+      ...(block.teacher_text === true && block.format === 'teacher-text' ? { teacher_text: true,
+        format: 'teacher-text', producer: 'teacher-text-emulation', tokenizer_ids: false } : {}),
       learned_vectors: false, qualification_certificate: false, training_admission: false };
     if (receipt.schema === 'natlang.provider-expanded-visible-input/1') return { ...common,
       context_occurrences: receipt.context_occurrences, writer_target_selected: false,

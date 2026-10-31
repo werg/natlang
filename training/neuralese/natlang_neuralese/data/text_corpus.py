@@ -22,6 +22,27 @@ def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value)
 
 
+def _is_teacher_text_write(receipt: Any) -> bool:
+    """Accept the literal-text transport only as an authenticated typed result, never as native state."""
+    return (isinstance(receipt, dict)
+            and receipt.get("format") == "teacher-text"
+            and receipt.get("producer") == "teacher-text-emulation"
+            and receipt.get("teacher_text") is True
+            and receipt.get("learned_vectors") is False
+            and receipt.get("tokenizer_ids") is False
+            and receipt.get("training_admission") is False
+            and isinstance(receipt.get("block_id"), str)
+            and re.fullmatch(r"nzt1_[a-z2-7]{52}", receipt["block_id"]) is not None
+            and receipt.get("source_occurrence") == receipt.get("writer_node")
+            and receipt.get("stop_gradient") is None
+            and receipt.get("source_kind") == "typed-text-result"
+            and receipt.get("source") == "return_result"
+            and receipt.get("body_source_basis") == "exact-teacher-text-result-marker"
+            and receipt.get("result_type") == "Neuralese<string>"
+            and _sha256_hex(receipt.get("request_sha256"))
+            and _sha256_hex(receipt.get("raw_response_sha256")))
+
+
 def _protected_target_sidecar_equivalence(record, receipt, metadata):
     """Validate the one historical converter sidecar excluded by the current target digest."""
     from ..train.inline_instructions import validate_inline_instruction_code
@@ -531,7 +552,7 @@ def _native_gold_render(tokenizer, turns, tools, *, empty_thought=True, prompt_r
 
 def _message_neuralese_ids(value):
     if isinstance(value, dict):
-        if value.get("type") == "neuralese" and isinstance(value.get("id"), str):
+        if value.get("type") in {"neuralese", "teacher_text"} and isinstance(value.get("id"), str):
             yield value["id"]
         for key, child in value.items():
             if key == "arguments" and isinstance(child, str):
@@ -655,6 +676,7 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False,
         for call in (assistant_decision.get("calls") or []):
             typed_writes.extend((call.get("outcome") or {}).get("typed_result_writes") or [])
         for receipt in typed_writes:
+            teacher_text_write = _is_teacher_text_write(receipt)
             if (not isinstance(receipt, dict)
                         or receipt.get("schema") != "natlang.typed-result-write/1"
                         or receipt.get("invocation_id") != source_ref.get("invocation_id")
@@ -663,7 +685,8 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False,
                         or receipt.get("result_type") != "Neuralese<string>"
                         or not isinstance(receipt.get("writer_node"), str)
                         or not isinstance(receipt.get("block_id"), str)
-                        or not receipt["block_id"].startswith("nz1_")
+                        or not (receipt["block_id"].startswith("nz1_") or teacher_text_write)
+                        or (receipt["block_id"].startswith("nzt1_") and not teacher_text_write)
                         or not isinstance(receipt.get("body_source"), str)
                         or not isinstance(receipt.get("body_sha256"), str)
                         or _sha(receipt["body_source"].encode("utf-8")) != receipt["body_sha256"]
@@ -712,11 +735,15 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False,
                                    if receipt.get("source_kind") == "typed-text-result"
                                    and receipt.get("source") in {"return_result", "assistant-text-return"}
                                    and receipt.get("body_source_basis") in {"exact-raw-model-result-string",
-                                                                          "trimmed-exact-assistant-final-text"}
+                                                                          "trimmed-exact-assistant-final-text",
+                                                                          "exact-teacher-text-result-marker"}
                                    else "soft-state:" + receipt["block_id"]),
                     "body_sha256": receipt["body_sha256"],
                     "writer_invocation_id": receipt["invocation_id"], "writer_write_node": receipt["writer_node"],
-                    "result_path": receipt["result_path"], "source_kind": "runtime-typed-result-write"})
+                    "result_path": receipt["result_path"], "source_kind": "runtime-typed-result-write",
+                    **({"teacher_text": True, "format": "teacher-text", "producer": "teacher-text-emulation",
+                        "learned_vectors": False, "tokenizer_ids": False, "training_admission": False}
+                       if teacher_text_write else {})})
 
     rows_by_invocation = {}
     for record in records:
@@ -826,6 +853,24 @@ def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, so
 def _provider_expanded_writer_source_valid(source_class, write, witness, block_type):
     witness = witness if isinstance(witness, dict) else {}
     return (
+        source_class == "teacher-text-exact-provider-output"
+        and write.get("producer") == "teacher-text-emulation"
+        and write.get("format") == "teacher-text"
+        and write.get("source_kind") == "typed-text-result"
+        and write.get("source") == "return_result"
+        and write.get("marker_context") == "return-result"
+        and write.get("learned_vectors") is False
+        and write.get("tokenizer_ids") is False
+        and write.get("training_admission") is False
+        and witness.get("kind") == "teacher-text-exact-provider-output/1"
+        and witness.get("source") == "return_result"
+        and witness.get("host_result_call_id") == write.get("call_id")
+        and witness.get("host_result_type") == block_type
+        and witness.get("writer_node") == write.get("node")
+        and witness.get("body_sha256") == write.get("text_body_sha256")
+        and _sha256_hex(witness.get("raw_response_sha256"))
+        and _sha256_hex(witness.get("typed_result_receipt_sha256"))
+    ) or (
         source_class in (None, "modern-typed-text-result")
         and write.get("producer") == "text-marker-emulation"
         and write.get("source_kind") == "typed-text-result"
@@ -1034,8 +1079,11 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 "block_id": block_id, "reader_record_id": record.get("id"), "body": body,
                 "source_kind": "provider-expanded-runtime-definition-context-only"})
             continue
+        teacher_text_read = (isinstance(block_id, str) and re.fullmatch(r"nzt1_[a-z2-7]{52}", block_id) is not None
+                             and item.get("teacher_text") is True and item.get("format") == "teacher-text"
+                             and item.get("learned_vectors") is False and item.get("tokenizer_ids") is False)
         if (item.get("type") != "Neuralese<string>" or not isinstance(block_id, str)
-                or not block_id.startswith("nz1_") or not isinstance(body_sha256, str)
+                or not (block_id.startswith("nz1_") or teacher_text_read) or not isinstance(body_sha256, str)
                 or item.get("learned_vectors") is not False
                 or item.get("qualification_certificate") is not False
                 or item.get("training_admission") is not False
@@ -1124,7 +1172,11 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 source_row_sha256=reader_source_row, split=split, source_groups=source_groups)
             if coalesced is not None:
                 eligible = [coalesced]
-        if len(eligible) == 1:
+        # For nzt1, a matching writer target is insufficient: the distinct
+        # consumer graph edge and exact provider expansion are part of the
+        # transport contract. Force it through the provider receipt checks
+        # below even when its producer row is also in writer_sources.
+        if len(eligible) == 1 and not teacher_text_read:
             writer = eligible[0]
             attestations.append({key: value for key, value in writer.items() if key != "body"} | {
                 "block_id": block_id, "reader_record_id": record.get("id"),
@@ -1134,7 +1186,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 "writer_target_selected": item.get("writer_target_selected"), "body": body,
                 "source_kind": "provider-expanded-same-run-read"})
             continue
-        if eligible:
+        if eligible and not teacher_text_read:
             raise ValueError("provider-expanded read has ambiguous same-split, same-source writers")
         if item.get("writer_target_selected") is not False:
             raise ValueError("provider-expanded read has no unique same-split, same-source writer")
@@ -1360,7 +1412,11 @@ def _coalesce_text_writer_event_aliases(candidates, *, block_id, block_type, bod
                 or writer.get("body_sha256") != body_sha256
                 or writer.get("body") != body
                 or block_type != "Neuralese<string>"
-                or not isinstance(block_id, str) or not block_id.startswith("nz1_")):
+                or not isinstance(block_id, str) or not (block_id.startswith("nz1_") or
+                    re.fullmatch(r"nzt1_[a-z2-7]{52}", block_id) is not None and
+                    writer.get("teacher_text") is True and writer.get("format") == "teacher-text" and
+                    writer.get("producer") == "teacher-text-emulation" and writer.get("learned_vectors") is False and
+                    writer.get("tokenizer_ids") is False and writer.get("training_admission") is False)):
             return None
         signature = (block_id, block_type, body_sha256, writer_call_id, writer_write_node,
                      writer.get("write_name"), tuple(writer.get("result_path") or []),
@@ -1391,7 +1447,7 @@ def _hydrate_tool_argument_blocks(messages, bodies, read_bodies=None):
     used = []
     def replace(value):
         if isinstance(value, dict):
-            if value.get("type") == "neuralese" and isinstance(value.get("id"), str):
+            if value.get("type") in {"neuralese", "teacher_text"} and isinstance(value.get("id"), str):
                 block_id = value["id"]
                 if block_id not in bodies:
                     raise ValueError(f"tool argument Neuralese block has no hash-bound source: {block_id}")
@@ -1415,7 +1471,7 @@ def _hydrate_tool_argument_blocks(messages, bodies, read_bodies=None):
                 # text parts without changing their order.
                 rendered = []
                 for part in args:
-                    if (isinstance(part, dict) and part.get("type") == "neuralese"
+                    if (isinstance(part, dict) and part.get("type") in {"neuralese", "teacher_text"}
                             and isinstance(part.get("id"), str)):
                         block_id = part["id"]
                         if block_id not in bodies:
@@ -1525,7 +1581,7 @@ def _static_context_replacements(record, replacements, bodies, read_bodies, sour
         # Frozen admitted source rows can still contain the exact historical
         # typed reference. This path only reads source receipts for conversion;
         # current converters emit plain text plus native occurrence metadata.
-        elif old.get("type")=="neuralese" and isinstance(old.get("id"),str):
+        elif old.get("type") in {"neuralese", "teacher_text"} and isinstance(old.get("id"),str):
             if isinstance(record.get("native_source_conversion"),dict):
                 raise ValueError("current native source rows cannot contain historical typed parts")
             body=bodies.get(old.get("id"))
@@ -1613,9 +1669,12 @@ def authenticated_crisp_context_messages(record, piece_map, writer_sources, *, s
         authentication_record, writer_sources, split=split, source_groups=groups,
         authenticated_context_bodies=provider_bodies,raw_bodies=neuralese_source_bodies)
     provider_ids = {item.get("block_id") for item in provider_attestations}
+    # A typed provider read may also be resolvable as an ordinary writer target
+    # (the producer is present in writer_sources). Keep the read-edge receipt as
+    # the single custody record for those IDs; otherwise the corpus counts the
+    # same text once as a target and again as a consumer dependency.
     context_attestations = [item for item in context_attestations
-                            if not (item.get("source_kind") == "provider_expanded_context_only_input"
-                                    and item.get("block_id") in provider_ids)]
+                            if item.get("block_id") not in provider_ids]
     provider_read_bodies=[(item.get("write_name"),item.get("body")) for item in provider_attestations]
     for item in provider_attestations:
         item.pop("body", None)
