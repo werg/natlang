@@ -535,20 +535,48 @@ def main():
     code_fingerprint = hashlib.sha256(''.join(code[path] for path in sorted(code)).encode()).hexdigest()
     global STATE_INDEX_CACHE
     STATE_INDEX_CACHE = args.index_cache
+    source_stat_guard = []
+    source_receipt = None
+    source_receipt_sha = None
     if args.corpus:
-        inputs = {name: {'path': str(args.corpus / name), 'sha256': sha256_file_hex(args.corpus / name)}
-                  for name in ('records.jsonl', 'edges.jsonl', 'chains.jsonl', 'pieces.jsonl')}
-        if (args.corpus / 'receipt.json').is_file():
+        receipt_file = args.corpus / 'receipt.json'
+        if receipt_file.is_file():
             source_receipt = args.corpus / 'receipt.json'
             receipt_sha = sha256_file_hex(source_receipt)
-            source_proof = json.loads(source_receipt.read_text()).get('current_protected_worlds') or {}
+            source_receipt_data = json.loads(source_receipt.read_text())
+            receipt_stat = source_receipt.stat()
+            receipt_artifacts = source_receipt_data.get('files') or {}
+            inputs = {}
+            for name in ('records.jsonl', 'edges.jsonl', 'chains.jsonl', 'pieces.jsonl'):
+                path = args.corpus / name
+                stat = path.stat()
+                artifact = receipt_artifacts.get(name) or {}
+                expected_sha = artifact.get('sha256')
+                if (type(artifact.get('bytes')) is not int or artifact['bytes'] != stat.st_size
+                        or not isinstance(expected_sha, str) or not re.fullmatch(r'[0-9a-f]{64}', expected_sha)):
+                    raise ValueError(f'assembled source receipt does not exactly bind {name}')
+                # Assembly writes its receipt only after hashing and sealing all
+                # artifacts. If their ctime is no later than that receipt and
+                # size matches, the pinned artifact hashes can be reused. If a
+                # file was touched later, rehash it before trusting the pin.
+                if stat.st_ctime_ns > receipt_stat.st_mtime_ns:
+                    if sha256_file_hex(path) != expected_sha:
+                        raise ValueError(f'assembled source artifact changed after its receipt: {name}')
+                inputs[name] = {'path': str(path), 'sha256': expected_sha}
+                source_stat_guard.append({'path': str(path.resolve()), 'device': stat.st_dev, 'inode': stat.st_ino,
+                    'size': stat.st_size, 'mtime_ns': stat.st_mtime_ns, 'ctime_ns': stat.st_ctime_ns})
+            source_receipt_sha = receipt_sha
+            inputs['receipt.json'] = current_binding['source_receipt']
+            source_proof = source_receipt_data.get('current_protected_worlds') or {}
             current_binding['source_receipt'] = {'path': str(source_receipt.resolve()),
                                                  'sha256': receipt_sha,
                                                  'upstream_union_status': ('matches-current' if
                                                      source_proof.get('registry_sha256') == current_binding['registry_sha256']
                                                      and source_proof.get('protected_sha256') == current_binding['protected_sha256']
                                                      else 'rechecked-record-by-record')}
-            inputs['receipt.json'] = current_binding['source_receipt']
+        else:
+            inputs = {name: {'path': str(args.corpus / name), 'sha256': sha256_file_hex(args.corpus / name)}
+                      for name in ('records.jsonl', 'edges.jsonl', 'chains.jsonl', 'pieces.jsonl')}
         units = list(corpus_units(args.corpus))
     else:
         inputs = {'work': str(args.work / args.source)}
@@ -593,8 +621,15 @@ def main():
         before_targets, before_bodies = collections.Counter(target_count), collections.Counter(body_count)
         cap_state_before = {'targets': sum(target_count.values()), 'bodies': sum(body_count.values())}
         plans = []
-        for unit, shas in zip(units, phase1_shas(pool, units, args.out / 'target-shas.jsonl',
-                                                  canonical_json_sha256_hex(binding['inputs']), args.batch_chains * 4)):
+        inputs_sha = canonical_json_sha256_hex(binding['inputs'])
+        target_sha_path = args.out / 'target-shas.jsonl'
+        if source_receipt and target_sha_path.is_file():
+            first_line = target_sha_path.open().readline()
+            saved_inputs_sha = json.loads(first_line).get('inputs_sha256')
+            if saved_inputs_sha != inputs_sha:
+                raise ValueError('source receipt input map differs from the previously full-hashed plan')
+        for unit, shas in zip(units, phase1_shas(pool, units, target_sha_path,
+                                                  inputs_sha, args.batch_chains * 4)):
             # A child result is computed from content only its call saw: its decision is never deduped away.
             exempt = {edge['writer_record_id'] for edge in unit[2] if edge.get('kind') in args.computed_kinds}
             supervised = set()
@@ -778,6 +813,10 @@ def main():
                'render_continuation_history': (progress or {}).get('render_continuation_history', []),
                'reader_cap': args.reader_cap, 'result_reader_cap': args.result_reader_cap,
                'computed_kinds': sorted(args.computed_kinds), 'target_cap': args.target_cap, 'chains': len(units),
+               'source_file_stat_guard': ({'assembly_receipt_sha256': source_receipt_sha,
+                   'verification': 'reuse receipt-pinned content hashes when artifact ctime predates sealed receipt; '
+                                   'recheck exact device/inode/size/mtime/ctime at completion',
+                   'artifacts': source_stat_guard} if source_receipt else None),
                'cap_state': {'path': str(args.cap_state) if args.cap_state else None, 'before': cap_state_before},
                'tokenizer': {'path': str(LFM3), 'fingerprint': LFM3_FINGERPRINT, 'role_ids': LFM3_ROLES},
                'code': code, 'totals': dict(totals), 'families': {k: dict(v) for k, v in sorted(families.items())},
@@ -790,6 +829,12 @@ def main():
     if current_binding.get('source_receipt') and sha256_file_hex(
             Path(current_binding['source_receipt']['path'])) != current_binding['source_receipt']['sha256']:
         raise ValueError('assembled source receipt changed during graph conversion')
+    for pinned in source_stat_guard:
+        stat = Path(pinned['path']).stat()
+        actual = {'device': stat.st_dev, 'inode': stat.st_ino, 'size': stat.st_size,
+                  'mtime_ns': stat.st_mtime_ns, 'ctime_ns': stat.st_ctime_ns}
+        if any(actual[key] != pinned[key] for key in actual):
+            raise ValueError('assembled source artifact changed during graph conversion: ' + pinned['path'])
     (args.out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
     (args.out / 'progress.json').unlink(missing_ok=True)
     (args.out / 'target-shas.jsonl').unlink(missing_ok=True)
