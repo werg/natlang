@@ -20,6 +20,7 @@ _NORMS = {'RMSNorm', 'Lfm2RMSNorm', 'Lfm3RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm
 NORM_EXECUTIONS = ('source-v1', 'stable-v1')
 
 
+@torch._dynamo.disable
 def rowwise_norm_forward(original_forward, x):
     """Keep LFM3 CUDA BF16 normalization independent of invocation packing."""
     if not x.is_cuda or x.dtype != torch.bfloat16 or x.numel() == 0:

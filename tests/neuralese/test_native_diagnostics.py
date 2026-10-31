@@ -30,3 +30,17 @@ def test_compiled_caller_preserves_chunk_boundaries_and_gradients():
     assert torch.equal(y,x.square())
     assert torch.equal(x.grad,2*x)
     assert calls==[2,1,2]
+
+
+def test_compiled_caller_norm_wrapper_preserves_values_and_gradients():
+    import torch
+    from natlang_neuralese.model.native_parameter_precision import rowwise_norm_forward
+    gain=torch.nn.Parameter(torch.tensor([1.,2.,3.]))
+    def operation(x):
+        return rowwise_norm_forward(lambda value:value.square()*gain,x)
+    compiled=torch.compile(operation,backend='eager')
+    x=torch.arange(15.,requires_grad=True).reshape(5,3);x.retain_grad()
+    out=compiled(x);out.sum().backward()
+    assert torch.equal(out,x.square()*gain)
+    assert torch.equal(x.grad,2*x*gain)
+    assert torch.equal(gain.grad,x.square().sum(0))
