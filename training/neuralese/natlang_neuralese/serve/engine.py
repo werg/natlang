@@ -143,12 +143,14 @@ class Sequence:
     native_guidance_anchor: dict | None = None
     native_guidance_flushing: bool = False
     native_guidance_receipt: dict | None = None
+    cuda_memory_start_allocated_bytes: int | None = None
+    cuda_memory_measurement_scope: str | None = None
 
 
 class Engine:
     def __init__(self, backbone, tokenizer, store: TensorStore, dialect: str,
                  max_block: int = 64, model_name: str = "natlang-native", device: str = "cpu",
-                 prefill_tokens: int = 8192, context: int | None = None,
+                 prefill_tokens: int | None = None, context: int | None = None,
                  prompt_rendering: str = "full", *, shared_model, role_tokens, model_config,
                  checkpoint_sha256: str, embedding_weight_sha256: str):
         from .chat import bind_history_reasoning
@@ -173,7 +175,12 @@ class Engine:
             'tokenizer_fingerprint': self.model_config.get('tokenizer_fingerprint'),
             'embedding_weight_sha256': embedding_weight_sha256,
             'architecture': self.model_config.get('architecture') or self.backbone.config.model_type}
-        self.prefill_tokens = prefill_tokens
+        from . import native_prefill_configuration
+        from ..common.hashing import canonical_json_sha256_hex
+        self.serving_config = native_prefill_configuration(device, prefill_tokens)
+        self.serving_config["identity_sha256"] = canonical_json_sha256_hex(
+            {key: value for key, value in self.serving_config.items() if key != "identity_sha256"})
+        self.prefill_tokens = self.serving_config["prefill_tokens"]
         # Optional exact prompt-prefix reuse (serve/prefix_cache.py); None keeps single-chunk prefill.
         self.prefix_cache = None
         self.dialect, self.max_block, self.model_name, self.device = dialect, max_block, model_name, device
@@ -189,11 +196,12 @@ class Engine:
         self._stopping = False
         self._ids = itertools.count()
         self._native_decoded_tokens = 0
+        self._last_cuda_request_memory: dict | None = None
 
     def progress_metrics(self):
-        """Host-only scheduler observations; never block on actor execution/GPU."""
+        """Scheduler and non-synchronizing CUDA allocator observations."""
         active = tuple(self._active)
-        return {'natlang_native_decode_tokens_total': self._native_decoded_tokens,
+        metrics = {'natlang_native_decode_tokens_total': self._native_decoded_tokens,
                 'natlang_native_batched_decode_rounds_total': getattr(self, '_native_batched_decode_rounds', 0),
                 'natlang_native_batched_decode_tokens_total': getattr(self, '_native_batched_decode_tokens', 0),
                 'natlang_active_sequences': sum(seq.phase != 'done' for seq in active),
@@ -201,6 +209,20 @@ class Engine:
                     seq.phase != 'done' and seq.native_capture_open for seq in active),
                 'natlang_queued_requests': self._incoming.qsize(),
                 **(self.prefix_cache.metrics() if self.prefix_cache is not None else {})}
+        device = torch.device(self.device)
+        if device.type == 'cuda':
+            try:
+                metrics.update({'natlang_cuda_memory_allocated_bytes': int(torch.cuda.memory_allocated(device)),
+                    'natlang_cuda_memory_reserved_bytes': int(torch.cuda.memory_reserved(device)),
+                    'natlang_cuda_peak_allocated_bytes': int(torch.cuda.max_memory_allocated(device)),
+                    'natlang_cuda_peak_reserved_bytes': int(torch.cuda.max_memory_reserved(device))})
+            except RuntimeError:
+                pass
+        if self._last_cuda_request_memory is not None:
+            metrics.update({f'natlang_cuda_last_request_{key}': value
+                for key, value in self._last_cuda_request_memory.items()
+                if isinstance(value, (int, float))})
+        return metrics
 
     def start(self):
         self._thread = threading.Thread(target=self._loop, name="neuralese-engine", daemon=True)
@@ -251,6 +273,9 @@ class Engine:
                     pass
                 self._round(list(self._active))
                 self._active = [s for s in self._active if not s.future.done()]
+                # Do not keep the last completed Sequence (and its GPU KV cache)
+                # alive in this frame while the next blocking queue read waits.
+                item = None
 
     def _template(self, messages, tools):
         return self.tokenizer.apply_chat_template(messages, tools=tools or None, tokenize=False,
@@ -537,7 +562,86 @@ class Engine:
         seq.native_own_position += 1
 
     def _native_prefill(self, seq):
+        self._begin_cuda_request_measurement(seq)
         return self._native_run(lambda: self._native_prefill_impl(seq), seq.request.adapters)
+
+    def _begin_cuda_request_measurement(self, seq):
+        device = torch.device(self.device)
+        if device.type != 'cuda':
+            return
+        active_other = any(item is not seq and item.phase != 'done' for item in self._active)
+        try:
+            if not active_other:
+                torch.cuda.reset_peak_memory_stats(device)
+                seq.cuda_memory_measurement_scope = 'single-request'
+            else:
+                seq.cuda_memory_measurement_scope = 'shared-engine-window'
+            seq.cuda_memory_start_allocated_bytes = int(torch.cuda.memory_allocated(device))
+        except RuntimeError:
+            seq.cuda_memory_measurement_scope = 'unavailable'
+
+    def _record_and_release_sequence_memory(self, seq):
+        """Snapshot request memory, then drop request-owned KV/logits before waking the client."""
+        device = torch.device(self.device)
+        memory = {'measurement_scope': seq.cuda_memory_measurement_scope}
+        if device.type == 'cuda':
+            try:
+                memory.update({
+                    'start_allocated_bytes': seq.cuda_memory_start_allocated_bytes or 0,
+                    'allocated_bytes': int(torch.cuda.memory_allocated(device)),
+                    'reserved_bytes': int(torch.cuda.memory_reserved(device)),
+                    'peak_allocated_bytes': int(torch.cuda.max_memory_allocated(device)),
+                    'peak_reserved_bytes': int(torch.cuda.max_memory_reserved(device)),
+                })
+                free_bytes, total_bytes = torch.cuda.mem_get_info(device)
+                memory['free_bytes'] = int(free_bytes)
+                memory['total_bytes'] = int(total_bytes)
+                self._last_cuda_request_memory = memory
+            except RuntimeError:
+                pass
+        # These tensors belong to a finished/failed request. Native text blocks
+        # have already been persisted to TensorStore by _native_response.
+        seq.cache = None
+        seq.logits = None
+        seq.items.clear()
+        seq.blocks.clear()
+        seq.native_capture_chunks.clear()
+        seq.native_capture_ids.clear()
+        seq.guide = None
+        if device.type == 'cuda':
+            try:
+                free_bytes, total_bytes = torch.cuda.mem_get_info(device)
+                if free_bytes < max(512 * 1024**2, total_bytes // 10):
+                    torch.cuda.empty_cache()
+                if self._last_cuda_request_memory is not None:
+                    self._last_cuda_request_memory['free_after_release_bytes'] = int(
+                        torch.cuda.mem_get_info(device)[0])
+                    self._last_cuda_request_memory['reserved_after_release_bytes'] = int(
+                        torch.cuda.memory_reserved(device))
+            except RuntimeError:
+                pass
+
+    @staticmethod
+    def _detach_exception_frames(error):
+        """Keep formatted diagnostics without retaining traceback locals with CUDA tensors."""
+        import traceback
+        try:
+            error.natlang_traceback = ''.join(traceback.format_exception(
+                type(error), error, error.__traceback__))
+        except Exception:
+            pass
+        pending = [error]
+        seen = set()
+        while pending:
+            current = pending.pop()
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+            current.__traceback__ = None
+            if current.__cause__ is not None:
+                pending.append(current.__cause__)
+            if current.__context__ is not None:
+                pending.append(current.__context__)
 
     @staticmethod
     def _validate_native_state_modes(modes, input_ids):
@@ -1286,10 +1390,15 @@ class Engine:
             return self._fail(seq,error)
         seq.native_protocol_failure=failure_descriptor(self,seq,error)
         seq.finish_reason='error';seq.phase='done'
-        if not seq.future.done():seq.future.set_result(self._native_response(seq))
+        if not seq.future.done():
+            response = self._native_response(seq)
+            self._record_and_release_sequence_memory(seq)
+            seq.future.set_result(response)
 
     def _fail(self, seq: Sequence, error: Exception):
         seq.phase = "done"
+        self._record_and_release_sequence_memory(seq)
+        self._detach_exception_frames(error)
         if not seq.future.done():
             seq.future.set_exception(error)
 
@@ -1302,8 +1411,10 @@ class Engine:
             seq.pending = []
         seq.finish_reason = reason
         seq.phase = "done"
+        response = self._native_response(seq)
+        self._record_and_release_sequence_memory(seq)
         if not seq.future.done():
-            seq.future.set_result(self._native_response(seq))
+            seq.future.set_result(response)
 
     def _emit(self, seq: Sequence, token: int):
         """Streaming: hand new output to the request's listener, if any."""

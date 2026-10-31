@@ -3,15 +3,58 @@
 from __future__ import annotations
 
 
+SMALL_GPU_PREFILL_LIMIT_BYTES = 12 * 1024**3
+SMALL_GPU_PREFILL_TOKENS = 2048
+LARGE_GPU_PREFILL_TOKENS = 8192
+
+
+def native_prefill_configuration(device: str, requested: int | None = None, *,
+                                 total_memory_bytes: int | None = None) -> dict:
+    """Choose and bind the native prompt-prefill chunk size for this actor.
+
+    Chunking changes only how the same complete prompt is forwarded. It does
+    not truncate or rewrite prompt tokens. Small GPUs use smaller activation
+    batches; larger GPUs retain the established chunk size.
+    """
+    import torch
+    if requested is not None and (type(requested) is not int or requested <= 0):
+        raise ValueError("prefill_tokens must be a positive integer")
+    device_obj = torch.device(device)
+    if device_obj.type == "cuda":
+        if total_memory_bytes is None:
+            if not torch.cuda.is_available():
+                raise RuntimeError("CUDA prefill selection requested but CUDA is unavailable")
+            total_memory_bytes = int(torch.cuda.get_device_properties(device_obj).total_memory)
+        elif type(total_memory_bytes) is not int or total_memory_bytes <= 0:
+            raise ValueError("device_total_memory_bytes must be a positive integer")
+    if requested is None:
+        chosen = (SMALL_GPU_PREFILL_TOKENS if total_memory_bytes is not None
+                  and total_memory_bytes <= SMALL_GPU_PREFILL_LIMIT_BYTES
+                  else LARGE_GPU_PREFILL_TOKENS)
+        selection = "auto-small-gpu-2048-large-gpu-8192-v1"
+    else:
+        chosen = requested
+        selection = "explicit"
+    return {"schema": "natlang.native-prefill-config/1", "device": str(device_obj),
+        "device_total_memory_bytes": total_memory_bytes, "prefill_tokens": chosen,
+        "selection": selection, "full_prompt_preserved": True,
+        "identity_sha256": None}
+
+
 def load_native_engine(checkpoint: str, *, base: str | None = None, device: str = "cpu", dtype=None,
                        prompt_rendering: str = "full", participant: str | None = None,
                        actor_view: dict | None = None, transported_actor: dict | None = None,
-                       store=None, engine_class=None):
+                       store=None, engine_class=None, prefill_tokens: int | None = None):
     """Restore a native-state checkpoint through the shared model loader and serving engine."""
     from ..common.hashing import sha256_file_hex_cached
     from ..model.native_model import load_native_checkpoint, native_identity
     from .engine import Engine
     from .store import TensorStore
+    from ..common.hashing import canonical_json_sha256_hex
+
+    serving_config = native_prefill_configuration(device, prefill_tokens)
+    serving_config["identity_sha256"] = canonical_json_sha256_hex(
+        {key: value for key, value in serving_config.items() if key != "identity_sha256"})
 
     view_options = ({'actor_view':actor_view} if actor_view is not None else
                     {'transported_actor':transported_actor} if transported_actor is not None else {})
@@ -28,8 +71,10 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
                     model_name=f"native-{config['architecture']}", device=device,
                     prompt_rendering=prompt_rendering, shared_model=model, role_tokens=roles,
                     model_config=config, checkpoint_sha256=identity['checkpoint_sha256'],
-                    embedding_weight_sha256=identity['embedding_weight_sha256'])
+                    embedding_weight_sha256=identity['embedding_weight_sha256'],
+                    prefill_tokens=serving_config["prefill_tokens"])
     engine.native_identity = identity
+    engine.serving_config = serving_config
     engine.native_checkpoint = str(checkpoint)
     engine.native_training_state = (_state.get('training') or _state.get('shared_training') or {})
     engine.native_actor_view = _state.get('actor_view')

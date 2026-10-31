@@ -37,3 +37,17 @@ def test_native_http_import_does_not_load_projected_gradient_or_writer_modules()
     )
     env = dict(os.environ, PYTHONPATH=str(package_root))
     subprocess.run([sys.executable, "-c", code], env=env, check=True)
+
+
+def test_native_server_clis_expose_prefill_chunk_binding():
+    package_root = Path(__file__).resolve().parents[2] / "training" / "neuralese"
+    env = dict(os.environ, PYTHONPATH=str(package_root))
+    checkpoint_server = Path(__file__).resolve().parents[2] / "scripts" / "neuralese_data" / "serve_native_checkpoint.py"
+    direct_server = subprocess.run([sys.executable, str(checkpoint_server), "--help"], env=env,
+        capture_output=True, text=True, check=True)
+    direct_help = " ".join(direct_server.stdout.split())
+    assert "--prefill-tokens" in direct_help
+    assert "2048 on GPUs <=12 GiB" in direct_help
+    with pytest.raises(SystemExit) as error:
+        main(["--help"])
+    assert error.value.code == 0

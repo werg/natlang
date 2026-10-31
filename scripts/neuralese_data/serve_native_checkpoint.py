@@ -35,6 +35,8 @@ def main() -> None:
     parser.add_argument('--coefficient-rebase-out', type=Path)
     parser.add_argument('--coefficient-cancel-stale-reason')
     parser.add_argument('--prompt-rendering', choices=('full', 'program-header'), default='full')
+    parser.add_argument('--prefill-tokens', type=int, default=None,
+                        help='native prompt-forward chunk size (default: 2048 on GPUs <=12 GiB, otherwise 8192)')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8097)
@@ -109,6 +111,7 @@ def main() -> None:
     engine = load_native_engine(str(checkpoint), base=str(args.base) if args.base else None,
         prompt_rendering=args.prompt_rendering, participant=args.native_participant,
         device=args.device,
+        prefill_tokens=args.prefill_tokens,
         **view_options)
     if args.engine == 'sglang':
         launch_sglang(engine, args, checkpoint)
@@ -142,6 +145,7 @@ def main() -> None:
         'checkpoint_sha256': args.training_source_sha256 if args.transport_receipt else args.checkpoint_sha256,
         **({'transport_view_sha256':args.checkpoint_sha256,'inference_only':True} if args.transport_receipt else {}),
         'rl_policy_binding': engine.rl_policy_binding,
+        'serving_config': engine.serving_config,
         'prompt_rendering': args.prompt_rendering,
         'listening': f'http://{server.server_address[0]}:{server.server_address[1]}'}), flush=True)
     try:

@@ -93,6 +93,10 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         binding = info['rl_policy_binding']
         assert binding['communication'] == 'native-state'
         assert binding['native_identity'] == engine.native_identity
+        assert info['serving_config'] == engine.serving_config
+        assert info['serving_config']['schema'] == 'natlang.native-prefill-config/1'
+        assert info['serving_config']['full_prompt_preserved'] is True
+        assert info['serving_config_identity_sha256'] == info['serving_config']['identity_sha256']
         from natlang_neuralese.rl.production import validate_actor_receipts
         validate_actor_receipts({endpoint: binding}, policy_id=engine.checkpoint_sha256, neuralese_server=True)
         native_token=engine._native_token

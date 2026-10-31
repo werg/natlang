@@ -149,6 +149,8 @@ def make_handler(engine: Engine):
                                            if getattr(engine, "rl_policy_binding", None) else {}),
                                         "prompt_rendering": engine.prompt_rendering,
                                         "prompt_rendering_identity_sha256": prompt_identity["identity_sha256"],
+                                        "serving_config": getattr(engine, "serving_config", None),
+                                        "serving_config_identity_sha256": (getattr(engine, "serving_config", None) or {}).get("identity_sha256"),
                                         "capabilities": [c for c in NATIVE_CAPABILITIES
                                                          if c != "store.owners" or hasattr(engine.store, "hold")]})
             native = _NATIVE_STATE.match(self.path)

@@ -19,6 +19,8 @@ def main(argv=None):
     parser.add_argument("--device", default="cpu", help="cpu, cuda[:N], or auto: cuda when it has room, else cpu")
     parser.add_argument("--dtype", choices=("float32", "bfloat16"), default=None,
                         help="model weight and cache dtype (default: float32 on CPU, bfloat16 on CUDA)")
+    parser.add_argument("--prefill-tokens", type=int, default=None,
+                        help="native prompt-forward chunk size (default: 2048 on GPUs <=12 GiB, otherwise 8192)")
     parser.add_argument("--native-checkpoint", required=True,
                         help="complete native shared-state model checkpoint")
     parser.add_argument("--base", default=None, help="exact source model snapshot for native restoration")
@@ -66,7 +68,7 @@ def main(argv=None):
     cap_cuda_memory(args.device, args.memory_gb)
     engine = load_native_engine(args.native_checkpoint, base=args.base, device=args.device, dtype=model_dtype,
                                 prompt_rendering=args.prompt_rendering or "full", participant=args.native_participant,
-                                actor_view=actor_view)
+                                actor_view=actor_view, prefill_tokens=args.prefill_tokens)
     if args.ctx_size:
         engine.context = min(engine.context, args.ctx_size)
     if args.store_dir is not None:
@@ -88,6 +90,7 @@ def main(argv=None):
                       "native_checkpoint": getattr(engine, "native_checkpoint", None), "device": args.device,
                       "model_dtype": str(next(engine.backbone.parameters()).dtype),
                       "prompt_rendering": engine.prompt_rendering,
+                      "serving_config": engine.serving_config,
                       "prompt_rendering_identity_sha256":
                           prompt_rendering_identity(engine.prompt_rendering)["identity_sha256"]}), flush=True)
     try:
