@@ -86,6 +86,8 @@ test('nl.with docs distinguish its child result from captured context', async ()
 test("return_result in eval with the tool's shape is read as the tool's request", async () => {
   const { results } = await script([['eval', { code: 'return_result({ status: "success", value: "Hello, " + name })' }]]);
   assert.match(results[0], /Staged "Hello, Ada" as the result/);
+  assert.match(results[0], /A JavaScript `return` in eval only stages this value; it does not end this invocation/);
+  assert.match(results[0], /finish it now so its caller receives this state and continues/);
   const blocked = await script([['eval', { code: 'return_result({ status: "blocked", reason: "No greeting style is given." })' }]]);
   assert.deepEqual(blocked.results, [], 'blocked ends the call');
 });
@@ -94,6 +96,26 @@ test('a value of the return type shaped like a request stays a value', async () 
   const { results } = await script([['eval', { code: 'return_result({ status: "success", value: 1 })' }]],
     '"{ status: string, value: number }"');
   assert.match(results[0], /Staged \{ status: "success", value: 1 \} as the result/);
+});
+
+test('unsupported TypeScript utility annotations get plain-JavaScript guidance without treating comparisons as types', async () => {
+  const telecom = { async getLineItems() { return [{ id: 'item-1' }]; } };
+  const bad = await script([['eval', { code:
+    'const rows: Awaited<ReturnType<typeof telecom.getLineItems>>[] = await telecom.getLineItems("L1002"); rows.length' }]],
+    'number', { services: { telecom }, serviceDeclarations: {
+      telecom: 'export function getLineItems(id: string): Promise<{ id: string }[]>;'
+    } });
+  assert.match(bad.results[0], /Eval cannot type-check the TypeScript utility annotation/);
+  assert.match(bad.results[0], /Remove this local annotation and let the value expression infer its type/);
+  assert.match(bad.results[0], /ordinary `const` inference usually makes `as const` unnecessary/);
+
+  const comparison = await script([['eval', { code: 'const isBefore = 2 < 3; return isBefore;' }]], 'boolean');
+  assert.match(comparison.results[0], /Staged true as the result/);
+  assert.doesNotMatch(comparison.results[0], /utility type|annotation/);
+
+  const literalAssertion = await script([['eval', { code: 'const label = "ready" as const; return label;' }]]);
+  assert.match(literalAssertion.results[0], /Staged "ready" as the result/);
+  assert.doesNotMatch(literalAssertion.results[0], /utility type|annotation/);
 });
 
 test('reaching for what the scope lacks is answered with what it has', async () => {

@@ -28,7 +28,7 @@ export type ScopeSourceSpan = {
 
 export type ScopeCompileDiagnostic = ScopeSourceSpan & {
   code: 'typescript-syntax' | 'forbidden-ambient' | 'forbidden-dynamic-code' |
-    'forbidden-control' | 'forbidden-prototype-mutation' | 'invalid-binding' | 'forbidden-loop' | 'recursion' |
+    'forbidden-control' | 'forbidden-prototype-mutation' | 'invalid-binding' | 'forbidden-loop' | 'unsupported-type-annotation' | 'recursion' |
     NatlangDiagnostic['code'];
   message: string;
 };
@@ -288,6 +288,11 @@ function portableAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | un
     if (!args.length) return name;
   }
   return;
+}
+
+function unsupportedUtilityAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | undefined {
+  const text = node.getText(file);
+  return /\b(?:Awaited|ReturnType|Parameters|ConstructorParameters|InstanceType|Partial|Required|Readonly|Pick|Omit|Exclude|Extract|NonNullable)\s*</.test(text) ? text : undefined;
 }
 
 function isPropertyName(node: ts.Identifier): boolean {
@@ -571,6 +576,13 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const flags = statement.declarationList.flags;
       const kind: ScopeBinding['kind'] = flags & ts.NodeFlags.Const ? 'const' : flags & ts.NodeFlags.Let ? 'let' : 'var';
       for (const declaration of statement.declarationList.declarations) for (const name of namesOf(declaration.name)) {
+        const annotation = ts.isIdentifier(declaration.name) && declaration.type ? portableAnnotation(declaration.type, file) : undefined;
+        const unsupportedAnnotation = ts.isIdentifier(declaration.name) && declaration.type && !annotation ?
+          unsupportedUtilityAnnotation(declaration.type, file) : undefined;
+        if (unsupportedAnnotation) diagnostics.push({ ...span(declaration.type!), code: 'unsupported-type-annotation',
+          message: `Eval cannot type-check the TypeScript utility annotation ${JSON.stringify(unsupportedAnnotation)}. ` +
+            'Remove this local annotation and let the value expression infer its type, for example `const rows = await service.getRows()`. ' +
+            'Use a structural record or array type only when an explicit local annotation is needed; ordinary `const` inference usually makes `as const` unnecessary.' });
         const initializerText = declaration.initializer?.getText(file);
         const bindingInitializer = declaration.initializer && initializerText ? ts.isIdentifier(declaration.name) ? initializerText :
           bindingInitializerProjections(declaration.name, initializerText).get(name.text) : undefined;
@@ -584,8 +596,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         if (initial && ts.isCallExpression(initial) && initial.expression.kind === ts.SyntaxKind.ImportKeyword) importedNames.add(name.text);
         bindings.push({ name: name.text, kind, mutable: kind !== 'const',
           ...(transient ? { transient: true } : {}),
-          ...(ts.isIdentifier(declaration.name) && declaration.type && portableAnnotation(declaration.type, file) ?
-            { annotation: portableAnnotation(declaration.type, file) } : {}),
+          ...(annotation ? { annotation } : {}),
           ...(bindingInitializer ? { initializer: bindingInitializer } : {}),
           start: span(name).start, end: span(name).end });
       }
