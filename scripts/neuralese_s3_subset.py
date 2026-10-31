@@ -62,9 +62,17 @@ def main() -> int:
     manifest = {"schema": "natlang.s3-full-subset/1", "source": str(source), "seed": args.seed,
                 "train_per_family": args.train_per_family, "eval_rows": args.eval_rows, "labels": sorted(labels),
                 "families": {}}
+    # Resumable: a preempted run keeps the families an identical earlier run (same parameters) finished.
+    previous = out / "manifest.json"
+    if previous.exists():
+        earlier = json.loads(previous.read_text())
+        if {k: v for k, v in earlier.items() if k != "families"} == {k: v for k, v in manifest.items() if k != "families"}:
+            manifest["families"] = {f: v for f, v in earlier["families"].items() if (out / f"{f}.port-records.jsonl").exists()}
     for path in sorted(source.glob("*.port-records.jsonl")):
         family = path.name.removesuffix(".port-records.jsonl")
         target = out / path.name
+        if family in manifest["families"]:
+            continue
         started = time.time()
         with np.load(build_index(path, index_dir), allow_pickle=False) as index:
             meta = json.loads(str(index["meta"]))
