@@ -3013,7 +3013,7 @@ def _main(argv=None, *, requested_refresh):
             forward_atol=args.forward_atol, gradient_atol=args.gradient_atol, device=args.device)
         checkpoint_options['training_backend_check'] = backend_check
         write_json(args.out / 'training-backend-check.json', backend_check)
-    if args.memory_qualification:
+    if args.memory_qualification and not args.continuation_preflight_only:
         from ..eval.native_memory import run_prepared
         memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,objective=objective,
             checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
