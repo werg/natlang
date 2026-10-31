@@ -228,7 +228,7 @@ def oversize_baseline(source, prior_geometry, *, fallback_tokens, current_geomet
 
 def policy_capacity_baseline(reference, *, checkpoint_sha256, objective_binding, source_binding,
                              cotangent_mode, retained_gradients):
-    """Use only the just-qualified exact policy/objective as the first-update boundary."""
+    """Reuse measured geometry; the proof retains its original numerical parent."""
     from ..common.hashing import canonical_json_sha256_hex
     from .native_resident import bound
     proof=reference.get('proof') or {}
@@ -246,7 +246,8 @@ def policy_capacity_baseline(reference, *, checkpoint_sha256, objective_binding,
             or any(type(limits.get(k)) is not int or limits[k]<1 for k in ('forward_tokens','kv_slots'))):
         raise ValueError('policy capacity proof does not bind the actual first-update execution')
     return {**limits,'basis':'actual-policy-capacity-proof','proof':{'path':reference['path'],'sha256':reference['sha256']},
-            'parent_checkpoint_sha256':checkpoint_sha256}
+            'parent_checkpoint_sha256':checkpoint_sha256,
+            'scope':'measured execution geometry; no fresh numerical certification after an optimizer update'}
 
 
 def oversized_batches(micro_batches, baseline):
