@@ -347,3 +347,36 @@ def test_reserved_background_write_retains_separate_next_slot(tmp_path, monkeypa
     second.close()
     with checkpoint_target_lock(policy.slot):
         pass
+
+
+def test_reserved_submit_failure_recovers_current_state_synchronously(tmp_path, monkeypatch):
+    from natlang_neuralese.train import trajectory_state
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)
+    optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
+    state = {'step': 2, 'training': {'optimizer': optimizer.state_dict(), 'rng': {},
+                                    'exposure_counts': {'graph': 2}, 'options': {}}}
+    policy = CheckpointPolicy(tmp_path, async_checkpoint=True)
+    policy.reserve_next(state, optimizer)
+    def fail(*args, **kwargs):
+        raise RuntimeError('snapshot submission failed')
+    monkeypatch.setattr(policy._async_writer, 'submit', fail)
+    event = policy.save(state, async_allowed=True, async_optimizer=optimizer)
+    assert event['async_writer_recovery']['recovered_synchronously']
+    assert torch.load(policy.slot, weights_only=False)['step'] == 2
+
+
+def test_reserved_hook_failure_surfaces_after_durable_commit(tmp_path, monkeypatch):
+    from natlang_neuralese.train import trajectory_state
+    monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes', lambda: 1 << 50)
+    optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
+    state = {'step': 3, 'training': {'optimizer': optimizer.state_dict(), 'rng': {},
+                                    'exposure_counts': {'graph': 3}, 'options': {}}}
+    def fail(*args):
+        raise RuntimeError('post-commit hook failed')
+    policy = CheckpointPolicy(tmp_path, async_checkpoint=True, on_saved=fail)
+    policy.reserve_next(state, optimizer)
+    policy.save(state, async_allowed=True, async_optimizer=optimizer)
+    with pytest.raises(RuntimeError, match='post-commit hook failed'):
+        policy.drain_async()
+    assert torch.load(policy.slot, weights_only=False)['step'] == 3
+    policy._persistent_reservation.close()

@@ -46,3 +46,26 @@ def test_sparse_pending_length_does_not_establish_allocated_reservation(tmp_path
         'schema': 'natlang.checkpoint-reservation/1', 'device': st.st_dev, 'inode': st.st_ino}))
     observed = module.native_reservation_status(slot)
     assert observed['state'] == 'partially-allocated' and not observed['protected']
+
+
+def test_monitor_reports_both_slots_and_bound_roles(tmp_path):
+    slot = tmp_path / 'checkpoint.pt'
+    identities = {}
+    for suffix, role in (('', 'writer'), ('.alternate', 'next')):
+        pending = slot.with_name(slot.name + suffix + '.reserved-pending')
+        pending.write_bytes(b'allocated')
+        st = pending.stat()
+        receipt = slot.with_name(slot.name + suffix + '.reservation.json')
+        receipt.write_text(json.dumps({'schema': 'natlang.checkpoint-reservation/1',
+                                       'device': st.st_dev, 'inode': st.st_ino}))
+        identities[role] = {'path': str(pending), 'device': st.st_dev, 'inode': st.st_ino}
+    slot.with_name(slot.name + '.reservation-roles.json').write_text(json.dumps({
+        'schema': 'natlang.checkpoint-reservation-roles/1', 'pid': 1, **identities}))
+    observed = module.native_reservation_status(slot)
+    assert observed['slots']['primary']['protected'] and observed['slots']['alternate']['protected']
+    assert observed['roles']['writer'] == identities['writer']
+    assert observed['roles']['next'] == identities['next']
+    identities['next']['inode'] += 1
+    slot.with_name(slot.name + '.reservation-roles.json').write_text(json.dumps({
+        'schema': 'natlang.checkpoint-reservation-roles/1', 'pid': 1, **identities}))
+    assert module.native_reservation_status(slot)['roles']['state'] == 'stale-or-invalid'

@@ -267,7 +267,8 @@ class PersistentCheckpointReservation:
         self.lock = self.target.with_name(self.target.name + '.reservation.lock')
         self.transfer_bytes = transfer_bytes
         self.minimum_free_bytes = minimum_free_bytes
-        if shared_lock is not None and (shared_lock.target != self.target or shared_lock._lock_fd is None):
+        if shared_lock is not None and (shared_lock.target != self.target or shared_lock.lock != self.lock
+                                        or shared_lock._lock_fd is None):
             raise CheckpointReserveError('shared checkpoint lock must be live and target the same slot')
         self._lock_fd = os.dup(shared_lock._lock_fd) if shared_lock is not None else None
         self._fd = None

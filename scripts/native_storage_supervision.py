@@ -18,10 +18,10 @@ from run_training_pipeline import atomic_json
 from natlang_neuralese.common.paths import root as machine_root
 
 
-def native_reservation_status(slot):
+def _reservation_slot_status(slot, suffix):
     slot = Path(slot)
-    pending = slot.with_name(slot.name + '.reserved-pending')
-    receipt = slot.with_name(slot.name + '.reservation.json')
+    pending = slot.with_name(slot.name + suffix + '.reserved-pending')
+    receipt = slot.with_name(slot.name + suffix + '.reservation.json')
     result = {'slot': str(slot), 'pending': str(pending), 'protected': False}
     if slot.is_file():
         result['committed_bytes'] = slot.stat().st_size
@@ -42,6 +42,40 @@ def native_reservation_status(slot):
                       allocated_bytes=allocated, protected=complete)
     except (OSError, ValueError, TypeError) as error:
         result.update(state='invalid-reservation', error=str(error))
+    return result
+
+
+def native_reservation_status(slot):
+    slot = Path(slot)
+    primary = _reservation_slot_status(slot, '')
+    alternate = _reservation_slot_status(slot, '.alternate')
+    result = dict(primary)
+    result['slots'] = {'primary': primary, 'alternate': alternate}
+    roles_path = slot.with_name(slot.name + '.reservation-roles.json')
+    if roles_path.exists():
+        try:
+            roles = json.loads(roles_path.read_text())
+            if roles.get('schema') != 'natlang.checkpoint-reservation-roles/1':
+                raise ValueError('invalid reservation role schema')
+            for role in ('writer', 'next'):
+                identity = roles.get(role)
+                if identity is None:
+                    continue
+                path = Path(identity['path'])
+                if str(path) not in (primary['pending'], alternate['pending']):
+                    raise ValueError('reservation role names another path')
+                st = path.lstat()
+                if (identity['device'], identity['inode']) != (st.st_dev, st.st_ino):
+                    raise ValueError('reservation role inode changed')
+            result['roles'] = roles
+            next_identity = roles.get('next')
+            if next_identity is not None:
+                selected = primary if next_identity['path'] == primary['pending'] else alternate
+                result.update(state=selected['state'], protected=selected['protected'])
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            result['roles'] = {'state': 'stale-or-invalid', 'error': str(error)}
+    if alternate['state'] == 'invalid-reservation':
+        result.update(state='invalid-reservation', protected=False)
     return result
 
 

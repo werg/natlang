@@ -139,6 +139,20 @@ class CheckpointPolicy:
         current = optimizer_state_size_upper_bound(optimizer, lazy=False)
         bound = checkpoint_size_upper_bound(state) + math.ceil(max(0, lazy-current) * 1.2)
         save_with_space_retry(lambda: self._persistent_reservation.acquire(bound))
+        if not self.async_pending:
+            self._reservation_roles(None, self._persistent_reservation)
+
+    def _reservation_roles(self, writer, next_slot):
+        def identity(reservation):
+            if reservation is None:
+                return None
+            st = os.fstat(reservation._fd)
+            return {'path': str(reservation.pending), 'device': st.st_dev, 'inode': st.st_ino}
+        path = self.slot.with_name(self.slot.name + '.reservation-roles.json')
+        temp = path.with_name(path.name + '.tmp')
+        temp.write_text(json.dumps({'schema': 'natlang.checkpoint-reservation-roles/1',
+            'pid': os.getpid(), 'writer': identity(writer), 'next': identity(next_slot)}) + '\n')
+        os.replace(temp, path)
 
     def _write(self, state: dict, target: Path) -> dict:
         """Preserve the previous slot until the replacement is completely written."""
@@ -147,6 +161,7 @@ class CheckpointPolicy:
         # GPU tensors are copied to host one storage at a time while writing; no second full copy in memory.
         if self._persistent_reservation is not None and target == self.slot:
             atomic_checkpoint(target, state, reservation=self._persistent_reservation)
+            self._reservation_roles(None, None)
         else:
             atomic_checkpoint(target, state)
         event = {"time": time.time(), "path": str(target), "bytes": target.stat().st_size,
@@ -278,7 +293,11 @@ class CheckpointPolicy:
                     self._record_committed(snapshot)
                     event['async_pending'] = False
                     self._after_save(snapshot, event, metric=metric, higher_is_better=higher_is_better)
+                    if spare is not None:
+                        self._reservation_roles(None, spare)
                 try:
+                    if spare is not None:
+                        self._reservation_roles(reserved_writer, spare)
                     self._async_writer.submit(self.slot,state,after_write=after_write, reservation=reserved_writer)
                     if spare is not None:
                         self._persistent_reservation = spare

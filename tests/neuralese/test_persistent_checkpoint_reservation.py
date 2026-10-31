@@ -206,3 +206,36 @@ def test_post_rename_receipt_enospc_retries_without_losing_parent(tmp_path, monk
     assert attempts
     assert torch.load(path, weights_only=True)['step'] == 2
     owner.close()
+
+
+def test_alternate_slot_crash_reopens_with_exact_inode(tmp_path):
+    path = tmp_path / 'checkpoint.pt'
+    primary = reservation(path).acquire(1024 * 1024)
+    alternate = PersistentCheckpointReservation(path, slot_suffix='.alternate', shared_lock=primary,
+                                                 transfer_bytes=0, minimum_free_bytes=0).acquire(1024 * 1024)
+    inode = alternate.pending.stat().st_ino
+    primary.close()
+    alternate.close()
+    reopened = PersistentCheckpointReservation(path, slot_suffix='.alternate', transfer_bytes=0,
+                                                minimum_free_bytes=0).acquire(1024 * 1024)
+    assert reopened.pending.stat().st_ino == inode
+    reopened.close()
+
+
+def test_alternate_admission_accounts_for_its_own_space(tmp_path, monkeypatch):
+    from collections import namedtuple
+    from natlang_neuralese.train import checkpoint_safety
+    path = tmp_path / 'checkpoint.pt'
+    torch.save({'step': 1}, path)
+    primary = reservation(path).acquire(1024 * 1024)
+    inode = primary.pending.stat().st_ino
+    alternate = PersistentCheckpointReservation(path, slot_suffix='.alternate', shared_lock=primary,
+                                                 transfer_bytes=0, minimum_free_bytes=0)
+    usage = namedtuple('usage', 'total used free')
+    monkeypatch.setattr(checkpoint_safety.shutil, 'disk_usage', lambda _: usage(1000, 999, 1))
+    with pytest.raises(checkpoint_safety.CheckpointSpaceUnavailable):
+        alternate.acquire(1024 * 1024)
+    assert primary.pending.stat().st_ino == inode and primary.bound == 1024 * 1024
+    assert torch.load(path, weights_only=True)['step'] == 1
+    alternate.close()
+    primary.close()
