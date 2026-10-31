@@ -157,5 +157,7 @@ def test_verified_guidance_variant_preserves_exact_world_and_answer(tmp_path):
 
 
 def test_assembly_interleave_skips_sources_with_no_train_rows():
-    assert interleave({'empty-source': [], 'a': [{'id': 'a1'}, {'id': 'a2'}],
-                       'b': [{'id': 'b1'}]}) == [{'id': 'a1'}, {'id': 'b1'}, {'id': 'a2'}]
+    assert interleave({'empty-source': [], 'a': [{'id': 'a1', 'family': 'f'}, {'id': 'a2', 'family': 'f'}],
+                       'b': [{'id': 'b1', 'family': 'f'}]}) == [
+                           {'id': 'a1', 'family': 'f'}, {'id': 'b1', 'family': 'f'},
+                           {'id': 'a2', 'family': 'f'}]
