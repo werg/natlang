@@ -1,6 +1,7 @@
 """An operator drain request stops a DiLoCo learner at a delivered boundary, so a
 relaunch can register an exact supervised source append with a real coordinator."""
 import json,socket,threading,time,uuid
+from types import SimpleNamespace
 import pytest,torch
 from test_native_model import tiny_source
 from test_native_state_sft import graph
@@ -44,10 +45,10 @@ def test_drain_request_yields_registrable_source_append(tmp_path,monkeypatch):
     try:
         out.mkdir();request={'schema':trainer.DILOCO_DRAIN_SCHEMA,'id':uuid.uuid4().hex,'worker':0,'fingerprint':'0'*64}
         write_json_durable(out/trainer.DILOCO_DRAIN_REQUEST,request)
-        with pytest.raises(ValueError,match='exact worker'):trainer.main(argv)
-        # The rejected request may finish its current update; resume only from
-        # the exact rolling slot rather than silently discarding its visits.
-        argv[argv.index('--continue-from')+1]=str(out/'checkpoint.pt')
+        # Reject a bad request before launching the training process, so it
+        # cannot consume an update under a stale coordinator contract.
+        with pytest.raises(ValueError,match='exact worker'):
+            trainer._diloco_drain_request(out,SimpleNamespace(worker=0,manifest={'fingerprint':manifest['fingerprint']}))
         request['fingerprint']=manifest['fingerprint'];write_json_durable(out/trainer.DILOCO_DRAIN_REQUEST,request)
         assert trainer.main(argv)==0
         state=torch.load(out/'checkpoint.pt',weights_only=False)['training'];saved=state['diloco']

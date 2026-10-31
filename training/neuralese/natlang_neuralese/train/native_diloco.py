@@ -73,9 +73,17 @@ def validate_new_outer(declaration, *, slot, seed, worker, workers, source_hash,
             or sha256_file_hex_cached(declaration_path) != reference.get('sha256')):
         raise ValueError('new outer peer declaration differs from its common manifest')
     proof = json.loads(declaration_path.read_text())
+    previous = (saved or {}).get('new_outer_reanchor')
+    # On a retry, --continue-from is correctly bound to the current rolling
+    # slot, whose bytes already include the committed reanchor. The shared
+    # declaration still names the immutable original seed; authenticate it
+    # against the prior transition receipt rather than reinterpreting the
+    # changed slot as that seed.
+    expected_seed_sha256 = (previous.get('seed_sha256') if isinstance(previous, dict)
+                            else sha256_file_hex_cached(seed))
     if (proof.get('schema') not in ('natlang.diloco-new-outer/1', 'natlang.diloco-first-outer/1') or proof.get('worker') != worker
             or proof.get('source_hash') != source_hash or proof.get('held_sha256') != held_sha256
-            or proof.get('seed_sha256') != sha256_file_hex_cached(seed)
+            or proof.get('seed_sha256') != expected_seed_sha256
             or not all(isinstance(proof.get(k),str) and re.fullmatch('[0-9a-f]{64}', proof[k])
                        for k in ('seed_sha256','source_hash','held_sha256'))):
         raise ValueError('new outer declaration differs from the worker, source, held or seed binding')
@@ -98,7 +106,6 @@ def validate_new_outer(declaration, *, slot, seed, worker, workers, source_hash,
     if Path(parent['path']).resolve() == Path(slot).resolve():
         raise ValueError('new outer parent pin must differ from the writable rolling slot')
     declaration_sha = sha256_file_hex_cached(path)
-    previous = (saved or {}).get('new_outer_reanchor')
     if previous:
         if previous.get('declaration_sha256') != declaration_sha:
             raise ValueError('resumed new outer declaration differs from the committed transition')

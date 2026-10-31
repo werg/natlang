@@ -38,6 +38,9 @@ def test_native_entry_saves_full_transition_before_readiness(tmp_path, monkeypat
     rotation={'schema':'natlang.pending-batch-rotation/1','anchor_id':'train','anchor_binding':original['training']['source_row_bindings']['train'],'parent_checkpoint_sha256':ref(old)['sha256']}
     original['training']['options']['pending_batch_rotation']=rotation
     torch.save(original, slot)
+    # The running slot is the explicit continuation parent in the new
+    # fail-closed contract. Bind the declaration's seed to those exact bytes.
+    shutil.copyfile(slot, seed)
     parent = tmp_path / 'peer.pt'
     shutil.copyfile(slot, parent)
     peer_declaration = tmp_path / 'peer.json'
@@ -172,11 +175,13 @@ def test_first_outer_saves_full_transition_before_readiness(tmp_path, monkeypatc
     rotation={'schema':'natlang.pending-batch-rotation/1','anchor_id':'train','anchor_binding':original['training']['source_row_bindings']['train'],'parent_checkpoint_sha256':ref(old)['sha256']}
     original['training']['options']['pending_batch_rotation']=rotation
     torch.save(original, slot)
+    shutil.copyfile(slot, seed)
     parent = tmp_path / 'peer.pt'
     shutil.copyfile(slot, parent)
     peer_declaration = tmp_path / 'peer.json'
     peer_declaration.write_text(json.dumps({'schema':'natlang.diloco-first-outer/1', 'worker':0,
         'parent':ref(parent), 'historical_outer_checkpoint':None, 'seed_sha256':ref(seed)['sha256'],
+        'rng_fork_seed':native_diloco.first_outer_rng_seed(ref(seed)['sha256'],0),
         'source_hash':original['training']['source_hash'], 'held_sha256':ref(paths['test'])['sha256']}))
     declaration = tmp_path / 'reanchor.json'
     declaration.write_text(json.dumps({'schema':'natlang.diloco-new-outer-manifest/1',
@@ -207,7 +212,10 @@ def test_first_outer_saves_full_transition_before_readiness(tmp_path, monkeypatc
             assert saved['training']['diloco']['local_steps'] == 0
             assert saved['training']['exposure_counts'] == original['training']['exposure_counts']
             assert same(saved['training']['optimizer'], original['training']['optimizer'])
-            assert same(saved['training']['rng'], original['training']['rng'])
+            assert not same(saved['training']['rng'], original['training']['rng'])
+            assert options['new_outer_reanchor']['rng_fork'] == {
+                'seed':native_diloco.first_outer_rng_seed(ref(seed)['sha256'],0),
+                'policy':'rank-derived-clone/1'}
             assert same(saved['backbone_state'], original['backbone_state'])
             assert same(saved['interface_state'], original['interface_state'])
             raise Ready()
