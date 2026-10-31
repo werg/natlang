@@ -59,3 +59,14 @@ test('function-typed slots hold live functions and live values dump by identity'
   assert.equal(coerce(when, parseType('Date'), new TypeEnv()), when);
   assert.match(JSON.stringify(dump({ when })), /"\$live":\{"type":"Date","id":\d+\}/);
 });
+
+test('integers beyond 2^53 are JS numbers in typed slots, as their inferred type says', async () => {
+  const { inferValueType } = await import('../dist/native/runtime.js');
+  // A row id parsed from JSON: JS holds the nearest double, and the typed boundary keeps exactly that double.
+  const rows = JSON.parse('[[1390763244713922561, "Joe", 3.5]]');
+  const type = parseType(inferValueType(rows));
+  assert.deepEqual(coerce(rows, type, new TypeEnv()), rows);
+  assert.equal(coerce(rows[0][0], parseType('number'), new TypeEnv()), rows[0][0]);
+  assert.deepEqual(coerce([569731104070115300], parseType('number[]'), new TypeEnv()), [569731104070115300]);
+  for (const bad of [Infinity, NaN]) assert.throws(() => coerce(bad, parseType('number'), new TypeEnv()), Reject);
+});

@@ -221,8 +221,9 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
     // unknown holds any value, as in TypeScript; code narrows it before relying on a shape.
     if (wanted.name === 'unknown' && raw !== undefined) return raw as Value;
     if ((wanted.name === 'string' || wanted.name === 'Blob') && typeof raw === 'string') return raw;
-    if (wanted.name === 'number' && typeof raw === 'number' && Number.isFinite(raw) &&
-        (!Number.isInteger(raw) || Number.isSafeInteger(raw))) return raw;
+    // A number is a JS number, as inferValueType and schemaOf declare it: an integer beyond 2^53 (a row id parsed
+    // from JSON) is the double JS already holds, so rejecting it here would lose nothing but the value.
+    if (wanted.name === 'number' && typeof raw === 'number' && Number.isFinite(raw)) return raw;
     if (wanted.name === 'boolean' && typeof raw === 'boolean') return raw;
     if (wanted.name === 'null' && raw === null) return null;
     if (wanted.name === 'Folder' && (raw instanceof Folder || raw instanceof FolderHandle)) return raw;
