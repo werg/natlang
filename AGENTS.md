@@ -10,6 +10,15 @@ insufficient. The qualified native Torch path includes3cc2556be. SGLang is a
 separate implementation: actor checkpoint attestation alone does not qualify
 its numerical equivalence. Use the qualified engine while repairing faster ones.
 
+Native CUDA BF16 matrix multiplication defaults to FP32 accumulation: reduced
+BF16 reduction changed identical-prefix logits and hybrid state when row geometry
+changed. Bind the actual reduction policy in actor and training identities;
+`NATLANG_BF16_REDUCTION=reduced` is an explicit historical-replay override, not a
+production default. The corrected checkpoint54 long forward/backward receipt
+covers all288 trainable parameters; a numerical certificate is not capability
+lift. Preserve reduced-arithmetic collections as historical data and never label
+them current-policy samples after a numerical-policy transition.
+
 An infrastructure wall timeout without an accepted final answer is unresolved,
 not a scored model failure or measured policy noise. Preserve raw observations
 and exact re-scoring history. Deterministic model request/token exhaustion remains
