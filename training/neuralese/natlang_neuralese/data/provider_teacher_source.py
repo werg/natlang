@@ -100,9 +100,42 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
                 raise ValueError("provider teacher target has multiple normalization bindings")
             target_adapter = candidate
     if target_adapter is None:
-        # Turns without a typed-state read still carry the action binding on the
-        # captured provider input receipt after normalized source conversion.
-        target_adapter = provider_context.get("target_binding_adapter")
+        # Most decisions in a captured episode have no Neuralese read, so their
+        # provider-action adapter lives only in the raw trajectory. Rebuild the
+        # adapter deterministically from that exact raw action and validate the
+        # same call/argument projection the corpus converter emitted.
+        model_response = source_turn.get("model_response") if isinstance(source_turn, dict) else None
+        raw_calls = model_response.get("raw_calls") if isinstance(model_response, dict) else None
+        if isinstance(raw_calls, list):
+            raw_action = {"role": "assistant", "content": (model_response.get("content") or ""),
+                          "raw_calls": raw_calls}
+            normalized_target = record.get("target")
+            normalized_sha = _sha(_canonical(normalized_target))
+            source_row_sha = source_ref.get("source_row_sha256")
+            normalized_calls = []
+            try:
+                for ordinal, raw_call in enumerate(raw_calls):
+                    function = (raw_call or {}).get("function") or {}
+                    arguments = function.get("arguments")
+                    if not isinstance(arguments, str):
+                        raise ValueError("provider raw action has no exact JSON arguments")
+                    parsed_arguments = json.loads(arguments)
+                    normalized_calls.append({"id": f"teacher_{index}_{ordinal}", "type": "function",
+                        "function": {"name": function.get("name"),
+                                    "arguments": json.dumps(parsed_arguments, ensure_ascii=False,
+                                        sort_keys=True, separators=(",", ":"))}})
+                reconstructed = {"role": "assistant", "content": raw_action["content"],
+                                 "tool_calls": normalized_calls}
+            except (TypeError, json.JSONDecodeError, ValueError):
+                reconstructed = None
+            target_adapter = {"schema": "natlang.provider-action-target-normalization/1",
+                "kind": "exact-raw-provider-calls-to-materialized-tool-calls",
+                "source_row_sha256": source_row_sha, "source_trajectory_index": index,
+                "raw_action": raw_action, "raw_action_sha256": _sha_value(raw_action),
+                "normalized_target": normalized_target, "normalized_target_sha256": normalized_sha,
+                "call_count": len((normalized_target or {}).get("tool_calls") or [])}
+            if reconstructed is None or _canonical(reconstructed) != _canonical(normalized_target):
+                target_adapter = None
     if (not isinstance(target_adapter, dict)
             or target_adapter.get("schema") != "natlang.provider-action-target-normalization/1"
             or target_adapter.get("source_row_sha256") != source_ref.get("source_row_sha256")

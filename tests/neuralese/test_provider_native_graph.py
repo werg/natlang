@@ -7,7 +7,8 @@ import pytest
 
 from test_native_serving_adapters import engine_fixture, run_native
 from natlang_neuralese.serve.engine import GenerationRequest
-from natlang_neuralese.data.provider_native_graph import native_graph_from_luna_capture
+from natlang_neuralese.data.provider_native_graph import (native_graph_from_luna_capture,
+                                                          native_graph_from_luna_episode)
 from natlang_neuralese.data.native_graph import graph_loss
 from natlang_neuralese.serve.teacher_source_receipt import validate_provider_teacher_source
 
@@ -120,29 +121,50 @@ def test_luna_text_source_replays_as_student_encoder_and_full_gradient_graph(tmp
             example.plan.invocations[2].imports[0].stop) == (1, 1 + len(blocks[0].block.token_ids))
     assert sum(example.target_weights) == len(capture["generated_inputs"])
 
+    prior_prompt = [{"role": "user", "content": "Earlier episode context."}]
+    prior_receipt = {**receipt, "source_turn_index": 4, "source_turn_sha256": "9" * 64,
+        "prompt_sha256": _sha(_canonical({"messages": prior_prompt, "tools": tools})),
+        "source_prompt_sha256": _sha(_canonical({"messages": prior_prompt, "tools": tools})),
+        "target_sha256": _sha(_canonical(target)), "typed_text_writes": []}
+    # This is a unit fixture for episode assembly: the previous capture's target
+    # tokens are reused with a plain prompt, never admitted as sampled data.
+    prior_capture = copy.deepcopy(capture)
+    prior_capture["teacher_source_receipt"] = prior_receipt
+    prior_capture["prompt"] = [{"kind": "tokens", "token_ids": [token for segment in capture["prompt"]
+        if segment.get("kind") == "tokens" for token in segment["token_ids"]]}]
+    prior_bundle = {"source_receipt": prior_receipt,
+        "capture": prior_capture, "native_identity": engine.native_identity,
+        "encoder_bindings": [], "encoder_states": []}
+    episode_row, episode = native_graph_from_luna_episode([bundle, prior_bundle])
+    assert [action["source_turn_index"] for action in episode_row["teacher_episode_actions"]] == [4, 5]
+    assert len(episode.plan.invocations) == 4
+    assert sum(weight > 0 for weight in episode.target_weights) == (
+        len(prior_capture["generated_inputs"]) + len(capture["generated_inputs"]))
+
     model = engine.shared_model
     for parameter in model.parameters():
         parameter.requires_grad_(True)
     with torch.no_grad():
         model.adapter.down.weight.normal_(std=0.02)
     def backward():
-        ids = torch.tensor([[token for node in example.plan.invocations for token in node.token_ids]],
+        ids = torch.tensor([[token for node in episode.plan.invocations for token in node.token_ids]],
                            device=next(model.parameters()).device)
         embeddings = model.embed(ids).detach().requires_grad_(True)
-        result = model(example.plan, embeddings=embeddings, retain_states=False)
+        result = model(episode.plan, embeddings=embeddings, retain_states=False)
         from natlang_neuralese.data.native_graph import graph_loss_from_result
-        loss, detail = graph_loss_from_result(model, example, result)
+        loss, detail = graph_loss_from_result(model, episode, result)
         embedding_gradient = torch.autograd.grad(loss, embeddings, retain_graph=True)[0]
-        reader_index = len(example.plan.invocations) - 1
-        for index, writer in enumerate(example.plan.invocations[:-1]):
-            writer_offset = example.plan.offsets[index]
+        reader_index = len(episode.plan.invocations) - 1
+        for index, writer in enumerate(episode.plan.invocations[:-2]):
+            writer_offset = episode.plan.offsets[index]
             writer_stop = writer_offset + len(writer.token_ids)
             assert embedding_gradient[:, writer_offset + 1:writer_stop - 1].norm() > 0
-        reader_offset = example.plan.offsets[reader_index]
+        reader_offset = episode.plan.offsets[reader_index]
         assert embedding_gradient[:, reader_offset:].norm() > 0
         loss.backward()
         grads = [parameter.grad for parameter in model.parameters() if parameter.grad is not None]
-        assert detail["supervised_tokens"] == len(capture["generated_inputs"])
+        assert detail["supervised_tokens"] == (len(capture["generated_inputs"])
+                                                 + len(prior_capture["generated_inputs"]))
         assert any(torch.isfinite(grad).all() and grad.norm() > 0 for grad in grads)
         assert model.adapter.up.weight.grad is not None and model.adapter.up.weight.grad.norm() > 0
         return loss.detach()
