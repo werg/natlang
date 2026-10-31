@@ -13,6 +13,7 @@ import { pureLiteralEvalReturn } from '../compiler/neuralese-conversion.js';
 import { deriveInlineActionSpanMap } from '../compiler/inline-action-spans.js';
 import { formatType, parseType, type Type } from '../native/types.js';
 import { writtenReturnResult } from '../native/pseudo-call.js';
+import { stagedResultBody } from '../native/staged-result.js';
 import { authenticateNativeXmlTurn } from '../model/native-xml-custody.js';
 
 // The materializer reads two explicitly identified source dialects: exact
@@ -438,7 +439,6 @@ function statusOnlySuccessProof(args: unknown, context: readonly Dict[], invocat
   // eval console output that merely imitates the notice. Earlier staged values remain in the
   // invocation across ordinary reads and unsuccessful evals, so inspect the whole current context
   // and bind its latest authentic staged eval to the successful action ledger.
-  const stagePattern = /(?:^|\n)Staged ([\s\S]+) as the result\. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result\. You can keep working and return a different value later\.$/;
   const stagedCandidates: { callId: string; output: string; event: Dict; linkage: 'tool-call-id' | 'unique-invocation-arguments-output' }[] = [];
   for (let outputIndex = 0; outputIndex < context.length; outputIndex++) {
     const message = context[outputIndex]!;
@@ -446,8 +446,8 @@ function statusOnlySuccessProof(args: unknown, context: readonly Dict[], invocat
     const stagedToolCallId = message.tool_call_id as string;
     const output = exactTranscriptText(message.content);
     if (output === undefined) continue;
-    const stage = stagePattern.exec(output);
-    if (!stage || stage[1]!.includes('<<cut off')) continue;
+    const stage = stagedResultBody(output);
+    if (stage === undefined || stage.includes('<<cut off')) continue;
     const producer = context.slice(0, outputIndex).reverse().find(candidate => candidate.role === 'assistant' &&
       Array.isArray(candidate.tool_calls) && (candidate.tool_calls as Dict[]).some(call => call.id === stagedToolCallId));
     const call = (producer?.tool_calls as Dict[] | undefined)?.find(item => item.id === stagedToolCallId);
@@ -465,9 +465,9 @@ function statusOnlySuccessProof(args: unknown, context: readonly Dict[], invocat
       // The runtime rewrites a single complete inline Neuralese literal to a block sentinel before eval.
       // Accept that one transformation only when the action call ID, staged notice, and execution graph
       // all identify the same exact typed block/body and producing eval turn.
-      return event.tool_call_id === stagedToolCallId && stage[1] !== undefined &&
+      return event.tool_call_id === stagedToolCallId &&
         transformedSoftEvalStageProof(stagedArgs, event.arguments, row, exactInvocationId, stagedToolCallId,
-          stage[1], event);
+          stage, event);
     });
     if (stagedEvents.length === 1) stagedCandidates.push({ callId: stagedToolCallId, output,
       event: stagedEvents[0]!, linkage: stagedEvents[0]!.tool_call_id === stagedToolCallId ?

@@ -37,6 +37,7 @@ import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { undeclaredServiceType } from './introspection.js';
 import { NATIVE_TOOL_SCHEMA } from './tool-surface.js';
 import { returnErrorText, returnValueRejection, type ReturnErrorText } from './return-errors.js';
+import { STAGED_RESULT_NOTICE } from './staged-result.js';
 import { TOOL_MARKUP } from './tool-markup.js';
 import type { Platform } from '../runtime/platform.js';
 
@@ -399,8 +400,8 @@ function typedJsonSource(value: Value): string | undefined {
 }
 
 /** What the model is told when a value is staged as the call's result. */
-const stagedMessage = (value: Value, liveIdentity?: (value: object) => number, untrusted?: UntrustedRegistry) => `\nStaged ${stagedText(value, liveIdentity, untrusted)} as the result. If this is the result of the task you were given and ` +
-  'you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. A JavaScript `return` in eval only stages this value; it does not end this invocation. To complete a child step or iteration transition, finish it now so its caller receives this state and continues. You can keep working and return a different value later only when more work belongs in this same invocation.';
+const stagedMessage = (value: Value, liveIdentity?: (value: object) => number, untrusted?: UntrustedRegistry) =>
+  `\nStaged ${stagedText(value, liveIdentity, untrusted)}${STAGED_RESULT_NOTICE}`;
 
 /** A staged value, in full when it is small, so it can be checked (and never needs retyping); long ones are cut by structure. */
 function stagedText(value: Value, liveIdentity?: (value: object) => number, untrusted?: UntrustedRegistry): string {

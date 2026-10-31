@@ -14,6 +14,7 @@ const [decisionReview, materializer, converter] = await Promise.all([
 const { nativeDecisionTargetDigest } = decisionReview;
 const { markAuthoredStaticReferencePending, materializeNativeRows, nativeRowDigest } = materializer;
 const { convertTrajectory } = converter;
+const { STAGED_RESULT_NOTICE } = await import(pathToFileURL(join(dist, 'native/staged-result.js')));
 const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
   value && typeof value === 'object' ? `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
     .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
@@ -255,9 +256,9 @@ test('folder.apply pseudo-return linkage rejects ambiguous or inconsistent evide
   }
 });
 
-test('status-only success requires a same-invocation linked staged typed result unless the return type is void', () => {
+for (const notice of ['recorded', 'current']) test(`status-only success requires a same-invocation linked staged typed result (${notice} notice) unless the return type is void`, () => {
   const stageCallId = 'stage-return';
-  const stagedText = 'Staged { answer: "ready" } as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.';
+  const stagedText = notice === 'current' ? `Staged { answer: "ready" }${STAGED_RESULT_NOTICE}` : 'Staged { answer: "ready" } as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.';
   const stageCall = { id: stageCallId, type: 'function', function: { name: 'eval', arguments: '{"code":"draft"}' } };
   const make = ({ withStage = true, linked = true, stageInvocation = 'same-invocation', returnType = '{ answer: string }',
     resultArgs = { status: 'success' }, stageOutput = stagedText, ledgerToolCallId = true, sampledToolCallId = stageCallId } = {}) => {
