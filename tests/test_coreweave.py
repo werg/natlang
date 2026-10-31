@@ -237,6 +237,9 @@ def test_directory_manifest_skips_space_reservations(tmp_path):
 
 
 def test_env_file_must_be_private_and_never_overrides(tmp_path, monkeypatch):
+    # These APIs mutate os.environ directly. Isolate their writes, including
+    # keys absent before the test (delenv alone cannot register those writes).
+    monkeypatch.setattr(os, 'environ', dict(os.environ))
     env = tmp_path / 'coreweave.env'
     env.write_text('export CWSANDBOX_API_KEY="secret-value"\nNATLANG_CW_BUCKET=natlang-cw\n')
     os.chmod(env, 0o644)
@@ -252,6 +255,7 @@ def test_env_file_must_be_private_and_never_overrides(tmp_path, monkeypatch):
 
 
 def test_coreweave_api_token_alias(monkeypatch):
+    monkeypatch.setattr(os, 'environ', dict(os.environ))
     monkeypatch.delenv('CWSANDBOX_API_KEY', raising=False)
     monkeypatch.setenv('COREWEAVE_API_TOKEN', 'tok')
     assert cwctl.api_key_name() == 'COREWEAVE_API_TOKEN'

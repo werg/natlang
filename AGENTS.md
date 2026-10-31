@@ -470,8 +470,9 @@ DiLoCo coordinator primary and replica run on dedicated CPU-only sandboxes, neve
 `resource_requests`/`cpu.max` on every new sandbox; a provider default is not a measured choice.
 Owner decision (2026-10-28): GPU sandboxes running inference engines (RL actors,
 evaluators, serving) request a CPU minimum of 8 cores. vLLM/SGLang were CPU-bound on
-the 2 CPUs an unconstrained request receives (GPU 13-68% busy). Learner sandboxes keep
-CPU unspecified; their GPU stays saturated on 2 CPUs with pre-tokenized shards.
+the 2 CPUs an unconstrained request receives (GPU 13-68% busy). The earlier
+CPU-unspecified learner recommendation was superseded by the 2026-10-29
+starvation/OOM findings above: learner defaults request 8 CPU and 64Gi RAM.
 
 Generation supply-chain supervision (engineering finding, 2026-10-23): monitor
 the actual generator, exporter and admission worker separately. A busy teacher

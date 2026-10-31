@@ -201,7 +201,7 @@ def test_runtime_resume_fingerprint_is_independent_of_checkout_path(tmp_path):
     assert a['observed_paths']!=b['observed_paths']
 
 
-def test_render_pending_runtime_continuation_preserves_old_builder_only_prefix():
+def test_current_renderer_rejects_historical_builder_only_continuation():
     from scripts.neuralese_data.build_acquired_full_session_graphs import (
         runtime_bindings, prove_render_pending_runtime_continuation)
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
@@ -214,9 +214,12 @@ def test_render_pending_runtime_continuation_preserves_old_builder_only_prefix()
     parent['runtime']['files']['builder']['sha256']=(
         'cf4346e17dcc2c9f4770e2d8fb142cf597563e6551b8d51329c5c224ba5aaf1b')
     parent['runtime']['fingerprint']=canonical_json_sha256_hex(parent['runtime']['files'])
-    witness=prove_render_pending_runtime_continuation(parent,current,350)
-    assert witness['parent_frontier']==350
-    assert witness['parent_binding_sha256']==canonical_json_sha256_hex(parent)
+    # The October 18 proof names one exact builder. Current serving-prompt /
+    # LFM3 re-encoding changed that builder, so unchanged source rows alone do
+    # not authorize reusing its old rendered prefix. Do not refresh the sealed
+    # historical proof merely to make a current-runtime fixture pass.
+    with pytest.raises(ValueError,match='syntax-repair continuation proof'):
+        prove_render_pending_runtime_continuation(parent,current,350)
     changed=copy.deepcopy(parent);changed['runtime']['files']['text_corpus']['sha256']='b'*64
     changed['runtime']['fingerprint']=canonical_json_sha256_hex(changed['runtime']['files'])
     with pytest.raises(ValueError,match='renderer dependency'):

@@ -138,6 +138,8 @@ def test_lfm3_templates_render_to_valid_jobs_and_run_file(tmp_path):
     render = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(render)
     values = {'placeholders': {'RUN_ID': 'lfm3-sft-diloco-test', 'PARENT': '/data/p/checkpoint.pt',
+                               'JOB_ID': 'lfm3-rl-test', 'LINEAGE': 'sd-test',
+                               'ROOT': '/work/rl', 'ROUNDS': '10',
                                'TRAINER_ARGS': ['--native-graphs', 'g', '--held-native-graphs', 'h', '--out', '/work/l'],
                                'COORDINATOR_BUNDLE': '/b/c.json', 'LEARNER_BUNDLE': '/b/l.json', 'RECIPE': 'r.json',
                                'STAGE': 's', 'EVAL_ID': 'lfm3-dev-eval-test', 'ACTOR_ID': 'lfm3-actor-test',
@@ -149,7 +151,7 @@ def test_lfm3_templates_render_to_valid_jobs_and_run_file(tmp_path):
     written = {path.name: json.loads(path.read_text()) for path in render.render(values, tmp_path)}
     learner = written['diloco-learner.job.json']
     assert learner['command'][3:] == ['--native-graphs', 'g', '--held-native-graphs', 'h', '--out', '/work/l']
-    assert learner['resources'] == {'gpu': 1, 'memory': '80Gi'} and learner['recovery']['keep'] == 2
+    assert learner['resources'] == {'gpu': 1, 'cpu': '8', 'memory': '80Gi'} and learner['recovery']['keep'] == 2
     run = written['diloco-sft.run.json']
     assert run['settings'] == {'run_id': 'lfm3-sft-diloco-test', 'workers': 2, 'local_steps': 128, 'wire_dtype': 'bf16'}
     assert run['learners']['job'] == str(tmp_path.resolve() / 'diloco-learner.job.json')
