@@ -156,7 +156,7 @@ def test_policy_automatically_submits_only_after_commit(tmp_path,monkeypatch):
             assert Path(path).is_file() and event['previous_preserved_until_replace']
             self.seen.append((Path(path).read_bytes(),state['training']['global_step']))
     record=Recorder();(tmp_path/'checkpoint-recovery-plan.json').write_text('{}')
-    monkeypatch.setattr(checkpoint_offload,'recovery_queue_for',lambda slot,plan:record)
+    monkeypatch.setattr(checkpoint_offload,'recovery_queue_for',lambda slot,plan,state=None:record)
     policy=CheckpointPolicy(tmp_path);policy.save({'training':{'global_step':3,'optimizer':{'x':1},'rng':{'x':1}}});policy.close()
     assert len(record.seen)==1 and record.seen[0][1]==3 and record.seen[0][0]
 
@@ -209,7 +209,9 @@ def test_real_policy_hook_exports_full_checkpoint_and_closure(tmp_path,monkeypat
         plan={'controller':{'state_path':str(controller),'config':bind(ce)},'schema':'natlang.local-full-recovery-plan/1','session':'integration','destination':destination,'journal_directory':str(out/'recovery'),'inputs':inputs,'closure':[{'role':role,**bind(path)} for role,path in [('sources',manifest),('sources',held),('sources',leaf),('controls',ce),('runtime',runtime),('environment',runtime),('system-python',runtime),('system-libraries',runtime),('node',runtime),('interpreter',runtime),('base',runtime),('tokenizer',runtime),('task-assets',runtime)]]}
         plan['restore']={'runtime_archive':str(runtime),'environment_archive':str(runtime),'system_python_archive':str(runtime),'base_path':str(tmp_path),'node_path':str(runtime),'interpreter_path':str(runtime),'sample_graph':str(leaf),'tokenizer_fingerprint':'a'*64,'asset_guard':str(ce),'asset_inventory':str(ce),'asset_archives':[{'env':'NATLANG_RL_TASK_ASSETS','original_root':str(tmp_path/'asset1'),'archive':str(runtime)},{'env':'NATLANG_RL_TASK_ASSETS_V3','original_root':str(tmp_path/'asset2'),'archive':str(runtime)}]}
         attach_qualification(plan,tmp_path/'qualification.json')
-        write_json_durable(out/'checkpoint-recovery-plan.json',plan);monkeypatch.setenv('NATLANG_REQUIRE_FULL_RECOVERY','1')
+        plan_path=out/'immutable-plan.json';write_json_durable(plan_path,plan);plan_ref={'path':str(plan_path),'sha256':sha(plan_path)}
+        write_json_durable(out/'checkpoint-recovery-plan.json',{'schema':'natlang.local-full-recovery-catalog/1','controller_config':bind(ce),'initial_plan':plan_ref,'plans':[plan_ref]})
+        monkeypatch.setenv('NATLANG_REQUIRE_FULL_RECOVERY','1');monkeypatch.setenv('NATLANG_RECOVERY_CONTROL_SHA',sha(ce))
         state={'training':{'global_step':3,'optimizer':{'slots':{'w':torch.tensor([1.0])}},'rng':{'seed':1},'source_row_bindings':{'row':'binding'},'held_row_bindings':{},'exposure_counts':{'row':2},'sft_progress':{},'source_receipts':[inputs['train']|{'sources':[bind(leaf)]},inputs['held']|{'sources':[bind(leaf)]}],'options':{'ce_supervision_policy_binding':inputs['ce'],'native_graphs':inputs['train']['path'],'foundation_native_graphs':inputs['foundation']['path'],'held_native_graphs':inputs['held']['path']}}}
         policy=CheckpointPolicy(out);policy.save(state);queue=policy.recovery_queue
         deadline=time.monotonic()+30
@@ -259,3 +261,35 @@ def test_restore_qualification_rejects_changed_restore_contract(setup):
     _,plan=setup;validate_restore_qualification(plan)
     plan['restore']['base_path']='/changed/base'
     with pytest.raises(ValueError,match='complete closure'):validate_restore_qualification(plan)
+
+
+def test_catalog_selects_actual_saved_source_without_early_promotion(setup,monkeypatch):
+    from natlang_neuralese.train.checkpoint_offload import _read_recovery_selection
+    slot,old=setup;oldpath=slot.parent/'old-plan.json';write_json_durable(oldpath,old);oldref={'path':str(oldpath),'sha256':sha(oldpath)}
+    new=json.loads(json.dumps(old));source=slot.parent/'new';source.write_bytes(b'new');ref={'path':str(source),'sha256':sha(source)}
+    new['inputs']['train']=new['inputs']['foundation']=ref;new['closure'].append({'role':'sources',**ref});new['restore']['sample_graph']=str(source);attach_qualification(new,slot.parent/'new-qualification.json')
+    newpath=slot.parent/'new-plan.json';write_json_durable(newpath,new);newref={'path':str(newpath),'sha256':sha(newpath)}
+    control=old['controller']['config'];catalog=slot.parent/'catalog.json';write_json_durable(catalog,{'schema':'natlang.local-full-recovery-catalog/1','controller_config':control,'initial_plan':oldref,'plans':[oldref,newref]})
+    monkeypatch.setenv('NATLANG_REQUIRE_FULL_RECOVERY','1');monkeypatch.setenv('NATLANG_RECOVERY_CONTROL_SHA',control['sha256'])
+    def state(plan):
+        i=plan['inputs'];return {'training':{'source_receipts':[i['train'],i['held']],'options':{'native_graphs':i['train']['path'],'foundation_native_graphs':i['foundation']['path'],'held_native_graphs':i['held']['path'],'ce_supervision_policy_binding':i['ce']}}}
+    assert _read_recovery_selection(catalog)['inputs']==old['inputs']
+    assert _read_recovery_selection(catalog,state(old))['inputs']==old['inputs']
+    assert _read_recovery_selection(catalog,state(new))['inputs']==new['inputs']
+    bad=state(new);bad['training']['source_receipts'][0]['sha256']='a'*64
+    with pytest.raises(ValueError,match='no unique'): _read_recovery_selection(catalog,bad)
+
+
+def test_resident_candidate_requires_qualified_matching_plan(setup, monkeypatch):
+    from natlang_neuralese.train import checkpoint_offload as offload
+    slot, plan = setup
+    path = slot.parent / 'catalog.json'
+    write_json_durable(path, plan)
+    checked = []
+    monkeypatch.setattr(offload, 'validate_recovery_plan_dependencies', lambda value: checked.append(value))
+    assert offload.require_recovery_candidate(path, plan['inputs']) == plan['restore_qualification']
+    assert checked == [plan]
+    inputs = dict(plan['inputs'], train={'path': '/unqualified', 'sha256': 'a' * 64})
+    with pytest.raises(ValueError, match='no unique staged recovery plan'):
+        offload.require_recovery_candidate(path, inputs)
+    assert checked == [plan]

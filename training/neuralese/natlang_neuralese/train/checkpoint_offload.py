@@ -828,7 +828,8 @@ def recovery_training_custody(state):
     if type(step) is not int:
         raise ValueError('recovery export requires an earned global step')
     from .native_continuation import collect_sft_progress
-    fields=('source_row_bindings','source_row_order','held_row_bindings','exposure_counts','required_visits')
+    fields=('source_row_bindings','source_row_order','held_row_bindings','exposure_counts','required_visits',
+            'cursor','epoch','step','global_step','source_hash')
     options=('withdrawal_history','pending_focus_history','fresh_source_frontier_history',
              '_required_visits','_objective_required_visits')
     frames=collect_sft_progress(training,borrow_frames=True)
@@ -1422,13 +1423,91 @@ class RecoveryExportQueue:
         self._owner.close()
 
 
-def recovery_queue_for(slot, plan_path):
-    """Share the default recovery owner across policies in the same process."""
-    path=Path(plan_path).resolve(strict=True)
+def _read_bound_recovery_bytes(reference):
+    if not isinstance(reference,dict) or set(reference)!={'path','sha256'}:
+        raise ValueError('invalid recovery plan reference')
+    path=Path(reference['path']).resolve(strict=True)
     before=path.stat();data=path.read_bytes();after=path.stat()
-    if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns):
-        raise ValueError('recovery plan changed while reading')
-    plan=json.loads(data)
+    identity=lambda st:(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns)
+    if identity(before)!=identity(after) or hashlib.sha256(data).hexdigest()!=reference['sha256']:
+        raise ValueError('recovery plan binding changed')
+    return data
+
+
+def _read_bound_recovery_json(reference):
+    return json.loads(_read_bound_recovery_bytes(reference))
+
+
+def _plan_matches_checkpoint(plan, state):
+    training=state.get('training') if isinstance(state,dict) else None
+    if not isinstance(training,dict):return False
+    receipts=training.get('source_receipts') or [];options=training.get('options') or {};inputs=plan.get('inputs') or {}
+    if len(receipts)<2:return False
+    for index,role in enumerate(('train','held')):
+        expected=inputs.get(role)
+        if not isinstance(expected,dict) or any(receipts[index].get(k)!=expected.get(k) for k in ('path','sha256')):
+            return False
+    if options.get('ce_supervision_policy_binding')!=inputs.get('ce'):return False
+    for key,role in (('native_graphs','train'),('foundation_native_graphs','foundation'),('held_native_graphs','held')):
+        ref=inputs.get(role);expected=ref.get('path') if isinstance(ref,dict) else None
+        if options.get(key)!=expected:return False
+    from .native_continuation import collect_sft_progress
+    declared={(x['kind'],x['path'],x['sha256']) for x in plan.get('additional_inputs',[])}
+    for role in ('train','foundation','held','ce'):
+        ref=inputs.get(role)
+        if isinstance(ref,dict):declared.add(('ce' if role=='ce' else 'source',ref['path'],ref['sha256']))
+    for frame in collect_sft_progress(training,borrow_frames=True).values():
+        for ref in frame.get('source_receipts') or []:
+            if ('source',ref.get('path'),ref.get('sha256')) not in declared:return False
+        saved=frame.get('options') or {};ce=saved.get('ce_supervision_policy_binding')
+        if ce and ('ce',ce.get('path'),ce.get('sha256')) not in declared:return False
+        foundation=saved.get('foundation_native_graphs')
+        if foundation and not any(kind=='source' and path==foundation for kind,path,_ in declared):return False
+    return True
+
+
+def _read_recovery_catalog(plan_path):
+    path=Path(plan_path).resolve(strict=True);before=path.stat();data=path.read_bytes();after=path.stat()
+    identity=lambda st:(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns)
+    if identity(before)!=identity(after):raise ValueError('recovery plan catalog changed while reading')
+    document=json.loads(data)
+    if document.get('schema')!='natlang.local-full-recovery-catalog/1':
+        if os.environ.get('NATLANG_REQUIRE_FULL_RECOVERY')=='1':
+            raise ValueError('required full recovery needs an immutable plan catalog')
+        return [document],0
+    references=document.get('plans');initial=document.get('initial_plan');control=document.get('controller_config')
+    if (not isinstance(references,list) or not references or initial not in references
+            or not isinstance(control,dict) or set(control)!={'path','sha256'}
+            or os.environ.get('NATLANG_RECOVERY_CONTROL_SHA')!=control['sha256']):
+        raise ValueError('recovery catalog lacks its exact active controller binding')
+    _read_bound_recovery_bytes(control)
+    plans=[_read_bound_recovery_json(ref) for ref in references]
+    for plan in plans:
+        validate_recovery_plan_shape(plan)
+        if plan['controller']['config']!=control:raise ValueError('recovery catalog mixes controller identities')
+    return plans,references.index(initial)
+
+
+def _read_recovery_selection(plan_path, state=None):
+    plans,initial=_read_recovery_catalog(plan_path)
+    if state is None:return plans[initial]
+    matches=[plan for plan in plans if _plan_matches_checkpoint(plan,state)]
+    if len(matches)!=1:raise ValueError('saved checkpoint has no unique restore-qualified recovery plan')
+    return matches[0]
+
+
+def require_recovery_candidate(plan_path, inputs):
+    """Require a closed staged plan without selecting it for an older checkpoint."""
+    plans,_=_read_recovery_catalog(plan_path)
+    matches=[plan for plan in plans if plan.get('inputs')==inputs]
+    if len(matches)!=1:raise ValueError('resident source has no unique staged recovery plan')
+    validate_recovery_plan_dependencies(matches[0])
+    return matches[0]['restore_qualification']
+
+
+def recovery_queue_for(slot, plan_path, state=None):
+    """Select by actual saved inputs; staged catalog entries are never promoted early."""
+    plan=_read_recovery_selection(plan_path,state)
     key=str(Path(slot).resolve())
     with _RECOVERY_QUEUES_GUARD:
         queue=_RECOVERY_QUEUES.get(key)

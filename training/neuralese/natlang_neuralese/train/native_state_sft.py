@@ -3573,6 +3573,19 @@ def _main(argv=None, *, requested_refresh):
                 pending_role_contract = {}
                 def resident_candidate_check(candidate_train,candidate_held,payload,candidate_ce,declarations):
                     nonlocal last_saved_step, metadata_dirty
+                    if policy.recovery_queue is not None:
+                        from .checkpoint_offload import require_recovery_candidate
+                        from .native_resident import ResidentRetry, physical
+                        roles=physical(payload['plan']['stage_inputs'][args.stage_id])
+                        def recovery_ref(value):
+                            return {key:value[key] for key in ('path','sha256')} if value is not None else None
+                        candidate_inputs={'train':recovery_ref(roles['native_graphs']),
+                            'foundation':recovery_ref(roles.get('foundation_native_graphs')),
+                            'held':recovery_ref(roles['held_native_graphs']),
+                            'ce':recovery_ref(roles.get('ce_supervision_policy'))}
+                        try:require_recovery_candidate(policy.recovery_plan,candidate_inputs)
+                        except (ValueError,OSError,KeyError,TypeError) as error:
+                            raise ResidentRetry('resident source awaits its exact restore-qualified recovery plan: '+str(error)) from error
                     checked = packed_candidate_check(candidate_train,candidate_held,payload,candidate_ce,declarations) if args.memory_qualification and objective is None else None
                     if diloco is not None and getattr(diloco,'contract_sha256',None) is not None:
                         from .native_resident import ResidentRetry

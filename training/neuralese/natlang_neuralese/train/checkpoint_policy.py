@@ -262,7 +262,7 @@ class CheckpointPolicy:
     def _after_save(self, state, event, *, metric, higher_is_better):
         if self.recovery_queue is not None:
             from .checkpoint_offload import recovery_queue_for
-            self.recovery_queue = recovery_queue_for(self.slot, self.recovery_plan)
+            self.recovery_queue = recovery_queue_for(self.slot, self.recovery_plan, state)
             self.recovery_queue.submit(self.slot, state, event)
             event['full_recovery'] = 'queued-not-yet-independently-verified'
         if self.on_saved is not None:
