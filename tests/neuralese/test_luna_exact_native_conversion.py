@@ -84,4 +84,10 @@ def test_protected_runtime_input_closure_requires_complete_pool_seal(tmp_path):
     module.chmod(0o444)
     bound_source.write_text("changed source bytes\n")
     with pytest.raises(ValueError, match="bound source input changed"):
-        _protected_runtime_binding(runtime, receipt_runtime)
+        immutable_native_runtime_tree(runtime)
+    bound_source.write_text("reviewed source bytes\n")
+    module.chmod(0o644)
+    module.write_text('export function nativeRowDigest(_row) { return "b".repeat(64); }\n')
+    module.chmod(0o444)
+    with pytest.raises(ValueError, match="absent from its declared pool"):
+        immutable_native_runtime_tree(runtime)

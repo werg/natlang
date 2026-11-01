@@ -4,7 +4,7 @@ import json
 import os
 import hashlib
 import stat
-from .hashing import sha256_file_hex
+from .hashing import sha256_file_hex, sha256_file_hex_cached
 
 
 _DEPENDENCY_RECEIPT = 'runtime-dependencies.json'
@@ -415,7 +415,7 @@ def immutable_native_runtime_tree(path, *, verify_bound_inputs=True):
                 raise ValueError('native runtime has malformed or duplicate bound inputs')
             seen.add(item['path'])
             source = Path(item['path']).resolve(strict=True)
-            if sha256_file_hex(source) != item['sha256']:
+            if sha256_file_hex_cached(source, trust_archive_receipt=False) != item['sha256']:
                 raise ValueError('native runtime bound source input changed: ' + str(source))
     pool_path = storage.get('pool')
     pool = Path(pool_path).resolve(strict=True) if isinstance(pool_path, str) and Path(pool_path).is_dir() else None
@@ -453,7 +453,7 @@ def immutable_native_runtime_tree(path, *, verify_bound_inputs=True):
             mode = stat.S_IMODE(info.st_mode)
             if mode & 0o222:
                 raise ValueError('native runtime contains a writable file: ' + relative)
-            digest = sha256_file_hex(item)
+            digest = sha256_file_hex_cached(item, trust_archive_receipt=False)
             if pool is not None:
                 blob = pool / digest[:2] / f'{digest}.{mode:o}'
                 try:
