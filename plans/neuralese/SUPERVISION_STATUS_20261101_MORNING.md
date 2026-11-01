@@ -16,9 +16,12 @@ This section supersedes the instantaneous observations below.
   without confusing it with the immediate57→61 parent/update delta. Exact
   evidence: `ops/publication61-1101/publication61.json`.
 - Real next on-policy round11 launched as
-  `lfm3-onpolicy61-307946-1101.service`, frozen
+  `lfm3-onpolicy61-307946-v2-1101.service`, frozen
   `runtime-next61-1de6db-1101`, HIGH76GB ledger, one policy round. Actor weights
-  loaded; full-prompt collection initializes from actual61. Launch/config is
+  loaded; full-prompt collection is producing fresh actual61 model replies.
+  The first launch refused an imported checkout helper before any rollout;
+  v2 uses the frozen runtime as actual ledger workdir and exact session custody
+  now succeeds. Launch/config is
   `ops/next61-onpolicy-307946-1101/config.json`. A launch is not an RL update.
   The stale root `sd-r1/config.json` remains unsuitable for resumption.
 - Prepared and bound successor recipe contains307946 graphs: actual298509
@@ -42,7 +45,10 @@ This section supersedes the instantaneous observations below.
   one infrastructure-wall unresolved case. Both are ineligible for a full score;
   unresolved is not a model failure. Fresh zero-exposure instruction-baseline
   evaluation is now actually running on Pop. Future matched completion needs
-  a larger nonbinding wall allowance, preserving original observations.
+  a larger nonbinding wall allowance, preserving original observations. A new
+  case0-only rerun for0/52/57 with7200s allowance and unchanged count limits is
+  queued behind the baseline via Pop's actual ledger waiter
+  `natlang-matched-case0-longwall-1101-waiter.service`; no duplicate actor runs.
 - Four reviewed medium-Luna NLIv16 workflow workers actually ran; slots01/03
   completed outputs and02/04 were still live at the last check. Full-graph
   quality and actual Sol judgment must be checked before positive admission.

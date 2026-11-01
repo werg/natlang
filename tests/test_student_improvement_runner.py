@@ -46,9 +46,19 @@ def server(replies):
 
 def test_frozen_round_collects_and_admits_teacher_repair(tmp_path, monkeypatch):
     monkeypatch.setattr('scripts.create_student_improvement_pipeline.current_improvement_turns', lambda repo: [])
-    repo = Path(__file__).resolve().parents[1]
+    source_repo = Path(__file__).resolve().parents[1]
+    # Discovery writes inventory snapshots. Exercise the real collectors/builds
+    # against fixture inputs without scanning or replacing the production catalog.
+    repo = tmp_path / 'fixture-repo'
+    repo.mkdir()
+    for name in ('ts-host', 'scripts'):
+        (repo / name).symlink_to(source_repo / name, target_is_directory=True)
+    (repo / 'training').mkdir()
+    (repo / 'training/data_sources.json').write_text(json.dumps({
+        'decisions': [], 'replacements': {}, 'required_default_inputs': []}))
     base_config = recipe(repo, python=sys.executable, teacher_results_override=[],
                          verified_turns_override=[], static_bundle=False)
+    assert Path(base_config['data_inventory']['report']).is_relative_to(repo)
     base_recipe = tmp_path / 'base-recipe.json'
     base_recipe.write_text(json.dumps(base_config))
     base_run = tmp_path / 'base-run'

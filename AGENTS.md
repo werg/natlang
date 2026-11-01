@@ -1134,6 +1134,13 @@ afterwards. The rules below are consequences of this one.
 
 # Working practice on shared machines
 
+- Frozen runtime launches use that runtime as their actual ledger `--workdir`,
+  as well as binding `NATLANG_REPO` and `PYTHONPATH`. Python's initial cwd can
+  otherwise import the canonical checkout's regular `scripts` package ahead
+  of the frozen helper closure. On2026-11-01 the collector correctly refused
+  this mixed process-custody helper before any rollout; changing only runtime
+  environment metadata was insufficient. Preserve the refusal and fix launch
+  ownership rather than weakening exact helper checks.
 - DGX launch environments are explicit: project/data tests use
   `/home/werg/natlang/.venv-neuralese/bin/python`; CoreWeave SDK orchestration
   uses `/home/werg/.local/share/natlang/cw-venv/bin/python`. Pass
