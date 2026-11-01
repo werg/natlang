@@ -13,6 +13,7 @@ from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
 from natlang_neuralese.train.native_continuation import collect_sft_progress
 from natlang_neuralese.train.native_supervision import ce_policy_dependencies
 from natlang_neuralese.train.recipe import native_source_dependencies,recipe_file_dependencies
+from natlang_neuralese.model.native_model import _checkpoint_bound_config_inventory
 
 
 def ldd_files(path):
@@ -35,6 +36,11 @@ def mapped_executables(pid):
             value=Path(parts[-1])
             if value.is_file():output.add(str(value.resolve()))
     return output
+
+
+def checkpoint_base_files(base,state):
+    return _checkpoint_bound_config_inventory(
+        base,(state.get('model_config') or {}).get('base_inventory'),state.get('backbone_state'))
 
 
 def build(args):
@@ -91,11 +97,13 @@ def build(args):
     base=Path(config['base']).resolve(strict=True)
     if options.get('base') and Path(options['base']).resolve(strict=True)!=base:
         raise ValueError('controller template and checkpoint base differ')
-    for directory,dirs,files in os.walk(base,followlinks=False):
-        dirs.sort();files.sort()
-        for name in files:
-            p=Path(directory)/name
-            if p.is_file():add(p,'base',logical=True);add(p,'tokenizer',logical=True)
+    # A full native checkpoint supplies the actual backbone weights.  The
+    # production loader validates its pinned inventory against these small
+    # config/tokenizer inputs before restoring the saved backbone state.
+    local_inventory=checkpoint_base_files(base,state)
+    for name,digest in sorted(local_inventory.items()):
+        p=base/name
+        add(p,'base',digest,logical=True);add(p,'tokenizer',digest,logical=True)
     node=Path(args.node).resolve(strict=True);interpreter=Path(args.interpreter).resolve(strict=True)
     add(node,'node');add(interpreter,'interpreter')
     for path in sorted(ldd_files(node)|ldd_files(interpreter)|mapped_executables(args.trainer_pid)):
