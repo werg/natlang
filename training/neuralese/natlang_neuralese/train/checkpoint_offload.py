@@ -1298,6 +1298,8 @@ class RecoveryExportQueue:
                 raise ValueError('recovery plan lacks a carried SFT foundation root')
         if not required <= available:
             raise ValueError('recovery closure omits actual source or CE dependencies')
+        if active_plan['sft_static_contract']!=recovery_static_sft_contract(training):
+            raise ValueError('recovery checkpoint static SFT contract differs from plan')
         step = training.get('global_step')
         if type(step) is not int:
             raise ValueError('recovery export requires an earned global step')

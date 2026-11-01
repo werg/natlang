@@ -244,11 +244,13 @@ def test_rl_leaf_keeps_carried_sft_source_and_ce_custody(setup):
     rl=slot.parent/'rollout.jsonl';rl.write_text('{}\n');rlref={'path':str(rl),'sha256':sha(rl)}
     plan['inputs']['train']=rlref;plan['inputs']['foundation']=None;plan['closure'].append({'role':'sources',**rlref})
     plan['additional_inputs']=[{'kind':'source',**old}]
-    attach_qualification(plan,slot.parent/'qualification.json')
-    q=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda plan:None,checkpoint_validator=lambda path,custody:None)
     frame={'source_receipts':[old,held], 'options':{'foundation_native_graphs':old['path'],'ce_supervision_policy_binding':ce},'source_row_bindings':{'old':'binding'},'exposure_counts':{'old':2}}
     state={'training':{'global_step':5,'optimizer':{'x':1},'rng':{'x':1},'source_receipts':[rlref,held],
                        'options':{'native_graphs':rlref['path'],'foundation_native_graphs':None,'held_native_graphs':held['path'],'ce_supervision_policy_binding':ce},'sft_progress':{'joint':frame}}}
+    from natlang_neuralese.train.checkpoint_offload import recovery_static_sft_contract
+    plan['sft_static_contract']=recovery_static_sft_contract(state['training'])
+    attach_qualification(plan,slot.parent/'qualification.json')
+    q=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda plan:None,checkpoint_validator=lambda path,custody:None)
     q.submit(slot,state,{'previous_preserved_until_replace':True});assert q.state['inflight']['custody']['sft_frames_sha256']['joint']
     assert q._export_one();q.close()
     plan['additional_inputs']=[];attach_qualification(plan,slot.parent/'qualification.json')
@@ -398,3 +400,21 @@ def test_recovery_plan_cannot_omit_static_contract(setup):
     _,plan=setup;plan.pop('sft_static_contract')
     with pytest.raises(ValueError,match='static SFT contract'):
         validate_recovery_plan_shape(plan)
+
+
+def test_direct_queue_submit_rejects_changed_static_quota(setup):
+    from natlang_neuralese.train.checkpoint_offload import recovery_static_sft_contract
+    slot,plan=setup
+    frame={'source_row_bindings':{},'required_visits':{'row':1},'options':{},'source_receipts':[]}
+    state={'training':{'global_step':4,'optimizer':{'m':1},'rng':{'r':1},
+        'source_receipts':[plan['inputs']['train'],plan['inputs']['held']],
+        'options':{'native_graphs':plan['inputs']['train']['path'],
+                   'foundation_native_graphs':plan['inputs']['foundation']['path'],
+                   'held_native_graphs':plan['inputs']['held']['path'],
+                   'ce_supervision_policy_binding':plan['inputs']['ce']},'sft_progress':{'joint':frame}}}
+    plan['sft_static_contract']=recovery_static_sft_contract(state['training']);attach_qualification(plan,slot.parent/'qualification.json')
+    q=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda plan:None,checkpoint_validator=lambda path,custody:None)
+    frame['required_visits']['row']=2
+    with pytest.raises(ValueError,match='static SFT contract'):
+        q.submit(slot,state,{'previous_preserved_until_replace':True})
+    assert not q.pin.exists();q.close()
