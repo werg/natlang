@@ -3,9 +3,11 @@ numeric questions over a financial report's text and table (relative tolerance 0
 items whose upstream answer string and executed program value disagree are dropped as noisy)."""
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
+from pathlib import Path
 
 from ..common import SOURCES_DIR, make_case, pick, text_digest
 
@@ -158,9 +160,32 @@ def _tatqa_number(text):
     return _plain_number(t)
 
 
+def _tatqa_rights():
+    """Resolve the dataset license from the pinned upstream README, not the repo-code LICENSE."""
+    root = Path(f'{BASE}/tatqa')
+    manifest = root / 'PROVENANCE.json'
+    rights_path = root / 'RIGHTS_REVIEW.json'
+    evidence_path = root / 'README.upstream-870accc.md'
+    rights = json.loads(rights_path.read_text(encoding='utf-8'))
+    manifest_sha = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    evidence_sha = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+    if (rights.get('schema') != 'natlang.dataset-rights-correction/1' or
+            rights.get('dataset_revision') != '870accc41953dcde885aabeb963d94aabdc0fbc3' or
+            rights.get('original_manifest_sha256') != manifest_sha or
+            rights.get('license_evidence_sha256') != evidence_sha or
+            rights.get('dataset_license') != 'CC-BY-4.0' or
+            rights.get('license_status') != 'cleared'):
+        raise ValueError('TAT-QA rights correction or pinned dataset-license evidence changed')
+    note = (f"TAT-QA dataset licensed CC BY 4.0 per upstream README at {rights['dataset_revision']} "
+            f"(SHA-256 {evidence_sha}); cite Zhu et al., ACL-IJCNLP 2021, DOI 10.18653/v1/2021.acl-long.254. "
+            "Train-only task transformation preserves context source groups and does not use held answers.")
+    return rights['dataset_license'], rights['dataset_revision'], note
+
+
 def tatqa(cap_train=1500, cap_eval=150, seed=20261031):
     import ast
     out = []
+    dataset_license, dataset_revision, license_note = _tatqa_rights()
     for split, path in (('train', 'train'), ('validation', 'dev'), ('validation', 'test_gold')):
         contexts = [json.loads(line) for line in open(f'{BASE}/tatqa/{path}.jsonl')]
         random.Random(seed).shuffle(contexts)
@@ -201,8 +226,9 @@ def tatqa(cap_train=1500, cap_eval=150, seed=20261031):
                     root_name='answer_from_report', args={'question': 'string', 'table': 'string[][]', 'paragraphs': 'string[]'},
                     returns=returns, instruction=pick(TATQA_INSTRUCTIONS, q['uid']),
                     inputs={'question': q['question'], 'table': table, 'paragraphs': paragraphs}, expected=expected,
-                    oracle=oracle, level=2 if kind == 'arithmetic' else 1, license_='MIT', domain='relational',
-                    wrong=wrong, aliases=aliases, revision='', difficulty=q.get('scale') or None))
+                    oracle=oracle, level=2 if kind == 'arithmetic' else 1, license_=dataset_license,
+                    license_note=license_note, domain='relational',
+                    wrong=wrong, aliases=aliases, revision=dataset_revision, difficulty=q.get('scale') or None))
                 n += 1
             if n >= cap:
                 break

@@ -23,6 +23,7 @@ finqa numeric:finqa
 mbpp code:mbpp
 wikitablequestions tables:wtq
 databench tables:databench
+# TAT-QA dataset is CC BY 4.0; pinned README correction in acquired-source RIGHTS_REVIEW.json.
 tatqa numeric:tatqa
 hybridqa multihop:hybridqa
 triviaqa multihop:triviaqa
