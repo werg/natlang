@@ -241,7 +241,8 @@ def test_sampled_actor_profile_overrides_future_seed_profile_in_actual_stage_cli
     assert seed_args[seed_args.index('--history-reasoning-policy')+1]==future
     assert rl_args[rl_args.index('--history-reasoning-policy')+1]==sampled
     seen={}
-    def admit(args,trainer):
+    def admit(args,trainer,*,operation_request):
+        assert operation_request['input_bindings']['rollouts']
         seen.update(profile=args.history_reasoning_policy,sha=args.history_reasoning_binding_sha256,
                     path=args.history_reasoning_binding_path,trainer=trainer)
         tokenizer=AutoTokenizer.from_pretrained(actual['tokenizer'],local_files_only=True)
@@ -252,6 +253,8 @@ def test_sampled_actor_profile_overrides_future_seed_profile_in_actual_stage_cli
             expected_binding_sha256=args.history_reasoning_binding_sha256,
             expected_binding_path=args.history_reasoning_binding_path)
     monkeypatch.setattr(native_stage,'_admit_and_train',admit)
+    (tmp_path/'rollouts.jsonl').write_text('{"id":"history-policy-fixture"}\n')
+    (tmp_path/'held.jsonl').write_text('{"id":"held-history-policy-fixture"}\n')
     command=['--rollouts',str(tmp_path/'rollouts.jsonl'),'--rl-tokenizer',actual['tokenizer'],
         '--continue-from',str(checkpoint),'--held-native-graphs',str(tmp_path/'held.jsonl'),
         '--out',str(tmp_path/'learner')]

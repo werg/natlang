@@ -27,7 +27,7 @@ assert.equal(parent.lam.return,'t7');
 const turns=recorder.nativeTurns();assert.equal(turns.length,3);
 assert.equal(turns[0].native.sampling.protocol_failure.code,'neuralese-native-state-close');
 assert.equal(turns[0].native.sampling.writes.length,1);
-assert.ok(turns[1].messages.some(message=>typeof message.content==='string'&&message.content.includes('incomplete or misplaced native-state delimiter')));
+assert.ok(turns[1].messages.some(message=>typeof message.content==='string'&&message.content.includes(turns[0].native.sampling.protocol_failure.code)));
 for(const turn of turns)for(const write of turn.native.sampling.writes)assert.ok(await store.getNativeState(write.state_id));
 const graph=[...recorder.graphNodes.values()];
 assert.equal(graph.filter(node=>node.kind==='model_turn').length,3);

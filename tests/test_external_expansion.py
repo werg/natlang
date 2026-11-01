@@ -410,7 +410,9 @@ def test_native_replay_disambiguates_reused_upstream_ids(tmp_path):
     subprocess.run([node,str(root/'ts-host/scripts/inline-curriculum/replay-port-record-calls.mjs'),str(ir),str(tmp_path/'replayed')],check=True,capture_output=True)
     summary=json.loads((tmp_path/'replayed.summary.json').read_text())
     assert summary['admitted']==1 and not summary['omitted']
-    row=json.loads((tmp_path/'replayed.rows.jsonl').read_text())
+    import zstandard
+    with zstandard.open(tmp_path/'replayed.rows.jsonl.zst', 'rt') as stream:
+        row=json.loads(stream.read())
     assert json.loads(row['outcome']['files']['answers.json'])=={'item-01':'FIRST ANSWER','item-02':'SECOND ANSWER'}
     subprocess.run([node,str(root/'ts-host/scripts/inline-curriculum/build-port-record-calls.mjs'),'--input',str(source),'--out',str(tmp_path/'separate'),'--reservations',str(reservations),'--items','1'],check=True,capture_output=True)
     separate=[json.loads(line) for line in next((tmp_path/'separate/fixture').glob('*.ir.jsonl')).read_text().splitlines()]

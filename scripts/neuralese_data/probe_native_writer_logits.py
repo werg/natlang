@@ -61,7 +61,7 @@ def main():
     p.add_argument('--expected-checkpoint',required=True);p.add_argument('--actor-receipt',required=True);p.add_argument('--output',required=True)
     p.add_argument('--device',default='cuda');p.add_argument('--prefill-tokens',type=int,default=8192)
     p.add_argument('--perturb-private-prefix',action='store_true');a=p.parse_args()
-    from natlang_neuralese.serve import load_native_engine
+    from natlang_neuralese.serve import load_native_engine, configure_native_prefix_cache
     data=Path(a.turns).read_bytes();turns=json.loads(data)
     turn=next(t for t in turns if t.get('native',{}).get('sampling',{}).get('protocol_failure'))
     capture=turn['native']['sampling']
@@ -69,6 +69,9 @@ def main():
     engine=load_native_engine(a.checkpoint,device=a.device,prefill_tokens=a.prefill_tokens)
     if engine.native_identity != capture['policy']: raise ValueError('loaded actor identity differs from recorded policy')
     actor=json.loads(Path(a.actor_receipt).read_text())['info']
+    cache=actor.get('serving_config',{}).get('prefix_cache')
+    if cache is not None:
+        configure_native_prefix_cache(engine,cache['budget_bytes']/2**30,cache['block_tokens'])
     if engine.serving_config != actor.get('serving_config'):
         raise ValueError('loaded serving configuration differs from recorded actor')
     with torch.inference_mode():
