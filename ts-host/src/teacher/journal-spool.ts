@@ -61,17 +61,38 @@ async function withRegistryLock<T>(root: string, body: () => Promise<T>): Promis
   }
 }
 
-async function treeBytes(path: string): Promise<number> {
-  let total = 0;
-  const walk = async (dir: string): Promise<void> => {
-    for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
-      const child = join(dir, entry.name);
-      if (entry.isDirectory()) await walk(child);
-      else if (entry.isFile()) total += (await stat(child)).size;
+export async function treeBytes(path: string, io: {
+  readdir: typeof readdir;
+  stat: typeof stat;
+} = { readdir, stat }): Promise<number> {
+  let lastRace: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let total = 0;
+    const walk = async (dir: string): Promise<void> => {
+      let entries;
+      try { entries = await io.readdir(dir, { withFileTypes: true }); }
+      catch (error) {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') throw error;
+        throw error;
+      }
+      for (const entry of entries) {
+        const child = join(dir, entry.name);
+        if (entry.isDirectory()) await walk(child);
+        else if (entry.isFile()) total += (await io.stat(child)).size;
+      }
+    };
+    try {
+      await walk(path);
+      return total;
+    } catch (error) {
+      // A different case can atomically rename a spool temp file after this
+      // scan sees its old name. Retry the entire aggregate so the final name
+      // is counted. Other I/O errors stay fail-closed.
+      if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'ENOENT') throw error;
+      lastRace = error;
     }
-  };
-  await walk(path);
-  return total;
+  }
+  throw new Error('journal spool tree changed during all three aggregate-size scans', { cause: lastRace });
 }
 
 export type JournalSpool = {

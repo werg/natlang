@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { acquireJournalSpool, JOURNAL_SPOOL_CASE_LIMIT } from '../dist/teacher/journal-spool.js';
+import { acquireJournalSpool, JOURNAL_SPOOL_CASE_LIMIT, treeBytes } from '../dist/teacher/journal-spool.js';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 
@@ -48,4 +48,24 @@ test('journal spool fails closed on altered bytes and preserves interrupted data
     await assert.rejects(() => spool.publish([{ source, destination, sha256: digest('different bytes') }]), /changed before publication/);
     assert.equal(await readFile(source, 'utf8'), 'actual bytes');
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('aggregate spool scan tolerates a temp file atomically renamed by another case', async () => {
+  const root = '/virtual-spool';
+  const dirent = (name, kind) => ({ name, isDirectory: () => kind === 'directory', isFile: () => kind === 'file' });
+  const vanished = Object.assign(new Error('renamed during scan'), { code: 'ENOENT' });
+  let renamed = false, caseDirectoryScans = 0;
+  const bytes = await treeBytes(root, {
+    readdir: async path => path === root ? [dirent('cases', 'directory'), dirent('stable.json', 'file')] :
+      path === `${root}/cases` ? [dirent('case-a', 'directory')] : (() => {
+        caseDirectoryScans++;
+        return [dirent(renamed ? 'published.partial.json' : 'temporary.partial.json.tmp-123', 'file')];
+      })(),
+    stat: async path => {
+      if (path.endsWith('temporary.partial.json.tmp-123')) { renamed = true; throw vanished; }
+      return { size: path.endsWith('stable.json') ? 17 : 7 };
+    },
+  });
+  assert.equal(bytes, 24);
+  assert.equal(caseDirectoryScans, 2, 'a missing temporary entry triggers one full aggregate rescan');
 });
