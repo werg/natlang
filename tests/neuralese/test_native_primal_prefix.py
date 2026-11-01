@@ -11,6 +11,16 @@ from natlang_neuralese.train.native_state_sft import pack_native_graphs
 from natlang_neuralese.train.native_prefix_packing import communication_primal_rows
 
 
+def test_update_diagnostic_reports_exact_mismatches_and_bf16_adjacency():
+    from diagnose_primal_update_equivalence import differences
+    a=torch.tensor([1.,2.],dtype=torch.bfloat16)
+    b=torch.tensor([1.,2.],dtype=torch.bfloat16)
+    b[1]=torch.nextafter(b[1],torch.tensor(float('inf'),dtype=b.dtype))
+    result=differences({'weight':a},{'weight':b})
+    assert len(result)==1 and result[0]['count']==result[0]['adjacent']==1
+    assert differences({'weight':a},{'weight':a.clone()})==[]
+
+
 @pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
 def test_cuda_primal_reuse_retains_every_original_occurrence_gradient(family,dtype,monkeypatch):
