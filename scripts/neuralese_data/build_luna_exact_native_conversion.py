@@ -310,6 +310,8 @@ def build(*, provider_source: Path, plan_path: Path, decisions_path: Path,
 
 
 def main():
+    from scripts.neuralese_data.provider_execution_runtime import require_frozen_provider_runtime
+    require_frozen_provider_runtime(ROOT)
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("provider-source", "plan", "decisions", "decision-receipt", "protection", "task-id", "output-dir"):
         parser.add_argument("--" + name, required=True)

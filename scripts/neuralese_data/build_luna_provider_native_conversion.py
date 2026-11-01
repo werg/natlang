@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training/neuralese"))
 from natlang_neuralese.common.hashing import sha256_hex
 from natlang_neuralese.common.jsonio import canonical_json_bytes
@@ -219,6 +220,8 @@ def build(raw_path, decisions_path, provider_source_path, plan_path, runtime_pat
 
 
 def main():
+    from scripts.neuralese_data.provider_execution_runtime import require_frozen_provider_runtime
+    require_frozen_provider_runtime(Path(__file__).resolve().parents[2])
     parser = argparse.ArgumentParser()
     for name in ("raw", "decisions", "provider-source", "plan", "runtime", "protection", "output-dir"):
         parser.add_argument("--" + name, required=True)

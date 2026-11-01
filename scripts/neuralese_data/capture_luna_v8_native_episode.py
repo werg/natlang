@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import torch
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "training/neuralese"))
 from natlang_neuralese.data.provider_native_graph import (  # noqa: E402
     capture_luna_native_turn, native_graph_from_luna_episode)
@@ -112,6 +113,8 @@ class _HttpNativeEngine:
 
 
 def main():
+    from scripts.neuralese_data.provider_execution_runtime import require_frozen_provider_runtime
+    require_frozen_provider_runtime(Path(__file__).resolve().parents[2])
     parser = argparse.ArgumentParser()
     parser.add_argument("--audit", required=True)
     parser.add_argument("--checkpoint")
