@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import time
@@ -360,17 +361,46 @@ def test_free_slot_pulls_next_case_and_reuses_failure_cooldown_journal(reviewed_
     assert Path(by_index[0].journal) == Path(by_index[2].journal)
 
 
-def test_storage_floor_pauses_before_claim_and_resumes_pending_case(reviewed_plan, monkeypatch):
+@pytest.mark.parametrize('blocked_role', ['campaign-output', 'hot-journal-spool'])
+def test_storage_floor_pauses_before_claim_and_resumes_pending_case(reviewed_plan, tmp_path, monkeypatch, blocked_role):
     _mock_controls(monkeypatch)
     plan_path, plan_sha, campaign_root, plan = reviewed_plan
     plan['slots'] = 1
-    plan['cases'] = plan['cases'][:2]
+    plan['cases'] = plan['cases'][:1]
     plan['min_free_mib'] = 10
+
+    # Use two independent filesystem roots and bind the reviewed external
+    # campaign plus internal hot spool to them. The check must gate on either.
+    external = tmp_path / 'data-hdd'
+    external_root = external / 'natlang-luna-campaigns'
+    nvme = tmp_path / 'data-nvme'
+    external_root.mkdir(parents=True)
+    nvme.mkdir()
+    roots = {'data_hdd': external, 'data_nvme': nvme}
+    monkeypatch.setattr(dispatcher, 'machine_resolve', lambda name, *parts: roots[name].joinpath(*parts))
+    monkeypatch.setattr(dispatcher.os.path, 'ismount', lambda path: Path(path) == external.resolve())
+    campaign_root = external_root / 'campaign'
+    plan['campaign_root'] = str(campaign_root)
+    plan['claim_ledger'] = str(campaign_root / 'dispatch/claims.jsonl')
+    plan['launch_record'] = str(campaign_root / 'dispatch/launch.json')
+    plan['journal_spool_root'] = str(nvme / 'natlang-teacher-journal-spool' / plan['campaign_id'])
     plan_path.write_text(json.dumps(plan, sort_keys=True))
     plan_sha = dispatcher.digest(plan_path)
 
-    free = iter([10, 0, 10, 10, 10])
-    monkeypatch.setattr(dispatcher, '_free_space_mib', lambda _path: next(free, 10))
+    first_block = True
+    def free_bytes(path):
+        nonlocal first_block
+        if Path(path) == external_root:
+            if blocked_role == 'campaign-output' and first_block:
+                first_block = False
+                return 0
+            return 20 * dispatcher.MIB
+        if blocked_role == 'hot-journal-spool' and first_block:
+            first_block = False
+            return dispatcher.JOURNAL_SPOOL_FREE_FLOOR_BYTES + dispatcher.JOURNAL_SPOOL_CASE_BYTES - 1
+        return dispatcher.JOURNAL_SPOOL_FREE_FLOOR_BYTES + dispatcher.JOURNAL_SPOOL_CASE_BYTES + 1
+    monkeypatch.setattr(dispatcher, '_free_space_bytes', free_bytes)
+    monkeypatch.setattr(dispatcher, '_spool_counts', lambda _root: (0, 0))
     made = []
 
     class FakeRunner:
@@ -393,16 +423,31 @@ def test_storage_floor_pauses_before_claim_and_resumes_pending_case(reviewed_pla
     pause = kinds.index('storage_paused')
     resume = kinds.index('storage_resumed')
     claims = [(i, row['index']) for i, row in enumerate(events) if row.get('event') == 'claim']
-    assert claims[0][0] < pause < resume < claims[1][0]
-    assert [index for _, index in claims] == [0, 1]
-    assert events[pause]['next_case_index'] == 1
-    assert events[pause]['disposition'] == 'no case claimed; pending case list preserved'
-    assert made == [0, 1]
+    assert pause < resume < claims[0][0]
+    assert [index for _, index in claims] == [0]
+    assert events[pause]['next_case_index'] == 0
+    assert events[pause]['disposition'] == 'no case claimed; pending case list preserved until all bound storage floors are met'
+    checks = {check['role']: check for check in events[pause]['storage_checks']}
+    assert set(checks) == {'campaign-output', 'hot-journal-spool'}
+    assert checks[blocked_role]['ok'] is False
+    assert checks['campaign-output']['path'] == str(external_root)
+    assert checks['hot-journal-spool']['path'] == plan['journal_spool_root']
+    assert made == [0]
     assert not any(row.get('event') == 'abandoned' for row in events)
     _, identity = dispatcher.validate_plan(plan_path, plan_sha)
     identity['identity_sha256'] = hashlib.sha256(
         json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     dispatcher._verify_ledger_events(events, identity)
+
+
+def test_spool_preflight_ignores_only_dead_pid_leases(tmp_path):
+    spool = tmp_path / 'spool'
+    leases = spool / '.leases'
+    leases.mkdir(parents=True)
+    (leases / 'dead.json').write_text(json.dumps({'pid': 2**30}), encoding='utf-8')
+    (leases / 'malformed.json').write_text('{', encoding='utf-8')
+    (leases / 'live.json').write_text(json.dumps({'pid': os.getpid()}), encoding='utf-8')
+    assert dispatcher._spool_counts(spool) == (2, 0)
 
 
 def test_resume_holds_uncertain_claim_and_dispatches_only_unclaimed_cases(reviewed_plan, monkeypatch):

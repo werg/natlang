@@ -37,6 +37,14 @@ from scripts.rl_tasks.execution_adapter import verify_runtime_tree
 RUNNER = (ROOT / 'scripts/run_bonsai_queue.py').resolve()
 DISPATCHER = Path(__file__).resolve()
 ALLOWED_REASONING = {'low', 'medium', 'high'}
+# Keep in sync with ts-host/src/teacher/journal-spool.ts.  The plan and frozen
+# runtime hash bind the collector; this dispatcher-side check prevents a case
+# claim when the independently mounted campaign filesystem has room but its
+# authenticated hot-journal spool cannot honor the collector's reservation.
+JOURNAL_SPOOL_CASE_BYTES = 256 * 1024 * 1024
+JOURNAL_SPOOL_ACTIVE_CASE_LIMIT = 6
+JOURNAL_SPOOL_FREE_FLOOR_BYTES = 40 * 1024 * 1024 * 1024
+MIB = 1024 * 1024
 _stop_requested = False
 
 
@@ -489,7 +497,10 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
                   'resource_policy': dict(resource_policy),
                   'journal_spool_root': str(spool_root),
                   'journal_spool_policy': {'schema': 'natlang.teacher_journal_spool_policy/1',
-                    'per_case_bytes': 268435456, 'active_case_credits': 6, 'aggregate_bytes': 1610612736,
+                    'per_case_bytes': JOURNAL_SPOOL_CASE_BYTES,
+                    'active_case_credits': JOURNAL_SPOOL_ACTIVE_CASE_LIMIT,
+                    'aggregate_bytes': JOURNAL_SPOOL_CASE_BYTES * JOURNAL_SPOOL_ACTIVE_CASE_LIMIT,
+                    'free_floor_bytes': JOURNAL_SPOOL_FREE_FLOOR_BYTES,
                     'publication': 'fsync+sha256-verified into external jobs directory before local retirement'},
                   'storage_root': str(storage_root),
                   'launch_record': str(Path(plan['launch_record']).resolve()),
@@ -690,6 +701,84 @@ def _authority_preflight(identity):
 def _free_space_mib(path=ROOT):
     """Return free filesystem space for the dispatcher pre-claim guard."""
     return shutil.disk_usage(path).free // (1024 * 1024)
+
+
+def _free_space_bytes(path):
+    """Measure the filesystem that will contain ``path``, even before creation."""
+    target = Path(path).expanduser().resolve(strict=False)
+    while not target.exists():
+        parent = target.parent
+        if parent == target:
+            raise FileNotFoundError(f'no existing ancestor for storage path: {path}')
+        target = parent
+    return shutil.disk_usage(target).free
+
+
+def _spool_counts(spool_root):
+    """Return conservative existing spool leases and retained case directories."""
+    root = Path(spool_root)
+    if not root.exists():
+        return 0, 0
+    leases = root / '.leases'
+    cases = root / 'cases'
+    lease_count = 0
+    if leases.exists():
+        for entry in leases.iterdir():
+            if not entry.is_file():
+                lease_count += 1
+                continue
+            try:
+                lease = json.loads(entry.read_text(encoding='utf-8'))
+                pid = lease.get('pid') if isinstance(lease, dict) else None
+                if type(pid) is not int or pid < 1:
+                    lease_count += 1
+                    continue
+                try:
+                    os.kill(pid, 0)
+                    lease_count += 1
+                except PermissionError:
+                    lease_count += 1
+                except ProcessLookupError:
+                    # The collector removes stale leases under its own lock
+                    # before making the same reservation.
+                    pass
+            except (OSError, json.JSONDecodeError):
+                # A partial or unreadable lease is not safe to ignore.
+                lease_count += 1
+    retained_count = sum(entry.is_dir() for entry in cases.iterdir()) if cases.exists() else 0
+    return lease_count, retained_count
+
+
+def _storage_preflight(identity, *, min_free_mib, active_cases):
+    """Check both actual output filesystems and leave a complete reservation for a new case.
+
+    The hot spool has a fixed 40 GiB reserve and a 256 MiB credit per live
+    collector.  Existing leases are counted conservatively, including stale
+    entries that the collector may later clean under its registry lock.  A
+    Failed checks pause before claim, so a pending case remains available when
+    either filesystem recovers. Stale dead-PID leases do not consume a live
+    credit; malformed or unreadable leases do, conservatively.
+    """
+    campaign_free = _free_space_bytes(identity['storage_root'])
+    campaign_minimum = min_free_mib * MIB
+    spool_root = identity['journal_spool_root']
+    existing_leases, retained_cases = _spool_counts(spool_root)
+    credits = max(existing_leases, active_cases) + 1
+    spool_free = _free_space_bytes(spool_root)
+    spool_minimum = JOURNAL_SPOOL_FREE_FLOOR_BYTES + credits * JOURNAL_SPOOL_CASE_BYTES
+    checks = [
+        {'role': 'campaign-output', 'path': identity['storage_root'],
+         'available_bytes': campaign_free, 'minimum_bytes': campaign_minimum,
+         'ok': campaign_free >= campaign_minimum},
+        {'role': 'hot-journal-spool', 'path': spool_root,
+         'available_bytes': spool_free, 'minimum_bytes': spool_minimum,
+         'case_credits_required': credits, 'existing_leases': existing_leases,
+         'active_cases': active_cases, 'retained_case_directories': retained_cases,
+         'retained_case_limit': JOURNAL_SPOOL_ACTIVE_CASE_LIMIT,
+         'ok': (spool_free >= spool_minimum and credits <= JOURNAL_SPOOL_ACTIVE_CASE_LIMIT and
+                retained_cases < JOURNAL_SPOOL_ACTIVE_CASE_LIMIT)},
+    ]
+    return {'ok': all(check['ok'] for check in checks), 'checks': checks}
 
 
 def _set_launch_status(path, identity, status, **extra):
@@ -897,22 +986,27 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                         break
                     if slot in active:
                         continue
-                    free_mib = _free_space_mib(identity['storage_root'])
                     minimum = plan.get('min_free_mib', 1024)
-                    if free_mib < minimum:
+                    storage = _storage_preflight(identity, min_free_mib=minimum,
+                                                 active_cases=len(active))
+                    campaign_check = storage['checks'][0]
+                    free_mib = campaign_check['available_bytes'] // MIB
+                    if not storage['ok']:
                         if not storage_paused:
                             _append_event(ledger, {'event': 'storage_paused',
                                                    'identity_sha256': identity['identity_sha256'],
                                                    'free_mib': free_mib,
                                                    'min_free_mib': minimum,
                                                    'storage_root': identity['storage_root'],
+                                                   'storage_checks': storage['checks'],
                                                    'next_case_index': cases[next_case]['index'],
                                                    'paused_at': _now(),
-                                                   'disposition': 'no case claimed; pending case list preserved'})
+                                                   'disposition': 'no case claimed; pending case list preserved until all bound storage floors are met'})
                             _set_launch_status(launch_record, identity, 'storage_paused',
                                                paused_at=_now(), free_mib=free_mib,
                                                min_free_mib=minimum,
                                                storage_root=identity['storage_root'],
+                                               storage_checks=storage['checks'],
                                                pending_indices=[row['index'] for row in cases[next_case:]])
                             storage_paused = True
                         break
@@ -922,9 +1016,11 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                                                'free_mib': free_mib,
                                                'min_free_mib': minimum,
                                                'storage_root': identity['storage_root'],
+                                               'storage_checks': storage['checks'],
                                                'resumed_at': _now(),
                                                'disposition': 'pending case list retained'})
-                        _set_launch_status(launch_record, identity, 'running', resumed_at=_now())
+                        _set_launch_status(launch_record, identity, 'running', resumed_at=_now(),
+                                           storage_checks=storage['checks'])
                         storage_paused = False
                     case = cases[next_case]
                     next_case += 1
