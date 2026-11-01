@@ -16,6 +16,18 @@ def test_controller_future_source_obligations_are_separate_and_deduplicated(tmp_
                     {'kind':'ce','path':str(ce),'sha256':hashlib.sha256(ce.read_bytes()).hexdigest()}]
 
 
+def test_controller_future_controls_keep_recipe_and_geometry_bindings():
+    import json
+    from scripts.neuralese_data.build_local_recovery_plan import controller_future_controls
+    params={'recipe_binding':{'path':'/recipe','sha256':'a'*64},
+            'sft_packed_geometry':json.dumps({'path':'/geometry','sha256':'b'*64}),
+            'pending_focus':'/focus'}
+    assert controller_future_controls({'seed_trainer_parameters':params})==[
+        {'kind':'recipe_binding','path':'/recipe','sha256':'a'*64},
+        {'kind':'sft_packed_geometry','path':'/geometry','sha256':'b'*64},
+        {'kind':'pending_focus','path':'/focus','sha256':None}]
+
+
 def test_inventories_real_process_and_executable_dependencies():
     assert os.path.realpath(sys.executable) in mapped_executables(os.getpid())
     libraries=ldd_files(sys.executable)

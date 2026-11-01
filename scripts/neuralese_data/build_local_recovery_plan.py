@@ -53,6 +53,24 @@ def controller_declared_inputs(config):
     return result
 
 
+def controller_future_controls(config):
+    """Return explicitly bound controls needed by a declared future SFT stage."""
+    params=config.get('seed_trainer_parameters') or {}
+    if not isinstance(params,dict):raise ValueError('controller seed trainer parameters must be an object')
+    result=[]
+    for key in ('recipe_binding','memory_qualification','sft_packed_geometry','pending_focus'):
+        value=params.get(key)
+        if not value:continue
+        if isinstance(value,str):
+            # Recipe/geometry bindings may be serialized structured arguments.
+            if value.lstrip().startswith('{'):value=json.loads(value)
+            else:value={'path':value}
+        if not isinstance(value,dict) or not isinstance(value.get('path'),str):
+            raise ValueError('controller future control lacks a path: '+key)
+        result.append({'kind':key,'path':value['path'],'sha256':value.get('sha256')})
+    return result
+
+
 def checkpoint_base_files(base,state):
     return _checkpoint_bound_config_inventory(
         base,(state.get('model_config') or {}).get('base_inventory'),state.get('backbone_state'))
@@ -163,6 +181,11 @@ def build(args):
     if config.get('cases'):add(config['cases'],'controls')
     if config.get('history_reasoning_binding_path'):
         add(config['history_reasoning_binding_path'],'controls',config.get('history_reasoning_binding_sha256'))
+    for item in controller_future_controls(config):
+        ref=add(item['path'],'controls',item['sha256'])
+        if item['kind']=='recipe_binding':
+            for dependency in recipe_file_dependencies(ref['path']):
+                add(dependency['path'],'controls',dependency['sha256'])
     binding=options.get('recipe_binding')
     if isinstance(binding,str):binding=json.loads(binding)
     if not isinstance(binding,dict) or not binding.get('path') or not binding.get('sha256'):
