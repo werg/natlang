@@ -27,6 +27,27 @@ def _strong_binding(path):
     return {'path':str(path),'bytes':before.st_size,'sha256':digest}
 
 
+def _strong_path_binding(path):
+    """Bind a file or a complete directory tree (used by tokenizer inputs)."""
+    from ..common.hashing import canonical_json_sha256_hex
+    path=Path(path).resolve(strict=True)
+    if path.is_file():return _strong_binding(path)
+    if not path.is_dir():raise ValueError('session artifacts must be files or directories')
+    before=path.stat();rows=[]
+    for child in sorted(path.rglob('*')):
+        if child.is_symlink():raise ValueError('directory artifacts may not contain symlinks')
+        if child.is_file():
+            bound=_strong_binding(child)
+            rows.append({'relative_path':child.relative_to(path).as_posix(),
+                         'bytes':bound['bytes'],'sha256':bound['sha256']})
+    if not rows:raise ValueError('directory artifact has no files')
+    after=path.stat()
+    if (before.st_dev,before.st_ino,before.st_mtime_ns,before.st_ctime_ns)!=(
+            after.st_dev,after.st_ino,after.st_mtime_ns,after.st_ctime_ns):
+        raise ValueError('directory artifact changed while hashing')
+    return {'path':str(path),'tree_sha256':canonical_json_sha256_hex(rows),'files':rows}
+
+
 def _verify_strong_ref(reference):
     if (not isinstance(reference,dict) or set(reference)!={'path','bytes','sha256'}
             or type(reference['bytes']) is not int or reference['bytes']<=0
@@ -35,6 +56,51 @@ def _verify_strong_ref(reference):
     if _strong_binding(reference['path'])!=reference:
         raise ValueError('session reconciliation input differs from its exact binding')
     return Path(reference['path']).resolve(strict=True)
+
+
+def _verify_artifact_ref(reference):
+    if not isinstance(reference,dict) or not isinstance(reference.get('path'),str):
+        raise ValueError('session artifact needs an exact file/tree binding')
+    if _strong_path_binding(reference['path'])!=reference:
+        raise ValueError('session artifact differs from its exact file/tree binding')
+    return Path(reference['path']).resolve(strict=True)
+
+
+def _verify_frozen_runtime_inventory(runtime_root, runtime):
+    """Recheck the frozen Node build inputs and copied npm dependency tree."""
+    import hashlib
+    node_build=runtime.get('node_build') or {};node_dependencies=runtime.get('node_dependencies') or {}
+    source_inputs=node_build.get('source_inputs') or {}
+    if (not source_inputs or not isinstance(node_build.get('source_inputs_sha256'),str)
+            or not isinstance(node_dependencies.get('files'),int)
+            or node_dependencies['files']<=0 or not isinstance(node_dependencies.get('sha256'),str)
+            or len(node_dependencies['sha256'])!=64):
+        raise ValueError('runtime closure omits its built-source or dependency inventory')
+    for relative,digest in source_inputs.items():
+        source_file=(runtime_root/relative).resolve(strict=True)
+        if not source_file.is_relative_to(runtime_root) or _strong_binding(source_file)['sha256']!=digest:
+            raise ValueError('frozen Node runtime source/build input changed: '+str(relative))
+    from ..common.hashing import canonical_json_sha256_hex
+    if canonical_json_sha256_hex(source_inputs)!=node_build['source_inputs_sha256']:
+        raise ValueError('frozen Node runtime source-input inventory digest differs')
+    compiler=(runtime_root/node_build.get('compiler','')).resolve(strict=True)
+    if not compiler.is_relative_to(runtime_root):
+        raise ValueError('frozen Node compiler escapes its runtime directory')
+    dependencies=runtime_root/'node_modules'
+    if not dependencies.is_dir():raise ValueError('frozen runtime has no copied Node dependency tree')
+    digest=hashlib.sha256();count=size=0
+    for path in sorted(dependencies.rglob('*')):
+        relative=path.relative_to(dependencies).as_posix()
+        if path.is_symlink():
+            digest.update(f'{relative}\0link\0{path.readlink()}\n'.encode())
+        elif path.is_file():
+            file_digest=_strong_binding(path)['sha256']
+            digest.update(f'{relative}\0{file_digest}\n'.encode());count+=1;size+=path.stat().st_size
+    bash_path=dependencies/'just-bash/package.json'
+    bash_version=json.loads(bash_path.read_text()).get('version') if bash_path.is_file() else None
+    if (digest.hexdigest()!=node_dependencies.get('sha256') or count!=node_dependencies.get('files')
+            or size!=node_dependencies.get('bytes') or bash_version!=node_dependencies.get('just_bash_version')):
+        raise ValueError('frozen Node dependency tree differs from its runtime closure')
 
 
 def _session_control(config):
@@ -66,14 +132,15 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
     predecessor=plan.get('predecessor') or {};successor=plan.get('successor') or {}
     if set(predecessor)!={'state','config','checkpoint','report','training_receipt'}:
         raise ValueError('reconciliation plan must bind every predecessor observation')
-    if set(successor)!={'config','out','control_sha256','artifacts','qualifications','immediate_parent','selected_next_mode'}:
+    if set(successor)!={'config','out','control_sha256','artifacts','immediate_parent','selected_next_mode'}:
         raise ValueError('reconciliation plan must bind the complete successor session')
     if successor.get('selected_next_mode') not in {'joint_sft_and_rl','sft_first'}:
         raise ValueError('successor must explicitly select joint SFT/RL or an SFT-first window')
 
     # Verify all external pins before taking the controller lock; compare state
     # again under lock before constructing the transaction.
-    for name,reference in predecessor.items():_verify_strong_ref(reference)
+    for name,reference in predecessor.items():
+        if name!='checkpoint':_verify_strong_ref(reference)
     successor_config_path=_verify_strong_ref(successor_config_ref)
     if successor['config']!=successor_config_ref:
         raise ValueError('successor config differs from the reconciliation plan')
@@ -91,16 +158,7 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
     artifacts=successor.get('artifacts')
     if not isinstance(artifacts,dict) or set(artifacts)!=stable_artifacts:
         raise ValueError('successor plan lacks exact runtime/source/CE/held/protection bindings')
-    for reference in artifacts.values():_verify_strong_ref(reference)
-    qualifications=successor.get('qualifications')
-    if (not isinstance(qualifications,dict)
-            or set(qualifications)!={'runtime','source_admission','protection_union','continuation_preflight'}):
-        raise ValueError('successor plan lacks required external verification receipts')
-    for name,item in qualifications.items():
-        if (not isinstance(item,dict) or set(item)!={'status','reference'} or item['status']!='passed'
-                or item['reference']!=artifacts[{'runtime':'runtime_manifest','source_admission':'source_admission',
-                    'protection_union':'protection_union','continuation_preflight':'continuation_preflight'}[name]]):
-            raise ValueError('successor plan has an unverified runtime/source/protection preflight')
+    for reference in artifacts.values():_verify_artifact_ref(reference)
     immediate_parent=successor.get('immediate_parent')
     if (not isinstance(immediate_parent,dict) or set(immediate_parent)!={'sha256','global_step'}
             or not isinstance(immediate_parent['sha256'],str) or len(immediate_parent['sha256'])!=64
@@ -108,9 +166,67 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
         raise ValueError('successor plan lacks the exact immediate checkpoint parent observation')
     preflight=json.loads(Path(artifacts['continuation_preflight']['path']).read_text())
     if (preflight.get('schema')!='natlang.native-continuation-cpu-preflight/1'
+            or preflight.get('passed') is not True
             or preflight.get('parent_sha256')!=immediate_parent['sha256']
             or preflight.get('global_step')!=immediate_parent['global_step']):
         raise ValueError('successor preflight does not prove its exact immediate checkpoint parent')
+
+    # Recompute runtime and source custody from their actual receipts. Caller
+    # booleans such as `status: passed` are declarations, not evidence.
+    from ..common.custody import ProtectedWorlds, REGISTRY as PROTECTED_REGISTRY
+    protection=ProtectedWorlds.load()
+    protection_path=_verify_artifact_ref(artifacts['protection_union'])
+    protection_json=json.loads(protection_path.read_text())
+    protected_digest=(protection_json.get('protected_worlds_sha256')
+        or protection_json.get('current_protection_digest') or protection_json.get('digest'))
+    if protection_path.resolve()==Path(PROTECTED_REGISTRY).resolve():
+        protected_digest=protection.digest
+    if protected_digest!=protection.digest:
+        raise ValueError('successor protection receipt does not prove the current ProtectedWorlds union')
+    runtime_path=_verify_artifact_ref(artifacts['runtime_manifest'])
+    runtime=json.loads(runtime_path.read_text())
+    if (runtime.get('schema')!='natlang.protected-runtime-input-closure/1'
+            or not isinstance(runtime.get('commit'),str) or not runtime.get('commit')
+            or runtime.get('protected_worlds_sha256')!=protection.digest
+            or not isinstance(runtime.get('destination'),str)):
+        raise ValueError('successor runtime closure lacks its exact commit or current protection digest')
+    runtime_root=Path(runtime['destination']).resolve(strict=True)
+    ts_host=runtime_root/'ts-host'
+    if (not (ts_host/'package.json').is_file()
+            or not (ts_host/'dist/teacher/collector.js').is_file()):
+        raise ValueError('frozen Node host lacks its package metadata or built collector entrypoint')
+    _verify_frozen_runtime_inventory(runtime_root,runtime)
+    bound_files=runtime.get('bound_files') or []
+    if not bound_files:raise ValueError('runtime closure has no pinned prompt/control inputs')
+    for bound in bound_files:
+        if not isinstance(bound,dict) or not isinstance(bound.get('path'),str):
+            raise ValueError('runtime closure has an invalid bound control')
+        if _strong_binding(bound['path'])['sha256']!=bound.get('sha256'):
+            raise ValueError('runtime closure control changed: '+bound['path'])
+    closure_bindings={(str(Path(item['path']).resolve()),item['sha256']) for item in bound_files}
+    for role in ('production_recipe','train_source','held_source','ce_policy'):
+        ref=artifacts[role]
+        if 'sha256' not in ref or (str(Path(ref['path']).resolve()),ref['sha256']) not in closure_bindings:
+            raise ValueError(f'frozen runtime closure does not bind the exact {role} input')
+    admission_path=_verify_artifact_ref(artifacts['source_admission'])
+    admission=json.loads(admission_path.read_text())
+    source_binding=admission.get('source') or admission.get('train_source')
+    if (not isinstance(source_binding,dict)
+            or Path(source_binding.get('path','')).resolve()!=Path(artifacts['train_source']['path']).resolve()
+            or source_binding.get('sha256')!=artifacts['train_source'].get('sha256')
+            or not isinstance(admission.get('schema'),str)
+            or admission.get('current_protection_digest',admission.get('protected_worlds_sha256'))!=protection.digest):
+        raise ValueError('source admission receipt does not bind the exact train source and current protection union')
+    recipe_binding=admission.get('recipe') or admission.get('production_recipe')
+    if (not isinstance(recipe_binding,dict)
+            or Path(recipe_binding.get('path','')).resolve()!=Path(artifacts['production_recipe']['path']).resolve()
+            or recipe_binding.get('sha256')!=artifacts['production_recipe'].get('sha256')):
+        raise ValueError('source admission receipt names another production recipe')
+    ce_binding=admission.get('ce_policy')
+    if (not isinstance(ce_binding,dict)
+            or Path(ce_binding.get('path','')).resolve()!=Path(artifacts['ce_policy']['path']).resolve()
+            or ce_binding.get('sha256')!=artifacts['ce_policy'].get('sha256')):
+        raise ValueError('source admission receipt does not bind the exact CE policy')
 
     with (state_path.parent/'controller.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -118,7 +234,14 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
         observed_state=_strong_binding(state_path);observed_config=_strong_binding(config_path)
         if predecessor['state']!=observed_state or predecessor['config']!=observed_config:
             raise ValueError('production state/config changed after the reconciliation observation')
+        checkpoint_path=Path(checkpoint_ref['path']).resolve(strict=True)
+        checkpoint_stat=checkpoint_path.stat()
         checkpoint=_verify_strong_ref(checkpoint_ref)
+        checkpoint_stable_stat=checkpoint_path.stat()
+        if (checkpoint_stat.st_dev,checkpoint_stat.st_ino,checkpoint_stat.st_size,checkpoint_stat.st_mtime_ns,
+                checkpoint_stat.st_ctime_ns)!=(checkpoint_stable_stat.st_dev,checkpoint_stable_stat.st_ino,
+                checkpoint_stable_stat.st_size,checkpoint_stable_stat.st_mtime_ns,checkpoint_stable_stat.st_ctime_ns):
+            raise ValueError('earned checkpoint changed during reconciliation observation')
         if predecessor['checkpoint']!=checkpoint_ref:
             raise ValueError('earned checkpoint differs from its exact reconciliation plan')
         if predecessor['report']!=report_ref or predecessor['training_receipt']!=training_receipt_ref:
@@ -127,7 +250,7 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
         report=json.loads(report_path.read_text());receipt=json.loads(receipt_path.read_text())
         if _strong_binding(successor_config_path)!=successor_config_ref:
             raise ValueError('successor production config changed during reconciliation')
-        for reference in artifacts.values():_verify_strong_ref(reference)
+        for reference in artifacts.values():_verify_artifact_ref(reference)
         new_config=json.loads(successor_config_path.read_text())
 
         if (state.get('schema')!='natlang.rl-production-state/1'
@@ -149,25 +272,36 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
                 or Path(receipt.get('checkpoint',{}).get('path','')).resolve()!=checkpoint
                 or receipt.get('training_receipt')!={'path':str(report_path),'sha256':report_ref['sha256']}
                 or receipt.get('continuation_boundary')!=report.get('continuation_boundary')
+                or receipt.get('mandatory_sft')!=report.get('mandatory_sft')
                 or receipt.get('native_identity',{}).get('checkpoint_sha256')!=checkpoint_ref['sha256']):
             raise ValueError('pending SFT report and receipt do not bind the exact earned full checkpoint')
-        boundary=report.get('continuation_boundary') or {};finite=report.get('progress_numerics') or {}
+        boundary=report.get('continuation_boundary') or {}
+        from ..train.native_operation_report import supervised_progress_numerics_ok
+        finite_ok=supervised_progress_numerics_ok(report,{'path':str(checkpoint),'sha256':checkpoint_ref['sha256']})
         exposure=receipt.get('exposure') or {}
-        if (boundary.get('kind')!='semantic-refresh' or boundary.get('checkpoint_sha256')!=checkpoint_ref['sha256']
+        if (boundary.get('kind')!='semantic-refresh' or boundary.get('reached') is not True
+                or boundary.get('checkpoint_sha256')!=checkpoint_ref['sha256']
                 or type(boundary.get('new_optimizer_updates')) is not int or boundary['new_optimizer_updates']<1
-                or finite.get('checkpoint_sha256')!=checkpoint_ref['sha256'] or finite.get('passed') is not True
-                or finite.get('nonfinite')!=[] or type(exposure.get('consumed_updates')) is not int
+                or finite_ok is not True or type(exposure.get('consumed_updates')) is not int
                 or exposure['consumed_updates']<1 or type(exposure.get('supervised_token_visits')) is not int
                 or exposure['supervised_token_visits']<1
                 or not isinstance(receipt.get('mandatory_sft'),dict)):
             raise ValueError('pending SFT evidence does not prove finite earned updates and exposure')
-        if state.get('mandatory_sft')!=receipt.get('mandatory_sft'):
-            raise ValueError('controller and checkpoint disagree on unfinished SFT obligations')
+        if (not isinstance(receipt.get('mandatory_sft'),dict)
+                or receipt['mandatory_sft'].get('schema')!='natlang.native-sft-progress/1'
+                or not isinstance(receipt['mandatory_sft'].get('stages'),dict)):
+            raise ValueError('saved checkpoint has no structured unfinished-SFT obligations')
+        active_source_sha=artifacts['train_source']['sha256']
+        if not any(stage.get('train_source_sha256')==active_source_sha
+                for stage in receipt['mandatory_sft']['stages'].values() if isinstance(stage,dict)):
+            raise ValueError('saved checkpoint SFT obligations do not include the planned train source')
         progress=state.get('last_learner_progress') or {}
-        if (progress.get('checkpoint_sha256')!=checkpoint_ref['sha256']
-                or progress.get('continuation_boundary')!=boundary
-                or progress.get('mandatory_sft')!=receipt.get('mandatory_sft')):
-            raise ValueError('controller progress summary differs from the exact saved SFT checkpoint report')
+        # A direct SFT owner may advance the shared checkpoint after the
+        # controller's last state write. Preserve that older controller view as
+        # history; the report/receipt and live full checkpoint are the new
+        # source of progress truth.
+        controller_progress_is_current=(progress.get('checkpoint_sha256')==checkpoint_ref['sha256']
+            and progress.get('continuation_boundary')==boundary)
         parent_sha=(receipt.get('continuation') or {}).get('checkpoint_sha256')
         if not isinstance(parent_sha,str) or len(parent_sha)!=64:
             raise ValueError('pending SFT receipt lacks its exact saved predecessor')
@@ -212,17 +346,22 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
         for role,path in artifact_paths.items():
             if not isinstance(path,str) or Path(path).resolve()!=Path(artifacts[role]['path']).resolve():
                 raise ValueError(f'successor config does not use its planned {role} artifact')
-        if (not isinstance(new_config.get('runtime'),str)
-                or json.loads(Path(artifacts['runtime_manifest']['path']).read_text()).get('runtime_root')
-                    !=str(Path(new_config['runtime']).resolve())):
-            raise ValueError('successor config runtime differs from its exact frozen runtime manifest')
+        configured_runtime=Path(new_config.get('runtime','')).resolve(strict=True)
+        if configured_runtime!=ts_host:
+            raise ValueError('successor runtime does not select the frozen Node host directory')
+        actor_environment=new_config.get('actor_environment') or {}
+        actor_repo=actor_environment.get('NATLANG_REPO')
+        if actor_repo is not None and Path(actor_repo).resolve()!=runtime_root:
+            raise ValueError('successor actor host repository differs from the frozen runtime closure')
         if new_config.get('foundation_native_graphs')!=artifacts['train_source']['path']:
             raise ValueError('successor config does not use its planned admitted SFT source')
         if new_config.get('seed_native_graphs',artifacts['train_source']['path'])!=artifacts['train_source']['path']:
             raise ValueError('successor seed source differs from its planned admitted SFT source')
+        if Path(new_config.get('rl_tokenizer','')).resolve()!=Path(artifacts['tokenizer_manifest']['path']).resolve():
+            raise ValueError('successor config does not use its exact tokenizer directory')
+        if Path(new_config.get('base','')).resolve()!=Path(artifacts['base_manifest']['path']).resolve():
+            raise ValueError('successor config does not use its exact base model artifact')
 
-        # Verify the new production configuration and its effective recipe now,
-        # before any controller can consume it.
         from ..train.recipe import resolve_recipe_data
         resolved=resolve_recipe_data(successor_config_path)
         if resolved.get('native_state') is not True or resolved.get('out')!=str(successor_production_out):
@@ -237,10 +376,19 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
         next_state=copy.deepcopy(state)
         next_state['checkpoint']=str(checkpoint)
         next_state.update(schema='natlang.rl-production-state/1',phase='collect',production_complete=False)
+        old_obligations=state.get('mandatory_sft')
+        if old_obligations is not None:
+            next_state.setdefault('historical_mandatory_sft_obligations',[]).append({
+                'observed_state':observed_state,'obligations':copy.deepcopy(old_obligations),
+                'relation':'controller snapshot before the authenticated direct-SFT checkpoint'})
+        next_state['mandatory_sft']=copy.deepcopy(receipt['mandatory_sft'])
         for key in ('pending_native_checkpoint','pending_native_round_dir','pending_update_kind',
                     'actor_policy_pending_load','latest_reward','readiness','foundation_candidate','foundation_qualified',
                     'last_learner_progress','last_sft_failure'):
             next_state.pop(key,None)
+        from ..train.native_operation_report import control_progress
+        next_state['last_learner_progress']=control_progress(report,report_path)
+        next_state.pop('update_learner_parameters',None)
         next_state.setdefault('production_session_reconciliation_history',[]).append({
             'schema':SESSION_RECONCILIATION,'transition_id':transition_id,'checkpoint_sha256':checkpoint_ref['sha256'],
             'optimizer_updates_credited':0,'sft_stage_completed':False,'behavioral_evaluation_passed':False})
@@ -249,7 +397,9 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
             'pending_operation_archived':True,'optimizer_updates_credited':0,
             'unfinished_sft_obligations_preserved':True,'capability_evaluation_pending':True,
             'successor_config':successor_config_ref,'immediate_parent':immediate_parent,
-            'selected_next_mode':successor['selected_next_mode'],'applied':False}
+            'selected_next_mode':successor['selected_next_mode'],'applied':False,
+            'controller_progress_was_current':controller_progress_is_current,
+            'active_mandatory_sft_checkpoint_sha256':checkpoint_ref['sha256']}
 
         allowed_transaction_files={'session-reconciliation.intent.json','proposed-state.json',
             'successor-config.json','session-reconciliation.json'}
@@ -262,6 +412,12 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
                     and any(transaction_dir.iterdir())):
                 raise ValueError('uncommitted reconciliation outputs have no durable intent')
         transaction_dir.mkdir(parents=True,exist_ok=True)
+        final_checkpoint_stat=checkpoint_path.stat()
+        if (checkpoint_stable_stat.st_dev,checkpoint_stable_stat.st_ino,checkpoint_stable_stat.st_size,
+                checkpoint_stable_stat.st_mtime_ns,checkpoint_stable_stat.st_ctime_ns)!=(
+                final_checkpoint_stat.st_dev,final_checkpoint_stat.st_ino,final_checkpoint_stat.st_size,
+                final_checkpoint_stat.st_mtime_ns,final_checkpoint_stat.st_ctime_ns):
+            raise ValueError('earned checkpoint changed after its full-byte verification')
         final_path=transaction_dir/'session-reconciliation.json';state_out=transaction_dir/'proposed-state.json'
         config_out=transaction_dir/'successor-config.json'
         if final_path.exists():
@@ -302,6 +458,7 @@ def reconcile_production_session(state_path, config_path, *, plan_ref,
             'successor_config':successor_config_ref,'successor_config_snapshot':staged_config_ref,
             'successor_state':_strong_binding(state_out),'install_state_path':str(state_path),
             'archived_pending_operation':pending,'archived_checkpoint_specific_evidence':prior_actor,
+            'archived_mandatory_sft_obligations':copy.deepcopy(old_obligations),
             'stable_artifacts':artifacts,'optimizer_updates_credited':0,'sft_stage_completed':False,
             'behavioral_evaluation_passed':False,'capability_evaluation_pending':True,
             'checkpoint_bytes_rehashed':True,'checkpoint_optimizer_rng_decoded':False,
