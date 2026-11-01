@@ -2,11 +2,11 @@
 an ongoing basis, async from write"). plans/STORAGE_POLICY.md section 2a.
 
 Writes are unchanged: every full state goes to the NVMe (pending file, fsync, atomic rename; trajectory_state). After a
-successful write the file is handed to one background worker per process, which copies it to the mirror
+successful write the file is handed to one process-owned worker thread, which copies it to the mirror
 
     <mirror root>/<path relative to ~/natlang/runs>      (default mirror root: <data_hdd>/natlang-active-lineage)
 
-in a child process at idle I/O class and nice 19: copy to ``<mirror>.offload.part`` in 8 MiB chunks with a streamed
+in that owned worker at idle I/O class and nice 19: copy to ``<mirror>.offload.part`` in 8 MiB chunks with a streamed
 SHA-256, fsync, check the source did not change, re-read the copy (page cache dropped) and compare size and hash, then
 atomically rename it into place, fsync the directory and write ``<mirror>.offload.json`` (source identity, bytes,
 SHA-256). Two roles:
@@ -28,7 +28,7 @@ same NVMe, e.g. inside a container without the mount). Settings (recorded in ``c
 ``NATLANG_CHECKPOINT_OFFLOAD=0`` disables, ``NATLANG_CHECKPOINT_MIRROR`` sets the root,
 ``NATLANG_CHECKPOINT_OFFLOAD_MIN_GB`` (default 1) the smallest file offloaded, ``NATLANG_CHECKPOINT_OFFLOAD_LATEST=0``
 stops mirroring the resumable slot, ``NATLANG_CHECKPOINT_OFFLOAD_HDD_FLOOR_GB`` (default 50) the free space kept on the
-external disk. Stdlib only: the copy child runs this file as a script.
+external disk. The checkpoint policy drains and joins its worker before trainer exit.
 """
 from __future__ import annotations
 
@@ -40,7 +40,6 @@ import os
 import platform
 import shutil
 import re
-import subprocess
 import sys
 import threading
 import time
@@ -637,7 +636,7 @@ def update_policy_record(out, **fields) -> dict:
 
 # The background worker -------------------------------------------------------------------------------------------
 def _lower_priority(pid: int) -> None:
-    """Use low CPU and best-effort I/O priority without starving recovery."""
+    """Use low CPU and best-effort I/O priority for the owned worker thread."""
     try:
         os.setpriority(os.PRIO_PROCESS, pid, 19)
     except OSError:
@@ -650,30 +649,31 @@ def _lower_priority(pid: int) -> None:
             pass
 
 
-def child_copy(path, dest, prune=False, *, lock_fds=()) -> dict:
-    """Run ``local_copy`` in a low-priority child without starving storage I/O."""
-    process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), {True: 'prune', 'auto': 'prune-auto'}.get(prune, 'copy'),
-                                str(path), str(dest)],
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, pass_fds=tuple(lock_fds))
-    _lower_priority(process.pid)
-    out, err = process.communicate()
-    if process.returncode != 0:
-        raise RuntimeError(f'offload copy failed ({process.returncode}): {err.strip()[-500:]}')
-    return json.loads(out.strip().splitlines()[-1])
+def owned_copy(path, dest, prune=False) -> dict:
+    """Copy on the caller-owned offload worker; never create an unowned child process.
+
+    The older implementation spawned a Python child in the learner's cgroup.
+    When the learner exited successfully, systemd killed that still-running copy
+    before its verified mirror receipt could be committed. The offloader now
+    owns and drains this work explicitly before its trainer closes.
+    """
+    _lower_priority(threading.get_native_id())
+    return local_copy(path, dest, prune=prune)
 
 
 class CheckpointOffloader:
     """One background worker per process. ``submit`` never blocks on I/O and never raises."""
 
-    def __init__(self, settings: OffloadSettings | None = None, *, copier=child_copy):
+    def __init__(self, settings: OffloadSettings | None = None, *, copier=owned_copy):
         self.settings = settings or OffloadSettings.from_env()
         self.copier = copier
-        self.pending: dict[str, str] = {}
-        self.failed: dict[str, str] = {}
+        self.pending: dict[str, tuple[str, bool | str]] = {}
+        self.failed: dict[str, tuple[str, bool | str]] = {}
         self.events: list[dict] = []
         self.swept: set[str] = set()
         self.cond = threading.Condition()
         self.busy = False
+        self.closing = False
         self.thread = threading.Thread(target=self._run, name='checkpoint-offload', daemon=True)
         self.thread.start()
 
@@ -689,11 +689,17 @@ class CheckpointOffloader:
             except OSError:
                 return
             with self.cond:
+                if self.closing:
+                    raise RuntimeError('checkpoint offloader is closing')
                 for retry, job in list(self.failed.items()):
                     self.pending.setdefault(retry, job)
                 self.failed.clear()
-                self.pending.pop(str(path), None)  # coalesce: the newest submission goes last
-                self.pending[str(path)] = (role, prune)
+                self.pending.pop(str(path), None)  # coalesce obsolete queued generations of this path
+                # Keep the rolling checkpoint (and newly published bests)
+                # ahead of one-time historical sibling sweeps. An active old
+                # copy is allowed to finish, but a new submission must not sit
+                # behind a queue of stale 15 GiB checkpoints.
+                self.pending = {str(path): (role, prune), **self.pending}
                 if str(path.parent) not in self.swept:  # leftovers of earlier processes: this and sibling stages
                     self.swept.add(str(path.parent))
                     siblings = [d for d in sorted(path.parent.parent.iterdir()) if d.is_dir() and d != path.parent
@@ -715,6 +721,19 @@ class CheckpointOffloader:
                 self.cond.wait(left)
         return True
 
+    def close(self, timeout: float | None = None) -> bool:
+        """Drain and join the owned copy worker before the trainer process exits.
+
+        Returns False on timeout. Failed jobs remain recorded in the offload
+        event log and are not silently retried during shutdown.
+        """
+        with self.cond:
+            self.closing = True
+            self.cond.notify_all()
+        if threading.current_thread() is not self.thread:
+            self.thread.join(timeout)
+        return not self.thread.is_alive()
+
     def _event(self, event: dict) -> None:
         event = dict(event, time=time.time())
         self.events.append(event)
@@ -730,8 +749,10 @@ class CheckpointOffloader:
     def _run(self) -> None:
         while True:
             with self.cond:
-                while not self.pending:
+                while not self.pending and not self.closing:
                     self.cond.wait()
+                if self.closing and not self.pending:
+                    return
                 path, (role, prune) = next(iter(self.pending.items()))
                 del self.pending[path]
                 self.busy = True
@@ -790,6 +811,17 @@ _RECOVERY_QUEUES: dict[str, 'RecoveryExportQueue'] = {}
 _RECOVERY_QUEUES_GUARD = threading.Lock()
 
 
+def close_offloader(timeout: float | None = None) -> bool:
+    """Drain the process-owned mirror worker at the trainer shutdown boundary."""
+    global _OFFLOADER
+    with _OFFLOADER_GUARD:
+        worker = _OFFLOADER
+        _OFFLOADER = None
+    if worker is None:
+        return True
+    return worker.close(timeout)
+
+
 def after_write(path, role: str | None = None, prune=False) -> None:
     """The hook every checkpoint writer calls after a successful write or best publication. Never raises."""
     try:
@@ -811,11 +843,6 @@ def policy_record(out) -> dict:
     reason = mirror_unavailable(probe, settings)
     return dict(settings.record(), mirror=None if reason else str(mirror_path(probe, settings).parent),
                 unavailable=reason)
-
-
-if __name__ == '__main__' and len(sys.argv) == 4 and sys.argv[1] in ('copy', 'prune', 'prune-auto'):
-    mode = {'copy': False, 'prune': True, 'prune-auto': 'auto'}[sys.argv[1]]
-    print(json.dumps(local_copy(sys.argv[2], sys.argv[3], prune=mode)), flush=True)
 
 
 def recovery_training_custody(state):
@@ -1088,7 +1115,7 @@ def validate_recovery_plan_dependencies(plan, *, require_restore=True):
         validate_restore_qualification(plan)
 
 
-def verified_recovery_blob(source, target, digest, *, copier=child_copy, cached_identity=None, owner_fd=None):
+def verified_recovery_blob(source, target, digest, *, copier=owned_copy, cached_identity=None):
     """Copy or reuse one independently checked content-addressed closure blob."""
     import fcntl
     source=Path(source).resolve(strict=True);target=Path(target)
@@ -1104,12 +1131,10 @@ def verified_recovery_blob(source, target, digest, *, copier=child_copy, cached_
             if cached_identity!=identity and file_sha256(target)!=digest:
                 raise ValueError('existing independent recovery closure differs')
         else:
-            # The child retains both locks if its parent dies during a copy.
-            # A restarted exporter cannot race the child's partial pathname.
-            if copier is child_copy:
-                copied=copier(source,target,lock_fds=tuple(x for x in (fd,owner_fd) if x is not None))
-            else:
-                copied=copier(source,target)
+            # Copy in the current queue owner while both lock descriptors stay
+            # open. A Popen child inherited the learner/exporter's cgroup and
+            # was killed at successful parent teardown before publication.
+            copied=copier(source,target)
             if copied['sha256']!=digest:
                 raise ValueError('recovery closure source differs from declared identity')
             st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
@@ -1424,7 +1449,7 @@ class RecoveryExportQueue:
                 raise ValueError('invalid recovery closure digest')
             target=self.destination/'closure'/digest
             cache=self.state.setdefault('closure_cache',{})
-            identity=verified_recovery_blob(source,target,digest,copier=self.copier,cached_identity=cache.get(digest),owner_fd=self._owner.fileno())
+            identity=verified_recovery_blob(source,target,digest,copier=self.copier,cached_identity=cache.get(digest))
             with self.cond:
                 cache[digest]=identity
                 self._persist()
@@ -1458,8 +1483,7 @@ class RecoveryExportQueue:
                 raise ValueError('existing recovery checkpoint differs')
             copied={'sha256':actual,'bytes':target.stat().st_size}
         else:
-            copied=(self.copier(self.pin,target,lock_fds=(self._owner.fileno(),))
-                    if self.copier is child_copy else self.copier(self.pin,target))
+            copied=self.copier(self.pin,target)
         self._validate_pin(record)
         if copied['sha256']!=record['checkpoint_sha256']:
             raise ValueError('independent recovery bytes differ from committed checkpoint digest')
@@ -1676,7 +1700,7 @@ def recovery_queue_for(slot, plan_path, state=None):
     with _RECOVERY_QUEUES_GUARD:
         queue=_RECOVERY_QUEUES.get(key)
         if queue is None:
-            queue=RecoveryExportQueue(slot,plan,copier=child_copy)
+            queue=RecoveryExportQueue(slot,plan,copier=owned_copy)
             _RECOVERY_QUEUES[key]=queue
         elif queue.plan_sha256!=queue._plan_digest(plan):
             queue.update_plan(plan)

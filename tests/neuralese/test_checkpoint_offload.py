@@ -159,6 +159,7 @@ def test_a_failing_offload_never_fails_training_and_is_retried_at_the_next_write
     worker.submit(write(out / 'checkpoint.pt'), 'latest')  # the next write retries the failed file
     assert worker.wait(30)
     assert best.is_symlink() and (mirror_dir / 'checkpoint.pt').is_file()
+    assert worker.close()
 
 
 def test_policy_writes_are_offloaded_and_a_best_shares_the_mirror_by_a_hard_link(layout, monkeypatch):
@@ -177,6 +178,7 @@ def test_policy_writes_are_offloaded_and_a_best_shares_the_mirror_by_a_hard_link
     assert worker.wait(30)
     assert torch.load(best)['step'] == 1 and torch.load(mirror_dir / 'checkpoint.pt')['step'] == 2
     assert json.loads((out / 'checkpoint-policy.json').read_text())['best_metric'] == 1.0
+    policy.close()
 
 
 def test_resume_reads_the_mirror_when_the_nvme_slot_is_missing_or_truncated(layout, monkeypatch):
@@ -196,6 +198,7 @@ def test_resume_reads_the_mirror_when_the_nvme_slot_is_missing_or_truncated(layo
     assert cp.CheckpointPolicy.load(slot)['step'] == 5
     fresh = layout[0].parent / 'never-mirrored'
     assert cp.CheckpointPolicy(fresh).recovered is None  # a run without a mirror record starts fresh
+    assert co.close_offloader()
 
 
 def test_stale_partials_are_cleaned_and_another_copiers_partial_is_left_alone(layout):
@@ -235,13 +238,13 @@ def test_disconnected_optional_mirror_does_not_block_primary_checkpoint_policy(l
     assert torch.equal(cp.CheckpointPolicy.load(policy.slot)['earned'], torch.tensor([1.0]))
 
 
-def test_the_default_copier_runs_in_an_idle_priority_child(layout):
+def test_owned_copier_runs_without_a_detached_process(layout):
     out, mirror_dir = layout
     slot = write(out / 'checkpoint.pt')
-    record = co.child_copy(slot, mirror_dir / 'checkpoint.pt')
+    record = co.owned_copy(slot, mirror_dir / 'checkpoint.pt')
     assert record['sha256'] == sha(slot) == sha(mirror_dir / 'checkpoint.pt')
-    with pytest.raises(RuntimeError, match='offload copy failed'):
-        co.child_copy(out / 'missing.pt', mirror_dir / 'missing.pt')
+    with pytest.raises(FileNotFoundError):
+        co.owned_copy(out / 'missing.pt', mirror_dir / 'missing.pt')
 
 
 def full_state(step):
@@ -294,6 +297,52 @@ def test_policy_bests_are_weights_only_while_the_slot_keeps_its_optimizer(layout
     assert best['optimizer_pruned'] and best['step'] == 1 and 'optimizer' not in best
     assert 'optimizer' in cp.CheckpointPolicy.load(out / 'checkpoint.pt')
     assert 'optimizer' in torch.load(mirror_dir / 'checkpoint.pt')
+    policy.close()
+
+
+def test_policy_close_waits_for_and_joins_owned_mirror_worker(layout, monkeypatch):
+    import threading
+    out, mirror_dir = layout
+    started, release, closed = threading.Event(), threading.Event(), threading.Event()
+    real_copy = co.local_copy
+
+    def blocked_copy(path, dest, prune=False):
+        started.set()
+        assert release.wait(5)
+        return real_copy(path, dest, prune)
+
+    worker = co.CheckpointOffloader(co.OffloadSettings.from_env(), copier=blocked_copy)
+    monkeypatch.setattr(co, '_OFFLOADER', worker)
+    policy = cp.CheckpointPolicy(out)
+    policy.save(full_state(9))
+    assert started.wait(5)
+
+    def close_policy():
+        policy.close()
+        closed.set()
+
+    closer = threading.Thread(target=close_policy)
+    closer.start()
+    assert not closed.wait(.1)
+    release.set()
+    closer.join(5)
+    assert closed.is_set() and not worker.thread.is_alive()
+    slot, mirror = out / 'checkpoint.pt', mirror_dir / 'checkpoint.pt'
+    assert slot.is_file() and mirror.is_file() and sha(slot) == sha(mirror)
+    assert co.read_record(mirror)['sha256'] == sha(slot)
+
+
+def test_new_rolling_checkpoint_precedes_queued_historical_sweep_work(layout):
+    out, _ = layout
+    worker = co.CheckpointOffloader(co.OffloadSettings.from_env(), copier=co.local_copy)
+    slot = write(out / 'checkpoint.pt')
+    with worker.cond:
+        worker.pending['old-stage-a/checkpoint-58.pt'] = ('archive', 'auto')
+        worker.pending['old-stage-b/checkpoint-49.pt'] = ('archive', 'auto')
+        worker.submit(slot, 'latest')
+        assert next(iter(worker.pending)) == str(slot.resolve())
+        worker.pending.clear()
+    assert worker.close()
 
 
 def test_superseded_pruned_best_does_not_rebind_successor_receipts(layout):

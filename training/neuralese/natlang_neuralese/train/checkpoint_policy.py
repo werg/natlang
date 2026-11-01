@@ -217,7 +217,7 @@ class CheckpointPolicy:
             self._async_writer.drain()
 
     def close(self):
-        """Release process-local checkpoint ownership without deleting recovery files."""
+        """Drain process-owned writers and offload copies before releasing ownership."""
         error = None
         try:
             self.drain_async()
@@ -233,6 +233,20 @@ class CheckpointPolicy:
                     error = caught
                 else:
                     error.add_note(f'checkpoint reservation close also failed: {type(caught).__name__}: {caught}')
+        # Mirror copies used to run in Popen children that outlived the trainer
+        # cgroup main process and were then killed by systemd during teardown.
+        # The worker now owns the streaming copy itself; drain and join it at
+        # this same shutdown boundary so a successful process exit means no
+        # unowned copy remains in flight.
+        try:
+            from .checkpoint_offload import close_offloader
+            if not close_offloader():
+                raise RuntimeError('checkpoint mirror worker did not stop after draining')
+        except BaseException as caught:
+            if error is None:
+                error = caught
+            else:
+                error.add_note(f'checkpoint mirror drain also failed: {type(caught).__name__}: {caught}')
         if error is not None:
             raise error
 

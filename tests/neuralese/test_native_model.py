@@ -85,9 +85,9 @@ def test_native_loader_rejects_legacy_checkpoint(tmp_path):
 
 
 @pytest.mark.parametrize('family', ['lfm'])
-def test_native_weights_only_child_export_keeps_exact_model_and_refuses_resume(tmp_path, family):
+def test_native_weights_only_export_keeps_exact_model_and_refuses_resume(tmp_path, family):
     from test_native_serving_adapters import engine_fixture
-    from natlang_neuralese.train.checkpoint_offload import child_copy, load_state
+    from natlang_neuralese.train.checkpoint_offload import owned_copy, load_state
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     from natlang_neuralese.serve import load_native_engine
     engine = engine_fixture(tmp_path, family)
@@ -98,7 +98,7 @@ def test_native_weights_only_child_export_keeps_exact_model_and_refuses_resume(t
         'rng': {'cpu': torch.get_rng_state()}, 'exposure_counts': {'exact-source-row': 7}})
     torch.save(state, full)
     original_sha = sha256_file_hex_cached(full)
-    record = child_copy(full, view, prune=True)  # actual direct-file worker import path
+    record = owned_copy(full, view, prune=True)
     assert record['optimizer_pruned'] and record['bytes'] < record['source_bytes']
     written = load_state(view)
     assert written['optimizer_pruned_keys'] == ['training.optimizer']

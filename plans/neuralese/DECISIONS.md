@@ -1672,7 +1672,7 @@ fixtures, with a pass bar of one success. It is replaced, for qualification and 
   under the measured budgets). With `task_eval.async` (now true in `neuralese-direct-v2`) a cadence evaluation is
   submitted and training continues at once: the trainer hard-links the slot it just wrote at the eval step into
   `<stage>/task-eval/async/step-N/` (the slot is only ever replaced atomically, as for the best link), a child at idle
-  priority prunes it to weights only (`checkpoint_offload.child_copy(prune=True)`, the offload's weights-only path) and
+  priority prunes it to weights only (`checkpoint_offload.owned_copy(prune=True)`, the offload's weights-only path) and
   the link is dropped. `scripts/task_eval_dispatch.py` (host side; the trainer's container has no systemd; requests found via pointers in `<data_nvme>/task-eval-queue`) launches
   each request as its own resumable medium-priority ledger unit (`taskeval-<stage>-<step>`, budget 1.3x the weights +
   8 GB; Mellum ~38 GB, which waits beside v4 until memory allows). The job restores the BF16 serving engine (clean

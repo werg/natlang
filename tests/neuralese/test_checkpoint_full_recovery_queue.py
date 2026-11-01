@@ -315,45 +315,30 @@ def test_resident_candidate_requires_qualified_matching_plan(setup, monkeypatch)
     assert checked == [plan]
 
 
-def test_copy_child_inherits_blob_and_owner_locks(tmp_path, monkeypatch):
+def test_recovery_blob_copy_runs_while_owner_lock_is_held(tmp_path):
     import fcntl
     from natlang_neuralese.train import checkpoint_offload as offload
     source = tmp_path / 'source'; source.write_bytes(b'complete recovery bytes')
     target = tmp_path / 'blobs' / sha(source)
-    owner = (tmp_path / 'owner.lock').open('w')
-    fcntl.flock(owner, fcntl.LOCK_EX)
-    calls = []
-    real = offload.subprocess.Popen
-    def checked(*args, **kwargs):
-        descriptors = kwargs['pass_fds']
-        assert owner.fileno() in descriptors and len(descriptors) == 2
-        calls.append(descriptors)
-        return real(*args, **kwargs)
-    monkeypatch.setattr(offload.subprocess, 'Popen', checked)
-    offload.verified_recovery_blob(source, target, sha(source), owner_fd=owner.fileno())
-    assert target.read_bytes() == source.read_bytes() and len(calls) == 1
-    owner.close()
+    owner_path = tmp_path / 'owner.lock'
+    with owner_path.open('w') as owner:
+        fcntl.flock(owner, fcntl.LOCK_EX)
 
+        def checked_copy(src, dst):
+            # The queued copier runs in this lock-owning process. A second open
+            # cannot acquire either the caller's owner lock or the digest lock
+            # while the exact blob is being committed.
+            with owner_path.open('w') as contender:
+                with pytest.raises(BlockingIOError):
+                    fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_path = target.parent / '.locks' / (sha(source) + '.lock')
+            with lock_path.open('w') as contender:
+                with pytest.raises(BlockingIOError):
+                    fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return offload.owned_copy(src, dst)
 
-def test_inherited_owner_lock_survives_parent_close(tmp_path):
-    import fcntl, subprocess, sys
-    path = tmp_path / 'owner.lock'
-    owner = path.open('w')
-    fcntl.flock(owner, fcntl.LOCK_EX)
-    child = subprocess.Popen([sys.executable, '-c', 'import sys; sys.stdin.read()'],
-                             stdin=subprocess.PIPE, pass_fds=(owner.fileno(),))
-    try:
-        owner.close()
-        with path.open('w') as contender:
-            with pytest.raises(BlockingIOError):
-                fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        child.stdin.close()
-        assert child.wait(timeout=5) == 0
-        with path.open('w') as contender:
-            fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    finally:
-        if child.poll() is None:
-            child.kill(); child.wait()
+        offload.verified_recovery_blob(source, target, sha(source), copier=checked_copy)
+    assert target.read_bytes() == source.read_bytes()
 
 
 def test_export_verifier_uses_only_independent_bytes(setup, monkeypatch):

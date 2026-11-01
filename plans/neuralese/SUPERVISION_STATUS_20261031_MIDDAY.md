@@ -253,10 +253,13 @@ rights metadata was corrected to CC-BY-4.0, distinct from the code's MIT license
 Independent environment/runtime/asset archives have readback receipts, including
 real isolated torch/transformers/numpy imports. Complete step59 recovery is
 still being exercised; the strong export queue is **not qualified or installed**.
-The manual step59 pin remains protected. Background checkpoint copies previously
-used idle I/O class and starved under sustained external-disk traffic; the shared
-default and actual live recovery copy children now use best-effort class2/prio7.
-Keep independent full56/full58 and SD52 fallback copies while qualification runs.
+The manual step59 pin remains protected. At this point in the historical run,
+background checkpoint copies used idle I/O class and the implementation relied
+on child copies. The current implementation instead copies on one process-owned
+worker thread, prioritizes the rolling checkpoint ahead of historical sweep work,
+and drains/joins the thread in `CheckpointPolicy.close()`; it does not rely on a
+detached copy child surviving trainer teardown. The former full56/full58 and SD52
+fallback copies remain separate historical recovery evidence.
 
 ## Actual continuation, source admission and writer diagnosis, November 1, 02:52 CET
 

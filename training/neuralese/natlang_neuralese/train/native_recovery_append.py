@@ -286,7 +286,7 @@ def stage_append_intent(queue,catalog_path,payload,resident_directory,*,stop_req
         if stop_requested():raise RuntimeError('recovery append staging stopped')
         digest_value,item=row;target=store/digest_value
         with queue.cond:cached=queue.state.get('closure_cache',{}).get(digest_value)
-        identity=verified_recovery_blob(item['path'],target,digest_value,cached_identity=cached,owner_fd=queue._owner.fileno())
+        identity=verified_recovery_blob(item['path'],target,digest_value,cached_identity=cached)
         return digest_value,{'path':str(target),'sha256':digest_value,'identity':identity}
     with ThreadPoolExecutor(max_workers=4) as pool:
         iterator=iter(unique.items());pending=set()
