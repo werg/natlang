@@ -93,3 +93,46 @@ def test_reclassified_report_recomputes_quality_and_efficiency_routes():
     assert actual['groups_with_efficiency_spread'] == 1
     assert actual['groups'][0]['route'] == 'grpo'
     assert original['groups_with_quality_spread'] == 1
+
+
+def preparation_fixture(tmp_path):
+    import hashlib
+    out = tmp_path / 'round-000000'
+    learner = out / 'learner'; learner.mkdir(parents=True)
+    def write(path, data):
+        path.write_text(json.dumps(data));raw=path.read_bytes()
+        return {'path':str(path),'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw)}
+    parent = write(tmp_path / 'retained-parent.pt', {'full_parent_fixture': True})
+    rollouts = write(out / 'rollouts.jsonl', {'capture': 'unchanged'})
+    graph = write(learner / 'rl-native-graphs.jsonl', {'graph': 'whole'})
+    admission = write(learner / 'rl-data-receipt.json', {'schema':'natlang.native-rl-admission/1',
+        'policy':{'checkpoint_sha256':parent['sha256']},'objective_sha256':'d'*64,
+        'native_graphs_sha256':graph['sha256'],'rollouts':{rollouts['path']:rollouts['sha256']}})
+    capacity = write(learner / 'rl-policy-capacity-request.json', {'schema':'natlang.native-policy-capacity-request/1',
+        'source':{'path':graph['path'],'sha256':graph['sha256']},'objective':{'sha256':'d'*64}})
+    evidence = {'schema':'natlang.unearned-rl-preparation/1','out':str(out),'parent':parent,
+                'admission':admission,'capacity_request':capacity}
+    reference = write(out / 'unearned-preparation.json', evidence)
+    return reference, {'out':out,'policy_id':parent['sha256']}, learner, write, evidence
+
+
+def test_actual_unearned_preparation_keeps_exact_parent(tmp_path):
+    from natlang_neuralese.rl.reward_reclassification import verify_unearned_preparation
+    reference, request, learner, _, expected = preparation_fixture(tmp_path)
+    assert verify_unearned_preparation(reference, request) == expected
+    assert not (learner / 'report.json').exists()
+
+
+@pytest.mark.parametrize('mutation', ['checkpoint', 'report', 'different_parent', 'changed_rollouts', 'different_graph', 'outside_admission'])
+def test_unearned_preparation_rejects_other_state_and_bindings(tmp_path, mutation):
+    from natlang_neuralese.rl.reward_reclassification import verify_unearned_preparation
+    reference, request, learner, write, evidence = preparation_fixture(tmp_path)
+    if mutation == 'checkpoint': write(learner / 'checkpoint.pt', {'earned':'preserve'})
+    if mutation == 'report': write(learner / 'report.json', {'step':1})
+    if mutation == 'different_parent': request['policy_id'] = 'b'*64
+    if mutation == 'changed_rollouts': write(request['out'] / 'rollouts.jsonl', {'capture':'different'})
+    if mutation == 'different_graph': write(learner / 'rl-native-graphs.jsonl', {'graph':'different'})
+    if mutation == 'outside_admission':
+        evidence['admission'] = write(tmp_path / 'foreign-admission.json', {})
+        reference = write(request['out'] / 'unearned-preparation.json', evidence)
+    with pytest.raises(ValueError): verify_unearned_preparation(reference, request)

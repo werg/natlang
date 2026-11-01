@@ -22,6 +22,42 @@ def _read(reference):
     return path
 
 
+def verify_unearned_preparation(reference, request):
+    """Authenticate an interrupted admission that produced no recoverable update.
+
+    This does not manufacture a zero-step training report or assert that an
+    optimizer ever ran. The exact current full parent is retained and all old
+    preparatory artifacts remain available as evidence.
+    """
+    evidence = json.loads(_read(reference).read_text())
+    out = Path(request['out']).resolve(strict=True)
+    learner = out / 'learner'
+    if (evidence.get('schema') != 'natlang.unearned-rl-preparation/1'
+            or evidence.get('out') != str(out)
+            or evidence.get('parent', {}).get('sha256') != request['policy_id']):
+        raise ValueError('unearned preparation names a different collection or parent')
+    _read(evidence['parent'])
+    if (learner / 'checkpoint.pt').exists() or (learner / 'report.json').exists():
+        raise ValueError('unearned preparation cannot discard a recoverable learner update')
+    capacity_path = _read(evidence['capacity_request'])
+    admission_path = _read(evidence['admission'])
+    if capacity_path != learner / 'rl-policy-capacity-request.json' or admission_path != learner / 'rl-data-receipt.json':
+        raise ValueError('unearned preparation artifacts escaped their actual learner')
+    capacity = json.loads(capacity_path.read_text())
+    admission = json.loads(admission_path.read_text())
+    source = capacity.get('source') or {}
+    if (capacity.get('schema') != 'natlang.native-policy-capacity-request/1'
+            or admission.get('schema') != 'natlang.native-rl-admission/1'
+            or admission.get('policy', {}).get('checkpoint_sha256') != request['policy_id']
+            or admission.get('rollouts') != {str(out / 'rollouts.jsonl'): sha256_file_hex(out / 'rollouts.jsonl')}
+            or capacity.get('objective', {}).get('sha256') != admission.get('objective_sha256')
+            or source.get('sha256') != admission.get('native_graphs_sha256')
+            or Path(source.get('path', '')).resolve() != learner / 'rl-native-graphs.jsonl'
+            or sha256_file_hex(learner / 'rl-native-graphs.jsonl') != source.get('sha256')):
+        raise ValueError('unearned preparation differs from the actual original admission')
+    return evidence
+
+
 def projected_rows(out, original):
     """Reassess exact raw results; preserve captures and historical cost policy."""
     entries = list(read_jsonl(out / 'queue.jsonl'))
@@ -117,15 +153,20 @@ def resume_reclassified_collection(reference, request, *, validate_actors):
     if sha256_file_hex(Path(task_packet.__file__)) != proof['classifier']['sha256']:
         raise ValueError('reward correction requires its exact reviewed classifier')
     # The abandoned learner may have changed metadata, but earned no SGD.
-    report = json.loads(_read(proof['no_update_report']).read_text())
-    receipt = json.loads(_read(proof['no_update_receipt']).read_text())
-    if (report.get('step') != 0 or report.get('completed') is not False
-            or report.get('continuation_boundary', {}).get('new_optimizer_updates') != 0
-            or report.get('continuation', {}).get('checkpoint_sha256') != request['policy_id']
-            or receipt.get('operation_parent', {}).get('sha256') != request['policy_id']
-            or any(receipt.get('exposure', {}).get(k) != 0 for k in ('consumed_updates', 'graph_visits'))
-            or receipt.get('training_receipt', {}).get('sha256') != proof['no_update_report']['sha256']):
-        raise ValueError('reward repair cannot discard earned or uncertain learner updates')
+    if proof.get('unearned_preparation') is not None:
+        if 'no_update_report' in proof or 'no_update_receipt' in proof:
+            raise ValueError('reward repair mixes distinct interruption evidence')
+        verify_unearned_preparation(proof['unearned_preparation'], request)
+    else:
+        report = json.loads(_read(proof['no_update_report']).read_text())
+        receipt = json.loads(_read(proof['no_update_receipt']).read_text())
+        if (report.get('step') != 0 or report.get('completed') is not False
+                or report.get('continuation_boundary', {}).get('new_optimizer_updates') != 0
+                or report.get('continuation', {}).get('checkpoint_sha256') != request['policy_id']
+                or receipt.get('operation_parent', {}).get('sha256') != request['policy_id']
+                or any(receipt.get('exposure', {}).get(k) != 0 for k in ('consumed_updates', 'graph_visits'))
+                or receipt.get('training_receipt', {}).get('sha256') != proof['no_update_report']['sha256']):
+            raise ValueError('reward repair cannot discard earned or uncertain learner updates')
     corrected = _read(proof['corrected_rollouts'])
     score = _read(proof['corrected_score'])
     directory = out / ('reward-reclassification-' + proof['id'])
