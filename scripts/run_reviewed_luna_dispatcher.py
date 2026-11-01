@@ -44,6 +44,7 @@ ALLOWED_REASONING = {'low', 'medium', 'high'}
 JOURNAL_SPOOL_CASE_BYTES = 256 * 1024 * 1024
 JOURNAL_SPOOL_ACTIVE_CASE_LIMIT = 6
 JOURNAL_SPOOL_FREE_FLOOR_BYTES = 40 * 1024 * 1024 * 1024
+GLOBAL_LUNA_WORKER_LIMIT = 6
 MIB = 1024 * 1024
 _stop_requested = False
 
@@ -681,21 +682,96 @@ def _authority_update(identity, binding=None, *, preflight=False):
         state['luna_workers'] = workers
         state['luna_runtime'] = identity['runtime']
         snapshot = reconcile_luna_authority(state)
+        reservations = state.get('luna_worker_reservations', [])
+        if not isinstance(reservations, list):
+            raise ValueError('Luna worker reservations must be a list')
+        # A slot reservation bridges the interval between claiming a case and
+        # registering its verified queue PID. Drop only reservations whose
+        # owning dispatcher and bound queue process are both gone.
+        reservations = [row for row in reservations if _reservation_is_live(row)]
+        if binding is not None:
+            reservations = [row for row in reservations if not (
+                row.get('campaign') == identity['campaign_id'] and
+                row.get('index') == binding.get('source_index'))]
         if preflight:
-            live = state.get('additional_teachers', {}).get('luna', {}).get('workers', [])
-            foreign = [worker for worker in live if worker.get('campaign') != identity['campaign_id']]
-            if foreign:
-                raise ValueError('Another verified Luna campaign is active; wait for reviewed handoff')
-            if snapshot['actual_live_workers'] > identity['slots']:
-                raise ValueError('Verified campaign workers exceed this plan slot ceiling')
+            campaign_live = [worker for worker in state.get('additional_teachers', {}).get('luna', {}).get('workers', [])
+                             if worker.get('campaign') == identity['campaign_id']]
+            if len(campaign_live) > identity['slots']:
+                raise ValueError('Verified workers for this campaign exceed its reviewed slot ceiling')
+            if snapshot['actual_live_workers'] + len(reservations) > GLOBAL_LUNA_WORKER_LIMIT:
+                raise ValueError('Verified Luna workers and pending launches exceed the global six-worker ceiling')
+        state['luna_worker_reservations'] = reservations
         state['luna_active_campaigns'] = snapshot['active_campaigns']
         state['luna_status'] = 'running' if snapshot['actual_live_workers'] else 'idle'
         atomic_json(path, state)
 
 
 def _authority_preflight(identity):
-    """Do not let a new dynamic plan silently overlap another Luna campaign."""
+    """Allow reviewed campaigns to overlap under the shared six-slot ceiling."""
     _authority_update(identity, preflight=True)
+
+
+def _reservation_is_live(row):
+    if not isinstance(row, dict):
+        return False
+    pid = row.get('dispatcher_pid')
+    argv = _proc_argv(pid) if type(pid) is int and pid > 0 else []
+    plan_path = row.get('plan_path')
+    plan_sha256 = row.get('plan_sha256')
+    dispatcher_live = bool(argv and str(DISPATCHER) in argv and plan_path in argv and
+                            '--sha256' in argv and plan_sha256 in argv)
+    if dispatcher_live:
+        return True
+    queue = row.get('queue')
+    journal = row.get('journal')
+    runtime = row.get('runtime')
+    if all(isinstance(value, str) and value for value in (queue, journal, runtime)):
+        return _find_runner(queue, journal, runtime) is not None
+    return False
+
+
+def _reserve_worker_slot(identity, *, index, slot, queue, journal):
+    """Atomically reserve one of six global Luna worker slots before spawn."""
+    path = Path(identity['authority'])
+    with authority_lock(path):
+        state = json.loads(path.read_text(encoding='utf-8'))
+        snapshot = reconcile_luna_authority(state)
+        reservations = state.get('luna_worker_reservations', [])
+        if not isinstance(reservations, list):
+            raise ValueError('Luna worker reservations must be a list')
+        reservations = [row for row in reservations if _reservation_is_live(row)]
+        token = (identity['campaign_id'], index)
+        if any((row.get('campaign'), row.get('index')) == token for row in reservations):
+            raise ValueError('A worker launch reservation already exists for this case')
+        occupied = snapshot['actual_live_workers'] + len(reservations)
+        if occupied >= GLOBAL_LUNA_WORKER_LIMIT:
+            state['luna_worker_reservations'] = reservations
+            state['luna_active_campaigns'] = snapshot['active_campaigns']
+            state['luna_status'] = 'running' if snapshot['actual_live_workers'] else 'idle'
+            atomic_json(path, state)
+            return False
+        reservations.append({'campaign': identity['campaign_id'], 'index': index, 'slot': slot,
+                             'dispatcher_pid': os.getpid(), 'plan_path': identity['plan_path'],
+                             'plan_sha256': identity['plan_sha256'], 'queue': queue,
+                             'journal': journal, 'runtime': identity['runtime'],
+                             'reserved_at': _now()})
+        state['luna_worker_reservations'] = reservations
+        state['luna_active_campaigns'] = snapshot['active_campaigns']
+        state['luna_status'] = 'running' if snapshot['actual_live_workers'] else 'idle'
+        atomic_json(path, state)
+        return True
+
+
+def _release_worker_reservation(identity, index):
+    path = Path(identity['authority'])
+    with authority_lock(path):
+        state = json.loads(path.read_text(encoding='utf-8'))
+        reservations = state.get('luna_worker_reservations', [])
+        if not isinstance(reservations, list):
+            raise ValueError('Luna worker reservations must be a list')
+        state['luna_worker_reservations'] = [row for row in reservations if not (
+            row.get('campaign') == identity['campaign_id'] and row.get('index') == index)]
+        atomic_json(path, state)
 
 
 def _free_space_mib(path=ROOT):
@@ -986,6 +1062,14 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                         break
                     if slot in active:
                         continue
+                    case = cases[next_case]
+                    claim_id = f"{identity['campaign_id']}-case-{case['index']:06d}"
+                    slot_root = root / f'slot-{slot:02d}'
+                    queue_path = slot_root / 'claims' / claim_id / 'queue.jsonl'
+                    journal_path = slot_root / 'journal.jsonl'
+                    if not _reserve_worker_slot(identity, index=case['index'], slot=slot,
+                                                queue=str(queue_path), journal=str(journal_path)):
+                        break
                     minimum = plan.get('min_free_mib', 1024)
                     storage = _storage_preflight(identity, min_free_mib=minimum,
                                                  active_cases=len(active))
@@ -1009,6 +1093,9 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                                                storage_checks=storage['checks'],
                                                pending_indices=[row['index'] for row in cases[next_case:]])
                             storage_paused = True
+                        # The capacity reservation was made before checking
+                        # storage; release it when no claim can be made.
+                        _release_worker_reservation(identity, case['index'])
                         break
                     if storage_paused:
                         _append_event(ledger, {'event': 'storage_resumed',
@@ -1022,7 +1109,6 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                         _set_launch_status(launch_record, identity, 'running', resumed_at=_now(),
                                            storage_checks=storage['checks'])
                         storage_paused = False
-                    case = cases[next_case]
                     next_case += 1
                     entry, queue, queue_sha, journal, supervisor_log, queue_payload = _claim_queue(plan, identity, slot, case)
                     claim_id = entry['key']

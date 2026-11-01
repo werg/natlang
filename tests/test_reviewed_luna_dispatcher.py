@@ -144,6 +144,43 @@ def test_dispatch_claim_must_explicitly_disable_resumability(tmp_path, monkeypat
     dispatcher._require_nonresumable_ledger_claim('campaign-test')
 
 
+def test_campaign_preflight_allows_distinct_campaigns_under_six_worker_ceiling(reviewed_plan, monkeypatch):
+    _, _, _, plan = reviewed_plan
+    authority = Path(plan['authority'])
+    authority.write_text(json.dumps({'luna_workers': [], 'additional_teachers': {'luna': {
+        'workers': [{'campaign': 'older-campaign', 'status': 'running'}]}}}))
+    monkeypatch.setattr(dispatcher, 'reconcile_luna_authority', lambda state: {
+        'actual_live_workers': 1, 'active_campaigns': ['older-campaign']})
+    _, identity = dispatcher.validate_plan(*[Path(reviewed_plan[0]), reviewed_plan[1]])
+
+    dispatcher._authority_preflight(identity)
+
+    state = json.loads(authority.read_text())
+    assert state['additional_teachers']['luna']['workers'][0]['campaign'] == 'older-campaign'
+    assert state['luna_active_campaigns'] == ['older-campaign']
+
+
+def test_worker_slot_reservations_atomically_enforce_global_six_cap(tmp_path, monkeypatch):
+    authority = tmp_path / 'authority.json'
+    authority.write_text(json.dumps({'luna_workers': [], 'additional_teachers': {'luna': {'workers': []}}}))
+    monkeypatch.setattr(dispatcher, 'reconcile_luna_authority', lambda state: {
+        'actual_live_workers': 0, 'active_campaigns': []})
+    monkeypatch.setattr(dispatcher, '_reservation_is_live', lambda row: True)
+    def identity(campaign):
+        return {'authority': str(authority), 'campaign_id': campaign, 'plan_path': f'/plans/{campaign}.json',
+                'plan_sha256': 'a' * 64, 'runtime': '/runtime'}
+
+    assert all(dispatcher._reserve_worker_slot(identity('campaign-a'), index=i, slot=i + 1,
+               queue=f'/a/{i}/queue.jsonl', journal=f'/a/{i}/journal.jsonl') for i in range(4))
+    assert all(dispatcher._reserve_worker_slot(identity('campaign-b'), index=i, slot=i + 1,
+               queue=f'/b/{i}/queue.jsonl', journal=f'/b/{i}/journal.jsonl') for i in range(2))
+    assert not dispatcher._reserve_worker_slot(identity('campaign-c'), index=0, slot=1,
+               queue='/c/0/queue.jsonl', journal='/c/0/journal.jsonl')
+    state = json.loads(authority.read_text())
+    assert len(state['luna_worker_reservations']) == 6
+    assert {row['campaign'] for row in state['luna_worker_reservations']} == {'campaign-a', 'campaign-b'}
+
+
 def test_reviewed_runner_binds_spool_root(reviewed_plan, tmp_path):
     plan_path, plan_sha, campaign_root, raw = reviewed_plan
     plan, identity = dispatcher.validate_plan(plan_path, plan_sha)
