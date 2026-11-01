@@ -1,3 +1,60 @@
+## Live supervision update, 2026-11-01 13:02 CET
+
+This section supersedes the instantaneous observations below.
+
+- Joint SFT completed four actual updates57→61, retaining optimizer/RNG and
+  earned exposure. Full checkpoint SHA256
+  `610de853e0578e240c1c085b8861468b826a767de3fd81ab62775b67a1d0abd9`;
+  rolling slot `sd-r1/learner/checkpoint.pt`. There are420 earned graph visits
+  against982749 required; comprehensive SFT is far from complete.
+- Step61 protected development evaluation:2/4 exact successes, all four terminal
+  and accounted;57 had1/4. The file-effects task improved in this observation.
+  This small comparison is encouraging, not demonstrated general capability lift.
+- Actual61 controller publication succeeded through main621ab7eca, with archived
+  report/receipt and independently recovered57 metadata. The trainer retains53
+  as its objective ancestor; authenticated publication57 proves that identity
+  without confusing it with the immediate57→61 parent/update delta. Exact
+  evidence: `ops/publication61-1101/publication61.json`.
+- Real next on-policy round11 launched as
+  `lfm3-onpolicy61-307946-1101.service`, frozen
+  `runtime-next61-1de6db-1101`, HIGH76GB ledger, one policy round. Actor weights
+  loaded; full-prompt collection initializes from actual61. Launch/config is
+  `ops/next61-onpolicy-307946-1101/config.json`. A launch is not an RL update.
+  The stale root `sd-r1/config.json` remains unsuitable for resumption.
+- Prepared and bound successor recipe contains307946 graphs: actual298509
+  predecessor plus9436 verified Big2 graphs and one accepted/masked CoEdIT graph.
+  Train/foundation roles move together; held source stays unchanged. Unearned
+  intermediate307945 is coalesced rather than claimed as training history.
+  Exact controls: `ops/coalesced307946-next61-v2-1101/`. No new SFT exposure yet.
+- Exact shared-producer decision factor0.01 reduces its measured effective
+  objective mass from roughly31% to0.962%; producer gradients, all consumer
+  targets and complete graph topology remain. No blanket communication loss cut.
+- New norm backward is qualified on actual61: reference/candidate losses and
+  all288 gradients bit-exact, with the optimized branch actually exercised.
+  `ops/qualify61-eab-plain-fullstate-v5-1101.json`. Selection is shape-specific;
+  broad unmeasured throughput claims would be wrong. The complete capacity
+  geometry audit also disproved the earlier claimed five-to-one probe reduction.
+- Independent stock-HF/native attention investigation isolated actual BF16
+  backend output rounding with identical Q/K/V/RoPE/masks. Both are similarly
+  close to the no-TF32 FP32 reference. No mask/RoPE bug or task-level harmlessness
+  is established. See `LFM3_HF_NATIVE_REFERENCE_20261101.md`.
+- Pop matched52/57 evaluations each observed two successes, one mismatch and
+  one infrastructure-wall unresolved case. Both are ineligible for a full score;
+  unresolved is not a model failure. Fresh zero-exposure instruction-baseline
+  evaluation is now actually running on Pop. Future matched completion needs
+  a larger nonbinding wall allowance, preserving original observations.
+- Four reviewed medium-Luna NLIv16 workflow workers actually ran; slots01/03
+  completed outputs and02/04 were still live at the last check. Full-graph
+  quality and actual Sol judgment must be checked before positive admission.
+  Campaign `contractnli-v16-scoped-sol-v2-20261101` on the external drive.
+- Earned61 external independent export is live, approximately6.6/15.3GB copied
+  at13:00. It is not yet verified recovery. Earned53 external and57 Pop copies
+  retain their existing verified status. New offload owner16d722bd7 protects one
+  in-flight copy and coalesces one newest pending copy independently of learner
+  service exit; intermediate join/cancel implementations are superseded.
+- Internal free space88GiB, external307GiB at this observation. Preserve source,
+  held inputs, actual recovery dependencies and live checkpoint reservations.
+
 ## Live supervision update, 2026-11-01 11:24 CET
 
 This section supersedes older instantaneous process, source and storage counts below.
