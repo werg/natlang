@@ -538,3 +538,21 @@ def test_episode_guidance_check_accepts_student_text_twin_and_rejects_imported_g
     with pytest.raises(ValueError, match='mark it as a teacher attempt'):
         check_episode_guidance({'jolt_role': 'student'}, imported)
     assert check_episode_guidance({'jolt_role': 'teacher'}, imported) == 'teacher'
+
+
+def test_backbone_student_and_teacher_use_native_writer(tmp_path):
+    from natlang_neuralese.rl.production import guidance_collection_options
+    from natlang_neuralese.rl.jolt import student_guidance,teacher_entries
+    from natlang_neuralese.rl.task_rollouts import build_queue
+    case=train_case();cases=tmp_path/'cases.jsonl';cases.write_text(json.dumps(case)+'\n')
+    config=tmp_path/'controls.json';config.write_text(json.dumps({'x_natlang_rl_capture':True}))
+    entries=build_queue(cases,1,2,tmp_path,temperature=1.,case_seconds=60,max_model_requests=16,max_turns=16,seed_base=1)
+    options=guidance_collection_options('backbone')
+    student_guidance(entries,ids=[case['id']],cases=cases,config=config,out=tmp_path,custody=custody(),**options)
+    for item in entries:
+        g=json.loads(open(item['chat_request_config']).read())['x_natlang_guidance']
+        assert g['role']=='student' and g['writer']=='native' and g['selection']=='crisp'
+    rows=[{'task_id':case['id'],'group':0,'sample':i,'reward':{'quality':0.}} for i in range(2)]
+    teachers=teacher_entries(entries,rows,cases=cases,config=config,out=tmp_path,attempts=1,seed_base=1,custody=custody(),**options)
+    g=json.loads(open(teachers['entries'][0]['chat_request_config']).read())['x_natlang_guidance']
+    assert g['role']=='teacher' and g['writer']=='native' and g['selection']=='crisp'

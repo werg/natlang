@@ -591,6 +591,11 @@ def _legacy_collection_binding(recorded):
     return recorded
 
 
+def guidance_collection_options(stage):
+    """Backbone guidance is authored by the current actor for both roles."""
+    return {'selection':'crisp', 'writer':'native'} if stage == 'backbone' else {}
+
+
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
@@ -711,7 +716,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         # JOLT+ students write (without importing) their guidance for the OPSD twin.
         from .jolt import student_guidance
         guidance_refusal = student_guidance(entries, ids=preparation['ids'], cases=Path(cases), config=config,
-                                            out=directory,**({'selection':'crisp','writer':'off'} if guidance_stage=='backbone' else {}))
+                                            out=directory,**guidance_collection_options(guidance_stage))
     runtime = Path(runtime or root('repo') / 'ts-host')
     if not (runtime / 'dist/teacher/cli.js').is_file():
         raise FileNotFoundError('RL requires the built natlang collector runtime')
@@ -761,7 +766,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             from .jolt import plan_command
             teachers = teacher_entries(entries, list(read_jsonl(out / 'student-rollouts.jsonl')),
                                        cases=Path(cases), config=config, out=out, attempts=teacher_attempts,
-                                       seed_base=seed_base, **({'selection':'crisp','writer':'off'} if guidance_stage=='backbone' else {}), plan_command=(plan_command(endpoints[0])
+                                       seed_base=seed_base, **guidance_collection_options(guidance_stage), plan_command=(plan_command(endpoints[0])
                                                                           if teacher_plan == 'nl' else None))
             if teachers['entries']:
                 bind_collection_prompt(teachers['entries'],prompt_rendering)
