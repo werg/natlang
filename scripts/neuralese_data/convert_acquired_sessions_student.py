@@ -11,15 +11,17 @@ receipts) over every export those registry entries bind, with the student's toke
       every export receipt bound by an admitted entry's admission audit (sorted, de-duplicated)
   convert_acquired_sessions_student.py convert --exports EXPORTS.json --out-root DIR --protection MANIFEST
       [--student lfm3] [--shard K --shards N]
-      resumable: an export whose output has a receipt is skipped
+      resumable: skip only a receipt bound to the same export and history policy
   convert_acquired_sessions_student.py summary --exports EXPORTS.json --out-root DIR --out SUMMARY.json
 
-Output: DIR/<source>/<export id>/{train,test}/native-graphs.jsonl.zst + receipt.json, one per export. Admission is
-inherited from the registry entries; a mixture still applies the complete current protection union.
+Output: DIR/<source>/<export id>/{train,test}/native-graphs.jsonl.zst + receipt.json, one per export. Unlabelled
+acquisitions include their source-path hash in the output key to avoid leaf-name collisions. Conversion is not
+training admission; current protection, quality and source-append checks remain required.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -68,7 +70,12 @@ def output_dir(root: Path, export: str) -> Path:
     """DIR/<source>/<export id>: the dataset label (D12, D32, ...) and the export's own directory chain."""
     parts = Path(export).parent.parts
     label = next((p for p in reversed(parts) if re.fullmatch(r'D\d+', p)), 'other')
-    tail = parts[parts.index(label) + 1:] if label in parts else parts[-1:]
+    if label == 'other':
+        # Different acquisitions commonly share a normalized leaf name. Keep
+        # their immutable export identities separate instead of skipping one.
+        key = hashlib.sha256(str(Path(export).absolute()).encode()).hexdigest()[:24]
+        return root / label / (parts[-1] + '-' + key)
+    tail = parts[parts.index(label) + 1:]
     return root / label / '/'.join(tail)
 
 
@@ -101,7 +108,11 @@ def convert(args):
         out = output_dir(Path(args.out_root), export)
         policy = profiles.get(export)
         if (out / 'receipt.json').exists():
-            done_policy = (json.loads((out / 'receipt.json').read_text()).get('prepared_tokenizer') or {}).get(
+            done_receipt = json.loads((out / 'receipt.json').read_text())
+            recorded = Path(done_receipt['export_receipt']['path'])
+            if recorded != Path(export) and recorded.resolve() != Path(export).resolve():
+                raise ValueError(f'{out} contains a different acquired export; refusing a false completed skip')
+            done_policy = (done_receipt.get('prepared_tokenizer') or {}).get(
                 'explicit_history_reasoning_policy')
             if done_policy != policy:
                 raise ValueError(f'{out} was converted with history policy {done_policy}, export needs {policy}')

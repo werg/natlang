@@ -74,3 +74,10 @@ def test_filtered_inventory_does_not_claim_unselected_source_coverage(tmp_path):
     assert result['source_filter'] == ['D15']
     assert result['complete_receipts'] == 0
     assert not result['per_source']
+
+
+def test_other_acquisitions_with_identical_leaf_names_have_distinct_outputs(tmp_path):
+    first = str(tmp_path / 'acquisition-a/normalized-first-whole-transcript-v2/export.json')
+    second = str(tmp_path / 'acquisition-b/normalized-first-whole-transcript-v2/export.json')
+    assert output_dir(tmp_path / 'out', first) != output_dir(tmp_path / 'out', second)
+    assert output_dir(tmp_path / 'out', first) == output_dir(tmp_path / 'out', first)
