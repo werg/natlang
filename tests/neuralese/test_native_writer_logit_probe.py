@@ -28,3 +28,15 @@ def test_recorded_prefix_replay_measures_each_actual_sample_and_private_context(
     assert result[1]['produce_close']['logit']==result[0]['produce_close']['logit']+3
     changed=probe.replay(Engine(),capture,perturb=True)
     assert changed[0]['produce_close']['logit']==result[0]['produce_close']['logit']+1
+
+
+def test_open_writer_sampler_keeps_padded_vocabulary_close_token_sampleable():
+    from natlang_neuralese.serve.engine import Engine, GenerationRequest, Sequence
+    request=GenerationRequest(messages=[],temperature=0)
+    seq=Sequence(request,None,native_capture_open=True,native_own_position=11)
+    seq.logits=torch.zeros(1,128000)
+    seq.logits[0,125034]=10  # produce close; 125036 is consume close
+    seq.bans[10]={125034}  # an unrelated guidance position is not a global ban
+    assert Engine._native_token(None,seq)[0]==125034
+    seq.bans[11]={125034}  # a specific guidance rejection is the only mask here
+    assert Engine._native_token(None,seq)[0]!=125034

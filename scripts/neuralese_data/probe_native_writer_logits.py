@@ -82,9 +82,13 @@ def main():
     actor=json.loads(Path(a.actor_receipt).read_text())['info']
     cache=actor.get('serving_config',{}).get('prefix_cache')
     if cache is not None:
-        configure_native_prefix_cache(engine,cache['budget_bytes']/2**30,cache['block_tokens'])
+        # CPU diagnostics must not reserve a long-lived accelerator-sized
+        # prefix cache; a smaller explicitly recorded prefill grid can fit a
+        # bounded host allocation without changing the prompt token sequence.
+        configure_native_prefix_cache(engine,0 if a.cpu_diagnostic else cache['budget_bytes']/2**30,
+                                      min(cache['block_tokens'],a.prefill_tokens) if a.cpu_diagnostic else cache['block_tokens'])
     actual,recorded=engine.serving_config,actor.get('serving_config') or {}
-    ignored={'device','device_total_memory_bytes','identity_sha256'} if a.cpu_diagnostic else set()
+    ignored={'device','device_total_memory_bytes','identity_sha256','prefill_tokens','prefix_cache'} if a.cpu_diagnostic else set()
     if {k:v for k,v in actual.items() if k not in ignored} != {k:v for k,v in recorded.items() if k not in ignored}:
         raise ValueError('loaded serving configuration differs from recorded actor')
     with torch.inference_mode():
@@ -95,7 +99,7 @@ def main():
        'serving_config':engine.serving_config,'prefill_tokens':a.prefill_tokens,
        'recorded_serving_config':recorded,'cpu_diagnostic':a.cpu_diagnostic,
        'baseline':baseline,'perturbed_first_private_token':changed,
-       'scope':('recorded token-prefix replay on CPU; arithmetic and greedy choices are not presumed equivalent to the recorded accelerator' if a.cpu_diagnostic
+       'scope':('recorded token-prefix replay on CPU with a separately recorded prefill grid; arithmetic and greedy choices are not presumed equivalent to the recorded accelerator' if a.cpu_diagnostic
                 else 'exact recorded writer prefix replay; changed-prefix result is causal diagnosis only, no SGD or task outcome')}
     Path(a.output).write_text(json.dumps(receipt,indent=2)+'\n')
     print(json.dumps({'output':a.output,'greedy_match':all(x['greedy_matches_recording'] for x in baseline)}))
