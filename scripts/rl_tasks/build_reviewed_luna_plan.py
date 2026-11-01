@@ -254,6 +254,26 @@ def _verify_intake_controller_frontend(rows: list[dict], intake_receipt: dict | 
     return fresh
 
 
+def _verify_root_input_bindings(rows: list[dict], intake_receipt: dict | None,
+                               runtime: Path) -> dict:
+    """Bind task input names using prepareProgramNode from the exact selected runtime."""
+    from scripts.rl_tasks.root_input_binding_frontend import validate_root_input_bindings
+    fresh = validate_root_input_bindings(rows, runtime_dist=runtime / 'dist')
+    recorded = (intake_receipt or {}).get('root_input_binding_preflight')
+    if recorded is None:
+        if isinstance(intake_receipt, dict) and intake_receipt.get('schema') == 'natlang.codebase_intake_receipt/1':
+            raise ValueError('codebase intake is missing collector root input-binding preflight evidence')
+        return fresh
+    if not isinstance(recorded, dict) or recorded.get('schema') != 'natlang.root-input-binding-preflight/1':
+        raise ValueError('intake root input-binding evidence has an unsupported schema')
+    def normalized(receipt: dict) -> list[tuple[str, str, tuple[str, ...]]]:
+        return sorted((item.get('id'), item.get('root'), tuple(item.get('input_names', [])))
+                      for item in receipt.get('checked', []) if isinstance(item, dict))
+    if normalized(recorded) != normalized(fresh):
+        raise ValueError('frozen collector root input bindings differ from the intake preflight')
+    return fresh
+
+
 def _program_id(row: dict) -> str:
     identifier = (row.get('curriculum', {}).get('external') or {}).get('program_id')
     return identifier if isinstance(identifier, str) and identifier else '__unknown_codebase__'
@@ -391,6 +411,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
     intake_record = json.loads(intake_receipt.read_text(encoding='utf-8')) if intake_receipt else None
     rows, verify_record = _verify_rows(source, verification, intake_receipt=intake_record)
     controller_preflight = _verify_intake_controller_frontend(rows, intake_record, runtime)
+    root_input_preflight = _verify_root_input_bindings(rows, intake_record, runtime)
     if intake_record and not intake_record.get('admission_eligible'):
         raise ValueError('codebase dataset has an unresolved rights hold')
     protected = protected or ProtectedWorlds.load()
@@ -437,7 +458,9 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
                  Path(__file__).with_name('audit_natlang_packages.py'), verification.parent / 'verification.json',
                  Path(__file__).with_name('codebase_services.py'),
                  Path(__file__).with_name('application_controller_frontend.py'),
-                 Path(__file__).with_name('validate_controller_frontend.mjs'), protection_receipt]
+                 Path(__file__).with_name('validate_controller_frontend.mjs'),
+                 Path(__file__).with_name('root_input_binding_frontend.py'),
+                 Path(__file__).with_name('validate_root_input_bindings.mjs'), protection_receipt]
     if intake_receipt:
         artifacts.append(intake_receipt.resolve(strict=True))
         external_service_files = _intake_external_service_files(intake_record)
@@ -466,6 +489,7 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
         'artifact_hashes': artifact_hashes,
         'intake_receipt_binding': intake_binding,
         'controller_frontend_preflight': controller_preflight,
+        'root_input_binding_preflight': root_input_preflight,
         'runtime_semantics_capability': runtime_semantics_capability,
         'external_service_bindings': _intake_external_service_files(intake_record),
         'external_services': (intake_record or {}).get('external_services', {}),

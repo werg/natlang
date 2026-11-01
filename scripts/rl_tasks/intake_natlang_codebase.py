@@ -25,6 +25,7 @@ from scripts.rl_tasks.common import jsonl_write, slug, text_digest
 from scripts.rl_tasks.audit_natlang_packages import audit
 from scripts.rl_tasks.codebase_services import load_external_services, bind_world_services
 from scripts.rl_tasks.execution_adapter import reject_uninvoked_execution_adapter, verify_runtime_trees
+from scripts.rl_tasks.root_input_binding_frontend import validate_root_input_bindings
 
 
 def _sha(value: bytes) -> str:
@@ -568,6 +569,10 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
     package_revision = metadata['source_revision'] + (f'+services:{service_set_sha}' if service_bindings else '')
     cases = _make_cases(metadata['program_id'], package_revision, files, metadata, world_rows,
                         external_services, service_bindings, world_services)
+    # Validate every task's runtime input names with the same prepareProgramNode
+    # binder used by collection. In particular, service fixture selectors and
+    # other intake metadata must not leak into the model-visible root arguments.
+    root_input_preflight = validate_root_input_bindings(cases)
     if controller is not None:
         from scripts.rl_tasks.application_controller_frontend import validate_controller_frontend
         roots = sorted({row['operation'] for row in world_rows})
@@ -598,6 +603,7 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
         'package_sha256': _sha(json.dumps({'files': files, 'services': external_services}, sort_keys=True, ensure_ascii=False).encode()),
         'external_services': service_bindings,
         'natlang_child_call_visibility': child_call_visibility,
+        'root_input_binding_preflight': root_input_preflight,
         **({'controller_frontend_preflight': controller_frontend_receipts}
            if controller_frontend_receipts else {}),
         'runtime_dependency_trees': runtime_dependency_trees,

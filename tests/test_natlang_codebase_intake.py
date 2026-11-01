@@ -27,7 +27,7 @@ args:
 returns: Result
 ---
 Use inspectEvidence and chooseAction with the supplied state.\n''')
-    (package / 'types.ts').write_text('export type State = { events: string[] };\nexport type Result = { action: string };\n')
+    (package / 'types.ts').write_text('export type State = { events: string[] };\nexport type Finding = { supported: string[]; unresolved: string[] };\nexport type Result = { action: string };\n')
     (package / 'LICENSE.notice').write_text('Use the fixture source under CC0.\n')
     (package / 'triage' / 'inspectEvidence.nl').write_text('''---
 args:
@@ -98,6 +98,26 @@ def test_intake_binds_multiple_operations_and_preserves_exact_vs_judged(tmp_path
     assert judged_rows[0]['semantics']['oracle']['level'] == 'judged'
     assert judged_rows[0]['curriculum']['reference']['root'] == []
     assert 'reconcile.nl' in rows[0]['semantics']['files']
+
+
+def test_intake_rejects_service_fixture_metadata_as_an_undeclared_root_argument(tmp_path):
+    worlds = [
+        {'id': 'case-1', 'group_id': 'world-a', 'task_family': 'corroborated', 'operation': 'reconcile.nl',
+         'task': 'Select a safe response from corroborated current evidence.',
+         'inputs': {'state': {'events': ['a', 'b']}, 'serviceFixtureId': 'case-1'},
+         'expected': {'action': 'rollback'}, 'oracle': 'exact',
+         'source_groups': ['incident-dataset:world-a']},
+        {'id': 'case-2', 'group_id': 'world-dev', 'task_family': 'retraction',
+         'operation': 'triage/inspectEvidence.nl',
+         'task': 'Identify which event was retracted and preserve uncertainty.',
+         'inputs': {'state': {'events': ['c', 'd']}},
+         'expected': {'supported': [], 'unresolved': ['impact']},
+         'oracle': {'level': 'judged', 'rubric': 'Judge evidence support and uncertainty.'},
+         'source_groups': ['incident-dataset:world-dev']},
+    ]
+    package, _ = _package(tmp_path, worlds=worlds)
+    with pytest.raises(ValueError, match=r'serviceFixtureId is not a parameter of reconcile'):
+        intake(package, output=tmp_path / 'must-not-be-intaken.jsonl')
 
 
 def test_child_call_visibility_rejects_sibling_and_accepts_companion_or_explicit_use():
@@ -409,10 +429,18 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     tree_binding = verify_runtime_tree(root=runtime_tree_root, manifest_path=tree_manifest,
                                        manifest_sha256=tree_sha)
     tree_binding['name'] = 'fixture-runtime'
+    root_input_preflight = {'schema': 'natlang.root-input-binding-preflight/1',
+        'loaded_by': 'teacher.prepareProgramNode', 'checked': [
+            {'id': row['id'], 'root': row['semantics']['root'], 'input_names': [],
+             'binding': 'teacher.prepareProgramNode/collector-root-argument-binding'} for row in rows]}
     intake_receipt.write_text(json.dumps({'admission_eligible': True, 'package_path': str(package.resolve()),
+        'root_input_binding_preflight': root_input_preflight,
         'external_services': {'telecom': {'source_path': 'host/collector-service.ts', 'source_sha256': service_sha,
             'fixtures_path': 'source/fixtures.jsonl', 'fixtures_sha256': fixtures_sha}},
         'runtime_dependency_trees': [tree_binding]}))
+    from scripts.rl_tasks import root_input_binding_frontend
+    monkeypatch.setattr(root_input_binding_frontend, 'validate_root_input_bindings',
+        lambda candidate_rows, runtime_dist=None: root_input_preflight)
     calls = []
 
     class Protected:
