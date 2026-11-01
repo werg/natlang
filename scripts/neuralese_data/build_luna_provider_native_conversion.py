@@ -79,9 +79,15 @@ def build(raw_path, decisions_path, provider_source_path, plan_path, runtime_pat
     selected_digest = (plan.get("artifact_hashes") or {}).get(selected_path)
     selected_bytes = Path(selected_path).resolve(strict=True).read_bytes()
     selected_rows = [json.loads(line) for line in selected_bytes.splitlines() if line.strip()]
-    if (not selected_digest or sha256_hex(selected_bytes) != selected_digest
-            or len(selected_rows) != 1 or selected_rows[0] != (raw.get("task") or {}).get("program_ir")):
-        raise ValueError("reviewed selected train program differs from the raw source task")
+    raw_program = (raw.get("task") or {}).get("program_ir")
+    if not selected_digest or sha256_hex(selected_bytes) != selected_digest:
+        raise ValueError("reviewed selected train source digest does not match its bytes")
+    selected_matches = [index for index, row in enumerate(selected_rows) if row == raw_program]
+    if len(selected_matches) != 1:
+        raise ValueError(
+            "raw source program must match exactly one row in the reviewed selected train source"
+        )
+    selected_program_index = selected_matches[0]
     judge_starts = [item for item in (raw.get("request_telemetry") or {}).get("starts") or []
                     if item.get("role") == "judge" and item.get("purpose") == "judge"]
     if len(judge_starts) != 1 or judge_starts[0].get("status") != "completed":
@@ -198,6 +204,12 @@ def build(raw_path, decisions_path, provider_source_path, plan_path, runtime_pat
         "raw_results": {"path": raw_binding["path"], "sha256": raw_binding["sha256"]},
         "python_corpus_conversion": {"path": str(converted_path), "sha256": sha256_hex(converted_bytes)},
         "plan": {"path": plan_binding["path"], "sha256": plan_binding["sha256"]},
+        "selected_train_program": {
+            "source_path": str(Path(selected_path).resolve()),
+            "source_sha256": selected_digest,
+            "row_index": selected_program_index,
+            "program_id": raw_program.get("id") if isinstance(raw_program, dict) else None,
+        },
         "runtime": {"path": str(plan_runtime), "receipt_sha256": runtime_binding["sha256"]},
         "provider_source_manifest": {"path": source_binding["path"], "sha256": source_binding["sha256"]},
         "decision_cache": {"path": decision_binding["path"], "sha256": decision_binding["sha256"]},

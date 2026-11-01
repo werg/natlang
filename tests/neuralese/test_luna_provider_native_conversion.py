@@ -17,7 +17,7 @@ def _write(path, data):
     return raw
 
 
-def _fixture(tmp_path, *, raw_override=None, decision_index=0, judge="gpt-6-sol"):
+def _fixture(tmp_path, *, raw_override=None, decision_index=0, judge="gpt-6-sol", selected_programs=None):
     source = tmp_path / "source"
     output = tmp_path / "output"
     runtime = tmp_path / "runtime"
@@ -26,7 +26,8 @@ def _fixture(tmp_path, *, raw_override=None, decision_index=0, judge="gpt-6-sol"
     groups = ["upstream:train:world"]
     program = {"id": "codebase:test:world", "split": "train", "source_groups": groups}
     selected_path = tmp_path / "selected.jsonl"
-    selected_bytes = _write(selected_path, canonical_json_bytes(program) + b"\n")
+    selected_programs = selected_programs if selected_programs is not None else [program]
+    selected_bytes = _write(selected_path, b"".join(canonical_json_bytes(row) + b"\n" for row in selected_programs))
     protection_path = tmp_path / "protection.json"
     protection_bytes = _write(protection_path, {
         "schema": "natlang.luna-codebase-protection-preflight/1",
@@ -93,6 +94,34 @@ def test_generic_audit_serializes_one_complete_judged_provider_episode(tmp_path)
     assert audit["approved_decision_count"] == 1
     assert audit["oracle_level"] == "judged" and audit["exact_oracle_claimed"] is False
     assert audit["training_admission"] is False
+    assert audit["selected_train_program"]["row_index"] == 0
+    assert audit["selected_train_program"]["program_id"] == "codebase:test:world"
+
+
+def test_generic_audit_binds_matching_program_among_multiple_selected_rows(tmp_path):
+    paths = _fixture(tmp_path, selected_programs=[
+        {"id": "codebase:other:world", "split": "train", "source_groups": ["other:train"]},
+        {"id": "codebase:test:world", "split": "train", "source_groups": ["upstream:train:world"]},
+    ])
+    _build(paths)
+    audit = json.loads((paths["output"] / "ingestion-audit.json").read_bytes())
+    assert audit["selected_train_program"]["row_index"] == 1
+    assert audit["selected_train_program"]["program_id"] == "codebase:test:world"
+
+
+def test_generic_audit_rejects_ambiguous_duplicate_selected_program(tmp_path):
+    program = {"id": "codebase:test:world", "split": "train", "source_groups": ["upstream:train:world"]}
+    paths = _fixture(tmp_path, selected_programs=[program, program])
+    with pytest.raises(ValueError, match="exactly one row"):
+        _build(paths)
+
+
+def test_generic_audit_rejects_program_absent_from_selected_source(tmp_path):
+    paths = _fixture(tmp_path, selected_programs=[
+        {"id": "codebase:other:world", "split": "train", "source_groups": ["other:train"]},
+    ])
+    with pytest.raises(ValueError, match="exactly one row"):
+        _build(paths)
 
 
 def test_generic_audit_rejects_noncontiguous_decision_chain(tmp_path):
