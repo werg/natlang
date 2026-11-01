@@ -644,13 +644,13 @@ def test_capacity_oom_retains_failing_phase_stack_and_actual_offload_state(tmp_p
 
 @pytest.mark.parametrize('transport_alias', [False, True])
 def test_sft_descriptor_qualifies_actual_loaded_source_without_updates(tmp_path, monkeypatch, transport_alias):
+    from scripts.neuralese_data.build_acquired_streaming_successor import sft_capacity_descriptor
     from natlang_neuralese.train import native_resident as resident
     from natlang_neuralese.eval import native_memory as memory
     from natlang_neuralese.train.native_packed_capacity import geometry_for_source
     model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch)
     _, geometry, _ = geometry_for_source(train, args.out, allow_build=True)
-    descriptor = {'schema': 'natlang.native-sft-capacity-cases/1', 'source': resident.binding(train.path),
-                  'geometry': geometry}
+    descriptor = sft_capacity_descriptor(resident.binding(train.path), geometry)
     if transport_alias:
         alias = tmp_path / 'logical-source.json'
         alias.symlink_to(train.path)
