@@ -293,3 +293,23 @@ def test_resident_candidate_requires_qualified_matching_plan(setup, monkeypatch)
     with pytest.raises(ValueError, match='no unique staged recovery plan'):
         offload.require_recovery_candidate(path, inputs)
     assert checked == [plan]
+
+
+def test_copy_child_inherits_blob_and_owner_locks(tmp_path, monkeypatch):
+    import fcntl
+    from natlang_neuralese.train import checkpoint_offload as offload
+    source = tmp_path / 'source'; source.write_bytes(b'complete recovery bytes')
+    target = tmp_path / 'blobs' / sha(source)
+    owner = (tmp_path / 'owner.lock').open('w')
+    fcntl.flock(owner, fcntl.LOCK_EX)
+    calls = []
+    real = offload.subprocess.Popen
+    def checked(*args, **kwargs):
+        descriptors = kwargs['pass_fds']
+        assert owner.fileno() in descriptors and len(descriptors) == 2
+        calls.append(descriptors)
+        return real(*args, **kwargs)
+    monkeypatch.setattr(offload.subprocess, 'Popen', checked)
+    offload.verified_recovery_blob(source, target, sha(source), owner_fd=owner.fileno())
+    assert target.read_bytes() == source.read_bytes() and len(calls) == 1
+    owner.close()

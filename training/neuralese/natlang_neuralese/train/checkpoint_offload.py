@@ -650,11 +650,11 @@ def _lower_priority(pid: int) -> None:
             pass
 
 
-def child_copy(path, dest, prune=False) -> dict:
+def child_copy(path, dest, prune=False, *, lock_fds=()) -> dict:
     """``local_copy`` in a child process at idle priority: the trainer keeps its GIL and its I/O share."""
     process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), {True: 'prune', 'auto': 'prune-auto'}.get(prune, 'copy'),
                                 str(path), str(dest)],
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, pass_fds=tuple(lock_fds))
     _lower_priority(process.pid)
     out, err = process.communicate()
     if process.returncode != 0:
@@ -993,7 +993,7 @@ def validate_recovery_plan_dependencies(plan, *, require_restore=True):
         validate_restore_qualification(plan)
 
 
-def verified_recovery_blob(source, target, digest, *, copier=child_copy, cached_identity=None):
+def verified_recovery_blob(source, target, digest, *, copier=child_copy, cached_identity=None, owner_fd=None):
     """Copy or reuse one independently checked content-addressed closure blob."""
     import fcntl
     source=Path(source).resolve(strict=True);target=Path(target)
@@ -1009,7 +1009,12 @@ def verified_recovery_blob(source, target, digest, *, copier=child_copy, cached_
             if cached_identity!=identity and file_sha256(target)!=digest:
                 raise ValueError('existing independent recovery closure differs')
         else:
-            copied=copier(source,target)
+            # The child retains both locks if its parent dies during a copy.
+            # A restarted exporter cannot race the child's partial pathname.
+            if copier is child_copy:
+                copied=copier(source,target,lock_fds=tuple(x for x in (fd,owner_fd) if x is not None))
+            else:
+                copied=copier(source,target)
             if copied['sha256']!=digest:
                 raise ValueError('recovery closure source differs from declared identity')
             st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
@@ -1319,7 +1324,7 @@ class RecoveryExportQueue:
                 raise ValueError('invalid recovery closure digest')
             target=self.destination/'closure'/digest
             cache=self.state.setdefault('closure_cache',{})
-            identity=verified_recovery_blob(source,target,digest,copier=self.copier,cached_identity=cache.get(digest))
+            identity=verified_recovery_blob(source,target,digest,copier=self.copier,cached_identity=cache.get(digest),owner_fd=self._owner.fileno())
             with self.cond:
                 cache[digest]=identity
                 self._persist()
@@ -1353,7 +1358,8 @@ class RecoveryExportQueue:
                 raise ValueError('existing recovery checkpoint differs')
             copied={'sha256':actual,'bytes':target.stat().st_size}
         else:
-            copied=self.copier(self.pin,target)
+            copied=(self.copier(self.pin,target,lock_fds=(self._owner.fileno(),))
+                    if self.copier is child_copy else self.copier(self.pin,target))
         self._validate_pin(record)
         if copied['sha256']!=record['checkpoint_sha256']:
             raise ValueError('independent recovery bytes differ from committed checkpoint digest')
