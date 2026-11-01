@@ -147,14 +147,92 @@ def locked_fixture(path):
         yield str(path)
 
 
-def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, evidence_path, environment_scratch=None, environment_fixture=None):
+def _identity(path):
+    st=Path(path).stat()
+    return [st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
+
+
+def _checked_hash(path, expected=None):
+    before=_identity(path);digest=file_sha256(Path(path))
+    if _identity(path)!=before or (expected is not None and digest!=expected):
+        raise ValueError('recovery evidence input changed: '+str(path))
+    return {'path':str(Path(path).resolve(strict=True)),'sha256':digest,'identity':before}
+
+
+def publish_checked_evidence(plan, draft, checkpoint, output_plan, qualification_path, evidence_path, expected_evidence_sha):
+    """Finish only an explicitly identified successful restore, without repeating it."""
+    evidence_ref=_checked_hash(evidence_path,expected_evidence_sha)
+    evidence=json.loads(Path(evidence_path).read_text())
+    sealed=evidence.get('sealed_inputs') or {}
+    if (evidence.get('schema')!='natlang.local-recovery-restore-evidence/1'
+            or sealed.get('schema')!='natlang.local-recovery-checked-inputs/1'
+            or sealed.get('draft')!=_checked_hash(draft)
+            or sealed.get('checkpoint')!={'path':str(checkpoint),'sha256':evidence.get('checkpoint',{}).get('sha256'),
+                                           'identity':_identity(checkpoint)}
+            or sealed.get('qualification_path')!=str(qualification_path)
+            or evidence.get('host_contract')!=_host_contract()):
+        raise ValueError('sealed recovery evidence differs from the current checked inputs')
+    independent=evidence.get('independent_checkpoint') or {}
+    if _identity(independent['path'])!=independent.get('identity'):
+        raise ValueError('independent checked checkpoint changed after restore')
+    blobs=sealed.get('closure_blobs')
+    if not isinstance(blobs,list):raise ValueError('sealed recovery closure blobs are missing')
+    for blob in blobs:
+        if _identity(blob['path'])!=blob['identity']:
+            raise ValueError('checked recovery closure blob changed after restore')
+    for item in evidence.get('used_host_executables',[]):
+        _checked_hash(item['path'],item['sha256'])
+    if _identity(evidence_path)!=evidence_ref['identity']:
+        raise ValueError('recovery evidence changed during publication')
+    evidence_identity=evidence_ref['identity']
+    evidence_ref={key:evidence_ref[key] for key in ('path','sha256')}
+    base_closure=[x for x in plan['closure'] if not (x['role']=='controls' and x['path']==str(qualification_path) and x['sha256']=='0'*64)]
+    if sealed.get('base_closure_sha256')!=canonical_json_sha256_hex(base_closure):
+        raise ValueError('sealed recovery closure differs from the current plan')
+    expected_blobs={(str(Path(plan['destination']).resolve()/'closure'/item['sha256']),item['sha256']) for item in base_closure}
+    if {(blob.get('path'),blob.get('sha256')) for blob in blobs}!=expected_blobs:
+        raise ValueError('sealed recovery closure blob identities are incomplete')
+    plan['closure']=base_closure+[{'role':'controls',**evidence_ref}]
+    checks={name:True for name in ('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded','checkpoint_full_state_loaded','checkpoint_plan_custody','node_collector_imported','task_assets_read')}
+    qualification={'schema':'natlang.local-recovery-restore-qualification/1','status':'passed','inputs':plan['inputs'],
+        'checkpoint':{'sha256':evidence['checkpoint']['sha256'],'training_custody':evidence['sample']['custody']},
+        'require_static_contract':plan.get('require_static_contract'),'sft_static_contract':plan.get('sft_static_contract'),
+        'control_snapshot':plan.get('control_snapshot'),'historical_programs':plan.get('historical_programs',[]),
+        'closure_identity':recovery_closure_identity(plan),'restore':plan['restore'],
+        'additional_inputs':plan.get('additional_inputs',[]),'controller_config':plan['controller']['config'],'checks':checks,
+        'evidence':{name:evidence_ref for name in checks},'host_contract':evidence['host_contract']}
+    qualification_path.parent.mkdir(parents=True,exist_ok=True)
+    if qualification_path.exists():
+        if json.loads(qualification_path.read_text())!=qualification:raise ValueError('existing recovery qualification differs')
+    else:write_json_durable(qualification_path,qualification)
+    plan['restore_qualification']['sha256']=file_sha256(qualification_path)
+    plan['closure'].append({'role':'controls',**plan['restore_qualification']})
+    validate_recovery_plan_shape(plan);validate_recovery_plan_dependencies(plan)
+    if (_identity(checkpoint)!=sealed['checkpoint']['identity'] or _identity(independent['path'])!=independent['identity']
+            or _identity(draft)!=sealed['draft']['identity'] or _identity(evidence_path)!=evidence_identity
+            or any(_identity(blob['path'])!=blob['identity'] for blob in blobs)):
+        raise ValueError('checked recovery inputs changed during publication')
+    output_plan.parent.mkdir(parents=True,exist_ok=True)
+    if output_plan.exists():
+        if json.loads(output_plan.read_text())!=plan:raise ValueError('existing recovery plan differs')
+    else:write_json_durable(output_plan,plan)
+    return {'plan':{'path':str(output_plan),'sha256':file_sha256(output_plan)},'qualification':plan['restore_qualification'],'evidence':evidence_ref}
+
+
+def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, evidence_path, environment_scratch=None, environment_fixture=None, resume_evidence_sha256=None):
     draft=Path(draft).resolve(strict=True);checkpoint=Path(checkpoint).resolve(strict=True)
     output_plan=Path(output_plan).resolve();qualification_path=Path(qualification_path).resolve();evidence_path=Path(evidence_path).resolve()
-    if any(path.exists() for path in (output_plan,qualification_path,evidence_path)):
+    if not resume_evidence_sha256 and any(path.exists() for path in (output_plan,qualification_path,evidence_path)):
         raise ValueError('recovery qualification outputs already exist')
+    draft_binding=_checked_hash(draft)
+    qualifier_binding=_checked_hash(Path(__file__).resolve())
+    host_before=_host_contract()
     plan=json.loads(draft.read_text());plan['restore_qualification']={'path':str(qualification_path),'sha256':'0'*64}
+    if _identity(draft)!=draft_binding['identity']:raise ValueError('recovery draft changed while reading')
     plan['closure']=[*plan['closure'],{'role':'controls',**plan['restore_qualification']}]
     validate_recovery_plan_shape(plan);validate_recovery_plan_dependencies(plan,require_restore=False)
+    if resume_evidence_sha256:
+        return publish_checked_evidence(plan,draft,checkpoint,output_plan,qualification_path,evidence_path,resume_evidence_sha256)
     store=Path(plan['destination']).resolve(strict=True);scratch_parent=Path(scratch_parent).resolve(strict=True)
     environment_scratch=Path(environment_scratch or scratch_parent).resolve(strict=True)
     if not scratch_parent.is_dir() or not environment_scratch.is_dir():
@@ -294,35 +372,32 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
             used.append({'path':raw,'sha256':allowed[raw]})
         evidence={'schema':'natlang.local-recovery-restore-evidence/1','checkpoint':{'path':str(checkpoint),'sha256':checkpoint_sha},
                   'independent_checkpoint':restored_checkpoint,
-                  'inputs':plan['inputs'],'sample':smoke,'node_collector':str(collector.relative_to(root)),
+                  'inputs':plan['inputs'],'sample':smoke,'node_collector':str(collector.relative_to(runtime)),
+                  'runtime_payload_root':str(runtime),
                   'runtime_manifest':runtime_manifest['schema'],'environment_manifest':env_manifest['schema'],
                   'system_python_manifest':stdlib_manifest['schema'],'task_asset_guard_output':asset_result.stdout.strip(),'used_host_executables':sorted(used,key=lambda x:x['path']),
-                  'host_contract':_host_contract(),'qualifier':{'path':str(Path(__file__).resolve()),'sha256':file_sha256(Path(__file__))},'scope':'independent closure bytes restored; CPU checkpoint load and staged communication graph; host libraries are hash-checked, no optimizer update or capability claim'}
+                  'host_contract':host_before,'qualifier':qualifier_binding,'scope':'independent closure bytes restored; CPU checkpoint load and staged communication graph; host libraries are hash-checked, no optimizer update or capability claim'}
+    if (_identity(draft)!=draft_binding['identity'] or checkpoint_identity()!=checkpoint_before
+            or _identity(qualifier_binding['path'])!=qualifier_binding['identity'] or _host_contract()!=host_before):
+        raise ValueError('recovery draft, checkpoint, qualifier, or host changed during restore')
+    if _identity(restored_checkpoint['path'])!=restored_checkpoint['identity']:
+        raise ValueError('independent checkpoint changed during restore')
+    # Temporary hardlinks change ctime when removed. Re-read each independent
+    # object after cleanup and seal its new five-field identity before publishing.
+    checked_blobs=[_checked_hash(value['path'],digest) for (_,digest),value in blobs.items()]
+    evidence['sealed_inputs']={'schema':'natlang.local-recovery-checked-inputs/1',
+        'draft':draft_binding,'checkpoint':{'path':str(checkpoint),'sha256':checkpoint_sha,'identity':list(checkpoint_before)},
+        'qualification_path':str(qualification_path),'base_closure_sha256':canonical_json_sha256_hex(base_closure),
+        'closure_blobs':checked_blobs}
     evidence_path.parent.mkdir(parents=True,exist_ok=True);write_json_durable(evidence_path,evidence)
-    evidence_ref={'path':str(evidence_path),'sha256':file_sha256(evidence_path)}
-    plan['closure']=base_closure+[{'role':'controls',**evidence_ref}]
-    checks={name:True for name in ('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded','checkpoint_full_state_loaded','checkpoint_plan_custody','node_collector_imported','task_assets_read')}
-    plan['restore_qualification']={'path':str(qualification_path),'sha256':'0'*64}
-    qualification={'schema':'natlang.local-recovery-restore-qualification/1','status':'passed','inputs':plan['inputs'],
-                   'checkpoint':{'sha256':checkpoint_sha,'training_custody':smoke['custody']},
-                   'require_static_contract':plan.get('require_static_contract'),
-                   'sft_static_contract':plan.get('sft_static_contract'),
-                   'control_snapshot':plan.get('control_snapshot'),
-                   'historical_programs':plan.get('historical_programs',[]),
-                   'closure_identity':recovery_closure_identity(plan),'restore':plan['restore'],
-                   'additional_inputs':plan.get('additional_inputs',[]),'controller_config':plan['controller']['config'],'checks':checks,
-                   'evidence':{name:evidence_ref for name in checks},'host_contract':evidence['host_contract']}
-    qualification_path.parent.mkdir(parents=True,exist_ok=True);write_json_durable(qualification_path,qualification)
-    plan['restore_qualification']['sha256']=file_sha256(qualification_path)
-    plan['closure'].append({'role':'controls',**plan['restore_qualification']})
-    validate_recovery_plan_shape(plan);validate_recovery_plan_dependencies(plan)
-    output_plan.parent.mkdir(parents=True,exist_ok=True);write_json_durable(output_plan,plan)
-    return {'plan':{'path':str(output_plan),'sha256':file_sha256(output_plan)},'qualification':plan['restore_qualification'],'evidence':evidence_ref}
+    evidence_sha=file_sha256(evidence_path)
+    return publish_checked_evidence(plan,draft,checkpoint,output_plan,qualification_path,evidence_path,evidence_sha)
 
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--draft-plan',required=True);p.add_argument('--checkpoint',required=True);p.add_argument('--scratch-parent',required=True);p.add_argument('--environment-scratch');p.add_argument('--output-plan',required=True);p.add_argument('--qualification',required=True);p.add_argument('--evidence',required=True)
     p.add_argument('--environment-fixture',help='Reuse an interrupted extracted fixture; every archived member is independently reverified under an exclusive lease')
-    a=p.parse_args();print(json.dumps(qualify(a.draft_plan,a.checkpoint,a.scratch_parent,a.output_plan,a.qualification,a.evidence,a.environment_scratch,a.environment_fixture)),flush=True)
+    p.add_argument('--resume-evidence-sha256',help='Finish publication from this exact previously sealed successful restore evidence')
+    a=p.parse_args();print(json.dumps(qualify(a.draft_plan,a.checkpoint,a.scratch_parent,a.output_plan,a.qualification,a.evidence,a.environment_scratch,a.environment_fixture,a.resume_evidence_sha256)),flush=True)
 
 if __name__=='__main__':main()

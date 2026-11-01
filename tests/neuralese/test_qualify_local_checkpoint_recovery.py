@@ -119,3 +119,46 @@ def test_historical_program_routes_use_archived_bytes_and_fail_on_conflict():
         add_historical_program_routes({'/old/program.py':'/other','/archive/exact.py':'/restored/exact.py'},[row])
     with pytest.raises(ValueError,match='absent'):
         add_historical_program_routes({},[row])
+
+
+def test_sealed_restore_publication_retries_without_restore_and_rejects_changed_bytes(tmp_path,monkeypatch):
+    from scripts.neuralese_data import qualify_local_checkpoint_recovery as q
+    monkeypatch.setattr(q,'validate_recovery_plan_shape',lambda plan:None)
+    monkeypatch.setattr(q,'validate_recovery_plan_dependencies',lambda plan,**kw:None)
+    monkeypatch.setattr(q,'recovery_closure_identity',lambda plan:'closure')
+    draft=tmp_path/'draft';draft.write_text('exact draft')
+    checkpoint=tmp_path/'owner';checkpoint.write_bytes(b'owner')
+    independent=tmp_path/'independent';independent.write_bytes(b'owner')
+    store=tmp_path/'store';blob=store/'closure'/('a'*64)
+    blob.parent.mkdir(parents=True);blob.write_bytes(b'checked blob')
+    qualification=tmp_path/'qualification.json';output=tmp_path/'plan.json';evidence_path=tmp_path/'evidence.json'
+    closure=[{'role':'runtime','path':'/source','sha256':'a'*64}]
+    plan={'destination':str(store),'inputs':{},'controller':{'config':'config'},'restore':{},
+        'closure':closure+[{'role':'controls','path':str(qualification),'sha256':'0'*64}],
+        'restore_qualification':{'path':str(qualification),'sha256':'0'*64}}
+    evidence={'schema':'natlang.local-recovery-restore-evidence/1',
+        'checkpoint':{'path':str(checkpoint),'sha256':q.file_sha256(checkpoint)},
+        'independent_checkpoint':{'path':str(independent),'identity':q._identity(independent)},
+        'sample':{'custody':{'step':7}},'host_contract':q._host_contract(),'used_host_executables':[],
+        'sealed_inputs':{'schema':'natlang.local-recovery-checked-inputs/1',
+            'draft':q._checked_hash(draft),'checkpoint':q._checked_hash(checkpoint),
+            'qualification_path':str(qualification),'base_closure_sha256':q.canonical_json_sha256_hex(closure),
+            'closure_blobs':[{'path':str(blob),'sha256':'a'*64,'identity':q._identity(blob)}]}}
+    evidence_path.write_text(json.dumps(evidence));sha=q.file_sha256(evidence_path)
+    import copy
+    original=q.write_json_durable
+    def fail_plan(path,value):
+        if path==output:raise OSError('reporting failure')
+        original(path,value)
+    monkeypatch.setattr(q,'write_json_durable',fail_plan)
+    with pytest.raises(OSError,match='reporting failure'):
+        q.publish_checked_evidence(copy.deepcopy(plan),draft,checkpoint,output,qualification,evidence_path,sha)
+    assert qualification.exists() and not output.exists()
+    monkeypatch.setattr(q,'write_json_durable',original)
+    result=q.publish_checked_evidence(copy.deepcopy(plan),draft,checkpoint,output,qualification,evidence_path,sha)
+    assert Path(result['plan']['path']).is_file()
+    blob.write_bytes(b'altered bytes')
+    with pytest.raises(ValueError,match='closure blob changed'):
+        q.publish_checked_evidence(copy.deepcopy(plan),draft,checkpoint,output,qualification,evidence_path,sha)
+    with pytest.raises(ValueError,match='changed'):
+        q.publish_checked_evidence(copy.deepcopy(plan),draft,checkpoint,output,qualification,evidence_path,'0'*64)
