@@ -1,4 +1,4 @@
-## Live supervision update, 2026-11-01 14:58 CET
+## Live supervision update, 2026-11-01 15:03 CET
 
 This update supersedes the earlier instantaneous observations below.
 
@@ -16,8 +16,13 @@ This update supersedes the earlier instantaneous observations below.
   SFT visits and optimizer/RNG custody survive;9437 additions have zero visits.
   Final controls are `ops/semantic-keyword-filter-audit-1101/qualified-successor-v8/`;
   exact63 preflight is the adjacent `earned63-correction-preflight.json`.
-  No adoption or new-source training has occurred yet. Full-model capacity
-  qualification remains required. Root is preparing checkpoint-preserving adoption.
+  Root atomically adopted63 into the rolling slot under the controller lock,
+  independently hashing both parents and retaining61 as a local fallback.
+  The full trainer CPU continuation preflight passed at63 (28GiB peak).
+  `lfm3-joint-sft63-307946-1101.service` launched at15:01 with frozen
+  `runtime-sft63-307946-28a-1101`, HIGH76GiB ledger and one-update refresh.
+  Verifier passed; actual trainer PID3328751 is initializing. Full-model capacity
+  qualification and a new optimizer update are not yet established.
 - Paid teacher generation is paused: live process/service/timer checks found no
   active generation. The last one-case Luna run exposed an oracle contradiction
   and supplied no admitted positive data; raw evidence is preserved. Repair and
@@ -28,7 +33,10 @@ This update supersedes the earlier instantaneous observations below.
   an active offloader alone does not prove independently recoverable63.
 - NVMe has62GiB free; external volume273GiB free. Keep the40GiB internal floor.
   Three source converters and the offloader are running; none remains frozen.
-  GPU is idle while adoption controls are prepared. Resume useful training promptly.
+  The learner is initializing; no new optimizer advancement is claimed yet.
+  The weekly read-only storage scan had run11 hours and was competing for HDD
+  metadata I/O. Root stopped it at15:02; PID2780081 is gone. No data was deleted;
+  active storage-floor supervision and checkpoint exports remain in place.
 - A targeted stop test injected its checkpoint stop into the initial zero-update
   recovery save. It now targets an earned checkpoint explicitly; all four stop
   scenarios pass. Broader check-main failures remain under investigation.
