@@ -188,13 +188,15 @@ def _identity(st) -> list:
     return [st.st_ino, st.st_size, st.st_mtime_ns]
 
 
-def file_sha256(path, *, drop_cache=True) -> str:
+def file_sha256(path, *, drop_cache=True, cancel=None) -> str:
     digest = hashlib.sha256()
     with open(path, 'rb') as stream:
         if drop_cache:
             _drop(stream)
         read = 0
         while block := stream.read(CHUNK):
+            if cancel is not None and cancel():
+                raise CheckpointCopySuperseded(f'{path} has a higher-priority checkpoint waiting')
             digest.update(block)
             read += len(block)
             if drop_cache and read % SYNC_EVERY == 0:
@@ -241,7 +243,7 @@ def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX, cancel=None) -> dic
                 raise CheckpointCopySuperseded(f'{path} has a newer pending checkpoint generation')
         os.utime(partial, ns=(before.st_atime_ns, before.st_mtime_ns))
         digest = source_hash.hexdigest()
-        if partial.stat().st_size != before.st_size or file_sha256(partial) != digest:
+        if partial.stat().st_size != before.st_size or file_sha256(partial, cancel=cancel) != digest:
             raise RuntimeError(f'verification failed for {path}')
         os.replace(partial, dest)
     except BaseException:
@@ -706,6 +708,16 @@ def _pending_id(descriptor: Path) -> str | None:
         return None
 
 
+def _latest_pending(root: Path) -> bool:
+    for descriptor in _queue_files(root):
+        try:
+            if json.loads(descriptor.read_text()).get('role') == 'latest':
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
 def _owner_unit(root: Path) -> str:
     return OWNER_UNIT + '-' + hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:10]
 
@@ -835,7 +847,10 @@ def _offload_pinned(job: dict, settings: OffloadSettings, copier=None) -> dict:
                 record = local_copy(pin, mirror, prune)
             else:
                 descriptor = Path(job['queue_root']) / 'pending' / f"{job['key']}.json"
-                record = verified_copy(pin, mirror, cancel=lambda: _pending_id(descriptor) != job['id'])
+                root = Path(job['queue_root'])
+                record = verified_copy(pin, mirror, cancel=lambda: (
+                    _pending_id(descriptor) != job['id'] or
+                    (role == 'archive' and _latest_pending(root))))
             record = dict(record, source=str(path), source_identity=list(job['source_identity']),
                           source_pin=str(pin), time=time.time())
             write_record(mirror, record)

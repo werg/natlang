@@ -157,6 +157,23 @@ def test_superseded_copy_discards_partial_without_replacing_verified_mirror(tmp_
     assert mirror.read_bytes() == old and not list(tmp_path.glob('*.offload.part'))
 
 
+def test_superseded_copy_is_cancelled_during_full_readback_hash(tmp_path, monkeypatch):
+    source = write(tmp_path / 'checkpoint.pt', b'x' * 4096)
+    mirror = write(tmp_path / 'mirror.pt', b'previous-verified')
+    old = mirror.read_bytes()
+    monkeypatch.setattr(co, 'CHUNK', 1024)
+    calls = 0
+
+    def superseded_during_readback():
+        nonlocal calls
+        calls += 1
+        return calls == 6  # four source chunks, source-final check, then first mirror readback chunk
+
+    with pytest.raises(co.CheckpointCopySuperseded):
+        co.verified_copy(source, mirror, cancel=superseded_during_readback)
+    assert mirror.read_bytes() == old and not list(tmp_path.glob('*.offload.part'))
+
+
 def test_a_failing_offload_never_fails_training_and_is_retried_at_the_next_write(layout):
     out, mirror_dir = layout
     calls = []
