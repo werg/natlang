@@ -220,13 +220,13 @@ def _convolve(layer, gated, c, plan, rows, *, index=None, noise=None):
         from .state_gather import gather_convolution_state
         gathered=gather_convolution_state(padded,index)
     else:
-        # The cached oracle gathers one invocation at a time. BF16 scatter
-        # accumulates repeated source histories in its output dtype; a single
-        # flattened scatter changes that rounding and therefore source gradients.
+        # The cached oracle gathers one invocation at a time. A single flattened
+        # scatter changes the order of repeated-source cotangent accumulation,
+        # including for FP32 histories whose gradient later reaches BF16 gates.
         # Keep the layer-major forward while retaining the same invocation
         # boundaries and reverse-order autograd accumulation as the cache.
         lengths=[]
-        if gated.dtype==torch.bfloat16:
+        if gated.dtype in (torch.bfloat16,torch.float32):
             if complete:lengths=[len(node.token_ids) for node in plan.invocations if node.token_ids]
             else:
                 previous=None

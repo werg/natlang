@@ -640,7 +640,8 @@ def test_attention_physical_index_reused_through_checkpoint_with_bitwise_adjoint
     assert observed[0][0] is not previous[0] and observed[0][1] is not previous[1]
 
 
-def test_bf16_convolution_graph_matches_cached_invocation_gradients():
+@pytest.mark.parametrize('source_dtype',[torch.bfloat16,torch.float32])
+def test_convolution_graph_matches_cached_invocation_gradients(source_dtype):
     from types import SimpleNamespace
     from natlang_neuralese.model.shared_state import _convolve, _finite_convolution
     torch.manual_seed(427)
@@ -651,7 +652,8 @@ def test_bf16_convolution_graph_matches_cached_invocation_gradients():
     weight=torch.randn(channels,1,width).bfloat16();bias=torch.randn(channels).bfloat16()
     kernel=SimpleNamespace(weight=weight,bias=bias)
     layer=SimpleNamespace(conv=SimpleNamespace(conv=kernel))
-    source=torch.randn(1,plan.token_count,channels).bfloat16();gate=torch.randn_like(source)
+    source=torch.randn(1,plan.token_count,channels).to(source_dtype)
+    gate=torch.randn(1,plan.token_count,channels).bfloat16()
     def run(reference):
         x=source.clone().requires_grad_()
         if not reference:
