@@ -1,5 +1,19 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Exact inference-view transfers (engineering, 2026-11-01)
+
+Use `scripts/coreweave/send_actor_transport.py` for new workstation/Pop actor
+deliveries, with the bound transport SHA and the peer's persistent staging root.
+It automatically uses the smaller verified XOR delta when a previous view is
+available, otherwise the full view. The receiver reconstructs and rereads exact
+bytes before publishing; original actor and full-state custody remain unchanged.
+The peer cache is a performance hint, not a recovery or training qualification.
+Keep actual bases while a transfer consumes them; missing cached bases use full
+transfer, while corrupt bases are diagnosed rather than silently accepted.
+Preserve readback receipts and avoid rewriting already matching metadata while
+actors use it. A full3.46GB view64→75 reconstruction verified a138.6MB delta
+(4.01% of full size). This is measured transport saving, not model improvement.
+
 ## Honest stops, bounded efficiency and live escalation (owner, 2026-11-01)
 
 Correct task completion remains the strongest outcome signal. A genuinely
