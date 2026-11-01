@@ -53,3 +53,48 @@ def test_bound_source_cache_reuses_only_verified_five_field_path_identity(tmp_pa
     link.symlink_to(second)
     assert source._read_bound(str(link), digest) == expected
     assert reads[-1] == second.resolve()
+
+
+def test_runtime_relative_protection_binding_accepts_only_unique_matching_relocated_path(tmp_path):
+    runtime = tmp_path / "frozen" / "runtime"
+    registry = runtime / "training" / "protected-worlds.json"
+    registry.parent.mkdir(parents=True)
+    registry.write_bytes(b'{"schema":"pinned"}\n')
+    digest = hashlib.sha256(registry.read_bytes()).hexdigest()
+    plan = {"artifact_hashes": {
+        "/home/author/natlang/training/protected-worlds.json": digest,
+    }}
+    resolved, found = source._plan_bound_runtime_file(plan, "training/protected-worlds.json", runtime)
+    assert resolved == registry.resolve()
+    assert found == digest
+
+
+def test_runtime_relative_protection_binding_rejects_changed_digest(tmp_path):
+    runtime = tmp_path / "frozen" / "runtime"
+    registry = runtime / "training" / "protected-worlds.json"
+    registry.parent.mkdir(parents=True)
+    registry.write_bytes(b'{"schema":"pinned"}\n')
+    plan = {"artifact_hashes": {
+        "/home/author/natlang/training/protected-worlds.json": "0" * 64,
+    }}
+    with pytest.raises(ValueError, match="digest mismatch"):
+        source._plan_bound_runtime_file(plan, "training/protected-worlds.json", runtime)
+
+
+def test_runtime_relative_protection_binding_rejects_ambiguous_suffix(tmp_path):
+    runtime = tmp_path / "frozen" / "runtime"
+    registry = runtime / "training" / "protected-worlds.json"
+    registry.parent.mkdir(parents=True)
+    registry.write_bytes(b'{"schema":"pinned"}\n')
+    digest = hashlib.sha256(registry.read_bytes()).hexdigest()
+    plan = {"artifact_hashes": {
+        "/home/author/natlang/training/protected-worlds.json": digest,
+        "/workspace/natlang/training/protected-worlds.json": digest,
+    }}
+    with pytest.raises(ValueError, match="one exact content-matching"):
+        source._plan_bound_runtime_file(plan, "training/protected-worlds.json", runtime)
+
+
+def test_runtime_relative_protection_binding_rejects_unsafe_path(tmp_path):
+    with pytest.raises(ValueError, match="unsafe"):
+        source._plan_bound_runtime_file({"artifact_hashes": {}}, "../protected-worlds.json", tmp_path)

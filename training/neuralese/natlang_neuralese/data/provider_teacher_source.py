@@ -23,6 +23,35 @@ def _sha_value(value) -> str:
     return _sha(_canonical(value))
 
 
+def _plan_bound_runtime_file(plan, relative_path, runtime_root):
+    """Resolve a runtime-relative asset against one exact content-pinned plan entry.
+
+    Campaign plans record source-machine absolute paths. Frozen runtimes relocate
+    the same registry under their own root, so path identity is checked by the
+    declared safe relative suffix and content digest, never by basename alone.
+    """
+    relative = Path(relative_path)
+    if (not isinstance(relative_path, str) or not relative_path or relative.is_absolute()
+            or ".." in relative.parts or relative.as_posix() != relative_path):
+        raise ValueError("runtime-relative provider asset path is unsafe")
+    local = (Path(runtime_root).resolve(strict=True) / relative).resolve(strict=True)
+    if not local.is_file():
+        raise ValueError("runtime-relative provider asset is not a file")
+    artifact_hashes = (plan.get("artifact_hashes") or {})
+    suffix = relative.parts
+    matches = []
+    for path, digest in artifact_hashes.items():
+        if not isinstance(path, str) or not Path(path).is_absolute():
+            continue
+        if Path(path).parts[-len(suffix):] == suffix:
+            matches.append((path, digest))
+    if (len(matches) != 1 or not isinstance(matches[0][1], str)
+            or len(matches[0][1]) != 64):
+        raise ValueError("runtime-relative provider asset lacks one exact content-matching plan binding")
+    _read_bound(str(local), matches[0][1])
+    return local, matches[0][1]
+
+
 _BOUND_READ_CACHE_LOCK = threading.RLock()
 _BOUND_READ_CACHE = OrderedDict()
 _BOUND_READ_CACHE_BYTES = 0
@@ -516,13 +545,11 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
         protection = json.loads(_read_bound(protection_path, protection_digest))
         from ..common.custody import ProtectedWorlds
         protected = ProtectedWorlds.load()
-        registry_path = (Path(__file__).resolve().parents[4] /
-                         protection.get("observed_at_source", "")).resolve(strict=True)
-        registry_sha = _sha(registry_path.read_bytes())
+        registry_path, registry_sha = _plan_bound_runtime_file(
+            plan, protection.get("observed_at_source", ""), Path(__file__).resolve().parents[4])
         if (protection.get("schema") != "natlang.luna-codebase-protection-preflight/1"
                 or protection.get("protected_worlds_digest") != protected.digest
-                or protection.get("registry_sha256") != registry_sha
-                or (plan.get("artifact_hashes") or {}).get(str(registry_path)) != registry_sha):
+                or protection.get("registry_sha256") != registry_sha):
             raise ValueError("provider source protection projection differs from current held custody")
         case_id = program_ir.get("id")
         upstream_groups = program_ir.get("source_groups")
