@@ -663,7 +663,7 @@ def assistant_reply(apply_template, message: dict, opening=None) -> str | None:
 
 
 def assistant_reply_segments(apply_template, message: dict, specials=(), opening=None, *,
-                             call_format: str | None = None, tools=None) -> list[tuple[str, bool]] | None:
+                             call_format: str | None = None, tools=None, target_types: bool = True) -> list[tuple[str, bool]] | None:
     """Render an assistant reply after its serving generation prompt.
 
     Special-token spellings in assistant-authored content are escaped before
@@ -677,7 +677,7 @@ def assistant_reply_segments(apply_template, message: dict, specials=(), opening
     if call_format == "xml":
         for call in normalize_tool_call_arguments([message])[0][0].get("tool_calls") or []:
             fn = call.get("function", call)
-            check_xml_call(fn.get("name"), fn.get("arguments"), tools)
+            check_xml_call(fn.get("name"), fn.get("arguments"), tools, types=target_types)
     supplied = json.dumps(message, ensure_ascii=False)
     nonce = secrets.token_hex(16)
     while nonce in supplied:

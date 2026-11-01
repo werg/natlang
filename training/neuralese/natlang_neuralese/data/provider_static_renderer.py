@@ -2,7 +2,7 @@
 import json
 from ..serve.chat import RequestError
 
-def render_forced_message_plan(self,message,tools,*,opening,spans):
+def render_forced_message_plan(self,message,tools,*,opening,spans,target_supervised=True):
     """Render authenticated targets without running a model or inventing captures."""
     if not isinstance(message,dict) or message.get('role')!='assistant':
         raise RequestError('forced-message','the replay target must be one assistant message')
@@ -106,7 +106,7 @@ def render_forced_message_plan(self,message,tools,*,opening,spans):
         return self.tokenizer.apply_chat_template(prepared,tools=tools or None,
             tokenize=False,add_generation_prompt=generation)
     segments=assistant_reply_segments(apply,target,self.specials,opening=opening,
-        call_format=getattr(self,"tool_call_format",None),tools=tools)
+        call_format=getattr(self,"tool_call_format",None),tools=tools,target_types=target_supervised)
     if segments is None:raise RequestError('forced-message','assistant response does not continue this exact actual prompt')
     plan=[];found={marker:0 for marker in markers}
     def append_text(text,escaped):

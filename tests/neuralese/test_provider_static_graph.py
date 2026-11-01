@@ -25,7 +25,7 @@ def test_inline_writer_and_multiple_imports_preserve_target(monkeypatch):
     import natlang_neuralese.data.text_corpus as corpus
     monkeypatch.setattr(corpus,'tokenizer_fingerprint',lambda tokenizer:'1'*64)
     import natlang_neuralese.data.provider_static_renderer as render
-    monkeypatch.setattr(render,'render_forced_message_plan',lambda renderer,message,tools,opening,spans: [7,1,*[ord(c)+100 for c in 'body'],2,8,9,10] if spans else [7,8,9,10])
+    monkeypatch.setattr(render,'render_forced_message_plan',lambda renderer,message,tools,opening,spans,**kwargs: [7,1,*[ord(c)+100 for c in 'body'],2,8,9,10] if spans else [7,8,9,10])
     row, example=_compile_loaded_episode(fixture(),Renderer(),tokenizer_fingerprint='1'*64)
     assert len(row['nodes'])==2
     producer,consumer=row['nodes'];assert producer['name']=='producer/1#1'
@@ -59,7 +59,7 @@ def test_static_and_reference_graph_loss_and_gradients_match(monkeypatch):
     from natlang_neuralese.model.shared_state import SharedStateModel
     from test_shared_state import tiny
     monkeypatch.setattr(corpus,'tokenizer_fingerprint',lambda tokenizer:'1'*64)
-    monkeypatch.setattr(render,'render_forced_message_plan',lambda renderer,message,tools,opening,spans: [7,1,*[ord(c)+100 for c in 'body'],2,8,9,10] if spans else [7,8,9,10])
+    monkeypatch.setattr(render,'render_forced_message_plan',lambda renderer,message,tools,opening,spans,**kwargs: [7,1,*[ord(c)+100 for c in 'body'],2,8,9,10] if spans else [7,8,9,10])
     row,_=_compile_loaded_episode(fixture(),Renderer(),tokenizer_fingerprint='1'*64)
     for node in row['nodes']:node['token_ids']=[x%50 for x in node['token_ids']]
     source,consumer=row['nodes']
@@ -90,6 +90,19 @@ def test_static_target_renderer_tracks_serving_implementation():
     static=ast.parse(textwrap.dedent(inspect.getsource(render_forced_message_plan))).body[0].body
     if isinstance(static[0],ast.Expr) and isinstance(static[0].value,ast.Constant):static=static[1:]
     for node in ast.walk(ast.Module(body=static,type_ignores=[])):
+        if isinstance(node,ast.Call):node.keywords=[x for x in node.keywords if x.arg!='target_types']
         if isinstance(node,ast.ImportFrom) and node.module=='serve.chat' and node.level==2:
             node.module='chat';node.level=1
     assert ast.dump(ast.Module(body=body,type_ignores=[]))==ast.dump(ast.Module(body=static,type_ignores=[]))
+
+
+def test_context_only_null_renders_without_weakening_supervised_targets():
+    import json
+    from natlang_neuralese.serve.chat import assistant_reply_segments,RequestError
+    target={'role':'assistant','content':'','tool_calls':[{'function':{'name':'return_result','arguments':json.dumps({'status':'success','reason':None})}}]}
+    tools=[{'type':'function','function':{'name':'return_result','parameters':{'type':'object','properties':{'status':{'type':'string'},'reason':{'type':'string'}},'required':['status']}}}]
+    def apply(messages,generation):return 'prompt' if generation else 'prompt historical-target'
+    with pytest.raises(RequestError,match='does not keep its type'):
+        assistant_reply_segments(apply,target,opening=[{'role':'user','content':'x'}],call_format='xml',tools=tools)
+    result=assistant_reply_segments(apply,target,opening=[{'role':'user','content':'x'}],call_format='xml',tools=tools,target_types=False)
+    assert result is not None
