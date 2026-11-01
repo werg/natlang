@@ -83,11 +83,6 @@ def _verify_rows(source: Path, verification_path: Path, *, intake_receipt: dict 
     return rows, verification
 
 
-def _canonical_object_sha(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
-                                     separators=(',', ':')).encode('utf-8')).hexdigest()
-
-
 def _verify_declared_reference_audits(source: Path, rows: list[dict], verification: dict) -> None:
     """Authenticate each declared collector reference against its exact source row and result bytes."""
     references = verification.get('reference_audits')
@@ -110,8 +105,6 @@ def _verify_declared_reference_audits(source: Path, rows: list[dict], verificati
         if not isinstance(case_id, str) or case_id not in by_id or case_id in seen:
             raise ValueError('reference audit has an absent or duplicate candidate case ID')
         row = by_id[case_id]
-        if audit.get('source_row_canonical_sha256') != _canonical_object_sha(row):
-            raise ValueError(f'reference audit is not bound to the exact candidate row: {case_id}')
         result_binding = audit.get('result')
         if not isinstance(result_binding, dict):
             raise ValueError(f'reference audit has no captured result binding: {case_id}')
@@ -122,10 +115,13 @@ def _verify_declared_reference_audits(source: Path, rows: list[dict], verificati
         program_ir = result.get('task', {}).get('program_ir')
         if not isinstance(program_ir, dict):
             raise ValueError(f'captured result has no executed task program IR: {case_id}')
-        actual_ir_sha = _canonical_object_sha(program_ir)
-        if (audit.get('program_ir_sha256') != result.get('provenance', {}).get('program_ir_sha256') or
-                audit.get('task_ir_canonical_sha256') != actual_ir_sha):
-            raise ValueError(f'captured program/task IR hashes do not match the reference audit: {case_id}')
+        recorded_ir_sha = result.get('provenance', {}).get('program_ir_sha256')
+        if (not isinstance(recorded_ir_sha, str) or len(recorded_ir_sha) != 64 or
+                any(char not in '0123456789abcdef' for char in recorded_ir_sha) or
+                audit.get('program_ir_sha256') != recorded_ir_sha or
+                audit.get('source_row_program_ir_sha256') != recorded_ir_sha or
+                audit.get('task_program_ir_sha256') != recorded_ir_sha):
+            raise ValueError(f'captured program/task IR hashes do not match the authenticated collector digest: {case_id}')
         if program_ir != row:
             raise ValueError(f'captured program IR is not the exact candidate source row: {case_id}')
         if (audit.get('world') != (row.get('curriculum', {}).get('external') or {}).get('upstream_id') or

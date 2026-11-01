@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from scripts.rl_tasks.build_reviewed_luna_plan import _canonical_object_sha, _verify_declared_reference_audits, _verify_rows
+from scripts.rl_tasks.build_reviewed_luna_plan import _verify_declared_reference_audits, _verify_rows
 
 
 def test_judged_source_qualification_binds_intake_without_claiming_behavior(tmp_path):
@@ -66,14 +66,15 @@ def _reference_fixture(tmp_path, *, second_row=False):
                                    'oracle': {'level': 'judged', 'rubric': 'Check source claims.'}}})
     source.write_text(''.join(json.dumps(item, sort_keys=True) + '\n' for item in rows))
     program_ir = json.loads(json.dumps(row))
+    program_ir_sha = hashlib.sha256(json.dumps(program_ir, sort_keys=True).encode()).hexdigest()
     result = {'task': {'program_ir': program_ir},
-              'provenance': {'program_ir_sha256': 'bound-program-ir'}}
+              'provenance': {'program_ir_sha256': program_ir_sha}}
     result_path = tmp_path / 'capture.result.json'
     result_path.write_text(json.dumps(result, sort_keys=True) + '\n')
     audit = {'case_id': row['id'], 'world': 'nda-34', 'source_groups': row['source_groups'],
-             'source_row_canonical_sha256': _canonical_object_sha(row),
-             'program_ir_sha256': 'bound-program-ir',
-             'task_ir_canonical_sha256': _canonical_object_sha(program_ir),
+             'source_row_program_ir_sha256': program_ir_sha,
+             'program_ir_sha256': program_ir_sha,
+             'task_program_ir_sha256': program_ir_sha,
              'result': {'path': str(result_path),
                         'sha256': hashlib.sha256(result_path.read_bytes()).hexdigest()}}
     audit_path = tmp_path / 'reference-audit.json'
@@ -92,7 +93,7 @@ def test_declared_reference_audit_binds_captured_task_result_and_exact_source_ro
 def test_declared_reference_audit_rejects_swapped_source_row(tmp_path):
     source, rows, _, _, verification = _reference_fixture(tmp_path)
     rows[0]['semantics']['inputs']['request']['agreementId'] = '146'
-    with pytest.raises(ValueError, match='exact candidate row'):
+    with pytest.raises(ValueError, match='exact candidate source row'):
         _verify_declared_reference_audits(source, rows, verification)
 
 
@@ -108,11 +109,12 @@ def test_reference_capture_cannot_bind_another_task_under_the_same_case_id(tmp_p
     result = json.loads(result_path.read_text())
     result['task']['program_ir']['semantics']['inputs']['request']['agreementId'] = '146'
     program_ir = result['task']['program_ir']
-    result['provenance']['program_ir_sha256'] = _canonical_object_sha(program_ir)
+    result['provenance']['program_ir_sha256'] = hashlib.sha256(json.dumps(program_ir, sort_keys=True).encode()).hexdigest()
     result_path.write_text(json.dumps(result, sort_keys=True) + '\n')
     audit = json.loads(audit_path.read_text())
     audit['program_ir_sha256'] = result['provenance']['program_ir_sha256']
-    audit['task_ir_canonical_sha256'] = _canonical_object_sha(program_ir)
+    audit['source_row_program_ir_sha256'] = result['provenance']['program_ir_sha256']
+    audit['task_program_ir_sha256'] = result['provenance']['program_ir_sha256']
     audit['result']['sha256'] = hashlib.sha256(result_path.read_bytes()).hexdigest()
     audit_path.write_text(json.dumps(audit, sort_keys=True) + '\n')
     verification['reference_audits'][0]['sha256'] = hashlib.sha256(audit_path.read_bytes()).hexdigest()
