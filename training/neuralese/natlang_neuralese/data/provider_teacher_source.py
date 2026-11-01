@@ -4,6 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import os
+import stat
+import threading
+from collections import OrderedDict
 from pathlib import Path
 
 
@@ -19,11 +23,57 @@ def _sha_value(value) -> str:
     return _sha(_canonical(value))
 
 
+_BOUND_READ_CACHE_LOCK = threading.RLock()
+_BOUND_READ_CACHE = OrderedDict()
+_BOUND_READ_CACHE_BYTES = 0
+_BOUND_READ_CACHE_MAX_BYTES = 256 * 1024 * 1024
+
+
+def _bound_file_identity(path):
+    lexical = Path(path).absolute()
+    resolved = lexical.resolve(strict=True)
+    link_stat = lexical.lstat()
+    target_stat = resolved.stat()
+    target = os.readlink(lexical) if stat.S_ISLNK(link_stat.st_mode) else None
+    signature = (str(lexical), str(resolved), target,
+        link_stat.st_dev, link_stat.st_ino, link_stat.st_size,
+        link_stat.st_mtime_ns, link_stat.st_ctime_ns,
+        target_stat.st_dev, target_stat.st_ino, target_stat.st_size,
+        target_stat.st_mtime_ns, target_stat.st_ctime_ns)
+    return lexical, resolved, signature
+
+
 def _read_bound(path, digest):
+    global _BOUND_READ_CACHE_BYTES
     if not isinstance(path, str) or not path or not isinstance(digest, str) or len(digest) != 64:
         raise ValueError("provider teacher source artifact binding is incomplete")
-    data = Path(path).read_bytes()
-    if _sha(data) != digest:
+    lexical, resolved, signature = _bound_file_identity(path)
+    cache_key = str(lexical)
+    with _BOUND_READ_CACHE_LOCK:
+        cached = _BOUND_READ_CACHE.get(cache_key)
+        if cached is not None and cached[0] == signature:
+            _BOUND_READ_CACHE.move_to_end(cache_key)
+            data, actual_digest = cached[1], cached[2]
+        else:
+            data = actual_digest = None
+    if data is None:
+        data = resolved.read_bytes()
+        actual_digest = _sha(data)
+        if signature != _bound_file_identity(path)[2]:
+            raise ValueError(f"provider teacher source artifact changed while being read: {path}")
+        if len(data) <= _BOUND_READ_CACHE_MAX_BYTES:
+            with _BOUND_READ_CACHE_LOCK:
+                previous = _BOUND_READ_CACHE.pop(cache_key, None)
+                if previous is not None:
+                    _BOUND_READ_CACHE_BYTES -= len(previous[1])
+                _BOUND_READ_CACHE[cache_key] = (signature, data, actual_digest)
+                _BOUND_READ_CACHE_BYTES += len(data)
+                while _BOUND_READ_CACHE_BYTES > _BOUND_READ_CACHE_MAX_BYTES and _BOUND_READ_CACHE:
+                    _, evicted = _BOUND_READ_CACHE.popitem(last=False)
+                    _BOUND_READ_CACHE_BYTES -= len(evicted[1])
+    elif signature != _bound_file_identity(path)[2]:
+        raise ValueError(f"provider teacher source artifact changed during cached read: {path}")
+    if actual_digest != digest:
         raise ValueError(f"provider teacher source artifact digest mismatch: {path}")
     return data
 
