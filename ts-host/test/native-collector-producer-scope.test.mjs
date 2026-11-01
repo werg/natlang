@@ -22,6 +22,10 @@ test('standalone collector retains a nested native writer for its parent model t
   assert.equal(requests.length,3);
   assert.notEqual(requests[1].invocation_id,requests[0].invocation_id,'nested provider turn uses the instrumented collector driver');
   const graph=result.outcome.execution_graph;
+  const childTrace=result.invocationTraces.find(trace=>trace.parentCallId==='collector-parent-scope-run');
+  assert.ok(childTrace,'nested call is attached to the collector root');
+  const manifest=childTrace.events.find(event=>event.kind==='manifest');
+  assert.equal(manifest.seed_policy.root,19,'child inherits the collector seed policy');
   const writer=graph.find(event=>event.kind==='block_write'&&event.format==='native-state');
   const read=graph.find(event=>event.kind==='block_read'&&event.block===writer?.block);
   assert.ok(writer);assert.ok(read);
