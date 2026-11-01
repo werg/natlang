@@ -122,14 +122,22 @@ def main():
     parser.add_argument("--endpoint", help="Reuse an already running native reference actor over HTTP")
     parser.add_argument("--output", required=True)
     parser.add_argument("--base")
+    parser.add_argument("--tokenizer-fingerprint", help="expected tokenizer identity for the default static training graph")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--dtype", choices=("bfloat16", "float16", "float32"), default="bfloat16")
     parser.add_argument("--prefill-tokens", type=int, default=2048)
     parser.add_argument("--prefix-cache-gb", type=float, default=0.25)
     parser.add_argument("--prefix-block", type=int, default=2048)
     args = parser.parse_args()
-    if bool(args.endpoint) == bool(args.checkpoint):
-        parser.error("supply exactly one of --endpoint or --checkpoint")
+    if not args.endpoint and not args.checkpoint:
+        if not args.base or not args.tokenizer_fingerprint:
+            parser.error("static graph compilation needs --base and --tokenizer-fingerprint")
+        from scripts.neuralese_data.compile_luna_static_episode import main as compile_static
+        sys.argv=[sys.argv[0], '--audit',args.audit,'--base',args.base,'--output',args.output,
+                  '--tokenizer-fingerprint',args.tokenizer_fingerprint]
+        return compile_static()
+    if args.endpoint and args.checkpoint:
+        parser.error("supply at most one of --endpoint or --checkpoint")
     dtype = {"bfloat16": torch.bfloat16, "float16": torch.float16, "float32": torch.float32}[args.dtype]
     audit_path = Path(args.audit).resolve(strict=True)
     audit = json.loads(audit_path.read_bytes())
