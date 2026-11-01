@@ -93,3 +93,26 @@ def test_second_driver_cannot_clean_live_scratch(tmp_path):
         result = subprocess.run(['bash', str(DRIVER), str(source), str(out)], capture_output=True, text=True)
     assert result.returncode == 75, result.stderr
     assert live.read_text() == 'valuable in-flight data'
+
+
+def test_runtime_identity_changes_when_script_changes(tmp_path, monkeypatch):
+    import importlib.util
+    import sys
+    sys.path.insert(0, str(ROOT / 'training/neuralese'))
+    spec = importlib.util.spec_from_file_location('port_runtime_identity', ROOT / 'scripts/neuralese_data/port_runtime_identity.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, 'task_runtime_inventory', lambda path: {'dist/cli.js': 'authenticated'})
+    root = tmp_path / 'runtime'
+    script = root / 'ts-host/scripts/inline-curriculum/replay.mjs'
+    script.parent.mkdir(parents=True)
+    script.write_text('first')
+    (root / 'runtime-input-closure.json').write_text('{}')
+    reservation = root / 'data/external_pilot/jeff-test-tasks.jsonl'
+    reservation.parent.mkdir(parents=True)
+    reservation.write_text('{}')
+    node = tmp_path / 'node'
+    node.write_text('node')
+    first = module.identity(root, node)['identity_sha256']
+    script.write_text('changed')
+    assert module.identity(root, node)['identity_sha256'] != first

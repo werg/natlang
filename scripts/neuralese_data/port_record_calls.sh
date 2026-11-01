@@ -21,6 +21,10 @@ NODE=${NODE:-/home/werg/.local/bin/node}
 TS=$REPO/ts-host/scripts/inline-curriculum
 RES=$REPO/data/external_pilot/jeff-test-tasks.jsonl
 mkdir -p "$OUT/ir" "$OUT/turns" "$OUT/logs"
+if [ -n "${SKIP_DONE_IN:-}" ]; then
+  [ -n "${SKIP_DONE_RECEIPT:-}" ] || { echo "predecessor receipt required" >&2; exit 2; }
+  python3 "$(dirname "${BASH_SOURCE[0]}")/port_predecessor_receipt.py" verify "$SKIP_DONE_IN" "$SKIP_DONE_RECEIPT"
+fi
 # Cleanup and shard publication require one live driver for this output tree.
 # Children inherit the descriptor, so a replacement waits for surviving work too.
 exec 9>"$OUT/.pipeline.lock"
@@ -29,14 +33,15 @@ flock -n 9 || { echo "another port-record driver owns $OUT" >&2; exit 75; }
 # no live replay behind, so the scratch of an earlier run is removed on start, and on TERM/INT/EXIT of this one.
 rm -rf "$OUT/tmp"; mkdir -p "$OUT/tmp"
 trap 'trap "" TERM INT; trap - EXIT; kill 0 2>/dev/null; wait; rm -rf "$OUT/tmp"' TERM INT EXIT
-PAGE=$(cd "$REPO/ts-host" && "$NODE" -e "import('./dist/native/cutoff.js').then(m => console.log(typeof m.shownCharsFor === 'function' ? m.shownCharsFor(65536) : 'fixed-2000'))")
-DIST=$(cat "$REPO/ts-host/dist/.build-commit" 2>/dev/null || echo "unknown (built before 2026-10-12 cutover)")
-RUNTIME="{\"page_size\": \"$PAGE\", \"dist_commit\": \"$DIST\", \"context_tokens\": 65536}"
+# The stamp alone is not an identity: a rebuild can leave it stale. Bind the
+# actual frozen dist, dependency and script contents before admitting work.
+RUNTIME=$(PYTHONPATH="$REPO/training/neuralese${PYTHONPATH:+:$PYTHONPATH}" python3 "$(dirname "${BASH_SOURCE[0]}")/port_runtime_identity.py" "$REPO" "$NODE")
 if [ -f "$OUT/runtime-page.json" ]; then
-  [ "$(cat "$OUT/runtime-page.json")" = "$RUNTIME" ] || { echo "OUT was replayed with $(cat "$OUT/runtime-page.json"), runtime is now $RUNTIME: continue in a new corpus version (SKIP_DONE_IN)" >&2; exit 2; }
+  [ "$(cat "$OUT/runtime-page.json")" = "$RUNTIME" ] || { echo "runtime content changed: use a new corpus output with SKIP_DONE_IN" >&2; exit 2; }
 else
-  echo "$RUNTIME" > "$OUT/runtime-page.json"
+  printf '%s\n' "$RUNTIME" > "$OUT/runtime-page.json"
 fi
+
 shard_complete() {
   [ -f "$1.summary.json" ] && [ -s "$1.turns.jsonl.zst" ] && [ -s "$1.rows.jsonl.zst" ]
 }
@@ -51,7 +56,7 @@ replay() {
   shard=$1; f=$(basename "$(dirname "$shard")"); n=$(basename "$shard" .ir.jsonl)
   dst=$OUT/turns/$f/$n
   shard_complete "$dst" && return 0
-  [ -n "${SKIP_DONE_IN:-}" ] && shard_complete "$SKIP_DONE_IN/turns/$f/$n" && return 0
+  [ -n "${SKIP_DONE_IN:-}" ] && shard_complete "$SKIP_DONE_IN/turns/$f/$n" && cmp -s "$shard" "$SKIP_DONE_IN/ir/$f/$n.ir.jsonl" && return 0
   mkdir -p "$OUT/turns/$f"
   # A historical failed publication may have a summary but a missing stream.
   # Invalidate that false completion before attempting its replacement.
@@ -89,7 +94,7 @@ builder=$!
 # return 0: under set -e/pipefail a last shard already done (the && chain fails) would end the whole driver.
 pending() { for b in "$OUT"/ir/*/build.json; do [ -f "$b" ] || continue; d=$(dirname "$b"); f=$(basename "$d")
   for s in "$d"/*.ir.jsonl; do n=$(basename "$s" .ir.jsonl); [ -f "$s" ] && ! shard_complete "$OUT/turns/$f/$n" \
-    && { [ -z "${SKIP_DONE_IN:-}" ] || ! shard_complete "$SKIP_DONE_IN/turns/$f/$n"; } && echo "$s"; done; done; return 0; }
+    && { [ -z "${SKIP_DONE_IN:-}" ] || ! shard_complete "$SKIP_DONE_IN/turns/$f/$n" || ! cmp -s "$s" "$SKIP_DONE_IN/ir/$f/$n.ir.jsonl"; } && echo "$s"; done; done; return 0; }
 while :; do
   building=0; kill -0 $builder 2>/dev/null && building=1
   work=$(pending | sort)
