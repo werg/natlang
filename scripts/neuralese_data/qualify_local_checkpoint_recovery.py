@@ -128,6 +128,17 @@ def copy_closure_blobs(base_closure, store):
     return dict(results[index] for index in sorted(results))
 
 
+def stage_restore_checkpoint(checkpoint, store, digest):
+    """Load the smoke test from verified independent bytes, never its owner slot."""
+    checkpoint=Path(checkpoint).resolve(strict=True)
+    target=Path(store)/'qualification-checkpoints'/(digest+'.pt')
+    identity=verified_recovery_blob(checkpoint,target,digest)
+    original=checkpoint.stat()
+    if tuple(identity[:2])==(original.st_dev,original.st_ino):
+        raise ValueError('recovery smoke checkpoint must have an independent inode')
+    return {'path':str(target.resolve(strict=True)), 'sha256':digest, 'identity':identity}
+
+
 @contextlib.contextmanager
 def locked_fixture(path):
     path=Path(path);path.mkdir(parents=True,exist_ok=True)
@@ -154,6 +165,8 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
         stat=checkpoint.stat();return (stat.st_dev,stat.st_ino,stat.st_size,stat.st_mtime_ns,stat.st_ctime_ns)
     checkpoint_before=checkpoint_identity();checkpoint_sha=file_sha256(checkpoint)
     if checkpoint_identity()!=checkpoint_before:raise ValueError('recovery checkpoint changed while hashing')
+    restored_checkpoint=stage_restore_checkpoint(checkpoint,store,checkpoint_sha)
+    if checkpoint_identity()!=checkpoint_before:raise ValueError('recovery checkpoint changed during independent staging')
     placeholder=plan['restore_qualification'];base_closure=[x for x in plan['closure'] if not (x['role']=='controls' and x['path']==placeholder['path'] and x['sha256']==placeholder['sha256'])]
     blobs=copy_closure_blobs(base_closure,store)
     restore=plan.get('restore') or {}
@@ -242,12 +255,15 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
 '''
         train=Path(source_map[plan['inputs']['train']['path']]);held=Path(source_map[plan['inputs']['held']['path']]);sample=Path(source_map[restore['sample_graph']])
         staged_plan=root/'restore-plan.json';write_json_durable(staged_plan,plan)
-        command=[str(venv/'bin/python'),'-c',code,str(checkpoint),str(base),str(train),str(held),str(sample),restore['tokenizer_fingerprint'],str(root/'.natlang-source-map.json'),str(staged_plan)]
+        command=[str(venv/'bin/python'),'-c',code,restored_checkpoint['path'],str(base),str(train),str(held),str(sample),restore['tokenizer_fingerprint'],str(root/'.natlang-source-map.json'),str(staged_plan)]
         py=subprocess.run(command,cwd=runtime,env=env,capture_output=True,text=True,timeout=1800)
         if py.returncode:raise RuntimeError('restored native checkpoint smoke failed: '+py.stderr[-5000:])
         lines=[line[len('RECOVERY_SMOKE='):] for line in py.stdout.splitlines() if line.startswith('RECOVERY_SMOKE=')]
         if len(lines)!=1:raise ValueError('restored native checkpoint smoke omitted exact result')
         if checkpoint_identity()!=checkpoint_before:raise ValueError('recovery checkpoint changed during isolated restore')
+        restored_stat=Path(restored_checkpoint['path']).stat()
+        if [restored_stat.st_dev,restored_stat.st_ino,restored_stat.st_size,restored_stat.st_mtime_ns,restored_stat.st_ctime_ns]!=restored_checkpoint['identity']:
+            raise ValueError('independent checkpoint changed during isolated restore')
         smoke=json.loads(lines[0]);collector=(runtime/'ts-host/dist/teacher/collector.js').resolve(strict=True)
         js="import fs from 'node:fs'; await import(process.argv[1]); console.log('NODE_RECOVERY='+JSON.stringify(fs.readFileSync('/proc/self/maps','utf8')));"
         node_result=subprocess.run([str(node),'--input-type=module','-e',js,collector.as_uri()],cwd=runtime,env=env,capture_output=True,text=True,timeout=120)
@@ -277,6 +293,7 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
             if raw not in allowed or file_sha256(path)!=allowed[raw]:raise ValueError('unbound host executable or library in restored process: '+raw)
             used.append({'path':raw,'sha256':allowed[raw]})
         evidence={'schema':'natlang.local-recovery-restore-evidence/1','checkpoint':{'path':str(checkpoint),'sha256':checkpoint_sha},
+                  'independent_checkpoint':restored_checkpoint,
                   'inputs':plan['inputs'],'sample':smoke,'node_collector':str(collector.relative_to(root)),
                   'runtime_manifest':runtime_manifest['schema'],'environment_manifest':env_manifest['schema'],
                   'system_python_manifest':stdlib_manifest['schema'],'task_asset_guard_output':asset_result.stdout.strip(),'used_host_executables':sorted(used,key=lambda x:x['path']),

@@ -5,6 +5,24 @@ from scripts.neuralese_data.archive_local_recovery_runtime import seal
 from scripts.neuralese_data.qualify_local_checkpoint_recovery import extract_archive,_mapped_path,bind_restored_asset
 
 
+def test_restore_checkpoint_is_a_verified_copy_and_rejects_aliases(tmp_path):
+    import hashlib,os
+    from scripts.neuralese_data.qualify_local_checkpoint_recovery import stage_restore_checkpoint
+    source=tmp_path/'owner.pt';source.write_bytes(b'full checkpoint bytes')
+    digest=hashlib.sha256(source.read_bytes()).hexdigest()
+    store=tmp_path/'independent'
+    result=stage_restore_checkpoint(source,store,digest)
+    restored=Path(result['path'])
+    assert restored.read_bytes()==source.read_bytes() and not os.path.samefile(restored,source)
+    assert stage_restore_checkpoint(source,store,digest)==result
+    restored.write_bytes(b'corrupt copy')
+    with pytest.raises(ValueError,match='differs'):
+        stage_restore_checkpoint(source,store,digest)
+    restored.unlink();os.link(source,restored)
+    with pytest.raises(ValueError,match='independent inode'):
+        stage_restore_checkpoint(source,store,digest)
+
+
 def test_restored_assets_can_live_on_separate_scratch_and_reject_collision(tmp_path):
     tree=tmp_path/'external-tree';tree.mkdir()
     payload=tmp_path/'local-scratch'/'runtime';payload.mkdir(parents=True)
