@@ -5,6 +5,7 @@ import hashlib
 import json
 import time
 import contextvars
+import os
 from pathlib import Path
 
 from ..data.native_sources import NativeGraphSource
@@ -266,6 +267,177 @@ def oversized_batches(micro_batches, baseline):
             or sum(len(example.plan.slot_sources) for example in batch) > baseline['kv_slots']]
 
 
+def _oversize_shape(batches):
+    """Describe whole-group geometry without combining maxima from different groups."""
+    groups=[]
+    for batch in batches:
+        graphs=[{'id':example.id,'forward_tokens':int(example.plan.token_count),
+                 'kv_slots':len(example.plan.slot_sources)} for example in batch]
+        groups.append({'graphs':graphs,'forward_tokens':sum(g['forward_tokens'] for g in graphs),
+                       'kv_slots':sum(g['kv_slots'] for g in graphs),'graph_count':len(graphs)})
+    return groups
+
+
+def _one_group_dominates(measured, candidate):
+    """Use one actually measured packed group as the envelope, never a cartesian max."""
+    if candidate['graph_count'] > measured['graph_count']:
+        return False
+    for key in ('forward_tokens','kv_slots'):
+        if candidate[key] > measured[key]:
+            return False
+    # Keep per-graph context lengths coupled to KV sizes. Sorting makes the
+    # comparison independent of source order while preventing crossed maxima.
+    old=sorted(((g['forward_tokens'],g['kv_slots']) for g in measured['graphs']), reverse=True)
+    new=sorted(((g['forward_tokens'],g['kv_slots']) for g in candidate['graphs']), reverse=True)
+    return all(t <= old[i][0] and k <= old[i][1] for i,(t,k) in enumerate(new))
+
+
+def _capacity_memory_context(device):
+    import torch
+    if device.type != 'cuda' or not torch.cuda.is_initialized():
+        return {'device_type':device.type,'free_bytes_at_probe':None,'total_bytes':None}
+    free,total=torch.cuda.mem_get_info(device)
+    return {'device_type':'cuda','free_bytes_at_probe':int(free),'total_bytes':int(total)}
+
+
+def oversize_execution_identity(model, optimizer, *, args, backend, objective_binding):
+    """Bind the memory execution path; parameter values may change, shapes may not."""
+    from ..common.hashing import canonical_json_sha256_hex
+    from .native_resident import code_inventory
+    import torch
+    package=Path(__file__).resolve().parents[1]
+    code=code_inventory(package)
+    params=[(name,tuple(parameter.shape),str(parameter.dtype),bool(parameter.requires_grad))
+            for name,parameter in getattr(optimizer,'_native_named_parameters',model.named_parameters())]
+    device=next(model.parameters()).device
+    hardware={'device':str(device),'torch':torch.__version__,'cuda':torch.version.cuda}
+    if device.type=='cuda':
+        hardware['name']=torch.cuda.get_device_name(device)
+        hardware['capability']=list(torch.cuda.get_device_capability(device))
+        hardware['total_bytes']=int(torch.cuda.get_device_properties(device).total_memory)
+    hardware['cuda_budget_gb']=os.environ.get('NATLANG_CUDA_MEMORY_GB')
+    return {'schema':'natlang.native-oversize-execution-identity/1',
+        'sha256':canonical_json_sha256_hex({'code':code,'params':params,'hardware':hardware,
+            'backend':backend.configuration() if backend is not None else {'enabled':False},
+            'checkpoint_layers':bool(args.checkpoint_layers),'chunk_tokens':int(args.chunk_tokens),
+            'cotangent_mode':'plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp',
+            'retained_gradients':int(args.accumulate_batches)>1,'production_packing':True,
+            'quantization':getattr(args,'quantization',None),
+            'fp8_training':getattr(args,'fp8_training',None),
+            'fp8_recipe':getattr(args,'fp8_recipe',None),
+            'share_causal_prefixes':bool(getattr(model,'share_causal_prefixes',False)),
+            'objective':objective_binding}),
+        'code':code,'parameter_signature_sha256':canonical_json_sha256_hex(params),
+        'hardware':hardware,'backend':backend.configuration() if backend is not None else {'enabled':False},
+        'objective':objective_binding}
+
+
+def _profile_shape_compatible(proof, *, execution_identity, precision, effective_layout, current_memory):
+    if proof.get('execution_identity') != execution_identity:
+        return False
+    if proof.get('effective_layout') != effective_layout:
+        return False
+    capacity=proof.get('capacity') or {}
+    qat=capacity.get('qat_point')
+    expected=None if precision is None else {'point':precision[1],
+        'loss_weight':float(precision[3])}
+    # The active mix is recorded on both receipts, but is an interpolation of
+    # operands, not an allocation-shape switch. Precision point and objective
+    # remain exact identity components.
+    if (None if qat is None else {'point':qat.get('point'),'loss_weight':qat.get('loss_weight')}) != expected:
+        return False
+    memory=proof.get('memory_context') or {}
+    now=current_memory
+    if memory.get('total_bytes') != now.get('total_bytes') or memory.get('device_type') != now.get('device_type'):
+        return False
+    # A proof made with less free device memory cannot authorize work now.
+    prior_free=memory.get('free_bytes_at_probe')
+    current_free=now.get('free_bytes_at_probe')
+    if prior_free is not None and (current_free is None or current_free < prior_free):
+        return False
+    return True
+
+
+def _find_oversize_envelope(history, candidate_groups, *, execution_identity, precision,
+                            effective_layout, current_memory):
+    from .native_resident import bound
+    choices=[]
+    for reference in history or ():
+        try:
+            record=json.loads(bound(reference).read_text())
+            bound(record['source'])
+        except (OSError,KeyError,ValueError,TypeError):
+            continue
+        if (record.get('schema')!='natlang.native-oversize-live-capacity/1' or record.get('passed') is not True
+                or not _profile_shape_compatible(record,execution_identity=execution_identity,
+                    precision=precision,effective_layout=effective_layout,current_memory=current_memory)):
+            continue
+        capacity=record.get('capacity') or {}
+        cases=capacity.get('cases') or []
+        groups=record.get('candidate_groups') or []
+        if (record.get('optimizer_updates')!=0 or record.get('earned_exposure')!=0
+                or record.get('model_boundary')!='current-live-model-before-update'
+                or capacity.get('passed') is not True or capacity.get('optimizer_updates')!=0
+                or capacity.get('production_packing') is not True
+                or capacity.get('whole_graphs') is not True
+                or capacity.get('cpu_and_all_cuda_rng_restored') is not True
+                or capacity.get('task_quality_qualified') is not False
+                or len(groups)!=len(cases)):
+            continue
+        for case,measured in zip(cases,groups,strict=True):
+            if case.get('status')!='passed':continue
+            if (measured.get('forward_tokens')!=case.get('forward_tokens')
+                    or measured.get('kv_slots')!=case.get('kv_slots')
+                    or measured.get('graph_count')!=len(measured.get('graphs',()))
+                    or [graph.get('id') for graph in measured.get('graphs',())] != case.get('example_ids')):
+                continue
+            if all(_one_group_dominates(measured,candidate) for candidate in candidate_groups):
+                choices.append((measured['forward_tokens']+measured['kv_slots'],reference,record,case,measured))
+    if not choices:return None
+    return min(choices,key=lambda item:item[0])[1:]
+
+
+def record_oversize_envelope_reuse(args, *, match, candidate_groups, source_path,
+                                   execution_identity, precision, effective_layout,
+                                   current_memory, checkpoint_sha256, global_step):
+    from ..common.hashing import canonical_json_sha256_hex
+    from ..common.jsonio import write_json_durable
+    from .native_resident import binding
+    source_reference,source_record,source_case,measured=match
+    reuse={'schema':'natlang.native-oversize-capacity-envelope-reuse/1',
+        'global_step':global_step,'parent_checkpoint_sha256':checkpoint_sha256,
+        'source':binding(source_path),'execution_identity':execution_identity,
+        'effective_layout':effective_layout,
+        'precision':None if precision is None else {'point':precision[1],
+            'mix':float(precision[2]),'loss_weight':float(precision[3])},
+        'memory_context':current_memory,'candidate_groups':candidate_groups,
+        'envelope_source':source_reference,'envelope_source_global_step':source_record['global_step'],
+        'measured_group':measured,'measured_case_id':source_case.get('id'),
+        'passed':True,'optimizer_updates':0,'earned_exposure':0,
+        'scope':'candidate is bounded componentwise by one complete measured group; no independent maxima combined'}
+    path=Path(args.out)/'oversize-capacity-reuse'/(canonical_json_sha256_hex(reuse)+'.json')
+    path.parent.mkdir(parents=True,exist_ok=True)
+    if not path.exists():write_json_durable(path,reuse)
+    return binding(path)
+
+
+def preflight_oversize_update(policy, model, micro_batches, baseline, *, history,
+                              execution_identity, precision, backend):
+    """Skip the async-save drain only when a bound past group covers this update."""
+    batches=oversized_batches(micro_batches,baseline)
+    if not batches:return False,None,[],None,None
+    from .native_state_sft import _communication_prefix_allowed
+    layout={'share_causal_prefixes':bool(getattr(model,'share_causal_prefixes',False)),
+        'allow_communication_prefixes':bool(_communication_prefix_allowed(backend,precision))}
+    groups=_oversize_shape(batches)
+    memory=_capacity_memory_context(next(model.parameters()).device)
+    match=_find_oversize_envelope(history,groups,execution_identity=execution_identity,
+        precision=precision,effective_layout=layout,current_memory=memory)
+    if match is None:
+        policy.drain_async()
+    return True,match,groups,layout,memory
+
+
 def checkpoint_overlap_barrier(policy, micro_batches, baseline):
     """Finish a detached checkpoint before an unqualified oversized update."""
     oversized = bool(oversized_batches(micro_batches, baseline))
@@ -276,7 +448,8 @@ def checkpoint_overlap_barrier(policy, micro_batches, baseline):
 
 def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, precision,
                              source_path, checkpoint_sha256, global_step, baseline,
-                             objective=None, objective_binding=None):
+                             objective=None, objective_binding=None, prior_history=(),
+                             execution_identity=None):
     """Gate newly larger actual groups on the live model and actual QAT point, before SGD."""
     from ..eval.native_memory import qualify_capacity
     from ..common.hashing import canonical_json_sha256_hex
@@ -286,6 +459,20 @@ def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, 
         raise ValueError('oversize capacity needs the actual objective and its bound identity together')
     batches=oversized_batches(micro_batches, baseline)
     if not batches:return None
+    candidate_groups=_oversize_shape(batches)
+    memory_context=_capacity_memory_context(next(model.parameters()).device)
+    from .native_state_sft import _communication_prefix_allowed
+    effective_layout={'share_causal_prefixes':bool(getattr(model,'share_causal_prefixes',False)),
+        'allow_communication_prefixes':bool(_communication_prefix_allowed(backend,precision))}
+    if execution_identity is not None:
+        reused=_find_oversize_envelope(prior_history,candidate_groups,
+            execution_identity=execution_identity,precision=precision,effective_layout=effective_layout,
+            current_memory=memory_context)
+        if reused is not None:
+            return record_oversize_envelope_reuse(args,match=reused,candidate_groups=candidate_groups,
+                source_path=source_path,execution_identity=execution_identity,precision=precision,
+                effective_layout=effective_layout,current_memory=memory_context,
+                checkpoint_sha256=checkpoint_sha256,global_step=global_step)
     named=getattr(optimizer,'_native_named_parameters',list(model.named_parameters()))
     prior={id(parameter):(parameter,parameter.grad) for _,parameter in named if parameter.grad is not None}
     for parameter,_ in prior.values():parameter.grad=None
@@ -301,6 +488,8 @@ def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, 
     record={'schema':'natlang.native-oversize-live-capacity/1','global_step':global_step,
             'parent_checkpoint_sha256':checkpoint_sha256,'source':binding(source_path),
             'baseline':baseline,'model_boundary':'current-live-model-before-update',
+            'candidate_groups':candidate_groups,'memory_context':memory_context,
+            'execution_identity':execution_identity,'effective_layout':effective_layout,
             'objective':objective_binding,
             'capacity':report,'passed':report['passed'],'optimizer_updates':0,'earned_exposure':0,
             'scope':'whole-graph forward/backward with retained gradients; excludes optimizer-step workspace'}

@@ -3358,6 +3358,9 @@ def _main(argv=None, *, requested_refresh):
         if prior_oversize_baseline else prior_packed_capacity.get('geometry'))
     oversize_limits = oversize_baseline(train, prior_geometry, fallback_tokens=args.batch_tokens,
         current_geometry=json.loads(args.sft_packed_geometry) if args.sft_packed_geometry else None)
+    from .native_packed_capacity import oversize_execution_identity
+    oversize_execution_identity_record = oversize_execution_identity(model, optimizer,
+        args=args, backend=backend, objective_binding=objective_binding)
     if objective is not None and not mandatory_objective:
         from .native_packed_capacity import policy_capacity_baseline
         from .native_resident import binding as native_binding
@@ -3810,8 +3813,15 @@ def _main(argv=None, *, requested_refresh):
             # A detached full-state checkpoint can overlap the qualified
             # ordinary workload, but not an as-yet-unqualified oversized
             # graph. Drain before calibration, its capacity gate, or forward.
-            from .native_packed_capacity import checkpoint_overlap_barrier
-            oversized_update = checkpoint_overlap_barrier(policy, micro_batches, oversize_limits)
+            from .native_packed_capacity import (preflight_oversize_update,
+                _capacity_memory_context, _find_oversize_envelope, record_oversize_envelope_reuse)
+            planned_precision = None
+            if quantization is not None and not policy_operation:
+                planned_precision=(quantization,*quantization.plan(global_step)[0])
+            oversized_update,envelope_match,candidate_groups,effective_layout,_ = preflight_oversize_update(
+                policy,model,micro_batches,oversize_limits,
+                history=checkpoint_options.get('oversize_capacity_history') or (),
+                execution_identity=oversize_execution_identity_record,precision=planned_precision,backend=backend)
             indices = [index for item in fetched for index in item[1]]
             pass_end = any(item[2] for item in fetched)
             batch = [example for micro in micro_batches for example in micro]
@@ -3840,12 +3850,37 @@ def _main(argv=None, *, requested_refresh):
             # A newly larger complete graph is measured on this very model
             # with the selected QAT point and actual cotangent path before SGD.
             from .native_packed_capacity import qualify_oversize_batches
+            oversize_proof = None
             try:
-                oversize_proof = qualify_oversize_batches(model, optimizer, micro_batches,
-                    args=args, backend=backend, precision=precision_pass, source_path=train.path,
-                    checkpoint_sha256=sha256_file_hex_cached(policy.slot) if policy.slot.exists() else config['base_inventory_sha256'],
-                    global_step=global_step, baseline=oversize_limits,
-                    objective=objective, objective_binding=objective_binding)
+                current_parent_sha=sha256_file_hex_cached(policy.slot) if policy.slot.exists() else config['base_inventory_sha256']
+                if envelope_match is not None:
+                    # Recheck actual selected QAT point and available device headroom after calibration.
+                    current_memory=_capacity_memory_context(next(model.parameters()).device)
+                    actual_layout={'share_causal_prefixes':bool(getattr(model,'share_causal_prefixes',False)),
+                        'allow_communication_prefixes':bool(_communication_prefix_allowed(backend,precision_pass))}
+                    verified_match=_find_oversize_envelope(
+                        checkpoint_options.get('oversize_capacity_history') or (),candidate_groups,
+                        execution_identity=oversize_execution_identity_record,precision=precision_pass,
+                        effective_layout=actual_layout,
+                        current_memory=current_memory)
+                    if verified_match is None:
+                        # An execution-path or headroom change invalidates the optimistic preflight.
+                        policy.drain_async()
+                    else:
+                        oversize_proof=record_oversize_envelope_reuse(args,match=verified_match,
+                            candidate_groups=candidate_groups,source_path=train.path,
+                            execution_identity=oversize_execution_identity_record,precision=precision_pass,
+                            effective_layout=actual_layout,
+                            current_memory=current_memory,checkpoint_sha256=current_parent_sha,
+                            global_step=global_step)
+                if envelope_match is None or oversize_proof is None:
+                    oversize_proof = qualify_oversize_batches(model, optimizer, micro_batches,
+                        args=args, backend=backend, precision=precision_pass, source_path=train.path,
+                        checkpoint_sha256=current_parent_sha,
+                        global_step=global_step, baseline=oversize_limits,
+                        objective=objective, objective_binding=objective_binding,
+                        prior_history=checkpoint_options.get('oversize_capacity_history') or (),
+                        execution_identity=oversize_execution_identity_record)
             except BaseException:
                 cursor = previous_cursor
                 if warmup is not None: warmup.restore()
