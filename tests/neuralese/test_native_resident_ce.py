@@ -400,6 +400,39 @@ def test_declared_family_scale_refresh_requires_same_families_and_exact_append(t
     with pytest.raises(ValueError,match='family set'):extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'],prior_train=before,candidate_train=after)
 
 
+def test_declared_family_extension_requires_an_exact_new_suffix_family(tmp_path):
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.train.own_output_supervision import identity, policy_objective
+    from test_own_output_supervision import objective
+    paths, old, new = fixture(tmp_path)
+    before = NativeGraphSource(paths['old_train'], 'tokenizer-sha', required_split='train')
+    after = NativeGraphSource(paths['train'], 'tokenizer-sha', required_split='train')
+    old_rows = [{'id': e['id'], 'binding': e['binding'], 'family': 'ordinary'} for e in before.entries]
+    new_rows = old_rows + [{'id': e['id'], 'binding': e['binding'], 'family': 'general-agent'}
+                           for e in after.entries[len(old_rows):]]
+    oldmap, newmap = tmp_path / 'old-families.json', tmp_path / 'new-families.json'
+    write_json(oldmap, {'schema': 'natlang.logical-family-map/1', 'source_sha256': before.file_sha256, 'rows': old_rows})
+    write_json(newmap, {'schema': 'natlang.logical-family-map/1', 'source_sha256': after.file_sha256, 'rows': new_rows})
+    olddoc, newdoc = json.loads(paths['old_ce'].read_text()), json.loads(paths['new_ce'].read_text())
+    spec = lambda path, scales: {'key': 'logical-family', 'max_scale': 8., 'normalization': 'declared/1',
+                                 'map': resident.binding(path), 'scales': scales}
+    olddoc['objective'] = objective(mass='token', family_balance=spec(oldmap, {'ordinary': 1.}))
+    newdoc['objective'] = objective(mass='token', family_balance=spec(newmap, {'ordinary': .9, 'general-agent': 1.1}))
+    newdoc['objective_transition'] = {'from': identity(policy_objective(olddoc))['sha256']}
+    write_json(paths['old_ce'], olddoc); write_json(paths['new_ce'], newdoc)
+    old['stage_inputs']['sft']['ce_supervision_policy'] = {**resident.binding(paths['old_ce']), 'binding': 'ce'}
+    new['stage_inputs']['sft']['ce_supervision_policy'] = {**resident.binding(paths['new_ce']), 'binding': 'ce'}
+    accepted = extension_policy(old['stage_inputs']['sft'], new['stage_inputs']['sft'], prior_train=before, candidate_train=after)
+    assert accepted['objective']['family_balance']['scales']['general-agent'] == 1.1
+    new_rows[0] = {**new_rows[0], 'family': 'general-agent'}
+    write_json(newmap, {'schema': 'natlang.logical-family-map/1', 'source_sha256': after.file_sha256, 'rows': new_rows})
+    newdoc['objective']['family_balance']['map'] = resident.binding(newmap)
+    write_json(paths['new_ce'], newdoc)
+    new['stage_inputs']['sft']['ce_supervision_policy'] = {**resident.binding(paths['new_ce']), 'binding': 'ce'}
+    with pytest.raises(ValueError, match='prior source row families'):
+        extension_policy(old['stage_inputs']['sft'], new['stage_inputs']['sft'], prior_train=before, candidate_train=after)
+
+
 def test_prior_inventory_repair_requires_exact_quarantine_and_family_custody(tmp_path):
     from natlang_neuralese.data.native_sources import NativeGraphSource
     from natlang_neuralese.train.own_output_supervision import identity, policy_objective

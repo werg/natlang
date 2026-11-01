@@ -173,13 +173,14 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
         # A declared objective transition may replace row-count balancing with
         # explicit measured own-output family scales. Keep all other objective
         # settings and the cap identical; load_policy validates the scales.
+        old_scales = new_scales = None
         if old_family.get('normalization') == 'bounded-mean-one/1' and new_family.get('normalization') == 'declared/1':
             old_family.pop('normalization');new_family.pop('normalization')
             new_family.pop('scales',None)
         elif not same_source and old_family.get('normalization') == new_family.get('normalization') == 'declared/1':
             old_scales=old_family.pop('scales',None);new_scales=new_family.pop('scales',None)
-            if not isinstance(old_scales,dict) or not isinstance(new_scales,dict) or set(old_scales)!=set(new_scales):
-                raise ValueError('resident declared-scale refresh changed the family set')
+            if not isinstance(old_scales,dict) or not isinstance(new_scales,dict) or not set(old_scales) <= set(new_scales):
+                raise ValueError('resident declared-scale refresh removed a prior family set')
         if left!=right or not old_map or not new_map or (b.get('objective_transition') or {}).get('from')!=identity(policy_objective(prior))['sha256']:
             raise ValueError('resident logical-family extension changed objective law or lacks its exact predecessor')
         previous=json.loads(_verified_bytes(old_map)[1]);current=json.loads(_verified_bytes(new_map)[1])
@@ -228,6 +229,13 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
                 raise ValueError('resident source correction ledger does not bind the exact mask and appended rows')
         prior_map_rows = previous['rows']
         current_prefix = current['rows'][:len(prior_map_rows)]
+        if old_scales is not None:
+            previous_families = {row.get('family') for row in prior_map_rows}
+            added_families = {row.get('family') for row in current['rows'][len(prior_map_rows):]} - previous_families
+            if (not previous_families <= set(old_scales)
+                    or not (previous_families | added_families) <= set(new_scales)
+                    or set(new_scales) - set(old_scales) != added_families - set(old_scales)):
+                raise ValueError('resident declared-scale refresh changed the family set without appended rows')
         if current_prefix != prior_map_rows:
             if correction_decl is None:
                 raise ValueError('resident logical-family extension changed prior source row families')
