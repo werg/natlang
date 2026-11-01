@@ -69,6 +69,7 @@ def _verify_rows(source: Path, verification_path: Path, *, intake_receipt: dict 
                 intake_receipt.get('judged_cases_sha256') != _sha(source) or
                 intake_receipt.get('admission_eligible') is not True):
             raise ValueError('judged source qualification does not bind its source and cleared intake receipt')
+        _verify_declared_reference_audits(source, rows, verification)
         return rows, verification
     if verification.get('schema') != 'natlang.broad-rl-case-verification/1':
         raise ValueError('unsupported source verification receipt')
@@ -80,6 +81,61 @@ def _verify_rows(source: Path, verification_path: Path, *, intake_receipt: dict 
         if not result or result.get('ok') is not True:
             raise ValueError(f'case is not an independently verified kept result: {row.get("id")}')
     return rows, verification
+
+
+def _canonical_object_sha(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                     separators=(',', ':')).encode('utf-8')).hexdigest()
+
+
+def _verify_declared_reference_audits(source: Path, rows: list[dict], verification: dict) -> None:
+    """Authenticate each declared collector reference against its exact source row and result bytes."""
+    references = verification.get('reference_audits')
+    if references is None:
+        return
+    if not isinstance(references, list) or not references:
+        raise ValueError('declared reference_audits must be a non-empty list')
+    by_id = {row.get('id'): row for row in rows}
+    if len(by_id) != len(rows):
+        raise ValueError('judged source contains duplicate case IDs')
+    seen: set[str] = set()
+    for reference in references:
+        if not isinstance(reference, dict):
+            raise ValueError('reference audit binding must be an object')
+        audit_path = Path(reference.get('path', '')).expanduser().resolve(strict=True)
+        if not audit_path.is_file() or _sha(audit_path) != reference.get('sha256'):
+            raise ValueError(f'reference audit bytes do not match their declared hash: {audit_path}')
+        audit = json.loads(audit_path.read_text(encoding='utf-8'))
+        case_id = audit.get('case_id')
+        if not isinstance(case_id, str) or case_id not in by_id or case_id in seen:
+            raise ValueError('reference audit has an absent or duplicate candidate case ID')
+        row = by_id[case_id]
+        if audit.get('source_row_canonical_sha256') != _canonical_object_sha(row):
+            raise ValueError(f'reference audit is not bound to the exact candidate row: {case_id}')
+        result_binding = audit.get('result')
+        if not isinstance(result_binding, dict):
+            raise ValueError(f'reference audit has no captured result binding: {case_id}')
+        result_path = Path(result_binding.get('path', '')).expanduser().resolve(strict=True)
+        if not result_path.is_file() or _sha(result_path) != result_binding.get('sha256'):
+            raise ValueError(f'captured result bytes do not match their declared hash: {case_id}')
+        result = json.loads(result_path.read_text(encoding='utf-8'))
+        program_ir = result.get('task', {}).get('program_ir')
+        if not isinstance(program_ir, dict):
+            raise ValueError(f'captured result has no executed task program IR: {case_id}')
+        actual_ir_sha = _canonical_object_sha(program_ir)
+        if (audit.get('program_ir_sha256') != result.get('provenance', {}).get('program_ir_sha256') or
+                audit.get('task_ir_canonical_sha256') != actual_ir_sha):
+            raise ValueError(f'captured program/task IR hashes do not match the reference audit: {case_id}')
+        if program_ir != row:
+            raise ValueError(f'captured program IR is not the exact candidate source row: {case_id}')
+        if (audit.get('world') != (row.get('curriculum', {}).get('external') or {}).get('upstream_id') or
+                audit.get('source_groups') != row.get('source_groups')):
+            raise ValueError(f'reference world/source groups do not match the candidate row: {case_id}')
+        seen.add(case_id)
+    if verification.get('reference_coverage') == 'all_candidates' and seen != set(by_id):
+        missing = sorted(set(by_id) - seen)
+        extra = sorted(seen - set(by_id))
+        raise ValueError(f'full reference coverage does not match candidate source rows; missing={missing}, extra={extra}')
 
 
 def _primary_world_group(row: dict) -> str:
