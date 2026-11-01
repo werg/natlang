@@ -198,6 +198,42 @@ def _split_for(row: dict, source_split: str, metadata: dict, group: str) -> str:
     return split
 
 
+def _validate_json_semantic_files_oracle(row: dict, path: Path, line_no: int) -> None:
+    spec = row.get('files_oracle')
+    if spec is None or not isinstance(spec, dict) or spec.get('compare') != 'json-semantic-structured':
+        return
+    comparison = spec.get('comparison_spec')
+    reports, contexts = spec.get('json_report_paths'), spec.get('rationale_context_paths')
+    if (not isinstance(comparison, dict) or comparison.get('schema_version') != 'semantic-structured-comparison/1' or
+            any(not isinstance(comparison.get(field), list) for field in ('unordered_paths', 'ordered_paths', 'prose_paths')) or
+            not comparison['prose_paths'] or not isinstance(comparison.get('prose_policy'), str) or
+            not comparison['prose_policy'].strip()):
+        raise ValueError(f'{path}:{line_no}: json-semantic-structured requires a complete semantic-structured-comparison/1 contract')
+    pointers = [*comparison['unordered_paths'], *comparison['ordered_paths'], *comparison['prose_paths']]
+    if (any(not isinstance(pointer, str) or not pointer.startswith('/') or '\x00' in pointer or
+            re.search(r'~(?![01])', pointer) for pointer in pointers) or len(set(pointers)) != len(pointers)):
+        raise ValueError(f'{path}:{line_no}: JSON comparison paths must be unique valid JSON pointers')
+    if (not isinstance(reports, list) or not reports or
+            any(not isinstance(name, str) for name in reports) or
+            len(set(reports)) != len(reports) or
+            any(not name or name.startswith('/') or '\\' in name or '\x00' in name or
+                re.match(r'^[A-Za-z]:', name) or any(part in {'', '.', '..'} for part in name.split('/')) or
+                not name.lower().endswith('.json') for name in reports)):
+        raise ValueError(f'{path}:{line_no}: json_report_paths must be unique safe relative JSON output paths')
+    expected = row.get('expected_files')
+    folder = row.get('folder_files')
+    if (not isinstance(expected, dict) or not isinstance(folder, dict) or
+            any(name not in expected or name in folder for name in reports)):
+        raise ValueError(f'{path}:{line_no}: every json_report_path must name an expected new report file')
+    if (not isinstance(contexts, list) or not contexts or
+            any(not isinstance(name, str) for name in contexts) or
+            len(set(contexts)) != len(contexts) or
+            any(not name or name.startswith('/') or '\\' in name or '\x00' in name or
+                re.match(r'^[A-Za-z]:', name) or any(part in {'', '.', '..'} for part in name.split('/')) or
+                name not in folder for name in contexts)):
+        raise ValueError(f'{path}:{line_no}: rationale_context_paths must name existing source files in folder_files')
+
+
 def _worlds(root: Path, metadata: dict) -> list[dict]:
     worlds = root.parent / 'worlds'
     if not worlds.is_dir():
@@ -238,6 +274,7 @@ def _worlds(root: Path, metadata: dict) -> list[dict]:
                     raise ValueError(f'{path}:{line_no}: {field} must map safe relative paths to text')
             if 'expected_files' in row and 'folder_files' not in row:
                 raise ValueError(f'{path}:{line_no}: expected_files requires folder_files')
+            _validate_json_semantic_files_oracle(row, path, line_no)
             source_groups = row.get('source_groups')
             if (not isinstance(source_groups, list) or not source_groups or
                     any(not isinstance(group, str) or not group.strip() for group in source_groups) or
@@ -248,8 +285,26 @@ def _worlds(root: Path, metadata: dict) -> list[dict]:
                 pass
             elif isinstance(oracle, dict) and oracle.get('level') == 'judged' and isinstance(oracle.get('rubric'), str) and oracle['rubric'].strip():
                 pass
+            elif isinstance(oracle, dict) and oracle.get('level') == 'normalized' and oracle.get('normalization') == 'semantic-structured':
+                comparison = oracle.get('comparison_spec')
+                if (not isinstance(comparison, dict) or comparison.get('schema_version') != 'semantic-structured-comparison/1' or
+                        any(not isinstance(comparison.get(field), list) for field in ('unordered_paths', 'ordered_paths', 'prose_paths')) or
+                        not comparison['prose_paths'] or not isinstance(comparison.get('prose_policy'), str) or
+                        not comparison['prose_policy'].strip()):
+                    raise ValueError(f'{path}:{line_no}: semantic-structured oracle requires complete comparison_spec')
+                pointers = [*comparison['unordered_paths'], *comparison['ordered_paths'], *comparison['prose_paths']]
+                if (any(not isinstance(pointer, str) or not pointer.startswith('/') or '\x00' in pointer or
+                        re.search(r'~(?![01])', pointer) for pointer in pointers) or len(set(pointers)) != len(pointers)):
+                    raise ValueError(f'{path}:{line_no}: semantic-structured oracle paths must be unique valid JSON pointers')
+                context = oracle.get('context')
+                context_files = context.get('source_files') if isinstance(context, dict) else None
+                folder_files = row.get('folder_files', {})
+                if (not isinstance(context_files, dict) or not context_files or
+                        any(not isinstance(name, str) or not isinstance(content, str) or
+                            folder_files.get(name) != content for name, content in context_files.items())):
+                    raise ValueError(f'{path}:{line_no}: semantic-structured oracle context must bind source text from folder_files')
             else:
-                raise ValueError(f'{path}:{line_no}: oracle must be exact or a judged object with an independent rubric')
+                raise ValueError(f'{path}:{line_no}: oracle must be exact, independently judged, or a validated semantic-structured oracle')
             reference_action = row.get('reference_action')
             if reference_action is not None:
                 if (not isinstance(reference_action, dict) or reference_action.get('tool') != 'eval' or
@@ -368,7 +423,9 @@ def _make_cases(program_id: str, package_revision: str, package: dict[str, str],
                              'workflow_ids': row.get('workflow_ids', []), 'instruction_sha256': text_digest(row['task']),
                              'external_services': service_bindings,
                              'checks': {'wrong_code': row['wrong_code']} if row.get('wrong_code') else {},
-                             'oracle_kind': 'exact' if oracle == 'exact' else 'judged'},
+                             'oracle_kind': ('exact' if oracle == 'exact' else
+                                 'semantic-structured' if isinstance(oracle, dict) and
+                                 oracle.get('normalization') == 'semantic-structured' else 'judged')},
             },
             'semantics': {'root': root, 'files': case_files, 'inputs': row['inputs'], 'expected': row['expected'],
                           'oracle': 'exact' if oracle == 'exact' else oracle},
@@ -558,7 +615,10 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
         'rights_status': metadata['dataset']['license_status'],
         'admission_eligible': metadata['dataset']['license_status'] == 'cleared',
         'oracle_counts': {'exact': sum(1 for row in world_rows if row['oracle'] == 'exact'),
-                          'judged': sum(1 for row in world_rows if isinstance(row['oracle'], dict))},
+                          'judged': sum(1 for row in world_rows if isinstance(row['oracle'], dict) and
+                                        row['oracle'].get('level') == 'judged'),
+                          'semantic_structured': sum(1 for row in world_rows if isinstance(row['oracle'], dict) and
+                                        row['oracle'].get('normalization') == 'semantic-structured')},
         'semantic_status': 'fixture-backed, not yet runtime-verified or live-model behaviorally evaluated',
         'diversity': report,
     }

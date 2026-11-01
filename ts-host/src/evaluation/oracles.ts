@@ -11,10 +11,11 @@ export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'sp
 /** Baseline answer comparison version; explicit specialized comparators carry their own verdict version. */
 export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/2';
 export type NumericListFieldSpec = { key: string; separator: '; '; empty_value: 'none' };
+export type SemanticStructuredComparisonSpec = { schema_version: string; unordered_paths: string[]; prose_paths: string[];
+  ordered_paths?: string[]; witness_review_required?: boolean; witness_policy?: string; prose_policy?: string };
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
   threshold?: number; normalization?: 'qa' | 'qa-string-map' | 'named-tree' | 'json-string-record' | (string & {});
-  comparison_spec?: { schema_version: string; unordered_paths: string[]; prose_paths: string[];
-    ordered_paths?: string[]; witness_review_required?: boolean; witness_policy?: string; prose_policy?: string };
+  comparison_spec?: SemanticStructuredComparisonSpec;
   /** Explicit answer-map keys whose string values are exact decimal quantities. */
   numeric_keys?: string[];
   /** Explicit answer-map keys whose values are ordered exact unsigned integer lists. */
@@ -58,7 +59,7 @@ export function declaredStructuralCanonical(value: unknown, unorderedPaths: stri
   return visit(value, []);
 }
 const BUILTIN_FILE_COMPARES = ['content', 'exact', 'moves', 'rewrite', 'csv', 'counts', 'json-string-record', 'qa-string-map',
-  'ordinal-distance-json-record',
+  'json-semantic-structured', 'ordinal-distance-json-record',
   'markdown-terminal-newline'] as const;
 export type OracleVerdict = { accepted: boolean; level: OracleLevel; score?: number; verdict?: string;
   needs_review?: boolean; comparison_version?: string };
@@ -319,8 +320,13 @@ export function agreement(actual: unknown, expected: unknown): number {
 /** File contracts fail closed on malformed reports and unverified rewrites. */
 export const DATA_QUALITY_VERSION = 3;
 export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/2';
-export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'qa-string-map' | 'markdown-terminal-newline' | (string & {}); threshold?: number; span?: number;
+export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'qa-string-map' | 'json-semantic-structured' | 'markdown-terminal-newline' | (string & {}); threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
+  /** JSON outputs whose prose-only fields may vary while all other structure remains exact. */
+  json_report_paths?: string[];
+  comparison_spec?: SemanticStructuredComparisonSpec;
+  /** Source files bound into the prose judge context for JSON reports. */
+  rationale_context_paths?: string[];
   /** Explicit answer file for return-value consistency when the default answers.json names do not apply. */
   return_path?: string;
   /** Explicit answer-map keys whose string values are exact decimal quantities. */
@@ -426,6 +432,83 @@ export function fileContentEqual(path: string, actual: string | undefined, expec
   return parsed !== null && parsed === jsonFileCanonical(expected);
 }
 
+function semanticJsonSpecValid(spec: FilesOracle): boolean {
+  const paths = spec.json_report_paths, context = spec.rationale_context_paths, comparison = spec.comparison_spec;
+  if (!Array.isArray(paths) || !paths.length || new Set(paths).size !== paths.length ||
+      paths.some(path => typeof path !== 'string' || !path || path.startsWith('/') || path.includes('\\') ||
+        path.split('/').some(part => !part || part === '.' || part === '..') || !/\.json$/i.test(path)) ||
+      !Array.isArray(context) || !context.length || new Set(context).size !== context.length ||
+      context.some(path => typeof path !== 'string' || !path || path.startsWith('/') || path.includes('\\') ||
+        path.split('/').some(part => !part || part === '.' || part === '..')) ||
+      !comparison || comparison.schema_version !== 'semantic-structured-comparison/1' ||
+      !Array.isArray(comparison.unordered_paths) || !Array.isArray(comparison.ordered_paths) ||
+      !Array.isArray(comparison.prose_paths) || !comparison.prose_paths.length ||
+      typeof comparison.prose_policy !== 'string' || !comparison.prose_policy.trim()) return false;
+  const declared = [...comparison.unordered_paths, ...comparison.ordered_paths, ...comparison.prose_paths];
+  return declared.every(path => typeof path === 'string' && path.startsWith('/') && !/~(?![01])/.test(path)) &&
+    new Set(declared).size === declared.length;
+}
+
+function hasRequiredJsonTextFields(value: unknown, pointers: string[]): boolean {
+  const read = (current: unknown, parts: string[], index: number): boolean => {
+    if (index === parts.length) return typeof current === 'string' && !!current.trim();
+    const part = parts[index]!;
+    if (part === '*') return Array.isArray(current) && current.length > 0 &&
+      current.every(child => read(child, parts, index + 1));
+    if (!current || typeof current !== 'object' || Array.isArray(current) ||
+        !Object.hasOwn(current, part)) return false;
+    return read((current as Record<string, unknown>)[part], parts, index + 1);
+  };
+  return pointers.every(pointer => read(value, pointer.slice(1).split('/').map(part =>
+    part.replace(/~1/g, '/').replace(/~0/g, '~')), 0));
+}
+
+function semanticJsonFileComparison(actual: Record<string, string>, expected: Record<string, string>,
+  input: Record<string, string>, spec: FilesOracle): FilesVerdict {
+  const invalid = !semanticJsonSpecValid(spec);
+  const configured = new Set(spec.json_report_paths ?? []);
+  const paths = [...new Set([...Object.keys(expected), ...Object.keys(actual), ...Object.keys(input)])].sort();
+  const failed: string[] = [], errors: string[] = [], pending: string[] = [];
+  if (invalid) errors.push('invalid_json_semantic_structured_spec');
+  if (!invalid) {
+    for (const path of spec.rationale_context_paths!) if (typeof input[path] !== 'string')
+      errors.push(`missing_rationale_context:${path}`);
+    for (const path of configured) if (typeof expected[path] !== 'string' || typeof input[path] === 'string')
+      errors.push(`invalid_json_report_path:${path}`);
+  }
+  for (const path of paths) {
+    if (configured.has(path)) {
+      const gotText = actual[path], wantText = expected[path];
+      if (typeof gotText !== 'string' || typeof wantText !== 'string' ||
+          jsonFileCanonical(gotText) === null || jsonFileCanonical(wantText) === null) {
+        failed.push(path); continue;
+      }
+      let got: unknown, want: unknown;
+      try { got = JSON.parse(gotText); want = JSON.parse(wantText); } catch { failed.push(path); continue; }
+      const comparison = spec.comparison_spec!;
+      if (!hasRequiredJsonTextFields(got, comparison.prose_paths) ||
+          !hasRequiredJsonTextFields(want, comparison.prose_paths)) { failed.push(path); continue; }
+      const strictGot = declaredStructuralCanonical(got, comparison.unordered_paths);
+      const strictWant = declaredStructuralCanonical(want, comparison.unordered_paths);
+      if (strictGot === null || strictWant === null) { failed.push(path); continue; }
+      if (strictGot !== strictWant) {
+        const proseGot = declaredStructuralCanonical(got, comparison.unordered_paths, comparison.prose_paths, true);
+        const proseWant = declaredStructuralCanonical(want, comparison.unordered_paths, comparison.prose_paths, true);
+        if (proseGot === null || proseWant === null || proseGot !== proseWant) failed.push(path);
+      }
+      if (!failed.includes(path)) pending.push(`unjudged_json_rationale:${path}`);
+      continue;
+    }
+    if (!fileContentEqual(path, actual[path], expected[path])) failed.push(path);
+    if (typeof expected[path] === 'string' && expected[path] === input[path] && actual[path] !== expected[path])
+      errors.push(`unexpected_change:${path}`);
+  }
+  const items = paths.length, passed = items - failed.length;
+  return { accepted: !invalid && !errors.length && !failed.length && !pending.length,
+    score: items ? passed / items : 1, passed, items, failed: failed.slice(0, 20), errors, pending,
+    quality_version: DATA_QUALITY_VERSION, comparison_version: 'json-semantic-structured-files/1' };
+}
+
 /** Remove at most one terminal LF or CRLF. No other whitespace or line-ending normalization occurs. */
 export function markdownTerminalNewlineBody(text: string): string {
   return text.endsWith('\r\n') ? text.slice(0, -2) : text.endsWith('\n') ? text.slice(0, -1) : text;
@@ -475,6 +558,8 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
   if (spec.compare === 'json-string-record' && spec.numeric_list_fields !== undefined &&
       !validNumericListFieldSchema(spec.numeric_list_fields))
     return { accepted: false, score: 0, passed: 0, items: 0, failed: [], errors: ['invalid_numeric_list_field_schema'], pending: [], quality_version: DATA_QUALITY_VERSION };
+  if (spec.compare === 'json-semantic-structured')
+    return semanticJsonFileComparison(actual, expected, input, spec);
   const compare = spec.compare ?? 'exact', threshold = probability(spec.threshold ?? 0.9, 'files'),
     span = probability(spec.span ?? 0.5, 'files span');
   if (compare === 'content') {
@@ -640,6 +725,30 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
 export async function checkFilesWithJudge(actual: Record<string, string>, expected: Record<string, string>,
     input: Record<string, string>, spec: FilesOracle = {}, judge?: OracleJudge): Promise<FilesVerdict> {
   const first = checkFiles(actual, expected, input, spec);
+  if (spec.compare === 'json-semantic-structured') {
+    if (first.errors.length || first.failed.length || !semanticJsonSpecValid(spec)) return first;
+    const pending: string[] = [], failed = [...first.failed], judgments: NonNullable<FilesVerdict['judgments']> = {};
+    for (const path of spec.json_report_paths!) {
+      let got: unknown, want: unknown;
+      try { got = JSON.parse(actual[path]!); want = JSON.parse(expected[path]!); }
+      catch { failed.push(path); continue; }
+      if (!judge) { pending.push(`unjudged_json_rationale:${path}`); continue; }
+      const sourceFiles = Object.fromEntries(spec.rationale_context_paths!.map(sourcePath => [sourcePath, input[sourcePath]]));
+      const verdict = await judge({ actual: { output_path: path, report: got, source_files: sourceFiles },
+        expected: { checked_non_prose_structure: true, prose_paths: spec.comparison_spec!.prose_paths },
+        rubric: spec.comparison_spec!.prose_policy! });
+      judgments[path] = { accepted: verdict.accepted === true, verdict: verdict.verdict,
+        ...(verdict.needs_review ? { needs_review: true } : {}) };
+      if (verdict.accepted !== true || verdict.needs_review) {
+        if (verdict.needs_review) pending.push(`unverified_json_rationale:${path}`);
+        else failed.push(path);
+      }
+    }
+    return { ...first, accepted: !failed.length && !pending.length,
+      score: first.items ? (first.items - failed.length) / first.items : 1,
+      failed: failed.slice(0, 20), pending, judgments: Object.keys(judgments).length ? judgments : undefined,
+      comparison_version: 'json-semantic-structured-files/1' };
+  }
   if (!['rewrite', 'csv'].includes(spec.compare ?? '') || !judge || !spec.rubric) return first;
   const judgments: NonNullable<FilesVerdict['judgments']> = {};
   for (const path of Object.keys(expected)) {

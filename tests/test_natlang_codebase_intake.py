@@ -491,6 +491,65 @@ def test_intake_folder_files_and_verifier_targets(tmp_path):
         intake(package, output=out)
 
 
+def test_intake_validates_semantic_json_file_oracle_sources_and_paths(tmp_path):
+    package, root = _package(tmp_path)
+    path = root / 'worlds/train.jsonl'
+    row = json.loads(path.read_text())
+    row['folder_files'] = {'source/clauses.json': '{"6":"The agreement includes all information."}\n'}
+    row['expected_files'] = {'reports/ledger.json': '{"schema":"review/2","findings":[]}\n'}
+    row['files_oracle'] = {
+        'compare': 'json-semantic-structured',
+        'json_report_paths': ['reports/ledger.json'],
+        'rationale_context_paths': ['source/clauses.json'],
+        'comparison_spec': {
+            'schema_version': 'semantic-structured-comparison/1', 'unordered_paths': [], 'ordered_paths': [],
+            'prose_paths': ['/findings/*/explanation'],
+            'prose_policy': 'Check each rationale against the exact source clause; accept faithful wording variations.',
+        },
+    }
+    semantic_comparison = {
+        'schema_version': 'semantic-structured-comparison/1', 'unordered_paths': [], 'ordered_paths': [],
+        'prose_paths': ['/findings/*/explanation'],
+        'prose_policy': 'Check each rationale against the exact source clause; accept faithful wording variations.',
+    }
+    row['oracle'] = {'level': 'normalized', 'normalization': 'semantic-structured',
+        'comparison_spec': semantic_comparison, 'context': {'source_files': row['folder_files']}}
+    path.write_text(json.dumps(row) + '\n')
+    out = tmp_path / 'semantic-files.jsonl'
+    receipt = intake(package, output=out)
+    case = json.loads(out.with_name('semantic-files.judged.jsonl').read_text().splitlines()[0])
+    assert case['semantics']['files_oracle'] == row['files_oracle']
+    assert case['semantics']['oracle'] == row['oracle']
+    assert case['curriculum']['external']['oracle_kind'] == 'semantic-structured'
+    # The fixture includes a separate judged dev world; semantic-structured is
+    # counted as its own oracle kind rather than being folded into judged.
+    assert receipt['oracle_counts'] == {'exact': 0, 'judged': 1, 'semantic_structured': 1}
+
+    invalid = [
+        {**row['files_oracle'], 'json_report_paths': ['../ledger.json']},
+        {**row['files_oracle'], 'rationale_context_paths': ['missing/source.json']},
+        {**row['files_oracle'], 'comparison_spec': {**row['files_oracle']['comparison_spec'],
+            'prose_paths': ['/findings/*/bad~2field']}},
+        {**row['files_oracle'], 'json_report_paths': ['source/clauses.json']},
+    ]
+    for spec in invalid:
+        row['files_oracle'] = spec
+        path.write_text(json.dumps(row) + '\n')
+        with pytest.raises(ValueError, match='json-semantic-structured|JSON comparison paths|json_report_paths|rationale_context_paths|expected new report'):
+            intake(package, output=out)
+    row['files_oracle'] = {
+        'compare': 'json-semantic-structured', 'json_report_paths': ['reports/ledger.json'],
+        'rationale_context_paths': ['source/clauses.json'],
+        'comparison_spec': {'schema_version': 'semantic-structured-comparison/1', 'unordered_paths': [],
+            'ordered_paths': [], 'prose_paths': ['/findings/*/explanation'],
+            'prose_policy': 'Check explanations against source.'},
+    }
+    row['oracle']['context']['source_files'] = {'forged/source.json': 'not bound to folder_files'}
+    path.write_text(json.dumps(row) + '\n')
+    with pytest.raises(ValueError, match='semantic-structured oracle context'):
+        intake(package, output=out)
+
+
 def test_intake_binds_hidden_world_services_and_checks_fixture_hash(tmp_path):
     package, root = _package(tmp_path)
     source = root / 'service.ts'
