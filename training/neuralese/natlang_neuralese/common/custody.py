@@ -27,6 +27,9 @@ from __future__ import annotations
 
 import functools
 import json
+import os
+import stat
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -114,7 +117,7 @@ def _source_path(value, root):
 
 
 def _evaluation_packets(source, root):
-    registry = json.loads(_source_path(source['registry'], root).read_text())
+    registry = _read_protected_registry(_source_path(source['registry'], root))
     entries = registry.get('corpora', registry) if isinstance(registry, dict) else registry
     identities, packets = set(), []
     for entry in entries:
@@ -162,6 +165,78 @@ def _split_reservations(source, root):
 LOADERS = {'evaluation-packets': _evaluation_packets, 'source-groups': _source_groups,
            'decision-holds': _decision_holds, 'split-reservations': _split_reservations}
 
+_PROTECTED_WORLDS_CACHE_LOCK = threading.RLock()
+_PROTECTED_WORLDS_CACHE = {}
+_PROTECTED_REGISTRY_CACHE = {}
+
+
+def _custody_file_identity(path):
+    """Five-field identity including a symlink's lexical and resolved targets."""
+    lexical = Path(path).absolute()
+    resolved = lexical.resolve(strict=True)
+    link_stat = lexical.lstat()
+    target_stat = resolved.stat()
+    link_target = os.readlink(lexical) if stat.S_ISLNK(link_stat.st_mode) else None
+    return (str(lexical), str(resolved), link_target,
+            link_stat.st_dev, link_stat.st_ino, link_stat.st_size,
+            link_stat.st_mtime_ns, link_stat.st_ctime_ns,
+            target_stat.st_dev, target_stat.st_ino, target_stat.st_size,
+            target_stat.st_mtime_ns, target_stat.st_ctime_ns,
+            stat.S_IMODE(target_stat.st_mode))
+
+
+def _protected_source_paths(declared, root):
+    """Enumerate files whose contents feed ProtectedWorlds, without reading their rows."""
+    paths = set()
+    for source in declared['sources']:
+        effective = dict(source)
+        if 'root' in effective:
+            from .paths import resolve
+            effective['path'] = str(resolve(effective['root'], effective['path']))
+        kind = effective.get('kind')
+        if kind == 'evaluation-packets':
+            registry_path = _source_path(effective['registry'], root)
+            paths.add(registry_path)
+            packet_registry = _read_protected_registry(registry_path)
+            packet_entries = packet_registry.get('corpora', packet_registry) if isinstance(packet_registry, dict) else packet_registry
+            for entry in packet_entries:
+                if (isinstance(entry, dict) and entry.get('admission') == PROTECTED_ADMISSION
+                        and 'cases.jsonl' in (entry.get('include') or [])):
+                    paths.add(_source_path(entry['path'], root) / 'cases.jsonl')
+        elif kind == 'decision-holds':
+            directory = _source_path(effective['path'], root)
+            paths.add(directory)
+            paths.update(directory.glob('*.jsonl'))
+        elif kind in {'source-groups', 'split-reservations'}:
+            paths.add(_source_path(effective['path'], root))
+        else:
+            raise CustodyError(f'unknown protected source kind {kind!r}; custody fails closed')
+    return tuple(sorted((_custody_file_identity(path) for path in paths), key=lambda item: item[0]))
+
+
+def _protected_worlds_snapshot(registry_path, declared, root):
+    return (_custody_file_identity(registry_path), *_protected_source_paths(declared, root))
+
+
+def _read_protected_registry(path):
+    key = str(Path(path).absolute())
+    before = _custody_file_identity(path)
+    with _PROTECTED_WORLDS_CACHE_LOCK:
+        cached = _PROTECTED_REGISTRY_CACHE.get(key)
+    if cached is not None and cached[0] == before:
+        if before != _custody_file_identity(path):
+            raise CustodyError(f'protected source registry {path} changed during cached verification')
+        return cached[1]
+    try:
+        value = json.loads(Path(path).read_bytes())
+    except (OSError, ValueError) as error:
+        raise CustodyError(f'protected source registry {path} is not readable; custody fails closed') from error
+    if before != _custody_file_identity(path):
+        raise CustodyError(f'protected source registry {path} changed while being read')
+    with _PROTECTED_WORLDS_CACHE_LOCK:
+        _PROTECTED_REGISTRY_CACHE[key] = (before, value)
+    return value
+
 
 @dataclass(frozen=True)
 class ProtectedWorlds:
@@ -188,14 +263,23 @@ class ProtectedWorlds:
     @classmethod
     def load(cls, root=None, registry=None):
         """Every source of the protected-worlds registry; fail closed on any unreadable or changed source."""
-        root = Path(root) if root is not None else _repo()
+        root = (Path(root) if root is not None else _repo()).resolve()
         path = _source_path(registry or REGISTRY, root)
         try:
-            declared = json.loads(path.read_text())
-        except (OSError, ValueError) as error:
+            declared = _read_protected_registry(path)
+        except CustodyError as error:
             raise CustodyError(f'protected-worlds registry {path} is not readable; custody fails closed') from error
         if declared.get('schema') != REGISTRY_SCHEMA or not declared.get('sources'):
             raise CustodyError('protected-worlds registry declares no sources; custody fails closed')
+        cache_key = (str(root), str(path.resolve(strict=True)))
+        snapshot = _protected_worlds_snapshot(path, declared, root)
+        with _PROTECTED_WORLDS_CACHE_LOCK:
+            cached = _PROTECTED_WORLDS_CACHE.get(cache_key)
+        if cached is not None and cached[0] == snapshot:
+            # Recheck after lookup so a source change racing the cheap scan does
+            # not return a stale protection set.
+            if _protected_worlds_snapshot(path, declared, root) == snapshot:
+                return cached[1]
         identities, receipts = set(), []
         for source in declared['sources']:
             loader = LOADERS.get(source.get('kind'))
@@ -218,7 +302,12 @@ class ProtectedWorlds:
             identities |= found
             receipts.append(json.dumps({'id': source['id'], 'kind': source['kind'], 'identities': len(found),
                                         **detail}, sort_keys=True))
-        return cls(frozenset(identities), tuple(receipts))
+        result = cls(frozenset(identities), tuple(receipts))
+        if _protected_worlds_snapshot(path, declared, root) != snapshot:
+            raise CustodyError('protected source files changed while custody was being verified; custody fails closed')
+        with _PROTECTED_WORLDS_CACHE_LOCK:
+            _PROTECTED_WORLDS_CACHE[cache_key] = (snapshot, result)
+        return result
 
     def related(self, case):
         """Sorted identity kinds this case shares with a protected world (empty: unrelated)."""
