@@ -214,3 +214,16 @@ def test_conversion_custody_reconciles_every_receipt_without_reading_graphs(tmp_
     screen['input_receipts']['sha256'] = '0' * 64
     with pytest.raises(ValueError, match='inventory'):
         module.verify_conversion_custody({'receipts': [entry]}, screen, screen_program)
+
+
+def test_successor_recipe_rebinds_roles_from_static_predecessor_without_dropping_correction():
+    from scripts.neuralese_data.build_acquired_streaming_successor import bind_successor_recipe_inputs
+    recipe={'input_bindings':{'static_train':{'path':'old','sha256':'a'}},'stages':[{'id':'native_joint_sft_v4','inputs':{
+        'native_graphs':'static_train','foundation_native_graphs':'static_train','continued_native_graphs':'older',
+        'ce_supervision_policy':'static_ce','source_correction':'static_proof','held_native_graphs':'held'}}]}
+    stage=bind_successor_recipe_inputs(recipe,{'path':'old','sha256':'a','bytes':1},
+        {'path':'new','sha256':'b','bytes':2},{'path':'ce','sha256':'c','bytes':3})
+    assert stage['inputs']['native_graphs']==stage['inputs']['foundation_native_graphs']=='v4_train_graphs'
+    assert recipe['input_bindings'][stage['inputs']['native_graphs']]=={'path':'new','sha256':'b'}
+    assert recipe['input_bindings'][stage['inputs']['continued_native_graphs']]=={'path':'old','sha256':'a'}
+    assert stage['inputs']['source_correction']=='static_proof' and stage['inputs']['held_native_graphs']=='held'

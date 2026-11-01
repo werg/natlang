@@ -68,6 +68,16 @@ def sft_capacity_descriptor(source, geometry):
     return {'schema': 'natlang.native-sft-capacity-cases/1', 'source': source, 'geometry': geometry}
 
 
+def bind_successor_recipe_inputs(recipe, predecessor, successor, policy):
+    """Bind actual stage roles even when the predecessor used different key names."""
+    for name,reference in (('v4_previous_train_graphs',predecessor),('v4_train_graphs',successor),('v4_ce_policy',policy)):
+        recipe['input_bindings'][name]={k:v for k,v in reference.items() if k!='bytes'}
+    stage=next(item for item in recipe['stages'] if item['id']=='native_joint_sft_v4')
+    stage['inputs'].update({'native_graphs':'v4_train_graphs','foundation_native_graphs':'v4_train_graphs',
+        'continued_native_graphs':'v4_previous_train_graphs','ce_supervision_policy':'v4_ce_policy'})
+    return stage
+
+
 def checked(ref, name):
     if not isinstance(ref, dict) or not isinstance(ref.get('path'), str) or not isinstance(ref.get('sha256'), str):
         raise ValueError(f'{name} lacks an exact binding')
@@ -770,10 +780,7 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         'scope': 'Untruncated indexed graph geometry; not serving-context or training-position qualification.'}
     write_json_durable(descriptor, sft_capacity_descriptor(bind(new_source_path), geometry_ref))
     recipe = read(recipe_path)
-    recipe['input_bindings']['v4_previous_train_graphs'] = {k: v for k, v in bind(source_path).items() if k != 'bytes'}
-    recipe['input_bindings']['v4_train_graphs'] = {k: v for k, v in bind(new_source_path).items() if k != 'bytes'}
-    recipe['input_bindings']['v4_ce_policy'] = {k: v for k, v in bind(new_ce_path).items() if k != 'bytes'}
-    operational_stage = next(item for item in recipe['stages'] if item['id'] == 'native_joint_sft_v4')
+    operational_stage=bind_successor_recipe_inputs(recipe,bind(source_path),bind(new_source_path),bind(new_ce_path))
     operational_stage['parameters']['sft_packed_geometry'] = geometry_ref
     operational_stage['parameters']['memory_qualification'] = {k: v for k, v in bind(descriptor).items() if k != 'bytes'}
     new_recipe_path = output / 'recipe-continuation.json'; write_json_durable(new_recipe_path, recipe)
