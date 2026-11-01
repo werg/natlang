@@ -190,7 +190,9 @@ def _resume_source_arguments(config,directory,values,*,parameters=None):
     def present(flag):
         return any(any(value==flag or value.startswith(flag+'=') for value in args)
                    for args in argument_lists)
-    checkpoint=Path(directory)/'checkpoint.pt'
+    # The selected parent may be an external or rolling checkpoint, rather
+    # than an older file left in this learner's output directory.
+    checkpoint=Path(values.get('checkpoint') or (Path(directory)/'checkpoint.pt'))
     if (config.get('native_actor_mode')!='raw-state' or not checkpoint.is_file()
             or not any(present('--'+role.replace('_','-')) for role,_,_ in roles)):
         return command,None
@@ -226,13 +228,33 @@ def _resume_source_arguments(config,directory,values,*,parameters=None):
         if not present(flag):continue
         target=(selected['train' if index==0 else 'held'] if selected else binding(config[name]))
         bound(target)
-        if target['sha256']!=receipts[index].get('sha256'):continue
+        target_current=target['sha256']==receipts[index].get('sha256')
         if role=='continued_native_graphs' and present('--source-correction'):
             correction=binding(config['source_correction'])
             history=(training.get('options') or {}).get('source_correction_history') or []
             if not any(item.get('proof_sha256')==correction['sha256'] for item in history):
                 # An unapplied correction still needs its declared predecessor.
                 continue
+            if not target_current:
+                # The correction already belongs to the earned parent, but
+                # the new append still needs that exact parent as predecessor.
+                # Inspect the actual expanded argv, including argument splices.
+                from .production import expand_command
+                argv=expand_command(command,{**config,**values})
+                predecessors=[]; corrections=[]
+                for position,arg in enumerate(argv):
+                    for option,collected in (('--continued-native-graphs',predecessors),('--source-correction',corrections)):
+                        if arg==option:
+                            if position+1>=len(argv):raise ValueError('supervised retry has a missing source argument')
+                            collected.append(argv[position+1])
+                        elif arg.startswith(option+'='):collected.append(arg[len(option)+1:])
+                try:
+                    parent=binding(bound(receipts[0]))
+                    matches=(bool(predecessors) and all(binding(path)==parent for path in predecessors)
+                             and bool(corrections) and all(binding(path)==correction for path in corrections))
+                except (OSError,ValueError):
+                    matches=False
+                if not matches:continue
             from ..train.native_source_correction import apply_source_correction
             model=saved['model_config']
             _,replay=apply_source_correction(training,correction['path'],
@@ -250,6 +272,7 @@ def _resume_source_arguments(config,directory,values,*,parameters=None):
                     elif args[cursor].startswith('--source-correction='):del args[cursor]
                     else:cursor+=1
             retired_correction=correction
+        if not target_current:continue
         for args in argument_lists:
             cursor=0
             while cursor<len(args):
@@ -260,7 +283,7 @@ def _resume_source_arguments(config,directory,values,*,parameters=None):
                 else:cursor+=1
         omitted[role]=target
     if binding(checkpoint)!=reference:raise ValueError('supervised retry checkpoint changed during source verification')
-    if not omitted:return command,None
+    if not omitted and retired_correction is None:return command,None
     return command,{'checkpoint':reference,'stage_id':stage,'source_frame':source_frame,
                     'already_current_sources':omitted,
                     **({'retired_committed_source_correction':retired_correction}

@@ -515,12 +515,12 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         if parallel_proof and canonical_json_sha256_hex(actual_new_metadata) != parallel_proof['ordered_metadata_sha256']:
             raise ValueError('prepared source row index differs from the parallel parser evidence')
         output.mkdir(parents=True)
-        _, geometry_ref, geometry_scan = capacity.geometry_for_source(new_source, output, prior=prepared['geometry'], allow_build=False)
+        geometry_values, geometry_ref, geometry_scan = capacity.geometry_for_source(new_source, output, prior=prepared['geometry'], allow_build=False)
     else:
         output.mkdir(parents=True)
         manifest = appended_manifest(source_path, graph_path, graph_ref)
         new_source_path = output / 'train-sources.json'; write_json_durable(new_source_path, manifest)
-        new_source, _, geometry_ref, geometry_scan = capacity.prepare_source(new_source_path, tokenizer, roles, output, prior=previous['geometry'])
+        new_source, geometry_values, geometry_ref, geometry_scan = capacity.prepare_source(new_source_path, tokenizer, roles, output, prior=previous['geometry'])
     if file_signature(graph_path) != graph_before:
         raise ValueError('screened graph bytes changed during indexing')
     if len(new_source.entries) != previous['rows'] + len(rows):
@@ -574,7 +574,15 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     extension = extension_policy(old_roles, new_roles, prior_train=old_index, candidate_train=new_source)
     _, transition = continuation_identity({'supervision_objective': previous['objective_transition']['to']}, extension)
     descriptor = output / 'sft-capacity-descriptor.json'
-    write_json_durable(descriptor, {'schema': 'natlang.native-sft-capacity-cases/1', 'source': bind(new_source_path), 'geometry': geometry_ref})
+    geometry_summary = {'max_forward_tokens': max(entry['forward_tokens'] for entry in new_source.entries),
+        'max_kv_slots': max(geometry_values), 'forward_tokens_over_262144':
+            sum(entry['forward_tokens'] > 262144 for entry in new_source.entries),
+        'new_max_forward_tokens': max(entry['forward_tokens'] for entry in new_source.entries[previous['rows']:]),
+        'new_forward_tokens_over_262144': sum(entry['forward_tokens'] > 262144
+            for entry in new_source.entries[previous['rows']:]),
+        'scope': 'Untruncated indexed graph geometry; not serving-context or training-position qualification.'}
+    write_json_durable(descriptor, {'schema': 'natlang.native-sft-capacity-cases/1', 'source': bind(new_source_path),
+                                   'geometry': geometry_ref, 'observed_geometry': geometry_summary})
     if file_signature(signals_path) != signals_before or file_signature(graph_path) != graph_before:
         raise ValueError('source or census changed while staging the continuation')
     result = {'schema': SCHEMA, 'status': 'source-ce-recipe-geometry-qualified-not-published', 'training_admission': False,
@@ -582,7 +590,7 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         'coverage_audit': bind(coverage_path), 'effective_loss_census': bind(census_path), 'row_signals': bind(signals_path),
         'source': bind(new_source_path), 'appended_graphs': {'path': str(graph_path), 'sha256': graph_ref['sha256'], 'bytes': graph_ref['bytes']},
         'family_map': bind(new_map_path), 'ce_policy': bind(new_ce_path), 'recipe': bind(new_recipe_path),
-        'geometry': geometry_ref, 'capacity_descriptor': bind(descriptor), 'rows': len(new_source.entries),
+        'geometry': geometry_ref, 'capacity_descriptor': bind(descriptor), 'observed_geometry': geometry_summary, 'rows': len(new_source.entries),
         'predecessor_rows': previous['rows'], 'new_rows': len(rows), 'new_family': family,
         'counts': counts, 'category_mass': masses, 'source_stores': stores, 'family_balance': family_plan,
         'source_format_custody': format_custody,
