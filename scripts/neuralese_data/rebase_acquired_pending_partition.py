@@ -71,17 +71,19 @@ def verify_rebase(screen, predecessor):
 
 def rebase(screen_path,census_path,new_predecessor,output):
     screen_path=Path(screen_path).resolve(strict=True);census_path=Path(census_path).resolve(strict=True)
-    new_predecessor=Path(new_predecessor).resolve(strict=True);screen=json.loads(screen_path.read_text());census=json.loads(census_path.read_text())
-    partition=_read(screen.get('pending_partition'));previous_ref=partition['predecessor'];current=json.loads(new_predecessor.read_text())
-    if census.get('screen',{}).get('sha256')!=bind(screen_path)['sha256'] or census.get('pending_partition')!=screen['pending_partition']:
+    new_predecessor=Path(new_predecessor).resolve(strict=True)
+    screen_ref,census_ref,predecessor_ref=bind(screen_path),bind(census_path),bind(new_predecessor)
+    screen,census=_read(screen_ref),_read(census_ref)
+    partition=_read(screen.get('pending_partition'));previous_ref=partition['predecessor'];current=_read(predecessor_ref)
+    if census.get('screen',{}).get('sha256')!=screen_ref['sha256'] or census.get('pending_partition')!=screen['pending_partition']:
         raise ValueError('pending census does not bind its original screen')
     correction=_read(current['source_correction']);correction_path=_checked(current['source_correction'])
     with open_jsonl_text(_proof_file(correction_path,correction['row_bindings_path'])) as stream:
         rows=[json.loads(line) for line in stream if line.strip()]
     output=Path(output).absolute()
     if output.exists() or output.is_symlink() or not output.parent.is_dir():raise ValueError('fresh rebase directory required')
-    output.mkdir();proof={'schema':SCHEMA,'original_screen':bind(screen_path),'pending_partition':screen['pending_partition'],
-        'previous_predecessor':previous_ref,'current_predecessor':bind(new_predecessor),'source_correction':current['source_correction'],
+    output.mkdir();proof={'schema':SCHEMA,'original_screen':screen_ref,'original_census':census_ref,'pending_partition':screen['pending_partition'],
+        'previous_predecessor':previous_ref,'current_predecessor':predecessor_ref,'source_correction':current['source_correction'],
         'corrected_ids':sorted(r['id'] for r in rows),'protected_worlds_sha256':partition['protected_worlds_sha256'],
         'scope':'same protected source partition, with independently verified static predecessor corrections; no admission or exposure'}
     proof_path=output/'predecessor-rebase.json';write_json_durable(proof_path,proof)
@@ -92,6 +94,7 @@ def rebase(screen_path,census_path,new_predecessor,output):
     from natlang_neuralese.train.own_output_supervision import policy_objective
     new_census={**census,'screen':bind(screen_out),'predecessor_rebase':bind(proof_path),
         'ce_policy':current['ce_policy'],'objective_sha256':canonical_json_sha256_hex(policy_objective(_read(current['ce_policy'])))}
+    for reference in (screen_ref,census_ref,predecessor_ref):_checked(reference)
     write_json_durable(output/'census.json',new_census)
     return proof
 
