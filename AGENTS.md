@@ -27,6 +27,12 @@ at most 0.05 for observed calls, generated tokens and unchanged repeated actions
 Normalize task outcomes separately; do not amplify tiny cost differences through
 standardization or teach all-failed groups to prefer cheap failure. Missing token
 counts remain unknown. Historical bound rounds retain their recorded cost policy.
+For newly prepared objectives, wholly efficiency-only accumulated updates also
+scale the actual optimizer learning rates by their bounded advantage magnitude:
+gradient scaling alone does not bound Adam/Muon steps. Restore ordinary rates
+after each update and record adoption and the applied scale. Mixed outcome or
+privileged-teacher updates retain their ordinary rate; their efficiency component
+is not separately bounded in parameter space.
 
 Inference escalation continues the actual live invocation through explicitly
 configured model profiles. Preserve scope, completed effects, authority, graph

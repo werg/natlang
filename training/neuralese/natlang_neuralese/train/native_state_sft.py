@@ -433,6 +433,8 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     micro_batches = [*accumulate, batch]
     if accumulate and any(not micro for micro in micro_batches):
         raise ValueError('native accumulated update has an empty micro-batch')
+    from ..rl.native_replay import efficiency_only_update_scale
+    efficiency_scale=efficiency_only_update_scale(objective,[example for micro in micro_batches for example in micro])
     scored = [len(micro) if objective is not None else
               sum(any(weight > 0 for weight in example.target_weights) or bool(example.decisions) for example in micro)
               for micro in micro_batches]
@@ -450,7 +452,9 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     profiler = (_BoundedUpdateProfile(next(model.parameters()).is_cuda)
                 if profile_path and not Path(profile_path).exists() else None)
     profiler_started=False
+    rates=[(group,group['lr']) for group in optimizer.param_groups] if efficiency_scale!=1. else []
     try:
+        for group,rate in rates:group['lr']=rate*efficiency_scale
         from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
         for index, (micro, share) in enumerate(zip(micro_batches, shares)):
             final = index == len(micro_batches) - 1
@@ -487,6 +491,9 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
             optimizer.latent._armed = None
         loss = torch.stack(losses).sum() if len(losses) > 1 else losses[0]
         details = merged_details
+        if rates:
+            details['efficiency_update_control']={'schema':'natlang.efficiency-only-update-scaling/1',
+                'scale':efficiency_scale,'scope':'complete-optimizer-update'}
         params = [p for p in model.parameters() if p.requires_grad and p.grad is not None]
         if params:
             norm = torch.nn.utils.clip_grad_norm_(params, float('inf'))
@@ -501,6 +508,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
         optimizer.zero_grad(set_to_none=True)
         raise
     finally:
+        for group,rate in rates:group['lr']=rate
         if profiler_started:
             try:
                 destination=Path(profile_path);destination.parent.mkdir(parents=True,exist_ok=True)
@@ -2378,6 +2386,14 @@ def _main(argv=None, *, requested_refresh):
                 raise ValueError('native objective spec must declare an implemented native policy or offline preference objective')
             from ..rl.native_replay import NativePolicyObjective
             objective = NativePolicyObjective(args.objective_spec)
+            declaration=objective.spec.get('efficiency_update_control')
+            if declaration is not None:
+                prior=saved_options.get('efficiency_update_control') or {}
+                checkpoint_options['efficiency_update_control']=(prior if prior.get('objective')==objective_binding else {
+                    'declaration':declaration,'objective':objective_binding,
+                    'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
+                    'previous_objective':prior.get('objective'),
+                    'custody':'complete-graph-optimizer-rng-exposure-preserved'})
             if parent_continuation:
                 actual = native_identity(model, config, checkpoint_sha256=sha256_file_hex_cached(args.continue_from))
                 if objective.identity != actual:

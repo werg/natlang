@@ -368,3 +368,24 @@ def test_grpo_objective_records_bonus_after_outcome_centering():
     expected, _ = group_advantages([1, 1, 0])
     assert [row['advantage'] for row in spec['rows'].values()] == pytest.approx(
         [expected[0] + .1, expected[1], expected[2]])
+
+
+def test_all_success_cost_objective_binds_the_optimizer_control():
+    from natlang_neuralese.rl.native_replay import prepare_objective
+    from natlang_neuralese.rl.rollout_math import execution_efficiency_counters,execution_efficiency_cost
+    from test_rl_episode_graph import attach_execution_graph
+    _,roles,identity,_,block,turns=actor_rollout('lfm')
+    raw=[{'messages':[],'target':{},'invocation_id':turn['graph_turn'],
+          'sampling':turn['sampling'],'replay':{'raw_calls_retained':True}} for turn in turns]
+    counters=execution_efficiency_counters(raw)
+    episodes=attach_execution_graph([{'task_id':'cost-only','sample':sample,'split':'train','group':'g',
+        'reward':{'quality':1,'execution_efficiency':{**counters,'weight':weight,
+            'cost':execution_efficiency_cost(**counters,weight=weight)}},
+        'policy':{'checkpoint_sha256':identity['checkpoint_sha256']},'turns':copy.deepcopy(raw)}
+        for sample,weight in enumerate((0.,1.))])
+    _,spec=prepare_objective(episodes,identity=identity,roles=roles,fetch_block=lambda key:block)
+    assert spec['efficiency_update_control']['schema']=='natlang.efficiency-only-update-scaling/1'
+    rows=list(spec['rows'].values());scale=rows[0]['efficiency_only_update_scale']
+    assert 0 < scale <= .05
+    assert all(row['efficiency_only_update_scale']==scale for row in rows)
+    assert max(abs(row['advantage']) for row in rows)==pytest.approx(scale)

@@ -70,6 +70,48 @@ def test_two_micro_batches_step_once_like_one_batch_of_all_graphs():
     assert actual_details[0]['original_physical_tokens'] == expected_details[0]['original_physical_tokens']
 
 
+def test_efficiency_only_controls_actual_muon_and_adam_update_with_history(monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.rl.native_replay import efficiency_only_update_scale
+    torch.manual_seed(818)
+    model, optimizer=build(); other, other_optimizer=build()
+    other.load_state_dict(model.state_dict())
+    other.port.hf.load_state_dict(model.port.hf.state_dict())
+    graphs=examples()[:2]
+    def loss(model, micro, **kwargs):
+        value=sum((parameter.float().square().sum() for parameter in model.parameters() if parameter.requires_grad))
+        return value, {'objective':'test'}
+    monkeypatch.setattr(trainer,'packed_graph_loss',loss)
+    # Establish the same nonzero actual optimizer history before comparing.
+    trainer.native_training_update(model,optimizer,graphs,checkpoint_layers=False)
+    trainer.native_training_update(other,other_optimizer,graphs,checkpoint_layers=False)
+    rows={example.id:{'efficiency_only_update_scale':.01} for example in graphs}
+    spec={'efficiency_update_control':{'schema':'natlang.efficiency-only-update-scaling/1','maximum':.05}}
+    objective=SimpleNamespace(spec=spec,rows=rows,policy_loss=None)
+    assert efficiency_only_update_scale(objective,graphs)==.01
+    before={name:value.detach().clone() for name,value in model.named_parameters()}
+    original_rates=[group['lr'] for group in optimizer.param_groups]
+    _,details=trainer.native_training_update(model,optimizer,graphs[1:],accumulate=[graphs[:1]],
+                                             checkpoint_layers=False,objective=objective)
+    trainer.native_training_update(other,other_optimizer,graphs[1:],accumulate=[graphs[:1]],
+                                   checkpoint_layers=False)
+    assert [group['lr'] for group in optimizer.param_groups]==original_rates
+    assert details['efficiency_update_control']['scale']==.01
+    for child in (optimizer.latent,optimizer.auxiliary):
+        ids={id(p) for group in child.param_groups for p in group['params']}
+        pairs=[(name,p) for name,p in model.named_parameters() if id(p) in ids]
+        actual=torch.cat([(p.detach()-before[name]).flatten() for name,p in pairs])
+        reference=torch.cat([(dict(other.named_parameters())[name].detach()-before[name]).flatten() for name,_ in pairs])
+        assert reference.norm()>0
+        torch.testing.assert_close(actual.norm()/reference.norm(),torch.tensor(.01),rtol=.03,atol=.001)
+    objective.policy_loss={'schema':'jolt-plus/1','beta_s':1.,'beta_t':.5}
+    rows[graphs[0].id]['jolt']={'role':'student','privileged':{'actual':'twin'}}
+    assert efficiency_only_update_scale(objective,graphs)==1.
+    del rows[graphs[0].id]['jolt'];del rows[graphs[0].id]['efficiency_only_update_scale']
+    assert efficiency_only_update_scale(objective,graphs)==1.
+
+
 def test_accumulated_loss_weights_micro_batches_by_scored_graphs():
     from natlang_neuralese.train.native_state_sft import native_training_update, packed_graph_loss
     model, optimizer = build()

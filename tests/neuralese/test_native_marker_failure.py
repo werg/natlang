@@ -76,6 +76,53 @@ def test_old_clients_keep_fail_closed_and_valid_public_reply_stays_unchanged(tmp
     finally:engine.store.close()
 
 
+@pytest.mark.parametrize('cache_enabled',[False,True])
+@pytest.mark.parametrize('adapted_writer',[False,True])
+@pytest.mark.parametrize('capture_failure',[False,True])
+def test_failed_writer_then_ordinary_matches_fresh_engine(tmp_path,monkeypatch,cache_enabled,adapted_writer,capture_failure):
+    """Real producer steps and failure cannot contaminate the next ordinary request."""
+    from natlang_neuralese.serve import load_native_engine
+    from natlang_neuralese.serve.prefix_cache import PrefixCache
+    from natlang_neuralese.model.native_adapters import execution_binding
+    from test_native_serving_adapters import nonzero_adapter
+    engine=engine_fixture(tmp_path,'lfm',service_template=True)
+    fresh=load_native_engine(str(tmp_path/'native.pt'),device='cpu',dtype=next(engine.shared_model.parameters()).dtype)
+    if cache_enabled:
+        engine.prefix_cache=PrefixCache(2**26,4);fresh.prefix_cache=PrefixCache(2**26,4)
+    adapter,_=nonzero_adapter(engine) if adapted_writer else (None,None)
+    baseline={name:value.detach().clone() for name,value in engine.shared_model.state_dict().items()}
+    tokens=iter([engine.role_tokens.produce_open,5])
+    monkeypatch.setattr(engine,'_native_token',lambda seq:(next(tokens),None))
+    prompt=[{'role':'user','content':'t4 t5 t6 t7 t8 t9'}]
+    try:
+        request=GenerationRequest(messages=prompt,temperature=0,max_tokens=2,
+            adapters=[{'id':adapter.id,'scale':.75}] if adapter else None,native_protocol_recovery=capture_failure)
+        if capture_failure:
+            failed=engine.generate(request)
+            assert failed['x_natlang_native_failure']['code']=='neuralese-native-state-open'
+        else:
+            with pytest.raises(RequestError,match='inside a produce span'):engine.generate(request)
+        assert not execution_binding(engine)
+        assert all(torch.equal(value,baseline[name]) for name,value in engine.shared_model.state_dict().items())
+        observed=[]
+        for actor in (engine,fresh):
+            draws=iter([5,2]);logits=[]
+            def next_token(seq,draws=draws,logits=logits):
+                logits.append(seq.logits.detach().clone())
+                return next(draws),None
+            monkeypatch.setattr(actor,'_native_token',next_token)
+            reply=actor.generate(GenerationRequest(messages=prompt,temperature=0,max_tokens=4,seed=123))
+            observed.append((reply,logits))
+        assert observed[0][0]['choices']==observed[1][0]['choices']
+        assert len(observed[0][1])==len(observed[1][1])==2
+        for actual,expected in zip(observed[0][1],observed[1][1]):
+            torch.testing.assert_close(actual,expected,rtol=0,atol=0)
+        if cache_enabled and not adapted_writer:
+            assert engine.prefix_cache.hits>0
+    finally:
+        engine.store.close();fresh.store.close()
+
+
 def replay_engine(tmp_path,family):
     engine=engine_fixture(tmp_path,family,service_template=True,context=8192)
     if family=='mellum':

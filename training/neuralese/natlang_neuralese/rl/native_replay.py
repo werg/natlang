@@ -764,6 +764,25 @@ def _admitted_objective(path):
     return value
 
 
+def efficiency_only_update_scale(objective, examples):
+    """Scale the optimizer only when every graph has solely bounded cost signal."""
+    spec=getattr(objective,'spec',{})
+    if spec.get('efficiency_update_control')!={'schema':'natlang.efficiency-only-update-scaling/1','maximum':0.05}:
+        return 1.
+    rows=getattr(objective,'rows',{})
+    policy=getattr(objective,'policy_loss',None) or {}
+    scales=[]
+    for example in examples:
+        row=rows.get(example.id) or {};scale=row.get('efficiency_only_update_scale')
+        if scale is None:return 1.
+        info=row.get('jolt') or {}
+        if (policy.get('schema')=='jolt-plus/1' and info.get('privileged') is not None
+                and policy['beta_s' if info.get('role','student')=='student' else 'beta_t']):
+            return 1.
+        scales.append(scale)
+    return max(scales) if scales else 1.
+
+
 class NativePolicyObjective:
     """Native GRPO/RFT loss plugged into the shared native trainer's ONE forward."""
     def __init__(self, spec_path):
@@ -777,6 +796,15 @@ class NativePolicyObjective:
         self.rows = self.spec['rows']
         if not self.rows:
             raise ValueError('native policy objective has no admitted episodes')
+        control=self.spec.get('efficiency_update_control')
+        if control is not None and control!={'schema':'natlang.efficiency-only-update-scaling/1','maximum':0.05}:
+            raise ValueError('native policy objective has an invalid efficiency update control')
+        for row in self.rows.values():
+            scale=row.get('efficiency_only_update_scale')
+            if scale is not None and (control is None or type(scale) not in (int,float)
+                    or not math.isfinite(scale) or not 0 < scale <= .05
+                    or abs(row.get('advantage',float('inf'))) > scale + 1e-12):
+                raise ValueError('native policy objective has an invalid efficiency-only scale')
         from .policy_math import policy_loss_declaration
         self.policy_loss = self.spec.get('policy_loss')
         if 'policy_loss' in self.spec and (self.spec['mode'] != 'grpo'
@@ -1333,6 +1361,10 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
         advantages = group_episode_advantages(members, jolt=jolt is not None, mode=mode)
         if advantages is None:
             continue
+        costs=[float((row['reward'].get('execution_efficiency') or {}).get('cost') or 0.) for row in members]
+        efficiency_only=(mode=='grpo' and len(set(costs))>1
+            and all(row['reward']['quality']==1 and not row['reward'].get('neuralese_bonus') for row in members))
+        efficiency_scale=max((abs(value or 0.) for value in advantages),default=0.) if efficiency_only else None
         for rollout, advantage in zip(members, advantages):
             if mode == 'rft' and rollout['reward']['quality'] < min_quality:
                 continue
@@ -1397,6 +1429,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                     for turn in turns for write in turn.get('text_result_writes',[])]}
                    if any(turn.get('text_result_writes') for turn in turns) else {}),
                 'actions': actions, 'advantage': float(advantage or 0.),
+                **({'efficiency_only_update_scale':efficiency_scale} if efficiency_only else {}),
                 # Self-distillation prefers successful Neuralese-using episodes: their sampled-output CE is
                 # weighted by the episode return (1 + bonus); other correct episodes keep weight 1.
                 **({'neuralese_bonus': rollout['reward']['neuralese_bonus']}
@@ -1418,6 +1451,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             policy_loss.get('outcome', policy_loss)['importance'] == 'none'):
         raise ValueError('declared stale/quantized actor episodes need an importance-corrected loss (tis or mis)')
     return graphs, {'schema': 'natlang.native-policy-objective/2' if behavior_policy is not None else 'natlang.native-policy-objective/1', 'kind': 'native-policy',
+        'efficiency_update_control':{'schema':'natlang.efficiency-only-update-scaling/1','maximum':0.05},
         'mode': mode, **({'policy_loss': policy_loss} if policy_loss is not None else {}), 'rows': objective_rows,
         **({'base_native_identity':dict(identity),'behavior_policy':behavior_policy,'behavior_policy_sha256':canonical_json_sha256_hex(behavior_policy)}
            if behavior_policy is not None else {'policy':dict(identity)}),
