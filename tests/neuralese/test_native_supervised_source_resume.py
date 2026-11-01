@@ -307,3 +307,26 @@ def test_rolling_custody_snapshot_rejects_parent_changed_during_metadata_read(tm
     monkeypatch.setattr(CheckpointPolicy,'load',raced)
     with pytest.raises(ValueError,match='changed during custody snapshot'):
         supervised.rolling_resume_parent(config,{'checkpoint':previous['path']},directory)
+
+
+def test_same_earned_checkpoint_keeps_each_snapshotter_evidence(tmp_path,monkeypatch):
+    import shutil
+    from natlang_neuralese.train import native_resident
+    _,_,directory,state,_=fixture(tmp_path)
+    state['training'].update(source_row_bindings={'row':'binding'},source_row_order=['row'],global_step=72)
+    slot=directory/'checkpoint.pt';torch.save(state,slot);sha=binding(slot)['sha256']
+    monkeypatch.setattr(shutil,'disk_usage',lambda path:SimpleNamespace(free=100*1024**3))
+    original=native_resident.binding;version=['a'*64]
+    def versioned(path):
+        value=original(path)
+        return {**value,'sha256':version[0]} if Path(path)==Path(supervised.__file__) else value
+    monkeypatch.setattr(native_resident,'binding',versioned)
+    first=supervised._rolling_parent_custody_snapshot(slot,sha,directory)
+    original_bytes=Path(first['path']).read_bytes()
+    version[0]='b'*64
+    second=supervised._rolling_parent_custody_snapshot(slot,sha,directory)
+    assert first['path']!=second['path']
+    assert Path(first['path']).read_bytes()==original_bytes
+    left=json.loads(original_bytes);right=json.loads(Path(second['path']).read_text())
+    assert left['sft_frames']==right['sft_frames']
+    assert left['snapshotter']['sha256']=='a'*64 and right['snapshotter']['sha256']=='b'*64

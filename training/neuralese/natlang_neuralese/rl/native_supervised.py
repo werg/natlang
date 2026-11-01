@@ -417,7 +417,11 @@ def _rolling_parent_custody_snapshot(checkpoint, expected_sha256, directory):
         'optimizer_present':True,'rng_present':True,'sft_frames':frames,'snapshotter':snapshotter,
         'scope':'actual pre-replacement SFT row obligations and exposure; not a checkpoint or independent backup'}
     encoded=json.dumps(record,sort_keys=True,separators=(',',':')).encode()
-    snapshot_dir=Path(directory)/'rolling-parent-custody';snapshot_dir.mkdir(parents=True,exist_ok=True)
+    # One earned checkpoint can be inspected by several corrected runtimes.
+    # Preserve each verifier's immutable evidence rather than colliding on the
+    # checkpoint SHA while the recorded snapshotter identity has changed.
+    snapshot_dir=Path(directory)/'rolling-parent-custody'/snapshotter['sha256']
+    snapshot_dir.mkdir(parents=True,exist_ok=True)
     if shutil.disk_usage(snapshot_dir).free < 40*1024**3+2*len(encoded)+(4<<20):
         raise ValueError('rolling parent custody snapshot would breach the 40 GiB floor')
     path=snapshot_dir/(expected_sha256+'.json')
