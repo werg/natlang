@@ -821,6 +821,14 @@ def test_active_recipe_stage_accepts_only_exact_source_correction_handoff(tmp_pa
         'held_native_graphs': old['held_native_graphs'],
         'source_correction': {'path': str(proof), 'sha256': _sha(proof), 'binding': 'source_correction'}}
     assert _source_correction_continuation(old, new)
+    # Train and foundation that share one input must move together.
+    shared_old = {**old, 'foundation_native_graphs':old['native_graphs']}
+    shared_new = {**new, 'foundation_native_graphs':new['native_graphs']}
+    assert _source_correction_continuation(shared_old, shared_new)
+    assert not _source_correction_continuation(shared_old, {**shared_new,
+        'foundation_native_graphs':old['native_graphs']})
+    assert not _source_correction_continuation(shared_old, {**shared_new,
+        'continued_native_graphs':{'path':'/inputs/stale.json','sha256':'stale','binding':'prior'}})
     altered = dict(new, held_native_graphs={'path': '/inputs/other-held.json',
         'sha256': 'changed', 'binding': 'held_native_graphs'})
     assert not _source_correction_continuation(old, altered)

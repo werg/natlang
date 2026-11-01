@@ -1046,6 +1046,12 @@ def _source_correction_continuation(old, new):
             or proof.get('row_bindings_sha256') != dependencies[1]['sha256']):
         return False
     excluded = {'native_graphs', 'continued_native_graphs', role}
+    # A foundation role sharing the train input must follow that exact source;
+    # an independently bound foundation stays unchanged below.
+    if old.get('foundation_native_graphs') == old.get('native_graphs'):
+        if new.get('foundation_native_graphs') != new.get('native_graphs'):
+            return False
+        excluded.add('foundation_native_graphs')
     held_changed = old.get('held_native_graphs') != new.get('held_native_graphs')
     if held_changed or 'continued_held_native_graphs' in new:
         protected = proof.get('protected_held_correction')
