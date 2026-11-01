@@ -67,11 +67,12 @@ def test_apply_records_replaced_values(tmp_path):
         {'k': 1}, {}, None)
 
 
-def test_gb10_profile_sets_only_the_expandable_allocator():
+def test_gb10_profile_sets_allocator_and_nvme_floor():
     """GB10: stage parameters unchanged; the allocator uses expandable segments (unified memory, varying RL graphs)."""
     merged, env, record = hp.for_stage('native_state_sft', {'checkpoint_layers': True}, detected=GB10)
     assert merged == {'checkpoint_layers': True} and record['applied'] == {}
-    assert env == {'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True'}
+    assert env == {'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True',
+                   'NATLANG_CHECKPOINT_DGX_NVME_MIN_FREE_BYTES':'42949672960'}
 
 
 def test_apply_environment_early_keeps_existing_settings(monkeypatch):

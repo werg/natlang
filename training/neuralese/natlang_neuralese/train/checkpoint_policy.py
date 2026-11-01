@@ -332,14 +332,26 @@ class CheckpointPolicy:
                 reserved_writer = self._persistent_reservation
                 spare = None
                 if reserved_writer is not None:
-                    from .checkpoint_safety import PersistentCheckpointReservation, save_with_space_retry
+                    from .checkpoint_safety import PersistentCheckpointReservation, CheckpointSpaceUnavailable
                     suffix = '' if reserved_writer.pending.name.endswith('.alternate.reserved-pending') else '.alternate'
                     spare = PersistentCheckpointReservation(self.slot, slot_suffix=suffix, shared_lock=reserved_writer)
                     try:
-                        save_with_space_retry(lambda: spare.acquire(reserved_writer.bound))
+                        spare.acquire(reserved_writer.bound)
+                    except (CheckpointSpaceUnavailable, OSError) as error:
+                        if isinstance(error,OSError) and error.errno != errno.ENOSPC:
+                            spare.close(); raise
+                        spare.discard_uncommitted()
+                        admission = {**admission, 'eligible':False, 'reason':'insufficient_checkpoint_spare_space',
+                                     'disk_error':str(error)[:1000]}
+                        spare = None
                     except BaseException:
-                        spare.close()
-                        raise
+                        spare.close(); raise
+                if not admission.get('eligible'):
+                    self._record_async_admission(state, admission, 'synchronous-fallback')
+                    event=self._write(state,self.slot)
+                    event['async_fallback']=admission
+                    self._after_save(state,event,metric=metric,higher_is_better=higher_is_better)
+                    return event
                 self._record_async_admission(state, admission, 'background')
                 event = {'time':time.time(),'path':str(self.slot),'bytes':None,
                     'previous_preserved_until_replace':True,'async_pending':True,

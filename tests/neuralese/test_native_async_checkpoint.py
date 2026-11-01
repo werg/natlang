@@ -475,3 +475,21 @@ def test_async_admission_preserves_lifetime_reserved_peak_across_step_peak_reset
     result=native_async_snapshot_headroom(state,optimizer)
     assert result['device_peak_reserved_bytes']==2000
     assert result['future_device_growth_allowance_bytes']==2000
+
+
+def test_low_disk_spare_falls_back_to_current_reserved_checkpoint(tmp_path,monkeypatch):
+    from natlang_neuralese.train import checkpoint_safety
+    model=torch.nn.Linear(2,2);optimizer=torch.optim.AdamW(model.parameters())
+    state=_full_state(model,optimizer,1,{'first':1});policy=CheckpointPolicy(tmp_path,async_checkpoint=True)
+    monkeypatch.setenv('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR','0')
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES','0')
+    policy.reserve_next(state,optimizer);old_inode=policy._persistent_reservation.pending.stat().st_ino
+    def limited(self):
+        raise checkpoint_safety.CheckpointSpaceUnavailable('floor would be crossed')
+    monkeypatch.setattr(checkpoint_safety.CheckpointWriteAdmission,'__enter__',limited)
+    monkeypatch.setattr(checkpoint_safety,'native_async_snapshot_headroom',lambda *_a,**_k:{'eligible':True})
+    event=policy.save(state,async_allowed=True,async_optimizer=optimizer)
+    assert not event.get('async_pending') and event['async_fallback']['reason']=='insufficient_checkpoint_spare_space'
+    assert policy.slot.stat().st_ino==old_inode and torch.load(policy.slot,weights_only=False)['step']==1
+    assert not policy.slot.with_name(policy.slot.name+'.alternate.reserved-pending').exists()
+    policy.close()

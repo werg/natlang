@@ -239,3 +239,15 @@ def test_alternate_admission_accounts_for_its_own_space(tmp_path, monkeypatch):
     assert torch.load(path, weights_only=True)['step'] == 1
     alternate.close()
     primary.close()
+
+
+def test_gb10_floor_applies_only_to_configured_hot_paths(tmp_path,monkeypatch):
+    from natlang_neuralese.train.checkpoint_safety import checkpoint_minimum_free_bytes
+    data=tmp_path/'data'; data.mkdir();repo=tmp_path/'repo';(repo/'runs').mkdir(parents=True)
+    monkeypatch.setenv('NATLANG_DATA_NVME',str(data));monkeypatch.setenv('NATLANG_REPO',str(repo))
+    monkeypatch.setenv('NATLANG_CHECKPOINT_DGX_NVME_MIN_FREE_BYTES',str(40*1024**3));monkeypatch.delenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES',raising=False)
+    assert checkpoint_minimum_free_bytes(data/'training/checkpoint.pt')==40*1024**3
+    assert checkpoint_minimum_free_bytes(repo/'runs/job/checkpoint.pt')==40*1024**3
+    assert checkpoint_minimum_free_bytes(tmp_path/'elsewhere/checkpoint.pt')==512*1024**2
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MIN_FREE_BYTES','123')
+    assert checkpoint_minimum_free_bytes(data/'training/checkpoint.pt')==123

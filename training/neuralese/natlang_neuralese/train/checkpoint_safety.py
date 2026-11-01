@@ -104,6 +104,22 @@ def _checkpoint_admission_lock_path(device):
     return root / f'checkpoint-admission-{os.getuid()}-{int(device)}.lock'
 
 
+def checkpoint_minimum_free_bytes(target):
+    """Apply the GB10 hot-volume floor only to configured NVMe data/repo paths."""
+    explicit=os.environ.get('NATLANG_CHECKPOINT_MIN_FREE_BYTES')
+    if explicit is not None:return max(0,int(explicit))
+    floor=os.environ.get('NATLANG_CHECKPOINT_DGX_NVME_MIN_FREE_BYTES')
+    if floor is None:return 512*1024**2
+    from ..common.paths import resolve
+    target=Path(target).resolve(strict=False);data=resolve('data_nvme').resolve(strict=False);runs=(resolve('repo')/'runs').resolve(strict=False)
+    for root in (data,runs):
+        if (target==root or root in target.parents) and root.exists():
+            parent=target.parent
+            while not parent.exists() and parent!=parent.parent:parent=parent.parent
+            if os.stat(parent).st_dev==os.stat(root).st_dev:return max(0,int(floor))
+    return 512*1024**2
+
+
 class CheckpointWriteAdmission:
     """Serialize checkpoint writers per filesystem and hold concurrent-transfer space.
 
@@ -131,7 +147,7 @@ class CheckpointWriteAdmission:
             transfer_bytes = math.ceil(self.write_bound_bytes * factor)
         self.transfer_bytes = max(0, int(transfer_bytes))
         if minimum_free_bytes is None:
-            minimum_free_bytes = int(os.environ.get('NATLANG_CHECKPOINT_MIN_FREE_BYTES', str(512 * 1024**2)))
+            minimum_free_bytes = checkpoint_minimum_free_bytes(self.target)
         self.minimum_free_bytes = max(0, int(minimum_free_bytes))
         self.lock_timeout_seconds = (float(os.environ.get('NATLANG_CHECKPOINT_LOCK_TIMEOUT_SECONDS', '1800'))
                                      if lock_timeout_seconds is None else float(lock_timeout_seconds))
@@ -401,6 +417,16 @@ class PersistentCheckpointReservation:
             os.fsync(fd)
         finally:
             os.close(fd)
+
+    def discard_uncommitted(self):
+        """Release an unused spare inode while retaining the durable checkpoint."""
+        if self._fd is not None:
+            st=self._check_pending_identity()
+            receipt=json.loads(self.receipt.read_text())
+            if receipt!={'schema':'natlang.checkpoint-reservation/1','device':st.st_dev,'inode':st.st_ino}:
+                raise CheckpointReserveError('cannot discard an unbound spare reservation')
+            self.pending.unlink(); self.receipt.unlink(); self._sync_directory()
+        self.close()
 
     def close(self):
         if self._fd is not None:

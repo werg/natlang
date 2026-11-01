@@ -30,7 +30,7 @@ SCHEMA = 'natlang.neuralese-hardware-profiles/1'
 PROFILE_STAGE_PARAMETERS = frozenset({'checkpoint_layers'})
 # Environment switches a profile may set: allocator and cache placement, and numerics-preserving compilation.
 PROFILE_ENVIRONMENT = frozenset({'PYTORCH_CUDA_ALLOC_CONF', 'TORCHINDUCTOR_CACHE_DIR', 'TRITON_CACHE_DIR',
-                                 'NATLANG_MAPLE_COMPILE', 'CUDA_DEVICE_MAX_CONNECTIONS'})
+                                 'NATLANG_MAPLE_COMPILE', 'CUDA_DEVICE_MAX_CONNECTIONS', 'NATLANG_CHECKPOINT_DGX_NVME_MIN_FREE_BYTES'})
 _MATCH_KEYS = frozenset({'capability', 'min_memory_gb', 'integrated', 'name_contains'})
 DEFAULT_PATH = Path(__file__).resolve().parents[2] / 'hardware-profiles.json'
 
