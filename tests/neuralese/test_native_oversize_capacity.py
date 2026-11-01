@@ -190,3 +190,41 @@ def test_oversize_checkpoint_barrier_drains_before_forward_and_leaves_ordinary_a
     assert policy.drains == 1
     assert checkpoint_overlap_barrier(policy, [[graph(90, 121)]], baseline)
     assert policy.drains == 2
+
+
+def test_qualified_oversize_update_can_save_async_with_next_update_barrier():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.native_packed_capacity import checkpoint_overlap_barrier
+    from natlang_neuralese.train.native_state_sft import _cadence_async_checkpoint_allowed
+
+    class Policy:
+        def __init__(self): self.drains = 0
+        def drain_async(self): self.drains += 1
+
+    def graph(tokens, slots):
+        return SimpleNamespace(plan=SimpleNamespace(token_count=tokens, slot_sources=range(slots)))
+
+    policy = Policy()
+    baseline = {'forward_tokens': 100, 'kv_slots': 120}
+    large = [[graph(101, 120)]]
+
+    # Existing writes are drained before live capacity qualification and SGD.
+    assert checkpoint_overlap_barrier(policy, large, baseline)
+    assert policy.drains == 1
+    assert _cadence_async_checkpoint_allowed(requested=True, oversized_update=True,
+        oversize_proof={'path': 'bound-live-capacity-proof'}, before_final_update=True,
+        stop_requested=False, refresh_due=False)
+    # The next larger/unqualified batch drains that detached write before its gate.
+    assert checkpoint_overlap_barrier(policy, large, baseline)
+    assert policy.drains == 2
+
+    assert not _cadence_async_checkpoint_allowed(requested=True, oversized_update=True,
+        oversize_proof=None, before_final_update=True, stop_requested=False, refresh_due=False)
+    assert _cadence_async_checkpoint_allowed(requested=True, oversized_update=False,
+        oversize_proof=None, before_final_update=True, stop_requested=False, refresh_due=False)
+    for change in ({'before_final_update': False}, {'stop_requested': True}, {'refresh_due': True}):
+        kwargs = {'requested': True, 'oversized_update': True,
+            'oversize_proof': {'path': 'bound-live-capacity-proof'}, 'before_final_update': True,
+            'stop_requested': False, 'refresh_due': False}
+        kwargs.update(change)
+        assert not _cadence_async_checkpoint_allowed(**kwargs)

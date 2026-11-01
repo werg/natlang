@@ -1154,6 +1154,20 @@ def _resume_identity_for_comparison(identity):
     return previous
 
 
+def _cadence_async_checkpoint_allowed(*, requested, oversized_update, oversize_proof,
+                                     before_final_update, stop_requested, refresh_due):
+    """Admit a detached cadence save only after any oversized step was qualified.
+
+    The pre-update overlap barrier drains older writes before an oversized
+    batch is measured. A successful live capacity proof permits this completed
+    update's save to overlap ordinary work; the next oversized batch drains it
+    before that batch's capacity gate or forward pass. CheckpointPolicy still
+    applies host-headroom admission and synchronous fallback.
+    """
+    return bool(requested and (not oversized_update or oversize_proof is not None)
+        and before_final_update and not stop_requested and not refresh_due)
+
+
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
           source_hash, source_row_bindings, held_row_bindings, exposure_counts, global_step, rng, metrics,
           architecture, options, fp8_state=None, sft_progress=None, async_allowed=False, reserve_only=False):
@@ -4104,10 +4118,13 @@ def _main(argv=None, *, requested_refresh):
                       rng=capture_training_rng_state(args.device), metrics=metrics,
                       architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
                       fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress,
-                      async_allowed=(args.async_checkpoint and not oversized_update and step < total_end and not policy.signaled
-                          and not relative_refresh_due and not requested_refresh.requested
-                          and not (args.refresh_after_updates is None
-                              and args.refresh_at_checkpoint and due_checkpoint)))
+                      async_allowed=_cadence_async_checkpoint_allowed(
+                          requested=args.async_checkpoint, oversized_update=oversized_update,
+                          oversize_proof=oversize_proof, before_final_update=step < total_end,
+                          stop_requested=policy.signaled,
+                          refresh_due=(relative_refresh_due or requested_refresh.requested
+                              or (args.refresh_after_updates is None
+                                  and args.refresh_at_checkpoint and due_checkpoint))))
                 last_saved_step = step
                 metadata_dirty = False
             if diloco is not None:
