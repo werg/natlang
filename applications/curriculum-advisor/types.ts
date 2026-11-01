@@ -48,6 +48,8 @@ export type TrainingCurriculumOptions = {
   schema: "natlang.rl-task-curriculum/1";
   breadth_fraction: number;
   promotion_success_rate: number;
+  /** Difficulty promotion is independent across declared semantic families. */
+  frontier_scope: "semantic-family";
   /** Fraction of practice slots exploring unvisited tasks from least-covered families, normally 0.5. */
   family_exploration_fraction: number;
 };

@@ -31,3 +31,9 @@ it receives one JSON request on stdin and returns the typed array on stdout.
 The two advisory functions above retain their existing review-only behavior.
 See `plans/neuralese/RL_CURRICULUM_20261016.md` for production bindings and
 pending live measurement of newly authored task scaffolds.
+
+Difficulty promotion uses `frontier_scope: "semantic-family"`: each declared family
+advances from its own scored outcomes. Strong performance on math can therefore
+move to harder math while tool execution continues practicing its own weak level.
+The rotating breadth allocation and least-covered-family exploration stay active;
+missing family metadata remains one unknown bucket.

@@ -7,7 +7,7 @@ small curriculum endpoint, including when all observed tasks were successful.
 import math
 
 DEFAULT={'schema':'natlang.rl-task-curriculum/1','breadth_fraction':.25,'promotion_success_rate':.6,
-         'family_exploration_fraction':.5}
+         'family_exploration_fraction':.5,'frontier_scope':'semantic-family'}
 
 
 def metadata(row):
@@ -25,6 +25,8 @@ def metadata(row):
 def policy_options(value):
     config={**DEFAULT,**value}
     if config['schema']!=DEFAULT['schema']:raise ValueError('unsupported task curriculum policy schema')
+    if config['frontier_scope'] != 'semantic-family':
+        raise ValueError('task curriculum frontier_scope must be semantic-family')
     for key in ('breadth_fraction','promotion_success_rate'):
         if type(config[key]) not in (int,float) or not math.isfinite(config[key]) or not 0<config[key]<=1:
             raise ValueError('task curriculum '+key+' must be finite in (0,1]')
@@ -50,17 +52,24 @@ def select(cases,stats,budget,config):
     if not tasks:return []
     observed={row['task_id']:row for row in stats if type(row.get('scored')) is int and row['scored']>0
               and type(row.get('mean')) in (int,float) and math.isfinite(row['mean']) and 0<=row['mean']<=1}
-    levels=sorted({task['level'] for task in tasks});frontier=levels[-1]
-    for level in levels:
-        groups=[observed[task['id']] for task in tasks if task['level']==level and task['id'] in observed]
-        scored=sum(group['scored'] for group in groups)
-        if not scored or sum(group['mean']*group['scored'] for group in groups)/scored<config['promotion_success_rate']:
-            frontier=level;break
+    # A solved math level must not wait for unrelated tool/semantic tasks.
+    # Missing family metadata stays one explicit unknown bucket.
+    family_levels={}
+    for task in tasks:
+        family_levels.setdefault(task['family'],{}).setdefault(task['level'],[]).append(task)
+    frontiers={}
+    for family,levels in family_levels.items():
+        frontiers[family]=max(levels)
+        for level in sorted(levels):
+            groups=[observed[task['id']] for task in levels[level] if task['id'] in observed]
+            scored=sum(group['scored'] for group in groups)
+            if not scored or sum(group['mean']*group['scored'] for group in groups)/scored<config['promotion_success_rate']:
+                frontiers[family]=level;break
     breadth=breadth_rows(cases,budget,config);reserved=set(breadth)
     def priority(index):
         task=tasks[index];group=observed.get(task['id']);mean=group['mean'] if group else None
         signal=0 if mean is not None and 0<mean<1 else 1 if mean is None else 2 if mean==0 else 3
-        return (abs(task['level']-frontier),signal,(index-budget['offset'])%len(cases))
+        return (abs(task['level']-frontiers[task['family']]),signal,(index-budget['offset'])%len(cases))
     practice=sorted((index for index in range(len(cases)) if index not in reserved),key=priority)
     count=min(budget['rows'],len(cases))
     slots=count-len(breadth)
@@ -84,7 +93,7 @@ def select(cases,stats,budget,config):
                            if not served.get(family) else priority)
         representatives.append(representative)
     representatives.sort(key=lambda i:(served.get(tasks[i]['family'],0),
-        tasks[i]['level'] if not served.get(tasks[i]['family']) else abs(tasks[i]['level']-frontier),
+        tasks[i]['level'] if not served.get(tasks[i]['family']) else abs(tasks[i]['level']-frontiers[tasks[i]['family']]),
         priority(i)))
     exploration=representatives[:math.ceil(slots*config['family_exploration_fraction'])]
     chosen_practice=list(exploration);selected=set(exploration)

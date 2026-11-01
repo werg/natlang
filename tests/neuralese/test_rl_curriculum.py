@@ -102,3 +102,24 @@ def test_family_metadata_is_not_fabricated_from_task_ids():
     assert [row['family'] for row in task_descriptors(rows)]==['unspecified','unspecified']
     with pytest.raises(ValueError,match='family'):
         task_descriptors([{'id':'bad','family':['not','an','identifier']}])
+
+
+def test_mastered_family_advances_independently_of_unrelated_failures():
+    rows=[{'id':'math-easy','family':'math','curriculum':{'rl':{'level':2}}},
+          {'id':'math-hard','family':'math','curriculum':{'rl':{'level':3}}},
+          {'id':'tools-easy','family':'tools','curriculum':{'rl':{'level':2}}},
+          {'id':'tools-hard','family':'tools','curriculum':{'rl':{'level':3}}},
+          {'id':'breadth','family':'other','curriculum':{'rl':{'level':0}}}]
+    stats=[{'task_id':'math-easy','scored':4,'mean':1.},
+           {'task_id':'tools-easy','scored':4,'mean':.5}]
+    chosen=production.select_tasks(rows,stats,{'rows':3,'group':4,'offset':4},
+                                  curriculum={**DEFAULT,'family_exploration_fraction':0.})
+    ids=[rows[item['row']]['id'] for item in chosen]
+    assert ids==['tools-easy','math-hard','breadth']
+    assert all(item['samples']==4 for item in chosen)
+
+
+def test_curriculum_cannot_silently_reintroduce_a_global_difficulty_gate():
+    with pytest.raises(ValueError,match='frontier_scope'):
+        production.select_tasks(cases(),[],{'rows':3,'group':4,'offset':0},
+                                curriculum={**DEFAULT,'frontier_scope':'global'})

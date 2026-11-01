@@ -28,6 +28,23 @@ duplicating full-state backup traffic for loss-selected aliases. Keep the
 exported prompt-piece table synchronized with runtime guidance and retain
 historical pieces for recorded-source rendering.
 
+## Independent curriculum promotion and bounded discovery (engineering, 2026-11-01)
+
+RL difficulty frontiers are per declared semantic task family. A solved math
+level must not wait for unrelated weak tool/semantic tasks. Preserve rotating
+breadth, least-covered-family exploration, actual task/sample budgets and complete
+graph custody. Missing family metadata remains one unknown bucket. The resolved
+policy records `frontier_scope: semantic-family`; historical frozen selectors and
+bound collections retain their actual old policy. Apply new selection at the next
+unbound collection; never rewrite an in-flight selected packet or old outcomes.
+
+Read-only discovery must not become unattended I/O load. Scope searches to known
+roots or declared source registries, bound broad searches, and poll or terminate
+the exact returned process/session. Two orphaned root `find` searches ran6/13hours
+across the external disk and dominated tiny random reads until stopped. They were
+not training/conversion work. Use actual PID I/O to diagnose contention before
+changing useful jobs or claiming a storage-throughput improvement.
+
 ## Useful data and recovery I/O custody (engineering, 2026-11-01)
 
 Acquired exports without a D-number source label can share leaf directory names.
