@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 import pytest
@@ -319,6 +320,80 @@ def test_completed_refresh_rejects_unregistered_or_mismatched_rolling_alias(tmp_
     (tmp_path/'prod/controller.lock').touch()
     with pytest.raises(ValueError,match='rolling SFT parent alias'):
         publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=tmp_path/'publication')
+
+
+@pytest.mark.parametrize('tamper',['none','missing-archive','wrong-intermediate','forged-report','wrong-controller-parent',
+                                   'changed-binding','decreased-exposure','changed-quota','missing-endpoint'])
+def test_two_earned_windows_require_exact_archived_intermediate_and_full_endpoint_custody(tmp_path,tamper):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed, _authenticated_refresh_publication
+    def file(name,value):
+        path=tmp_path/name;path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(json.dumps(value,sort_keys=True));return binding(path)
+    parent=file('round/checkpoint.pt',{'step':72,'optimizer':'present','rng':'present'})
+    slot=tmp_path/'production/learner/checkpoint.pt';slot.parent.mkdir(parents=True)
+    slot.write_text(json.dumps({'step':75,'earned':'first-window'}));middle=binding(slot)
+    middle_boundary={'kind':'semantic-refresh','reached':True,'new_optimizer_updates':3,'checkpoint_sha256':middle['sha256']}
+    middle_report=file('archive/report.json',{'schema':'natlang.neuralese-native-sft-report/1',
+        'checkpoint_sha256':middle['sha256'],'continuation_boundary':middle_boundary,'numerics_ok':True})
+    middle_receipt=file('archive/native-training-receipt.json',{'schema':'natlang.native-training-readiness/1',
+        'checkpoint':middle,'continuation':{'checkpoint_sha256':parent['sha256']},
+        'operation_parent':{'path':str(slot),'sha256':parent['sha256'],'global_step':72},
+        'continuation_boundary':middle_boundary,'training_receipt':middle_report})
+    archive=file('archive/receipt.json',{'schema':'natlang.stopped-window-evidence/1',
+                                         'artifacts':[middle_report,middle_receipt]})
+    slot.write_text(json.dumps({'step':79,'earned':'both-windows'}));child=binding(slot)
+    transition={'schema':'natlang.rolling-sft-resume/1','checkpoint_path':str(slot),
+        'checkpoint_sha256':middle['sha256'],'previous_checkpoint_path':parent['path'],
+        'previous_checkpoint_sha256':parent['sha256']}
+    if tamper=='wrong-intermediate':transition['checkpoint_sha256']='f'*64
+    if tamper=='wrong-controller-parent':transition['previous_checkpoint_sha256']='f'*64
+    if tamper=='forged-report':Path(middle_report['path']).write_text('{}')
+    state=tmp_path/'production/state.json';state.write_text(json.dumps({'phase':'awaiting_semantic_refresh',
+        'checkpoint':parent['path'],'pending_native_checkpoint':str(slot),'rolling_sft_resume_history':[transition]}))
+    boundary={'kind':'semantic-refresh','reached':True,'new_optimizer_updates':4,'checkpoint_sha256':child['sha256']}
+    report=file('new-report.json',{'checkpoint_sha256':child['sha256'],'continuation_boundary':boundary,'numerics_ok':True})
+    receipt=file('new-receipt.json',{'checkpoint':child,'continuation':{'checkpoint_sha256':middle['sha256']},
+        'operation_parent':{'path':str(slot),'sha256':middle['sha256'],'global_step':75}})
+    common={'optimizer_present':True,'rng_present':True}
+    held={'path':str(tmp_path/'held'),'sha256':'d'*64}
+    frame={'source_row_order':['a'],'source_row_bindings':{'a':'a-binding'},
+        'required_visits':{'a':2},'exposure_counts':{'a':1},'pending_source_rows':{},
+        'held_row_bindings':{'held':'held-binding'},'source_receipts':[{'sha256':'old'},held]}
+    new_frame=copy.deepcopy(frame);new_frame['source_row_order'].append('b')
+    new_frame['source_row_bindings']['b']='b-binding';new_frame['required_visits']['b']=1
+    new_frame['exposure_counts'].update(a=2,b=1)
+    if tamper=='changed-binding':new_frame['source_row_bindings']['a']='forged'
+    if tamper=='decreased-exposure':new_frame['exposure_counts']['a']=0
+    if tamper=='changed-quota':new_frame['required_visits']['a']=1
+    def snapshot(name,checkpoint,step,frames):
+        return file(name,{'schema':'natlang.rolling-sft-parent-custody-snapshot/1',
+            'checkpoint':{**checkpoint,'bytes':Path(checkpoint['path']).stat().st_size},
+            'global_step':step,'optimizer_present':True,'rng_present':True,'model_config_sha256':'a'*64,
+            'sft_frames':{'full':frames}})
+    old_snapshot=snapshot('old-snapshot.json',parent,72,frame)
+    new_snapshot=snapshot('new-snapshot.json',child,79,new_frame)
+    custody_data={'schema':'natlang.earned-sft-checkpoint-custody/1','parent':parent|common|{'global_step':72},
+        'successor':child|common|{'global_step':79},'old_bindings_and_quotas_preserved':True,
+        'old_exposure_not_decreased':True,'rolling_intermediate_window':{
+            'schema':'natlang.rolling-sft-intermediate-window/1','evidence':archive},
+        'rolling_endpoint_snapshots':{'schema':'natlang.rolling-sft-endpoint-snapshots/1',
+                                      'parent':old_snapshot,'successor':new_snapshot}}
+    if tamper=='missing-archive':custody_data['rolling_intermediate_window']['evidence']['sha256']='0'*64
+    if tamper=='missing-endpoint':del custody_data['rolling_endpoint_snapshots']
+    custody=file('custody.json',custody_data);out=tmp_path/'publication.json'
+    if tamper!='none':
+        with pytest.raises(ValueError):publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=out)
+        assert json.loads(state.read_text())['checkpoint']==parent['path']
+        return
+    result=publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=out)
+    proof=result['rolling_intermediate_proof']
+    assert proof['intermediate']['sha256']==middle['sha256'] and proof['intermediate']['global_step']==75
+    assert proof['intermediate_updates']==3 and proof['intermediate_checkpoint_bytes_verified_currently'] is False
+    assert result['rolling_endpoint_custody_proof']['stages']['full']['old_graph_visits']==1
+    assert result['parent']['sha256']==parent['sha256'] and result['checkpoint']['sha256']==child['sha256']
+    assert _authenticated_refresh_publication(binding(out))['publication']==result
+    Path(parent['path']).unlink()
+    assert _authenticated_refresh_publication(binding(out))['publication']==result
 
 
 def _session_reconciliation_fixture(tmp_path):

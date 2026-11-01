@@ -13,6 +13,132 @@ SESSION_RECONCILIATION = 'natlang.rl-production-session-reconciliation/1'
 SESSION_PLAN = 'natlang.rl-production-session-plan/1'
 
 
+def _rolling_endpoint_snapshots(declaration, parent, child, *, verify_current_endpoints=True):
+    """Recompute every carried stage's exact endpoint obligations, not a caller boolean."""
+    if (not isinstance(declaration,dict)
+            or declaration.get('schema')!='natlang.rolling-sft-endpoint-snapshots/1'):
+        raise ValueError('rolling SFT custody needs exact endpoint snapshots')
+    values=[]
+    for name,checkpoint in (('parent',parent),('successor',child)):
+        ref=declaration.get(name);path=_verify_historical_file_ref(ref);value=json.loads(path.read_text())
+        recorded=value.get('checkpoint') or {}
+        if (value.get('schema')!='natlang.rolling-sft-parent-custody-snapshot/1'
+                or Path(recorded.get('path','')).resolve()!=Path(checkpoint.get('path','')).resolve()
+                or recorded.get('sha256')!=checkpoint.get('sha256')
+                or type(recorded.get('bytes')) is not int or recorded['bytes']<=0
+                or (verify_current_endpoints and recorded['bytes']!=Path(checkpoint['path']).stat().st_size)
+                or value.get('global_step')!=checkpoint.get('global_step')
+                or value.get('optimizer_present') is not True or value.get('rng_present') is not True
+                or not isinstance(value.get('sft_frames'),dict)):
+            raise ValueError('rolling SFT endpoint snapshot differs from its exact full checkpoint identity')
+        values.append(value)
+    before,after=values
+    if (not isinstance(before.get('model_config_sha256'),str) or len(before['model_config_sha256'])!=64
+            or before['model_config_sha256']!=after.get('model_config_sha256')):
+        raise ValueError('rolling SFT endpoint snapshots changed model configuration without proof')
+    stages={}
+    for stage,old in before['sft_frames'].items():
+        new=after['sft_frames'].get(stage)
+        if not isinstance(new,dict):raise ValueError('rolling SFT endpoint dropped a carried stage')
+        old_bind=old.get('source_row_bindings');new_bind=new.get('source_row_bindings')
+        old_order=old.get('source_row_order');new_order=new.get('source_row_order')
+        old_quota=old.get('required_visits');new_quota=new.get('required_visits')
+        old_count=old.get('exposure_counts');new_count=new.get('exposure_counts')
+        old_pending=old.get('pending_source_rows') or {};new_pending=new.get('pending_source_rows') or {}
+        if (not all(isinstance(x,dict) for x in (old_bind,new_bind,old_quota,new_quota,old_count,new_count,old_pending,new_pending))
+                or not isinstance(old_order,list) or not isinstance(new_order,list)
+                or new_order[:len(old_order)]!=old_order or len(old_order)!=len(old_bind)
+                or set(old_order)!=set(old_bind) or len(new_order)!=len(new_bind) or set(new_order)!=set(new_bind)
+                or old.get('held_row_bindings')!=new.get('held_row_bindings')):
+            raise ValueError('rolling SFT endpoint changed old order or held bindings')
+        for key,expected in old_bind.items():
+            if new_bind.get(key)!=expected:
+                raise ValueError('rolling SFT endpoint changed an earned source row binding')
+        for key,row in old_pending.items():
+            expected=row.get('binding') if isinstance(row,dict) else None
+            current=new_bind.get(key) or (new_pending.get(key) or {}).get('binding')
+            if not expected or current!=expected:
+                raise ValueError('rolling SFT endpoint changed a pending source row binding')
+        for key,required in old_quota.items():
+            old_value=old_count.get(key,0);new_value=new_count.get(key,0)
+            if (type(required) is not int or required<0 or new_quota.get(key)!=required
+                    or type(old_value) is not int or old_value<0 or type(new_value) is not int or new_value<old_value):
+                raise ValueError('rolling SFT endpoint changed an old quota or decreased exposure')
+        old_held=(old.get('source_receipts') or [None,None])[-1]
+        new_held=(new.get('source_receipts') or [None,None])[-1]
+        if not isinstance(old_held,dict) or not isinstance(new_held,dict) or old_held.get('sha256')!=new_held.get('sha256'):
+            raise ValueError('rolling SFT endpoint changed the held source')
+        stages[stage]={'old_rows':len(old_bind),'new_rows':len(new_bind),
+            'old_pending_rows':len(old_pending),'old_quota_rows':len(old_quota),
+            'old_graph_visits':sum(old_count.values()),'successor_graph_visits':sum(new_count.values())}
+    if not stages:raise ValueError('rolling SFT endpoint contains no carried SFT obligations')
+    return {'schema':'natlang.rolling-sft-endpoint-custody-proof/1',
+        'parent':declaration['parent'],'successor':declaration['successor'],'stages':stages,
+        'scope':'recomputed exact retained-parent to actual-successor metadata; no intermediate row state inferred'}
+
+
+def _rolling_intermediate_window(declaration, transition, parent, child, receipt, *, state_parent=None,
+                                 historical_previous_path=None):
+    """Authenticate a stopped intermediate SFT window without inventing its missing full state."""
+    from ..train.native_operation_report import supervised_progress_numerics_ok
+    if (not isinstance(declaration,dict) or declaration.get('schema')!='natlang.rolling-sft-intermediate-window/1'
+            or not isinstance(transition,dict) or transition.get('schema')!='natlang.rolling-sft-resume/1'):
+        raise ValueError('invalid rolling SFT intermediate window declaration')
+    archive_ref=declaration.get('evidence')
+    archive=json.loads(_verify_historical_file_ref(archive_ref).read_text())
+    artifacts=archive.get('artifacts')
+    if not isinstance(artifacts,list):raise ValueError('rolling intermediate evidence lacks archived artifacts')
+    named={}
+    for ref in artifacts:
+        path=_verify_historical_file_ref(ref)
+        if path.name in named:raise ValueError('rolling intermediate evidence repeats an artifact name')
+        named[path.name]=ref
+    if not {'report.json','native-training-receipt.json'} <= set(named):
+        raise ValueError('rolling intermediate evidence lacks report or training receipt')
+    report=json.loads(Path(named['report.json']['path']).read_text())
+    prior=json.loads(Path(named['native-training-receipt.json']['path']).read_text())
+    verified_report=report
+    certificate=report.get('runtime_certificate') or {}
+    if certificate.get('passed') is False:
+        archived=named.get('native-runtime-certificate.json')
+        if not archived or archived['sha256']!=certificate.get('sha256'):
+            raise ValueError('rolling intermediate runtime certificate archive differs')
+        # The original rolling certificate path has since been overwritten;
+        # only relocate the already authenticated identical bytes for checking.
+        verified_report={**report,'runtime_certificate':{**certificate,'path':archived['path']}}
+    boundary=report.get('continuation_boundary') or {};updates=boundary.get('new_optimizer_updates')
+    prior_op=prior.get('operation_parent') or {};current_op=receipt.get('operation_parent') or {}
+    parent_path=Path(parent.get('path','')).resolve();child_path=Path(child.get('path','')).resolve()
+    rolling=Path(transition.get('checkpoint_path','')).resolve()
+    previous=(Path(historical_previous_path).resolve() if historical_previous_path is not None
+              else Path(transition.get('previous_checkpoint_path','')).resolve())
+    middle_sha=transition.get('checkpoint_sha256')
+    if (state_parent is not None and previous!=Path(state_parent).resolve() or previous!=parent_path
+            or rolling!=child_path or transition.get('previous_checkpoint_sha256')!=parent.get('sha256')
+            or not isinstance(middle_sha,str) or len(middle_sha)!=64 or middle_sha==parent.get('sha256')
+            or report.get('schema')!='natlang.neuralese-native-sft-report/1'
+            or prior.get('schema')!='natlang.native-training-readiness/1'
+            or boundary.get('kind')!='semantic-refresh' or boundary.get('reached') is not True
+            or type(updates) is not int or updates<1 or boundary.get('checkpoint_sha256')!=middle_sha
+            or report.get('checkpoint_sha256')!=middle_sha or prior.get('checkpoint',{}).get('sha256')!=middle_sha
+            or Path(prior.get('checkpoint',{}).get('path','')).resolve()!=rolling
+            or prior.get('continuation_boundary')!=boundary
+            or (prior.get('training_receipt') or {}).get('sha256')!=named['report.json']['sha256']
+            or (prior.get('continuation') or {}).get('checkpoint_sha256')!=parent.get('sha256')
+            or prior_op.get('sha256')!=parent.get('sha256') or prior_op.get('global_step')!=parent.get('global_step')
+            or Path(prior_op.get('path','')).resolve()!=rolling
+            or current_op.get('sha256')!=middle_sha or current_op.get('global_step')!=parent.get('global_step')+updates
+            or Path(current_op.get('path','')).resolve()!=rolling
+            or not supervised_progress_numerics_ok(verified_report,{'sha256':middle_sha})):
+        raise ValueError('rolling intermediate report, selected parent or exact window differs')
+    return {'schema':'natlang.rolling-sft-intermediate-window-proof/1','evidence':archive_ref,
+        'registered_transition':transition,'report':named['report.json'],'receipt':named['native-training-receipt.json'],
+        'resolved_previous_checkpoint_path':str(previous),
+        'intermediate':{'path':str(rolling),'sha256':middle_sha,'global_step':parent['global_step']+updates},
+        'intermediate_updates':updates,'intermediate_checkpoint_bytes_verified_currently':False,
+        'scope':'historical report/receipt and registered transition; endpoint custody is direct and no intermediate row state is reconstructed'}
+
+
 def _strong_binding(path):
     """Hash a file's current bytes without relying on the mutable hash cache."""
     from ..common.hashing import sha256_file_hex
@@ -102,6 +228,19 @@ def _authenticated_refresh_publication(reference, seen=None):
             and operation_parent.get('sha256')==custody_parent.get('sha256')
             and Path(operation_parent.get('path','')).resolve()==Path(custody_parent.get('path','')).resolve()
             and operation_parent.get('global_step')==custody_parent.get('global_step')))
+    intermediate=publication.get('rolling_intermediate_proof')
+    if intermediate is not None:
+        declaration=custody.get('rolling_intermediate_window')
+        checked=_rolling_intermediate_window(declaration,intermediate.get('registered_transition'),
+                                             custody_parent,successor,receipt,
+                                             historical_previous_path=intermediate.get('resolved_previous_checkpoint_path'))
+        if checked!=intermediate:
+            raise ValueError('historical rolling intermediate proof changed')
+        endpoint=_rolling_endpoint_snapshots(custody.get('rolling_endpoint_snapshots'),custody_parent,successor,
+                                              verify_current_endpoints=False)
+        if endpoint!=publication.get('rolling_endpoint_custody_proof'):
+            raise ValueError('historical rolling endpoint custody changed')
+        operation_parent_matches=True
     if (custody.get('schema')!='natlang.earned-sft-checkpoint-custody/1'
             or Path(custody_parent.get('path','')).resolve()!=Path(parent['path']).resolve()
             or custody_parent.get('sha256')!=parent['sha256']
@@ -116,8 +255,13 @@ def _authenticated_refresh_publication(reference, seen=None):
             or receipt.get('checkpoint',{}).get('sha256')!=checkpoint['sha256']
             or not isinstance(continuation,str) or len(continuation)!=64):
         raise ValueError('historical SFT publication report/receipt/custody do not prove its checkpoint transition')
+    if intermediate is not None and successor.get('global_step') != (custody_parent.get('global_step')
+            + intermediate['intermediate_updates'] + boundary['new_optimizer_updates']):
+        raise ValueError('historical rolling intermediate update counts differ')
     authenticated_ancestors={parent['sha256']}
-    if continuation!=parent['sha256']:
+    if intermediate is not None and continuation==intermediate['intermediate']['sha256']:
+        authenticated_ancestors.add(continuation)
+    elif continuation!=parent['sha256']:
         proof=publication.get('historical_parent_proof') or {}
         ancestor=proof.get('prior_continuation_ancestor') or {}
         ancestor_ref=proof.get('publication') or ancestor.get('publication') or {}
@@ -794,10 +938,13 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
     from ..train.native_operation_report import supervised_progress_numerics_ok
     state_path,out=Path(state_path).resolve(),Path(out).resolve()
     def read(ref): return json.loads(_bound(ref).read_text())
+    def stamp(path):
+        s=Path(path).stat();return (s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
     with (state_path.parent/'controller.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         state=json.loads(state_path.read_text());report,receipt,custody=map(read,(report_ref,receipt_ref,custody_ref))
         parent,child=custody['parent'],custody['successor'];child_path=_bound(child)
+        child_stamp=stamp(child_path);parent_stamp=None
         boundary=report.get('continuation_boundary') or {}
         updates=boundary.get('new_optimizer_updates')
         state_parent=Path(state['checkpoint']).resolve()
@@ -812,10 +959,13 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
                 and operation_parent.get('global_step')==parent.get('global_step')))
         historical_parent_proof=None
         rolling_parent_alias_proof=None
+        rolling_intermediate_proof=None
+        rolling_endpoint_custody_proof=None
         if parent_matches:
             # Ordinary publication: the exact parent bytes still occupy their
             # pinned path, so freshly verify them as before.
             parent_path=_bound(parent)
+            parent_stamp=stamp(parent_path)
         elif not same_slot:
             # A controller may retain its RL checkpoint under the round path
             # while explicitly adopting the exact same bytes into the rolling
@@ -906,7 +1056,17 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
                     'global_step':parent['global_step']},
             }
             parent_matches=True
+        if custody.get('rolling_intermediate_window') is not None:
+            rolling_history=state.get('rolling_sft_resume_history') or []
+            if not parent_matches or same_slot or not rolling_history:
+                raise ValueError('rolling intermediate window needs its retained parent and latest registered transition')
+            rolling_intermediate_proof=_rolling_intermediate_window(custody['rolling_intermediate_window'],
+                rolling_history[-1],parent,child,receipt,state_parent=state_parent)
+            rolling_endpoint_custody_proof=_rolling_endpoint_snapshots(custody.get('rolling_endpoint_snapshots'),parent,child)
+            operation_parent_matches=True
         receipt_parents={parent['sha256']}
+        if rolling_intermediate_proof is not None:
+            receipt_parents.add(rolling_intermediate_proof['intermediate']['sha256'])
         if historical_parent_proof is not None:
             receipt_parents.update(authenticated_prior['authenticated_ancestors'])
         if (state.get('phase')!='awaiting_semantic_refresh' or not parent_matches
@@ -915,7 +1075,8 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
                 or not _completed_refresh_obligations(custody,parent,child)
                 or custody.get('old_exposure_not_decreased') is not True
                 or type(updates) is not int or updates<1
-                or child['global_step']!=parent['global_step']+updates
+                or child['global_step']!=parent['global_step']+updates+(rolling_intermediate_proof['intermediate_updates']
+                    if rolling_intermediate_proof is not None else 0)
                 or not all(x.get('optimizer_present') and x.get('rng_present') for x in (parent,child))
                 or boundary.get('kind')!='semantic-refresh' or boundary.get('reached') is not True
                 or boundary.get('checkpoint_sha256')!=child['sha256']
@@ -925,6 +1086,9 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
                 or receipt.get('continuation',{}).get('checkpoint_sha256') not in receipt_parents
                 or not supervised_progress_numerics_ok(report,{'sha256':child['sha256']})):
             raise ValueError('SFT refresh publication lacks exact qualified full-state custody')
+        if (stamp(child_path)!=child_stamp or binding(child_path)['sha256']!=child['sha256']
+                or parent_stamp is not None and (stamp(parent_path)!=parent_stamp or binding(parent_path)['sha256']!=parent['sha256'])):
+            raise ValueError('SFT refresh endpoint checkpoint changed during publication')
         if out.exists():raise ValueError('SFT refresh publication intent already exists')
         result={'schema':'natlang.direct-sft-refresh-publication/1',
                 'parent':(historical_parent_proof['identity'] if historical_parent_proof is not None else
@@ -932,6 +1096,8 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
                           if rolling_parent_alias_proof is not None else binding(parent_path)),
                 'historical_parent_proof':historical_parent_proof,
                 'rolling_parent_alias_proof':rolling_parent_alias_proof,
+                'rolling_intermediate_proof':rolling_intermediate_proof,
+                'rolling_endpoint_custody_proof':rolling_endpoint_custody_proof,
                 'checkpoint':binding(child_path),
                 'report':report_ref,'receipt':receipt_ref,'custody':custody_ref,'stage_completion_granted':False,
                 'behavioral_qualification_granted':False,'additional_training_credit':0}

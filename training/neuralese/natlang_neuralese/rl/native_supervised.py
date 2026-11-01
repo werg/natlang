@@ -351,6 +351,78 @@ def qualified_foundation_handoff(config, checkpoint, report_path):
     return True
 
 
+def _rolling_parent_custody_snapshot(checkpoint, expected_sha256, directory):
+    """Seal actual per-stage SFT obligations before an earned rolling parent is replaced."""
+    import shutil
+    from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
+    from ..common.jsonio import write_json_durable
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from ..train.native_continuation import collect_sft_progress, required_visits
+    from ..train.native_resident import binding
+    from .native_raw_policy import require_raw_training
+    checkpoint=Path(checkpoint).resolve(strict=True)
+    snapshotter=binding(Path(__file__))
+    def stamp():
+        stat=checkpoint.stat()
+        return (stat.st_dev,stat.st_ino,stat.st_size,stat.st_mtime_ns,stat.st_ctime_ns)
+    before=stamp()
+    if sha256_file_hex_cached(checkpoint)!=expected_sha256:
+        raise ValueError('rolling parent changed before custody snapshot')
+    saved=CheckpointPolicy.load(checkpoint);training=require_raw_training(saved)
+    if not isinstance(training.get('optimizer'),dict) or not training['optimizer'] or not isinstance(training.get('rng'),dict) or not training['rng']:
+        raise ValueError('rolling parent custody requires its actual optimizer and RNG')
+    global_step=training.get('global_step',training.get('step'))
+    if type(global_step) is not int or global_step<0:
+        raise ValueError('rolling parent custody requires its exact global step')
+    progress=collect_sft_progress(training,borrow_frames=True);frames={}
+    for stage,frame in progress.items():
+        from itertools import chain
+        order=frame.get('source_row_order') or []
+        bindings=frame.get('source_row_bindings') or {}
+        counts=frame.get('exposure_counts') or {}
+        pending=frame.get('pending_source_rows') or {}
+        quotas=frame.get('required_visits')
+        derived=quotas is None
+        if derived:quotas=required_visits(order,float((frame.get('options') or {}).get('epochs',1)))
+        if (not isinstance(stage,str) or not isinstance(bindings,dict) or not isinstance(order,list)
+                or len(order)!=len(bindings) or set(order)!=set(bindings)
+                or not isinstance(pending,dict) or not isinstance(quotas,dict)
+                or not set(bindings)<=set(quotas) or not set(quotas)<=set(bindings)|set(pending)
+                or not isinstance(counts,dict) or not set(counts)<=set(quotas)
+                or any(type(value) is not int or value<0 for value in chain(quotas.values(),counts.values()))):
+            raise ValueError('rolling parent has invalid SFT row bindings, quotas or exposure')
+        options=frame.get('options') or {}
+        frames[stage]={'source_row_order':order,'source_row_bindings':bindings,'required_visits':quotas,
+            'required_visits_derived_from_epochs':derived,'exposure_counts':counts,
+            'source_receipts':frame.get('source_receipts'),'source_hash':frame.get('source_hash'),
+            'held_row_bindings':frame.get('held_row_bindings'),
+            'pending_source_rows':frame.get('pending_source_rows') or {},
+            'pending_source_declarations':frame.get('pending_source_declarations') or {},
+            'completed_foundations':frame.get('completed_foundations') or [],
+            'stage_identity':frame.get('identity'),'epochs':options.get('epochs',1),
+            'source_correction_binding':options.get('source_correction_binding'),
+            'source_correction_history':options.get('source_correction_history') or [],
+            'withdrawal_history':options.get('withdrawal_history') or []}
+    if stamp()!=before or sha256_file_hex_cached(checkpoint)!=expected_sha256 or stamp()!=before or binding(Path(__file__))!=snapshotter:
+        raise ValueError('rolling parent changed during custody snapshot')
+    record={'schema':'natlang.rolling-sft-parent-custody-snapshot/1',
+        'checkpoint':{'path':str(checkpoint),'sha256':expected_sha256,'bytes':before[2]},
+        'global_step':global_step,
+        'model_config_sha256':canonical_json_sha256_hex(saved['model_config']),
+        'optimizer_present':True,'rng_present':True,'sft_frames':frames,'snapshotter':snapshotter,
+        'scope':'actual pre-replacement SFT row obligations and exposure; not a checkpoint or independent backup'}
+    encoded=json.dumps(record,sort_keys=True,separators=(',',':')).encode()
+    snapshot_dir=Path(directory)/'rolling-parent-custody';snapshot_dir.mkdir(parents=True,exist_ok=True)
+    if shutil.disk_usage(snapshot_dir).free < 40*1024**3+2*len(encoded)+(4<<20):
+        raise ValueError('rolling parent custody snapshot would breach the 40 GiB floor')
+    path=snapshot_dir/(expected_sha256+'.json')
+    if path.exists():
+        if json.loads(path.read_text())!=record:raise ValueError('rolling parent custody snapshot changed')
+    else:write_json_durable(path,record)
+    if stamp()!=before:raise ValueError('rolling parent changed while publishing custody snapshot')
+    return binding(path)
+
+
 def rolling_resume_parent(config, state, directory):
     """Authenticate an earned same-slot retry without rewriting its old parent history.
 
@@ -377,6 +449,7 @@ def rolling_resume_parent(config, state, directory):
               'checkpoint_sha256':control['checkpoint_sha256'],
               'previous_checkpoint_path':str(old),
               'previous_checkpoint_sha256':control['previous_checkpoint_sha256']}
+    record['custody_snapshot']=_rolling_parent_custody_snapshot(slot,control['checkpoint_sha256'],directory)
     return str(slot), record
 
 

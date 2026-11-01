@@ -1678,7 +1678,7 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
         equal(actual[key], expected[key])
 
 
-@pytest.mark.parametrize('refresh',['checkpoint','relative','signal','stop','complete'])
+@pytest.mark.parametrize('refresh',['checkpoint','relative','signal','stop','complete','complete-relative'])
 def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,refresh):
     import json
     import torch
@@ -1704,8 +1704,11 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
         '--epochs','2','--checkpoint-every','1','--eval-every','1',
         '--task-eval-every','0','--out',str(out),
         '--task-eval',json.dumps({'packet':{'path':'unused','sha256':'s'},'cases':[0]})]
-    if refresh=='checkpoint':argv+=['--refresh-at-checkpoint']
-    elif refresh=='relative':argv+=['--refresh-after-updates','1']
+    if refresh in ('checkpoint','relative'):
+        argv+=['--refresh-at-checkpoint'] if refresh=='checkpoint' else ['--refresh-after-updates','1']
+        argv+=['--task-eval-every','1']
+        monkeypatch.setattr(trainer,'_evaluate_cadence',lambda *a,**k: pytest.fail('held evaluation started at automatic refresh'))
+    elif refresh=='complete-relative':argv+=['--refresh-after-updates','2']
     elif refresh in('signal','stop'):
         import copy
         import os
@@ -1729,12 +1732,16 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
         monkeypatch.setattr(trainer,'native_training_update',request_after_update)
     assert trainer.main(argv)==0
     report=json.loads((out/'report.json').read_text())
-    if refresh!='complete':
+    if refresh not in ('complete','complete-relative'):
         assert not calls
         assert report['completed'] is False
         assert report['continuation_boundary']['reached'] is (refresh!='stop')
         assert report['continuation_boundary']['new_optimizer_updates']==1
         assert torch.load(out/'checkpoint.pt',weights_only=False)['training']['exposure_counts']=={'train':1}
+        if refresh in ('checkpoint','relative'):
+            certificate=json.loads((out/'native-runtime-certificate.json').read_text())
+            assert certificate['deferred'] and not certificate['passed']
+            assert certificate['reason']=='semantic refresh; qualification deferred until resume'
         if refresh in('signal','stop'):
             if refresh=='signal':assert report['continuation_boundary']['requested_signals'][0]['signal']=='SIGUSR2'
             else:

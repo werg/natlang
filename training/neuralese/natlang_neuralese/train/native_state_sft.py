@@ -4244,8 +4244,10 @@ def _main(argv=None, *, requested_refresh):
                                     and step - resumed_step >= args.refresh_after_updates)
             due_checkpoint = (policy.due(step, end=step == total_end)
                               or relative_refresh_due or requested_refresh.requested)
-            if policy.signaled or requested_refresh.requested:
-                refresh_boundary = refresh_boundary or requested_refresh.requested
+            automatic_refresh_due = (relative_refresh_due or
+                (args.refresh_at_checkpoint and args.refresh_after_updates is None and due_checkpoint))
+            if policy.signaled or requested_refresh.requested or (automatic_refresh_due and step < total_end):
+                refresh_boundary = refresh_boundary or requested_refresh.requested or automatic_refresh_due
                 break
             due_task = task_eval is not None and ((step == total_end and not policy_operation) or
                         bool(args.task_eval_every and step % args.task_eval_every == 0))
@@ -4506,7 +4508,7 @@ def _main(argv=None, *, requested_refresh):
             fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
         last_saved_step = step
     if metadata_dirty or ((step != resumed_step or policy.signaled) and last_saved_step != step):
-        if not policy.signaled and not requested_refresh.requested and not metrics.get('held'):
+        if not policy.signaled and not requested_refresh.requested and not refresh_boundary and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = held_evaluation(step == total_end and not policy_operation)
             metrics.update(ema_side_metrics)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
@@ -4598,7 +4600,7 @@ def _main(argv=None, *, requested_refresh):
                                                checkpoint_sha256=checkpoint_sha)
         write_json(task_receipt_path, task_receipt)
     runtime_path = args.out / 'native-runtime-certificate.json'
-    if policy.signaled or requested_refresh.requested or (not completed and not foundation_boundary and not refresh_boundary and not active_stage_complete):
+    if policy.signaled or requested_refresh.requested or (refresh_boundary and not completed and not active_stage_complete) or (not completed and not foundation_boundary and not refresh_boundary and not active_stage_complete):
         # Operational stops preserve the exact resumable checkpoint. Defer a
         # full capture/splice qualification until the declared data exposure is
         # finished; do not make interruptions pay for a second model pass.
@@ -4606,7 +4608,7 @@ def _main(argv=None, *, requested_refresh):
                           'checkpoint_sha256': checkpoint_sha, 'native_identity': model_identity,
                           'deferred': True, 'reason': ('operational stop; qualification deferred until resume'
                             if policy.signaled else 'semantic refresh; qualification deferred until resume'
-                            if requested_refresh.requested else 'declared native graph exposure is incomplete')}
+                            if requested_refresh.requested or refresh_boundary else 'declared native graph exposure is incomplete')}
     else:
         try:
             if args.forward_atol is None or args.gradient_atol is None:

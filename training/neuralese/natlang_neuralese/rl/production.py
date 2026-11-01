@@ -307,8 +307,9 @@ def complete_update_audit(state, *, checkpoint):
         # operation. It may intentionally leave the complete recipe source
         # obligations open; that receipt records the real update without
         # claiming it trained any collected RL task or completed the recipe.
+        from ..train.native_operation_report import supervised_progress_numerics_ok
         if (progress.get('schema')!='natlang.neuralese-native-sft-report/1'
-                or report.get('numerics_ok') is not True
+                or not supervised_progress_numerics_ok(report, checkpoint)
                 or report.get('checkpoint_sha256')!=checkpoint.get('sha256')
                 or not (report.get('progress_numerics')or{}).get('passed')):
             raise ValueError('completed seed SFT report does not bind its exact checkpoint and finite update')
@@ -323,7 +324,8 @@ def complete_update_audit(state, *, checkpoint):
         receipt_report_path=_bound(receipt_report) if isinstance(receipt_report,dict) else None
         receipt_checkpoint_path=Path(receipt_checkpoint.get('path','')).resolve(strict=True)
         if (receipt.get('schema')!='natlang.native-training-readiness/1'
-                or receipt.get('completed') is not report.get('completed')
+                or type(receipt.get('completed')) is not bool
+                or (receipt.get('completed') is True and report.get('completed') is not True)
                 or receipt.get('mandatory_sft')!=report.get('mandatory_sft')
                 or receipt_checkpoint.get('sha256')!=checkpoint.get('sha256')
                 or sha256_file_hex_cached(receipt_checkpoint_path)!=checkpoint.get('sha256')
@@ -1208,17 +1210,19 @@ def initial_controller_state(config):
 def qualified_seed_boundary(config,mode,progress,checkpoint):
     """Accept actual SFT work at its checkpoint, without declaring the stage complete."""
     if not config.get('native_state') or mode!='seed':return False
-    from ..train.native_operation_report import active_stage_handoff
+    from ..train.native_operation_report import active_stage_handoff, supervised_progress_numerics_ok
     from ..common.hashing import sha256_file_hex_cached
     if Path(checkpoint).is_file()and active_stage_handoff(progress,{'sha256':sha256_file_hex_cached(checkpoint)},
             stage_id=(config.get('seed_trainer_parameters')or{}).get('stage_id')):return True
     boundary=progress.get('continuation_boundary') or {}
     if (progress.get('schema')!='natlang.neuralese-native-sft-report/1'
-            or progress.get('numerics_ok') is not True or boundary.get('kind')!='semantic-refresh'
+            or boundary.get('kind')!='semantic-refresh'
             or boundary.get('reached') is not True
             or type(boundary.get('new_optimizer_updates')) is not int
             or boundary['new_optimizer_updates']<=0 or not Path(checkpoint).is_file()):return False
-    return boundary.get('checkpoint_sha256')==sha256_file_hex_cached(checkpoint)
+    checkpoint_sha=sha256_file_hex_cached(checkpoint)
+    return (boundary.get('checkpoint_sha256')==checkpoint_sha
+            and supervised_progress_numerics_ok(progress, {'sha256':checkpoint_sha}))
 
 
 def initial_capacity_collection(config,state):

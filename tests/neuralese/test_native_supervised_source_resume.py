@@ -161,6 +161,30 @@ def test_actual_partial_trainer_retry_updates_once_and_retains_exact_source_cred
         assert audit['mode']=='seed'
         assert audit['operation_receipt']['scope']=='seed-supervised-exposure'
         assert not result['production_complete']
+        receipt=json.loads((directory/'native-training-receipt.json').read_text())
+        report=json.loads((directory/'report.json').read_text())
+        assert receipt['completed'] is False and report['numerics_ok'] is False
+        assert report['progress_numerics']['passed'] is True
+
+
+def test_seed_refresh_rejects_tampered_deferred_runtime_certificate(tmp_path):
+    from natlang_neuralese.rl.production import qualified_seed_boundary
+    checkpoint=tmp_path/'checkpoint.pt';checkpoint.write_bytes(b'actual checkpoint')
+    sha=binding(checkpoint)['sha256']
+    certificate=tmp_path/'runtime.json'
+    certificate.write_text(json.dumps({'passed':False,'deferred':True,
+        'reason':'semantic refresh; qualification deferred until resume','checkpoint_sha256':sha}))
+    report={'schema':'natlang.neuralese-native-sft-report/1','numerics_ok':False,
+        'runtime_certificate':{**binding(certificate),'passed':False},
+        'progress_numerics':{'schema':'natlang.native-finite-training-state/1','passed':True,
+            'checkpoint_sha256':sha,'runtime_qualification_granted':False,'nonfinite':[],
+            'floating_tensors':{'model':1,'optimizer':1}},
+        'continuation_boundary':{'kind':'semantic-refresh','reached':True,
+            'new_optimizer_updates':1,'checkpoint_sha256':sha}}
+    assert qualified_seed_boundary({'native_state':True},'seed',report,checkpoint)
+    certificate.write_text('{}')
+    with pytest.raises(ValueError):
+        qualified_seed_boundary({'native_state':True},'seed',report,checkpoint)
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
@@ -235,3 +259,51 @@ def test_append_retires_only_replayed_parent_correction_and_keeps_append_predece
         assert reuse['already_current_sources']=={} and reuse['retired_committed_source_correction']==ref
     else:
         assert '--source-correction' in command and reuse is None
+
+
+def test_rolling_resume_seals_carried_stage_obligations_before_slot_replacement(tmp_path,monkeypatch):
+    import shutil
+    config,_,directory,state,targets=fixture(tmp_path)
+    frame=copy.deepcopy(state['training'])
+    frame.update(source_row_bindings={'row':'old-binding'},source_row_order=['row'],
+        required_visits={'row':3,'pending':2},exposure_counts={'row':1,'pending':0},
+        pending_source_rows={'pending':{'binding':'pending-binding','required_visits':2}},
+        pending_source_declarations={'source':{'sha256':'a'*64}})
+    state['training'].update(options={'stage_id':'rl'},identity={'objective':{'kind':'native-policy'}},global_step=72,
+                             sft_progress={'full':frame})
+    slot=directory/'checkpoint.pt';torch.save(state,slot)
+    previous=targets[2];slot_ref=binding(slot);previous_ref=binding(previous)
+    config['rolling_sft_resume']={'schema':'natlang.rolling-sft-resume/1',
+        'checkpoint_path':slot_ref['path'],'checkpoint_sha256':slot_ref['sha256'],
+        'previous_checkpoint_path':previous_ref['path'],'previous_checkpoint_sha256':previous_ref['sha256']}
+    monkeypatch.setattr(shutil,'disk_usage',lambda path:SimpleNamespace(free=100*1024**3))
+    selected,record=supervised.rolling_resume_parent(config,{'checkpoint':str(previous)},directory)
+    assert selected==str(slot.resolve())
+    proof=json.loads(Path(record['custody_snapshot']['path']).read_text())
+    assert proof['checkpoint']['sha256']==slot_ref['sha256']
+    assert proof['sft_frames']['full']['required_visits']=={'row':3,'pending':2}
+    assert proof['sft_frames']['full']['exposure_counts']=={'row':1,'pending':0}
+    assert proof['sft_frames']['full']['pending_source_rows']['pending']['binding']=='pending-binding'
+    slot.write_text('newer checkpoint bytes')
+    assert binding(record['custody_snapshot']['path'])==record['custody_snapshot']
+
+
+def test_rolling_custody_snapshot_rejects_parent_changed_during_metadata_read(tmp_path,monkeypatch):
+    import shutil
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    config,_,directory,state,targets=fixture(tmp_path);slot=directory/'checkpoint.pt'
+    state['training'].update(source_row_bindings={'row':'binding'},source_row_order=['row'],global_step=72)
+    torch.save(state,slot)
+    slot_ref=binding(slot);previous=binding(targets[2])
+    config['rolling_sft_resume']={'schema':'natlang.rolling-sft-resume/1',
+        'checkpoint_path':slot_ref['path'],'checkpoint_sha256':slot_ref['sha256'],
+        'previous_checkpoint_path':previous['path'],'previous_checkpoint_sha256':previous['sha256']}
+    monkeypatch.setattr(shutil,'disk_usage',lambda path:SimpleNamespace(free=100*1024**3))
+    load=CheckpointPolicy.load
+    def raced(path):
+        result=load(path)
+        with Path(path).open('ab') as stream:stream.write(b'changed')
+        return result
+    monkeypatch.setattr(CheckpointPolicy,'load',raced)
+    with pytest.raises(ValueError,match='changed during custody snapshot'):
+        supervised.rolling_resume_parent(config,{'checkpoint':previous['path']},directory)
