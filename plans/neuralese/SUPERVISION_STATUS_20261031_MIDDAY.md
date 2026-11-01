@@ -4,6 +4,71 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Current observation, November 1, 06:07 CET
+
+The latest saved production parent is global72/local18, SHA
+`a36125a2b2051dab81a7fa01de65110c07f97a930574f4914e3d44b4b58084a8`.
+It records source189928, including actual first exposure to17 of the534 newly
+admitted positive coding graphs (one visit each). It is distinct from the
+rejected historical branch72. Full weights, optimizer, RNG and actual row
+credits remain in the one rolling slot. See `ops/checkpoint72-cutover-parent-1101.json`.
+
+The previous trainer was stopped after saving72, before another optimizer
+update. Only redundant post-checkpoint prefetch/capacity probes were discarded.
+A live cgroup probe exposed the actual cache-reuse defect: reading nonexistent
+mount-root cgroup files erased valid host availability, leaving every proof's
+headroom null. Runtime **1ea437f42** fixes nested-process cgroup ancestry and
+host fallback. Focused tests passed; actual repeated-proof reuse still needs
+observing after one fresh qualification under the changed runtime inventory.
+
+`lfm3-sft72-focus-fixed-190154-1101.service` is active. Its bound CPU continuation
+preflight passed, the GPU trainer loaded the226-row append, and fresh capacity
+gates are running. New SGD is not yet credited. Exact controls are under
+`/home/werg/data/lfm3-rl-dgx-20261029/ops/resident-190154-1ea/`.
+An inherited designbrief37 CLI focus initially conflicted with the saved active
+loghub focus; the launch now resolves it from the actual adopted recipe plan.
+The190154 recipe includes all760 prepared positive D13/D14 trajectories:534
+already adopted and226 newly appended with explicit training-only Bash tool
+context. Exactly25 empty undeclared Bash fields were canonicalized with original
+provenance retained. Train and foundation move together; protected held stays
+unchanged. Task evaluation now uses the corrected frozen Node runtime too.
+
+The strong recovery queue remains **off and unqualified for production**.
+The actual full70/source189394 independent bootstrap is active and has copied
+about10GiB of15.3GB; independent readback and isolated full restore remain.
+Its old source is an honest fallback, not qualification for the newer recipe.
+Environment/runtime/assets have separate verified archive/import receipts.
+The abandoned59 prototype pin was retired; verified58,56 and SD52 fallbacks
+remain. Redundant weak mutable-latest offload is paused while this primary
+export completes; a newer actual-source export must follow, not an indefinite
+backup pause. Prospective append/recovery crash handling is being tested on the
+actual tiny trainer; fixture archive proofs do not replace production restore.
+
+TAT-QA v10 produced one accepted review trajectory, one impossible-contract
+inventory attempt and one sales attempt that exhausted128 requests/64 logical
+turns. The inventory reviewer and filing oracle contradict each other about
+whether general inventory prose establishes a line-item note; that invalid task
+is excluded and being repaired. The accepted trajectory still needs whole-child
+contract review and native capture before admission. Four ContractNLI train
+worlds have passed actual scripted collector/negative controls with independent
+Sol judging configured; fresh plan review and Luna collection remain pending.
+Zero active teacher calls is temporary preparation, not completed generation.
+
+Pop is reachable with an idle8GiB4060. Its full56 capture actor is stopped;
+obsolete54/55 states are being retired only after fresh full56/SD52 readbacks,
+to make room for a newer independent export and useful evaluation. The local
+GPU belongs to the active learner. CoreWeave's hourly monitor remains live;
+its latest checked GPU creation was denied, and a durable launch hold prevents
+obsolete fresh-init cloud controls from launching if entitlement returns.
+
+The previous goal turn made authoritative progress through storage retirement,
+not an idle wait. MegaToken state is absent on both drives; the recovery
+workspace is external with unique work and required data retained. Around80GiB
+internal headroom was observed. Full check-main remains **not green**; helpers
+are repairing concrete test-contract failures without weakening actor, split,
+numerical or recovery custody. Training steps and lower loss are not yet a
+claim of improved task capability.
+
 ## Current observation, November 1, 04:37 CET
 
 The previous learner completed real SGD through global step67 and exited 0.
