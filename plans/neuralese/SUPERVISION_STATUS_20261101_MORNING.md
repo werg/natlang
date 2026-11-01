@@ -1,3 +1,69 @@
+## Live supervision update, 2026-11-02 00:31 CET
+
+- Bounded execution-efficiency rewards and live inference escalation are integrated
+  on main and included in the current frozen production runtime. Correct task
+  completion remains strongest; all-failed groups do not learn cheap failure.
+  Actual optimizer learning rates are bounded for wholly efficiency-only updates.
+  Configured fallback models continue the existing invocation, effects, scope,
+  ancestry and shared budgets, with per-turn actor attribution. Native views now
+  require budget allowances when graph budgets are configured; the older optional
+  view-metering limitation below is historical. The final targeted escalation,
+  learning-custody and CLI verification already passed23 tests; no paid calls.
+- Earned68 is durable and authentically published: source353731, full SHA
+  62beb28d99e72643d1705d1a4320d343a00650d590cd81a6e536cf8621ab33e0,
+  15,367,458,490bytes. The64-to67 interrupted window plus one real67-to68 update
+  is verified from retained full parents; no fake stage completion or optimizer
+  credit. Full68 external mirror is independently read back at
+  /mnt/external/natlang-active-lineage/home/data/lfm3-rl-dgx-20261029/sd-r2-best64-1101/learner/checkpoint.pt.
+  Keep immutable67 full state for central historical publication replay.
+- Real data defect found: four previously appended ordinary rows and seven new
+  candidates exceed LFM3's262144 per-invocation positional bound. Largest ordinary
+  invocation524650tokens. All four old rows have exactly zero earned exposure in
+  both67 and68; none of the seven candidates ever received SGD. Retain68; no
+  contaminated-weight rollback is warranted. Graph-total length alone does not
+  establish an overlong invocation: existing long native graphs are different.
+- Source367540 capacity attempts stopped before any optimizer69. Do not repeat
+  unchanged524k ordinary probes or relabel this as a mere memory shortage.
+  016a1e392 derives bounded native producer/consumer graphs, retaining every
+  original evidence token and exactly the original effective target mass. Static
+  edges are declared derived training constructions, never fabricated teacher
+  invocations. All11 actual overlength rows pass structural/target-mass checks;
+  actual GPU capacity and learning behavior remain unqualified. Helper is finishing
+  source/index/geometry/CE binding correction and the pending-partition rebase.
+  13802 ready candidate rows and7 pending rows remain separate retained obligations.
+- Useful GPU work continues meanwhile: lfm3-onpolicy68-fullgraph-jolt-v2-1101
+  collects from exact68 with full explanatory prompt, group4 and four train tasks,
+  explicit policy objective, whole graphs and privileged JOLT twins. At00:27,
+  15/16 student trajectories terminal:12 accepted,3 wrong, one still in progress.
+  This is collection, not an earned RL update or capability-lift claim. Existing
+  SFT obligations survive. Fixed80GiB memory claim and32GiB host allowance.
+- Pop67 remaining12 evaluation finished7 successes,4 semantic mismatches and one
+  actual64-request exhaustion (64 turns,25602tokens,838.5seconds), not a wall-time
+  timeout. Together with focused4/4 this is11 verified successes across16, matching
+  selected64's success count. Score complete=false remains preserved. Root copied
+  receipts to W/ops/pop67-newrecipe-remaining12-evidence-1102. No repeated67 run is
+  needed merely to explain that exhaustion. Exact-runtime68 view preparation and
+  verified delta delivery are active in prepare-send-pop68-runtime0f8a-1102, with
+  a fresh focused Pop comparison launched only after successful transport.
+- Independent selected64 recovery closure qualification passed, including restored
+  CPU checkpoint load, runtime/environment and staged communication graph. Private
+  full64 and runtime exports also passed fresh workstation owner-GET verification
+  with zero running sandboxes. Private status still says complete_closure=false:
+  complete private dependency publication and newer full parents remain obligations.
+- Raw converter failed a strict old-renderer resume check. Preserved the entire
+  partial D32/d7369... output,13 completed shards/frontier1300, under
+  .partial-ee2b-preserved-1102; other completed immutable export receipts stay put.
+  Rebuild this one export fresh using committed frozen016a rather than asserting
+  unproved old/new renderer equivalence. Active retry:
+  lfm3-acquired-conversion-static016a-frozen-v2-1102. Controls/evidence:
+  W/ops/converter-fresh-static-runtime-transition-1102.json. Raw conversion alone
+  is not source admission. Paid teacher generation remains paused.
+- Internal69GiB free, external92GiB at00:18; continue40GiB/50GiB floors and bounded
+  checkpoint reservations. Retired only an unused derived64 actor view; full64
+  survives. Full70 diagnostic was verified externally before reclaiming its local
+  duplicate. Memory guard now polls1s with6GiB emergency floor, preserving ordinary
+  checkpoint grace without letting a failing capacity probe kill recovery helpers.
+
 ## Live supervision update, 2026-11-01 23:21 CET
 
 - Previous goal turn was progress: verified escalation integration, recovered
