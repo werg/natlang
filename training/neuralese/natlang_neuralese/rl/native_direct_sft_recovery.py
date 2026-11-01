@@ -78,7 +78,17 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
         state=json.loads(state_path.read_text());report,receipt,custody=map(read,(report_ref,receipt_ref,custody_ref))
         parent,child=custody['parent'],custody['successor'];parent_path,child_path=_bound(parent),_bound(child)
         boundary=report.get('continuation_boundary') or {}
-        if (state.get('phase')!='awaiting_semantic_refresh' or Path(state['checkpoint']).resolve()!=parent_path
+        state_parent=Path(state['checkpoint']).resolve()
+        parent_matches=state_parent==parent_path
+        # A rolling slot is atomically replaced after its prior checkpoint was
+        # independently pinned. Bind that prior identity to the last publication.
+        if not parent_matches and state_parent==child_path:
+            history=state.get('direct_sft_refresh_history') or []
+            prior=read(history[-1]) if history else {}
+            parent_matches=(prior.get('schema')=='natlang.direct-sft-refresh-publication/1'
+                            and prior.get('checkpoint',{}).get('path')==str(child_path)
+                            and prior.get('checkpoint',{}).get('sha256')==parent['sha256'])
+        if (state.get('phase')!='awaiting_semantic_refresh' or not parent_matches
                 or Path(state.get('pending_native_checkpoint','')).resolve()!=child_path
                 or custody.get('schema')!='natlang.earned-sft-checkpoint-custody/1'
                 or custody.get('old_bindings_and_quotas_preserved') is not True
