@@ -72,13 +72,22 @@ def prepare(pairs_ref, output, *, model_id):
         with open_jsonl_text(leaf) as rows:
             for line in rows:
                 if not line.strip():continue
-                graph=json.loads(line);ident=graph['id']
-                original_leaf_order.append(ident)
                 indexed_entry=next(leaf_entries,None)
-                if indexed_entry is None or indexed_entry['id']!=ident:
-                    raise ValueError('source leaf row order differs from its authenticated execution index')
-                if ident in ledger:selected.append(ident)
-                else:retained.append(ident);writer.write(graph)
+                if indexed_entry is None or not line.endswith('\n'):
+                    raise ValueError('source leaf has an extra or unterminated indexed row')
+                ident=indexed_entry['id'];original_leaf_order.append(ident)
+                if ident in ledger:
+                    graph=json.loads(line)
+                    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+                    if graph.get('id')!=ident or canonical_json_sha256_hex(graph)!=ledger[ident]['parent_row_sha256']:
+                        raise ValueError('selected source graph differs from its audited original')
+                    selected.append(ident)
+                else:
+                    retained.append(ident)
+                    # The exact source SHA and authenticated execution index bind
+                    # this row position. Preserve its original JSON bytes without
+                    # parsing and re-serializing an unchanged training example.
+                    writer.encoder.stdin.write(line.encode('utf-8'));writer.rows+=1
         if len(set(retained+selected))!=len(retained)+len(selected) or set(selected)!=set(ledger):raise ValueError('source leaf selected identities differ')
         if next(leaf_entries,None) is not None:raise ValueError('source leaf omitted indexed rows')
         leaf_order=retained+selected

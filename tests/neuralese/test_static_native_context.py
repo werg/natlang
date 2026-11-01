@@ -167,21 +167,24 @@ def test_earned_graph_pair_preparation_checks_saved_binding_and_zero_exposure(tm
     def write(name,value):
         p=tmp_path/name;p.write_text(json.dumps(value));return {'path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size}
     original=row();child,proof=graphify(original,objective(mass='token'),max_tokens=32,consumer_context=6,state_tokens=2)
-    writer=GraphWriter(tmp_path/'source.zst');writer.write(original);source=writer.finish()
+    other=copy.deepcopy(original);other['id']='ordinary-other';other['nodes'][0]['token_ids']=other['nodes'][0]['token_ids'][:12];other['nodes'][0]['target_weights']=other['nodes'][0]['target_weights'][:12]
+    writer=GraphWriter(tmp_path/'source.zst');writer.write(other);writer.write(original);source=writer.finish()
     policy=write('policy.json',{'objective':objective(mass='token')});signals=write('signals.json',{})
     manifest=write('train-sources.json',{'schema':'natlang.native-graph-sources/1',
         'sources':[{'kind':'native-graphs',**{k:source[k] for k in ('path','sha256','bytes')},'training_priority':1}]})
     geometry=write('geometry.json',{'source':{'sha256':manifest['sha256']},
         'identity':{'split':'train','roles':[58,59,60,61],'tokenizer':FP}})
     candidate=write('candidate.json',{'schema':'natlang.acquired-streaming-source-successor/1','appended_graphs':source,
-        'source':manifest,'ce_policy':policy,'row_signals':signals,'geometry':geometry,'new_rows':1})
+        'source':manifest,'ce_policy':policy,'row_signals':signals,'geometry':geometry,'new_rows':2})
     audit=write('audit.json',{'schema':'natlang.acquired-static-native-context-candidate-audit/1','source':source,'ce_policy':policy,
         'row_signals':signals,'proofs':[proof],'max_tokens':32,'consumer_context':6,'state_tokens':2})
     old=_row_bindings([indexed_graph_metadata(original,tokenizer_fingerprint=FP)])[original['id']]
+    other_binding=_row_bindings([indexed_graph_metadata(other,tokenizer_fingerprint=FP)])[other['id']]
     checkpoint={'sha256':'e'*64};snapshot=write('snapshot.json',{'schema':'natlang.rolling-sft-parent-custody-snapshot/1',
         'checkpoint':checkpoint,'optimizer_present':True,'rng_present':True,'sft_frames':{'stage':{'source_receipts':[manifest],
         'stage_identity':{'config':{'architecture':'model','base_inventory_sha256':'exact'}},
-        'source_row_order':[original['id']],'source_row_bindings':{original['id']:old},'exposure_counts':{original['id']:0},'required_visits':{original['id']:1}}}})
+        'source_row_order':[other['id'],original['id']],'source_row_bindings':{other['id']:other_binding,original['id']:old},
+        'exposure_counts':{original['id']:0},'required_visits':{original['id']:1}}}})
     monkeypatch.setattr(recovery,'_authenticated_refresh_publication',lambda _:{'publication':{'checkpoint':checkpoint,'rolling_endpoint_custody_proof':{'successor':snapshot}}})
     monkeypatch.setattr(prep.shutil,'disk_usage',lambda _:SimpleNamespace(free=100*1024**3))
     result=prep.prepare(candidate,audit,{'path':'publication','sha256':'f'*64},tmp_path/'pairs')
@@ -190,9 +193,13 @@ def test_earned_graph_pair_preparation_checks_saved_binding_and_zero_exposure(tm
     verified,_=verify_static_context_correction(tmp_path/'pairs/receipt.json',result['source_correction_declaration'])
     assert verified[original['id']]['old_binding']==old
     from scripts.neuralese_data import prepare_earned_static_context_source as source_prep
-    monkeypatch.setattr(source_prep,'NativeGraphSource',lambda *a,**k:SimpleNamespace(entries=[{'id':original['id'],'binding':old}]))
+    monkeypatch.setattr(source_prep,'NativeGraphSource',lambda *a,**k:SimpleNamespace(entries=[{'id':other['id'],'binding':other_binding},
+        {'id':original['id'],'binding':old}]))
     source_result=source_prep.prepare(prep.bind(tmp_path/'pairs/receipt.json'),tmp_path/'staged-source',model_id='model:exact')
     assert source_result['corrected_ids']==[original['id']]
+    from natlang_neuralese.common.jsonio import open_jsonl_text
+    with open_jsonl_text(source_result['unchanged_leaf']['path']) as stream:
+        assert [json.loads(line) for line in stream]==[other]
     from natlang_neuralese.train.native_source_correction import source_correction_dependencies
     assert source_correction_dependencies(source_result['source_correction'])
 
