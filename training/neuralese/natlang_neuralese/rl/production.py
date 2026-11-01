@@ -592,8 +592,14 @@ def _legacy_collection_binding(recorded):
 
 
 def guidance_collection_options(stage):
-    """Backbone guidance is authored by the current actor for both roles."""
-    return {'selection':'crisp', 'writer':'native'} if stage == 'backbone' else {}
+    """Early backbone learning uses verified text twins before native authoring.
+
+    Checkpoint56's native writers all stalled on malformed producer spans.
+    Writer-off still records student text twins and imports teacher text; it
+    does not disable privileged learning. Joint native SFT remains required.
+    The later general guidance stage retains its native-writer default.
+    """
+    return {'selection':'crisp', 'writer':'off'} if stage == 'backbone' else {}
 
 
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,

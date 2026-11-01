@@ -106,6 +106,22 @@ unused snapshot directories normally; the pool prunes blobs only after no
 snapshot links remain, under the publication lock. Preserve live runtime and
 recovery bindings when choosing snapshots to retire.
 
+## Actual early privileged learning and writer readiness (engineering, 2026-11-01)
+
+Inspect `rl_sampling.privileged` and the converted objective/loss, not just
+`sampling_law.guidance`: the latter describes import into the student. Early
+backbone collection uses crisp selection and the verified text-twin fallback;
+writer-off does not disable privileged self-distillation. Checkpoint57 earned a
+real student OPSD update from six whole graphs and22 text-twin blocks, with zero
+outcome/teacher terms. This is neither native-writer qualification nor demonstrated
+task lift. Joint SFT's full native producer/consumer obligations remain active.
+
+Current checkpoint56 native guidance writers all stalled on malformed producer
+spans before solver work. Do not repeat that known-worse early configuration just
+because mechanism tests pass. Repair and demonstrate actual authoring/consumption
+before promoting to the later native-writer guidance stage; preserve exact failed
+captures and keep useful text-twin learning and joint SFT advancing meanwhile.
+
 Storage supervision follows current native writer processes and their reservation
 receipts (`scripts/native_storage_supervision.py`), not an old learner PID/cursor.
 It observes; the checkpoint writer enforces allocation. Preserve live

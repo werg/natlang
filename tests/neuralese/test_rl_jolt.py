@@ -540,7 +540,7 @@ def test_episode_guidance_check_accepts_student_text_twin_and_rejects_imported_g
     assert check_episode_guidance({'jolt_role': 'teacher'}, imported) == 'teacher'
 
 
-def test_backbone_student_and_teacher_use_native_writer(tmp_path):
+def test_backbone_student_and_teacher_use_verified_text_guidance(tmp_path):
     from natlang_neuralese.rl.production import guidance_collection_options
     from natlang_neuralese.rl.jolt import student_guidance,teacher_entries
     from natlang_neuralese.rl.task_rollouts import build_queue
@@ -551,8 +551,9 @@ def test_backbone_student_and_teacher_use_native_writer(tmp_path):
     student_guidance(entries,ids=[case['id']],cases=cases,config=config,out=tmp_path,custody=custody(),**options)
     for item in entries:
         g=json.loads(open(item['chat_request_config']).read())['x_natlang_guidance']
-        assert g['role']=='student' and g['writer']=='native' and g['selection']=='crisp'
+        assert g['role']=='student' and g['writer']=='off' and g['selection']=='crisp'
     rows=[{'task_id':case['id'],'group':0,'sample':i,'reward':{'quality':0.}} for i in range(2)]
     teachers=teacher_entries(entries,rows,cases=cases,config=config,out=tmp_path,attempts=1,seed_base=1,custody=custody(),**options)
     g=json.loads(open(teachers['entries'][0]['chat_request_config']).read())['x_natlang_guidance']
-    assert g['role']=='teacher' and g['writer']=='native' and g['selection']=='crisp'
+    assert g['role']=='teacher' and g['writer']=='off' and g['selection']=='crisp'
+    assert guidance_collection_options(None)=={}, 'general guidance keeps its native-writer default'

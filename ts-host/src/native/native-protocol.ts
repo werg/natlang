@@ -61,5 +61,9 @@ export function nativeProtocolFailure(response: unknown): NativeProtocolFailure 
 }
 
 export function nativeProtocolFeedback(failure: NativeProtocolFailure): string {
-  return `${failure.code}: Return a complete native value or the declared ordinary result; this reply has an incomplete or misplaced native-state delimiter.`;
+  return `${failure.code}: This reply has an incomplete or misplaced Neuralese delimiter. Rewrite the complete reply. ` +
+    'If this function returns Neuralese<T>, return the ordinary value of T directly: plain text for string, or JSON for an object. ' +
+    'The runtime writes that value as Neuralese; do not put Neuralese delimiters inside the returned string. ' +
+    'Invoke offered tools as actual tool calls, not tool-call markup printed as text. ' +
+    'For a producer span embedded elsewhere, close every span before ending the reply.';
 }
