@@ -14,6 +14,8 @@ def test_controller_future_source_obligations_are_separate_and_deduplicated(tmp_
     assert result==[{'kind':'source','path':str(train),'sha256':hashlib.sha256(train.read_bytes()).hexdigest()},
                     {'kind':'source','path':str(held),'sha256':hashlib.sha256(held.read_bytes()).hexdigest()},
                     {'kind':'ce','path':str(ce),'sha256':hashlib.sha256(ce.read_bytes()).hexdigest()}]
+    alias=tmp_path/'source-alias';alias.symlink_to(train)
+    assert controller_declared_inputs({'seed_native_graphs':str(alias)})[0]['path']==str(alias)
 
 
 def test_controller_future_controls_keep_recipe_and_geometry_bindings():

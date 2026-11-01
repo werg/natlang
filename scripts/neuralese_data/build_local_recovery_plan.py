@@ -49,7 +49,10 @@ def controller_declared_inputs(config):
         value=config.get(key)
         if not value:continue
         if not isinstance(value,str):raise ValueError('controller source must be a path: '+key)
-        path=Path(value).resolve(strict=True);item={'kind':kind,'path':str(path),'sha256':sha(path)}
+        path=Path(value)
+        if not path.is_absolute() or '..' in path.parts:raise ValueError('controller source must be an absolute normalized path: '+key)
+        path.resolve(strict=True)
+        item={'kind':kind,'path':str(path),'sha256':sha(path)}
         identity=(kind,item['path'],item['sha256'])
         if identity not in seen:result.append(item);seen.add(identity)
     return result
@@ -154,7 +157,7 @@ def build(args):
     inputs={'train':{k:receipts[0][k] for k in ('path','sha256')},'held':{k:receipts[1][k] for k in ('path','sha256')},
             'ce':options.get('ce_supervision_policy_binding')}
     foundation=options.get('foundation_native_graphs')
-    inputs['foundation']=({'path':str(Path(foundation).resolve(strict=True)),'sha256':sha(Path(foundation))} if foundation else None)
+    inputs['foundation']=({'path':str(Path(foundation)),'sha256':sha(Path(foundation))} if foundation else None)
     closure=[];seen=set()
     def add(path,role,expected=None,*,logical=False):
         given=Path(path)
@@ -167,11 +170,11 @@ def build(args):
         if key not in seen:closure.append(record);seen.add(key)
         return record
     def add_source(ref):
-        add(ref['path'],'sources',ref['sha256'])
-        for item in native_source_dependencies(ref['path']):add(item['path'],'sources',item['sha256'])
+        add(ref['path'],'sources',ref['sha256'],logical=True)
+        for item in native_source_dependencies(ref['path']):add(item['path'],'sources',item['sha256'],logical=True)
     def add_ce(ref):
         if ref:
-            for item in ce_policy_dependencies(ref):add(item['path'],'controls',item['sha256'])
+            for item in ce_policy_dependencies(ref):add(item['path'],'controls',item['sha256'],logical=True)
     for role in ('train','foundation','held'):
         if inputs[role]:add_source(inputs[role])
     add_ce(inputs['ce']);additional=[];declared={(('ce' if role=='ce' else 'source'),ref['path'],ref['sha256']) for role,ref in inputs.items() if ref}
@@ -184,7 +187,7 @@ def build(args):
             item={'kind':'ce','path':prior['path'],'sha256':prior['sha256']};additional.append(item);declared.add(('ce',prior['path'],prior['sha256']));add_ce(prior)
         previous=(frame.get('options') or {}).get('foundation_native_graphs')
         if previous and not any(kind=='source' and path==previous for kind,path,_ in declared):
-            path=Path(previous).resolve(strict=True);item={'kind':'source','path':str(path),'sha256':sha(path)};additional.append(item);declared.add(('source',item['path'],item['sha256']));add_source(item)
+            path=Path(previous);item={'kind':'source','path':str(path),'sha256':sha(path)};additional.append(item);declared.add(('source',item['path'],item['sha256']));add_source(item)
     # The controller may have qualified future stages which are not yet earned
     # in this checkpoint. Preserve their complete dependencies without crediting
     # any visits or changing the checkpoint's active source/frame identity.
@@ -195,14 +198,14 @@ def build(args):
             (add_ce if item['kind']=='ce' else add_source)(item)
     controller_config=Path(args.controller_config).resolve(strict=True)
     add(config_path,'controls');add(controller_config,'controls');add(args.asset_guard,'controls');add(args.asset_inventory,'controls')
-    if config.get('cases'):add(config['cases'],'controls')
+    if config.get('cases'):add(config['cases'],'controls',logical=True)
     if config.get('history_reasoning_binding_path'):
-        add(config['history_reasoning_binding_path'],'controls',config.get('history_reasoning_binding_sha256'))
+        add(config['history_reasoning_binding_path'],'controls',config.get('history_reasoning_binding_sha256'),logical=True)
     for item in controller_future_controls(config):
-        ref=add(item['path'],'controls',item['sha256'])
+        ref=add(item['path'],'controls',item['sha256'],logical=True)
         if item['kind']=='recipe_binding':
             for dependency in recipe_file_dependencies(ref['path']):
-                add(dependency['path'],'controls',dependency['sha256'])
+                add(dependency['path'],'controls',dependency['sha256'],logical=True)
     binding=options.get('recipe_binding')
     if isinstance(binding,str):binding=json.loads(binding)
     if not isinstance(binding,dict) or not binding.get('path') or not binding.get('sha256'):
