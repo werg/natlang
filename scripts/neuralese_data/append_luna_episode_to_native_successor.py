@@ -84,6 +84,33 @@ def _teacher_actor_binding(raw, raw_binding):
     }
 
 
+def _verified_oracle_claim(audit, raw):
+    """Validate and preserve the actual exact-vs-judged source qualification."""
+    level = audit.get("oracle_level")
+    exact = audit.get("exact_oracle_claimed")
+    outcome = raw.get("outcome") or {}
+    oracle = outcome.get("oracle") or {}
+    if outcome.get("accepted") is not True or oracle.get("accepted") is not True:
+        raise ValueError("source result is not accepted by its recorded oracle")
+    if level == "exact":
+        if exact is not True or oracle.get("level") != "exact":
+            raise ValueError("exact oracle claim does not match the raw result")
+        return {"oracle_level": "exact", "exact_oracle_claimed": True}
+    if level == "judged":
+        judge = audit.get("oracle_judge") or {}
+        provenance_judge = (raw.get("provenance") or {}).get("judge") or {}
+        if (exact is not False or oracle.get("level") != "judged"
+                or not isinstance(judge.get("model_id"), str)
+                or not isinstance(judge.get("provider"), str)
+                or provenance_judge.get("model") != judge.get("model_id")
+                or provenance_judge.get("provider") != judge.get("provider")
+                or provenance_judge.get("transport") != "pi-provider"):
+            raise ValueError("judged oracle claim lacks matching independent judge provenance")
+        return {"oracle_level": "judged", "exact_oracle_claimed": False,
+            "oracle_judge": {"model_id": judge["model_id"], "provider": judge["provider"]}}
+    raise ValueError("source audit declares an unsupported oracle level")
+
+
 def _verify_episode(receipt_path, protection, tokenizer):
     receipt = _read(receipt_path)
     if receipt.get("schema") == "natlang.luna-static-episode-build/1":
@@ -184,8 +211,8 @@ def _verify_static_episode(receipt_path, protection, tokenizer):
         if sha256_file_hex(path)!=ref.get('sha256'):raise ValueError('static episode bound artifact changed')
         return path
     graph_path=checked(receipt['graph']); audit_path=checked(receipt['audit']); audit=_read(audit_path)
-    if audit.get('training_admission') is not False or audit.get('oracle_level')!='exact' or audit.get('exact_oracle_claimed') is not True:
-        raise ValueError('static episode lacks exact reviewed source audit')
+    if audit.get('training_admission') is not False:
+        raise ValueError('static episode source audit must remain unadmitted')
     runtime=receipt.get('runtime') or {}; actual=immutable_native_runtime_tree(runtime.get('root',''))
     if actual!=runtime:raise ValueError('static compiler execution runtime identity changed')
     graph_rows=_jsonl(graph_path)
@@ -198,9 +225,10 @@ def _verify_static_episode(receipt_path, protection, tokenizer):
     raw_path=checked(audit['raw_results']);raw_rows=_jsonl(raw_path)
     if len(raw_rows)!=1:raise ValueError('static source must bind one complete teacher result')
     raw=raw_rows[0];outcome=raw.get('outcome') or {};oracle=outcome.get('oracle') or {};program=(raw.get('task') or {}).get('program_ir') or {}
-    if (raw.get('id')!=audit.get('task_id') or outcome.get('status')!='done' or outcome.get('accepted') is not True
-        or oracle.get('accepted') is not True or oracle.get('level')!='exact' or program.get('split')!='train'):
-        raise ValueError('static teacher result is not an exact accepted train task')
+    oracle_claim = _verified_oracle_claim(audit, raw)
+    if (raw.get('id')!=audit.get('task_id') or outcome.get('status')!='done'
+        or program.get('split')!='train'):
+        raise ValueError('static teacher result is not an accepted train task')
     _teacher_actor_binding(raw,_bind(raw_path));disposition=protection.check(program)
     if disposition.get('split')!='train' or not (set(program.get('source_groups') or [])|{program.get('id')})<=set(graph.get('source_groups') or []):
         raise ValueError('static graph differs from current protected train world')
@@ -228,11 +256,40 @@ def _verify_static_episode(receipt_path, protection, tokenizer):
     return {'kind':'static','receipt_path':str(receipt_path),'receipt_binding':_bind(receipt_path),'receipt':receipt,
         'graph_path':str(graph_path),'graph_bytes':graph_path.read_bytes(),'graph':graph,'graph_binding':_bind(graph_path),
         'raw_binding':_bind(raw_path),'audit_binding':_bind(audit_path),'raw':raw,'program':program,
-        'protection_disposition':disposition,'classification':classification,'parsed':parsed}
+        'protection_disposition':disposition,'classification':classification,'parsed':parsed,
+        'oracle_claim':oracle_claim}
 
 
 def _normalize_base_receipt(receipt):
     """Accept a sealed Big2 append using its actual published field names."""
+    if receipt.get("schema") == "natlang.big2-source-objective-recipe-successor/1":
+        required = ("successor_source", "ce_policy", "recipe", "geometry", "family_map",
+            "objective_census")
+        if (receipt.get("training_admission") is not False
+                or receipt.get("optimizer_exposure") is not False
+                or not isinstance(receipt.get("successor_rows"), int)
+                or receipt["successor_rows"] < 1
+                or not isinstance(receipt.get("current_protection_digest"), str)):
+            raise ValueError("Big2 prepared successor is not source-only and unexposed")
+        for key in required:
+            ref = receipt.get(key)
+            if not isinstance(ref, dict) or not ref.get("path") or not ref.get("sha256"):
+                raise ValueError("Big2 successor lacks bound " + key)
+            path = Path(ref["path"]).resolve(strict=True)
+            if (sha256_file_hex(path) != ref["sha256"]
+                    or ("bytes" in ref and path.stat().st_size != ref["bytes"])):
+                raise ValueError("Big2 successor binding changed: " + key)
+        predecessor = receipt.get("predecessor_source")
+        if not isinstance(predecessor, dict) or not predecessor.get("path") or not predecessor.get("sha256"):
+            raise ValueError("Big2 successor lacks its exact source predecessor")
+        predecessor_path = Path(predecessor["path"]).resolve(strict=True)
+        if (sha256_file_hex(predecessor_path) != predecessor["sha256"]
+                or ("bytes" in predecessor and predecessor_path.stat().st_size != predecessor["bytes"])):
+            raise ValueError("Big2 predecessor source binding changed")
+        return {**receipt, "schema": "natlang.native-quality-successor/1",
+            "source": receipt["successor_source"], "rows_after": receipt["successor_rows"],
+            "protection_digest": receipt["current_protection_digest"],
+            "status": "source-ce-recipe-geometry-qualified-not-published"}
     if receipt.get('schema')!='natlang.big2-sft-source-append/1':return receipt
     if (receipt.get('training_admission') is not False or receipt.get('optimizer_exposure') is not False
         or not isinstance(receipt.get('rows'),int) or receipt['rows']<1
@@ -395,8 +452,9 @@ def build(base_dir, episode_receipt, output_dir):
 
     qualification_path = output_dir / "episode-qualification.json"
     is_static=episode.get('kind')=='static'
+    oracle_claim = episode.get("oracle_claim") or {"oracle_level": "exact", "exact_oracle_claimed": True}
     qualification = {"schema": "natlang.luna-native-append-qualification/1",
-        "training_admission": False, "oracle_level": "exact", "exact_oracle_claimed": True,
+        "training_admission": False, **oracle_claim,
         "base_successor": base_receipt_binding, "episode_source_kind":'static-training-graph' if is_static else 'captured-native-episode',
         "episode_assembly": episode["receipt_binding"], "episode_audit": episode["audit_binding"], "raw_result": episode["raw_binding"],
         "graph": graph_binding, "current_protection_digest": protection.digest, "train_disposition": episode["protection_disposition"],
