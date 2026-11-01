@@ -1,7 +1,56 @@
 # Supervision status — 2026-11-01 morning
 
-Latest observation: 08:54 CET. Check live processes before acting. The goal is
+Latest observation: 09:47 CET. Check live processes before acting. The goal is
 still capable Natlang/Neuralese models, not completion of this document.
+
+## Live continuation and immediate work
+
+`lfm3-joint-sft53-a9cf-1101.service` is actually running the shared production
+controller and native SFT trainer from frozen `runtime-a9cf65487`. Its parent
+is earned SD-R1 step53 below; output is the single new `sd-r1/learner` slot,
+never the immutable `round-000010/learner` parent. The real CPU continuation
+preflight passed, preserving model/optimizer/RNG and 11 RL rounds/244 graph
+visits. Main GPU capacity and six additional oversize cases passed. The first
+optimizer update started at09:45; no new committed step is claimed yet.
+
+Actual controls: `ops/joint-sft53-a9cf-20261101/config.json`, SHA
+`cd279cc2056c9e599ca2d7eb0c0edc84839afd03cefcaae062486a7a8106dc7b`.
+Recipe SHA `6ec5b245d3c959f399e6f3feae8891fb3191cc30af7d7525a6d99cb721c9fc3d`.
+The current190154-row source is SHA
+`d8185760a238cb59247b0fb5cf9db6ab800776be3f0699cbbc7b1ffbb8fe10ff`:
+the quality-corrected190153 rows plus the verified complete TATQA case0 graph.
+Its equality in row count with the old190154 recipe does not mean equal content.
+One full source pass and seven communication visits remain required (224264
+visits), with an initial four-update refresh and task-behavior check. Four
+updates are an early adaptation window, not completion of this recipe. Continue
+the evolving recipe promptly after inspecting earned state and behavior.
+
+The stale unearned591181-row stage was explicitly replaced, with zero exposure
+credited and its source/history preserved; see the actual parent53-bound proof
+in the controls directory. This does not excuse useful data omissions. A found
+108353-row Big2 communication omission has a content/protection-filtered candidate;
+Native parser validation, current-source dedup, CE and geometry staging are still
+in progress. Adopt the qualified successor against the actual earned current
+source and checkpoint; do not reuse the zero-exposure stage replacement proof.
+
+Both reviewed v18 Luna tasks completed successfully (sales30 turns, rate19).
+Whole-graph quality review found a redundant classification action/subtree in
+rate; preserve its raw history and mask the unwanted targets with bound evidence.
+Sales capture failed before encoding due to an inconsistent separate-materializer
+runtime binding. The builder now rejects unsupported bindings at build time
+(`261e7044b`); fresh audits must pass the actual positive-row loader before GPU
+capture. The failed Pop container was explicitly stopped and its lease released;
+stopping a systemd wrapper around detached Docker does not itself stop Docker.
+
+Port conversion falsely committed five completion summaries with a missing
+compressed stream. Their markers were withdrawn with exact evidence under
+`ops/port-invalid-summaries-1101`. Publication now checks both streams, propagates
+compression failures and takes an exclusive owner lock; four regression tests
+passed. Six existing SWE replays are draining with only scheduling stopped.
+`port-s4-frozen-handoff-v2-1101` owns their automatic corrected handoff. It binds
+actual frozen runtime/script/dependency contents and predecessor IR equality;
+the old mutable `dist/.build-commit` stamp was stale despite rebuilt contents.
+Verify actual successor launch rather than assuming the watcher has completed.
 
 ## Earned model and numerical repair
 
@@ -32,10 +81,11 @@ unchanged forward values and unchanged tolerances. Commit `a9cf65487` implements
 that shared correction, retaining one packed model forward. Five focused tests
 passed, including rejection of old arithmetic and a disconnected-import control.
 A16384-token single-convolution forward/backward timing was0.0809s old /0.0843s
-new (three measurements; this is not end-to-end throughput). A real frozen
-committed-runtime continuation/certificate still must be verified before Native
-SFT. The successful diagnostic used an unstepped optimizer only as an inventory;
-it does not replace actual optimizer/recovery custody.
+new (three measurements; this is not end-to-end throughput). Actual frozen
+runtime qualification subsequently passed all289 comparisons with saved step53
+optimizer tensors and RNG unchanged. Receipt `ops/qualify53-a9cf-fullstate-1101.json`,
+SHA `b33c985fc2fe6f663d45cae367431c97e38348fc5e2e0a4d99f143f4a31f4930`.
+This no-SGD certificate is separate from earned optimizer work and behavior.
 
 Step52 remains the independently recovered fallback. Branch74 remains diagnostic;
 no SFT53–74 exposure from that branch was credited to this new53.
@@ -73,8 +123,9 @@ targets in qwen36, preserving all12 nodes and producer/consumer edge. Current
 candidate source is190153 rows, SHA
 `b6ec0bbd4026afcf7e25f845b33af6e2e51de004f00f96ff4187e21880a3f7d2`.
 CE/family map/geometry/recipe are bound in that receipt; actual `load_recipe`
-passed under4GB LOW. It remains unpublished/unadmitted. Remove the stale LogHub
-focus role in the actual next SFT controls. Reusable quality tools/tests landed
+passed under4GB LOW. Its successor plus TATQA is now selected by the live SFT
+controls above. The stale LogHub focus was replaced by the good TATQA row.
+Reusable quality tools/tests landed
 in `83edad9eb`.
 
 IMPORTANT: original unearned SFT plan is591181 rows (519 leaves), not190153.
@@ -111,21 +162,28 @@ Actual capture unit `capture-tatqa-case0-native-v12-pop52-1101` uses remote
 `pop-native52-capture-json-v2-1101` (10GB host,7.5GB discrete GPU,1GB reserve),
 with source encoder checkpoint52/runtime9b. The teacher remains Luna/ac519.
 Output: `/mnt/external/natlang-luna-campaigns/tatqa-v16-case0-native-capture52-v2`.
-At last check it passed through index17, original eval targets supervised;
-actual reader states exist as5.6MB safetensors, source positions[1,37), with
+The capture completed all19 turns, and NativeGraphSource verified the assembled
+20-node graph with six authenticated consumer imports, original producer-action
+CE and zero host-encoder CE. Graph SHA
+`1df930a0c598b2871f34b4161f6824925068820105fd5c4e8d9a55fa87f593e3`.
+Actual reader states exist as5.6MB safetensors, source positions[1,37), with
 exact writer/typed-body receipts. Sampled `native_writes=0` counters exclude
 these separate host encoder bindings; do not infer a missing source from that
-counter alone. C must still verify all19 turns, all six import edges and full
-Native graph assembly/admission. Wrapper automatically stops the actor/tunnel
-and releases the ended lease. Prior v1 failed after a source-helper change;
+counter alone. The current recipe binds the separate original Luna teacher and
+student52 encoder through corrected role receipts. Verify actual exposure in the
+next earned checkpoint. Prior v1 failed after a source-helper change;
 its partial capture remains diagnostic and its actor/lease were actually closed.
 
 ContractNLI final2 generation was actually launched on the correct source after
 rejecting stale final/final4 plans. All three Luna episodes completed but Sol
 judged them false; no positive admission. A drain marker left the fourth row
 unclaimed so its new requests can use fixed seed/custody/runtime code. TATQA18
-corrects the currency task and has three accepted scripted references; its
-unsupported-USD negative and fresh teacher plan still need full qualification.
+sales/rate references passed while movement and unsupported-USD references
+were excluded for semantic repair. The two sound cases were launched with
+medium reasoning and full prompts and both completed. Current v20 source work
+also exposed a false alias conflict: comma/semicolon record syntax was compared
+as raw text. `d744d64a1` compares parsed canonical types; four focused tests passed.
+New teacher freezes use the fix; historical actors retain their actual bindings.
 Use actual source/child evidence and repair feedback; do not count broken task
 contracts as model negatives. Up to six Luna generation workers are authorized.
 
@@ -134,7 +192,7 @@ contracts as model negatives. Up to six Luna generation workers are authorized.
 Step53 independent file export is active as `export-earned53-independent-1101`,
 PID589782 at last check. Destination:
 `/mnt/external/natlang-independent-recovery-20261101/jolt53/1fdbacfb2cfd55cde8d6695bb666d820b41682d5c4d3299872512c267499ff77/`.
-It has copied a few GB, not a verified recovery. Preserve its source until
+It has copied about15GB and is still finalizing, not a verified recovery. Preserve its source until
 complete independent subprocess readback. The complete runtime/source53 draft
 `ops/recovery-onpolicy53-v2-draft.json` SHA
 `5a06d6104f79e626c6e9eda7156c2e5c329a152c5e2a99cb6fe5f35317b74456`
@@ -144,15 +202,18 @@ activation or complete53 restore qualification is claimed.
 The supplemental diagnostic69 restore uses NVMe for tiny runtime/Python/assets
 and external hardlinks for source objects/checkpoint. Its bounded pause for53
 backup ended and the exact invocation thawed. Root's three-converter180-second
-window `checkpoint-external-write-window4-1101` must also be checked for actual
-thaw. Diagnostic-only pause gave <1MB/s for53; pausing cold converters improved
+window `checkpoint-external-write-window4-1101` ended and all three converters
+were directly verified thawed. Diagnostic-only pause gave <1MB/s for53; pausing cold converters improved
 it to roughly14MB/s, identifying disk contention. Internal NVMe was mostly idle;
 the external HDD had about1s read latency. Do not call this an internal SSD fault.
 
 MegaToken runs are deleted on both drives. Disposable recovery staging/caches and
 merged worktrees were removed; unique work/recovery refs remain externally.
 Internal free space was89GiB, external339GiB before ongoing exports.40GiB internal
-floor remains enforced; only52/53 full checkpoints remain in SD-R1 learner slots.
+floor remains enforced;52/53 remain protected in their original SD-R1 slots and
+new SFT writes only to the separate rolling slot. Actual external I/O priorities
+now favor the earned53 export over cold converters/diagnostic69, without freezing
+them. Measured efficacy is separate from a successful ionice setting.
 Pop SSH briefly timed out, then was actually reachable again; never infer terminal
 failure from one timeout. CoreWeave monitor's latest request was not entitled;
 its stale-launch hold remains.
