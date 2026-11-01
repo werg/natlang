@@ -70,11 +70,16 @@ def sft_capacity_descriptor(source, geometry):
 
 def bind_successor_recipe_inputs(recipe, predecessor, successor, policy):
     """Bind actual stage roles even when the predecessor used different key names."""
+    stage=next(item for item in recipe['stages'] if item['id']=='native_joint_sft_v4')
+    replaced={stage['inputs'].get(role) for role in ('native_graphs','foundation_native_graphs',
+        'continued_native_graphs','ce_supervision_policy')}
     for name,reference in (('v4_previous_train_graphs',predecessor),('v4_train_graphs',successor),('v4_ce_policy',policy)):
         recipe['input_bindings'][name]={k:v for k,v in reference.items() if k!='bytes'}
-    stage=next(item for item in recipe['stages'] if item['id']=='native_joint_sft_v4')
     stage['inputs'].update({'native_graphs':'v4_train_graphs','foundation_native_graphs':'v4_train_graphs',
         'continued_native_graphs':'v4_previous_train_graphs','ce_supervision_policy':'v4_ce_policy'})
+    used={name for item in recipe['stages'] for name in (item.get('inputs') or {}).values() if isinstance(name,str)}
+    for name in replaced:
+        if name not in used:recipe['input_bindings'].pop(name,None)
     return stage
 
 
