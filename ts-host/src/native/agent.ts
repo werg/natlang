@@ -722,7 +722,7 @@ export class NativeToolAgent {
         // Keep the actual episode recorder's cross-invocation writers and the
         // task-scoped inference index. Neither can borrow another task's state.
         if (!writers.includes(declared) &&
-            !hasProducerOccurrence(block, declared, session.runtime.episodeBudget))
+            !hasProducerOccurrence(block, declared, producerScopeForTrace(trace)!))
           throw new Error(`neuralese-native-grad-invalid: native read ${block} names no matching in-episode writer ${declared}`);
         return declared;
       }

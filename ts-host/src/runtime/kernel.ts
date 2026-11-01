@@ -19,7 +19,7 @@ import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } fr
 import { recordingServices, type LiveEvent, type LiveSink } from './runtime.js';
 import { kernelHooks } from './hooks.js';
 import { engageFusion } from './fusion.js';
-import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, registerTrace, releaseTrace, traceFor } from '../native/graph.js';
+import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, producerScopeForTrace, registerTrace, releaseTrace, traceFor } from '../native/graph.js';
 import { CallCapture, definitionKey, interfaceHash, type CallStoreLike } from '../calls/recorder.js';
 import { Deopt, admit, handoffNote, isDeopt } from '../calls/dispatch.js';
 import type { LoadedCase } from '../calls/compilations.js';
@@ -677,7 +677,9 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,
-    sharedEpisodeBudget: task.episodeBudget, seedPolicy: task.runtime.options.seed, runId: callId,
+    sharedEpisodeBudget: task.episodeBudget,
+    sharedProducerScope: producerScopeForTrace(traceFor(frame.parentCallId)),
+    seedPolicy: task.runtime.options.seed, runId: callId,
     exactHostTraceCapture: task.runtime.options.exactHostTraceCapture,
     seedId: task.definitionSeedId(descriptor?.key ?? (owner ?? '') + ':' + definition.id),
     sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: frame.signal ?? task.signal,
@@ -700,7 +702,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         realized_instruction: options.instructions ?? definition.body } } : {}) } });
   let outcome = 'failed', detail = '';
   let hostValue: unknown, hasValue = false;
-  registerTrace(callId, runtime.trace, runtime.episodeBudget);
+  registerTrace(callId, runtime.trace, producerScopeForTrace(runtime.trace));
   const liveCall = task.live && { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null, definitionId: definition.id, name: definition.name };
   if (liveCall) task.live!({ type: 'call_start', ...liveCall });
   const streams = task.streamsTraces, trace = runtime.trace;

@@ -567,6 +567,24 @@ test('inference resolves the declared occurrence among repeated equal-content pr
   assert.notEqual(read.inputs[0].node,second);
 });
 
+test('a child producer scope follows its actual parent without sharing episode budgets', async()=>{
+  const store=new MemoryNeuraleseStore(),artifact=await store.putNativeState(nativeStateFixture());
+  const {graphNode,producerScopeForTrace}=await import('../dist/native/graph.js');
+  const parent=open({type:'() => boolean',instructions:'Read the child result.'},{neuralese:runtimeFor(store)}).session;
+  const child=open({type:'() => boolean',instructions:'Write the result.'},
+    {neuralese:runtimeFor(store),sharedProducerScope:producerScopeForTrace(parent.runtime.trace)}).session;
+  assert.notEqual(child.runtime.episodeBudget,parent.runtime.episodeBudget);
+  const writer=graphNode(child.runtime.trace,'block_write',{block:artifact.id,call_id:'child'},[]);
+  const part={type:'native_state',id:artifact.id,source_occurrence:writer};
+  const agent=new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  await agent.modelTurnNode(parent,[{role:'user',content:[part]}],{},1);
+  const read=parent.runtime.trace.events.find(event=>event.kind==='block_read');
+  assert.equal(read.inputs[0].node,writer);
+  const unrelated=open({type:'() => boolean',instructions:'A different task.'},{neuralese:runtimeFor(store)}).session;
+  await assert.rejects(()=>agent.modelTurnNode(unrelated,[{role:'user',content:[part]}],{},1),
+    /names no matching in-episode writer/);
+});
+
 test('actual eval compiler preserves native constant and source metadata in a typed result', async()=>{
   const {neuraleseRefSentinel}=await import('../dist/native/neuralese.js');
   const store=new MemoryNeuraleseStore(),artifact=await store.putNativeState(nativeStateFixture());

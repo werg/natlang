@@ -187,6 +187,8 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
    */
   serviceScopes?: Record<string, string[]>;
   sharedEpisodeBudget?: { limit?: number; used: number };
+  /** Producer custody shared with the actual parent trace, independently of task budgets. */
+  sharedProducerScope?: object;
   /** Wording of return_result's value rejections (native/return-errors.ts); default the platform's (Node: NATLANG_RETURN_ERROR_TEXT), then the adopted one. */
   returnErrorText?: ReturnErrorText;
   seedPolicy?: { mode: 'derived' | 'backend'; root?: number } };
@@ -710,7 +712,7 @@ export class NativeRuntime {
       ...(options.parentCallId ? { parent_call_id: options.parentCallId } : {}),
       environment: { mode: options.environment.mode, authority: options.environment.authority, native_state_replayable: false },
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects', ...(options.manifest ?? {}) });
-    bindTraceScope(this.trace, this.episodeBudget);
+    bindTraceScope(this.trace, options.sharedProducerScope ?? this.episodeBudget);
     this.exactHostTraceCapture = options.exactHostTraceCapture;
     const capture = this.exactHostTraceCapture;
     if (capture && (!Number.isSafeInteger(capture.maxBytes) || capture.maxBytes < 1 || capture.maxBytes > 8_000_000 ||
