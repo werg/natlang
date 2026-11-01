@@ -334,3 +334,20 @@ def test_inherited_owner_lock_survives_parent_close(tmp_path):
     finally:
         if child.poll() is None:
             child.kill(); child.wait()
+
+
+def test_export_verifier_uses_only_independent_bytes(setup, monkeypatch):
+    from scripts.neuralese_data import verify_local_recovery_export as verifier
+    slot, plan = setup
+    q=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda plan:None,
+                          checkpoint_validator=lambda path,custody:None)
+    submit(q,slot,1); assert q._export_one()
+    ref=q.state['latest_verified']; q.close()
+    for item in plan['closure']:
+        Path(item['path']).unlink(missing_ok=True)
+    monkeypatch.setattr(verifier,'validate_full_recovery_checkpoint',lambda path,custody:None)
+    result=verifier.verify(ref['path'],ref['sha256'])
+    assert result['global_step']==1
+    receipt=json.loads(Path(ref['path']).read_text()); Path(receipt['closure'][0]['path']).write_bytes(b'tampered')
+    with pytest.raises(ValueError,match='closure bytes'):
+        verifier.verify(ref['path'],ref['sha256'])
