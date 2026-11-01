@@ -195,10 +195,24 @@ def _interrupted_rolling_window(declaration, transition, parent, child, receipt,
     # evidence of the state actually serialized in the retained checkpoint.
     derived = _derive_interrupted_checkpoint_snapshot(retained_path, refs['retained_checkpoint']['sha256'])
     extracted = read('extracted_snapshot')
-    for key in ('schema', 'checkpoint', 'global_step', 'optimizer_present', 'rng_present',
+    for key in ('schema', 'global_step', 'optimizer_present', 'rng_present',
                 'model_config_sha256', 'sft_frames'):
         if derived.get(key) != extracted.get(key):
             raise ValueError('interrupted SFT retained checkpoint derivation differs from extracted snapshot')
+    # The historical declaration records the original retained pathname. A
+    # later verified relocation may leave that pathname as a symlink; resolve
+    # the bytes for fresh derivation, but retain the original lexical path in
+    # the old evidence instead of rewriting or weakening its identity.
+    actual_checkpoint=derived.get('checkpoint') or {};recorded_checkpoint=extracted.get('checkpoint') or {}
+    declared_path=Path(refs['retained_checkpoint']['path']).absolute()
+    if (Path(recorded_checkpoint.get('path','')).absolute()!=declared_path
+            or Path(actual_checkpoint.get('path','')).resolve()!=retained_path
+            or actual_checkpoint.get('sha256')!=refs['retained_checkpoint']['sha256']
+            or recorded_checkpoint.get('sha256')!=actual_checkpoint.get('sha256')
+            or type(actual_checkpoint.get('bytes')) is not int
+            or actual_checkpoint['bytes']!=retained_path.stat().st_size
+            or recorded_checkpoint.get('bytes')!=actual_checkpoint['bytes']):
+        raise ValueError('interrupted SFT retained checkpoint path, hash or size differs from fresh derivation')
     del derived
     original_ref = transition.get('custody_snapshot')
     original = json.loads(_verify_historical_file_ref(original_ref).read_text())

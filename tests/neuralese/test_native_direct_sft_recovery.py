@@ -772,7 +772,7 @@ def test_interrupted_update_telemetry_checks_exact_order_and_finite_progress(tmp
             _interrupted_update_telemetry(train_ref, progress_ref, 64, 67)
 
 
-@pytest.mark.parametrize('tamper', ['none', 'checkpoint', 'snapshot', 'both-snapshots', 'source', 'journal', 'capacity', 'step'])
+@pytest.mark.parametrize('tamper', ['none', 'alias', 'alias-corrupt', 'alias-path-forgery', 'checkpoint', 'snapshot', 'both-snapshots', 'source', 'journal', 'capacity', 'step'])
 def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry(tmp_path, tamper, monkeypatch):
     from natlang_neuralese.rl.native_direct_sft_recovery import _rolling_intermediate_window
     def file(name, data, *, raw=False):
@@ -790,6 +790,14 @@ def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry
     original = file('snapshot.json', snapshot)
     extracted = copy.deepcopy(snapshot); extracted['checkpoint']['path'] = retained['path']
     if tamper == 'snapshot': extracted['sft_frames']['full']['actual'] = 'forged'
+    alias_path = None
+    if tamper in ('alias', 'alias-corrupt', 'alias-path-forgery'):
+        alias_path=tmp_path/'external'/'retained.pt';alias_path.parent.mkdir()
+        alias_path.write_bytes(Path(retained['path']).read_bytes())
+        Path(retained['path']).unlink();Path(retained['path']).symlink_to(alias_path)
+        actual['checkpoint']['path']=str(alias_path.resolve())
+        if tamper=='alias-corrupt':alias_path.write_bytes(b'forged')
+        if tamper=='alias-path-forgery':extracted['checkpoint']['path']=str(alias_path)
     extracted_ref = file('extracted.json', extracted)
     calls = []
     def derive(checkpoint, sha256, directory):
@@ -833,10 +841,10 @@ def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry
                                  'global_step':68 if tamper == 'step' else 67}}
     args=({'schema':'natlang.interrupted-sft-intermediate-window/1','evidence':evidence},transition,
           parent,{'path':str(slot)},receipt)
-    if tamper == 'none':
+    if tamper in ('none','alias'):
         result=_rolling_intermediate_window(*args)
         assert result['intermediate_updates']==3 and result['intermediate_checkpoint_bytes_verified_currently'] is True
     else:
         with pytest.raises(ValueError): _rolling_intermediate_window(*args)
-    if tamper != 'checkpoint':
-        assert calls == [(retained['path'], retained['sha256'])]
+    if tamper not in ('checkpoint','alias-corrupt'):
+        assert calls == [(str(alias_path.resolve()) if alias_path else retained['path'], retained['sha256'])]
