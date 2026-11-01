@@ -858,6 +858,11 @@ def validate_full_recovery_checkpoint(path, expected):
 def validate_recovery_plan_shape(plan):
     if not isinstance(plan,dict) or plan.get('schema')!='natlang.local-full-recovery-plan/1':
         raise ValueError('invalid full recovery plan schema')
+    contract=plan.get('sft_static_contract')
+    if (plan.get('require_static_contract') is not True or not isinstance(contract,dict)
+            or any(not isinstance(name,str) or not isinstance(value,str) or not re.fullmatch(r'[0-9a-f]{64}',value)
+                   for name,value in contract.items())):
+        raise ValueError('full recovery plan requires its exact static SFT contract')
     session=plan.get('session')
     if (not isinstance(session,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}',session)
             or session in ('.','..')):
