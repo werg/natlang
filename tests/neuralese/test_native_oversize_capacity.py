@@ -263,6 +263,48 @@ def test_capacity_envelope_uses_incremental_peak_and_current_reusable_headroom()
         {'device_type':'cpu','host_available_bytes':2<<30})
 
 
+def test_capacity_host_headroom_uses_nested_process_cgroup_without_losing_host_fallback(tmp_path):
+    from natlang_neuralese.train.trajectory_state import available_system_memory_bytes
+    root=tmp_path/'cgroup';leaf=root/'user.slice'/'job.service'
+    (leaf/'memory.current').parent.mkdir(parents=True)
+    (leaf/'memory.current').write_text(str(3<<30))
+    (leaf/'memory.max').write_text(str(8<<30))
+    parent=leaf.parent
+    (parent/'memory.current').write_text(str(5<<30))
+    (parent/'memory.max').write_text(str(6<<30))
+    meminfo=tmp_path/'meminfo';meminfo.write_text('MemTotal: 16 kB\nMemAvailable: 7000000 kB\n')
+    cgroup=tmp_path/'cgroup.txt';cgroup.write_text('0::/user.slice/job.service\n')
+    assert available_system_memory_bytes(meminfo_path=meminfo,cgroup_path=cgroup,cgroup_root=root,
+        cgroup_v1_root=tmp_path/'v1-memory')==1<<30
+
+    # Unlimited nested cgroups inherit any finite parent; an unlimited or
+    # absent controller hierarchy leaves the host measurement available.
+    (leaf/'memory.max').write_text('max')
+    assert available_system_memory_bytes(meminfo_path=meminfo,cgroup_path=cgroup,cgroup_root=root,
+        cgroup_v1_root=tmp_path/'v1-memory')==1<<30
+    (parent/'memory.max').write_text('max')
+    assert available_system_memory_bytes(meminfo_path=meminfo,cgroup_path=cgroup,cgroup_root=root,
+        cgroup_v1_root=tmp_path/'v1-memory')==7000000*1024
+
+    # A missing cgroup mount/file is not grounds to discard the valid host
+    # MemAvailable measurement or to make all cached envelopes ineligible.
+    cgroup.write_text('0::/missing/service\n')
+    assert available_system_memory_bytes(meminfo_path=meminfo,cgroup_path=cgroup,cgroup_root=root,
+        cgroup_v1_root=tmp_path/'v1-memory')==7000000*1024
+
+    # If a finite bound is advertised but cannot be read, return unknown rather
+    # than treating the larger host measurement as safe headroom.
+    unreadable=root/'broken'/'service'
+    unreadable.mkdir(parents=True)
+    (unreadable/'memory.max').write_text(str(4<<30))
+    cgroup.write_text('0::/broken/service\n')
+    assert available_system_memory_bytes(meminfo_path=meminfo,cgroup_path=cgroup,cgroup_root=root,
+        cgroup_v1_root=tmp_path/'v1-memory') is None
+    (unreadable/'memory.current').mkdir()
+    assert available_system_memory_bytes(meminfo_path=meminfo,cgroup_path=cgroup,cgroup_root=root,
+        cgroup_v1_root=tmp_path/'v1-memory') is None
+
+
 def test_capacity_peak_keeps_prior_large_case_for_later_small_case():
     from natlang_neuralese.eval.native_memory import _gate_cuda_peaks
     rows=[{'cuda_peak_allocated_bytes':12<<30,'cuda_peak_reserved_bytes':15<<30},

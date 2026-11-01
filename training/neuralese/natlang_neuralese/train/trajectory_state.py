@@ -341,29 +341,75 @@ def immutable_cpu_snapshot(value, *, _tensor_storage_memo=None):
     raise TypeError(f'unsupported checkpoint snapshot leaf: {type(value).__module__}.{type(value).__qualname__}')
 
 
-def available_system_memory_bytes():
-    """Return conservative host/cgroup memory availability, or ``None`` if unknown."""
+def available_system_memory_bytes(*, meminfo_path='/proc/meminfo', cgroup_path='/proc/self/cgroup',
+                                  cgroup_root='/sys/fs/cgroup', cgroup_v1_root='/sys/fs/cgroup/memory'):
+    """Return host availability capped by finite limits on this process's cgroup ancestry.
+
+    Cgroup-v2 memory files live at the process's nested cgroup, not at the
+    mount root. Missing memory-controller files are an absent bound and do not
+    erase a valid MemAvailable reading; an unreadable/malformed advertised
+    bound makes availability unknown so callers fail closed.
+    """
     available = None
     try:
-        for line in Path('/proc/meminfo').read_text().splitlines():
+        for line in Path(meminfo_path).read_text().splitlines():
             if line.startswith('MemAvailable:'):
                 available = int(line.split()[1]) * 1024
                 break
     except (OSError, ValueError, IndexError):
         pass
-    limits = []
-    for root in (Path('/sys/fs/cgroup'), Path('/sys/fs/cgroup/memory')):
-        try:
-            limit_text = (root / ('memory.max' if root.name == 'cgroup' else 'memory.limit_in_bytes')).read_text().strip()
-            current_text = (root / ('memory.current' if root.name == 'cgroup' else 'memory.usage_in_bytes')).read_text().strip()
-            if limit_text != 'max':
-                limit, current = int(limit_text), int(current_text)
-                if limit > 0 and limit < (1 << 60):
-                    limits.append(max(0, limit - current))
-        except (OSError, ValueError):
-            pass
+    try:
+        memberships=Path(cgroup_path).read_text().splitlines()
+    except FileNotFoundError:
+        return available
+    except (PermissionError,OSError):
+        return None
+    roots=[]
+    v2_root=Path(cgroup_root)
+    v1_root=Path(cgroup_v1_root)
+    for line in memberships:
+        parts=line.split(':',2)
+        if len(parts)!=3:
+            continue
+        hierarchy,controllers,relative=parts
+        if hierarchy=='0' and not controllers:
+            roots.append((v2_root,v2_root/relative.lstrip('/'),'memory.max','memory.current'))
+        elif 'memory' in controllers.split(','):
+            roots.append((v1_root,v1_root/relative.lstrip('/'),'memory.limit_in_bytes','memory.usage_in_bytes'))
+    limits=[]
+    unknown=False
+    for mount,process_cgroup,limit_name,current_name in roots:
+        if mount not in process_cgroup.parents and process_cgroup!=mount:
+            unknown=True
+            continue
+        current=process_cgroup
+        while current==mount or mount in current.parents:
+            try:
+                limit_text=(current/limit_name).read_text().strip()
+            except FileNotFoundError:
+                # A cgroup without the memory controller has no bound at this
+                # level. Continue upward, where an ancestor may still cap it.
+                pass
+            except (PermissionError,ValueError,OSError):
+                unknown=True
+            else:
+                if limit_text!='max':
+                    try:
+                        limit=int(limit_text)
+                        if limit>0 and limit < (1<<60):
+                            current_usage=int((current/current_name).read_text().strip())
+                            limits.append(max(0,limit-current_usage))
+                    except (FileNotFoundError,PermissionError,ValueError,OSError):
+                        # A finite limit without a readable usage counter is
+                        # an unknown bound, not evidence of unlimited room.
+                        unknown=True
+            if current==mount:
+                break
+            current=current.parent
+    if unknown:
+        return None
     if limits:
-        available = min(limits + ([available] if available is not None else []))
+        available=min(limits+([available] if available is not None else []))
     return available
 
 

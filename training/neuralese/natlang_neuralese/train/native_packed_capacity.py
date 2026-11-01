@@ -294,16 +294,8 @@ def _one_group_dominates(measured, candidate):
 
 def _capacity_memory_context(device):
     import torch
-    from pathlib import Path
-    host_available=None
-    try:
-        meminfo=dict(line.split(':',1) for line in Path('/proc/meminfo').read_text().splitlines() if ':' in line)
-        host_available=int(meminfo['MemAvailable'].split()[0])*1024
-        current=int(Path('/sys/fs/cgroup/memory.current').read_text())
-        limit=Path('/sys/fs/cgroup/memory.max').read_text().strip()
-        if limit!='max':host_available=min(host_available,max(0,int(limit)-current))
-    except (OSError,ValueError,KeyError):
-        host_available=None
+    from .trajectory_state import available_system_memory_bytes
+    host_available=available_system_memory_bytes()
     if device.type != 'cuda' or not torch.cuda.is_initialized():
         return {'device_type':device.type,'free_bytes_at_probe':None,'total_bytes':None,
                 'allocated_bytes':None,'reserved_bytes':None,'reusable_cache_bytes':None,
