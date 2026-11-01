@@ -116,3 +116,21 @@ def test_runtime_identity_changes_when_script_changes(tmp_path, monkeypatch):
     first = module.identity(root, node)['identity_sha256']
     script.write_text('changed')
     assert module.identity(root, node)['identity_sha256'] != first
+
+
+def test_predecessor_receipt_detects_changed_summary(tmp_path):
+    import json
+    root = tmp_path / 'old'
+    d = root / 'turns/family'
+    d.mkdir(parents=True)
+    (root / 'runtime-page.json').write_text('{"dist_commit":"old"}')
+    (d / '00000.summary.json').write_text('{"cases":1}')
+    (d / '00000.turns.jsonl.zst').write_bytes(b'turns')
+    (d / '00000.rows.jsonl.zst').write_bytes(b'rows')
+    receipt = tmp_path / 'receipt.json'
+    tool = ROOT / 'scripts/neuralese_data/port_predecessor_receipt.py'
+    subprocess.run(['python3', str(tool), 'create', str(root), str(receipt)], check=True)
+    subprocess.run(['python3', str(tool), 'verify', str(root), str(receipt)], check=True)
+    (d / '00000.summary.json').write_text('{"cases":2}')
+    assert subprocess.run(['python3', str(tool), 'verify', str(root), str(receipt)], capture_output=True).returncode != 0
+    assert json.loads(receipt.read_text())['completed']
