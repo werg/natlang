@@ -53,7 +53,7 @@ This update supersedes the earlier instantaneous observations below.
 - Independent61 external full-state export and full readback are verified in
   `ops/export-earned61-external-1101.json`. Latest63 export is still being checked;
   an active offloader alone does not prove independently recoverable63.
-- NVMe has62GiB free; external volume273GiB free. Keep the40GiB internal floor.
+- NVMe has61GiB free; external volume258GiB free. Keep the40GiB internal floor.
   Three source converters and the offloader are running; none remains frozen.
   Root retired the15.3GB discarded zero-SGD metadata checkpoint after64 was
   saved and published, retaining all its reports, source proof and exact63 parent.
