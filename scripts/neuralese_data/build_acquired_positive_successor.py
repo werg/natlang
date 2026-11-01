@@ -10,15 +10,17 @@ import argparse
 import hashlib
 import json
 import math
-import os
 import subprocess
 import sys
-from collections import Counter
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "training/neuralese"))
+sys.path.insert(0, str(REPO_ROOT))
 
 from natlang_neuralese.common.custody import ProtectedWorlds, world_identities
 from natlang_neuralese.common.hashing import (
-    canonical_json_bytes, canonical_json_sha256_hex, sha256_file_hex, sha256_hex,
+    canonical_json_sha256_hex, sha256_file_hex,
 )
 from natlang_neuralese.common.jsonio import open_jsonl_text, write_json_durable
 from natlang_neuralese.data.native_graph_schema import parse_graph, communication_classification
@@ -383,7 +385,7 @@ def build(predecessor_dir: Path, screen_path: Path, output_dir: Path):
                 "training/neuralese/natlang_neuralese/train/own_output_supervision.py",
                 "training/neuralese/natlang_neuralese/train/native_resident_ce.py",
                 "training/neuralese/natlang_neuralese/train/recipe.py")]],
-        "builder_commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[2],
+        "builder_commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT,
             check=True, capture_output=True, text=True).stdout.strip(),
         "python_version": sys.version.split()[0],
         "current_protection_digest": protection.digest,
