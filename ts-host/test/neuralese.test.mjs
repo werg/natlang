@@ -10,10 +10,24 @@ import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseRef, neurales
   sourceWithLiteralCalls, textToParts, writeLiterals } from '../dist/native/neuralese.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
 import { createVirtualProgram } from '../dist/compiler/host.js';
-import { compileScopeSnippet } from '../dist/scope-compiler.js';
+import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../dist/scope-compiler.js';
+import ts from 'typescript';
 import { compileModule } from '../dist/runtime/modules.js';
 import { arrayToStringNeuralese, concatNeuralese, joinNeuralese, mapNeuraleseReadout, readNeuraleseIfReference } from '../dist/runtime/lowered.js';
 import { readNeuraleseForCurrentTask } from '../dist/neuralese/combinators.js';
+
+// These coercion fixtures stub snapshot/output handling to observe exact object
+// identity and effects. Use the runtime's real promise observer for emitted calls.
+const preludeFile = ts.createSourceFile('scope-prelude.ts', SCOPE_RUNTIME_PRELUDE, ts.ScriptTarget.ES2022, true);
+const ownershipStatement = preludeFile.statements.find(statement => ts.isVariableStatement(statement) &&
+  statement.declarationList.declarations.some(declaration => ts.isIdentifier(declaration.name) && declaration.name.text === '__natlang_own'));
+assert.ok(ownershipStatement);
+const ownershipPrelude = ts.transpileModule(ownershipStatement.getText(preludeFile),
+  { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+function scopeFunction(...parameters) {
+  const body = parameters.pop();
+  return new Function(...parameters, `${ownershipPrelude}\n${body}`);
+}
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { createNatlangRuntime, iterateOn } from '../dist/runtime/node.js';
 import { defineNatlang } from '../dist/runtime/callable.js';
@@ -290,7 +304,7 @@ test('typed readout in an inline Array.map callback is awaited with native spars
   const values = [neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), ,
     neuraleseRef('Neuralese<string>', 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')];
   Object.defineProperty(values, 'map', { configurable: true, get() { events.push('map-get'); return Array.prototype.map; } });
-  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const run = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `const __natlang_guard = (id, fn, args) => __live.guard(id, fn, args); ${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { mapNeuraleseReadout, guard: (_id, fn, args) => fn(...(args ?? [])), readNeuralese: async value => {
       events.push('read:' + value.$neuralese.id);
@@ -313,7 +327,7 @@ test('typed readout in an inline Array.map callback is awaited with native spars
   const nestedCompiled = compileScopeSnippet(nestedSource, { inputBindings: ['items', 'values'], neuralese: true,
     analyze: text => analyzeEvalSnippet(text, nestedScope) });
   assert.equal(nestedCompiled.ok, true, JSON.stringify(nestedCompiled.diagnostics));
-  const nestedRun = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const nestedRun = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `const __natlang_guard = (id, fn, args) => __live.guard(id, fn, args); ${nestedCompiled.program}; return __natlang_scope;`)(
     value => value, value => value, async value => value, output => output.result,
     { mapNeuraleseReadout, guard: (_id, fn) => fn(), readNeuralese: async value => value.$neuralese.id ===
@@ -373,7 +387,7 @@ test('computed member and object keys read soft values at the key position', asy
     analyze: text => analyzeEvalSnippet(text, scope) });
   const runScope = (compiled, live, values) => {
     assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
-    const fn = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    const fn = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
       `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
       output => output.result, live);
     return fn(values, {}, {});
@@ -485,7 +499,7 @@ test('explicit Number and Boolean read only scalar Neuralese alternatives after 
     if (failReads) throw new Error('scalar read failed');
     return value.$neuralese.id === 'nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn' ? 17 : 'false';
   };
-  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const run = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuraleseIfReference });
   const softResult = await run({ numberValue: neuraleseRef('Neuralese<number>', 'nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn'),
@@ -545,7 +559,7 @@ test('boolean Neuralese is read only at actual asynchronous control-flow guards'
     analyze: text => analyzeEvalSnippet(text, scope) });
   const events = [];
   let flagValue = false;
-  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const run = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuraleseIfReference: async value => {
       if (!isNeuraleseRef(value)) return value;
@@ -632,7 +646,7 @@ test('discarded unary negation in a guard comma expression reads only soft boole
     analyze: text => analyzeEvalSnippet(text, scope) });
   const events = [];
   let reads = 0;
-  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const run = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuraleseIfReference: async value => {
       if (!isNeuraleseRef(value)) return value;
@@ -719,7 +733,7 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.equal(arrayStringCompiled.ok, true, JSON.stringify(arrayStringCompiled.diagnostics));
   assert.match(arrayStringCompiled.program, /arrayToStringNeuralese/);
   const scopeArrayStringEvents = [];
-  const runArrayStringScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const runArrayStringScope = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${arrayStringCompiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { arrayToStringNeuralese, readNeuralese: async ref => {
       scopeArrayStringEvents.push(`read:${ref.$neuralese.id}`); return 'scope soft';
@@ -745,7 +759,7 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.match(jsonCompiled.program, /readNeuraleseIfReference/);
   assert.match(jsonCompiled.program, /\.stringify\], \[value\]\)/);
   let scopeJsonReads = 0;
-  const runJsonScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const runJsonScope = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${jsonCompiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuraleseIfReference: async value => {
       if (!isNeuraleseRef(value)) return value;
@@ -759,7 +773,7 @@ test('string conversions read typed Neuralese values with native method ordering
     const compiled = compileScopeSnippet(source, { inputBindings: ['value'], neuralese: true,
       analyze: text => analyzeEvalSnippet(text, jsonScope) });
     assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
-    const scope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    const scope = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
       `${compiled.program}; return __natlang_scope;`)(item => item, item => item, async item => item,
       output => output.result, { readNeuraleseIfReference: async item => isNeuraleseRef(item) ? 'scope payload' : item });
     return scope({ value }, {}, {});
@@ -781,7 +795,7 @@ test('string conversions read typed Neuralese values with native method ordering
     analyze: source => analyzeEvalSnippet(source, assertedTextScope) });
   assert.equal(assertedTextCompiled.ok, true, JSON.stringify(assertedTextCompiled.diagnostics));
   assert.match(assertedTextCompiled.program, /readNeuraleseIfReference/);
-  const assertedTextScopeFn = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const assertedTextScopeFn = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${assertedTextCompiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuraleseIfReference: async value => {
       assert.ok(isNeuraleseRef(value));
@@ -1170,7 +1184,7 @@ test('receiver-only String methods read declared soft strings before native look
   Object.defineProperty(sentinel, 'then', { get() { observed.push('then-get'); return undefined; } });
   const original = Object.getOwnPropertyDescriptor(String.prototype, 'trim');
   try {
-    const runScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    const runScope = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
       `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
       output => output.result, { readNeuraleseIfReference: async value => {
         if (!isNeuraleseRef(value)) return value;
@@ -1178,7 +1192,7 @@ test('receiver-only String methods read declared soft strings before native look
       }, readNeuralese: async value => value });
     const normalEvents = [], normalTrace = [];
     observed = normalTrace;
-    const normalScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    const normalScope = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
       `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
       output => output.result, { readNeuraleseIfReference: async value => {
         if (!isNeuraleseRef(value)) return value;
@@ -1209,7 +1223,7 @@ test('receiver-only String methods read declared soft strings before native look
 
     const crispEvents = [], crispTrace = [];
     observed = crispTrace;
-    const crispScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    const crispScope = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
       `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
       output => output.result, { readNeuraleseIfReference: async value => {
         if (!isNeuraleseRef(value)) return value;
@@ -1221,7 +1235,7 @@ test('receiver-only String methods read declared soft strings before native look
 
     const failedEvents = [], failedTrace = [];
     observed = failedTrace;
-    const failedScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    const failedScope = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
       `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
       output => output.result, { readNeuraleseIfReference: async () => {
         observed.push('read'); throw new Error('string receiver read failed');
@@ -1254,7 +1268,7 @@ test('argument-taking String receivers preserve typed readout and native call or
 
   const events = [], trace = [];
   const sentinel = {};
-  const scopeFn = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const scopeFn = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuraleseIfReference: async value => {
       if (!isNeuraleseRef(value)) return value;
@@ -1378,7 +1392,7 @@ test('the default Error constructor reads a typed message after evaluating its a
     const compiled = compileScopeSnippet(source, { inputBindings: ['text', 'events'], neuralese: true,
       analyze: text => analyzeEvalSnippet(text, scope) });
     const events = [];
-    const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    const run = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
       `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
       output => output.result, { readNeuraleseIfReference: async value => {
         if (!isNeuraleseRef(value)) return value;
@@ -1425,7 +1439,7 @@ test('standard String text arguments read soft values after the native call argu
   const compiled = compileScopeSnippet(source, { inputBindings: ['label', 'query', 'events'], neuralese: true,
     analyze: text => analyzeEvalSnippet(text, scope) });
   const events = [];
-  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const run = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuraleseIfReference: async value => {
       if (!isNeuraleseRef(value)) return value;
@@ -1473,7 +1487,7 @@ test('soft string replace reads the receiver before native method lookup and str
 
   const events = [];
   let failRead = false;
-  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const run = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuraleseIfReference: async value => {
       if (!isNeuraleseRef(value)) return value;
@@ -1541,7 +1555,7 @@ test('soft string replace reads the receiver before native method lookup and str
   assert.deepEqual(pureAnalysis.readouts.map(item => [item.kind, item.conditional]), [['string-replace', undefined]]);
   const pureCompiled = compileScopeSnippet(pureSource, { inputBindings: ['priorNotes'], neuralese: true,
     analyze: text => analyzeEvalSnippet(text, pureScope) });
-  const pureRun = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+  const pureRun = scopeFunction('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${pureCompiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuralese: async () => 'old notes',
       invokeWithReceiver: (method, receiver, args) => Reflect.apply(method, receiver, args) });

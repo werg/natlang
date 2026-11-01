@@ -885,7 +885,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   if (options.checkFields) for (const item of options.checkFields(analysisSource)) diagnostics.push(toRaw(item));
 
   // Lowering edits (snippet-relative). Container edits (returns, final expression) lower their contents recursively.
-  type Edit = { start: number; end: number; text: string; composed?: boolean };
+  // Paired insertions belong to the complete expression they wrap. A shared
+  // start offset does not make an outer call's observer part of its receiver.
+  type Edit = { start: number; end: number; text: string; composed?: boolean;
+    owner?: { start: number; end: number } };
   const primitive: Edit[] = [];
   let loops = 0;
   const rel = (node: ts.Node) => ({ start: node.getStart(file) - PREFIX.length, end: node.getEnd() - PREFIX.length });
@@ -895,8 +898,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   }));
   const rebindAt = new Map(rebinds.map(site => [`${site.start}:${site.end}`, site]));
   const instantiationAt = new Map(instantiations.map(site => [`${site.start}:${site.end}`, site]));
-  for (const readout of readouts) if (!readout.kind) primitive.push({ start: readout.start, end: readout.end,
-    text: `(await __live.${readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese'}((${analysisSource.slice(readout.start, readout.end)})))` });
+  const valueReadouts = new Map(readouts.filter(readout => !readout.kind)
+    .map(readout => [`${readout.start}:${readout.end}`, readout]));
+  const loweringValueReadouts = new Set<string>();
   const joins = new Set(readouts.filter(readout => readout.kind === 'join').map(readout => `${readout.start}:${readout.end}`));
   const arrayStrings = new Set(readouts.filter(readout => readout.kind === 'array-string').map(readout => `${readout.start}:${readout.end}`));
   const concats = new Set(readouts.filter(readout => readout.kind === 'concat').map(readout => `${readout.start}:${readout.end}`));
@@ -915,6 +919,16 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const asyncMapCallbacks = new Set([...arrayMapReadouts.values()].flatMap(readout => readout.callback ?
     [`${readout.callback.start}:${readout.callback.end}`] : []));
   const lowerNodes = (node: ts.Node): void => {
+    const location = rel(node), valueKey = `${location.start}:${location.end}`;
+    const valueReadout = valueReadouts.get(valueKey);
+    if (valueReadout && !loweringValueReadouts.has(valueKey)) {
+      loweringValueReadouts.add(valueKey);
+      lowerNodes(node);
+      loweringValueReadouts.delete(valueKey);
+      primitive.push({ ...location, composed: true,
+        text: `(await __live.${valueReadout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese'}((${lowerSpan(location.start, location.end)})))` });
+      return;
+    }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
         arrayMapReadouts.has(`${rel(node).start}:${rel(node).end}`) && node.arguments[0]) {
       const readout = arrayMapReadouts.get(`${rel(node).start}:${rel(node).end}`)!;
@@ -944,7 +958,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const methodName = `__natlang_replace_method_${rel(node).start}`;
       const argsName = `__natlang_replace_args_${rel(node).start}`;
       const reader = readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese';
-      primitive.push({ ...rel(node), text: `(await (async (${receiverName}: any) => { ` +
+      primitive.push({ ...rel(node), composed: true, text: `(await (async (${receiverName}: any) => { ` +
         `const ${textName} = await __live.${reader}(${receiverName}); ` +
         `const ${methodName} = ${textName}.replace; const ${argsName} = [${args}]; ` +
         `return { value: __live.invokeWithReceiver(${methodName}, ${textName}, ${argsName}) }; })(${receiver})).value` });
@@ -960,7 +974,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const argsName = `__natlang_scalar_args_${rel(node).start}`;
       const index = readout.argument ?? 0;
       const reader = readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese';
-      primitive.push({ ...rel(node), text: `(await ((${calleeName}: any) => (async (${argsName}: any[]) => { ` +
+      primitive.push({ ...rel(node), composed: true, text: `(await ((${calleeName}: any) => (async (${argsName}: any[]) => { ` +
         `${argsName}[${index}] = await __live.${reader}(${argsName}[${index}]); ` +
         `return ${calleeName}(...${argsName}); })([${args}]))(${callee}))` });
       return;
@@ -988,7 +1002,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const argsName = `__natlang_text_args_${rel(node).start}`;
       const index = readout.argument ?? 0;
       const reader = readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese';
-      primitive.push({ ...rel(node), text: `(await ((${receiverName}: any) => ((${methodName}: any) => (async (${argsName}: any[]) => { ` +
+      primitive.push({ ...rel(node), composed: true, text: `(await ((${receiverName}: any) => ((${methodName}: any) => (async (${argsName}: any[]) => { ` +
         `${argsName}[${index}] = await __live.${reader}(${argsName}[${index}]); ` +
         `return ${methodName}.call(${receiverName}, ...${argsName}); })([${args}]))(${receiverName}.${node.expression.name.text}))(${receiver}))` });
       return;
@@ -1004,7 +1018,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const reader = readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese';
       const invoke = ts.isNewExpression(node) ? `new ${calleeName}(await __live.${reader}(${argsName}[0]), ...${argsName}.slice(1))` :
         `${calleeName}(await __live.${reader}(${argsName}[0]), ...${argsName}.slice(1))`;
-      primitive.push({ ...rel(node), text: `(await ((${calleeName}: any) => (async (${argsName}: any[]) => ${invoke})` +
+      primitive.push({ ...rel(node), composed: true, text: `(await ((${calleeName}: any) => (async (${argsName}: any[]) => ${invoke})` +
         `([${args}]))(${callee}))` });
       return;
     }
@@ -1025,7 +1039,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const receiverName = fresh(`__natlang_json_receiver_${rel(node).start}`);
       const callName = fresh(`__natlang_json_call_${rel(node).start}`);
       const argsName = fresh(`__natlang_json_args_${rel(node).start}`);
-      primitive.push({ ...rel(node), text: `(await ((${receiverName}: any) => (async (${callName}: [any, any], ${argsName}: any[]) => ` +
+      primitive.push({ ...rel(node), composed: true, text: `(await ((${receiverName}: any) => (async (${callName}: [any, any], ${argsName}: any[]) => ` +
         `${callName}[1].call(${callName}[0], await __live.${reader}(${argsName}[0])` +
         `${args.slice(1).map((_arg, index) => `, ${argsName}[${index + 1}]`).join('')}` +
         `))([${receiverName}, ${receiverName}.stringify], [${args.join(', ')}]))(${receiver}))` });
@@ -1036,7 +1050,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const receiver = lowerSpan(rel(node.expression.expression).start, rel(node.expression.expression).end);
       const values = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
       const temp = `__natlang_concat_receiver_${rel(node).start}`;
-      primitive.push({ ...rel(node), text: `await ((${temp}: any) => { const __method = ${temp}.concat; const __values = [${values}]; ` +
+      primitive.push({ ...rel(node), composed: true, text: `await ((${temp}: any) => { const __method = ${temp}.concat; const __values = [${values}]; ` +
         `return __live.concatNeuralese(${temp}, __method, __values, async (__value: any) => ` +
         `await __live.readNeuralese(__value)); })(${receiver})` });
       return;
@@ -1050,7 +1064,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const methodName = `__natlang_array_string_method_${rel(node).start}`;
       const argsName = `__natlang_array_string_args_${rel(node).start}`;
       const args = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
-      primitive.push({ ...rel(node), text: `(await ((${receiverName}: any) => (async (${methodName}: any, ${argsName}: any[]) => ` +
+      primitive.push({ ...rel(node), composed: true, text: `(await ((${receiverName}: any) => (async (${methodName}: any, ${argsName}: any[]) => ` +
         `(await __live.arrayToStringNeuralese(${receiverName}, ${methodName}, ${argsName}, async (__natlang_array_string_value: any) => ` +
         `await __live.readNeuralese(__natlang_array_string_value))).value)(${receiverName}.toString, [${args}]))(${lowerSpan(receiver.start, receiver.end)}))` });
       return;
@@ -1064,7 +1078,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const methodName = `__natlang_join_method_${rel(node).start}`;
       const argsName = `__natlang_join_args_${rel(node).start}`;
       const args = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
-      primitive.push({ ...rel(node), text: `(await ((${receiverName}: any) => (async (${methodName}: any, ${argsName}: any[]) => ` +
+      primitive.push({ ...rel(node), composed: true, text: `(await ((${receiverName}: any) => (async (${methodName}: any, ${argsName}: any[]) => ` +
         `(await __live.joinNeuralese(${receiverName}, ${methodName}, ${argsName}, async (__natlang_join_value: any) => ` +
         `await __live.readNeuralese(__natlang_join_value))).value)(${receiverName}.join, [${args}]))(${lowerSpan(receiver.start, receiver.end)}))` });
       return;
@@ -1163,17 +1177,17 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     const promiseConstruction = ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'Promise';
     if ((ts.isCallExpression(node) && !instance && !chainedMethodCall && !iterateOnCall && !inIterateOnChain(node)) || promiseConstruction) {
       const at = rel(node);
-      primitive.push({ start: at.start, end: at.start, text: '__natlang_own((' },
-        { start: at.end, end: at.end, text: '))' });
+      primitive.push({ start: at.start, end: at.start, text: '__natlang_own((', owner: at },
+        { start: at.end, end: at.end, text: '))', owner: at });
     }
     // A call of a function with a representation-generic result runs the instance its expected type picked.
     if (instance && ts.isCallExpression(node)) {
       const callee = rel(node.expression);
-      primitive.push({ start: callee.start, end: callee.start, text: '__live.instantiate(' },
-        { start: callee.end, end: callee.end, text: `, ${JSON.stringify(instance.representation)}, ${JSON.stringify(`eval line ${instance.line}`)})` });
+      primitive.push({ start: callee.start, end: callee.start, text: '__live.instantiate(', owner: callee },
+        { start: callee.end, end: callee.end, text: `, ${JSON.stringify(instance.representation)}, ${JSON.stringify(`eval line ${instance.line}`)})`, owner: callee });
       const at = rel(node);
-      primitive.push({ start: at.start, end: at.start, text: '__natlang_own((' },
-        { start: at.end, end: at.end, text: '))' });
+      primitive.push({ start: at.start, end: at.start, text: '__natlang_own((', owner: at },
+        { start: at.end, end: at.end, text: '))', owner: at });
     }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'iterateOn' &&
         !ts.isTaggedTemplateExpression(node.expression.expression)) {
@@ -1251,9 +1265,11 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   };
   const lowerSpan = (start: number, end: number): string => {
     let text = analysisSource.slice(start, end);
-    const contained = primitive.filter(edit => edit.start >= start && edit.end <= end);
+    const contained = primitive.filter(edit => edit.start >= start && edit.end <= end &&
+      (!edit.owner || edit.owner.start >= start && edit.owner.end <= end));
     const inside = contained.filter(edit => !contained.some(parent => parent.composed && parent !== edit &&
-      parent.start <= edit.start && parent.end >= edit.end && (parent.start < edit.start || parent.end > edit.end)));
+      parent.start <= (edit.owner ?? edit).start && parent.end >= (edit.owner ?? edit).end &&
+      (parent.start < (edit.owner ?? edit).start || parent.end > (edit.owner ?? edit).end)));
     for (const edit of [...inside].sort((a, b) => b.start - a.start || b.end - a.end))
       text = text.slice(0, edit.start - start) + edit.text + text.slice(edit.end - start);
     return text;
@@ -1286,7 +1302,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   for (const repair of redundantAliases) containers.push({ start: repair.start + helperPrefix.length,
     end: repair.end + helperPrefix.length, text: '' });
   const topPrimitive = primitive.filter(edit => !primitive.some(parent => parent.composed && parent !== edit &&
-    parent.start <= edit.start && parent.end >= edit.end && (parent.start < edit.start || parent.end > edit.end)));
+    parent.start <= (edit.owner ?? edit).start && parent.end >= (edit.owner ?? edit).end &&
+    (parent.start < (edit.owner ?? edit).start || parent.end > (edit.owner ?? edit).end)));
   const edits = [...containers, ...topPrimitive.filter(edit => !containers.some(container =>
     edit.start >= container.start && edit.end <= container.end && container.text !== ''))];
   let body = analysisSource;
