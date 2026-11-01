@@ -3857,11 +3857,13 @@ def _main(argv=None, *, requested_refresh):
                 policy,model,micro_batches,oversize_limits,
                 frontier=oversize_frontier,
                 execution_identity=oversize_execution_identity_record,precision=planned_precision,backend=backend)
-            if policy.signaled:
+            if policy.signaled or requested_refresh.requested:
                 cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
                     rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                refresh_boundary = refresh_boundary or requested_refresh.requested
                 print(json.dumps({'kind':'native_phase','phase':'stop_before_update','gate':'oversize_preflight',
-                    'global_step':global_step,'cursor':cursor,'received_signals':policy.stop.received}),flush=True)
+                    'global_step':global_step,'cursor':cursor,
+                    'received_signals':[*policy.stop.received,*requested_refresh.received]}),flush=True)
                 break
             indices = [index for item in fetched for index in item[1]]
             pass_end = any(item[2] for item in fetched)
@@ -3888,11 +3890,13 @@ def _main(argv=None, *, requested_refresh):
                             collect_accuracy=False, allow_communication_prefixes=backend is None))
                 finally:
                     restore_training_rng_state(calibration_rng, args.device)
-                if policy.signaled:
+                if policy.signaled or requested_refresh.requested:
                     cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
                         rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                    refresh_boundary = refresh_boundary or requested_refresh.requested
                     print(json.dumps({'kind':'native_phase','phase':'stop_before_update','gate':'qat_calibration',
-                        'global_step':global_step,'cursor':cursor,'received_signals':policy.stop.received}),flush=True)
+                        'global_step':global_step,'cursor':cursor,
+                        'received_signals':[*policy.stop.received,*requested_refresh.received]}),flush=True)
                     break
             # A newly larger complete graph is measured on this very model
             # with the selected QAT point and actual cotangent path before SGD.
@@ -3942,29 +3946,36 @@ def _main(argv=None, *, requested_refresh):
                     remember_oversize_capacity_proof(oversize_frontier, oversize_proof)
                     checkpoint_options['oversize_capacity_frontier'] = serialize_oversize_capacity_frontier(
                         oversize_frontier)
-            if policy.signaled:
+            if policy.signaled or requested_refresh.requested:
                 cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
                     rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                refresh_boundary = refresh_boundary or requested_refresh.requested
                 print(json.dumps({'kind':'native_phase','phase':'stop_before_update','gate':'oversize_qualification',
-                    'global_step':global_step,'cursor':cursor,'received_signals':policy.stop.received}),flush=True)
+                    'global_step':global_step,'cursor':cursor,
+                    'received_signals':[*policy.stop.received,*requested_refresh.received]}),flush=True)
                 break
             # Continue locally while peers boot; pause only if unmerged residual
             # reaches the configured offline-history bound.
-            if diloco is not None and not diloco.await_update_capacity(stop_requested=lambda: policy.signaled):
-                if policy.signaled:
+            if diloco is not None and not diloco.await_update_capacity(
+                    stop_requested=lambda: policy.signaled or requested_refresh.requested):
+                if policy.signaled or requested_refresh.requested:
                     cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
                         rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                    refresh_boundary = refresh_boundary or requested_refresh.requested
                     print(json.dumps({'kind':'native_phase','phase':'stop_before_update','gate':'diloco_capacity',
-                        'global_step':global_step,'cursor':cursor,'received_signals':policy.stop.received}),flush=True)
+                        'global_step':global_step,'cursor':cursor,
+                        'received_signals':[*policy.stop.received,*requested_refresh.received]}),flush=True)
                 break
             # The signal can arrive while a capacity proof, QAT calibration or
             # DiLoCo handoff is running. Observe it again at the final boundary
             # before any native forward/backward/optimizer work starts.
-            if policy.signaled:
+            if policy.signaled or requested_refresh.requested:
                 cursor = _restore_unstarted_update(optimizer=optimizer, previous_cursor=previous_cursor,
                     rng_state=fetch_rng, device=args.device, warmup=warmup, anneal=anneal)
+                refresh_boundary = refresh_boundary or requested_refresh.requested
                 print(json.dumps({'kind':'native_phase','phase':'stop_before_update','gate':'final_pre_update',
-                    'global_step':global_step,'cursor':cursor,'received_signals':policy.stop.received}),flush=True)
+                    'global_step':global_step,'cursor':cursor,
+                    'received_signals':[*policy.stop.received,*requested_refresh.received]}),flush=True)
                 break
             exception_boundary_safe = False
             print(json.dumps({'kind':'native_phase','phase':'update_start','global_step':global_step}),flush=True)
@@ -4536,7 +4547,8 @@ def _main(argv=None, *, requested_refresh):
     completed = completed and (policy_operation or mandatory_sft['complete'])
     pending_source_admission = ({**admission_record, 'checkpoint_sha256': checkpoint_sha}
         if admission_record and admission_record['global_step'] == global_step and step == resumed_step else None)
-    continuation_boundary = {'kind': 'semantic-refresh', 'reached': bool(refresh_boundary and step>resumed_step),
+    continuation_boundary = {'kind': 'semantic-refresh',
+        'reached': bool(refresh_boundary and (step>resumed_step or requested_refresh.requested)),
         'new_optimizer_updates':step-resumed_step, 'checkpoint_sha256':checkpoint_sha}
     if requested_refresh.received:
         continuation_boundary['requested_signals'] = requested_refresh.received

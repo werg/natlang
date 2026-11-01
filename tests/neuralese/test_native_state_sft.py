@@ -53,7 +53,8 @@ def test_unstarted_update_stop_restores_cursor_rng_optimizer_and_lr_schedules(mo
     assert restored==[({'seed':3},'cpu')]
 
 
-def test_sigterm_during_capacity_gate_cancels_fetched_batch_before_sgd(tmp_path,monkeypatch):
+@pytest.mark.parametrize('requested_signal',('SIGTERM','SIGUSR2'))
+def test_signal_during_capacity_gate_cancels_fetched_batch_before_sgd(tmp_path,monkeypatch,requested_signal):
     import json
     import os
     import signal
@@ -75,7 +76,7 @@ def test_sigterm_during_capacity_gate_cancels_fetched_batch_before_sgd(tmp_path,
     def stop_during_gate(model,optimizer,micro_batches,**kwargs):
         from natlang_neuralese.train.optim_restore import _children
         scaled_rates.extend(group['lr'] for _,child in _children(optimizer) for group in child.param_groups)
-        os.kill(os.getpid(),signal.SIGTERM)
+        os.kill(os.getpid(),getattr(signal,requested_signal))
         return None
     monkeypatch.setattr(native_packed_capacity,'qualify_oversize_batches',stop_during_gate)
     monkeypatch.setattr(trainer,'native_training_update',
@@ -92,7 +93,12 @@ def test_sigterm_during_capacity_gate_cancels_fetched_batch_before_sgd(tmp_path,
     report=json.loads((out/'report.json').read_text())
     assert report['completed'] is False
     assert report['continuation_boundary']['new_optimizer_updates']==0
-    assert report['continuation_boundary']['operational_stop_signals'][0]['signal']=='SIGTERM'
+    if requested_signal=='SIGTERM':
+        assert report['continuation_boundary']['operational_stop_signals'][0]['signal']=='SIGTERM'
+        assert report['continuation_boundary']['reached'] is False
+    else:
+        assert report['continuation_boundary']['requested_signals'][0]['signal']=='SIGUSR2'
+        assert report['continuation_boundary']['reached'] is True
 
 
 def test_decoded_parent_metadata_is_released_before_restored_model_checks(tmp_path, monkeypatch):
