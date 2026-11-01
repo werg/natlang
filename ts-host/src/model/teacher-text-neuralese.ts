@@ -4,6 +4,7 @@ import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { MemoryNeuraleseStore, type NeuraleseBlockMeta } from '../native/neuralese-store.js';
 import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
 import { isNeuraleseRef, isTeacherTextNeuraleseId } from '../native/neuralese.js';
+import { formatType, parseType } from '../native/types.js';
 
 export const TEACHER_TEXT_NEURALESE_VERSION = 'teacher-text/1';
 export const TEACHER_TEXT_NEURALESE_DIALECT = 'nd:teacher-text/1';
@@ -54,8 +55,12 @@ export function validateTeacherTextReadBinding(value: unknown, block: TeacherTex
 /** Merge read-site and writer-site aliases without allowing the same name to change meaning across scopes. */
 export function mergeTeacherTextTypeAliases(readScope: Readonly<Record<string, string>> = {},
   writerScope: Readonly<Record<string, string>> = {}): Record<string, string> {
+  const canonical = (name: string, source: string): string => {
+    try { return formatType(parseType(source)); }
+    catch { throw new Error(`teacher-text read has invalid type alias ${name}`); }
+  };
   for (const [name, source] of Object.entries(writerScope)) {
-    if (Object.hasOwn(readScope, name) && readScope[name] !== source)
+    if (Object.hasOwn(readScope, name) && canonical(name, readScope[name]!) !== canonical(name, source))
       throw new Error(`teacher-text read has conflicting type alias ${name}`);
   }
   return { ...readScope, ...writerScope };

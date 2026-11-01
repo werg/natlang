@@ -347,6 +347,12 @@ test('teacher-text typed read binding rejects altered IDs, declared types, write
   assert.throws(() => validateTeacherTextReadBinding(ref, { ...block, writer_node: undefined }), /writer occurrence/);
   assert.throws(() => mergeTeacherTextTypeAliases({ InspectionNote: '{ kind: string }' },
     { InspectionNote: 'string' }), /conflicting type alias InspectionNote/);
+  assert.deepEqual(mergeTeacherTextTypeAliases(
+    { Statement: '{ statementId: string; tableUid: string; sourceDigest: string; title: string; table: string[][]; paragraphs: string[] }' },
+    { Statement: '{ statementId: string, tableUid: string, sourceDigest: string, title: string, table: string[][], paragraphs: string[] }' }),
+    { Statement: '{ statementId: string, tableUid: string, sourceDigest: string, title: string, table: string[][], paragraphs: string[] }' });
+  assert.throws(() => mergeTeacherTextTypeAliases({ Statement: '{ statementId: string; table: string[][] }' },
+    { Statement: '{ statementId: string; table: number[][] }' }), /conflicting type alias Statement/);
   assert.deepEqual(mergeTeacherTextTypeAliases({ Shared: 'string' }, { InspectionNote: 'Shared' }),
     { Shared: 'string', InspectionNote: 'Shared' });
 });
