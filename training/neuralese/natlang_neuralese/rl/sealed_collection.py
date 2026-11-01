@@ -59,7 +59,10 @@ def resume_sealed_collection(reference, request, *, validate_actors):
                     neuralese_server=binding['neuralese_server'], expected_native=original_native,
                     expected_coefficient=coefficient.get('runtime') if coefficient else None)
     entries = list(read_jsonl(out / 'queue.jsonl'))
-    if len(entries) != binding['rows'] * binding['group'] or report.get('root_mode') != binding['root_mode']:
+    teacher_attempts = binding.get('jolt_teacher_attempts', 0)
+    if type(teacher_attempts) is not int or teacher_attempts < 0:
+        raise ValueError('sealed collection teacher-attempt count is invalid')
+    if len(entries) != binding['rows'] * (binding['group'] + teacher_attempts) or report.get('root_mode') != binding['root_mode']:
         raise ValueError('sealed collection sample accounting changed')
     for entry in entries:
         result = Path(entry['output'])

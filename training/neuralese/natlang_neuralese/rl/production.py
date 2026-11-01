@@ -1023,6 +1023,10 @@ def collect_with_actor(config, values, **kwargs):
     The entire actor lease ends only AFTER collect has durably archived blocks.
     External fleets use the same collect function and explicit supervisor hooks.
     """
+    rescored = (config.get('reward_reclassification_continuations') or {}).get(str(Path(kwargs['out']).resolve()))
+    if rescored is not None:
+        from .reward_reclassification import resume_reclassified_collection
+        return resume_reclassified_collection(rescored, kwargs, validate_actors=validate_actor_receipts)
     amended = (config.get('amended_collection_continuations') or {}).get(str(Path(kwargs['out']).resolve()))
     if amended is not None:
         from .amended_collection import resume_amended_collection
@@ -1592,6 +1596,13 @@ def run(config_path, *, rounds=None, stop=None):
                 selected=[selected[i] for i in amended_groups]
                 selection=[selection[i] for i in amended_groups]
                 values['rollouts']=report['amended_rollouts']
+            if report.get('reward_reclassification'):
+                values['rollouts'] = report['reclassified_rollouts']
+                values['learner_out'] = report['reclassified_learner_out']
+                correction = report['reward_reclassification']
+                history = state.setdefault('reward_reclassification_history', [])
+                if correction not in history:
+                    history.append(correction)
             values['block_bundle'] = report.get('block_bundle', '')
             if report.get('coefficient_policy'):
                 state['coefficient_policy']=report['coefficient_policy']['path']

@@ -165,3 +165,44 @@ def test_native_termination_rejects_unbound_or_mismatched_record_source(mutation
     elif mutation=='wrong_source':error['source_sha256']='d'*64
     else:accounting.pop('source_sha256')
     assert classify_case(None,finish)=='unresolved'
+
+
+def accepted_blocked_result():
+    return {'outcome': {'status': 'quiesced', 'accepted': True,
+            'oracle': {'accepted': True, 'level': 'exact'}, 'rejection_reasons': [],
+            'checks': {'expected_status': True, 'honest_stop': True, 'stop_evidence': True,
+                       'effects': True, 'answer': True},
+            'detail': 'blocked: external operation was rejected; no authorized repair exists',
+            'scope_failures': [{'message': 'TypeError in an earlier recovered action'}],
+            'action_ledger': [{'name': 'eval', 'outcome': 'rejected'},
+                              {'name': 'return_result', 'outcome': 'blocked',
+                               'arguments': {'status': 'blocked', 'reason': 'external operation rejected'}}]}}
+
+
+def test_verified_expected_blocked_stop_earns_task_success_despite_action_history():
+    result = accepted_blocked_result()
+    assert classify_case(result, {'status': 'complete'}) == 'task_success'
+    from natlang_neuralese.rl.task_rollouts import reward_of
+    assert reward_of(classify_case(result, {'status': 'complete'})) == 1.
+
+
+@pytest.mark.parametrize('missing', ['expected_status', 'honest_stop', 'stop_evidence'])
+def test_accepted_flag_alone_does_not_qualify_an_unproven_stop(missing):
+    result = accepted_blocked_result()
+    del result['outcome']['checks'][missing]
+    assert classify_case(result, {'status': 'complete'}) != 'task_success'
+
+
+def test_expected_stop_cannot_hide_resource_exhaustion_or_rejected_checks():
+    result = accepted_blocked_result()
+    assert classify_case(result, {'status': 'timeout', 'resource_limit_reason': 'case_wall_budget'}) == 'unresolved'
+    result['outcome']['checks']['effects'] = False
+    assert classify_case(result, {'status': 'complete'}) != 'task_success'
+
+
+def test_verified_expected_failed_stop_and_accepted_complete_result_are_distinct():
+    result = accepted_blocked_result()
+    result['outcome']['status'] = 'failed'
+    assert classify_case(result, {'status': 'complete'}) == 'task_success'
+    result['outcome']['oracle']['accepted'] = False
+    assert classify_case(result, {'status': 'complete'}) != 'task_success'

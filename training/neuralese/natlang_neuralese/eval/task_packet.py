@@ -66,6 +66,24 @@ def _native_terminal_outcome(accounting: dict[str, Any]) -> str | None:
     }.get(payload.get("message") if isinstance(payload.get("message"), str) else None)
 
 
+def _accepted_terminal(outcome: dict[str, Any], finish: dict[str, Any] | None) -> bool:
+    """An expected, evidenced stop is a correct task outcome too."""
+    if outcome.get('accepted') is not True:
+        return False
+    if outcome.get('status') == 'done':
+        return True
+    checks = outcome.get('checks')
+    return (outcome.get('status') in {'failed', 'quiesced'}
+            and (finish or {}).get('status') in {'complete', 'complete_with_skips'}
+            and not (finish or {}).get('resource_limit_reason')
+            and not outcome.get('resource_limit_reason') and not outcome.get('resource_limit')
+            and not outcome.get('rejection_reasons')
+            and (outcome.get('oracle') or {}).get('accepted') is True
+            and isinstance(checks, dict)
+            and all(checks.get(key) is True for key in ('expected_status', 'honest_stop', 'stop_evidence'))
+            and all(value is True for value in checks.values()))
+
+
 def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) -> str:
     """Use explicit terminal evidence; repeated action-shape counts alone are not a failure label."""
     if finish and finish.get('status') == 'repetition' and finish.get('resource_limit_reason') == 'identical_turn_limit':
@@ -104,7 +122,7 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
         return "unresolved"
 
     outcome = result.get("outcome") if isinstance(result.get("outcome"), dict) else {}
-    if outcome.get("status") == "done" and outcome.get("accepted") is True:
+    if _accepted_terminal(outcome, finish):
         return "task_success"
 
     if finish and (finish.get("resource_limit_reason") == "case_wall_budget"
