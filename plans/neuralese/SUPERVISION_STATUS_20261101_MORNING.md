@@ -1,3 +1,63 @@
+## Live supervision update, 2026-11-01 11:24 CET
+
+This section supersedes older instantaneous process, source and storage counts below.
+
+- Production joint SFT actually advanced from earned57 to58 on the complete
+  298,509-row source; the next update is running. Unit
+  `lfm3-joint-sft57-full298509-1101.service`, frozen
+  `runtime-sft-multiupdate-v2-1101`, rolling `sd-r1/learner/checkpoint.pt`.
+  First update: 376,174 physical / 1,191,427 logical / 36,193 supervised tokens,
+  833.52 seconds including an exceptionally heavy profiler. Do not use that
+  observation as an unprofiled throughput baseline or capability lift.
+- Earned57 full checkpoint `b3be5ac5...c8f056da` has completed independent Pop
+  full-file readback. Exact receipt: `ops/current-sft-peer-export-1101.json`.
+  Earned53 also has verified external full-state recovery. Runtime/source closure
+  and restore qualification remain separate from these full-state copies.
+- The latest57 task evaluation was 1/4 exact successes. It is not a matched
+  53-versus57 comparison and does not prove improvement or general regression.
+- Big2 restored data has substantial producer repetition: 93,229 graphs share
+  one327-token producer. The initial effective objective census places roughly
+  31% of total loss mass on that program. A is implementing an exact decision
+  factor of0.01 plus measured family normalization/cap, preserving all consumer
+  targets and whole graphs. It must be adopted as an explicit objective
+  continuation as soon as sealed, with historical exposure preserved.
+- Another9,436 authenticated Big2 producer/consumer edges passed provenance,
+  graph-content duplicate, current-protection and actual loader checks; sealed
+  `ops/big2-restoration-v2/qualified-delta-v1/receipt.json`. A is combining them
+  with the objective correction rather than adding repeated producer CE unchanged.
+- Profiling produced an11.265GB/38.8M-event Chrome trace. Terra extracted compact
+  complete summaries and retired the trace with a hash/receipt, leaving a tiny
+  sentinel to prevent the older running profiler exporting another trace.
+  Committed5324adfe1 replaces new profiling with bounded phase timings.
+  Rowwise norm backward dominates that instrumented trace. The first batched
+  candidate has exact CUDA input/gain gradients but is slower in an initial
+  diagnostic; it is NOT promoted. Real production-path warmed timing is underway.
+  Temporary learner pauses preserve its in-flight state and always thaw in finally.
+- Streaming-compressed replay runtime `runtime-port-stream-a8b-1101` is sealed;
+  predecessor receipt completed and the new conversion unit
+  `lfm3-cov-port-s4-stream-a8b-1101.service` is active. Driver authenticates and
+  reuses completed historical shards; journals now stream directly to zstd.
+  Check real new replay/output growth, not just active state. Exact launch and
+  predecessor bindings: `ops/port-stream-controls-a8b-1101/`.
+- Three reviewed medium-Luna CoEdIT workflows actually launched: single-document
+  revision, atomic multi-document queue, concurrent-change recovery. C supervises
+  whole-graph quality, Sol judgment and static conversion. One completed revision
+  has task success but redundant exploratory calls; mask exact bad targets before
+  admission. A failed batch is not positive data. Scripted references are not
+  sampled teacher success. No pinned application files are being edited live.
+- Next actual-current-policy whole-graph JOLT+ config has been prepared at
+  `ops/next-onpolicy-298509-1101/config.json`; model-free resume preflight passed
+  (unbound next round). It is NOT launched while SFT owns the GPU. Publish the
+  genuine earned SFT boundary, rebind any newly ready objective/runtime, run final
+  frozen preflight, then collect from that exact checkpoint with full prompt,
+  complete schemas and sampled probabilities. Retain all unfinished SFT obligations.
+  Do not accidentally resume stale `sd-r1/config.json` (old runtime/source/engine).
+- MegaToken run state is absent on both drives. Additional inactive derived
+  materializer caches/bytecode removed1,995,886,592 allocated bytes; receipts saved
+  in `ops/recovery-cache-cleanup-1793528040757592774.json`. Unique data and actual
+  recovery dependencies remain. Internal free space fluctuates with legitimate
+  rolling-checkpoint reservations; keep40GiB floor.
+
 # Supervision status — 2026-11-01 morning
 
 Latest observation: 09:47 CET. Check live processes before acting. The goal is
