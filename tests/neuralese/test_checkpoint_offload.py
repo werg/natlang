@@ -25,6 +25,7 @@ def layout(tmp_path, monkeypatch):
     monkeypatch.setenv('NATLANG_CHECKPOINT_MIRROR', str(hdd / 'natlang-active-lineage'))
     monkeypatch.setenv('NATLANG_CHECKPOINT_OFFLOAD_MIN_GB', '0')
     monkeypatch.setenv('NATLANG_CHECKPOINT_OFFLOAD_HDD_FLOOR_GB', '0')
+    monkeypatch.setenv('NATLANG_CHECKPOINT_OFFLOAD_QUEUE', str(tmp_path / 'offload-queue'))
     monkeypatch.setattr(co, '_mount_of', lambda path: hdd)  # the tmp "external disk"
     monkeypatch.setattr(co, '_same_filesystem', lambda a, b: False)
     monkeypatch.setattr(co, '_OFFLOADER', None)
@@ -139,6 +140,23 @@ def test_the_link_swap_never_leaves_a_dangling_link_or_replaces_a_changed_file(t
     assert path.is_symlink() and path.read_bytes() == dest.read_bytes()
 
 
+def test_superseded_copy_discards_partial_without_replacing_verified_mirror(tmp_path, monkeypatch):
+    source = write(tmp_path / 'checkpoint.pt', b'x' * 4096)
+    mirror = write(tmp_path / 'mirror.pt', b'previous-verified')
+    old = mirror.read_bytes()
+    monkeypatch.setattr(co, 'CHUNK', 1024)
+    calls = 0
+
+    def superseded():
+        nonlocal calls
+        calls += 1
+        return calls == 2
+
+    with pytest.raises(co.CheckpointCopySuperseded):
+        co.verified_copy(source, mirror, cancel=superseded)
+    assert mirror.read_bytes() == old and not list(tmp_path.glob('*.offload.part'))
+
+
 def test_a_failing_offload_never_fails_training_and_is_retried_at_the_next_write(layout):
     out, mirror_dir = layout
     calls = []
@@ -152,8 +170,9 @@ def test_a_failing_offload_never_fails_training_and_is_retried_at_the_next_write
     worker = co.CheckpointOffloader(co.OffloadSettings.from_env(), copier=flaky)
     best = write(out / 'best-checkpoint.pt')
     worker.submit(best, 'archive')  # returns at once; the failure is an event
-    assert worker.wait(30)
-    assert worker.events[-1]['event'] == 'checkpoint_offload_failed' and best.is_file() and not best.is_symlink()
+    failure = co._process_queue_once(worker.root, settings=worker.settings, copier=worker.copier)
+    assert failure['event'] == 'checkpoint_offload_failed' and best.is_file() and not best.is_symlink()
+    assert list((worker.root / 'pending').glob('*.json'))
     assert json.loads((out / 'checkpoint-offload.jsonl').read_text().splitlines()[-1])['event'] == \
         'checkpoint_offload_failed'
     worker.submit(write(out / 'checkpoint.pt'), 'latest')  # the next write retries the failed file
@@ -300,7 +319,7 @@ def test_policy_bests_are_weights_only_while_the_slot_keeps_its_optimizer(layout
     policy.close()
 
 
-def test_policy_close_waits_for_and_joins_owned_mirror_worker(layout, monkeypatch):
+def test_policy_close_returns_while_independent_owner_holds_pinned_copy(layout, monkeypatch):
     import threading
     out, mirror_dir = layout
     started, release, closed = threading.Event(), threading.Event(), threading.Event()
@@ -315,7 +334,15 @@ def test_policy_close_waits_for_and_joins_owned_mirror_worker(layout, monkeypatc
     monkeypatch.setattr(co, '_OFFLOADER', worker)
     policy = cp.CheckpointPolicy(out)
     policy.save(full_state(9))
-    assert started.wait(5)
+    job_file = next((worker.root / 'pending').glob('*.json'))
+    job = json.loads(job_file.read_text())
+
+    def independent_owner():
+        assert co._process_queue_once(worker.root, settings=worker.settings, copier=worker.copier)
+
+    owner = threading.Thread(target=independent_owner, name='test-ledger-owner')
+    owner.start()
+    assert started.wait(5) and Path(job['pin']).is_file()
 
     def close_policy():
         policy.close()
@@ -323,25 +350,156 @@ def test_policy_close_waits_for_and_joins_owned_mirror_worker(layout, monkeypatc
 
     closer = threading.Thread(target=close_policy)
     closer.start()
-    assert not closed.wait(.1)
+    assert closed.wait(.1)
+    assert Path(job['pin']).is_file() and job_file.exists()
     release.set()
+    owner.join(5)
     closer.join(5)
-    assert closed.is_set() and not worker.thread.is_alive()
+    assert closed.is_set() and not owner.is_alive() and not job_file.exists()
     slot, mirror = out / 'checkpoint.pt', mirror_dir / 'checkpoint.pt'
     assert slot.is_file() and mirror.is_file() and sha(slot) == sha(mirror)
     assert co.read_record(mirror)['sha256'] == sha(slot)
 
 
-def test_new_rolling_checkpoint_precedes_queued_historical_sweep_work(layout):
+def test_owner_retries_durable_job_after_copy_failure_without_another_checkpoint(layout):
+    import threading
+    out, mirror_dir = layout
+    attempts = []
+
+    def fail_once(path, dest, prune=False):
+        attempts.append((path, dest))
+        if len(attempts) == 1:
+            raise OSError('temporary HDD disconnect')
+        return co.verified_copy(path, dest)
+
+    worker = co.CheckpointOffloader(co.OffloadSettings.from_env(), copier=fail_once)
+    slot = write(out / 'checkpoint.pt')
+    worker.submit(slot, 'latest')
+    assert co._process_queue_once(worker.root, settings=worker.settings, copier=fail_once)['event'] == \
+        'checkpoint_offload_failed'
+    owner = threading.Thread(target=co.run_offload_owner, kwargs={
+        'root': worker.root, 'idle_seconds': .05, 'retry_seconds': .01, 'copier': fail_once})
+    owner.start()
+    owner.join(5)
+    assert not owner.is_alive() and len(attempts) == 2
+    assert not list((worker.root / 'pending').glob('*.json'))
+    assert sha(mirror_dir / slot.name) == sha(slot)
+    assert co.read_record(mirror_dir / slot.name)['source_identity'] == co._identity(slot.stat())
+
+
+def test_ledger_owner_launch_uses_durable_low_priority_service_command(layout, monkeypatch):
+    calls = []
+
+    class Result:
+        returncode = 0
+        stdout = stderr = ''
+
+    def run(args, **kwargs):
+        calls.append(args)
+        if args[:4] == ['systemctl', '--user', 'is-active', '--quiet']:
+            return type('Inactive', (), {'returncode': 1})()
+        return Result()
+
+    monkeypatch.setattr(co.subprocess, 'run', run)
+    co._launch_owner(layout[0].parent / 'queue')
+    command = calls[-1]
+    assert command[1].endswith('scripts/memory_ledger.py') and command[2:4] == ['run', '--unit']
+    assert command[command.index('--priority') + 1] == 'low'
+    assert command[command.index('--class') + 1] == 'service'
+    assert command[command.index('--budget-gb') + 1] == '2'
+    assert '--detach' in command and '--resumable' in command and '--wait' in command
+    assert command[-3:] == ['-m', 'natlang_neuralese.train.checkpoint_offload', '--owner-loop']
+
+
+def test_submit_waits_for_an_owner_in_idle_exit_before_starting_replacement(layout, monkeypatch):
+    root = layout[0].parent / 'queue'
+    root.mkdir()
+    (root / 'owner-idle.json').write_text('{}\n')
+    calls = []
+    owner_checks = 0
+
+    class Result:
+        stdout = stderr = ''
+
+        def __init__(self, returncode):
+            self.returncode = returncode
+
+    def run(args, **kwargs):
+        nonlocal owner_checks
+        calls.append(args)
+        if args[:4] == ['systemctl', '--user', 'is-active', '--quiet']:
+            if args[4].endswith('.service') and not args[4].endswith('-waiter.service'):
+                owner_checks += 1
+                return Result(0 if owner_checks == 1 else 1)
+            return Result(1)
+        return Result(0)
+
+    monkeypatch.setattr(co.subprocess, 'run', run)
+    co._launch_owner(root)
+    assert owner_checks >= 2 and any('memory_ledger.py' in str(arg) for arg in calls[-1])
+
+
+def test_new_rolling_checkpoint_is_selected_before_queued_archive_work(layout):
     out, _ = layout
     worker = co.CheckpointOffloader(co.OffloadSettings.from_env(), copier=co.local_copy)
     slot = write(out / 'checkpoint.pt')
-    with worker.cond:
-        worker.pending['old-stage-a/checkpoint-58.pt'] = ('archive', 'auto')
-        worker.pending['old-stage-b/checkpoint-49.pt'] = ('archive', 'auto')
-        worker.submit(slot, 'latest')
-        assert next(iter(worker.pending)) == str(slot.resolve())
-        worker.pending.clear()
+    (out.parent / 'old-stage-a').mkdir()
+    (out.parent / 'old-stage-b').mkdir()
+    old_a = write(out.parent / 'old-stage-a' / 'checkpoint-58.pt')
+    old_b = write(out.parent / 'old-stage-b' / 'checkpoint-49.pt')
+    worker.submit(old_a, 'archive', 'auto')
+    worker.submit(old_b, 'archive', 'auto')
+    worker.submit(slot, 'latest')
+    first = co._process_queue_once(worker.root, settings=worker.settings, copier=worker.copier)
+    assert first['path'] == str(slot.resolve())
+    assert worker.close()
+
+
+def test_new_checkpoint_replaces_only_pending_generation_and_keeps_exact_latest_pin(layout):
+    out, _ = layout
+    worker = co.CheckpointOffloader(co.OffloadSettings.from_env(), copier=co.local_copy)
+    slot = write(out / 'checkpoint.pt', b'old-generation')
+    worker.submit(slot, 'latest')
+    descriptor = next((worker.root / 'pending').glob('*.json'))
+    old = json.loads(descriptor.read_text())
+    replacement = write(out / 'checkpoint.pt.pending', b'new-generation')
+    os.replace(replacement, slot)
+    worker.submit(slot, 'latest')
+    new = json.loads(descriptor.read_text())
+    assert new['id'] != old['id'] and Path(new['pin']).read_bytes() == b'new-generation'
+    assert not Path(old['pin']).exists()
+    assert worker.wait(30)
+    assert worker.close()
+
+
+def test_active_copy_pin_survives_pending_replacement_until_it_returns(layout):
+    import threading
+    out, _ = layout
+    worker = co.CheckpointOffloader(co.OffloadSettings.from_env(), copier=co.local_copy)
+    slot = write(out / 'checkpoint.pt', b'active-generation')
+    worker.submit(slot, 'latest')
+    descriptor = next((worker.root / 'pending').glob('*.json'))
+    active = json.loads(descriptor.read_text())
+    started, release = threading.Event(), threading.Event()
+
+    def blocked(path, dest, prune=False):
+        started.set()
+        assert release.wait(5)
+        return co.verified_copy(path, dest)
+
+    owner = threading.Thread(target=lambda: co._process_queue_once(
+        worker.root, settings=worker.settings, copier=blocked))
+    owner.start()
+    assert started.wait(5)
+    replacement = write(out / 'checkpoint.pt.pending', b'newer-generation')
+    os.replace(replacement, slot)
+    worker.submit(slot, 'latest')
+    pending = json.loads(descriptor.read_text())
+    assert pending['id'] != active['id'] and Path(active['pin']).is_file()
+    release.set()
+    owner.join(5)
+    assert not owner.is_alive() and not Path(active['pin']).exists() and descriptor.exists()
+    assert worker.wait(30) and not descriptor.exists()
     assert worker.close()
 
 

@@ -2,11 +2,11 @@
 an ongoing basis, async from write"). plans/STORAGE_POLICY.md section 2a.
 
 Writes are unchanged: every full state goes to the NVMe (pending file, fsync, atomic rename; trajectory_state). After a
-successful write the file is handed to one process-owned worker thread, which copies it to the mirror
+successful write it is pinned and queued to an independently supervised low-priority memory-ledger owner
 
     <mirror root>/<path relative to ~/natlang/runs>      (default mirror root: <data_hdd>/natlang-active-lineage)
 
-in that owned worker at idle I/O class and nice 19: copy to ``<mirror>.offload.part`` in 8 MiB chunks with a streamed
+in that service at idle I/O class and nice 19: copy to ``<mirror>.offload.part`` in 8 MiB chunks with a streamed
 SHA-256, fsync, check the source did not change, re-read the copy (page cache dropped) and compare size and hash, then
 atomically rename it into place, fsync the directory and write ``<mirror>.offload.json`` (source identity, bytes,
 SHA-256). Two roles:
@@ -21,18 +21,21 @@ Crash consistency: the NVMe path is always the old regular file or a symlink to 
 and made durable first, never a dangling link. Stale ``.offload.part``/``.offload-link`` files of a crash are removed
 when a directory is next swept. Foreign partial copies (``<mirror>.part``) are never touched; a file with one is
 skipped. An offload failure is an event (stdout and ``<out>/checkpoint-offload.jsonl``), never a training failure; the
-failed file is retried with the next write. The worker coalesces repeated writes of one path to the newest.
+failed file remains queued for retry. New pending writes of one path supersede older pending generations. Active copies
+retain their inode pin until complete, while a newer pending generation is processed next.
 
 The mirror is used only when its root lies on a mounted filesystem other than the source's (never a directory on the
 same NVMe, e.g. inside a container without the mount). Settings (recorded in ``checkpoint-policy.json``):
 ``NATLANG_CHECKPOINT_OFFLOAD=0`` disables, ``NATLANG_CHECKPOINT_MIRROR`` sets the root,
 ``NATLANG_CHECKPOINT_OFFLOAD_MIN_GB`` (default 1) the smallest file offloaded, ``NATLANG_CHECKPOINT_OFFLOAD_LATEST=0``
 stops mirroring the resumable slot, ``NATLANG_CHECKPOINT_OFFLOAD_HDD_FLOOR_GB`` (default 50) the free space kept on the
-external disk. The checkpoint policy drains and joins its worker before trainer exit.
+external disk. The checkpoint policy only detaches from the independent owner; explicit final shutdown may call
+``drain_offloader`` to wait for all durable queue entries.
 """
 from __future__ import annotations
 
 import ctypes
+import fcntl
 import fnmatch
 import hashlib
 import json
@@ -40,6 +43,7 @@ import os
 import platform
 import shutil
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -61,6 +65,8 @@ KEEP_MARKER = '.keep-on-nvme'
 # lineage continues from the predecessor's checkpoint.pt (recipe DIRECT_PHASE_CONTINUATION), never from a best; the
 # text warm-up continues from its verified best, causal bootstrap and trajectories pin or resume theirs: not listed.
 PRUNABLE_SCHEMAS = ('natlang.neuralese-direct/1',)
+OWNER_UNIT = 'natlang-checkpoint-offload-owner'
+OWNER_IDLE_SECONDS = 2.0
 
 
 def _paths():
@@ -196,7 +202,11 @@ def file_sha256(path, *, drop_cache=True) -> str:
     return digest.hexdigest()
 
 
-def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX) -> dict:
+class CheckpointCopySuperseded(RuntimeError):
+    pass
+
+
+def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX, cancel=None) -> dict:
     """Durably copy the exact opened source, checking its identity, size and SHA-256.
 
     Atomic pathname replacement by training does not invalidate that intact
@@ -213,6 +223,8 @@ def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX) -> dict:
             before = os.fstat(src.fileno())
             copied = 0
             while block := src.read(CHUNK):
+                if cancel is not None and cancel():
+                    raise CheckpointCopySuperseded(f'{path} has a newer pending checkpoint generation')
                 source_hash.update(block)
                 out.write(block)
                 copied += len(block)
@@ -225,6 +237,8 @@ def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX) -> dict:
             _drop(src, out)
             if _identity(os.fstat(src.fileno())) != _identity(before):
                 raise RuntimeError(f'{path} changed during the copy')
+            if cancel is not None and cancel():
+                raise CheckpointCopySuperseded(f'{path} has a newer pending checkpoint generation')
         os.utime(partial, ns=(before.st_atime_ns, before.st_mtime_ns))
         digest = source_hash.hexdigest()
         if partial.stat().st_size != before.st_size or file_sha256(partial) != digest:
@@ -398,8 +412,12 @@ def read_record(mirror: Path) -> dict | None:
 def write_record(mirror: Path, record: dict) -> None:
     target = mirror.with_name(mirror.name + RECORD_SUFFIX)
     temp = target.with_name(target.name + '.pending')
-    temp.write_text(json.dumps(record, indent=1) + '\n')
+    with open(temp, 'w') as stream:
+        stream.write(json.dumps(record, indent=1) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
     os.replace(temp, target)
+    _fsync_dir(target.parent)
 
 
 def mirror_current(path: Path, mirror: Path) -> dict | None:
@@ -634,9 +652,9 @@ def update_policy_record(out, **fields) -> dict:
     return data
 
 
-# The background worker -------------------------------------------------------------------------------------------
+# The independently supervised checkpoint offload owner ----------------------------------------------------------
 def _lower_priority(pid: int) -> None:
-    """Use low CPU and best-effort I/O priority for the owned worker thread."""
+    """Use low CPU and best-effort I/O priority for the ledger-owned copy process."""
     try:
         os.setpriority(os.PRIO_PROCESS, pid, 19)
     except OSError:
@@ -650,32 +668,331 @@ def _lower_priority(pid: int) -> None:
 
 
 def owned_copy(path, dest, prune=False) -> dict:
-    """Copy on the caller-owned offload worker; never create an unowned child process.
-
-    The older implementation spawned a Python child in the learner's cgroup.
-    When the learner exited successfully, systemd killed that still-running copy
-    before its verified mirror receipt could be committed. The offloader now
-    owns and drains this work explicitly before its trainer closes.
-    """
+    """Copy in a caller-owned recovery-export worker thread at low CPU/I/O priority."""
     _lower_priority(threading.get_native_id())
     return local_copy(path, dest, prune=prune)
 
 
-class CheckpointOffloader:
-    """One background worker per process. ``submit`` never blocks on I/O and never raises."""
+def queue_root() -> Path:
+    return Path(os.environ.get('NATLANG_CHECKPOINT_OFFLOAD_QUEUE') or
+                _paths().resolve('data_nvme', 'natlang-checkpoint-offload-queue'))
 
-    def __init__(self, settings: OffloadSettings | None = None, *, copier=owned_copy):
+
+def _durable_json(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(path.name + f'.{os.getpid()}.pending')
+    with open(temp, 'w') as stream:
+        json.dump(value, stream, sort_keys=True)
+        stream.write('\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temp, path)
+    _fsync_dir(path.parent)
+
+
+def _queue_files(root: Path) -> list[Path]:
+    pending = root / 'pending'
+    return sorted(pending.glob('*.json')) if pending.is_dir() else []
+
+
+def _queue_key(path: Path) -> str:
+    return hashlib.sha256(str(path).encode()).hexdigest()
+
+
+def _pending_id(descriptor: Path) -> str | None:
+    try:
+        return json.loads(descriptor.read_text()).get('id')
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _owner_unit(root: Path) -> str:
+    return OWNER_UNIT + '-' + hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:10]
+
+
+def _enqueue(root: Path, path: Path, role: str, prune, settings: OffloadSettings) -> dict:
+    """Hard-link the exact completed checkpoint inode and atomically replace its pending generation."""
+    identity = _identity(path.stat())
+    key = _queue_key(path)
+    job_id = f'{time.time_ns()}-{os.getpid()}-{threading.get_native_id()}'
+    pin = path.with_name(f'.{path.name}.offload-pin-{job_id}')
+    os.link(path, pin, follow_symlinks=False)
+    pinned = os.stat(pin, follow_symlinks=False)
+    if _identity(pinned) != identity:
+        pin.unlink(missing_ok=True)
+        raise RuntimeError('checkpoint changed while creating immutable offload pin')
+    job = {'schema': 'natlang.checkpoint-offload-job/1', 'id': job_id, 'key': key,
+           'path': str(path), 'pin': str(pin), 'role': role, 'prune': prune,
+           'source_identity': identity, 'source_bytes': pinned.st_size,
+           'mirror_root': str(settings.mirror_root), 'settings': settings.record(),
+           'queue_root': str(root), 'created': time.time()}
+    descriptor = root / 'pending' / f'{key}.json'
+    try:
+        old = json.loads(descriptor.read_text())
+    except (OSError, ValueError):
+        old = None
+    try:
+        active = json.loads((root / 'active' / f'{key}.json').read_text())
+    except (OSError, ValueError):
+        active = None
+    _durable_json(descriptor, job)
+    if old and old.get('id') != job_id and not (active and active.get('id') == old.get('id')):
+        old_pin = Path(str(old.get('pin', '')))
+        if old_pin != pin and old_pin.name.startswith('.') and 'offload-pin-' in old_pin.name:
+            old_pin.unlink(missing_ok=True)
+    return job
+
+
+def _enqueue_initial_sweep(root: Path, path: Path, settings: OffloadSettings) -> None:
+    """Queue checkpoint artifacts already present in this run, once per stage directory."""
+    key = hashlib.sha256(str(path.parent).encode()).hexdigest()
+    marker = root / 'swept' / f'{key}.json'
+    if marker.exists():
+        return
+    siblings = [d for d in sorted(path.parent.parent.iterdir()) if d.is_dir() and d != path.parent] \
+        if _within_a_run(path) else []
+    for directory, own in ((path.parent, True), *((d, False) for d in siblings)):
+        for item, item_role in sweep_targets(directory, settings, own=own):
+            if item == path:
+                continue
+            _enqueue(root, item, item_role, 'auto', settings)
+    _durable_json(marker, {'schema': 'natlang.checkpoint-offload-sweep/1',
+                           'directory': str(path.parent), 'time': time.time()})
+
+
+def _launch_owner(root: Path) -> None:
+    """Admit the copy service under memory_ledger; no mirror copy runs in the learner cgroup."""
+    repo = Path(_paths().root('repo'))
+    ledger = repo / 'scripts' / 'memory_ledger.py'
+    py_path = str(repo / 'training' / 'neuralese') + os.pathsep + str(repo)
+    root.mkdir(parents=True, exist_ok=True)
+    unit = _owner_unit(root)
+    owner_service = unit + '.service'
+    waiter_service = unit + '-waiter.service'
+    for _ in range(100):
+        active = any(subprocess.run(['systemctl', '--user', 'is-active', '--quiet', unit],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+                     for unit in (owner_service, waiter_service))
+        idle_marker = root / 'owner-idle.json'
+        if active and not idle_marker.exists():
+            return
+        if active:
+            time.sleep(.1)
+            continue
+        idle_marker.unlink(missing_ok=True)
+        command = [sys.executable, str(ledger), 'run', '--unit', unit, '--budget-gb', '2',
+               '--reserve-gb', '0.5', '--class', 'service', '--priority', 'low',
+               '--resumable', '--wait', '86400', '--detach', '--workdir', str(repo),
+               '--env', 'PYTHONPATH=' + py_path,
+               '--env', 'NATLANG_CHECKPOINT_OFFLOAD_QUEUE=' + str(root), '--',
+               sys.executable, '-m', 'natlang_neuralese.train.checkpoint_offload', '--owner-loop']
+        result = subprocess.run(command, cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                timeout=30)
+        if result.returncode == 0:
+            return
+        time.sleep(.1)
+    raise RuntimeError('could not start checkpoint offload ledger owner: ' +
+                       (result.stderr or result.stdout)[-500:])
+
+
+def _offload_pinned(job: dict, settings: OffloadSettings, copier=None) -> dict:
+    path, pin = Path(job['path']), Path(job['pin'])
+    if pin.parent != path.parent or not pin.name.startswith(f'.{path.name}.offload-pin-'):
+        raise ValueError('offload job pin is not an adjacent checkpoint snapshot')
+    if not pin.is_file() or _identity(pin.stat()) != list(job['source_identity']):
+        raise RuntimeError(f"immutable checkpoint pin is missing or changed: {pin}")
+    settings = OffloadSettings(**job['settings'])
+    role = job['role']
+    mirror = mirror_path(path, settings)
+    if mirror is None:
+        raise RuntimeError('source path is outside the mirrored trees')
+    if mirror_unavailable(path, settings):
+        raise OSError('mirror filesystem unavailable')
+    manifest = pinned_by_manifest(path) if role == 'archive' else None
+    if manifest:
+        return {'event': 'checkpoint_offload_skipped', 'path': str(path),
+                'reason': f'pinned by corpus manifest {manifest}'}
+    if foreign_partial(mirror):
+        raise OSError(f'another copy in progress: {foreign_partial(mirror)}')
+    clean_stale(mirror.parent, older_than=settings.stale_part_seconds)
+    record = read_record(mirror)
+    copied = False
+    record_current = bool(record and record.get('source_identity') == list(job['source_identity']) and
+                          mirror.is_file() and mirror.stat().st_size == record.get('bytes') and
+                          (record.get('optimizer_pruned') or record.get('bytes') == job['source_bytes']))
+    if not record_current:
+        record = None
+        prune = job.get('prune') if role == 'archive' and settings.prune_archived else False
+        if role == 'archive' and not prune:
+            record = _hdd_link_shortcut(path, mirror)
+        if record is None:
+            free = shutil.disk_usage(_mount_of(Path(settings.mirror_root)) or settings.mirror_root).free
+            if free - int(job['source_bytes']) < settings.hdd_floor_bytes:
+                raise OSError(f'external disk floor: {free} bytes free, {job["source_bytes"]} to copy, floor {settings.hdd_floor_bytes}')
+            if copier is not None:
+                record = copier(pin, mirror, prune)
+            elif prune:
+                record = local_copy(pin, mirror, prune)
+            else:
+                descriptor = Path(job['queue_root']) / 'pending' / f"{job['key']}.json"
+                record = verified_copy(pin, mirror, cancel=lambda: _pending_id(descriptor) != job['id'])
+            record = dict(record, source=str(path), source_identity=list(job['source_identity']),
+                          source_pin=str(pin), time=time.time())
+            write_record(mirror, record)
+            copied = True
+    event = {'event': 'checkpoint_offloaded', 'role': role, 'path': str(path), 'mirror': str(mirror),
+             'bytes': record['bytes'], 'sha256': record['sha256'], 'copied': copied,
+             'optimizer_pruned': bool(record.get('optimizer_pruned')), 'source_bytes': record.get('source_bytes'),
+             'queue_job_id': job['id'], 'source_identity': list(job['source_identity'])}
+    if role == 'archive' and settings.link_archived and not path.is_symlink():
+        with path_lock(path):
+            try:
+                unchanged = _identity(path.lstat()) == list(job['source_identity'])
+            except OSError:
+                unchanged = False
+            if unchanged:
+                if record.get('optimizer_pruned'):
+                    event['receipts'] = rebind_receipts(path, record)
+                replace_with_link(path, mirror, expect=job['source_identity'])
+                event['linked'] = True
+    return event
+
+
+def _process_queue_once(root: Path, *, settings=None, copier=None) -> dict | None:
+    settings = settings or OffloadSettings.from_env()
+    decoded = []
+    for descriptor in _queue_files(root):
+        try:
+            job = json.loads(descriptor.read_text())
+            if job.get('schema') != 'natlang.checkpoint-offload-job/1' or descriptor.stem != job.get('key'):
+                continue
+            decoded.append((0 if job.get('role') == 'latest' else 1, -float(job.get('created', 0)), descriptor, job))
+        except (OSError, ValueError):
+            continue
+    if not decoded:
+        return None
+    _, _, descriptor, job = min(decoded)
+    event_path = Path(job['path']).parent / 'checkpoint-offload.jsonl'
+    active_path = root / 'active' / f"{job['key']}.json"
+    _durable_json(active_path, {'schema': 'natlang.checkpoint-offload-active/1',
+                                'id': job['id'], 'pin': job['pin'], 'started': time.time()})
+    try:
+        event = _offload_pinned(job, settings, copier=copier)
+        with open(event_path, 'a') as stream:
+            stream.write(json.dumps(dict(event, time=time.time())) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            current = json.loads(descriptor.read_text())
+        except (OSError, ValueError):
+            current = None
+        if current and current.get('id') == job.get('id'):
+            descriptor.unlink(missing_ok=True)
+            Path(job['pin']).unlink(missing_ok=True)
+            _fsync_dir(descriptor.parent)
+        elif current:
+            Path(job['pin']).unlink(missing_ok=True)
+        return event
+    except CheckpointCopySuperseded as error:
+        superseded = {'event': 'checkpoint_offload_superseded', 'path': job.get('path'),
+                      'queue_job_id': job.get('id'), 'error': str(error)[:300]}
+        try:
+            with open(event_path, 'a') as stream:
+                stream.write(json.dumps(dict(superseded, time=time.time())) + '\n')
+                stream.flush()
+                os.fsync(stream.fileno())
+        except OSError:
+            pass
+        return superseded
+    except Exception as error:
+        failure = {'event': 'checkpoint_offload_failed', 'path': job.get('path'), 'role': job.get('role'),
+                   'queue_job_id': job.get('id'), 'error': repr(error)[:500], 'retry': 'owner will retry'}
+        try:
+            with open(event_path, 'a') as stream:
+                stream.write(json.dumps(dict(failure, time=time.time())) + '\n')
+                stream.flush()
+                os.fsync(stream.fileno())
+        except OSError:
+            pass
+        print(json.dumps(failure), flush=True)
+        return failure
+    finally:
+        try:
+            active = json.loads(active_path.read_text())
+        except (OSError, ValueError):
+            active = None
+        if active and active.get('id') == job.get('id'):
+            active_path.unlink(missing_ok=True)
+            _fsync_dir(active_path.parent)
+        try:
+            current = json.loads(descriptor.read_text())
+        except (OSError, ValueError):
+            current = None
+        if not current or current.get('id') != job.get('id'):
+            Path(job['pin']).unlink(missing_ok=True)
+
+
+def _clean_stale_active(root: Path) -> None:
+    """Remove pins left by a crashed owner only when they are no longer the pending retry."""
+    active_dir = root / 'active'
+    if not active_dir.is_dir():
+        return
+    for active_path in active_dir.glob('*.json'):
+        try:
+            active = json.loads(active_path.read_text())
+            pending = json.loads((root / 'pending' / active_path.name).read_text())
+        except (OSError, ValueError):
+            pending = None
+            active = {}
+        if pending and pending.get('id') == active.get('id'):
+            continue  # interrupted in-flight copy; the exact pin is its retry input
+        pin = Path(str(active.get('pin', '')))
+        if pin.name.startswith('.') and 'offload-pin-' in pin.name:
+            pin.unlink(missing_ok=True)
+        active_path.unlink(missing_ok=True)
+
+
+def run_offload_owner(*, root=None, idle_seconds=OWNER_IDLE_SECONDS, retry_seconds=60.0, copier=None) -> None:
+    """Ledger service entrypoint. Queue pins/descriptors are its durable recovery state."""
+    root = Path(root or queue_root())
+    (root / 'owner-idle.json').unlink(missing_ok=True)
+    _clean_stale_active(root)
+    _lower_priority(os.getpid())
+    last_work = time.monotonic()
+    while True:
+        event = _process_queue_once(root, copier=copier)
+        if event and event.get('event') in ('checkpoint_offloaded', 'checkpoint_offload_superseded'):
+            last_work = time.monotonic()
+            continue
+        if _queue_files(root):
+            # Keep the ledger owner alive for a bounded retry window; failures
+            # such as a disconnected HDD remain durable across service restarts.
+            time.sleep(retry_seconds if event else min(1.0, retry_seconds))
+            continue
+        # Idle exit is serialized with producer writes to avoid a missed wakeup.
+        root.mkdir(parents=True, exist_ok=True)
+        with open(root / 'launch.lock', 'a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if _queue_files(root):
+                continue
+            if time.monotonic() - last_work >= idle_seconds:
+                _durable_json(root / 'owner-idle.json', {'pid': os.getpid(), 'at': time.time()})
+                return
+        time.sleep(min(1.0, max(.05, idle_seconds - (time.monotonic() - last_work))))
+        if _queue_files(root):
+            time.sleep(retry_seconds if (root / 'last-failure').exists() else .05)
+
+
+class CheckpointOffloader:
+    """Queue producer. ``close`` never waits for the independent copy owner."""
+
+    def __init__(self, settings: OffloadSettings | None = None, *, copier=None, queue=None, launch=None):
         self.settings = settings or OffloadSettings.from_env()
         self.copier = copier
-        self.pending: dict[str, tuple[str, bool | str]] = {}
-        self.failed: dict[str, tuple[str, bool | str]] = {}
+        self.root = Path(queue or queue_root())
+        self.launch = (copier is None) if launch is None else launch
         self.events: list[dict] = []
-        self.swept: set[str] = set()
-        self.cond = threading.Condition()
-        self.busy = False
         self.closing = False
-        self.thread = threading.Thread(target=self._run, name='checkpoint-offload', daemon=True)
-        self.thread.start()
 
     def submit(self, path, role: str | None = None, prune=False) -> None:
         try:
@@ -683,56 +1000,41 @@ class CheckpointOffloader:
             role = role or role_of(path, self.settings)
             if role is None or (role == 'latest' and not self.settings.mirror_latest):
                 return
-            try:
-                if path.is_symlink() or path.stat().st_size < self.settings.min_bytes:
-                    return
-            except OSError:
+            if path.is_symlink() or path.stat().st_size < self.settings.min_bytes:
                 return
-            with self.cond:
-                if self.closing:
-                    raise RuntimeError('checkpoint offloader is closing')
-                for retry, job in list(self.failed.items()):
-                    self.pending.setdefault(retry, job)
-                self.failed.clear()
-                self.pending.pop(str(path), None)  # coalesce obsolete queued generations of this path
-                # Keep the rolling checkpoint (and newly published bests)
-                # ahead of one-time historical sibling sweeps. An active old
-                # copy is allowed to finish, but a new submission must not sit
-                # behind a queue of stale 15 GiB checkpoints.
-                self.pending = {str(path): (role, prune), **self.pending}
-                if str(path.parent) not in self.swept:  # leftovers of earlier processes: this and sibling stages
-                    self.swept.add(str(path.parent))
-                    siblings = [d for d in sorted(path.parent.parent.iterdir()) if d.is_dir() and d != path.parent
-                                ] if _within_a_run(path) else []
-                    for directory, own in ((path.parent, True), *((d, False) for d in siblings)):
-                        for item, item_role in sweep_targets(directory, self.settings, own=own):
-                            self.pending.setdefault(str(item), (item_role, 'auto'))
-                self.cond.notify()
-        except Exception as error:  # never fail a write
+            self.root.mkdir(parents=True, exist_ok=True)
+            with open(self.root / 'launch.lock', 'a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                _enqueue(self.root, path, role, prune, self.settings)
+                try:
+                    _enqueue_initial_sweep(self.root, path, self.settings)
+                except OSError as error:
+                    self._event({'event': 'checkpoint_offload_sweep_failed', 'path': str(path),
+                                 'error': repr(error)})
+                if self.launch:
+                    _launch_owner(self.root)
+        except Exception as error:  # checkpoint publication remains successful
             self._event({'event': 'checkpoint_offload_failed', 'path': str(path), 'error': repr(error)})
 
     def wait(self, timeout: float | None = None) -> bool:
+        """Explicit synchronous drain for tests/operators; training handoffs never call it."""
         deadline = None if timeout is None else time.monotonic() + timeout
-        with self.cond:
-            while self.pending or self.busy:
-                left = None if deadline is None else deadline - time.monotonic()
-                if left is not None and left <= 0:
+        while _queue_files(self.root):
+            if deadline is not None and time.monotonic() >= deadline:
+                return False
+            event = _process_queue_once(self.root, settings=self.settings, copier=self.copier)
+            if event is None:
+                return False
+            self.events.append(event)
+            if event.get('event') == 'checkpoint_offload_failed':
+                if deadline is None:
                     return False
-                self.cond.wait(left)
+                time.sleep(.05)
         return True
 
     def close(self, timeout: float | None = None) -> bool:
-        """Drain and join the owned copy worker before the trainer process exits.
-
-        Returns False on timeout. Failed jobs remain recorded in the offload
-        event log and are not silently retried during shutdown.
-        """
-        with self.cond:
-            self.closing = True
-            self.cond.notify_all()
-        if threading.current_thread() is not self.thread:
-            self.thread.join(timeout)
-        return not self.thread.is_alive()
+        self.closing = True
+        return True
 
     def _event(self, event: dict) -> None:
         event = dict(event, time=time.time())
@@ -746,27 +1048,23 @@ class CheckpointOffloader:
             except OSError:
                 pass
 
-    def _run(self) -> None:
-        while True:
-            with self.cond:
-                while not self.pending and not self.closing:
-                    self.cond.wait()
-                if self.closing and not self.pending:
-                    return
-                path, (role, prune) = next(iter(self.pending.items()))
-                del self.pending[path]
-                self.busy = True
-            try:
-                self._event(offload_one(path, role, self.settings, copier=self.copier, prune=prune))
-            except Exception as error:
-                with self.cond:
-                    self.failed[path] = (role, prune)
-                self._event({'event': 'checkpoint_offload_failed', 'path': path, 'role': role,
-                             'error': repr(error)[:500], 'retry': 'at the next checkpoint write'})
-            finally:
-                with self.cond:
-                    self.busy = False
-                    self.cond.notify_all()
+
+def _owner_cli() -> int:
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--owner-loop', action='store_true')
+    parser.add_argument('--drain', action='store_true')
+    args = parser.parse_args()
+    if args.owner_loop:
+        run_offload_owner()
+        return 0
+    if args.drain:
+        return 0 if drain_offloader(None) else 1
+    parser.error('choose --owner-loop or --drain')
+
+
+if __name__ == '__main__':
+    raise SystemExit(_owner_cli())
 
 
 def _within_a_run(path: Path) -> bool:
@@ -812,7 +1110,7 @@ _RECOVERY_QUEUES_GUARD = threading.Lock()
 
 
 def close_offloader(timeout: float | None = None) -> bool:
-    """Drain the process-owned mirror worker at the trainer shutdown boundary."""
+    """Close the process-local queue producer without waiting for mirrored checkpoint I/O."""
     global _OFFLOADER
     with _OFFLOADER_GUARD:
         worker = _OFFLOADER
@@ -820,6 +1118,25 @@ def close_offloader(timeout: float | None = None) -> bool:
     if worker is None:
         return True
     return worker.close(timeout)
+
+
+def drain_offloader(timeout: float | None = None) -> bool:
+    """Explicit final-shutdown/operator drain; resumable training handoffs must not call this."""
+    root = queue_root()
+    deadline = None if timeout is None else time.monotonic() + timeout
+    while _queue_files(root):
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            with open(root / 'launch.lock', 'a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                _launch_owner(root)
+        except Exception:
+            if deadline is not None and time.monotonic() >= deadline:
+                return False
+        if deadline is not None and time.monotonic() >= deadline:
+            return False
+        time.sleep(.2)
+    return True
 
 
 def after_write(path, role: str | None = None, prune=False) -> None:

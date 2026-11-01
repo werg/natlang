@@ -255,11 +255,14 @@ real isolated torch/transformers/numpy imports. Complete step59 recovery is
 still being exercised; the strong export queue is **not qualified or installed**.
 The manual step59 pin remains protected. At this point in the historical run,
 background checkpoint copies used idle I/O class and the implementation relied
-on child copies. The current implementation instead copies on one process-owned
-worker thread, prioritizes the rolling checkpoint ahead of historical sweep work,
-and drains/joins the thread in `CheckpointPolicy.close()`; it does not rely on a
-detached copy child surviving trainer teardown. The former full56/full58 and SD52
-fallback copies remain separate historical recovery evidence.
+on child copies. The following intermediate implementation used a process-owned
+worker thread and joined it in `CheckpointPolicy.close()`, but measured full
+checkpoint copies could take about 50 minutes and block each learner handoff.
+The current implementation instead pins each completed inode and queues it for
+the separate low-priority, memory-ledger-owned checkpoint-offload service.
+Pending copies coalesce by source path; active pins survive trainer exit, and
+explicit final shutdown can drain the durable queue. The former full56/full58
+and SD52 fallback copies remain separate historical recovery evidence.
 
 ## Actual continuation, source admission and writer diagnosis, November 1, 02:52 CET
 
