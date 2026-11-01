@@ -17,8 +17,8 @@ def attach_qualification(plan,path):
     evidence_ref={'path':str(evidence_path),'sha256':sha(evidence_path)}
     if not any(x['path']==str(evidence_path) for x in plan['closure']):plan['closure'].append({'role':'controls',**evidence_ref})
     plan['restore_qualification']={'path':str(path),'sha256':'0'*64}
-    checks={key:True for key in ('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded','checkpoint_full_state_loaded','node_collector_imported','task_assets_read')}
-    write_json_durable(path,{'schema':'natlang.local-recovery-restore-qualification/1','status':'passed','inputs':plan['inputs'],'restore':plan.get('restore'),'additional_inputs':plan.get('additional_inputs',[]),'controller_config':plan.get('controller',{}).get('config'),'closure_identity':recovery_closure_identity(plan),'checks':checks,'evidence':{key:evidence_ref for key in checks}})
+    checks={key:True for key in ('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded','checkpoint_full_state_loaded','checkpoint_plan_custody','node_collector_imported','task_assets_read')}
+    write_json_durable(path,{'schema':'natlang.local-recovery-restore-qualification/1','status':'passed','checkpoint':{'sha256':'a'*64,'training_custody':{'source_roots':[plan['inputs']['train'],plan['inputs']['held']],'ce':plan['inputs']['ce']}},'inputs':plan['inputs'],'restore':plan.get('restore'),'additional_inputs':plan.get('additional_inputs',[]),'controller_config':plan.get('controller',{}).get('config'),'closure_identity':recovery_closure_identity(plan),'checks':checks,'evidence':{key:evidence_ref for key in checks}})
     plan['restore_qualification']['sha256']=sha(path)
     plan['closure'].append({'role':'controls',**plan['restore_qualification']})
     return plan
@@ -260,6 +260,16 @@ def test_restore_qualification_rejects_changed_restore_contract(setup):
     from natlang_neuralese.train.checkpoint_offload import validate_restore_qualification
     _,plan=setup;validate_restore_qualification(plan)
     plan['restore']['base_path']='/changed/base'
+    with pytest.raises(ValueError,match='complete closure'):validate_restore_qualification(plan)
+
+
+def test_restore_qualification_rejects_checkpoint_from_another_source(setup):
+    from natlang_neuralese.train.checkpoint_offload import validate_restore_qualification
+    _,plan=setup;ref=plan['restore_qualification'];path=Path(ref['path']);proof=json.loads(path.read_text())
+    proof['checkpoint']['training_custody']['source_roots'][0]['sha256']='b'*64
+    write_json_durable(path,proof);old=ref['sha256'];ref['sha256']=sha(path)
+    for item in plan['closure']:
+        if item['path']==str(path) and item['sha256']==old:item['sha256']=ref['sha256']
     with pytest.raises(ValueError,match='complete closure'):validate_restore_qualification(plan)
 
 

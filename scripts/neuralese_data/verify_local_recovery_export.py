@@ -40,13 +40,17 @@ def verify(path, expected_sha256):
                    and item['declared_path']==proof_ref['path'] and item['sha256']==proof_ref['sha256']]
     if len(proof_entries)!=1:raise ValueError('restore qualification not in exported closure')
     proof=json.loads(Path(proof_entries[0]['path']).read_text())
+    qualified_checkpoint=proof.get('checkpoint') or {}; qualified_custody=qualified_checkpoint.get('training_custody') or {}
     if (proof.get('status')!='passed' or proof.get('inputs')!=plan['inputs']
         or proof.get('restore')!=plan.get('restore') or proof.get('additional_inputs',[])!=plan.get('additional_inputs',[])
         or proof.get('controller_config')!=plan['controller']['config']
+        or not isinstance(qualified_checkpoint.get('sha256'),str) or len(qualified_checkpoint['sha256'])!=64
+        or qualified_custody.get('source_roots')!=[plan['inputs']['train'],plan['inputs']['held']]
+        or qualified_custody.get('ce')!=plan['inputs']['ce']
         or proof.get('closure_identity')!=recovery_closure_identity(plan)
         or not all(proof.get('checks',{}).get(key) is True for key in
                    ('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded',
-                    'checkpoint_full_state_loaded','node_collector_imported','task_assets_read'))):
+                    'checkpoint_full_state_loaded','checkpoint_plan_custody','node_collector_imported','task_assets_read'))):
         raise ValueError('export restore qualification differs')
     return {'receipt_sha256':expected_sha256,'checkpoint_sha256':checkpoint['sha256'],
             'global_step':receipt['global_step'],'closure_entries':len(observed),

@@ -945,13 +945,17 @@ def validate_restore_qualification(plan):
         raise ValueError('recovery restore qualification binding changed')
     value=json.loads(path.read_text());checks=value.get('checks') or {}
     required=('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded',
-              'checkpoint_full_state_loaded','node_collector_imported','task_assets_read')
+              'checkpoint_full_state_loaded','checkpoint_plan_custody','node_collector_imported','task_assets_read')
     evidence=value.get('evidence') or {}
+    checkpoint=value.get('checkpoint') or {};custody=checkpoint.get('training_custody') or {}
     available={(item['path'],item['sha256']) for item in plan['closure'] if item['role']=='controls'}
     if (value.get('schema')!='natlang.local-recovery-restore-qualification/1'
             or value.get('status')!='passed' or value.get('inputs')!=plan['inputs']
             or value.get('restore')!=plan.get('restore') or value.get('additional_inputs',[])!=plan.get('additional_inputs',[])
             or value.get('controller_config')!=plan['controller']['config']
+            or not isinstance(checkpoint.get('sha256'),str) or not re.fullmatch(r'[0-9a-f]{64}',checkpoint['sha256'])
+            or custody.get('source_roots')!=[plan['inputs']['train'],plan['inputs']['held']]
+            or custody.get('ce')!=plan['inputs']['ce']
             or value.get('closure_identity')!=recovery_closure_identity(plan)
             or set(evidence)!=set(required) or any(checks.get(key) is not True for key in required)):
         raise ValueError('recovery restore qualification does not bind the complete closure')

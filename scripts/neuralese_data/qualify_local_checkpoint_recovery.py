@@ -99,7 +99,10 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
     store=Path(plan['destination']).resolve(strict=True);scratch_parent=Path(scratch_parent).resolve(strict=True)
     if store.stat().st_dev!=scratch_parent.stat().st_dev:
         raise ValueError('recovery qualification scratch must share the independent destination filesystem')
-    checkpoint_sha=file_sha256(checkpoint)
+    def checkpoint_identity():
+        stat=checkpoint.stat();return (stat.st_dev,stat.st_ino,stat.st_size,stat.st_mtime_ns,stat.st_ctime_ns)
+    checkpoint_before=checkpoint_identity();checkpoint_sha=file_sha256(checkpoint)
+    if checkpoint_identity()!=checkpoint_before:raise ValueError('recovery checkpoint changed while hashing')
     placeholder=plan['restore_qualification'];base_closure=[x for x in plan['closure'] if not (x['role']=='controls' and x['path']==placeholder['path'] and x['sha256']==placeholder['sha256'])]
     blobs=copy_closure_blobs(base_closure,store)
     restore=plan.get('restore') or {}
@@ -152,9 +155,9 @@ from pathlib import Path
 from natlang_neuralese.model.native_model import load_native_checkpoint
 from natlang_neuralese.data.native_sources import NativeGraphSource
 from natlang_neuralese.data.native_graph_schema import communication_classification
-from natlang_neuralese.train.checkpoint_offload import recovery_training_custody
+from natlang_neuralese.train.checkpoint_offload import recovery_training_custody, _plan_matches_checkpoint
 from natlang_neuralese.train.recipe import native_source_dependencies
-checkpoint,base,train,held,sample,fingerprint,mapping=sys.argv[1:]
+checkpoint,base,train,held,sample,fingerprint,mapping,plan_path=sys.argv[1:]
 paths=json.loads(Path(mapping).read_text())['paths']
 def route(parent,child):
  p=Path(child);key=str(p);resolved=str(p.resolve())
@@ -164,6 +167,7 @@ def route(parent,child):
  raise ValueError('restore source escaped staged closure: '+key)
 train_deps=native_source_dependencies(train,source_route=route);held_deps=native_source_dependencies(held,source_route=route)
 model,tokenizer,roles,config,state=load_native_checkpoint(checkpoint,base=base,device='cpu')
+if not _plan_matches_checkpoint(json.loads(Path(plan_path).read_text()),state):raise ValueError('restored checkpoint source and frame custody differs from recovery plan')
 if config['tokenizer_fingerprint']!=fingerprint:raise ValueError('restored tokenizer fingerprint differs')
 source=NativeGraphSource(sample,fingerprint,required_split='train',role_ids=tuple(config['marker_ids']))
 example=next(iter(source));classification=communication_classification(example)
@@ -177,11 +181,13 @@ for line in Path('/proc/self/maps').read_text().splitlines():
 print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'tokenizer_fingerprint':config['tokenizer_fingerprint'],'train_dependencies':len(train_deps),'held_dependencies':len(held_deps),'sample_id':example.id,'sample_classification':classification,'mapped_executables':sorted(set(mapped))}),flush=True)
 '''
         train=Path(source_map[plan['inputs']['train']['path']]);held=Path(source_map[plan['inputs']['held']['path']]);sample=Path(source_map[restore['sample_graph']])
-        command=[str(venv/'bin/python'),'-c',code,str(checkpoint),str(base),str(train),str(held),str(sample),restore['tokenizer_fingerprint'],str(root/'.natlang-source-map.json')]
+        staged_plan=root/'restore-plan.json';write_json_durable(staged_plan,plan)
+        command=[str(venv/'bin/python'),'-c',code,str(checkpoint),str(base),str(train),str(held),str(sample),restore['tokenizer_fingerprint'],str(root/'.natlang-source-map.json'),str(staged_plan)]
         py=subprocess.run(command,cwd=runtime,env=env,capture_output=True,text=True,timeout=1800)
         if py.returncode:raise RuntimeError('restored native checkpoint smoke failed: '+py.stderr[-5000:])
         lines=[line[len('RECOVERY_SMOKE='):] for line in py.stdout.splitlines() if line.startswith('RECOVERY_SMOKE=')]
         if len(lines)!=1:raise ValueError('restored native checkpoint smoke omitted exact result')
+        if checkpoint_identity()!=checkpoint_before:raise ValueError('recovery checkpoint changed during isolated restore')
         smoke=json.loads(lines[0]);collector=(runtime/'ts-host/dist/teacher/collector.js').resolve(strict=True)
         js="import fs from 'node:fs'; await import(process.argv[1]); console.log('NODE_RECOVERY='+JSON.stringify(fs.readFileSync('/proc/self/maps','utf8')));"
         node_result=subprocess.run([str(node),'--input-type=module','-e',js,collector.as_uri()],cwd=runtime,env=env,capture_output=True,text=True,timeout=120)
@@ -218,9 +224,10 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
     evidence_path.parent.mkdir(parents=True,exist_ok=True);write_json_durable(evidence_path,evidence)
     evidence_ref={'path':str(evidence_path),'sha256':file_sha256(evidence_path)}
     plan['closure']=base_closure+[{'role':'controls',**evidence_ref}]
-    checks={name:True for name in ('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded','checkpoint_full_state_loaded','node_collector_imported','task_assets_read')}
+    checks={name:True for name in ('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded','checkpoint_full_state_loaded','checkpoint_plan_custody','node_collector_imported','task_assets_read')}
     plan['restore_qualification']={'path':str(qualification_path),'sha256':'0'*64}
     qualification={'schema':'natlang.local-recovery-restore-qualification/1','status':'passed','inputs':plan['inputs'],
+                   'checkpoint':{'sha256':checkpoint_sha,'training_custody':smoke['custody']},
                    'closure_identity':recovery_closure_identity(plan),'restore':plan['restore'],
                    'additional_inputs':plan.get('additional_inputs',[]),'controller_config':plan['controller']['config'],'checks':checks,
                    'evidence':{name:evidence_ref for name in checks},'host_contract':evidence['host_contract']}
