@@ -146,6 +146,16 @@ def runtime_bindings(root=None):
             'observed_paths': observed_paths, 'numerical_runtime': numerical_runtime()}
 
 
+_LOADED_RUNTIME_BINDING = runtime_bindings()
+
+
+def checked_loaded_runtime():
+    current = runtime_bindings()
+    if current != _LOADED_RUNTIME_BINDING:
+        raise ValueError("converter runtime files changed after the process loaded; restart conversion")
+    return current
+
+
 def prove_render_pending_runtime_continuation(parent_binding, current_binding, parent_frontier):
     """Prove the one reviewed builder-only change can resume prior render shards."""
     if type(parent_frontier) is not int or parent_frontier < 0:
@@ -716,7 +726,7 @@ def _convert(args, prepared):
     repair_binding = verify_derived_repair_export(args.export_receipt, export, source)
     if (args.output / 'receipt.json').exists():
         raise ValueError('completed graph output is immutable; use its bound receipt')
-    runtime = runtime_bindings()
+    runtime = checked_loaded_runtime()
     binding = {'source': {'path': str(source), 'sha256': digest, 'sessions': source_rows},
         'export_receipt': {'path': str(args.export_receipt), 'sha256': sha256_file_hex(args.export_receipt)},
         'source_contract': export['contract'], 'protection': protection['proof'],
@@ -916,12 +926,13 @@ def _convert(args, prepared):
                         'sha256': sha256_file_hex(output_path)})
     omissions_path = args.output / 'omissions.jsonl'
     _sync_concat(omissions_path, [Path(item['path']).parent / 'omissions.jsonl' for item in shard_receipts])
+    checked_loaded_runtime()
     write_json_durable(args.output / 'receipt.json', {'schema': 'natlang.acquired-full-session-graphs/1',
         'source': {'path': str(source), 'sha256': digest},
         'export_receipt': {'path': str(args.export_receipt), 'sha256': sha256_file_hex(args.export_receipt)},
         'protection': protection['proof'], 'decision_holds': decision_bindings,
         'source_tokenizer_fingerprint': source_fp, 'expanded_tokenizer_fingerprint': expanded_fp,
-        'builder_sha256': sha256_file_hex(__file__), 'runtime': runtime,
+        'builder_sha256': runtime['files']['builder']['sha256'], 'runtime': runtime,
         'prepared_tokenizer': prepared.binding,
         **({'explicit_history_reasoning_policy': prepared_profile}
            if prepared_profile is not None else {}),

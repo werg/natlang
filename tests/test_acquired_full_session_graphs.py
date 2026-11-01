@@ -175,6 +175,15 @@ def test_original_target_identity_closes_decision_hold_descendants():
     assert held_session_targets(row,{'unrelated:1'})==[]
 
 
+def test_loaded_runtime_rejects_changed_files(monkeypatch):
+    from scripts.neuralese_data import build_acquired_full_session_graphs as builder
+    original = builder._LOADED_RUNTIME_BINDING
+    assert builder.checked_loaded_runtime() == original
+    monkeypatch.setattr(builder, "runtime_bindings", lambda: {**original, "fingerprint": "changed"})
+    with pytest.raises(ValueError, match="changed after the process loaded"):
+        builder.checked_loaded_runtime()
+
+
 def test_runtime_resume_fingerprint_is_independent_of_checkout_path(tmp_path):
     from scripts.neuralese_data.build_acquired_full_session_graphs import runtime_bindings
     first=tmp_path/'checkout-a';second=tmp_path/'checkout-b'
