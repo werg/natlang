@@ -20,6 +20,58 @@ from natlang_neuralese.train.recipe import load_recipe,resolve_stage_inputs,_sou
 from scripts.neuralese_data.build_acquired_streaming_successor import (bind,checked,read,require_output_headroom,
     predecessor_mass_census,sft_capacity_descriptor,receipt_protection_digest)
 
+def seed_unchanged_index(prep,prior,old_geo,old_rows):
+    """Independently prove the filtered leaf bytes before reusing old row metadata."""
+    from natlang_neuralese.common import row_index
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached,canonical_json_sha256_hex
+    from scripts.neuralese_data.partition_acquired_context_pending import _checked as fresh_checked
+    identity=old_geo['identity'];pairs=read(checked(prep['graph_pairs'],'static graph-pair receipt'))
+    original=fresh_checked(pairs['source_leaf']);remaining=fresh_checked(prep['unchanged_leaf'])
+    original_source=NativeGraphSource(checked(prior['source'],'prior source'),identity['tokenizer'],
+                                      required_split='train',role_ids=identity['roles'])
+    if (len(original_source.entries)!=len(old_rows) or any(e['id']!=r['id'] or e['binding']!=r['binding']
+        for e,r in zip(original_source.entries,old_rows,strict=True))):
+        raise ValueError('predecessor execution index differs from its exact family map')
+    leaf=original_source.children[-1]
+    if leaf.file_sha256!=pairs['source_leaf']['sha256']:raise ValueError('prior indexed final leaf differs')
+    evidence={row['id']:row for row in pairs['rows']};selected=set(prep['corrected_ids']);retained=[];seen=set()
+    if set(evidence)!=selected:raise ValueError('source partition evidence differs from selected rows')
+    with open_jsonl_text(original) as source,open_jsonl_text(remaining) as result:
+        source=iter(source);result=iter(result)
+        for entry in leaf.entries:
+            original_line=next((line for line in source if line.strip()),None)
+            if original_line is None:raise ValueError('original leaf omitted an indexed row')
+            ident=entry['id']
+            if ident in selected:
+                parent=json.loads(original_line)
+                if parent.get('id')!=ident or canonical_json_sha256_hex(parent)!=evidence[ident]['parent_row_sha256']:
+                    raise ValueError('source partition selected row differs from its parent proof')
+                seen.add(ident)
+            else:
+                remainder_line=next((line for line in result if line.strip()),None)
+                if remainder_line!=original_line:raise ValueError('unchanged source leaf differs from exact original row bytes')
+                retained.append(entry)
+        if (next((line for line in source if line.strip()),None) is not None
+            or next((line for line in result if line.strip()),None) is not None or seen!=selected or not retained):
+            raise ValueError('source partition contains extra or missing rows')
+    fresh_checked(pairs['source_leaf']);fresh_checked(prep['unchanged_leaf'])
+    package=Path(capacity.__file__).resolve().parents[1]
+    names=('data/native_sources.py','data/native_graph_schema.py','data/decision_graph.py','model/native_graph_plan.py',
+           'data/native_pair_schema.py','common/row_index.py','common/jsonio.py','common/hashing.py')
+    parser=canonical_json_sha256_hex({name:sha256_file_hex_cached(package/name) for name in names})
+    if parser!=identity.get('parser_policy_sha256'):raise ValueError('source parser changed; cannot seed prior execution index')
+    key={'source_sha256':prep['unchanged_leaf']['sha256'],'tokenizer':identity['tokenizer'],'split':'train',
+         'policy_sha256':parser,'kind':'native-graphs','pair_model':None,'role_ids':identity['roles']}
+    index_path=row_index.entry_path('native-graphs',canonical_json_sha256_hex(key))
+    record={'schema':'natlang.row-index/1','key':key,'entries':retained,'metadata_sha256':canonical_json_sha256_hex(retained)}
+    existing=row_index.load(index_path)
+    if existing is not None and existing!=record:raise ValueError('unchanged source index conflicts with exact partition proof')
+    if existing is None:row_index.save(index_path,record)
+    if row_index.load(index_path)!=record:raise ValueError('verified unchanged source index was not durably cached')
+    return {'schema':'natlang.static-context-unchanged-index-proof/1','source':pairs['source_leaf'],
+        'remainder':prep['unchanged_leaf'],'index':bind(index_path),'rows':len(retained),
+        'scope':'fresh exact row-byte comparison plus authenticated prior execution index; no model execution'}
+
 def reconcile_geometry(entries,old_rows,old_geo,ledger,corrected_ids,corrected_slots):
     """Reuse only geometry whose ordered original bindings and token counts agree."""
     old_by_id={r['id']:r for r in old_rows};new_by_id={r['id']:r for r in entries};selected=set(corrected_ids)
@@ -66,6 +118,7 @@ def finalize(preparation, predecessor, output):
         or len(old_map.get('rows',[]))!=prior['rows'] or old_geo.get('schema')!='natlang.native-packed-geometry/1'
         or (old_geo.get('source') or {}).get('sha256')!=prior['source']['sha256'] or len(old_geo.get('kv_slots',[]))!=prior['rows']):
         raise ValueError('earned family map or geometry lacks exact source custody')
+    index_proof=seed_unchanged_index(prep,prior,old_geo,old_map['rows'])
     ident=old_geo['identity'];source=NativeGraphSource(source_path,ident['tokenizer'],required_split='train',role_ids=ident['roles'])
     entries=source.entries;old_rows=old_map['rows']
     if len(entries)!=prior['rows']:raise ValueError('static source changed the earned graph inventory')
@@ -140,6 +193,7 @@ def finalize(preparation, predecessor, output):
         'objective_transition':transition,'family_balance':prior['family_balance'],
         'family_census':prepared_policy['_family_census'],'current_protection_digest':protection.digest,
         'source_correction':bind(correction_path),'static_context_preparation':bind(prep_path),
+        'unchanged_source_index_proof':index_proof,
         'limitations':['Current full-checkpoint preflight and actual GPU capacity qualification are still required.',
             'Graph edges are static derived training structure, not observed teacher invocations.']}
     write_json_durable(output/'receipt.json',result)

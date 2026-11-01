@@ -63,6 +63,7 @@ def test_finalizer_builds_bound_source_geometry_policy_and_receipt(tmp_path,monk
     monkeypatch.setattr(tool,'require_output_headroom',lambda _:None)
     monkeypatch.setattr(tool.ProtectedWorlds,'load',lambda:SimpleNamespace(digest='p'))
     monkeypatch.setattr(tool,'source_correction_dependencies',lambda _:[])
+    monkeypatch.setattr(tool,'seed_unchanged_index',lambda *a:{'rows':0,'scope':'fixture'})
     monkeypatch.setattr(tool,'policy_objective',lambda policy:policy['objective'])
     monkeypatch.setattr(tool,'identity',lambda obj:{'name':'test','sha256':'a'*64})
     monkeypatch.setattr(tool,'load_policy',lambda ref:json.loads(Path(ref['path']).read_text()))
@@ -79,3 +80,37 @@ def test_finalizer_builds_bound_source_geometry_policy_and_receipt(tmp_path,monk
     assert new_map['rows']==[{'id':'a','binding':'new-a','family':'general-agent'}]
     new_geo=json.loads(Path(result['geometry']['path']).read_text())
     assert new_geo['kv_slots'][0]>0 and new_geo['source']['sha256']==new_source['sha256']
+
+
+def test_seed_index_reuses_only_byte_identical_authenticated_rows(tmp_path,monkeypatch):
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached,canonical_json_sha256_hex
+    from natlang_neuralese.common import row_index
+    from scripts.neuralese_data import finalize_earned_static_context_source as tool
+    from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter
+    def write_graphs(name,rows):
+        w=GraphWriter(tmp_path/name)
+        for row in rows:w.write(row)
+        return w.finish()
+    old_rows=[{'id':'keep','value':[1,2]},{'id':'replace','value':[3,4]}]
+    original=write_graphs('original.zst',old_rows);remaining=write_graphs('remaining.zst',[old_rows[0]])
+    def write(name,value):
+        path=tmp_path/name;path.write_text(json.dumps(value));return {'path':str(path),'sha256':sha256_file_hex_cached(path),'bytes':path.stat().st_size}
+    pairs=write('pairs.json',{'source_leaf':original,'rows':[{'id':'replace','parent_row_sha256':canonical_json_sha256_hex(old_rows[1])}]})
+    source=write('source.json',{});entries=[{'id':'keep','binding':'b1','groups':['g'],'forward_tokens':2},
+                                            {'id':'replace','binding':'b2','groups':['g'],'forward_tokens':2}]
+    fake=SimpleNamespace(entries=entries,children=[SimpleNamespace(file_sha256=original['sha256'],entries=entries)])
+    monkeypatch.setattr(tool,'NativeGraphSource',lambda *a,**k:fake)
+    monkeypatch.setattr(row_index,'cache_dir',lambda:tmp_path/'cache')
+    package=Path(tool.capacity.__file__).resolve().parents[1]
+    names=('data/native_sources.py','data/native_graph_schema.py','data/decision_graph.py','model/native_graph_plan.py',
+        'data/native_pair_schema.py','common/row_index.py','common/jsonio.py','common/hashing.py')
+    parser=canonical_json_sha256_hex({name:sha256_file_hex_cached(package/name) for name in names})
+    geometry={'identity':{'tokenizer':'f'*64,'roles':[1,2,3,4],'parser_policy_sha256':parser}}
+    prep={'graph_pairs':pairs,'unchanged_leaf':remaining,'corrected_ids':['replace']}
+    proof=tool.seed_unchanged_index(prep,{'source':source},geometry,entries)
+    assert proof['rows']==1 and row_index.load(Path(proof['index']['path']))['entries']==[entries[0]]
+    Path(remaining['path']).write_bytes(b'corrupt')
+    with pytest.raises(ValueError,match='differs from its binding'):tool.seed_unchanged_index(prep,{'source':source},geometry,entries)
