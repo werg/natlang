@@ -1,18 +1,10 @@
 """Hash-bound execution adapter and external runtime dependency validation."""
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from pathlib import Path
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open('rb') as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(block)
-    return digest.hexdigest()
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
 
 
 def verify_runtime_tree(*, root: Path, manifest_path: Path, manifest_sha256: str) -> dict:

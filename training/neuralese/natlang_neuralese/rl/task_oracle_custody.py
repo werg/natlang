@@ -5,6 +5,7 @@ import json
 import subprocess
 from pathlib import Path
 from ..common.hashing import sha256_file_hex
+from ..common.paths import resolve
 
 
 def _reference(path):
@@ -109,7 +110,7 @@ def verify_task_oracle_runtime(task_source, runtime, cases_sha, *, _dependency_c
                   for result in event.get('results', [])]
         if passed != proof.get('results'):
             raise ValueError('task oracle proof differs from its closed passing groups')
-        runtime_root = identity.get('runtime_root', '/home/werg/natlang/ts-host')
+        runtime_root = identity.get('runtime_root', str(resolve('repo', 'ts-host')))
         if not isinstance(runtime_root, str) or not Path(runtime_root).is_absolute():
             raise ValueError('task oracle runtime source root is invalid')
         prefix = runtime_root.rstrip('/') + '/dist/'

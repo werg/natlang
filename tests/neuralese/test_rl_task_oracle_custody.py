@@ -26,8 +26,8 @@ def test_group_oracle_requires_complete_collector_runtime_inventory(tmp_path, mo
         '@dependency-files': {'module': {'sha256': 'abc'}}, '@dependency-source-links': {}})
     result = {'id': 'task', 'reference': {'ok': True}, 'wrong_answer_accepted': False,
               'missing_required_read_accepted': False}
-    source_prefix = '/home/werg/natlang/ts-host/'
-    identity = put(tmp_path / 'verification-identity.json', {'node': subprocess.check_output(['node', '--version'], text=True).strip(), 'inputs': [
+    source_prefix = str(tmp_path / 'recorded-source' / 'ts-host') + '/'
+    identity = put(tmp_path / 'verification-identity.json', {'runtime_root': source_prefix.rstrip('/'), 'node': subprocess.check_output(['node', '--version'], text=True).strip(), 'inputs': [
         {'path': source_prefix + 'dist/teacher/collector.js', 'sha256': collector['sha256']},
         {'path': source_prefix + 'dist/teacher/required-actions.js', 'sha256': actions['sha256']},
         {'path': source_prefix + 'package-lock.json', 'sha256': lock['sha256']},
