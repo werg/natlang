@@ -4,6 +4,42 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Cleanup and actual progress, November 1, 01:04 CET
+
+Owner-approved MegaToken state deletion is complete (88.5 GiB observed gain).
+Abandoned recovery worktrees, derived build/index caches and duplicate unpacked
+restore staging were removed after preserving unique edits and verified archives.
+The remaining historical recovery workspace was verified and moved to
+`/mnt/external/natlang-recovery-archive/claude-recovery-20261028`; its old internal
+path is a symlink. Exact receipts remain under the current learner's `ops/`.
+
+Twelve cold runtime snapshots were archived, compared with tar, and removed from
+NVMe. The completed 4,648,529,781-byte profiler trace was compressed to
+267,759,660 bytes on the external drive, independently decompressed and hashed,
+then removed internally. Its receipt is `ops/sft56-profile-archive-20261101.json`.
+The internal filesystem had 45,053,984,768 bytes free after trace retirement;
+subsequent temporary verification and ongoing writes change that observation.
+
+Actual earned outcome-GRPO checkpoint55 and expanded-source SFT checkpoint56
+were saved with optimizer/RNG/exposure custody. The latter's one-pass development
+check passed cases88/112 and failed exact-answer checks on0/32 (2/4), under
+runtime9366af768. It is not a broad capability qualification. Checkpoint56's
+direct-controller interrupted-save publication is still pending explicit
+numerical qualification and authenticated recovery; do not fabricate completed
+refresh state or repeat its earned optimizer update. Norm optimization50e4c8564
+failed the strict full-model input-gradient gate while the pre-change runtime
+passed; it is not qualified. Replacementa19a081db replays original chunk
+arithmetic and is undergoing the same gate before adoption.
+
+New frozen runtimes share identical read-only files through an adjacent
+content-addressed pool by default, retaining independent paths and self-contained
+tar exports. Eleven targeted tests passed. A real28,923-file runtime test shared
+all640,895,500 logical bytes in its second snapshot without creating new blobs;
+both its sealed collector and an ordinary tar-restored collector imported.
+Receipt: `ops/runtime-pool-real-smoke-1101.json`. Temporary verification trees
+were removed. Durability flushes the completed tree's filesystem in a batch,
+avoiding tens of thousands of serial per-file journal commits.
+
 ## Actual data and training corrections, 23:36 CET
 
 The current ToolACE failure group exposed a real task-conversion defect:

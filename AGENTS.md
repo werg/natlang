@@ -98,6 +98,14 @@ than discovering missing ignored assets after allocation. Source and training
 data survive cleanup; disposable unpacked restore tests and byte-identical packing
 intermediates do not need permanent copies.
 
+New frozen native runtimes seal their files into the adjacent content-addressed
+`.native-runtime-file-pool` by default. Snapshot paths and ordinary tar exports
+remain independent; identical read-only file inodes are shared. Edit main and
+freeze a successor rather than modifying or chmod-writing a sealed file. Retire
+unused snapshot directories normally; the pool prunes blobs only after no
+snapshot links remain, under the publication lock. Preserve live runtime and
+recovery bindings when choosing snapshots to retire.
+
 Storage supervision follows current native writer processes and their reservation
 receipts (`scripts/native_storage_supervision.py`), not an old learner PID/cursor.
 It observes; the checkpoint writer enforces allocation. Preserve live

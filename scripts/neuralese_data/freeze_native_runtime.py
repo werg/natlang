@@ -12,6 +12,7 @@ from natlang_neuralese.common.runtime_inventory import assemble_protected_runtim
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from freeze_training_runtime import isolated_compiled_runtime, check_prompt_features
+from runtime_file_pool import seal_runtime_tree
 
 
 def build_archived_node_runtime(root):
@@ -86,8 +87,12 @@ def main():
     receipt['node_build'] = node_build
     receipt['commit']=subprocess.check_output(['git','rev-parse',args.commit],text=True).strip()
     (args.out/'runtime-input-closure.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+    storage=seal_runtime_tree(args.out)
+    storage_receipt=args.out.with_name(args.out.name+'.storage.json')
+    storage_receipt.write_text(json.dumps(storage,indent=2,sort_keys=True)+'\n')
     print(json.dumps({'runtime':str(args.out.resolve()),'receipt':str((args.out/'runtime-input-closure.json').resolve()),
-                      'protected_worlds_sha256':receipt['protected_worlds_sha256']}))
+                      'protected_worlds_sha256':receipt['protected_worlds_sha256'],
+                      'storage_receipt':str(storage_receipt.resolve())}))
 
 
 if __name__=='__main__':main()
