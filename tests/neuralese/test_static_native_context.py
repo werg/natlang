@@ -238,3 +238,25 @@ def test_static_recipe_transition_requires_preserved_family_membership(tmp_path,
     assert _source_correction_continuation(old,new)
     new_map.write_text(json.dumps({'source_sha256':'new','rows':[{'id':'x','binding':'new-binding','family':'different'}]}))
     with pytest.raises(ValueError,match='family membership'):_source_correction_continuation(old,new)
+
+
+def test_pending_static_graphs_are_staged_without_discharge(tmp_path,monkeypatch):
+    import json,hashlib
+    from types import SimpleNamespace
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter
+    from scripts.neuralese_data import prepare_pending_static_graphs as tool
+    def write(name,value):
+        p=tmp_path/name;p.write_text(json.dumps(value));return {'path':str(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size}
+    original=row();child,proof=graphify(original,objective(mass='token'),max_tokens=32,consumer_context=6,state_tokens=2)
+    writer=GraphWriter(tmp_path/'pending.zst');writer.write(original);source=writer.finish()
+    policy=write('policy.json',{'objective':objective(mass='token')});signals=write('signals.json',{})
+    candidate=write('candidate.json',{'ce_policy':policy,'row_signals':signals})
+    partition=write('partition.json',{'schema':'natlang.acquired-position-pending-partition/1','input_graph':source,
+        'pending_graph':source,'candidate':candidate,'pending_rows':[{'id':original['id'],'graph_sha256':canonical_json_sha256_hex(original)}]})
+    audit=write('audit.json',{'schema':'natlang.acquired-static-native-context-candidate-audit/1','source':source,
+        'ce_policy':policy,'row_signals':signals,'proofs':[proof],'max_tokens':32,'consumer_context':6,'state_tokens':2})
+    monkeypatch.setattr(tool.shutil,'disk_usage',lambda _:SimpleNamespace(free=100*1024**3))
+    result=tool.prepare(partition,audit,tmp_path/'derived')
+    assert result['original_pending_graphs']==source and result['derived_graphs']['rows']==1
+    assert 'obligations remain' in result['status']
