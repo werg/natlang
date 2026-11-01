@@ -16,6 +16,8 @@ from natlang_neuralese.train.recipe import native_source_dependencies,recipe_fil
 from natlang_neuralese.model.native_model import _checkpoint_bound_config_inventory
 from natlang_neuralese.train.checkpoint_offload import recovery_static_sft_contract
 
+MODULE_SOURCE_SHA=sha(Path(__file__).resolve())
+
 
 def ldd_files(path):
     result=subprocess.run(['ldd',str(path)],capture_output=True,text=True,timeout=30)
@@ -128,6 +130,12 @@ def historical_program_bindings(receipts,add):
 
 def build(args):
     config_path=Path(args.config).resolve(strict=True);config=json.loads(config_path.read_text())
+    repo=Path(__file__).resolve().parents[2]
+    verifier=Path(__file__).resolve().with_name('verify_local_recovery_export.py')
+    snapshots=[snapshot_control(path,Path(args.journal_directory)/'control-snapshots',repo)
+               for path in (Path(__file__).resolve(),Path(args.qualifier).resolve(),verifier)]
+    if snapshots[0]['sha256']!=MODULE_SOURCE_SHA:
+        raise ValueError('recovery builder source changed after it was loaded')
     # Capture the actual process mappings before potentially slow checkpoint
     # and source reads; a short-lived trainer may exit during those reads.
     proc_stat=Path('/proc')/str(args.trainer_pid)/'stat'
@@ -201,7 +209,6 @@ def build(args):
         raise ValueError('checkpoint lacks its exact active recipe binding')
     recipe=Path(binding['path']).resolve(strict=True);add(recipe,'controls',binding['sha256'])
     for ref in recipe_file_dependencies(recipe):add(ref['path'],'controls',ref['sha256'])
-    verifier=Path(__file__).resolve().with_name('verify_local_recovery_export.py')
     for path in args.control:
         if Path(path).resolve(strict=True)!=verifier:add(path,'controls')
     base=Path(config['base']).resolve(strict=True)
@@ -225,9 +232,6 @@ def build(args):
     assets=add(args.asset_archive,'task-assets');assets_v3=add(args.asset_v3_archive,'task-assets')
     for path in args.archive_receipt:add(path,'controls')
     historical=historical_program_bindings(getattr(args,'historical_program_receipt',[]),add)
-    repo=Path(__file__).resolve().parents[2]
-    snapshots=[snapshot_control(path,Path(args.journal_directory)/'control-snapshots',repo)
-               for path in (Path(__file__).resolve(),Path(args.qualifier).resolve(),verifier)]
     for snapshot in snapshots:add(snapshot['path'],'controls',snapshot['sha256'])
     config_ref={'path':str(controller_config),'sha256':sha(controller_config)}
     plan={'schema':'natlang.local-full-recovery-plan/1','session':args.session,'destination':str(Path(args.destination).resolve()),
