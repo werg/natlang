@@ -23,6 +23,15 @@ likelihood attribution. No paid generation is implied by configuring this machin
 
 ## Source continuations and asynchronous checkpoints (engineering, 2026-11-01)
 
+Checkpoint reservation covers post-update metadata growth before SGD, including
+the second asynchronous snapshot inode. A preallocated tensor payload alone is
+insufficient: a 3,153-byte estimate increase exhausted admission below the free
+space floor after an update. Large reservations include physically allocated
+metadata headroom; growth beyond it still requires full admission. Never count
+an update whose checkpoint failed to commit as durable progress. Retire abandoned
+reserve inodes only after verifying the writer is terminal and the exact inode
+contains no serialized checkpoint; preserve actual source weights and evidence.
+
 Qualify the publication path alongside a source continuation, before spending
 SGD on it. An authenticated target repair changes a row binding; preserve its
 old exposure and quota, record the exact correction, and never claim unchanged
