@@ -373,3 +373,20 @@ def test_checkpoint_copy_uses_low_best_effort_io(monkeypatch):
     monkeypatch.setattr(offload.ctypes,'CDLL',lambda *args,**kwargs:Lib())
     offload._lower_priority(123)
     assert calls==[('nice',(offload.os.PRIO_PROCESS,123,19)),('ioprio',(30,1,123,(2<<13)|7))]
+
+
+def test_static_recovery_contract_allows_earned_progress_but_rejects_quota_change():
+    from copy import deepcopy
+    from natlang_neuralese.train.checkpoint_offload import recovery_static_sft_contract
+    frame={'source_row_bindings':{'row':'binding'},'source_row_order':['row'],
+           'held_row_bindings':{},'required_visits':{'row':7},'source_hash':'source',
+           'identity':{'stage':'joint'},'source_receipts':[{'path':'/train','sha256':'a'*64}],
+           'options':{'epochs':1,'_required_visits':{'row':7}},'exposure_counts':{'row':1},
+           'rng':{'seed':1},'optimizer':{'momentum':1},'cursor':1,'global_step':68}
+    training={'sft_progress':{'joint':frame}}
+    original=recovery_static_sft_contract(training)
+    advanced=deepcopy(training);other=advanced['sft_progress']['joint']
+    other.update(exposure_counts={'row':2},rng={'seed':2},optimizer={'momentum':2},cursor=2,global_step=69)
+    assert recovery_static_sft_contract(advanced)==original
+    other['required_visits']['row']=8
+    assert recovery_static_sft_contract(advanced)!=original

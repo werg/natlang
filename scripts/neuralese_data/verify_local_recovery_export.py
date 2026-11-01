@@ -44,6 +44,8 @@ def verify(path, expected_sha256):
     if (proof.get('status')!='passed' or proof.get('inputs')!=plan['inputs']
         or proof.get('restore')!=plan.get('restore') or proof.get('additional_inputs',[])!=plan.get('additional_inputs',[])
         or proof.get('controller_config')!=plan['controller']['config']
+        or proof.get('require_static_contract')!=plan.get('require_static_contract')
+        or proof.get('sft_static_contract')!=plan.get('sft_static_contract')
         or not isinstance(qualified_checkpoint.get('sha256'),str) or len(qualified_checkpoint['sha256'])!=64
         or qualified_custody.get('source_roots')!=[plan['inputs']['train'],plan['inputs']['held']]
         or qualified_custody.get('ce')!=plan['inputs']['ce']

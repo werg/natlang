@@ -14,6 +14,7 @@ from natlang_neuralese.train.native_continuation import collect_sft_progress
 from natlang_neuralese.train.native_supervision import ce_policy_dependencies
 from natlang_neuralese.train.recipe import native_source_dependencies,recipe_file_dependencies
 from natlang_neuralese.model.native_model import _checkpoint_bound_config_inventory
+from natlang_neuralese.train.checkpoint_offload import recovery_static_sft_contract
 
 
 def ldd_files(path):
@@ -119,6 +120,7 @@ def build(args):
     plan={'schema':'natlang.local-full-recovery-plan/1','session':args.session,'destination':str(Path(args.destination).resolve()),
           'journal_directory':str(Path(args.journal_directory).resolve()),'controller':{'state_path':str(state_path),'config':config_ref},
           'inputs':inputs,'additional_inputs':additional,'closure':closure,
+          'require_static_contract':True,'sft_static_contract':recovery_static_sft_contract(training),
           'restore':{'runtime_archive':runtime['path'],'environment_archive':environment['path'],'system_python_archive':stdlib['path'],
                      'base_path':str(base),'node_path':str(node),'interpreter_path':str(interpreter),
                      'sample_graph':str(Path(args.sample_graph).resolve(strict=True)),'tokenizer_fingerprint':args.tokenizer_fingerprint,

@@ -953,6 +953,8 @@ def validate_restore_qualification(plan):
             or value.get('status')!='passed' or value.get('inputs')!=plan['inputs']
             or value.get('restore')!=plan.get('restore') or value.get('additional_inputs',[])!=plan.get('additional_inputs',[])
             or value.get('controller_config')!=plan['controller']['config']
+            or value.get('require_static_contract')!=plan.get('require_static_contract')
+            or value.get('sft_static_contract')!=plan.get('sft_static_contract')
             or not isinstance(checkpoint.get('sha256'),str) or not re.fullmatch(r'[0-9a-f]{64}',checkpoint['sha256'])
             or custody.get('source_roots')!=[plan['inputs']['train'],plan['inputs']['held']]
             or custody.get('ce')!=plan['inputs']['ce']
@@ -1448,9 +1450,26 @@ def _read_bound_recovery_json(reference):
     return json.loads(_read_bound_recovery_bytes(reference))
 
 
+def recovery_static_sft_contract(training):
+    """Bind source/quotas and objective while excluding advancing exposure and RNG."""
+    from .native_continuation import collect_sft_progress
+    from ..common.hashing import canonical_json_sha256_hex
+    result={}
+    for name,frame in collect_sft_progress(training,borrow_frames=True).items():
+        options=frame.get('options') or {}
+        static={key:frame.get(key) for key in ('source_row_bindings','source_row_order','held_row_bindings','required_visits','source_hash','identity')}
+        static['source_roots']=[{key:ref.get(key) for key in ('path','sha256')} for ref in (frame.get('source_receipts') or [])]
+        static['options']={key:options.get(key) for key in ('stage_id','epochs','communication_min_visits',
+            'ce_supervision_policy_binding','_required_visits','_objective_required_visits')}
+        result[name]=canonical_json_sha256_hex(static)
+    return result
+
+
 def _plan_matches_checkpoint(plan, state):
     training=state.get('training') if isinstance(state,dict) else None
     if not isinstance(training,dict):return False
+    if plan.get('require_static_contract') is True:
+        if plan.get('sft_static_contract')!=recovery_static_sft_contract(training):return False
     receipts=training.get('source_receipts') or [];options=training.get('options') or {};inputs=plan.get('inputs') or {}
     if len(receipts)<2:return False
     for index,role in enumerate(('train','held')):
