@@ -159,6 +159,44 @@ def receipt_protection_digest(receipt):
     return values[0]
 
 
+def predecessor_collision_count(screen, predecessor, old_rows):
+    """Authenticate explicitly retained predecessor versions, never rename collisions."""
+    reference = screen.get('predecessor_collision_filter')
+    if reference is None:
+        if screen.get('accounting', {}).get('predecessor_collisions', 0):
+            raise ValueError('predecessor exclusions lack a collision filter proof')
+        return 0
+    proof = read(checked(reference, 'predecessor collision filter'))
+    original = read(checked(proof['original_screen'], 'original protected screen'))
+    old = {row['id']: row['binding'] for row in old_rows}
+    excluded = proof.get('excluded')
+    if (proof.get('schema') != 'natlang.acquired-predecessor-collision-filter/1'
+            or proof.get('predecessor') != bind(predecessor)
+            or proof.get('output_graph') != screen['output']
+            or proof.get('input_graph') != original['output']
+            or proof.get('protected_worlds_sha256') != screen['protected_worlds']['identity_set_sha256']
+            or original.get('protected_worlds') != screen.get('protected_worlds')
+            or original.get('coverage_audit') != screen.get('coverage_audit')
+            or original.get('input_receipts') != screen.get('input_receipts')
+            or original.get('excluded_current_protection') != screen.get('excluded_current_protection')
+            or not isinstance(excluded, list)
+            or original['output']['rows'] - len(excluded) != screen['output']['rows']
+            or screen.get('accounting', {}).get('predecessor_collisions') != len(excluded)):
+        raise ValueError('predecessor collision proof differs from source custody')
+    checked(proof['builder'], 'collision filter builder')
+    seen = set()
+    for row in excluded:
+        if (row.get('id') in seen or row.get('id') not in old
+                or row.get('previous_binding') != old[row['id']]
+                or not isinstance(row.get('candidate_binding'), str) or len(row['candidate_binding']) != 64
+                or not isinstance(row.get('candidate_graph_sha256'), str) or len(row['candidate_graph_sha256']) != 64
+                or row.get('equivalent_training_binding') is not (row['previous_binding'] == row['candidate_binding'])
+                or row.get('disposition') != 'retain-qualified-predecessor; candidate retained in original immutable source'):
+            raise ValueError('collision exclusion does not retain the actual predecessor binding')
+        seen.add(row['id'])
+    return len(excluded)
+
+
 def prepare_source_stage(predecessor_receipt, screen_receipt, output, *, parallel_workers=2):
     """Index only the immutable successor and extend authenticated geometry before census completion."""
     predecessor_path, screen_path = (Path(p).resolve(strict=True) for p in (predecessor_receipt, screen_receipt))
@@ -459,11 +497,12 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
             or len(screen['input_receipts']['sha256']) != 64):
         raise ValueError('screen does not bind the current conversion inventory')
     accounting = screen.get('accounting') or {}
+    collision_count = predecessor_collision_count(screen, predecessor_path, read(map_path)['rows'])
     train_count = sum(entry.get('counts', {}).get('graphs:train', 0) for entry in coverage.get('receipts', []))
     excluded = screen.get('excluded_current_protection')
     if (not isinstance(excluded, list) or accounting.get('train_graphs_before_current_check') != train_count
             or accounting.get('current_protected_exclusions') != len(excluded)
-            or train_count - len(excluded) != screen['output']['rows']
+            or train_count - len(excluded) - collision_count != screen['output']['rows']
             or accounting.get('eligible_train_graphs') != screen['output']['rows']):
         raise ValueError('screened graph counts do not reconcile with receipt inventory and protection exclusions')
     format_custody = verify_conversion_custody(coverage, screen, screen_program)
