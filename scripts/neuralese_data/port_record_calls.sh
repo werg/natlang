@@ -19,7 +19,7 @@ REPO=${NATLANG_REPO:-/home/werg/natlang}
 # systemd units see /usr/bin/node (v18, no global crypto.randomUUID); use the toolchain node the checkout is built with.
 NODE=${NODE:-/home/werg/.local/bin/node}
 TS=$REPO/ts-host/scripts/inline-curriculum
-RES=$REPO/data/external_pilot/jeff-test-tasks.jsonl
+RES=${PORT_RESERVATIONS:-$REPO/data/external_pilot/jeff-test-tasks.jsonl}
 mkdir -p "$OUT/ir" "$OUT/turns" "$OUT/logs"
 if [ -n "${SKIP_DONE_IN:-}" ]; then
   [ -n "${SKIP_DONE_RECEIPT:-}" ] || { echo "predecessor receipt required" >&2; exit 2; }
@@ -35,7 +35,7 @@ rm -rf "$OUT/tmp"; mkdir -p "$OUT/tmp"
 trap 'trap "" TERM INT; trap - EXIT; kill 0 2>/dev/null; wait; rm -rf "$OUT/tmp"' TERM INT EXIT
 # The stamp alone is not an identity: a rebuild can leave it stale. Bind the
 # actual frozen dist, dependency and script contents before admitting work.
-RUNTIME=$(PYTHONPATH="$REPO/training/neuralese${PYTHONPATH:+:$PYTHONPATH}" python3 "$(dirname "${BASH_SOURCE[0]}")/port_runtime_identity.py" "$REPO" "$NODE")
+RUNTIME=$(PYTHONPATH="$REPO/training/neuralese${PYTHONPATH:+:$PYTHONPATH}" python3 "$(dirname "${BASH_SOURCE[0]}")/port_runtime_identity.py" "$REPO" "$NODE" "$RES")
 if [ -f "$OUT/runtime-page.json" ]; then
   [ "$(cat "$OUT/runtime-page.json")" = "$RUNTIME" ] || { echo "runtime content changed: use a new corpus output with SKIP_DONE_IN" >&2; exit 2; }
 else
