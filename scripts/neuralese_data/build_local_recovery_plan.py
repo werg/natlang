@@ -5,7 +5,7 @@ This is an inventory, not a recoverability claim. Qualification of the staged
 archives and an actual isolated restore must follow before a plan can run.
 """
 from __future__ import annotations
-import argparse,json,os,re,subprocess
+import argparse,json,os,re,subprocess,time
 from pathlib import Path
 from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha
 from natlang_neuralese.common.jsonio import write_json_durable
@@ -128,6 +128,15 @@ def historical_program_bindings(receipts,add):
 
 def build(args):
     config_path=Path(args.config).resolve(strict=True);config=json.loads(config_path.read_text())
+    # Capture the actual process mappings before potentially slow checkpoint
+    # and source reads; a short-lived trainer may exit during those reads.
+    proc_stat=Path('/proc')/str(args.trainer_pid)/'stat'
+    start_before=proc_stat.read_text().rsplit(')',1)[1].split()[19]
+    trainer_mappings=mapped_executables(args.trainer_pid)
+    if proc_stat.read_text().rsplit(')',1)[1].split()[19]!=start_before:
+        raise ValueError('trainer process changed while inventorying mappings')
+    process_observation={'pid':args.trainer_pid,'start_ticks':start_before,'time_unix':time.time(),
+                         'scope':'point-in-time executable mappings; not a live-process lease'}
     state_path=Path(args.controller_state).resolve(strict=True);checkpoint=Path(args.checkpoint).resolve(strict=True)
     before=checkpoint.stat();state=CheckpointPolicy.load(checkpoint);after=checkpoint.stat()
     ident=lambda st:(st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns)
@@ -207,7 +216,7 @@ def build(args):
         add(p,'base',digest,logical=True);add(p,'tokenizer',digest,logical=True)
     node=Path(args.node).resolve(strict=True);interpreter=Path(args.interpreter).resolve(strict=True)
     add(node,'node');add(interpreter,'interpreter')
-    for path in sorted(ldd_files(node)|ldd_files(interpreter)|mapped_executables(args.trainer_pid)):
+    for path in sorted(ldd_files(node)|ldd_files(interpreter)|trainer_mappings):
         p=Path(path)
         # Runtime, venv, checkpoint and model bytes are already sealed separately.
         if any(p.is_relative_to(root) for root in (Path(args.runtime).resolve(),Path(args.venv).resolve(),base)) or p==checkpoint:continue
@@ -223,6 +232,7 @@ def build(args):
     config_ref={'path':str(controller_config),'sha256':sha(controller_config)}
     plan={'schema':'natlang.local-full-recovery-plan/1','session':args.session,'destination':str(Path(args.destination).resolve()),
           'journal_directory':str(Path(args.journal_directory).resolve()),'controller':{'state_path':str(state_path),'config':config_ref},
+          'process_observation':process_observation,
           'inputs':inputs,'additional_inputs':additional,'closure':closure,'control_snapshot':snapshots,'historical_programs':historical,
           'require_static_contract':True,'sft_static_contract':recovery_static_sft_contract(training),
           'restore':{'runtime_archive':runtime['path'],'environment_archive':environment['path'],'system_python_archive':stdlib['path'],
