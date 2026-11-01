@@ -28,6 +28,23 @@ duplicating full-state backup traffic for loss-selected aliases. Keep the
 exported prompt-piece table synchronized with runtime guidance and retain
 historical pieces for recorded-source rendering.
 
+## Useful data and recovery I/O custody (engineering, 2026-11-01)
+
+Acquired exports without a D-number source label can share leaf directory names.
+Their conversion output key includes the immutable source-path hash; a receipt
+from another export must never count as a completed skip. Preserve conflicting
+historical outputs, reconvert each real source separately, and inventory committed
+receipts while other conversions continue. Receipt presence and output size are
+not output-hash verification, current protection screening, semantic quality or
+training admission. Keep source-scoped inventories explicit about their filter.
+
+Memory-ledger I/O priority follows useful-work priority: high training/source
+reads use best-effort0, medium preparation best-effort4, and low bulk conversion
+idle class. The checkpoint exporter stays CPU nice19 but best-effort2 for I/O;
+recovery must not wait behind normal-priority cold conversion. Apply priority
+repairs to actual live PIDs and descendants as well as future launches. Preserve
+the40GiB floor and independently verified parents while managing pending writes.
+
 ## Native numerical and observation custody (engineering, 2026-10-31 evening)
 
 LFM3 normalization must share canonical row arithmetic in ordinary inference,

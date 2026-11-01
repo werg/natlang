@@ -1,3 +1,62 @@
+## Live supervision update, 2026-11-01 17:12 CET
+
+- SFT66→70 completed four actual optimizer updates,134 graph visits, preserving
+  all bindings/quotas and optimizer/RNG history. Earned SFT visits594; required
+  1048808 remains unchanged. Full70 SHA256
+  `0ee0fc52a238ac6146d9f2b5ac380d0f9819bf7cb8762f7767dd35376f411c5b`.
+  Publication finished17:02 via
+  `ops/completed-sft66-window-publication-1101/publication.json`. On-policy round13
+  launched17:02:35 as `lfm3-onpolicy70-307946-1101.service`, actual70 actor bound
+  and collecting. No round13 SGD claimed yet. Full recipe remains307946 rows.
+- Actual69 four-case protected evaluation completed2/4 in318seconds, with two
+  semantic mismatches and zero protocol/repetition/budget/infra/unresolved cases.
+  Same ticket/ownership misses as earlier; no demonstrated lift. Actual score:
+  `sd-r1/learner/task-eval/step-0000012/task-score.json` (stage-local step12).
+- Actual70 synthetic native-writer probe made three requests and sampled EOS
+  while still inside each producer span, below384-token output limits. The final
+  generic budget message does not explain away the recorded native-marker errors.
+  It is not native-writer qualification. Evidence:
+  `ops/next70-onpolicy-307946-1101/native-writer-probe/`. Qualified text-twin RL
+  continues. Prepared next SFT in `ops/next-sft-after70-marker-lr-1101/` raises
+  only newly provisioned marker-row LR1e-4→1e-3, retaining backbone1e-6, existing
+  reasoning-row1e-4, global warmup and optimizer/exposure history. Finalize against
+  actual next earned RL parent and preflight; verify effective rates and authoring
+  afterward. This is an evidence-motivated adaptation, not a proven root cause/fix.
+- Exact64 inference transport completed under0f8a. View3.3GB, SHA256
+  `f3be691967b54b5c2dd4dd9929e49a0b97fb956a883caac1b2e222c397a3a8da`;
+  transport SHA256
+  `2c403192b5e2a4cb4126d34a90ba070d97ee636e64e6dbdbe99978d8d59c0359`.
+  `stage-pop64-matched-actor-1101` transfers these to Pop. New prepared runner
+  `run-pop-dev16-transport64-0f8a-1101.py` uses exactly baseline runtime/prompt,
+  task packet/indices, budgets, engine, cache and one-worker execution, preserving
+  original full-state actor identity. `pop-baseline-to-matched64-waiter-1101`
+  polls actual baseline unit and starts64 through Pop's memory ledger only after
+  completed baseline receipt and actual GPU/container cleanup. Check remote
+  transfer SHA/readiness and completed outcomes; no score or remote readiness yet.
+- New acquired inventory exposed a real output-key collision: two D20 exports
+  named `normalized-first-whole-transcript-v2` shared `other/` output; one receipt
+  could falsely suppress the other conversion. Main fixes the unique source key
+  and exact-export completed-skip guard. Both affected exports were actually
+  reconverted into distinct directories by `convert-acquired-other-unique-1101`;
+  old conflicting output retained. Eight custody/identity tests pass.
+- Fixed new-family inventory completed211 receipts,210 pending,zero errors and
+  45785 source-reported positive train graphs (D12,D15,D16,D18,D32,other), including
+  42507 D32 graphs. This is not admission. Actual output/receipt hashes and current
+  protection screening now run as `screen-new-acquired-families-1101`, output
+  `/mnt/external/natlang-lfm3-data-20261028/acquired-new-families-screen-20261101-v1`.
+  Semantic/tool-contract audit, deduplication, source/CE/recipe/geometry successor
+  and actual learner adoption remain to do. The broader pre-fix inventory found
+  5191 committed/332 pending plus exactly the D20 collision; its snapshot used old
+  output naming and is historical. `inventory-full-acquired-collision-fixed-1101`
+  now inventories current naming, including additional D13/D14 positives.
+- Actual recovery I/O priority was BE7 while bulk converters used normal class.
+  Root changed live offloader2886063 toBE2 and converter descendant PIDs toidle.
+  Main's ledger now assigns highBE0,mediumBE4,lowidle; recovery defaultsBE2 with
+  low CPU priority. Eight targeted ledger-launch tests pass. Observe measured
+  throughput after this repair; no speedup number claimed.
+- Paid teacher generation remains paused. All preparation above uses existing
+  exports or our resident trained actor. Pop baseline and DGX collection are live.
+
 ## Live supervision update, 2026-11-01 16:49 CET
 
 - Actual SFT66 window has earned optimizer updates67,68,69. The scheduled

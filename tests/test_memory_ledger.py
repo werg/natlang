@@ -1184,3 +1184,18 @@ def test_floor_does_not_stop_the_sole_unit_within_its_budget():
     assert ledger.victim(live, True, 1.15) == (None, None)
     live['rl.service']['used'] = 125 * GIB  # past the overshoot: stopped as over budget
     assert ledger.victim(live, True, 1.15)[0] == 'rl.service'
+
+
+@pytest.mark.parametrize('priority,expected', [
+    ('low', ['IOSchedulingClass=idle']),
+    ('medium', ['IOSchedulingClass=best-effort', 'IOSchedulingPriority=4']),
+    ('high', ['IOSchedulingClass=best-effort', 'IOSchedulingPriority=0']),
+])
+def test_launch_prioritizes_training_io_above_bulk_conversion(monkeypatch, priority, expected):
+    seen = []
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda cmd, **k: seen.append(cmd) or type('R', (), {'returncode': 0})())
+    spec = {'unit': 'u.service', 'budget': GIB, 'priority': priority, 'oom_policy': 'stop',
+            'workdir': '.', 'env': [], 'command': ['true'], 'stop_seconds': 5}
+    ledger.launch(spec)
+    command = next(c for c in seen if c[0] == 'systemd-run')
+    assert all(item in command for item in expected)

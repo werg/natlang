@@ -682,6 +682,13 @@ def launch(spec):
                '--working-directory', os.path.abspath(spec['workdir']),
                '-E', f'NATLANG_CUDA_MEMORY_GB={round((spec.get("cuda_budget") or budget) / GIB, 1)}',
                '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
+    # CPU niceness does not prioritize a contended external disk. Bulk conversion
+    # yields to training/source reads; recovery owners explicitly select BE2.
+    if spec['priority'] == 'low':
+        command += ['-p', 'IOSchedulingClass=idle']
+    else:
+        io_priority = 0 if spec['priority'] == 'high' else 4
+        command += ['-p', 'IOSchedulingClass=best-effort', '-p', f'IOSchedulingPriority={io_priority}']
     # The user manager's PATH lacks ~/.local/bin, so units got /usr/bin/node v18 (no crypto.randomUUID; ts-host scripts
     # need Node >= 22) while shells get v24 (2026-10-11). Units see the shell's toolchain (scripts/natlang_env.sh).
     launch_path = next((env[5:] for env in reversed(spec['env']) if env.startswith('PATH=')),

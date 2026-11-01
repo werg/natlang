@@ -6,7 +6,7 @@ successful write it is pinned and queued to an independently supervised low-prio
 
     <mirror root>/<path relative to ~/natlang/runs>      (default mirror root: <data_hdd>/natlang-active-lineage)
 
-in that service at idle I/O class and nice 19: copy to ``<mirror>.offload.part`` in 8 MiB chunks with a streamed
+in that service at best-effort I/O priority 2 and CPU nice 19: copy to ``<mirror>.offload.part`` in 8 MiB chunks with a streamed
 SHA-256, fsync, check the source did not change, re-read the copy (page cache dropped) and compare size and hash, then
 atomically rename it into place, fsync the directory and write ``<mirror>.offload.json`` (source identity, bytes,
 SHA-256). Two roles:
@@ -656,7 +656,7 @@ def update_policy_record(out, **fields) -> dict:
 
 # The independently supervised checkpoint offload owner ----------------------------------------------------------
 def _lower_priority(pid: int) -> None:
-    """Use low CPU and best-effort I/O priority for the ledger-owned copy process."""
+    """Keep CPU work gentle, but prioritize earned recovery above bulk conversion."""
     try:
         os.setpriority(os.PRIO_PROCESS, pid, 19)
     except OSError:
@@ -664,7 +664,7 @@ def _lower_priority(pid: int) -> None:
     number = {'x86_64': 251, 'aarch64': 30}.get(platform.machine())
     if number is not None:
         try:
-            ctypes.CDLL(None, use_errno=True).syscall(number, 1, pid, (2 << 13) | 7)  # IOPRIO_WHO_PROCESS, CLASS_BE, lowest priority
+            ctypes.CDLL(None, use_errno=True).syscall(number, 1, pid, (2 << 13) | 2)  # IOPRIO_WHO_PROCESS, CLASS_BE; training BE0 remains ahead
         except (OSError, AttributeError):
             pass
 
