@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.rl_tasks.audit_natlang_packages import audit
-from scripts.rl_tasks.intake_natlang_codebase import intake
+from scripts.rl_tasks.intake_natlang_codebase import intake, _project, _validate_natlang_child_call_visibility
 from scripts.rl_tasks.execution_adapter import verify_runtime_trees, verify_runtime_tree
 from scripts.rl_tasks.build_reviewed_luna_plan import (build_plan, select_balanced_train,
                                                        _intake_external_service_files)
@@ -98,6 +98,37 @@ def test_intake_binds_multiple_operations_and_preserves_exact_vs_judged(tmp_path
     assert judged_rows[0]['semantics']['oracle']['level'] == 'judged'
     assert judged_rows[0]['curriculum']['reference']['root'] == []
     assert 'reconcile.nl' in rows[0]['semantics']['files']
+
+
+def test_child_call_visibility_rejects_sibling_and_accepts_companion_or_explicit_use():
+    sibling = {
+        'compare.nl': '---\nargs: {}\nreturns: Result\n---\nCall reviewHypothesis for both agreements.\n',
+        'review/reviewHypothesis.nl': '---\nargs: {}\nreturns: Finding\n---\nReview one hypothesis.\n',
+    }
+    with pytest.raises(ValueError, match=r'compare\.nl calls reviewHypothesis.*only defined at'):
+        _validate_natlang_child_call_visibility(sibling)
+
+    companion = {
+        'review.nl': '---\nargs: {}\nreturns: Finding\n---\nCall reviewHypothesis for each requested item.\n',
+        'review/reviewHypothesis.nl': '---\nargs: {}\nreturns: Finding\n---\nAssess one hypothesis.\n',
+    }
+    receipt = _validate_natlang_child_call_visibility(companion)
+    assert receipt['schema'] == 'natlang.child-call-visibility/1'
+    assert receipt['call_reference_count'] == 1
+
+    explicitly_used = {
+        'compare.nl': '---\nargs: {}\nreturns: Result\nuses: [helpers/reviewHypothesis]\n---\nCall reviewHypothesis for both agreements.\n',
+        'helpers/reviewHypothesis.nl': '---\nargs: {}\nreturns: Finding\n---\nReview one hypothesis.\n',
+    }
+    assert _validate_natlang_child_call_visibility(explicitly_used)['call_reference_count'] == 1
+
+
+def test_contractnli_v6_cross_folder_reference_is_caught_before_dispatch():
+    package = Path('/home/werg/data/luna-deep-codebases-20261031/lane-e/contract-obligation-ledger-v6/package')
+    if not package.is_dir():
+        pytest.skip('external ContractNLI v6 fixture is not present in this checkout')
+    with pytest.raises(ValueError, match=r'compareAgreements\.nl calls reviewHypothesis'):
+        _validate_natlang_child_call_visibility(_project(package))
 
 
 def test_intake_binds_collector_executed_application_controller_to_actual_package(tmp_path):

@@ -97,6 +97,91 @@ def _project(package: Path, metadata: dict | None = None) -> dict[str, str]:
     return project
 
 
+_NL_CALL_REFERENCE = re.compile(r"\b(?:call|invoke|run)\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?\b", re.IGNORECASE)
+
+
+def _declared_uses(source: str) -> list[str]:
+    """Read simple `uses` entries from NL frontmatter for callable-scope checks."""
+    if not source.startswith('---\n'):
+        return []
+    end = source.find('\n---', 4)
+    if end < 0:
+        return []
+    header = source[4:end]
+    match = re.search(r'(?m)^uses:\s*(.*)$', header)
+    if not match:
+        return []
+    inline = match.group(1).strip()
+    if inline.startswith('[') and inline.endswith(']'):
+        return [item.strip().strip("'\"") for item in inline[1:-1].split(',') if item.strip()]
+    uses: list[str] = []
+    lines = header.splitlines()
+    start = next((i for i, line in enumerate(lines) if re.match(r'^uses:\s*$', line)), None)
+    if start is not None:
+        for line in lines[start + 1:]:
+            item = re.match(r'^\s+-\s*([^\s#]+)', line)
+            if not item:
+                if line.strip() and not line.lstrip().startswith('#'):
+                    break
+                continue
+            uses.append(item.group(1).strip("'\""))
+    return uses
+
+
+def _validate_natlang_child_call_visibility(files: dict[str, str]) -> dict:
+    """Fail intake when instructions name a package child outside that NL node's tree.
+
+    NL children are loaded from a callable's companion directory, while `uses`
+    attaches an explicitly named package item. A prose instruction to call a
+    function elsewhere in the package does not make that sibling visible. This
+    small source inventory catches such mistakes before a teacher request; it
+    does not claim that the model follows the instructions or that the workflow
+    itself is behaviorally correct.
+    """
+    nl_paths = sorted(path for path in files if path.endswith('.nl'))
+    callable_paths = {path for path in files if path.endswith(('.nl', '.ts'))}
+    names: dict[str, list[str]] = {}
+    for path in callable_paths:
+        name = Path(path).stem
+        names.setdefault(name, []).append(path)
+
+    checked = []
+    violations = []
+    for path in nl_paths:
+        source = files[path]
+        parent = Path(path).parent
+        companion = (parent / Path(path).stem).as_posix()
+        visible = {
+            candidate[len(companion) + 1:].split('/', 1)[0].rsplit('.', 1)[0]
+            for candidate in callable_paths
+            if candidate.startswith(companion + '/') and
+            '/' not in candidate[len(companion) + 1:]
+        }
+        for item in _declared_uses(source):
+            normalized = item.removesuffix('.nl').removesuffix('.ts').strip('/')
+            if normalized:
+                visible.add(Path(normalized).name)
+        references = []
+        _, _, instructions = source.partition('\n---')
+        for match in _NL_CALL_REFERENCE.finditer(instructions):
+            name = match.group(1)
+            if name not in names:
+                continue
+            references.append(name)
+            if name not in visible:
+                violations.append({'path': path, 'callable': name,
+                                   'defined_at': names[name],
+                                   'reason': 'referenced child is not in this callable’s companion folder or declared uses'})
+        checked.append({'path': path, 'visible_children': sorted(visible),
+                        'internal_call_references': sorted(set(references))})
+    if violations:
+        details = '; '.join(f"{item['path']} calls {item['callable']} but it is only defined at {', '.join(item['defined_at'])}"
+                            for item in violations)
+        raise ValueError(f'Natlang child-call visibility check failed: {details}')
+    return {'schema': 'natlang.child-call-visibility/1', 'checked_functions': checked,
+            'call_reference_count': sum(len(row['internal_call_references']) for row in checked)}
+
+
 def _split_for(row: dict, source_split: str, metadata: dict, group: str) -> str:
     split_table = metadata.get('split', {})
     if not isinstance(split_table, dict):
@@ -411,6 +496,7 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
     reject_uninvoked_execution_adapter(metadata)
     runtime_dependency_trees = verify_runtime_trees(metadata, package_root.parent)
     files = _project(package_root, metadata)
+    child_call_visibility = _validate_natlang_child_call_visibility(files)
     external_services, service_bindings = load_external_services(package_root, metadata)
     _validate_runtime_contracts(files, metadata, external_services)
     world_rows = _worlds(package_root, metadata)
@@ -454,6 +540,7 @@ def intake(package_root: Path, *, output: Path, diversity_output: Path | None = 
         'package_path': str(package_root),
         'package_sha256': _sha(json.dumps({'files': files, 'services': external_services}, sort_keys=True, ensure_ascii=False).encode()),
         'external_services': service_bindings,
+        'natlang_child_call_visibility': child_call_visibility,
         **({'controller_frontend_preflight': controller_frontend_receipts}
            if controller_frontend_receipts else {}),
         'runtime_dependency_trees': runtime_dependency_trees,
