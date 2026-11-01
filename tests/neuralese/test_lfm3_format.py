@@ -663,3 +663,24 @@ def test_approved_embedded_think_projection_is_source_bound_and_generation_prefi
         'content': raw_target['content'] + 'tail'}}) is None
     assert project_embedded_thinking_target({**record, 'target': {**raw_target,
         'reasoning_content': 'already separated'}}) is None
+
+
+@needs_lfm3
+@pytest.mark.parametrize('messages', [
+    [{'role':'system','content':'Use the tools.'},{'role':'user','content':'Read the program and report its result.'}],
+    [{'role':'user','content':'Run the calculation.'},
+     {'role':'assistant','content':'','tool_calls':[{'type':'function','function':{'name':'eval','arguments':{'code':'return 2 + 3;','finish':True}}}]},
+     {'role':'tool','name':'eval','content':'5'}],
+])
+def test_serving_request_plain_tokens_match_pinned_hf_template(tokenizer, messages):
+    from natlang_neuralese.serve.engine import Engine
+    engine = object.__new__(Engine)
+    engine.tokenizer = tokenizer
+    engine.prompt_rendering = 'full'
+    engine.tool_call_format = 'xml'
+    rendered = engine.render_request(messages, EVAL_TOOLS)
+    assert rendered.blocks == [] and all(isinstance(s, str) for s in rendered.segments)
+    text = ''.join(rendered.segments)
+    expected = tokenizer.apply_chat_template(messages, tools=EVAL_TOOLS, tokenize=False, add_generation_prompt=True)
+    assert text == expected
+    assert engine._tokens(text) == tokenizer(expected, add_special_tokens=False)['input_ids']

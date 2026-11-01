@@ -430,3 +430,55 @@ def test_all_bf16_native_optimizer_moves_small_sparse_row_updates_with_stochasti
         assert rows['dtype'] == 'torch.bfloat16' and all(row['gradient_present'] for row in rows['rows'])
     assert changes['nearest'] == 0
     assert changes['stochastic'] > 0
+
+
+@pytest.mark.parametrize('chunks', [((0, 5), *((i, i + 1) for i in range(5, 17))),
+                                   ((0, 3), (3, 7), (7, 10), (10, 17))])
+def test_incremental_native_cache_matches_original_hf_incremental_across_window(chunks):
+    """Independent HF cache, including conv and sliding-attention state, is the reference."""
+    port = tiny_lfm3(markers=False, window=4)
+    ids = torch.randint(3, 60, (1, 17), generator=torch.Generator().manual_seed(47))
+    hf_cache = None
+    native_cache = PortCache.empty(port.num_layers)
+    reference, actual = [], []
+    with torch.no_grad():
+        # First prefill and tokenwise decode cross the 4-token sliding window.
+        for start, stop in chunks:
+            expected = port.hf(ids[:, start:stop], past_key_values=hf_cache, use_cache=True)
+            hf_cache = expected.past_key_values
+            got = port.forward_ids(ids[:, start:stop], cache=native_cache)
+            native_cache = got['cache']
+            reference.append(expected.logits)
+            actual.append(got['logits'])
+            torch.testing.assert_close(got['logits'], expected.logits, atol=2e-5, rtol=2e-5)
+        torch.testing.assert_close(torch.cat(actual, 1), torch.cat(reference, 1), atol=2e-5, rtol=2e-5)
+        for index, state in enumerate(native_cache.states):
+            hf_layer = hf_cache.layers[index]
+            if port.layer_types[index] == 'conv':
+                # HF retains a fixed convolution window, including its leading
+                # storage slot; native retains precisely the causal history.
+                expected = hf_layer.conv_states[0][..., -state.window.shape[-1]:]
+                torch.testing.assert_close(state.window, expected, atol=2e-5, rtol=2e-5)
+            else:
+                expected_k = hf_layer.keys
+                expected_v = hf_layer.values
+                torch.testing.assert_close(state.k[..., -expected_k.shape[-2]:, :], expected_k, atol=2e-5, rtol=2e-5)
+                torch.testing.assert_close(state.v[..., -expected_v.shape[-2]:, :], expected_v, atol=2e-5, rtol=2e-5)
+
+
+def test_fresh_shared_native_step_matches_independent_hf_cached_decode():
+    from natlang_neuralese.model.lfm3_port import Lfm3PortBackbone
+    from natlang_neuralese.model.shared_state import SharedStateModel, native_step
+    reference = tiny_lfm3_hf(window=4)
+    native_weights = copy.deepcopy(reference)
+    port = Lfm3PortBackbone(native_weights, ControlTokens(62, 63), markers=False)
+    shared = SharedStateModel(port, (60, 61, 62, 63), native_norm_execution='stable-v1').eval()
+    ids = torch.randint(3, 60, (1, 17), generator=torch.Generator().manual_seed(71))
+    hf_cache = native_cache = None
+    with torch.no_grad():
+        for start, stop in ((0, 3), (3, 7), (7, 10), *((i, i + 1) for i in range(10, 17))):
+            expected = reference(ids[:, start:stop], past_key_values=hf_cache, use_cache=True)
+            hf_cache = expected.past_key_values
+            actual = native_step(shared, ids[:, start:stop], native_cache)
+            native_cache = actual['cache']
+            torch.testing.assert_close(shared.logits(actual['h_final']), expected.logits, atol=2e-5, rtol=2e-5)
