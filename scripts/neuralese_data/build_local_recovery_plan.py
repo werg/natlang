@@ -76,6 +76,24 @@ def file_sha256_for_control(path):
     with open(path,'rb') as source:return hashlib.file_digest(source,'sha256').hexdigest()
 
 
+def historical_program_bindings(receipts,add):
+    historical=[];seen=set()
+    for receipt_name in receipts:
+        receipt_path=Path(receipt_name).resolve(strict=True);receipt=json.loads(receipt_path.read_text())
+        if receipt.get('schema')!='natlang.historical-source-program-preservation/1':
+            raise ValueError('invalid historical source program preservation receipt')
+        receipt_binding=add(receipt_path,'controls')
+        for item in receipt.get('programs',[]):
+            original=Path(item['original_path'])
+            if not original.is_absolute() or str(original) in seen:raise ValueError('ambiguous historical program path')
+            archive=add(item['path'],'controls',item['sha256'])
+            if Path(archive['path']).stat().st_size!=item['bytes']:raise ValueError('historical program size differs')
+            historical.append({'original_path':str(original),'archive':{'path':archive['path'],'sha256':archive['sha256']},
+                               'receipt':{'path':receipt_binding['path'],'sha256':receipt_binding['sha256']}})
+            seen.add(str(original))
+    return historical
+
+
 def build(args):
     config_path=Path(args.config).resolve(strict=True);config=json.loads(config_path.read_text())
     state_path=Path(args.controller_state).resolve(strict=True);checkpoint=Path(args.checkpoint).resolve(strict=True)
@@ -149,6 +167,7 @@ def build(args):
     runtime=add(args.runtime_archive,'runtime');environment=add(args.environment_archive,'environment');stdlib=add(args.system_python_archive,'system-python')
     assets=add(args.asset_archive,'task-assets');assets_v3=add(args.asset_v3_archive,'task-assets')
     for path in args.archive_receipt:add(path,'controls')
+    historical=historical_program_bindings(getattr(args,'historical_program_receipt',[]),add)
     repo=Path(__file__).resolve().parents[2]
     snapshots=[snapshot_control(path,Path(args.journal_directory)/'control-snapshots',repo)
                for path in (Path(__file__).resolve(),Path(args.qualifier).resolve(),verifier)]
@@ -156,7 +175,7 @@ def build(args):
     config_ref={'path':str(controller_config),'sha256':sha(controller_config)}
     plan={'schema':'natlang.local-full-recovery-plan/1','session':args.session,'destination':str(Path(args.destination).resolve()),
           'journal_directory':str(Path(args.journal_directory).resolve()),'controller':{'state_path':str(state_path),'config':config_ref},
-          'inputs':inputs,'additional_inputs':additional,'closure':closure,'control_snapshot':snapshots,
+          'inputs':inputs,'additional_inputs':additional,'closure':closure,'control_snapshot':snapshots,'historical_programs':historical,
           'require_static_contract':True,'sft_static_contract':recovery_static_sft_contract(training),
           'restore':{'runtime_archive':runtime['path'],'environment_archive':environment['path'],'system_python_archive':stdlib['path'],
                      'base_path':str(base),'node_path':str(node),'interpreter_path':str(interpreter),
@@ -178,6 +197,7 @@ def main():
     for name in ('config','controller-config','controller-state','checkpoint','runtime','venv','runtime-archive','environment-archive','system-python-archive','asset-archive','asset-v3-archive','asset-root','asset-v3-root','asset-guard','asset-inventory','node','interpreter','sample-graph','tokenizer-fingerprint','destination','journal-directory','session','qualifier','output'):
         p.add_argument('--'+name,required=True)
     p.add_argument('--trainer-pid',required=True,type=int);p.add_argument('--control',action='append',default=[]);p.add_argument('--archive-receipt',action='append',default=[])
+    p.add_argument('--historical-program-receipt',action='append',default=[])
     a=p.parse_args();print(json.dumps(build(a)),flush=True)
 
 if __name__=='__main__':main()

@@ -54,6 +54,8 @@ def validate_append_intent(predecessor, successor, payload, *, stage_id, predece
     def bindings(plan):return {(x['role'],x['path'],x['sha256']) for x in plan['closure'] if x['role'] in fixed}
     if bindings(predecessor)!=bindings(successor) or predecessor['restore']!=successor['restore'] or predecessor['control_snapshot']!=successor['control_snapshot']:
         raise ValueError('resident append changes independently restored execution closure')
+    if any(item not in successor.get('historical_programs',[]) for item in predecessor.get('historical_programs',[])):
+        raise ValueError('resident append drops historical source program custody')
     declared={(x['kind'],x['path'],x['sha256']) for x in successor.get('additional_inputs',[])}
     for role in ('train','held','ce'):
         ref=predecessor['inputs'][role]
@@ -125,6 +127,7 @@ def seal_append_transition(predecessor_ref, successor, payload, committed, state
            'inputs':result['inputs'],'restore':result['restore'],'additional_inputs':result.get('additional_inputs',[]),
            'controller_config':result['controller']['config'],'require_static_contract':True,
            'sft_static_contract':result['sft_static_contract'],'control_snapshot':result['control_snapshot'],
+           'historical_programs':result.get('historical_programs',[]),
            'closure_identity':recovery_closure_identity(result),'predecessor_plan':predecessor_ref,
            'transition_evidence':evidence_ref,
            'checks':{'predecessor_restore_anchor':True,'resident_commit_validated':True,'successor_metadata_validated':True},

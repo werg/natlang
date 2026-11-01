@@ -539,3 +539,21 @@ def test_queue_close_keeps_owner_until_staging_worker_exits(setup,monkeypatch):
     while not q._owner.closed and time.monotonic()<deadline:time.sleep(.01)
     assert q._owner.closed
     replacement=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda p:None,checkpoint_validator=lambda p,c:None);replacement.close()
+
+
+def test_historical_program_custody_checks_receipt_and_archive_not_original(setup,monkeypatch):
+    from natlang_neuralese.train import recipe,native_supervision
+    from natlang_neuralese.train.checkpoint_offload import validate_recovery_plan_dependencies
+    slot,plan=setup;original=slot.parent/'mutable-original.py';original.write_bytes(b'new code')
+    archive=slot.parent/'archived-old.py';archive.write_bytes(b'old code')
+    receipt=slot.parent/'history.json';write_json_durable(receipt,{'schema':'natlang.historical-source-program-preservation/1','programs':[{'original_path':str(original),'path':str(archive),'sha256':sha(archive),'bytes':archive.stat().st_size}]})
+    archive_ref={'path':str(archive),'sha256':sha(archive)};receipt_ref={'path':str(receipt),'sha256':sha(receipt)}
+    plan['historical_programs']=[{'original_path':str(original),'archive':archive_ref,'receipt':receipt_ref}]
+    plan['closure'] += [{'role':'controls',**archive_ref},{'role':'controls',**receipt_ref}]
+    monkeypatch.setattr(recipe,'native_source_dependencies',lambda path:[])
+    monkeypatch.setattr(native_supervision,'ce_policy_dependencies',lambda ref:[ref])
+    validate_recovery_plan_dependencies(plan,require_restore=False)
+    original.unlink();validate_recovery_plan_dependencies(plan,require_restore=False)
+    archive.write_bytes(b'changed')
+    with pytest.raises(ValueError,match='archive or receipt changed'):
+        validate_recovery_plan_dependencies(plan,require_restore=False)

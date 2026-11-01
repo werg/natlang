@@ -20,8 +20,15 @@ def verify_proof_chain(plan, lookup, seen=None):
         or proof.get('inputs')!=plan['inputs'] or proof.get('restore')!=plan.get('restore')
         or proof.get('additional_inputs',[])!=plan.get('additional_inputs',[]) or proof.get('controller_config')!=plan['controller']['config']
         or proof.get('require_static_contract')!=plan.get('require_static_contract') or proof.get('sft_static_contract')!=plan.get('sft_static_contract')
-        or proof.get('control_snapshot')!=plan.get('control_snapshot') or proof.get('closure_identity')!=recovery_closure_identity(plan)):
+        or proof.get('control_snapshot')!=plan.get('control_snapshot') or proof.get('historical_programs',[])!=plan.get('historical_programs',[])
+        or proof.get('closure_identity')!=recovery_closure_identity(plan)):
         raise ValueError('export restore qualification differs')
+    for item in plan.get('historical_programs',[]):
+        receipt=lookup(item['receipt']);matches=[row for row in receipt.get('programs',[])
+            if row.get('original_path')==item['original_path'] and row.get('path')==item['archive']['path']
+            and row.get('sha256')==item['archive']['sha256']]
+        if receipt.get('schema')!='natlang.historical-source-program-preservation/1' or len(matches)!=1:
+            raise ValueError('export historical program receipt differs')
     if proof.get('mode')=='resident-append/1':
         from natlang_neuralese.train.native_recovery_append import validate_committed_record
         predecessor=lookup(proof['predecessor_plan']);evidence=lookup(proof['transition_evidence']);draft=lookup(evidence['successor_draft'])
@@ -50,9 +57,10 @@ def verify_proof_chain(plan, lookup, seen=None):
                    (('native_graphs','train'),('foundation_native_graphs','foundation'),('held_native_graphs','held'),('ce_supervision_policy','ce')))
             or staged.get('plan_sha256')!=RecoveryExportQueue._plan_digest(draft)
             or {x['sha256'] for x in staged.get('objects',[])}!={x['sha256'] for x in draft['closure']}
-            or any(draft.get(k)!=plan.get(k) for k in ('inputs','restore','controller','control_snapshot','additional_inputs','session','destination','journal_directory'))
+            or any(draft.get(k)!=plan.get(k) for k in ('inputs','restore','controller','control_snapshot','historical_programs','additional_inputs','session','destination','journal_directory'))
             or not {(x['role'],x['path'],x['sha256']) for x in draft['closure']} <= {(x['role'],x['path'],x['sha256']) for x in plan['closure']}
             or roles(predecessor)!=roles(draft) or predecessor['restore']!=draft['restore'] or predecessor['control_snapshot']!=draft['control_snapshot']
+            or any(item not in draft.get('historical_programs',[]) for item in predecessor.get('historical_programs',[]))
             or predecessor['controller']!=draft['controller'] or predecessor['inputs']['held']!=draft['inputs']['held']
             or (next_foundation!=prior_foundation and not (prior_foundation==predecessor['inputs']['train'] and next_foundation==draft['inputs']['train']))
             or any(ref and ref!=draft['inputs'][role] and (('ce' if role=='ce' else 'source'),ref['path'],ref['sha256']) not in retained

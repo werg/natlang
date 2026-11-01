@@ -59,6 +59,16 @@ def _mapped_path(tree, absolute):
     return tree/value.relative_to('/')
 
 
+def add_historical_program_routes(source_map,historical):
+    """Route a preserved original program identity to its exact archived bytes."""
+    for item in historical:
+        original=item['original_path'];archived=item['archive']['path']
+        if archived not in source_map:raise ValueError('historical program archive is absent from staged closure')
+        if original in source_map and source_map[original]!=source_map[archived]:
+            raise ValueError('historical program path conflicts with another staged input')
+        source_map[original]=source_map[archived]
+
+
 def _host_contract():
     import platform
     result={'machine':platform.machine(),'kernel':platform.release(),'python_interpreter':str(Path('/usr/bin/python3.12').resolve())}
@@ -127,6 +137,7 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
             else:os.link(blob,target)
             source_map[item['path']]=str(target)
             source_map[str(Path(item['path']).resolve())]=str(target)
+        add_historical_program_routes(source_map,plan.get('historical_programs',[]))
         write_json_durable(root/'.natlang-source-map.json',{'schema':'natlang.staged-source-map/1','paths':source_map})
         runtime_manifest=extract_archive(runtime_archive,root/'restored-runtime')
         env_manifest=extract_archive(environment_archive,environment_root,environment=True)
@@ -234,6 +245,7 @@ print('RECOVERY_SMOKE='+json.dumps({'custody':recovery_training_custody(state),'
                    'require_static_contract':plan.get('require_static_contract'),
                    'sft_static_contract':plan.get('sft_static_contract'),
                    'control_snapshot':plan.get('control_snapshot'),
+                   'historical_programs':plan.get('historical_programs',[]),
                    'closure_identity':recovery_closure_identity(plan),'restore':plan['restore'],
                    'additional_inputs':plan.get('additional_inputs',[]),'controller_config':plan['controller']['config'],'checks':checks,
                    'evidence':{name:evidence_ref for name in checks},'host_contract':evidence['host_contract']}

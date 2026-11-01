@@ -43,3 +43,22 @@ def test_control_snapshot_survives_source_edit_and_rejects_dirty_capture(tmp_pat
     assert Path(snapshot['path']).read_text()=='committed\n'
     with pytest.raises(ValueError,match='differs from its committed source'):
         snapshot_control(source,tmp_path/'snapshots',repo)
+
+
+def test_historical_program_mapping_binds_archived_bytes_not_mutable_original(tmp_path):
+    import hashlib,json
+    from pathlib import Path
+    import pytest
+    from scripts.neuralese_data.build_local_recovery_plan import historical_program_bindings
+    original=tmp_path/'original.py';original.write_bytes(b'new mutable code')
+    archive=tmp_path/'archived.py';archive.write_bytes(b'old exact code')
+    digest=lambda p:hashlib.sha256(Path(p).read_bytes()).hexdigest()
+    receipt=tmp_path/'receipt.json';receipt.write_text(json.dumps({'schema':'natlang.historical-source-program-preservation/1','programs':[{'original_path':str(original),'path':str(archive),'sha256':digest(archive),'bytes':archive.stat().st_size}]}))
+    def add(path,role,expected=None):
+        actual=digest(path)
+        if expected is not None and actual!=expected:raise ValueError('archive digest differs')
+        return {'path':str(Path(path).resolve()),'sha256':actual,'role':role}
+    mapping=historical_program_bindings([receipt],add)
+    assert mapping[0]['original_path']==str(original) and mapping[0]['archive']['sha256']==digest(archive)
+    archive.write_bytes(b'bad alteration')
+    with pytest.raises(ValueError,match='digest differs'):historical_program_bindings([receipt],add)

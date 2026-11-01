@@ -54,3 +54,15 @@ def test_closure_copy_refills_while_first_copy_is_slow(tmp_path, monkeypatch):
     monkeypatch.setattr(q,'verified_recovery_blob',copy)
     rows=[{'path':str(i),'sha256':str(i)} for i in range(12)]
     assert len(q.copy_closure_blobs(rows,tmp_path))==12
+
+
+def test_historical_program_routes_use_archived_bytes_and_fail_on_conflict():
+    from scripts.neuralese_data.qualify_local_checkpoint_recovery import add_historical_program_routes
+    import pytest
+    row={'original_path':'/old/program.py','archive':{'path':'/archive/exact.py','sha256':'a'*64},'receipt':{'path':'/receipt','sha256':'b'*64}}
+    paths={'/archive/exact.py':'/restored/exact.py'}
+    add_historical_program_routes(paths,[row]);assert paths['/old/program.py']=='/restored/exact.py'
+    with pytest.raises(ValueError,match='conflicts'):
+        add_historical_program_routes({'/old/program.py':'/other','/archive/exact.py':'/restored/exact.py'},[row])
+    with pytest.raises(ValueError,match='absent'):
+        add_historical_program_routes({},[row])

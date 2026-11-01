@@ -893,6 +893,19 @@ def validate_recovery_plan_shape(plan):
                 or not any(item['role']=='controls' and item['path']==snapshot['path']
                            and item['sha256']==snapshot['sha256'] for item in closure)):
             raise ValueError('recovery helper snapshot is not exactly bound')
+    historical=plan.get('historical_programs',[])
+    if not isinstance(historical,list):raise ValueError('invalid historical program mappings')
+    seen_historical=set()
+    for item in historical:
+        if (not isinstance(item,dict) or set(item)!={'original_path','archive','receipt'}
+                or not isinstance(item['original_path'],str) or not Path(item['original_path']).is_absolute()
+                or item['original_path'] in seen_historical):
+            raise ValueError('invalid or ambiguous historical program mapping')
+        seen_historical.add(item['original_path'])
+        for ref in (item['archive'],item['receipt']):
+            if (not isinstance(ref,dict) or set(ref)!={'path','sha256'}
+                    or not any(entry['role']=='controls' and entry['path']==ref['path'] and entry['sha256']==ref['sha256'] for entry in closure)):
+                raise ValueError('historical program mapping is not retained')
     inputs=plan.get('inputs')
     if not isinstance(inputs,dict) or set(inputs)!={'train','foundation','held','ce'}:
         raise ValueError('recovery plan needs exact train, foundation, held and CE bindings')
@@ -998,8 +1011,9 @@ def validate_restore_qualification(plan, _seen=None):
                 or value.get('controller_config')!=plan['controller']['config']
                 or value.get('require_static_contract') is not True or value.get('sft_static_contract')!=plan['sft_static_contract']
                 or value.get('control_snapshot')!=plan.get('control_snapshot') or value.get('closure_identity')!=recovery_closure_identity(plan)
+                or value.get('historical_programs',[])!=plan.get('historical_programs',[])
                 or evidence.get('schema')!='natlang.local-recovery-resident-transition/1' or intent!=recomputed
-                or any(draft.get(key)!=plan.get(key) for key in ('inputs','restore','controller','control_snapshot','additional_inputs','session','destination','journal_directory'))
+                or any(draft.get(key)!=plan.get(key) for key in ('inputs','restore','controller','control_snapshot','historical_programs','additional_inputs','session','destination','journal_directory'))
                 or not {(x['role'],x['path'],x['sha256']) for x in draft['closure']} <= {(x['role'],x['path'],x['sha256']) for x in plan['closure']}
                 or committed.get('generation')!=intent['generation'] or not committed.get('validation')
                 or committed.get('at_global_step')!=evidence.get('actual_global_step')
@@ -1020,6 +1034,7 @@ def validate_restore_qualification(plan, _seen=None):
             or value.get('require_static_contract')!=plan.get('require_static_contract')
             or value.get('sft_static_contract')!=plan.get('sft_static_contract')
             or value.get('control_snapshot')!=plan.get('control_snapshot')
+            or value.get('historical_programs',[])!=plan.get('historical_programs',[])
             or not isinstance(checkpoint.get('sha256'),str) or not re.fullmatch(r'[0-9a-f]{64}',checkpoint['sha256'])
             or custody.get('source_roots')!=[plan['inputs']['train'],plan['inputs']['held']]
             or custody.get('ce')!=plan['inputs']['ce']
@@ -1038,6 +1053,15 @@ def validate_recovery_plan_dependencies(plan, *, require_restore=True):
     from .recipe import native_source_dependencies
     from .native_supervision import ce_policy_dependencies
     from ..common.hashing import sha256_file_hex_cached
+    for item in plan.get('historical_programs',[]):
+        archive=item['archive'];receipt=item['receipt']
+        if sha256_file_hex_cached(Path(archive['path']))!=archive['sha256'] or sha256_file_hex_cached(Path(receipt['path']))!=receipt['sha256']:
+            raise ValueError('historical program archive or receipt changed')
+        value=json.loads(Path(receipt['path']).read_text())
+        matches=[row for row in value.get('programs',[]) if row.get('original_path')==item['original_path']
+                 and str(Path(row.get('path','')).resolve())==archive['path'] and row.get('sha256')==archive['sha256']]
+        if value.get('schema')!='natlang.historical-source-program-preservation/1' or len(matches)!=1 or Path(archive['path']).stat().st_size!=matches[0].get('bytes'):
+            raise ValueError('historical program does not match its preservation receipt')
     inputs=plan.get('inputs') or {}
     available={(str(Path(item['path']).resolve()),item['sha256']) for item in plan.get('closure',[])}
     required=set()
