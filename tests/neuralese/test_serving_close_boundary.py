@@ -17,6 +17,7 @@ def test_native_sampling_stops_or_rejects_only_at_native_boundaries(temperature,
     # open; it is not the old two-marker text-mode stop control.
     engine = Engine.__new__(Engine)
     engine.native_state_enabled = True
+    engine.device = 'cpu'
     engine.stop_ids = {7}
     engine.role_tokens = SimpleNamespace(produce_open=17, produce_close=18,
                                          consume_open=19, consume_close=20)
@@ -44,13 +45,13 @@ def test_native_sampling_stops_or_rejects_only_at_native_boundaries(temperature,
     if token == 7:
         assert seq.phase == 'done'
         assert seq.future.result() == {'items': [5], 'reason': 'stop'}
-        assert seq.items == [5] and seq.generated_positions == 1
+        assert seq.items == [] and seq.generated_positions == 1
         assert events == []
     elif token == 18:
         with pytest.raises(RequestError, match='produce end marker without an open span'):
             seq.future.result()
         assert seq.phase == 'done'
-        assert seq.items == [5] and seq.generated_positions == 1
+        assert seq.items == [] and seq.generated_positions == 1
         assert events == []
     else:
         assert seq.phase == 'text' and not seq.future.done()

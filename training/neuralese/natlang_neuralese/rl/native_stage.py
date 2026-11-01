@@ -163,6 +163,8 @@ def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerpri
 def main(argv=None):
     from ..train.hardware_profile import apply_environment_early
     apply_environment_early()  # allocator settings must precede CUDA initialization
+    import sys
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--rollouts', action='append', type=Path, required=True)
     parser.add_argument('--rl-tokenizer', type=Path, required=True)
@@ -214,10 +216,117 @@ def main(argv=None):
             args.foundation_communication_batches, args.refresh_foundation_readiness,
             args.resident_data_directory, args.resident_geometry_qualification)):
         raise ValueError('SFT source controls cannot be applied to a native RL stage')
+    operation_request = _completed_operation_request(args, trainer, raw_argv)
     from contextlib import nullcontext
     from .native_output_lease import coefficient_output_lease
     with coefficient_output_lease(args.out) if args.coefficient_policy is not None else nullcontext():
-        return _admit_and_train(args,trainer)
+        if _completed_operation_replay(args, operation_request):
+            return 0
+        return _admit_and_train(args,trainer, operation_request=operation_request)
+
+
+def _completed_operation_request(args, trainer, raw_argv):
+    """Bind one exact RL operation's command, inputs, and code before its update."""
+    from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
+
+    def path_binding(path):
+        path=Path(path).resolve(strict=True)
+        if path.is_file():
+            files=[{'path':'.','sha256':sha256_file_hex_cached(path)}]
+        elif path.is_dir():
+            files=[{'path':item.relative_to(path).as_posix(),'sha256':sha256_file_hex_cached(item)}
+                   for item in sorted(path.rglob('*')) if item.is_file()]
+        else:
+            raise ValueError('RL operation input is neither a regular file nor a directory')
+        return {'path':str(path),'files':files,'tree_sha256':canonical_json_sha256_hex(files)}
+
+    inputs={
+        'rollouts':[path_binding(path) for path in args.rollouts],
+        'tokenizer':path_binding(args.rl_tokenizer),
+        'continue_from':path_binding(args.continue_from),
+        'held_native_graphs':path_binding(args.held_native_graphs),
+    }
+    for key in ('jolt_cases','rl_actors','rl_block_bundle','coefficient_policy','history_reasoning_binding_path',
+                'foundation_qualification_request','publication_owner_pointer'):
+        value=getattr(args,key,None)
+        if value is not None:inputs[key]=path_binding(value)
+    if args.memory_qualification:
+        try:memory_ref=json.loads(args.memory_qualification)
+        except (TypeError,json.JSONDecodeError):memory_ref=None
+        if isinstance(memory_ref,dict) and isinstance(memory_ref.get('path'),str):
+            bound=path_binding(memory_ref['path'])
+            if memory_ref.get('sha256') is not None and memory_ref['sha256']!=bound['files'][0]['sha256']:
+                raise ValueError('RL parent memory qualification input changed before operation binding')
+            inputs['memory_qualification']=bound
+    # Native trainer switches can carry policy, qualification or model files.
+    # Bind any existing path-valued option so an exact retry cannot hide a
+    # mutated external artifact behind identical argv text.
+    trainer_paths=[];index=0
+    while index<len(trainer):
+        token=trainer[index];value=None
+        if token.startswith('--') and '=' in token:
+            value=token.split('=',1)[1]
+        elif token.startswith('--') and index+1<len(trainer) and not trainer[index+1].startswith('--'):
+            index+=1;value=trainer[index]
+        if value:
+            try:
+                parsed=json.loads(value)
+            except (TypeError,json.JSONDecodeError):parsed=None
+            candidate=parsed.get('path') if isinstance(parsed,dict) else value
+            if isinstance(candidate,str):
+                try:path=Path(candidate)
+                except (TypeError,ValueError):path=None
+                if path is not None and path.exists():
+                    bound=path_binding(path)
+                    if isinstance(parsed,dict) and parsed.get('sha256') not in (None,bound['files'][0]['sha256']):
+                        raise ValueError('RL trainer qualification input changed before operation binding')
+                    trainer_paths.append({'option':token.split('=',1)[0],'binding':bound})
+        index+=1
+    if trainer_paths:inputs['trainer_path_inputs']=trainer_paths
+    package=Path(__file__).resolve().parents[1]
+    code={name:sha256_file_hex_cached(package/name) for name in (
+        'rl/native_stage.py','train/native_state_sft.py','rl/native_replay.py',
+        'rl/policy_source_continuation.py')}
+    request={'schema':'natlang.native-rl-operation-request/1','argv':raw_argv,
+        'trainer_arguments':list(trainer),'output':str(args.out.resolve()),
+        'input_bindings':inputs,'code_bindings':code}
+    return {**request,'request_sha256':canonical_json_sha256_hex(request)}
+
+
+def _completed_operation_replay(args, request):
+    """Accept only an exact retry of an already committed policy operation."""
+    from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
+    from ..train.native_resident import binding
+    marker=args.out/'native-rl-completed-operation.json'
+    if not marker.exists():return False
+    saved=json.loads(marker.read_text())
+    saved_request=saved.get('request')
+    hash_payload={key:value for key,value in saved_request.items() if key!='request_sha256'} if isinstance(saved_request,dict) else None
+    if (saved.get('schema')!='natlang.native-rl-completed-operation/1'
+            or saved.get('request')!=request
+            or saved.get('request_sha256')!=request['request_sha256']
+            or canonical_json_sha256_hex(hash_payload)!=request['request_sha256']):
+        raise ValueError('RL output directory is sealed to a different completed operation')
+    report_ref,receipt_ref,checkpoint_ref=saved.get('report'),saved.get('training_receipt'),saved.get('checkpoint')
+    for ref in (report_ref,receipt_ref,checkpoint_ref):
+        if not isinstance(ref,dict) or binding(ref.get('path'))!=ref:
+            raise ValueError('completed RL operation artifact changed; refusing replay')
+    report=json.loads(Path(report_ref['path']).read_text())
+    receipt=json.loads(Path(receipt_ref['path']).read_text())
+    if (report.get('completed') is not True
+            or report.get('checkpoint_sha256')!=checkpoint_ref['sha256']
+            or receipt.get('checkpoint',{}).get('sha256')!=checkpoint_ref['sha256']
+            or receipt.get('continuation',{}).get('checkpoint_sha256')
+                !=request['input_bindings']['continue_from']['files'][0]['sha256']
+            or Path(checkpoint_ref['path']).resolve()!= (args.out/'checkpoint.pt').resolve()
+            or sha256_file_hex_cached(Path(checkpoint_ref['path']))!=checkpoint_ref['sha256']):
+        raise ValueError('completed RL operation receipt does not prove its exact committed update')
+    for key,filename in (('data_receipt','rl-data-receipt.json'),('objective','rl-native-objective.json'),
+                         ('graphs','rl-native-graphs.jsonl')):
+        ref=saved.get(key)
+        if not isinstance(ref,dict) or binding(ref.get('path'))!=ref or Path(ref['path']).resolve()!=(args.out/filename).resolve():
+            raise ValueError('completed RL operation source artifact changed; refusing replay')
+    return True
 
 
 def skip_zero_signal_jolt(graphs, objective):
@@ -247,8 +356,9 @@ def skip_zero_signal_jolt(graphs, objective):
     return kept,projected,disposition
 
 
-def _admit_and_train(args,trainer):
+def _admit_and_train(args,trainer,*,operation_request=None):
     from ..common.jsonio import iter_jsonl_rows
+    from ..common.hashing import canonical_json_sha256_hex
     rows = [row for path in args.rollouts for _, row in iter_jsonl_rows(path)]
     graphs, objective = prepare(rows, checkpoint=args.continue_from, tokenizer=args.rl_tokenizer,
         bundle=args.rl_block_bundle, mode=args.rl_mode,coefficient_policy=args.coefficient_policy,
@@ -338,7 +448,30 @@ def _admit_and_train(args,trainer):
     # unified memory is also GPU memory, for the whole update.
     del rows, graphs, objective, policy_objective, source, request
     _release_host_memory()
-    return _invoke_raw_trainer(args, trainer, trainer_args, train)
+    result=_invoke_raw_trainer(args, trainer, trainer_args, train)
+    if result==0 and operation_request is not None and args.coefficient_policy is None:
+        from ..train.native_resident import binding
+        report_path=args.out/'report.json';receipt_path=args.out/'native-training-receipt.json'
+        checkpoint_path=args.out/'checkpoint.pt'
+        data_path=args.out/'rl-data-receipt.json';objective_path=args.out/'rl-native-objective.json'
+        graph_path=args.out/'rl-native-graphs.jsonl'
+        if all(path.is_file() for path in (report_path,receipt_path,checkpoint_path,data_path,objective_path,graph_path)):
+            report=json.loads(report_path.read_text());training_receipt=json.loads(receipt_path.read_text())
+            checkpoint=binding(checkpoint_path)
+            parent_sha=operation_request['input_bindings']['continue_from']['files'][0]['sha256']
+            boundary=report.get('continuation_boundary') or {}
+            if (report.get('completed') is True and report.get('checkpoint_sha256')==checkpoint['sha256']
+                    and boundary.get('new_optimizer_updates',0)>0
+                    and training_receipt.get('checkpoint',{}).get('sha256')==checkpoint['sha256']
+                    and training_receipt.get('continuation',{}).get('checkpoint_sha256')==parent_sha):
+                payload={key:value for key,value in operation_request.items() if key!='request_sha256'}
+                write_json_durable(args.out/'native-rl-completed-operation.json',{
+                    'schema':'natlang.native-rl-completed-operation/1','request':operation_request,
+                    'request_sha256':canonical_json_sha256_hex(payload),
+                    'report':binding(report_path),'training_receipt':binding(receipt_path),
+                    'checkpoint':checkpoint,'data_receipt':binding(data_path),
+                    'objective':binding(objective_path),'graphs':binding(graph_path)})
+    return result
 
 
 def _release_host_memory():

@@ -44,8 +44,8 @@ def test_actual_shared_optimizer_updates_native_policy_graph_for_both_ports(tmp_
 
 
 @pytest.mark.parametrize('shared_parent',[True,False])
-def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,shared_parent, *, parent_setup=None, extra_args=(),
-        preserve_first_operation_report=False):
+def test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(tmp_path,shared_parent, *, parent_setup=None, extra_args=(),
+        preserve_first_operation_report=False, reject_stale_actor_replay=True):
     """Actual tiny LFM full trainer; fixture reward is NOT an environment result."""
     from test_native_model import tiny_source
     from natlang_neuralese.model.native_model import load_native_model, model_state, native_identity, SHARED_CHECKPOINT_SCHEMA
@@ -110,13 +110,7 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
         '--continue-from', str(parent), *(['--native-participant', 'lfm'] if shared_parent else []), '--held-native-graphs', str(held),
         '--out', str(tmp_path/'learner'), '--device', 'cpu', '--epochs', '1', '--rank', '4',
         '--learning-rate', '1e-3', '--weight-decay', '0', '--eval-every', '1',
-        '--communication-foundation', '--foundation-native-graphs', str(tmp_path/'parent-only-source'),
-        '--foundation-communication-batches','4',
-        '--refresh-foundation-readiness',
-        '--resident-data-directory',str(tmp_path/'parent-only-resident'),
-        '--resident-geometry-qualification',str(tmp_path/'parent-only-capacity.json'),
-        '--memory-qualification',json.dumps({'path':str(tmp_path/'parent-only-sft-memory.json'),
-            'sha256':'0'*64,'bytes':1}), *extra_args]
+        *extra_args]
     assert main(argv) == 0
     slot = tmp_path/'learner/checkpoint.pt'
     first_report=(tmp_path/'learner/report.json').read_bytes()
@@ -150,8 +144,19 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
         assert restored['optimizer'] is state['training']['optimizer']
     assert not state['training']['options']['communication_foundation']
     prior_sha = sha256_file_hex(slot)
+    # An exact retry of the same completed command/source is a no-op even
+    # though the rollout's actor is now historical.
     assert main(argv) == 0
-    assert sha256_file_hex(slot) == prior_sha  # no repeated update/checkpoint rewrite
+    assert sha256_file_hex(slot) == prior_sha
+    if reject_stale_actor_replay:
+        # The same old capture is a *new* operation when pointed at the updated
+        # checkpoint and a fresh output namespace; exact actor checks reject it.
+        stale_argv=list(argv)
+        stale_argv[stale_argv.index('--continue-from') + 1] = str(slot)
+        stale_argv[stale_argv.index('--out') + 1] = str(tmp_path/'stale-learner')
+        with pytest.raises(ValueError, match='checkpoint/tokenizer differs from actual sampled policy'):
+            main(stale_argv)
+        assert sha256_file_hex(slot) == prior_sha  # no replayed update
     if preserve_first_operation_report:
         # This fixture feeds the real operation into the production controller.
         # Keep the report from the invocation that actually updated; the later
@@ -183,7 +188,7 @@ def test_policy_completion_uses_bounded_rotating_numeric_held_graphs(tmp_path,mo
         saved['training']['held_row_bindings']=source.bindings
         _,coverage,_=held_selection(source.entries,source_sha256=source.file_sha256,token_budget=1,graph_budget=2)
         saved['training']['metrics']={'held_coverage':coverage,'held':{'loss':-999,'scope':'full'}}
-    test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,False,
+    test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(tmp_path,False,
         parent_setup=setup,extra_args=['--held-eval-tokens','1','--held-eval-graphs','2'],
         preserve_first_operation_report=True)
     report=json.loads((tmp_path/'learner/report.json').read_text())
@@ -265,7 +270,7 @@ def test_actual_policy_update_keeps_pending_sft_focus_without_resolving_rl_rows(
     history=[{'schema':'natlang.native-pending-focus-history/1','request':ref,'at_global_step':1,
         'initial_credits':{'sft-only':0},'state':'active','consumed':[],'withdrawn':[]}]
     def setup(saved,held,roles,config):saved['training']['options']['pending_focus_history']=copy.deepcopy(history)
-    test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,False,parent_setup=setup)
+    test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(tmp_path,False,parent_setup=setup)
     updated=torch.load(tmp_path/'learner/checkpoint.pt',map_location='cpu',weights_only=False)
     assert updated['training']['global_step']==2
     assert updated['training']['options']['pending_focus_history']==history
@@ -273,13 +278,13 @@ def test_actual_policy_update_keeps_pending_sft_focus_without_resolving_rl_rows(
 
 def test_long_graph_limit_records_and_refuses_on_the_real_stage(tmp_path):
     """--max-graph-forward-tokens: a limit above every graph defers none (recorded); below every graph refuses."""
-    test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path/'kept', False,
+    test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(tmp_path/'kept', False,
         extra_args=('--max-graph-forward-tokens', '100000'))
     receipt = json.loads((tmp_path/'kept/learner/rl-data-receipt.json').read_text())
     record = receipt['omissions']['deferred_long_graphs']
     assert record['max_graph_forward_tokens'] == 100000 and record['episodes'] == [] and record['path'] is None
     with pytest.raises(ValueError, match='exceeds --max-graph-forward-tokens'):
-        test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path/'refused', False,
+        test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(tmp_path/'refused', False,
             extra_args=('--max-graph-forward-tokens', '1'))
 
 

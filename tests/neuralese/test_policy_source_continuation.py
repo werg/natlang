@@ -50,24 +50,24 @@ def test_policy_append_rejects_changed_earned_actions_and_graphs(tmp_path):
         arrange_and_seal(tmp_path,[{'id':'a','nodes':[2]}],{'schema':'x','rows':{'a':{'actions':[1]}}})
 
 
-def test_actual_policy_trainer_resumes_earned_state_and_trains_only_added_row(tmp_path):
+def test_actual_policy_trainer_rejects_mutated_source_in_completed_output(tmp_path):
     import torch
-    from test_native_rl_production import test_native_stage_real_shared_parent_update_and_exact_noop_resume
+    from test_native_rl_production import test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay
     from natlang_neuralese.rl.native_stage import main
-    test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path, False)
+    test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay(
+        tmp_path, False, reject_stale_actor_replay=False)
     source=tmp_path/'rollouts.jsonl'; first=json.loads(source.read_text())
     second=json.loads(json.dumps(first)); second['sample']=1
     source.write_text(json.dumps(second)+'\n'+json.dumps(first)+'\n')
     out=tmp_path/'learner'; before=torch.load(out/'checkpoint.pt',map_location='cpu',weights_only=False)['training']
+    before_sha=sha256_file_hex_cached(out/'checkpoint.pt')
     argv=['--rollouts',str(source),'--rl-tokenizer',str(tmp_path/'tokenizer'),'--rl-mode','rft',
           '--continue-from',str(tmp_path/'shared.pt'),'--held-native-graphs',str(tmp_path/'held.jsonl'),
           '--out',str(out),'--device','cpu','--epochs','1','--rank','4','--learning-rate','1e-3',
           '--weight-decay','0','--eval-every','1']
-    assert main(argv)==0
+    with pytest.raises(ValueError,match='sealed to a different completed operation'):
+        main(argv)
     after=torch.load(out/'checkpoint.pt',map_location='cpu',weights_only=False)['training']
-    assert after['global_step']==before['global_step']+1
-    assert all(after['exposure_counts'][key]==value for key,value in before['exposure_counts'].items())
-    assert sum(after['exposure_counts'].values())==sum(before['exposure_counts'].values())+1
-    history=after['options']['policy_source_continuation_history'][-1]
-    assert history['old_rows']==1 and history['added_rows']==1
-    assert history['at_global_step']==before['global_step']
+    assert sha256_file_hex_cached(out/'checkpoint.pt')==before_sha
+    assert after['global_step']==before['global_step']
+    assert after['exposure_counts']==before['exposure_counts']

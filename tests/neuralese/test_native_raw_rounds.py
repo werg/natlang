@@ -136,12 +136,17 @@ def test_raw_supervised_publish_restart_uses_same_output_and_retains_obligations
     assert seen[0]==first and result['cycle']==1
 
 
-def test_actual_raw_bridge_worker_runs_real_shared_native_learner_and_exact_resume(tmp_path,monkeypatch):
+def test_actual_raw_bridge_worker_runs_real_shared_native_learner(tmp_path,monkeypatch):
     """Only collection is a fixture; model/optimizer/RNG/carry and bridge are real."""
     from natlang_neuralese.rl import production,native_bridge,native_stage
-    from test_native_rl_production import test_native_stage_real_shared_parent_update_and_exact_noop_resume as actual_trainer
+    from test_native_rl_production import test_native_stage_real_shared_parent_update_and_rejects_stale_actor_replay as actual_trainer
     original=native_stage.main;observed=[]
     def through_bridge(argv):
+        if observed:
+            # This is an exact retry of the already-completed invocation. The
+            # stage's source-bound completion receipt must no-op before a new
+            # bridge request could claim a different parent.
+            return original(argv)
         out=Path(argv[argv.index('--out')+1]);out.mkdir(parents=True,exist_ok=True)
         parent=Path(argv[argv.index('--continue-from')+1]);state_path=out/'state.json'
         config=tmp_path/'bridge-config.json'
@@ -162,9 +167,8 @@ def test_actual_raw_bridge_worker_runs_real_shared_native_learner_and_exact_resu
         observed.append(value)
         return 0
     monkeypatch.setattr(native_stage,'main',through_bridge)
-    actual_trainer(tmp_path,False)
-    assert len(observed)==2 and observed[0]['checkpoint']
-    assert 'checkpoint' not in observed[1]  # exact already-current no-op publication
+    actual_trainer(tmp_path,False,reject_stale_actor_replay=False)
+    assert len(observed)==1 and observed[0]['checkpoint']
 
 
 def test_live_raw_owner_blocks_release_and_exact_released_parents_replace_originals(tmp_path,monkeypatch):

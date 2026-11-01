@@ -71,12 +71,16 @@ def test_exact_zero_gradient_metrics_preserve_complete_result(shape, dtype):
     actual = torch.zeros(shape, dtype=dtype)
     expected = torch.zeros_like(actual)
     result = gradient_metrics(actual, expected, atol=1e-5, rtol=1e-4)
-    assert result == {
+    expected_core = {
         'passed': True, 'finite': True, 'max_abs': 0.0, 'shape': list(shape),
         'dtype': str(dtype), 'relative_l2': 0.0, 'cosine': 1.0,
         'reference_l2': 0.0, 'actual_l2': 0.0, 'mismatched_elements': 0,
         'elements': actual.numel(), 'atol': 1e-5, 'rtol': 1e-4,
     }
+    assert {key: result[key] for key in expected_core} == expected_core
+    assert result['strict_passed'] is True
+    assert result['adjacent_bf16_mismatches'] == 0
+    assert result['comparison_policy'] == 'bf16-adjacent-ulp-normwise/1'
 
 
 def test_zero_fast_path_does_not_cover_nonzero_mismatch_or_tiny_values():
