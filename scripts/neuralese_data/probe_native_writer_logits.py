@@ -60,19 +60,32 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--checkpoint',required=True);p.add_argument('--turns',required=True)
     p.add_argument('--expected-checkpoint',required=True);p.add_argument('--actor-receipt',required=True);p.add_argument('--output',required=True)
     p.add_argument('--device',default='cuda');p.add_argument('--prefill-tokens',type=int,default=8192)
+    p.add_argument('--transport-receipt');p.add_argument('--transport-view-receipt')
+    p.add_argument('--cpu-diagnostic',action='store_true',help='Report CPU replay separately; do not claim GPU arithmetic equivalence')
     p.add_argument('--perturb-private-prefix',action='store_true');a=p.parse_args()
     from natlang_neuralese.serve import load_native_engine, configure_native_prefix_cache
     data=Path(a.turns).read_bytes();turns=json.loads(data)
     turn=next(t for t in turns if t.get('native',{}).get('sampling',{}).get('protocol_failure'))
     capture=turn['native']['sampling']
     if capture['policy']['checkpoint_sha256']!=a.expected_checkpoint: raise ValueError('recorded checkpoint mismatch')
-    engine=load_native_engine(a.checkpoint,device=a.device,prefill_tokens=a.prefill_tokens)
+    if bool(a.transport_receipt)!=bool(a.transport_view_receipt):
+        raise ValueError('transport and view receipts must be supplied together')
+    if a.cpu_diagnostic and a.device!='cpu':raise ValueError('CPU diagnostic requires CPU device')
+    def reference(path):
+        path=Path(path).resolve(strict=True);data=path.read_bytes()
+        return {'path':str(path),'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)}
+    transported = ({'transport':reference(a.transport_receipt),'view_receipt':reference(a.transport_view_receipt),
+                    'recovery_receipt':None,'source_sha256':a.expected_checkpoint,'scope':'diagnostic-local-pin'}
+                   if a.transport_receipt else None)
+    engine=load_native_engine(a.checkpoint,device=a.device,prefill_tokens=a.prefill_tokens,transported_actor=transported)
     if engine.native_identity != capture['policy']: raise ValueError('loaded actor identity differs from recorded policy')
     actor=json.loads(Path(a.actor_receipt).read_text())['info']
     cache=actor.get('serving_config',{}).get('prefix_cache')
     if cache is not None:
         configure_native_prefix_cache(engine,cache['budget_bytes']/2**30,cache['block_tokens'])
-    if engine.serving_config != actor.get('serving_config'):
+    actual,recorded=engine.serving_config,actor.get('serving_config') or {}
+    ignored={'device','device_total_memory_bytes','identity_sha256'} if a.cpu_diagnostic else set()
+    if {k:v for k,v in actual.items() if k not in ignored} != {k:v for k,v in recorded.items() if k not in ignored}:
         raise ValueError('loaded serving configuration differs from recorded actor')
     with torch.inference_mode():
         baseline=replay(engine,capture)
@@ -80,11 +93,13 @@ def main():
     receipt={'schema':'natlang.native-writer-logit-diagnostic/1','checkpoint':a.expected_checkpoint,
        'recorded_turns_sha256':hashlib.sha256(data).hexdigest(),'actor_identity':engine.native_identity,
        'serving_config':engine.serving_config,'prefill_tokens':a.prefill_tokens,
+       'recorded_serving_config':recorded,'cpu_diagnostic':a.cpu_diagnostic,
        'baseline':baseline,'perturbed_first_private_token':changed,
-       'scope':'exact recorded writer prefix replay; changed-prefix result is causal diagnosis only, no SGD or task outcome'}
+       'scope':('recorded token-prefix replay on CPU; arithmetic and greedy choices are not presumed equivalent to the recorded accelerator' if a.cpu_diagnostic
+                else 'exact recorded writer prefix replay; changed-prefix result is causal diagnosis only, no SGD or task outcome')}
     Path(a.output).write_text(json.dumps(receipt,indent=2)+'\n')
     print(json.dumps({'output':a.output,'greedy_match':all(x['greedy_matches_recording'] for x in baseline)}))
-    if not all(x['greedy_matches_recording'] for x in baseline): raise ValueError('replayed greedy choices differ from recorded actor')
+    if not a.cpu_diagnostic and not all(x['greedy_matches_recording'] for x in baseline): raise ValueError('replayed greedy choices differ from recorded actor')
 
 
 if __name__=='__main__':main()

@@ -173,6 +173,8 @@ test('repeated malformed writes retain every failure and retry the typed templat
   assert.equal(requests.length,4);
   assert.ok(requests.every(request=>request.template?.value==='write'));
   const feedback=nativeProtocolFeedback(bad.x_natlang_native_failure,true);
+  assert.match(feedback,/single dedicated .* special token/);
+  assert.match(feedback,/Ordinary text spelling those characters does not close/);
   assert.equal(requests[3].messages.filter(message=>message.role==='user'&&message.content===feedback).length,3);
   assert.equal(requests[3].messages.filter(message=>message.role==='assistant'&&message.content===bad.choices[0].message.content).length,3);
 });

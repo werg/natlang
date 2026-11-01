@@ -62,7 +62,8 @@ export function nativeProtocolFailure(response: unknown): NativeProtocolFailure 
 
 export function nativeProtocolFeedback(failure: NativeProtocolFailure, templatedWrite = false): string {
   if (templatedWrite) return `${failure.code}: The typed native writer already opened a producer span. ` +
-    'Write its body, then emit <|/neuralese_produce|> before ending the reply. ' +
+    'Write its body, then emit the single dedicated <|/neuralese_produce|> special token before ending the reply. ' +
+    'Ordinary text spelling those characters does not close the span. ' +
     'Do not emit an end-of-turn token while the producer span is open.';
   return `${failure.code}: This reply has an incomplete or misplaced Neuralese delimiter. Rewrite the complete reply. ` +
     'If this function returns Neuralese<T>, return the ordinary value of T directly: plain text for string, or JSON for an object. ' +
