@@ -10,8 +10,10 @@ import { pathToFileURL } from 'node:url';
 const dist = process.env.NATLANG_TS_HOST_TEST_DIST;
 const load = name => dist ? import(pathToFileURL(join(dist, name)).href) : import(new URL(`../dist/${name}`, import.meta.url));
 const [{ definitionProject }, { collectBatch, nativeJobRunner, defaultToolSurfaceHash, expectedProvenance },
-  { createTeacherTextNeuralese, validateTeacherTextReadBinding, mergeTeacherTextTypeAliases }, { neuraleseRef }] = await Promise.all([
-  load('teacher/program.js'), load('teacher/collector.js'), load('model/teacher-text-neuralese.js'), load('native/neuralese.js')]);
+  { createTeacherTextNeuralese, validateTeacherTextReadBinding, mergeTeacherTextTypeAliases }, { neuraleseRef },
+  { materializeNativeRows }] = await Promise.all([
+  load('teacher/program.js'), load('teacher/collector.js'), load('model/teacher-text-neuralese.js'), load('native/neuralese.js'),
+  load('teacher/native-materializer.js')]);
 
 const sha256 = value => createHash('sha256').update(value, 'utf8').digest('hex');
 const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
@@ -306,6 +308,16 @@ test('teacher-text read() uses the declared typed model reader and records the e
       'natlang.teacher-text-readout-template-emulation/1');
     assert.equal(requests[2].tool_choice, 'required');
     assert.deepEqual(requests[2].tools.map(tool => tool.function.name), ['return_result']);
+    const materialized = materializeNativeRows([row], { directAnswers: true });
+    assert.equal(materialized.acceptedRows, 1, JSON.stringify(materialized.unlinked));
+    const nativeReader = materialized.turns.find(turn => turn.source_ref?.invocation_id === reader.invocation_id);
+    assert.ok(nativeReader, 'the exact reader tool action survives native teacher materialization');
+    const visible = nativeReader.source_ref.provider_expanded_visible_inputs;
+    assert.equal(visible.length, 1, 'the materialized reader retains its authenticated teacher-text context receipt');
+    assert.equal(visible[0].block.id, writer.block);
+    assert.equal(visible[0].block.writer_node, writer.node);
+    assert.equal(visible[0].block.body_sha256, writer.text_body_sha256);
+    assert.equal(visible[0].training_admission, false);
   } finally {
     await new Promise(resolve => { server.closeAllConnections?.(); server.close(resolve); });
     await rm(directory, { recursive: true, force: true });
