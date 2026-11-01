@@ -222,3 +222,19 @@ def test_real_native_factory_tuple_and_preference_alias_load_phase(monkeypatch, 
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
+
+
+def test_first_update_profile_is_bounded_and_preserves_training(task, tmp_path, monkeypatch):
+    expected = task()
+    output = tmp_path / 'first-update.json'
+    monkeypatch.setenv('NATLANG_NATIVE_PROFILE_FIRST_UPDATE', str(output))
+    actual = task()
+    assert_tree_equal(actual, expected)
+    report = json.loads(output.read_text())
+    assert report['schema'] == 'natlang.bounded-update-profile/1'
+    assert set(report['phases']) == {'native_forward_and_readout',
+                                     'native_backward_and_in_backward_optimizer',
+                                     'native_optimizer_step'}
+    assert all(p['wall_seconds'] >= 0 and p['cuda_current_stream_ms'] is None
+               for p in report['phases'].values())
+    assert output.stat().st_size < 4096

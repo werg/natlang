@@ -378,6 +378,36 @@ def _communication_prefix_allowed(backend, precision):
     return backend is None
 
 
+class _BoundedUpdateProfile:
+    """Constant-size wall/current-stream timings for one update's final microbatch."""
+    def __init__(self, cuda):
+        self.cuda = cuda
+        self.samples = {}
+
+    @contextlib.contextmanager
+    def phase(self, name):
+        start = time.perf_counter()
+        events = None
+        if self.cuda:
+            events = (torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True))
+            events[0].record()
+        try:
+            yield
+        finally:
+            if events is not None:
+                events[1].record()
+            self.samples[name] = (time.perf_counter() - start, events)
+
+    def save(self, path):
+        if self.cuda:
+            torch.cuda.synchronize()
+        phases = {name: {'wall_seconds': wall, 'cuda_current_stream_ms': None if events is None else events[0].elapsed_time(events[1])}
+                  for name, (wall, events) in self.samples.items()}
+        write_json(Path(path), {'schema': 'natlang.bounded-update-profile/1',
+                               'scope': 'last microbatch and optimizer step',
+                               'cuda_timing_scope': 'current stream', 'phases': phases})
+
+
 def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_layers=True,
                            chunk_tokens=128, objective=None, precision=None, accumulate=()):
     """One shared complete production update, also used by throughput diagnostics.
@@ -417,18 +447,15 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     loss_weight = None if precision is None or precision[3] == 1.0 else float(precision[3])
     losses, parts = [], []
     profile_path = os.environ.get('NATLANG_NATIVE_PROFILE_FIRST_UPDATE')
-    profiler = None
-    if profile_path and not Path(profile_path).exists():
-        activities=[torch.profiler.ProfilerActivity.CPU]
-        if next(model.parameters()).is_cuda:activities.append(torch.profiler.ProfilerActivity.CUDA)
-        profiler=torch.profiler.profile(activities=activities,record_shapes=False,profile_memory=False,with_stack=False)
+    profiler = (_BoundedUpdateProfile(next(model.parameters()).is_cuda)
+                if profile_path and not Path(profile_path).exists() else None)
     profiler_started=False
     try:
         from ..model.native_weight_carrier import ParameterCotangentScope, plain_training_arithmetic
         for index, (micro, share) in enumerate(zip(micro_batches, shares)):
             final = index == len(micro_batches) - 1
             if final and profiler is not None:
-                profiler.__enter__();profiler_started=True
+                profiler_started=True
             context = (optimizer.latent.in_backward() if final and optimizer.latent is not None
                        else _nullcontext())
             precision_context = (precision[0].context(precision[1], precision[2]) if precision is not None
@@ -440,7 +467,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
             else:
                 scope = ParameterCotangentScope.for_model(model, mode='vjp')
             with scope as cotangents, precision_context, context:
-                with (torch.profiler.record_function('native_forward_and_readout') if profiler_started else _nullcontext()), \
+                with (profiler.phase('native_forward_and_readout') if profiler_started else _nullcontext()), \
                      (backend.autocast() if backend is not None else _nullcontext()):
                     loss, details = packed_graph_loss(model, micro,
                         checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
@@ -452,7 +479,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                 if final:
                     merged_details=parts[0] if len(parts)==1 else merge_update_details(parts,scored)
                 scaled = loss if share == 1. else loss * share
-                with (torch.profiler.record_function('native_backward_and_in_backward_optimizer') if profiler_started else _nullcontext()):
+                with (profiler.phase('native_backward_and_in_backward_optimizer') if profiler_started else _nullcontext()):
                     (scaled if loss_weight is None else scaled * loss_weight).backward()
                 cotangents.finish()
             losses.append(loss.detach() * share)
@@ -465,7 +492,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
             norm = torch.nn.utils.clip_grad_norm_(params, float('inf'))
             if not torch.isfinite(norm):
                 raise FloatingPointError('nonfinite native gradient norm')
-        with (torch.profiler.record_function('native_optimizer_step') if profiler_started else _nullcontext()):
+        with (profiler.phase('native_optimizer_step') if profiler_started else _nullcontext()):
             optimizer.step()
         model.native_sparse_updates = sparse_row_updates(model, sparse_before)
     except Exception:
@@ -476,9 +503,8 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     finally:
         if profiler_started:
             try:
-                profiler.__exit__(None,None,None)
                 destination=Path(profile_path);destination.parent.mkdir(parents=True,exist_ok=True)
-                profiler.export_chrome_trace(str(destination))
+                profiler.save(destination)
                 print(json.dumps({'kind':'native_update_profile','path':str(destination),'scope':'last microbatch and optimizer step of first profiled update'}),flush=True)
             except Exception as error:
                 print(json.dumps({'kind':'native_update_profile','error':str(error)}),flush=True)
