@@ -262,8 +262,9 @@ export function nativeStateConsumerFromInfo(info: Record<string, unknown>): Nati
 export type NeuraleseRuntimeOptions = {
   store: NeuraleseStore;
   /** Case-local exact-text sidecar for explicit teacher-only provider emulation; it contains no tensors. */
-  teacherText?: { get(id: string): { id: string; type: string; body: string; body_sha256: string;
-    producer_call_id: string; writer_node?: string } | undefined; recordWriter(id: string, node: string): void };
+  teacherText?: { get(id: string): { id: string; type: string; dialect: 'nd:teacher-text/1'; body: string; body_sha256: string;
+    producer_call_id: string; writer_node?: string; type_aliases?: Record<string, string> } | undefined;
+    recordWriter(id: string, node: string): void };
   nativeStateConsumer?: NativeStateConsumer;
   /** Refresh a server-backed reader identity before binding state to a model prompt. */
   nativeStateConsumerForCall?: () => Promise<NativeStateConsumer | undefined>;

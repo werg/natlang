@@ -42,6 +42,14 @@ import { TOOL_MARKUP } from './tool-markup.js';
 import type { Platform } from '../runtime/platform.js';
 import ts from 'typescript';
 
+function typeAliasesFromEnv(env: TypeEnv): Record<string, string> {
+  const chain: TypeEnv[] = [];
+  for (let current: TypeEnv | undefined = env; current; current = current.parent) chain.unshift(current);
+  const aliases: Record<string, string> = {};
+  for (const current of chain) for (const [name, type] of Object.entries(current.names)) aliases[name] = formatType(type);
+  return aliases;
+}
+
 /** What the model is told when it reaches for the call it is executing (calling it, or reading its code): a judgment is
  * made here and returned, and eval serves the exact work the instructions need, not as a stand-in for the judgment. */
 const SELF_CALL_ADVICE = 'Do what its instructions ask here. For a judgment, decide it yourself from the inputs and return the answer with ' +
@@ -767,6 +775,7 @@ export class NativeRuntime {
       normalized[index] = await this.writeNeuraleseText(input, wanted, {
         sourceKind: 'typed-text-argument', source: 'call-argument', markerContext: 'typed-argument',
         argumentName: parameter.name, inputs: [callerInput],
+        typeAliases: Object.fromEntries(Object.entries(aliases).map(([name, alias]) => [name, formatType(alias)])),
       });
     }
     return normalized;
@@ -778,6 +787,7 @@ export class NativeRuntime {
     source: string;
     markerContext: string;
     inputs: readonly { node: string; port?: string }[];
+    typeAliases?: Record<string, string>;
     resultPath?: (string | number)[];
     argumentName?: string;
   }): Promise<Value> {
@@ -794,6 +804,7 @@ export class NativeRuntime {
     const callId = this.currentCallId ?? this.options.runId;
     const producer = { source_kind: metadata.sourceKind, source: metadata.source, marker_context: metadata.markerContext,
       call_id: callId, ...(metadata.argumentName ? { argument_type: type } : { result_type: type }), text_body_sha256: bodySha,
+      ...(this.neuralese?.teacherText && metadata.typeAliases ? { type_aliases: metadata.typeAliases } : {}),
       ...(metadata.resultPath ? { result_path: metadata.resultPath } : {}),
       ...(metadata.argumentName ? { argument_name: metadata.argumentName } : {}) };
     const block = await port.write(text, { type, producer });
@@ -1434,7 +1445,8 @@ export class NativeSession {
     const input = sourceEvent ? { node: sourceEvent.node as string, port: 'result-source' } :
       { node: invocationNodeId(this.runtime.options.runId), port: 'typed-result-source' };
     const ref = await this.runtime.writeNeuraleseText(text, wanted, { sourceKind, source, markerContext: 'return-result',
-      inputs: [input], ...(resultPath ? { resultPath: ['return', ...resultPath] } : {}) });
+      inputs: [input], typeAliases: typeAliasesFromEnv(this.env),
+      ...(resultPath ? { resultPath: ['return', ...resultPath] } : {}) });
     return coerce(ref, wanted, this.env, 'return');
   }
 

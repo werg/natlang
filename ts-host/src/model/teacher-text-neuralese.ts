@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { MemoryNeuraleseStore, type NeuraleseBlockMeta } from '../native/neuralese-store.js';
 import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
+import { isNeuraleseRef, isTeacherTextNeuraleseId } from '../native/neuralese.js';
 
 export const TEACHER_TEXT_NEURALESE_VERSION = 'teacher-text/1';
 export const TEACHER_TEXT_NEURALESE_DIALECT = 'nd:teacher-text/1';
@@ -16,8 +17,8 @@ export const TEACHER_TEXT_NEURALESE_PROMPT = `\n\nExplicit teacher text-Neurales
   `Ordinary string results remain ordinary strings. This transport stores literal text only and does not provide native ` +
   `state, model vectors, token IDs, learned representations, or a student writer.`;
 
-export type TeacherTextBlock = { id: string; type: string; body: string; body_sha256: string;
-  producer_call_id: string; writer_node?: string; format?: 'teacher-text'; teacher_text?: true;
+export type TeacherTextBlock = { id: string; type: string; dialect: typeof TEACHER_TEXT_NEURALESE_DIALECT; body: string; body_sha256: string;
+  producer_call_id: string; writer_node?: string; type_aliases?: Record<string, string>; format?: 'teacher-text'; teacher_text?: true;
   learned_vectors?: false; tokenizer_ids?: false };
 export type TeacherTextNeuralese = { runtime: NeuraleseRuntimeOptions;
   wrap<T extends (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn>>(send: T): T;
@@ -36,6 +37,29 @@ const base32 = (bytes: Uint8Array): string => {
 const canonical = (value: unknown): string => Array.isArray(value) ? '[' + value.map(canonical).join(',') + ']' :
   value && typeof value === 'object' ? '{' + Object.entries(value as Record<string, unknown>).sort(([a],[b])=>a.localeCompare(b))
     .map(([key,item])=>JSON.stringify(key)+':'+canonical(item)).join(',') + '}' : JSON.stringify(value);
+
+/** Validate the exact typed producer occurrence before a teacher-text model readout is invoked. */
+export function validateTeacherTextReadBinding(value: unknown, block: TeacherTextBlock | undefined): TeacherTextBlock {
+  if (!isNeuraleseRef(value) || !isTeacherTextNeuraleseId(value.$neuralese.id) || value.$neuralese.teacher_text !== true || !block)
+    throw new Error('teacher-text read needs a case-local typed reference');
+  const ref = value.$neuralese;
+  if (!block.writer_node || block.id !== ref.id || block.type !== ref.type || ref.source_occurrence !== block.writer_node ||
+      block.dialect !== TEACHER_TEXT_NEURALESE_DIALECT || !/^[0-9a-f]{64}$/.test(block.body_sha256) || hex(block.body) !== block.body_sha256 ||
+      typeof block.producer_call_id !== 'string' || !block.producer_call_id ||
+      block.type_aliases && Object.values(block.type_aliases).some(source => typeof source !== 'string'))
+    throw new Error('teacher-text read does not match its typed body, writer occurrence, or source digest');
+  return block;
+}
+
+/** Merge read-site and writer-site aliases without allowing the same name to change meaning across scopes. */
+export function mergeTeacherTextTypeAliases(readScope: Readonly<Record<string, string>> = {},
+  writerScope: Readonly<Record<string, string>> = {}): Record<string, string> {
+  for (const [name, source] of Object.entries(writerScope)) {
+    if (Object.hasOwn(readScope, name) && readScope[name] !== source)
+      throw new Error(`teacher-text read has conflicting type alias ${name}`);
+  }
+  return { ...readScope, ...writerScope };
+}
 
 /** A run-local store whose IDs, payload, type and writer identity are all derived from actual provider text. */
 export function createTeacherTextNeuralese(): TeacherTextNeuralese {
@@ -60,7 +84,14 @@ export function createTeacherTextNeuralese(): TeacherTextNeuralese {
       const bodySha = hex(text), ordinal = ++writeOrdinal;
       const id = 'nzt1_' + base32(createHash('sha256').update(canonical({ type, body_sha256: bodySha,
         producer_call_id: producerCall, ordinal }), 'utf8').digest());
-      const block: TeacherTextBlock = { id, type, body: text, body_sha256: bodySha, producer_call_id: producerCall };
+      const rawAliases = producer.type_aliases && typeof producer.type_aliases === 'object' && !Array.isArray(producer.type_aliases) ?
+        producer.type_aliases as Record<string, unknown> : undefined;
+      const typeAliases = rawAliases && Object.fromEntries(Object.entries(rawAliases).map(([name, source]) => {
+        if (typeof source !== 'string') throw new Error('teacher-text producer has a non-text type alias');
+        return [name, source];
+      }));
+      const block: TeacherTextBlock = { id, type, dialect: TEACHER_TEXT_NEURALESE_DIALECT, body: text, body_sha256: bodySha, producer_call_id: producerCall,
+        ...(typeAliases ? { type_aliases: typeAliases } : {}) };
       blocks.set(id, block);
       const meta: NeuraleseBlockMeta = { id, dialect: TEACHER_TEXT_NEURALESE_DIALECT, type, length: text.length, width: 0,
         producer: { kind: 'teacher-text-emulation', source_kind: producer.source_kind ?? 'typed-text-result',
@@ -117,12 +148,32 @@ export function createTeacherTextNeuralese(): TeacherTextNeuralese {
       return out;
     };
     const adapted = (async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
-      if (request.adapters?.length || request.guidance || request.template)
-        throw new Error('teacher-text transport cannot apply native adapters, native guidance, or template readout');
+      if (request.adapters?.length || request.guidance)
+        throw new Error('teacher-text transport cannot apply native adapters or native guidance');
+      let templateEmulation: Record<string, unknown> | undefined;
+      let providerRequest = request;
+      if (request.template) {
+        const template = request.template;
+        if (template.value !== 'decode' || template.call !== 'return_result' ||
+            Object.keys(template.arguments).length !== 1 || template.arguments.status !== 'success' ||
+            template.argument !== undefined && template.argument !== 'value' ||
+            template.argument_path?.length || template.value_type !== undefined && !['string', 'unknown'].includes(template.value_type))
+          throw new Error('teacher-text transport supports only a typed crisp return_result readout; native state writes and other templates are unavailable');
+        const returnTool = request.tools.filter(tool => {
+          if (!tool || typeof tool !== 'object') return false;
+          const fn = (tool as { function?: { name?: unknown } }).function;
+          return fn?.name === template.call;
+        });
+        if (returnTool.length !== 1) throw new Error('typed teacher-text readout needs exactly one declared return_result tool');
+        providerRequest = { ...request, tools: returnTool, tool_choice: 'required', template: undefined };
+        templateEmulation = { schema: 'natlang.teacher-text-readout-template-emulation/1',
+          source_template: structuredClone(template), provider_tool_choice: 'required',
+          provider_tool_names: [template.call] };
+      }
       const expanded = new Map<string, TeacherTextBlock>();
-      const renderedMessages = await render(request.messages, expanded);
+      const renderedMessages = await render(providerRequest.messages, expanded);
       if (!Array.isArray(renderedMessages)) throw new TypeError('teacher-text provider messages must remain an array');
-      const renderedRequest = { ...request, messages: renderedMessages };
+      const renderedRequest = { ...providerRequest, messages: renderedMessages };
       const response = await send(renderedRequest, signal);
       const markerOutputs = [response.text, response.calls].flatMap(value => {
         const found: string[] = [];
@@ -133,6 +184,7 @@ export function createTeacherTextNeuralese(): TeacherTextNeuralese {
       }).map(body => ({ body, body_sha256: hex(body), body_chars: body.length }));
       return { ...response, transport_provenance: { ...provenance, raw_request_sha256: hex(canonical(request)),
         rendered_request_sha256: hex(canonical(renderedRequest)), rendered_messages: renderedMessages,
+        ...(templateEmulation ? { template_emulation: templateEmulation } : {}),
         raw_response_sha256: response.raw_response ? hex(canonical(response.raw_response)) : null,
         expanded_input_blocks: [...expanded.values()], marker_outputs: markerOutputs } };
     }) as T;

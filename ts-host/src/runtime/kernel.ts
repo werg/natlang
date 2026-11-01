@@ -607,6 +607,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   // caller's bound skill set unless one is explicitly supplied for that inline definition.
   const invocationSkillFiles = options.manifest?.inline ? (options.skillFiles ?? frame.skillFiles) : options.skillFiles;
   const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, adHocQuestions, programOwner: owner,
+    typeAliases: definition.types,
     signal: frame.signal, abort: frame.abort,
     ...(invocationSkillFiles ? { skillFiles: invocationSkillFiles } : {}),
     ...(weights ? { weights } : {}), invocationTexts: {},

@@ -16,7 +16,7 @@ import { parseType } from '../native/types.js';
  * and coercions), a representation-generic call used for its Neuralese form (runtime/kernel.ts) and the builtin `view`
  * write.
  */
-import { dialectBinding } from '../native/neuralese.js';
+import { dialectBinding, isTeacherTextNeuraleseId } from '../native/neuralese.js';
 import { nativeStateRuntimeOptions } from '../model/native-state-client.js';
 import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
@@ -27,6 +27,8 @@ import { decodeNz, isSoftFunctionSpec, saveNz } from '../native/nz-file.js';
 import { HttpNeuraleseStore } from '../model/neuralese-server.js';
 import { fetchModel } from '../model/chat-completion.js';
 import { hexDigest } from '../native/hash.js';
+import { formatType } from '../native/types.js';
+import { mergeTeacherTextTypeAliases, validateTeacherTextReadBinding } from '../model/teacher-text-neuralese.js';
 
 type Json = Record<string, unknown>;
 
@@ -267,6 +269,43 @@ export async function readNeuraleseForCurrentTask(value: unknown): Promise<unkno
   if (typeof value === 'string') return value;
   if (!isNeuraleseRef(value)) throw new TypeError('typed Neuralese readout requires a Neuralese reference');
   const task = currentFrame()?.task;
+  const frame = currentFrame();
+  const ref = value.$neuralese;
+  if (isTeacherTextNeuraleseId(ref.id) || ref.teacher_text === true) {
+    const transport = task?.runtime.options.neuralese?.teacherText;
+    let block;
+    try { block = validateTeacherTextReadBinding(value, transport?.get(ref.id)); }
+    catch (error) { throw new NeuraleseReadoutCapabilityError(error instanceof Error ? error.message : String(error)); }
+    if (!frame) throw new NeuraleseReadoutCapabilityError('the teacher-text read has no active task call');
+    let declared;
+    try { declared = parseType(ref.type); } catch {
+      throw new NeuraleseReadoutCapabilityError('the teacher-text reference has an invalid declared type');
+    }
+    if (declared.kind !== 'neuralese')
+      throw new NeuraleseReadoutCapabilityError('the teacher-text reference does not declare Neuralese<T>');
+    const writerNode = block.writer_node!;
+    let typeAliases: Record<string, string>;
+    try { typeAliases = mergeTeacherTextTypeAliases(frame.typeAliases, block.type_aliases); }
+    catch (error) { throw new NeuraleseReadoutCapabilityError(error instanceof Error ? error.message : String(error)); }
+    const typeAliasesSha256 = hexDigest(JSON.stringify(Object.fromEntries(Object.entries(typeAliases).sort(([a], [b]) => a.localeCompare(b)))));
+    graphNode(traceFor(frame.parentCallId), 'readout', { type: formatType(declared.element),
+      call_id: frame.parentCallId ?? null, transport: 'teacher-text-model-read/1', block: ref.id,
+      type_aliases_sha256: typeAliasesSha256 },
+    [{ node: writerNode, port: 'args', block: ref.id }]);
+    const { invokeDefinition } = await import('../runtime/kernel.js');
+    const elementType = formatType(declared.element);
+    return invokeDefinition(frame, {
+      id: 'natlang:teacher-text-read/1', name: 'natlang.read',
+      body: 'Read the supplied Neuralese value. Return exactly the value it contains in its declared element type. ' +
+        'Preserve its content and structure; do not summarize, add fields, or add commentary.',
+      params: [{ name: 'value', type: ref.type }], returns: elementType,
+      types: typeAliases, codebase: {}, subtype: 'function', readout: 'template',
+      revision: 'teacher-text-model-read/1',
+    }, [value], { manifest: { internal: true, adHoc: false,
+      teacher_text_readout: { schema: 'natlang.teacher-text-model-read/1', block: ref.id,
+        type: ref.type, writer_node: writerNode, body_sha256: block.body_sha256,
+        producer_call_id: block.producer_call_id } } });
+  }
   const library = (task?.services as Json | undefined)?.neuralese as StandardLibrary | undefined;
   if (!library?.bodies?.read) throw new NeuraleseReadoutCapabilityError('services.neuralese is missing or has no read body');
   const store = task?.runtime.options.neuralese?.store;
