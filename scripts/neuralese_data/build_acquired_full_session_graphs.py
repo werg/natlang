@@ -288,6 +288,100 @@ def _record_uncommitted_cleanup(shard_root, directory):
         os.close(dir_fd)
 
 
+def archive_incompatible_empty_attempt(output, state_path, shard_root, state, current_binding):
+    """Preserve and reset an incompatible attempt only when it committed no source prefix.
+
+    A continuation proof is required to reuse receipted shards across renderer
+    changes. When the state frontier is zero and no shard receipt exists, the
+    unreceipted files are only an interrupted derivation; archive those bytes
+    and their hashes, then let the caller begin under the current binding.
+    """
+    output = Path(output)
+    state_path = Path(state_path)
+    shard_root = Path(shard_root)
+    if state_path.parent != output or shard_root != output / 'session-shards':
+        raise ValueError('incompatible attempt paths do not share the declared output root')
+    if (output / 'receipt.json').exists():
+        raise ValueError('completed output cannot be reset as an empty attempt')
+    if (state.get('schema') != 'natlang.acquired-session-resume/1'
+            or type(state.get('completed_source_record_frontier')) is not int
+            or state.get('completed_source_record_frontier') != 0 or state.get('shards')):
+        return False
+    if any(shard_root.glob('shard-*/receipt.json')):
+        return False
+    preserved_names = {'.conversion.lock', 'resume-state.json', 'session-shards',
+                       'cleanup-receipt.jsonl', '.incompatible-attempts'}
+    if any(item.name not in preserved_names for item in output.iterdir()):
+        return False
+    state_bytes = state_path.read_bytes()
+    if json.loads(state_bytes) != state:
+        raise ValueError('incompatible attempt state changed while it was being inspected')
+    prior_binding = state.get('binding')
+    if not isinstance(prior_binding, dict) or prior_binding == current_binding:
+        return False
+    if state.get('binding_sha256') != canonical_json_sha256_hex(prior_binding):
+        raise ValueError('incompatible attempt state binding digest is invalid')
+    archive_root = output / '.incompatible-attempts'
+    archive_id = hashlib.sha256(state_bytes).hexdigest()
+    archive = archive_root / archive_id
+    if archive.exists():
+        raise ValueError(f'incompatible attempt archive already exists: {archive}')
+    files = []
+    cleanup_path = output / 'cleanup-receipt.jsonl'
+    attempt_paths = [state_path]
+    if shard_root.exists():
+        attempt_paths.extend(sorted(shard_root.rglob('*')))
+    if cleanup_path.exists():
+        attempt_paths.append(cleanup_path)
+    for path in attempt_paths:
+        if path.is_symlink():
+            raise ValueError(f'incompatible attempt contains an unexpected symlink: {path}')
+        if not path.is_file():
+            continue
+        files.append({'path': str(path.relative_to(output)), 'bytes': path.stat().st_size,
+                      'sha256': sha256_file_hex(path)})
+    record = {'schema': 'natlang.acquired-session-incompatible-empty-attempt/1',
+        'reason': 'runtime continuation parent is not proven; no source shard was committed',
+        'prior_state_sha256': archive_id,
+        'prior_binding_sha256': canonical_json_sha256_hex(prior_binding),
+        'current_binding_sha256': canonical_json_sha256_hex(current_binding),
+        'completed_source_record_frontier': 0,
+        'files': files}
+    archive_root.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f'.pending-{archive_id[:12]}-', dir=archive_root))
+    moved = []
+    try:
+        if shard_root.exists():
+            os.replace(shard_root, staging / 'session-shards')
+            moved.append((staging / 'session-shards', shard_root))
+        os.replace(state_path, staging / 'resume-state.json')
+        moved.append((staging / 'resume-state.json', state_path))
+        if cleanup_path.exists():
+            os.replace(cleanup_path, staging / 'cleanup-receipt.jsonl')
+            moved.append((staging / 'cleanup-receipt.jsonl', cleanup_path))
+        write_json_durable(staging / 'archive-receipt.json', record)
+        dir_fd = os.open(staging, os.O_DIRECTORY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+        os.replace(staging, archive)
+    except BaseException:
+        for archived_path, original_path in reversed(moved):
+            if archived_path.exists() and not original_path.exists():
+                os.replace(archived_path, original_path)
+        if staging.exists() and not any(staging.iterdir()):
+            staging.rmdir()
+        raise
+    for directory in (archive_root, output):
+        dir_fd = os.open(directory, os.O_DIRECTORY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    return True
+
+
 def _stop_writer_without_deleting_temp(writer):
     """Quiesce a failed shard compressor while retaining its temp for cleanup proof."""
     if writer.encoder.poll() is None:
@@ -644,33 +738,40 @@ def _convert(args, prepared):
     if state_path.exists():
         state = json.loads(state_path.read_text())
         if state.get('binding') != binding:
-            parent_binding = state.get('binding')
+            if archive_incompatible_empty_attempt(args.output, state_path, shard_root, state, binding):
+                state = None
+                previous_state_frontier = 0
+            else:
+                parent_binding = state.get('binding')
+                previous_state_frontier = state.get('completed_source_record_frontier', 0)
+                runtime_continuation = prove_render_pending_runtime_continuation(
+                    parent_binding, binding, previous_state_frontier)
+                # Existing output receipts remain byte-exact and retain their old
+                # binding. Prove that this source prefix has no newly-classified
+                # malformed tool calls before allowing the reviewed continuation.
+                for index, value in enumerate(sessions(source)):
+                    if index >= previous_state_frontier:
+                        break
+                    if session_exclusion(value, protection, held_sources):
+                        continue
+                    try:
+                        prevalidate_session_tool_arguments(value, template_backbone=template_backbone)
+                    except RequestError as error:
+                        if error.code in RENDER_PENDING_CODES:
+                            raise ValueError('prior committed source prefix contains a newly render-pending row') from error
+                        raise
+                compatible_bindings[canonical_json_sha256_hex(parent_binding)] = previous_state_frontier
+                state = {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
+                    'binding_sha256': canonical_json_sha256_hex(binding),
+                    'completed_source_record_frontier': previous_state_frontier,
+                    'shards': state.get('shards', []), 'parent_binding': parent_binding,
+                    'runtime_continuation': runtime_continuation}
+                write_json_durable(state_path, state)
+        if state is not None:
             previous_state_frontier = state.get('completed_source_record_frontier', 0)
-            runtime_continuation = prove_render_pending_runtime_continuation(
-                parent_binding, binding, previous_state_frontier)
-            # Existing output receipts remain byte-exact and retain their old
-            # binding. Prove that this source prefix has no newly-classified
-            # malformed tool calls before allowing the reviewed continuation.
-            for index, value in enumerate(sessions(source)):
-                if index >= previous_state_frontier:
-                    break
-                if session_exclusion(value, protection, held_sources):
-                    continue
-                try:
-                    prevalidate_session_tool_arguments(value, template_backbone=template_backbone)
-                except RequestError as error:
-                    if error.code in RENDER_PENDING_CODES:
-                        raise ValueError('prior committed source prefix contains a newly render-pending row') from error
-                    raise
-            compatible_bindings[canonical_json_sha256_hex(parent_binding)] = previous_state_frontier
-            state = {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
-                'binding_sha256': canonical_json_sha256_hex(binding),
-                'completed_source_record_frontier': previous_state_frontier,
-                'shards': state.get('shards', []), 'parent_binding': parent_binding,
-                'runtime_continuation': runtime_continuation}
-            write_json_durable(state_path, state)
-        previous_state_frontier = state.get('completed_source_record_frontier', 0)
     else:
+        state = None
+    if state is None:
         state = {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
                                         'binding_sha256': canonical_json_sha256_hex(binding),
                                         'completed_source_record_frontier': 0}

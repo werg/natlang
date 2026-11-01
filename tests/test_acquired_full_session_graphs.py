@@ -292,6 +292,56 @@ def test_unreceipted_shard_cleanup_is_durably_listed_first(tmp_path):
         'sha256':__import__('hashlib').sha256(b'partial output').hexdigest()}]
 
 
+def test_incompatible_zero_frontier_attempt_is_archived_before_clean_retry(tmp_path):
+    import hashlib, json
+    from scripts.neuralese_data.build_acquired_full_session_graphs import archive_incompatible_empty_attempt
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    output=tmp_path/'graphs';output.mkdir()
+    state_path=output/'resume-state.json';shards=output/'session-shards'
+    partial=shards/'shard-00000000'/'train'/'partial.zst.tmp'
+    partial.parent.mkdir(parents=True);partial.write_bytes(b'partial shard from old runtime')
+    cleanup=output/'cleanup-receipt.jsonl';cleanup.write_text('{"prior":"cleanup"}\n')
+    old_binding={'source':{'sha256':'a'*64},'runtime':{'builder':'old'}}
+    state={'schema':'natlang.acquired-session-resume/1','binding':old_binding,
+        'binding_sha256':canonical_json_sha256_hex(old_binding),'completed_source_record_frontier':0}
+    state_path.write_text(json.dumps(state,sort_keys=True))
+    original_state_sha=hashlib.sha256(state_path.read_bytes()).hexdigest()
+    current_binding={'source':{'sha256':'a'*64},'runtime':{'builder':'current'}}
+    assert archive_incompatible_empty_attempt(output,state_path,shards,state,current_binding)
+    archive=output/'.incompatible-attempts'/original_state_sha
+    manifest=json.loads((archive/'archive-receipt.json').read_text())
+    assert manifest['schema']=='natlang.acquired-session-incompatible-empty-attempt/1'
+    assert manifest['completed_source_record_frontier']==0
+    assert manifest['prior_binding_sha256']==canonical_json_sha256_hex(old_binding)
+    assert manifest['current_binding_sha256']==canonical_json_sha256_hex(current_binding)
+    archived_state=archive/'resume-state.json'
+    archived_partial=archive/'session-shards/shard-00000000/train/partial.zst.tmp'
+    assert archived_state.read_bytes()==json.dumps(state,sort_keys=True).encode()
+    assert archived_partial.read_bytes()==b'partial shard from old runtime'
+    assert (archive/'cleanup-receipt.jsonl').read_bytes()==b'{"prior":"cleanup"}\n'
+    assert not state_path.exists() and not shards.exists() and not cleanup.exists()
+    assert {item['path']:item for item in manifest['files']}['session-shards/shard-00000000/train/partial.zst.tmp']=={
+        'path':'session-shards/shard-00000000/train/partial.zst.tmp','bytes':len(b'partial shard from old runtime'),
+        'sha256':hashlib.sha256(b'partial shard from old runtime').hexdigest()}
+
+
+@pytest.mark.parametrize('frontier,committed_receipt',[(1,False),(0,True)])
+def test_incompatible_attempt_archive_refuses_any_possible_committed_prefix(tmp_path,frontier,committed_receipt):
+    import json
+    from scripts.neuralese_data.build_acquired_full_session_graphs import archive_incompatible_empty_attempt
+    old={'runtime':'old'};current={'runtime':'current'}
+    output=tmp_path/'graphs';output.mkdir();state_path=output/'resume-state.json';shards=output/'session-shards'
+    shard=shards/'shard-00000000';shard.mkdir(parents=True)
+    state={'schema':'natlang.acquired-session-resume/1','binding':old,
+        'completed_source_record_frontier':frontier,'shards':[]}
+    state_path.write_text(json.dumps(state))
+    if committed_receipt:
+        (shard/'receipt.json').write_text('{}')
+    assert not archive_incompatible_empty_attempt(output,state_path,shards,state,current)
+    assert state_path.exists() and shard.exists()
+    assert not (output/'.incompatible-attempts').exists()
+
+
 @pytest.mark.parametrize('transitive',[False,True])
 def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch,transitive):
     import json,sys
