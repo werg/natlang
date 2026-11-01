@@ -33,7 +33,7 @@ def test_oversize_gate_uses_actual_point_and_restores_prior_gradients(tmp_path, 
     monkeypatch.setattr(native_memory,'qualify_capacity',fake)
     parameter=torch.nn.Parameter(torch.ones(2));parameter.grad=torch.tensor([3.,4.]);gradient=parameter.grad
     model=torch.nn.Linear(2,2);optimizer=SimpleNamespace(_native_named_parameters=[('p',parameter)])
-    example=SimpleNamespace(plan=SimpleNamespace(token_count=100,slot_sources=range(101)))
+    example=SimpleNamespace(id='oversize-case',plan=SimpleNamespace(token_count=100,slot_sources=range(101)))
     source=tmp_path/'source.json';source.write_text('{}')
     args=SimpleNamespace(cotangent_accumulator_backend='plain',checkpoint_layers=True,chunk_tokens=16,accumulate_batches=16,out=tmp_path)
     precision=(object(),'fp8',0.06,1.5)
@@ -106,7 +106,7 @@ def test_failed_oversize_gate_preserves_gradients_and_records_no_update(tmp_path
     monkeypatch.setattr(native_memory,'qualify_capacity',fail)
     parameter=torch.nn.Parameter(torch.ones(2));parameter.grad=torch.tensor([3.,4.]);gradient=parameter.grad
     model=torch.nn.Linear(2,2);optimizer=SimpleNamespace(_native_named_parameters=[('p',parameter)])
-    example=SimpleNamespace(plan=SimpleNamespace(token_count=100,slot_sources=range(101)))
+    example=SimpleNamespace(id='oversize-failure-case',plan=SimpleNamespace(token_count=100,slot_sources=range(101)))
     source=tmp_path/'source.json';source.write_text('{}')
     args=SimpleNamespace(cotangent_accumulator_backend='plain',checkpoint_layers=True,chunk_tokens=16,accumulate_batches=16,out=tmp_path)
     with pytest.raises(ValueError,match='failed live-model/QAT capacity'):
@@ -125,10 +125,12 @@ def test_gate_failure_before_update_preserves_durable_checkpoint(tmp_path, monke
           '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
           '--epochs','2','--batch-graphs','1','--accumulate-batches','1','--eval-every','1','--checkpoint-every','1','--checkpoint-seconds','0',
           '--seed','23','--lr-warmup','8','--refresh-after-updates','1','--batch-tokens','1','--out',str(out)]
-    assert trainer.main(args)==0
+    assert trainer.main(args+['--initialize-only']) is None
     checkpoint=out/'checkpoint.pt';before=torch.load(checkpoint,map_location='cpu',weights_only=False)
     def fail(*args,**kwargs):raise ValueError('injected oversize capacity failure')
     monkeypatch.setattr(native_packed_capacity,'qualify_oversize_batches',fail)
+    monkeypatch.setattr(native_packed_capacity,'oversize_baseline',
+        lambda *args,**kwargs:{'forward_tokens':1,'kv_slots':1,'basis':'injected-test-boundary'})
     with pytest.raises(ValueError,match='injected oversize capacity'):
         trainer.main(args+['--continue-from',str(checkpoint)])
     after=torch.load(checkpoint,map_location='cpu',weights_only=False)
@@ -245,12 +247,43 @@ def test_capacity_envelope_uses_one_measured_group_not_crossed_maxima():
     assert _one_group_dominates(jointly_large,candidate)
 
 
+def test_capacity_envelope_uses_incremental_peak_and_current_reusable_headroom():
+    from natlang_neuralese.train.native_packed_capacity import _incremental_headroom_covers
+    case={'cuda_incremental_peak_allocated_bytes':4<<30,'host_incremental_peak_bytes':0}
+    # A 1 GiB checkpoint snapshot may reduce free unified memory, while this
+    # process can still reuse cached allocator blocks. Require measured peak
+    # plus 25% headroom (at least 1 GiB), not the old proof-time free watermark.
+    assert _incremental_headroom_covers(case,{'device_type':'cuda','free_bytes_at_probe':2<<30,
+        'reusable_cache_bytes':3<<30,'total_bytes':128<<30,'host_available_bytes':6<<30})
+    assert not _incremental_headroom_covers(case,{'device_type':'cuda','free_bytes_at_probe':2<<30,
+        'reusable_cache_bytes':2<<30,'total_bytes':128<<30,'host_available_bytes':6<<30})
+    assert _incremental_headroom_covers({'host_incremental_peak_bytes':2<<30},
+        {'device_type':'cpu','host_available_bytes':5<<30})
+    assert not _incremental_headroom_covers({'host_incremental_peak_bytes':2<<30},
+        {'device_type':'cpu','host_available_bytes':2<<30})
+
+
+def test_capacity_peak_keeps_prior_large_case_for_later_small_case():
+    from natlang_neuralese.eval.native_memory import _gate_cuda_peaks
+    rows=[{'cuda_peak_allocated_bytes':12<<30,'cuda_peak_reserved_bytes':15<<30},
+        {'cuda_peak_allocated_bytes':7<<30,'cuda_peak_reserved_bytes':9<<30}]
+    allocated,reserved=_gate_cuda_peaks(rows,start_allocated=5<<30,start_reserved=6<<30,is_cuda=True)
+    assert allocated==7<<30
+    assert reserved==9<<30
+    # A later small case cannot reset the global high-water used by async
+    # checkpoint admission or shrink the cached proof's required headroom.
+    rows.append({'cuda_peak_allocated_bytes':6<<30,'cuda_peak_reserved_bytes':7<<30})
+    assert _gate_cuda_peaks(rows,start_allocated=5<<30,start_reserved=6<<30,is_cuda=True)==(allocated,reserved)
+
+
 def test_persisted_capacity_envelope_reuses_only_exact_runtime_point_and_device_context(tmp_path, monkeypatch):
     from natlang_neuralese.train import native_packed_capacity as capacity
     from natlang_neuralese.eval import native_memory
     model=torch.nn.Linear(2,2)
     optimizer=SimpleNamespace(_native_named_parameters=list(model.named_parameters()))
     source=tmp_path/'source.json';source.write_text('{}')
+    monkeypatch.setattr(capacity,'_capacity_memory_context',lambda device:{'device_type':'cpu',
+        'free_bytes_at_probe':None,'total_bytes':None,'host_available_bytes':8<<30})
     from natlang_neuralese.train.native_resident import binding
     execution={'schema':'natlang.native-oversize-execution-identity/1','sha256':'a'*64}
     qat={'point':'fp8','mix':0.25,'loss_weight':1.5}
@@ -259,12 +292,14 @@ def test_persisted_capacity_envelope_reuses_only_exact_runtime_point_and_device_
     proof={'schema':'natlang.native-oversize-live-capacity/1','global_step':61,'source':binding(source),
         'execution_identity':execution,
         'effective_layout':{'share_causal_prefixes':False,'allow_communication_prefixes':True},
-        'memory_context':{'device_type':'cpu','free_bytes_at_probe':None,'total_bytes':None},
+        'memory_context':{'device_type':'cpu','free_bytes_at_probe':None,'total_bytes':None,'host_available_bytes':8<<30},
         'candidate_groups':[group], 'passed':True,'optimizer_updates':0,'earned_exposure':0,
         'model_boundary':'current-live-model-before-update',
         'capacity':{'passed':True,'optimizer_updates':0,'production_packing':True,
             'whole_graphs':True,'cpu_and_all_cuda_rng_restored':True,'task_quality_qualified':False,'qat_point':qat,
-            'cases':[{'status':'passed','forward_tokens':100,'kv_slots':120,'id':'measured','example_ids':['measured']}]}}
+            'cases':[{'status':'passed','forward_tokens':100,'kv_slots':120,'id':'measured','example_ids':['measured'],
+                'cuda_incremental_peak_allocated_bytes':0,'cuda_incremental_peak_reserved_bytes':0,
+                'host_incremental_peak_bytes':0}]}}
     proof_path=tmp_path/'prior-proof.json';proof_path.write_text(json.dumps(proof))
     history=[binding(proof_path)]
     example=SimpleNamespace(id='candidate',plan=SimpleNamespace(token_count=80,slot_sources=range(90)))
@@ -274,7 +309,8 @@ def test_persisted_capacity_envelope_reuses_only_exact_runtime_point_and_device_
     monkeypatch.setattr(native_memory,'qualify_capacity',fail)
     ref=capacity.qualify_oversize_batches(model,optimizer,[[example]],args=args,backend=None,
         precision=(None,'fp8',0.99,1.5),source_path=source,checkpoint_sha256='b'*64,
-        global_step=62,baseline={'forward_tokens':10,'kv_slots':10},prior_history=history,
+        global_step=62,baseline={'forward_tokens':10,'kv_slots':10},prior_frontier=capacity.load_oversize_capacity_frontier(
+            [{'proof':history[0]}]),
         execution_identity=execution)
     reuse=json.loads(open(ref['path']).read())
     assert reuse['schema']=='natlang.native-oversize-capacity-envelope-reuse/1'
@@ -284,6 +320,7 @@ def test_persisted_capacity_envelope_reuses_only_exact_runtime_point_and_device_
 
 
 def test_capacity_envelope_rejects_different_execution_or_precision_point(tmp_path):
+    from natlang_neuralese.train import native_packed_capacity as capacity
     from natlang_neuralese.train.native_packed_capacity import _find_oversize_envelope
     from natlang_neuralese.train.native_resident import binding
     source=tmp_path/'source.json';source.write_text('{}')
@@ -292,14 +329,17 @@ def test_capacity_envelope_rejects_different_execution_or_precision_point(tmp_pa
         'model_boundary':'current-live-model-before-update',
         'execution_identity':{'sha256':'a'},
         'effective_layout':{'share_causal_prefixes':False,'allow_communication_prefixes':True},
-        'memory_context':{'device_type':'cpu','free_bytes_at_probe':None,'total_bytes':None},
+        'memory_context':{'device_type':'cpu','free_bytes_at_probe':None,'total_bytes':None,'host_available_bytes':8<<30},
         'candidate_groups':[{'graphs':[{'id':'measured','forward_tokens':10,'kv_slots':12}],
             'forward_tokens':10,'kv_slots':12,'graph_count':1}],
         'capacity':{'passed':True,'optimizer_updates':0,'production_packing':True,
             'whole_graphs':True,'cpu_and_all_cuda_rng_restored':True,'task_quality_qualified':False,
             'qat_point':{'point':'bf16','mix':0.0,'loss_weight':1.0},
-            'cases':[{'status':'passed','forward_tokens':10,'kv_slots':12,'example_ids':['measured']}]}}
-    path=tmp_path/'proof.json';path.write_text(json.dumps(proof));history=[binding(path)]
+            'cases':[{'status':'passed','forward_tokens':10,'kv_slots':12,'example_ids':['measured'],
+                'cuda_incremental_peak_allocated_bytes':0,'cuda_incremental_peak_reserved_bytes':0,
+                'host_incremental_peak_bytes':0}]}}
+    path=tmp_path/'proof.json';path.write_text(json.dumps(proof));history=capacity.load_oversize_capacity_frontier(
+        [{'proof':binding(path)}])
     candidate=[{'graphs':[{'id':'candidate','forward_tokens':5,'kv_slots':6}],
         'forward_tokens':5,'kv_slots':6,'graph_count':1}]
     assert _find_oversize_envelope(history,candidate,execution_identity={'sha256':'b'},
@@ -310,10 +350,13 @@ def test_capacity_envelope_rejects_different_execution_or_precision_point(tmp_pa
         current_memory=proof['memory_context']) is None
 
 
-def test_known_envelope_skips_async_drain_but_unknown_execution_drains(tmp_path):
+def test_known_envelope_skips_async_drain_but_unknown_execution_drains(tmp_path,monkeypatch):
+    from natlang_neuralese.train import native_packed_capacity as capacity
     from natlang_neuralese.train.native_packed_capacity import preflight_oversize_update
     from natlang_neuralese.train.native_resident import binding
     model=torch.nn.Linear(2,2)
+    monkeypatch.setattr(capacity,'_capacity_memory_context',lambda device:{'device_type':'cpu',
+        'free_bytes_at_probe':None,'total_bytes':None,'host_available_bytes':8<<30})
     source=tmp_path/'source.json';source.write_text('{}')
     execution={'schema':'natlang.native-oversize-execution-identity/1','sha256':'a'*64}
     layout={'share_causal_prefixes':False,'allow_communication_prefixes':True}
@@ -321,24 +364,26 @@ def test_known_envelope_skips_async_drain_but_unknown_execution_drains(tmp_path)
         'forward_tokens':100,'kv_slots':120,'graph_count':1}
     proof={'schema':'natlang.native-oversize-live-capacity/1','global_step':61,'source':binding(source),
         'execution_identity':execution,'effective_layout':layout,
-        'memory_context':{'device_type':'cpu','free_bytes_at_probe':None,'total_bytes':None},
+        'memory_context':{'device_type':'cpu','free_bytes_at_probe':None,'total_bytes':None,'host_available_bytes':8<<30},
         'candidate_groups':[group],'passed':True,'optimizer_updates':0,'earned_exposure':0,
         'model_boundary':'current-live-model-before-update',
         'capacity':{'passed':True,'optimizer_updates':0,'production_packing':True,
             'whole_graphs':True,'cpu_and_all_cuda_rng_restored':True,'task_quality_qualified':False,
             'qat_point':None,'cases':[{'status':'passed','forward_tokens':100,'kv_slots':120,
-                'id':'measured','example_ids':['measured']}]}}
-    path=tmp_path/'proof.json';path.write_text(json.dumps(proof));history=[binding(path)]
+                'id':'measured','example_ids':['measured'],'cuda_incremental_peak_allocated_bytes':0,
+                'cuda_incremental_peak_reserved_bytes':0,'host_incremental_peak_bytes':0}]}}
+    path=tmp_path/'proof.json';path.write_text(json.dumps(proof));history=capacity.load_oversize_capacity_frontier(
+        [{'proof':binding(path)}])
     example=SimpleNamespace(id='candidate',plan=SimpleNamespace(token_count=80,slot_sources=range(90)))
     class Policy:
         def __init__(self):self.drains=0
         def drain_async(self):self.drains+=1
     policy=Policy()
     oversized,match,groups,actual_layout,_=preflight_oversize_update(policy,model,[[example]],
-        {'forward_tokens':10,'kv_slots':10},history=history,execution_identity=execution,
+        {'forward_tokens':10,'kv_slots':10},frontier=history,execution_identity=execution,
         precision=None,backend=None)
     assert oversized and match is not None and groups and actual_layout==layout and policy.drains==0
     oversized,match,_,_,_=preflight_oversize_update(policy,model,[[example]],
-        {'forward_tokens':10,'kv_slots':10},history=history,execution_identity={'sha256':'different'},
+        {'forward_tokens':10,'kv_slots':10},frontier=history,execution_identity={'sha256':'different'},
         precision=None,backend=None)
     assert oversized and match is None and policy.drains==1

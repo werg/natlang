@@ -3372,6 +3372,11 @@ def _main(argv=None, *, requested_refresh):
             retained_gradients=args.accumulate_batches>1)
     checkpoint_options['oversize_capacity_baseline'] = oversize_limits
     checkpoint_options['oversize_capacity_history'] = prior_oversize_history
+    from .native_packed_capacity import (load_oversize_capacity_frontier,
+        serialize_oversize_capacity_frontier)
+    oversize_frontier = load_oversize_capacity_frontier(
+        checkpoint_options.get('oversize_capacity_frontier') or ())
+    checkpoint_options['oversize_capacity_frontier'] = serialize_oversize_capacity_frontier(oversize_frontier)
     # A policy round samples the unquantized actor, while QAT is retained for
     # the continuing SFT lineage. Carry the pending refresh across resumes.
     policy_qat_refresh = saved_quantization_options.get('policy_qat_refresh_required')
@@ -3820,7 +3825,7 @@ def _main(argv=None, *, requested_refresh):
                 planned_precision=(quantization,*quantization.plan(global_step)[0])
             oversized_update,envelope_match,candidate_groups,effective_layout,_ = preflight_oversize_update(
                 policy,model,micro_batches,oversize_limits,
-                history=checkpoint_options.get('oversize_capacity_history') or (),
+                frontier=oversize_frontier,
                 execution_identity=oversize_execution_identity_record,precision=planned_precision,backend=backend)
             indices = [index for item in fetched for index in item[1]]
             pass_end = any(item[2] for item in fetched)
@@ -3859,7 +3864,7 @@ def _main(argv=None, *, requested_refresh):
                     actual_layout={'share_causal_prefixes':bool(getattr(model,'share_causal_prefixes',False)),
                         'allow_communication_prefixes':bool(_communication_prefix_allowed(backend,precision_pass))}
                     verified_match=_find_oversize_envelope(
-                        checkpoint_options.get('oversize_capacity_history') or (),candidate_groups,
+                        oversize_frontier,candidate_groups,
                         execution_identity=oversize_execution_identity_record,precision=precision_pass,
                         effective_layout=actual_layout,
                         current_memory=current_memory)
@@ -3879,7 +3884,7 @@ def _main(argv=None, *, requested_refresh):
                         checkpoint_sha256=current_parent_sha,
                         global_step=global_step, baseline=oversize_limits,
                         objective=objective, objective_binding=objective_binding,
-                        prior_history=checkpoint_options.get('oversize_capacity_history') or (),
+                        prior_frontier=oversize_frontier,
                         execution_identity=oversize_execution_identity_record)
             except BaseException:
                 cursor = previous_cursor
@@ -3889,6 +3894,12 @@ def _main(argv=None, *, requested_refresh):
                 raise
             if oversize_proof is not None:
                 checkpoint_options.setdefault('oversize_capacity_history', []).append(oversize_proof)
+                proof_path = str((oversize_proof or {}).get('path') or '')
+                if '/oversize-capacity/' in proof_path and '/oversize-capacity-reuse/' not in proof_path:
+                    from .native_packed_capacity import remember_oversize_capacity_proof
+                    remember_oversize_capacity_proof(oversize_frontier, oversize_proof)
+                    checkpoint_options['oversize_capacity_frontier'] = serialize_oversize_capacity_frontier(
+                        oversize_frontier)
             # Continue locally while peers boot; pause only if unmerged residual
             # reaches the configured offline-history bound.
             if diloco is not None and not diloco.await_update_capacity(stop_requested=lambda: policy.signaled):

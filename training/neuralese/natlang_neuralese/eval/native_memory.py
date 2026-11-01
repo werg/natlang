@@ -181,6 +181,15 @@ class _HostPeak:
     def __exit__(self,*unused):self.stop.set();self.thread.join()
 
 
+def _gate_cuda_peaks(rows, *, start_allocated, start_reserved, is_cuda):
+    """Keep allocator high-water marks across cases; never reset CUDA peaks."""
+    if not is_cuda:
+        return 0,0
+    peak_allocated=max((int(row.get('cuda_peak_allocated_bytes') or 0) for row in rows),default=0)
+    peak_reserved=max((int(row.get('cuda_peak_reserved_bytes') or 0) for row in rows),default=0)
+    return max(0,peak_allocated-start_allocated),max(0,peak_reserved-start_reserved)
+
+
 def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers=True,
                      chunk_tokens=1024, checkpoint_sha256, source_binding, gradient_observer=None, objective=None,
                      production_packing=False, retained_gradients=False, cotangent_mode='vjp', precision=None):
@@ -210,6 +219,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
     device = next(model.parameters()).device
     rng_device = 'cuda' if device.type=='cuda' or torch.cuda.is_initialized() else 'cpu'
     rng = capture_training_rng_state(rng_device)
+    cuda_start_allocated=int(torch.cuda.memory_allocated(device)) if device.type=='cuda' else 0
+    cuda_start_reserved=int(torch.cuda.memory_reserved(device)) if device.type=='cuda' else 0
+    host_boundary_before=_host_memory()
     training_modes = {module:module.training for module in model.modules()}
     had_layers = hasattr(model.port,'checkpoint_layers')
     layers = getattr(model.port,'checkpoint_layers',None)
@@ -308,7 +320,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                 row['seconds']=time.monotonic()-started
                 row['cuda_peak_allocated_bytes']=(torch.cuda.max_memory_allocated(device) if device.type=='cuda' else 0)
                 row['cuda_peak_reserved_bytes']=(torch.cuda.max_memory_reserved(device) if device.type=='cuda' else 0)
-                row['cuda_peak_includes_prior_restore']=True
+                row['cuda_start_allocated_bytes']=cuda_start_allocated
+                row['cuda_start_reserved_bytes']=cuda_start_reserved
+                row['cuda_peak_includes_preexisting_allocations']=True
                 row['host_after']=_host_memory()
                 host_stats=getattr(torch.cuda.memory,'host_memory_stats',None)
                 row['pinned_host_allocator'] = ({key:value for key,value in host_stats().items()
@@ -317,6 +331,23 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             print(json.dumps({'kind':'native_capacity_case','event':'finish','index':case_index,'total':len(cases),'status':row['status'],'seconds':row['seconds']}),flush=True)
             if row['status']!='passed':break
         after=backend.collect_row_counts() if backend is not None else {}
+        if rows:
+            cuda_incremental,cuda_reserved_incremental=_gate_cuda_peaks(rows,
+                start_allocated=cuda_start_allocated,start_reserved=cuda_start_reserved,
+                is_cuda=device.type=='cuda')
+            host_peaks=[row.get('host_peak') or {} for row in rows]
+            starts=[host_boundary_before.get('cgroup_current_bytes'),host_boundary_before.get('cgroup_anon_bytes')]
+            host_maxima=[max((peak.get(key,0) for peak in host_peaks),default=0)
+                         for key in ('cgroup_current_bytes','cgroup_anon_bytes')]
+            increments=[max(0,peak-start) for peak,start in zip(host_maxima,starts)
+                        if isinstance(start,int) and isinstance(peak,int)]
+            host_incremental=max(increments) if increments else None
+            for row in rows:
+                row['cuda_incremental_peak_allocated_bytes']=cuda_incremental
+                row['cuda_incremental_peak_reserved_bytes']=cuda_reserved_incremental
+                row['host_incremental_peak_bytes']=host_incremental
+                row['cuda_peak_allocated_gate_max_bytes']=max(
+                    (item.get('cuda_peak_allocated_bytes') or 0) for item in rows)
         return {'schema':'natlang.native-memory-capacity-check/1',
             'passed':len(rows)==len(cases) and all(row['status']=='passed' for row in rows),
             'parent_checkpoint_sha256':checkpoint_sha256,'source':source_binding,'cases':rows,

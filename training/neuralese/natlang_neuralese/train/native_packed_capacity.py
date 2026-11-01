@@ -294,10 +294,25 @@ def _one_group_dominates(measured, candidate):
 
 def _capacity_memory_context(device):
     import torch
+    from pathlib import Path
+    host_available=None
+    try:
+        meminfo=dict(line.split(':',1) for line in Path('/proc/meminfo').read_text().splitlines() if ':' in line)
+        host_available=int(meminfo['MemAvailable'].split()[0])*1024
+        current=int(Path('/sys/fs/cgroup/memory.current').read_text())
+        limit=Path('/sys/fs/cgroup/memory.max').read_text().strip()
+        if limit!='max':host_available=min(host_available,max(0,int(limit)-current))
+    except (OSError,ValueError,KeyError):
+        host_available=None
     if device.type != 'cuda' or not torch.cuda.is_initialized():
-        return {'device_type':device.type,'free_bytes_at_probe':None,'total_bytes':None}
+        return {'device_type':device.type,'free_bytes_at_probe':None,'total_bytes':None,
+                'allocated_bytes':None,'reserved_bytes':None,'reusable_cache_bytes':None,
+                'host_available_bytes':host_available}
     free,total=torch.cuda.mem_get_info(device)
-    return {'device_type':'cuda','free_bytes_at_probe':int(free),'total_bytes':int(total)}
+    allocated=int(torch.cuda.memory_allocated(device));reserved=int(torch.cuda.memory_reserved(device))
+    return {'device_type':'cuda','free_bytes_at_probe':int(free),'total_bytes':int(total),
+            'allocated_bytes':allocated,'reserved_bytes':reserved,
+            'reusable_cache_bytes':max(0,reserved-allocated),'host_available_bytes':host_available}
 
 
 def oversize_execution_identity(model, optimizer, *, args, backend, objective_binding):
@@ -350,51 +365,141 @@ def _profile_shape_compatible(proof, *, execution_identity, precision, effective
     now=current_memory
     if memory.get('total_bytes') != now.get('total_bytes') or memory.get('device_type') != now.get('device_type'):
         return False
-    # A proof made with less free device memory cannot authorize work now.
-    prior_free=memory.get('free_bytes_at_probe')
-    current_free=now.get('free_bytes_at_probe')
-    if prior_free is not None and (current_free is None or current_free < prior_free):
-        return False
     return True
 
 
-def _find_oversize_envelope(history, candidate_groups, *, execution_identity, precision,
-                            effective_layout, current_memory):
+def _incremental_headroom_covers(case, current_memory):
+    """Require room for measured incremental live allocations plus a safety margin."""
+    host_needed=case.get('host_incremental_peak_bytes')
+    host_available=current_memory.get('host_available_bytes')
+    if any(type(value) is not int or value<0 for value in (host_needed,host_available)):
+        return False
+    if current_memory.get('device_type')=='cuda':
+        needed=max(case.get('cuda_incremental_peak_allocated_bytes') or 0,
+                   case.get('cuda_incremental_peak_reserved_bytes') or 0)
+        free=current_memory.get('free_bytes_at_probe')
+        reusable=current_memory.get('reusable_cache_bytes')
+        if any(type(value) is not int or value<0 for value in (needed,free,reusable)):
+            return False
+        if free+reusable < needed+max(1<<30,(needed+3)//4):
+            return False
+    elif current_memory.get('device_type')=='cpu':
+        needed=0
+    else:
+        return False
+    incremental=needed+host_needed
+    margin=max(1<<30,(incremental+3)//4)
+    return host_available>=incremental+margin
+
+
+def _oversize_frontier_entries(reference):
+    """Load valid measured cases once from a bounded durable proof frontier."""
     from .native_resident import bound
+    try:
+        record=json.loads(bound(reference['proof']).read_text())
+        bound(record['source'])
+    except (OSError,KeyError,ValueError,TypeError):
+        return []
+    if (record.get('schema')!='natlang.native-oversize-live-capacity/1' or record.get('passed') is not True
+            or record.get('optimizer_updates')!=0 or record.get('earned_exposure')!=0
+            or record.get('model_boundary')!='current-live-model-before-update'):
+        return []
+    capacity=record.get('capacity') or {}
+    groups=record.get('candidate_groups') or []
+    cases=capacity.get('cases') or []
+    if (capacity.get('passed') is not True or capacity.get('optimizer_updates')!=0
+            or capacity.get('production_packing') is not True or capacity.get('whole_graphs') is not True
+            or capacity.get('cpu_and_all_cuda_rng_restored') is not True
+            or capacity.get('task_quality_qualified') is not False or len(groups)!=len(cases)):
+        return []
+    output=[]
+    for index,(case,group) in enumerate(zip(cases,groups,strict=True)):
+        if (case.get('status')!='passed' or group.get('forward_tokens')!=case.get('forward_tokens')
+                or group.get('kv_slots')!=case.get('kv_slots')
+                or group.get('graph_count')!=len(group.get('graphs',()))
+                or [graph.get('id') for graph in group.get('graphs',())]!=case.get('example_ids')
+                or any(type(case.get(key)) is not int or case[key]<0 for key in (
+                    'cuda_incremental_peak_allocated_bytes','cuda_incremental_peak_reserved_bytes',
+                    'host_incremental_peak_bytes'))):
+            continue
+        output.append({'proof':reference['proof'],'record':record,'case_index':index,
+            'case':case,'group':group})
+    return output
+
+
+def load_oversize_capacity_frontier(references):
+    """Restore only the bounded active frontier; the full proof history stays separate."""
+    frontier=[]
+    for reference in references or ():
+        if not isinstance(reference,dict) or not isinstance(reference.get('proof'),dict):continue
+        frontier.extend(_oversize_frontier_entries(reference))
+    return frontier
+
+
+def _frontier_profile(entry):
+    record=entry['record'];capacity=record.get('capacity') or {};qat=capacity.get('qat_point')
+    return (record.get('execution_identity',{}).get('sha256'),record.get('effective_layout'),
+        None if qat is None else (qat.get('point'),qat.get('loss_weight')),
+        (record.get('memory_context') or {}).get('device_type'),(record.get('memory_context') or {}).get('total_bytes'))
+
+
+def _entry_resource_envelope(entry):
+    case=entry['case']
+    return (max(int(case.get('cuda_incremental_peak_allocated_bytes') or 0),
+                int(case.get('cuda_incremental_peak_reserved_bytes') or 0)),
+            int(case.get('host_incremental_peak_bytes') or 0))
+
+
+def _entry_dominates(left,right):
+    return (_one_group_dominates(left['group'],right['group'])
+        and all(a>=b for a,b in zip(_entry_resource_envelope(left),_entry_resource_envelope(right))))
+
+
+def remember_oversize_capacity_proof(frontier, reference):
+    """Add newly measured cases and retain only their authenticated nondominated envelope."""
+    additions=_oversize_frontier_entries({'proof':reference})
+    for entry in additions:
+        profile=_frontier_profile(entry)
+        same=[old for old in frontier if _frontier_profile(old)==profile]
+        if any(_entry_dominates(old,entry) for old in same):continue
+        frontier[:]=[old for old in frontier if not (_frontier_profile(old)==profile and _entry_dominates(entry,old))]
+        frontier.append(entry)
+    # Keep the lookup bounded under adversarially diverse geometry. Full proof
+    # history remains immutable; truncation can only cause a fresh live gate.
+    if len(frontier)>256:
+        by_profile={}
+        for entry in frontier:
+            by_profile.setdefault(_frontier_profile(entry),[]).append(entry)
+        frontier[:]=[]
+        for entries in by_profile.values():
+            entries.sort(key=lambda entry:(sum(entry['group'][k] for k in ('forward_tokens','kv_slots')),
+                *_entry_resource_envelope(entry)),reverse=True)
+            frontier.extend(entries[:256])
+    return frontier
+
+
+def serialize_oversize_capacity_frontier(frontier):
+    unique={}
+    for entry in frontier:
+        key=(entry['proof']['path'],entry['proof']['sha256'])
+        unique.setdefault(key,{'proof':dict(entry['proof'])})
+    return list(unique.values())
+
+
+def _find_oversize_envelope(frontier, candidate_groups, *, execution_identity, precision,
+                            effective_layout, current_memory):
     choices=[]
-    for reference in history or ():
-        try:
-            record=json.loads(bound(reference).read_text())
-            bound(record['source'])
-        except (OSError,KeyError,ValueError,TypeError):
+    for entry in frontier or ():
+        record=entry['record'];case=entry['case'];measured=entry['group']
+        if not _profile_shape_compatible(record,execution_identity=execution_identity,
+                precision=precision,effective_layout=effective_layout,current_memory=current_memory):
             continue
-        if (record.get('schema')!='natlang.native-oversize-live-capacity/1' or record.get('passed') is not True
-                or not _profile_shape_compatible(record,execution_identity=execution_identity,
-                    precision=precision,effective_layout=effective_layout,current_memory=current_memory)):
-            continue
-        capacity=record.get('capacity') or {}
-        cases=capacity.get('cases') or []
-        groups=record.get('candidate_groups') or []
-        if (record.get('optimizer_updates')!=0 or record.get('earned_exposure')!=0
-                or record.get('model_boundary')!='current-live-model-before-update'
-                or capacity.get('passed') is not True or capacity.get('optimizer_updates')!=0
-                or capacity.get('production_packing') is not True
-                or capacity.get('whole_graphs') is not True
-                or capacity.get('cpu_and_all_cuda_rng_restored') is not True
-                or capacity.get('task_quality_qualified') is not False
-                or len(groups)!=len(cases)):
-            continue
-        for case,measured in zip(cases,groups,strict=True):
-            if case.get('status')!='passed':continue
-            if (measured.get('forward_tokens')!=case.get('forward_tokens')
-                    or measured.get('kv_slots')!=case.get('kv_slots')
-                    or measured.get('graph_count')!=len(measured.get('graphs',()))
-                    or [graph.get('id') for graph in measured.get('graphs',())] != case.get('example_ids')):
-                continue
-            if all(_one_group_dominates(measured,candidate) for candidate in candidate_groups):
-                choices.append((measured['forward_tokens']+measured['kv_slots'],reference,record,case,measured))
+        if not _incremental_headroom_covers(case,current_memory):continue
+        if all(_one_group_dominates(measured,candidate) for candidate in candidate_groups):
+            choices.append((measured['forward_tokens']+measured['kv_slots'],entry))
     if not choices:return None
-    return min(choices,key=lambda item:item[0])[1:]
+    entry=min(choices,key=lambda item:item[0])[1]
+    return entry['proof'],entry['record'],entry['case'],entry['group']
 
 
 def record_oversize_envelope_reuse(args, *, match, candidate_groups, source_path,
@@ -421,7 +526,7 @@ def record_oversize_envelope_reuse(args, *, match, candidate_groups, source_path
     return binding(path)
 
 
-def preflight_oversize_update(policy, model, micro_batches, baseline, *, history,
+def preflight_oversize_update(policy, model, micro_batches, baseline, *, frontier,
                               execution_identity, precision, backend):
     """Skip the async-save drain only when a bound past group covers this update."""
     batches=oversized_batches(micro_batches,baseline)
@@ -431,7 +536,7 @@ def preflight_oversize_update(policy, model, micro_batches, baseline, *, history
         'allow_communication_prefixes':bool(_communication_prefix_allowed(backend,precision))}
     groups=_oversize_shape(batches)
     memory=_capacity_memory_context(next(model.parameters()).device)
-    match=_find_oversize_envelope(history,groups,execution_identity=execution_identity,
+    match=_find_oversize_envelope(frontier,groups,execution_identity=execution_identity,
         precision=precision,effective_layout=layout,current_memory=memory)
     if match is None:
         policy.drain_async()
@@ -448,7 +553,7 @@ def checkpoint_overlap_barrier(policy, micro_batches, baseline):
 
 def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, precision,
                              source_path, checkpoint_sha256, global_step, baseline,
-                             objective=None, objective_binding=None, prior_history=(),
+                             objective=None, objective_binding=None, prior_frontier=(),
                              execution_identity=None):
     """Gate newly larger actual groups on the live model and actual QAT point, before SGD."""
     from ..eval.native_memory import qualify_capacity
@@ -465,7 +570,7 @@ def qualify_oversize_batches(model, optimizer, micro_batches, *, args, backend, 
     effective_layout={'share_causal_prefixes':bool(getattr(model,'share_causal_prefixes',False)),
         'allow_communication_prefixes':bool(_communication_prefix_allowed(backend,precision))}
     if execution_identity is not None:
-        reused=_find_oversize_envelope(prior_history,candidate_groups,
+        reused=_find_oversize_envelope(prior_frontier,candidate_groups,
             execution_identity=execution_identity,precision=precision,effective_layout=effective_layout,
             current_memory=memory_context)
         if reused is not None:
