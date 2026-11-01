@@ -836,6 +836,8 @@ def recovery_training_custody(state):
     for name,frame in frames.items():
         selected={key:frame.get(key) for key in fields}
         selected['options']={key:(frame.get('options') or {}).get(key) for key in options}
+        selected['ce_binding']=(frame.get('options') or {}).get('ce_supervision_policy_binding')
+        selected['source_roots']=[{key:ref.get(key) for key in ('path','sha256')} for ref in (frame.get('source_receipts') or [])]
         frame_custody[name]=canonical_json_sha256_hex(selected)
     return {'global_step':step,'optimizer_present':True,'rng_present':True,
             'custody_sha256':{key:canonical_json_sha256_hex(training.get(key)) for key in fields},
@@ -871,16 +873,40 @@ def validate_recovery_plan_shape(plan):
                 or not isinstance(item['path'],str) or not Path(item['path']).is_absolute()
                 or not isinstance(item['sha256'],str) or not re.fullmatch(r'[0-9a-f]{64}',item['sha256'])):
             raise ValueError('invalid recovery closure binding')
-    if not {'runtime','environment','tokenizer','task-assets','controls','sources'} <= {item['role'] for item in closure}:
-        raise ValueError('recovery closure lacks a required runtime, environment, tokenizer, task asset, control or source role')
+    if not {'runtime','environment','system-python','system-libraries','node','interpreter','base','tokenizer','task-assets','controls','sources'} <= {item['role'] for item in closure}:
+        raise ValueError('recovery closure lacks a required runtime, environment, system, base, tokenizer, task asset, control or source role')
     inputs=plan.get('inputs')
     if not isinstance(inputs,dict) or set(inputs)!={'train','foundation','held','ce'}:
         raise ValueError('recovery plan needs exact train, foundation, held and CE bindings')
-    for ref in inputs.values():
+    for role,ref in inputs.items():
+        if ref is None and role in ('foundation','ce'):continue
         if (not isinstance(ref,dict) or set(ref)!={'path','sha256'} or not isinstance(ref['path'],str)
                 or not Path(ref['path']).is_absolute() or not isinstance(ref['sha256'],str)
                 or not re.fullmatch(r'[0-9a-f]{64}',ref['sha256'])):
             raise ValueError('invalid recovery input binding')
+    restore=plan.get('restore')
+    restore_fields={'runtime_archive','environment_archive','system_python_archive','base_path','node_path','interpreter_path','sample_graph','tokenizer_fingerprint','asset_archives','asset_guard','asset_inventory'}
+    if (not isinstance(restore,dict) or set(restore)!=restore_fields
+            or any(not isinstance(restore[key],str) or not Path(restore[key]).is_absolute() for key in restore_fields-{'tokenizer_fingerprint','asset_archives'})
+            or not isinstance(restore['tokenizer_fingerprint'],str) or not re.fullmatch(r'[0-9a-f]{64}',restore['tokenizer_fingerprint'])):
+        raise ValueError('recovery plan lacks exact restore inputs')
+    for key,role in (('runtime_archive','runtime'),('environment_archive','environment'),('system_python_archive','system-python'),('node_path','node'),('interpreter_path','interpreter'),('sample_graph','sources')):
+        if not any(item['role']==role and item['path']==restore[key] for item in closure):
+            raise ValueError('recovery closure omits restore input '+key)
+    if not any(item['role']=='base' and Path(item['path']).is_relative_to(restore['base_path']) for item in closure):
+        raise ValueError('recovery closure omits the pinned model base')
+    assets=restore['asset_archives']
+    if (not isinstance(assets,list) or len(assets)!=2
+            or {item.get('env') for item in assets if isinstance(item,dict)}!={'NATLANG_RL_TASK_ASSETS','NATLANG_RL_TASK_ASSETS_V3'}):
+        raise ValueError('recovery plan needs both exact task asset roots')
+    for item in assets:
+        if (not isinstance(item,dict) or set(item)!={'env','original_root','archive'}
+                or not isinstance(item['original_root'],str) or not Path(item['original_root']).is_absolute()
+                or not any(ref['role']=='task-assets' and ref['path']==item['archive'] for ref in closure)):
+            raise ValueError('recovery task asset archive binding differs')
+    for key in ('asset_guard','asset_inventory'):
+        if not any(item['role']=='controls' and item['path']==restore[key] for item in closure):
+            raise ValueError('recovery closure omits task asset guard or inventory')
     qualification=plan.get('restore_qualification')
     if (not isinstance(qualification,dict) or set(qualification)!={'path','sha256'}
             or not isinstance(qualification['path'],str) or not Path(qualification['path']).is_absolute()
@@ -888,6 +914,13 @@ def validate_recovery_plan_shape(plan):
             or not any(item['role']=='controls' and item['path']==qualification['path']
                        and item['sha256']==qualification['sha256'] for item in closure)):
         raise ValueError('recovery plan needs an exact restore qualification binding')
+    additional=plan.get('additional_inputs',[])
+    if not isinstance(additional,list):raise ValueError('invalid additional recovery input inventory')
+    for item in additional:
+        if (not isinstance(item,dict) or set(item)!={'kind','path','sha256'} or item['kind'] not in ('source','ce')
+                or not isinstance(item['path'],str) or not Path(item['path']).is_absolute()
+                or not isinstance(item['sha256'],str) or not re.fullmatch(r'[0-9a-f]{64}',item['sha256'])):
+            raise ValueError('invalid additional recovery input binding')
     controller=plan.get('controller')
     if (not isinstance(controller,dict) or set(controller)!={'state_path','config'}
             or not isinstance(controller['state_path'],str) or not Path(controller['state_path']).is_absolute()
@@ -911,11 +944,13 @@ def validate_restore_qualification(plan):
         raise ValueError('recovery restore qualification binding changed')
     value=json.loads(path.read_text());checks=value.get('checks') or {}
     required=('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded',
-              'checkpoint_full_state_loaded','node_collector_imported')
+              'checkpoint_full_state_loaded','node_collector_imported','task_assets_read')
     evidence=value.get('evidence') or {}
     available={(item['path'],item['sha256']) for item in plan['closure'] if item['role']=='controls'}
     if (value.get('schema')!='natlang.local-recovery-restore-qualification/1'
             or value.get('status')!='passed' or value.get('inputs')!=plan['inputs']
+            or value.get('restore')!=plan.get('restore') or value.get('additional_inputs',[])!=plan.get('additional_inputs',[])
+            or value.get('controller_config')!=plan['controller']['config']
             or value.get('closure_identity')!=recovery_closure_identity(plan)
             or set(evidence)!=set(required) or any(checks.get(key) is not True for key in required)):
         raise ValueError('recovery restore qualification does not bind the complete closure')
@@ -926,7 +961,7 @@ def validate_restore_qualification(plan):
             raise ValueError('recovery restore qualification evidence changed or is not retained')
 
 
-def validate_recovery_plan_dependencies(plan):
+def validate_recovery_plan_dependencies(plan, *, require_restore=True):
     """Check current recipe's transitive graph and CE dependencies once per plan."""
     from .recipe import native_source_dependencies
     from .native_supervision import ce_policy_dependencies
@@ -935,16 +970,51 @@ def validate_recovery_plan_dependencies(plan):
     available={(str(Path(item['path']).resolve()),item['sha256']) for item in plan.get('closure',[])}
     required=set()
     for role in ('train','foundation','held'):
-        ref=inputs[role];path=Path(ref['path']).resolve(strict=True)
+        ref=inputs[role]
+        if ref is None:continue
+        path=Path(ref['path']).resolve(strict=True)
         if sha256_file_hex_cached(path)!=ref['sha256']:
             raise ValueError('recovery input source digest changed')
         required.add((str(path),ref['sha256']))
         required.update((item['path'],item['sha256']) for item in native_source_dependencies(path))
-    required.update((item['path'],item['sha256']) for item in ce_policy_dependencies(inputs['ce']))
+    if inputs['ce'] is not None:
+        required.update((item['path'],item['sha256']) for item in ce_policy_dependencies(inputs['ce']))
+    for ref in plan.get('additional_inputs',[]):
+        path=Path(ref['path']).resolve(strict=True)
+        if sha256_file_hex_cached(path)!=ref['sha256']:raise ValueError('additional recovery input digest changed')
+        required.add((str(path),ref['sha256']))
+        dependencies=native_source_dependencies(path) if ref['kind']=='source' else ce_policy_dependencies({'path':str(path),'sha256':ref['sha256']})
+        required.update((item['path'],item['sha256']) for item in dependencies)
     missing=required-available
     if missing:
         raise ValueError('recovery plan omits transitive source or CE dependencies: '+str(sorted(missing)[:3]))
-    validate_restore_qualification(plan)
+    if require_restore:
+        validate_restore_qualification(plan)
+
+
+def verified_recovery_blob(source, target, digest, *, copier=child_copy, cached_identity=None):
+    """Copy or reuse one independently checked content-addressed closure blob."""
+    import fcntl
+    source=Path(source).resolve(strict=True);target=Path(target)
+    if not isinstance(digest,str) or not re.fullmatch(r'[0-9a-f]{64}',digest):
+        raise ValueError('invalid recovery closure digest')
+    lock_dir=target.parent/'.locks';lock_dir.mkdir(parents=True,exist_ok=True)
+    fd=os.open(lock_dir/(digest+'.lock'),os.O_CREAT|os.O_RDWR|getattr(os,'O_NOFOLLOW',0),0o600)
+    try:
+        fcntl.flock(fd,fcntl.LOCK_EX)
+        if target.is_symlink():raise ValueError('independent recovery blob cannot be a symlink')
+        if target.exists():
+            st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
+            if cached_identity!=identity and file_sha256(target)!=digest:
+                raise ValueError('existing independent recovery closure differs')
+        else:
+            copied=copier(source,target)
+            if copied['sha256']!=digest:
+                raise ValueError('recovery closure source differs from declared identity')
+            st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
+        return identity
+    finally:
+        os.close(fd)
 
 
 class RecoveryExportQueue:
@@ -1031,7 +1101,7 @@ class RecoveryExportQueue:
                 or any(plan.get(k)!=self.plan.get(k) for k in ('session','destination','journal_directory'))
                 or plan['controller']['state_path']!=self.plan['controller']['state_path']
                 or not isinstance(plan.get('inputs'),dict) or set(plan['inputs'])!={'train','foundation','held','ce'}
-                or not {'runtime','environment','tokenizer','task-assets','controls','sources'} <= {x.get('role') for x in plan.get('closure',[]) if isinstance(x,dict)}):
+                or not {'runtime','environment','system-python','system-libraries','node','interpreter','base','tokenizer','task-assets','controls','sources'} <= {x.get('role') for x in plan.get('closure',[]) if isinstance(x,dict)}):
             raise ValueError('invalid recovery plan transition')
         self.plan_validator(plan)
         with self.cond:
@@ -1065,10 +1135,10 @@ class RecoveryExportQueue:
                     or self._plan_digest(receipt.get('plan'))!=receipt.get('plan_sha256')
                     or receipt.get('checkpoint',{}).get('sha256')!=reference['checkpoint_sha256']):
                 return 'unavailable'
-            expected={(x['role'],str(Path(x['path']).resolve()),x['sha256']) for x in receipt['plan']['closure']}
+            expected={(x['role'],x['path'],x['sha256']) for x in receipt['plan']['closure']}
             controller=receipt['controller_state']
-            expected.add(('controller-state',str(Path(controller['path']).resolve()),controller['sha256']))
-            if {(x.get('role'),x.get('source'),x.get('sha256')) for x in receipt['closure']}!=expected:
+            expected.add(('controller-state',controller['path'],controller['sha256']))
+            if {(x.get('role'),x.get('declared_path'),x.get('sha256')) for x in receipt['closure']}!=expected:
                 return 'unavailable'
             items=[receipt['checkpoint'],*receipt['closure']]
             for item in items:
@@ -1102,10 +1172,10 @@ class RecoveryExportQueue:
                 or file_sha256(Path(checkpoint.get('path','')).resolve(strict=True))!=checkpoint.get('sha256')):
             raise ValueError('verified recovery receipt does not bind this export')
         observed=receipt.get('closure')
-        expected={(x['role'],str(Path(x['path']).resolve()),x['sha256']) for x in record['plan']['closure']}
+        expected={(x['role'],x['path'],x['sha256']) for x in record['plan']['closure']}
         controller=record['controller_state']
-        expected.add(('controller-state',str(Path(controller['path']).resolve()),controller['sha256']))
-        if (not isinstance(observed,list) or {(x.get('role'),x.get('source'),x.get('sha256')) for x in observed}!=expected
+        expected.add(('controller-state',controller['path'],controller['sha256']))
+        if (not isinstance(observed,list) or {(x.get('role'),x.get('declared_path'),x.get('sha256')) for x in observed}!=expected
                 or any(file_sha256(Path(x['path']).resolve(strict=True))!=x['sha256'] for x in observed)):
             raise ValueError('verified recovery closure is missing or changed')
 
@@ -1176,15 +1246,39 @@ class RecoveryExportQueue:
         if options.get('ce_supervision_policy_binding') != inputs['ce']:
             raise ValueError('recovery checkpoint CE binding differs from plan')
         for key,role in (('native_graphs','train'),('foundation_native_graphs','foundation'),('held_native_graphs','held')):
-            if options.get(key)!=inputs[role]['path']:
+            expected=inputs[role]['path'] if inputs[role] is not None else None
+            if options.get(key)!=expected:
                 raise ValueError('recovery checkpoint source role differs from plan')
         available={(item.get('path'),item.get('sha256')) for item in active_plan['closure']}
-        required={(ref['path'],ref['sha256']) for ref in inputs.values()}
-        for receipt in receipts[:2]:
-            leaves=receipt.get('sources')
-            if not isinstance(leaves,list):
-                raise ValueError('recovery checkpoint lacks source leaf inventory')
-            required.update((item.get('path'),item.get('sha256')) for item in leaves)
+        required={(ref['path'],ref['sha256']) for ref in inputs.values() if ref is not None}
+        def add_receipt(receipt):
+            if not isinstance(receipt,dict) or not receipt.get('path') or not receipt.get('sha256'):
+                raise ValueError('recovery checkpoint source receipt is incomplete')
+            required.add((receipt['path'],receipt['sha256']))
+            children=receipt.get('sources')
+            if children is not None:
+                if not isinstance(children,list) or not children:raise ValueError('invalid recovery source tree')
+                for child in children:add_receipt(child)
+        for receipt in receipts[:2]:add_receipt(receipt)
+        from .native_continuation import collect_sft_progress
+        declared={(item['kind'],item['path'],item['sha256']) for item in active_plan.get('additional_inputs',[])}
+        for role in ('train','foundation','held','ce'):
+            ref=inputs[role]
+            if ref is not None:declared.add(('ce' if role=='ce' else 'source',ref['path'],ref['sha256']))
+        for frame in collect_sft_progress(training,borrow_frames=True).values():
+            roots=frame.get('source_receipts') or []
+            for root in roots:
+                add_receipt(root)
+                if ('source',root['path'],root['sha256']) not in declared:
+                    raise ValueError('recovery plan lacks a carried SFT source root')
+            saved_options=frame.get('options') or {};ce=saved_options.get('ce_supervision_policy_binding')
+            if ce:
+                required.add((ce['path'],ce['sha256']))
+                if ('ce',ce['path'],ce['sha256']) not in declared:
+                    raise ValueError('recovery plan lacks a carried SFT CE root')
+            foundation=saved_options.get('foundation_native_graphs')
+            if foundation and not any(kind=='source' and path==foundation for kind,path,_ in declared):
+                raise ValueError('recovery plan lacks a carried SFT foundation root')
         if not required <= available:
             raise ValueError('recovery closure omits actual source or CE dependencies')
         step = training.get('global_step')
@@ -1223,28 +1317,12 @@ class RecoveryExportQueue:
             if not isinstance(digest,str) or len(digest)!=64 or any(x not in '0123456789abcdef' for x in digest):
                 raise ValueError('invalid recovery closure digest')
             target=self.destination/'closure'/digest
-            lock_dir=target.parent/'.locks';lock_dir.mkdir(parents=True,exist_ok=True)
-            import fcntl
-            fd=os.open(lock_dir/(digest+'.lock'),os.O_CREAT|os.O_RDWR|getattr(os,'O_NOFOLLOW',0),0o600)
-            try:
-                fcntl.flock(fd,fcntl.LOCK_EX)
-                if target.is_symlink():raise ValueError('independent recovery blob cannot be a symlink')
-                cache=self.state.setdefault('closure_cache',{})
-                if target.exists():
-                    st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
-                    if cache.get(digest)!=identity and file_sha256(target)!=digest:
-                        raise ValueError('existing independent recovery closure differs')
-                else:
-                    copied=self.copier(source,target)
-                    if copied['sha256'] != digest:
-                        raise ValueError('recovery closure source differs from declared identity')
-                    st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
-                with self.cond:
-                    cache[digest]=identity
-                    self._persist()
-            finally:
-                os.close(fd)
-            result.append({'role':item['role'],'source':str(source),'sha256':digest,'path':str(target),'file_identity':identity})
+            cache=self.state.setdefault('closure_cache',{})
+            identity=verified_recovery_blob(source,target,digest,copier=self.copier,cached_identity=cache.get(digest))
+            with self.cond:
+                cache[digest]=identity
+                self._persist()
+            result.append({'role':item['role'],'source':str(source),'declared_path':item['path'],'sha256':digest,'path':str(target),'file_identity':identity})
         return result
 
     def _leased(self, record):

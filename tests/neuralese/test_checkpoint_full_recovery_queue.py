@@ -17,8 +17,8 @@ def attach_qualification(plan,path):
     evidence_ref={'path':str(evidence_path),'sha256':sha(evidence_path)}
     if not any(x['path']==str(evidence_path) for x in plan['closure']):plan['closure'].append({'role':'controls',**evidence_ref})
     plan['restore_qualification']={'path':str(path),'sha256':'0'*64}
-    checks={key:True for key in ('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded','checkpoint_full_state_loaded','node_collector_imported')}
-    write_json_durable(path,{'schema':'natlang.local-recovery-restore-qualification/1','status':'passed','inputs':plan['inputs'],'closure_identity':recovery_closure_identity(plan),'checks':checks,'evidence':{key:evidence_ref for key in checks}})
+    checks={key:True for key in ('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded','checkpoint_full_state_loaded','node_collector_imported','task_assets_read')}
+    write_json_durable(path,{'schema':'natlang.local-recovery-restore-qualification/1','status':'passed','inputs':plan['inputs'],'restore':plan.get('restore'),'additional_inputs':plan.get('additional_inputs',[]),'controller_config':plan.get('controller',{}).get('config'),'closure_identity':recovery_closure_identity(plan),'checks':checks,'evidence':{key:evidence_ref for key in checks}})
     plan['restore_qualification']['sha256']=sha(path)
     plan['closure'].append({'role':'controls',**plan['restore_qualification']})
     return plan
@@ -29,17 +29,18 @@ def setup(tmp_path):
     with tempfile.TemporaryDirectory(dir='/dev/shm') as destination:
         slot=tmp_path/'checkpoint.pt';slot.write_bytes(b'full state 1')
         refs=[]
-        for role in ('runtime','environment','tokenizer','task-assets','controls','sources'):
+        for role in ('runtime','environment','system-python','system-libraries','node','interpreter','base','tokenizer','task-assets','controls','sources'):
             p=tmp_path/role;p.write_bytes(role.encode());refs.append({'role':role,'path':str(p),'sha256':sha(p)})
-        inputs={role:{'path':str(tmp_path/role),'sha256':sha(tmp_path/role)} for role in ('runtime','environment','tokenizer','task-assets','controls','sources')}
+        inputs={role:{'path':str(tmp_path/role),'sha256':sha(tmp_path/role)} for role in ('runtime','environment','system-python','system-libraries','node','interpreter','base','tokenizer','task-assets','controls','sources')}
         bindings={'train':inputs['sources'],'foundation':inputs['sources'],'held':inputs['runtime'],'ce':inputs['controls']}
         controller=tmp_path/'controller.json';controller.write_text(json.dumps({'phase':'updating','checkpoint':str(slot),'round':0,'offset':0,'trained_rounds':0}))
         plan={'controller':{'state_path':str(controller),'config':inputs['controls']},'inputs':bindings,'schema':'natlang.local-full-recovery-plan/1','session':'s1','destination':destination,'journal_directory':str(tmp_path/'journal'),'closure':refs}
+        plan['restore']={'runtime_archive':str(tmp_path/'runtime'),'environment_archive':str(tmp_path/'environment'),'system_python_archive':str(tmp_path/'system-python'),'base_path':str(tmp_path),'node_path':str(tmp_path/'node'),'interpreter_path':str(tmp_path/'interpreter'),'sample_graph':str(tmp_path/'sources'),'tokenizer_fingerprint':'a'*64,'asset_guard':str(tmp_path/'controls'),'asset_inventory':str(tmp_path/'controls'),'asset_archives':[{'env':'NATLANG_RL_TASK_ASSETS','original_root':str(tmp_path/'asset1'),'archive':str(tmp_path/'task-assets')},{'env':'NATLANG_RL_TASK_ASSETS_V3','original_root':str(tmp_path/'asset2'),'archive':str(tmp_path/'task-assets')}]}
         attach_qualification(plan,tmp_path/'qualification.json')
         yield slot,plan
 
 
-def submit(q,slot,step):q.submit(slot,{'training':{'optimizer':{'x':1},'rng':{'x':1},'global_step':step,'source_receipts':[q.inputs['train']|{'sources':[]},q.inputs['held']|{'sources':[]}],'options':{'ce_supervision_policy_binding':q.inputs['ce'],'native_graphs':q.inputs['train']['path'],'foundation_native_graphs':q.inputs['foundation']['path'],'held_native_graphs':q.inputs['held']['path']}}},{'previous_preserved_until_replace':True})
+def submit(q,slot,step):q.submit(slot,{'training':{'optimizer':{'x':1},'rng':{'x':1},'global_step':step,'source_receipts':[q.inputs['train'],q.inputs['held']],'options':{'ce_supervision_policy_binding':q.inputs['ce'],'native_graphs':q.inputs['train']['path'],'foundation_native_graphs':q.inputs['foundation']['path'] if q.inputs['foundation'] else None,'held_native_graphs':q.inputs['held']['path']}}},{'previous_preserved_until_replace':True})
 
 
 def test_coalesced_pins_recovery_and_verified_copy(setup):
@@ -51,7 +52,7 @@ def test_coalesced_pins_recovery_and_verified_copy(setup):
     assert q._export_one() and q.state['inflight'] is None and q.state['latest_verified']['global_step']==2
     assert not q.pin.exists()
     r=json.loads(Path(q.state['latest_verified']['path']).read_text());assert r['full_state'] and r['independent_readback'] and Path(r['checkpoint']['path']).read_bytes()==b'full state 2'
-    assert len(r['closure'])==9
+    assert len(r['closure'])==14
     q.close()
 
 
@@ -77,7 +78,7 @@ def test_inflight_keeps_old_closure_when_source_plan_changes(setup):
     old_hash=q.state['inflight']['plan_sha256'];new_source=slot.parent/'newsource';new_source.write_bytes(b'new source')
     next_plan=json.loads(json.dumps(plan));new_ref={'role':'sources','path':str(new_source),'sha256':sha(new_source)}
     next_plan['closure']=[x for x in next_plan['closure'] if x['role']!='sources']+[new_ref]
-    next_plan['inputs']['train']={'path':str(new_source),'sha256':sha(new_source)};next_plan['inputs']['foundation']=next_plan['inputs']['train']
+    next_plan['inputs']['train']={'path':str(new_source),'sha256':sha(new_source)};next_plan['inputs']['foundation']=next_plan['inputs']['train'];next_plan['restore']['sample_graph']=str(new_source)
     q.update_plan(next_plan);replacement=slot.with_name('replacement');replacement.write_bytes(b'full state 2');os.replace(replacement,slot);submit(q,slot,2)
     assert q._export_one();old_receipt=json.loads(Path(q.state['latest_verified']['path']).read_text());assert old_receipt['plan_sha256']==old_hash
     assert q._export_one();new_receipt=json.loads(Path(q.state['latest_verified']['path']).read_text());assert new_receipt['inputs']['train']['sha256']==sha(new_source)
@@ -111,7 +112,7 @@ def test_real_dependency_contract_rejects_missing_transitive_file(setup,monkeypa
 
 def test_checkpoint_must_match_qualified_source(setup):
     slot,plan=setup;q=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda plan:None,checkpoint_validator=lambda path,custody:None)
-    state={'training':{'optimizer':{'x':1},'rng':{'x':1},'global_step':1,'source_receipts':[q.inputs['train']|{'sources':[{'path':'/omitted','sha256':'a'*64}]},q.inputs['held']|{'sources':[]}],'options':{'ce_supervision_policy_binding':q.inputs['ce'],'native_graphs':q.inputs['train']['path'],'foundation_native_graphs':q.inputs['foundation']['path'],'held_native_graphs':q.inputs['held']['path']}}}
+    state={'training':{'optimizer':{'x':1},'rng':{'x':1},'global_step':1,'source_receipts':[q.inputs['train']|{'sources':[{'path':'/omitted','sha256':'a'*64}]},q.inputs['held']],'options':{'ce_supervision_policy_binding':q.inputs['ce'],'native_graphs':q.inputs['train']['path'],'foundation_native_graphs':q.inputs['foundation']['path'] if q.inputs['foundation'] else None,'held_native_graphs':q.inputs['held']['path']}}}
     with pytest.raises(ValueError,match='closure omits'):q.submit(slot,state,{'previous_preserved_until_replace':True})
     assert not q.pin.exists();q.close()
 
@@ -139,7 +140,7 @@ def test_real_graph_and_ce_closure_validation(tmp_path):
     held=tmp_path/'held.json';held.write_text(manifest.read_text())
     ce=tmp_path/'ce.json';ce.write_text(json.dumps({'schema':'natlang.native-ce-supervision-policy/1','sources':[{'sha256':sha(leaf),'context_weight':0.1,'encoding':'native-row-objectives-v1'}]}))
     inputs={'train':{'path':str(manifest),'sha256':sha(manifest)},'foundation':{'path':str(manifest),'sha256':sha(manifest)},'held':{'path':str(held),'sha256':sha(held)},'ce':{'path':str(ce),'sha256':sha(ce)}}
-    plan={'inputs':inputs,'closure':[{'role':'sources',**ref} for ref in inputs.values()]}
+    plan={'inputs':inputs,'controller':{'config':inputs['ce']},'closure':[{'role':'sources',**ref} for ref in inputs.values()]}
     with pytest.raises(ValueError,match='transitive'):validate_recovery_plan_dependencies(plan)
     plan['closure'].append({'role':'sources','path':str(leaf),'sha256':sha(leaf)})
     attach_qualification(plan,tmp_path/'qualification.json')
@@ -170,7 +171,7 @@ def test_independent_checkpoint_decodes_full_exposure_and_detects_mismatch(setup
     import torch
     from natlang_neuralese.train.checkpoint_offload import recovery_training_custody,validate_full_recovery_checkpoint
     slot,plan=setup;q=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda plan:None)
-    state={'training':{'global_step':3,'optimizer':{'slots':{'w':torch.tensor([1.0])}},'rng':{'seed':1},'source_row_bindings':{'row':'binding'},'held_row_bindings':{},'exposure_counts':{'row':2},'sft_progress':{},'source_receipts':[q.inputs['train']|{'sources':[]},q.inputs['held']|{'sources':[]}],'options':{'ce_supervision_policy_binding':q.inputs['ce'],'native_graphs':q.inputs['train']['path'],'foundation_native_graphs':q.inputs['foundation']['path'],'held_native_graphs':q.inputs['held']['path']}}}
+    state={'training':{'global_step':3,'optimizer':{'slots':{'w':torch.tensor([1.0])}},'rng':{'seed':1},'source_row_bindings':{'row':'binding'},'held_row_bindings':{},'exposure_counts':{'row':2},'sft_progress':{},'source_receipts':[q.inputs['train'],q.inputs['held']],'options':{'ce_supervision_policy_binding':q.inputs['ce'],'native_graphs':q.inputs['train']['path'],'foundation_native_graphs':q.inputs['foundation']['path'] if q.inputs['foundation'] else None,'held_native_graphs':q.inputs['held']['path']}}}
     torch.save(state,slot);q.submit(slot,state,{'previous_preserved_until_replace':True});assert q._export_one()
     receipt=json.loads(Path(q.state['latest_verified']['path']).read_text());assert receipt['training_custody']==recovery_training_custody(state)
     changed=recovery_training_custody(state);changed['global_step']=4
@@ -205,7 +206,8 @@ def test_real_policy_hook_exports_full_checkpoint_and_closure(tmp_path,monkeypat
         bind=lambda p:{'path':str(p),'sha256':sha(p)}
         inputs={'train':bind(manifest),'foundation':bind(manifest),'held':bind(held),'ce':bind(ce)}
         controller=tmp_path/'controller.json';controller.write_text(json.dumps({'phase':'updating','checkpoint':str(out/'checkpoint.pt'),'round':0,'offset':0,'trained_rounds':0}))
-        plan={'controller':{'state_path':str(controller),'config':bind(ce)},'schema':'natlang.local-full-recovery-plan/1','session':'integration','destination':destination,'journal_directory':str(out/'recovery'),'inputs':inputs,'closure':[{'role':role,**bind(path)} for role,path in [('sources',manifest),('sources',held),('sources',leaf),('controls',ce),('runtime',runtime),('environment',runtime),('tokenizer',runtime),('task-assets',runtime)]]}
+        plan={'controller':{'state_path':str(controller),'config':bind(ce)},'schema':'natlang.local-full-recovery-plan/1','session':'integration','destination':destination,'journal_directory':str(out/'recovery'),'inputs':inputs,'closure':[{'role':role,**bind(path)} for role,path in [('sources',manifest),('sources',held),('sources',leaf),('controls',ce),('runtime',runtime),('environment',runtime),('system-python',runtime),('system-libraries',runtime),('node',runtime),('interpreter',runtime),('base',runtime),('tokenizer',runtime),('task-assets',runtime)]]}
+        plan['restore']={'runtime_archive':str(runtime),'environment_archive':str(runtime),'system_python_archive':str(runtime),'base_path':str(tmp_path),'node_path':str(runtime),'interpreter_path':str(runtime),'sample_graph':str(leaf),'tokenizer_fingerprint':'a'*64,'asset_guard':str(ce),'asset_inventory':str(ce),'asset_archives':[{'env':'NATLANG_RL_TASK_ASSETS','original_root':str(tmp_path/'asset1'),'archive':str(runtime)},{'env':'NATLANG_RL_TASK_ASSETS_V3','original_root':str(tmp_path/'asset2'),'archive':str(runtime)}]}
         attach_qualification(plan,tmp_path/'qualification.json')
         write_json_durable(out/'checkpoint-recovery-plan.json',plan);monkeypatch.setenv('NATLANG_REQUIRE_FULL_RECOVERY','1')
         state={'training':{'global_step':3,'optimizer':{'slots':{'w':torch.tensor([1.0])}},'rng':{'seed':1},'source_row_bindings':{'row':'binding'},'held_row_bindings':{},'exposure_counts':{'row':2},'sft_progress':{},'source_receipts':[inputs['train']|{'sources':[bind(leaf)]},inputs['held']|{'sources':[bind(leaf)]}],'options':{'ce_supervision_policy_binding':inputs['ce'],'native_graphs':inputs['train']['path'],'foundation_native_graphs':inputs['foundation']['path'],'held_native_graphs':inputs['held']['path']}}}
@@ -232,3 +234,28 @@ def test_strong_policy_never_uses_legacy_mirror_when_slot_missing(tmp_path,monke
     monkeypatch.setattr(checkpoint_offload,'recovery_queue_for',lambda slot,plan:Queue())
     monkeypatch.setattr(checkpoint_policy,'recover_latest',lambda slot:pytest.fail('legacy mirror must not be selected'))
     with pytest.raises(ValueError,match='restore a verified full-state export'):checkpoint_policy.CheckpointPolicy(tmp_path)
+
+
+def test_rl_leaf_keeps_carried_sft_source_and_ce_custody(setup):
+    slot,plan=setup;old=plan['inputs']['train'];held=plan['inputs']['held'];ce=plan['inputs']['ce']
+    rl=slot.parent/'rollout.jsonl';rl.write_text('{}\n');rlref={'path':str(rl),'sha256':sha(rl)}
+    plan['inputs']['train']=rlref;plan['inputs']['foundation']=None;plan['closure'].append({'role':'sources',**rlref})
+    plan['additional_inputs']=[{'kind':'source',**old}]
+    attach_qualification(plan,slot.parent/'qualification.json')
+    q=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda plan:None,checkpoint_validator=lambda path,custody:None)
+    frame={'source_receipts':[old,held], 'options':{'foundation_native_graphs':old['path'],'ce_supervision_policy_binding':ce},'source_row_bindings':{'old':'binding'},'exposure_counts':{'old':2}}
+    state={'training':{'global_step':5,'optimizer':{'x':1},'rng':{'x':1},'source_receipts':[rlref,held],
+                       'options':{'native_graphs':rlref['path'],'foundation_native_graphs':None,'held_native_graphs':held['path'],'ce_supervision_policy_binding':ce},'sft_progress':{'joint':frame}}}
+    q.submit(slot,state,{'previous_preserved_until_replace':True});assert q.state['inflight']['custody']['sft_frames_sha256']['joint']
+    assert q._export_one();q.close()
+    plan['additional_inputs']=[];attach_qualification(plan,slot.parent/'qualification.json')
+    plan['journal_directory']=str(slot.parent/'other-journal');q=RecoveryExportQueue(slot,plan,start_worker=False,plan_validator=lambda plan:None,checkpoint_validator=lambda path,custody:None)
+    with pytest.raises(ValueError,match='carried SFT source'):q.submit(slot,state,{'previous_preserved_until_replace':True})
+    q.close()
+
+
+def test_restore_qualification_rejects_changed_restore_contract(setup):
+    from natlang_neuralese.train.checkpoint_offload import validate_restore_qualification
+    _,plan=setup;validate_restore_qualification(plan)
+    plan['restore']['base_path']='/changed/base'
+    with pytest.raises(ValueError,match='complete closure'):validate_restore_qualification(plan)

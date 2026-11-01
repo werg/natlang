@@ -9,7 +9,7 @@ from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.train.checkpoint_offload import file_sha256
 
 
-def seal(runtime, output, receipt):
+def seal(runtime, output, receipt, *, allow_external_file_links=False):
     runtime=Path(runtime).resolve(strict=True);output=Path(output).resolve();receipt=Path(receipt).resolve()
     if output.exists() or receipt.exists():raise ValueError('runtime archive output already exists')
     output.parent.mkdir(parents=True,exist_ok=True);pending=output.with_name(output.name+'.pending')
@@ -25,9 +25,16 @@ def seal(runtime, output, receipt):
                     path=base/name;member='runtime/'+path.relative_to(runtime).as_posix();before=identity(path)
                     if path.is_symlink():
                         target=path.resolve(strict=True)
-                        if not target.is_relative_to(runtime):raise ValueError('runtime symlink escapes frozen runtime')
-                        info=tarfile.TarInfo(member);info.type=tarfile.SYMTYPE;info.linkname=os.readlink(path);info.mode=0o777
-                        archive.addfile(info);entries.append({'name':member,'link':info.linkname})
+                        if not target.is_relative_to(runtime):
+                            if not allow_external_file_links or not target.is_file():raise ValueError('runtime symlink escapes frozen runtime')
+                            target_before=identity(target);digest=file_sha256(target);info=archive.gettarinfo(str(target),member)
+                            if info.islnk():info.type=tarfile.REGTYPE;info.linkname='';info.size=target.stat().st_size
+                            with target.open('rb') as source:archive.addfile(info,source)
+                            if identity(target)!=target_before:raise ValueError('external link target changed during archive')
+                            entries.append({'name':member,'sha256':digest,'bytes':info.size,'original_link':os.readlink(path)})
+                        else:
+                            info=tarfile.TarInfo(member);info.type=tarfile.SYMTYPE;info.linkname=os.readlink(path);info.mode=0o777
+                            archive.addfile(info);entries.append({'name':member,'link':info.linkname})
                     elif path.is_dir():
                         info=archive.gettarinfo(str(path),member);archive.addfile(info)
                         entries.append({'name':member,'directory':True,'mode':info.mode & 0o7777})
@@ -62,6 +69,8 @@ def seal(runtime, output, receipt):
         result={'schema':'natlang.local-recovery-runtime-archive-receipt/1','source':str(runtime),
                 'archive':{'path':str(output),'sha256':digest,'bytes':output.stat().st_size},
                 'entries':len(entries),'all_members_independently_reread':True,
+                'builder':{'path':str(Path(__file__).resolve()),'sha256':file_sha256(Path(__file__))},
+                'external_file_links_dereferenced':allow_external_file_links,
                 'scope':'frozen runtime bytes only; model, environment, data and actual restore are separate'}
         write_json_durable(receipt,result);return result
     except BaseException:
@@ -70,7 +79,7 @@ def seal(runtime, output, receipt):
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--runtime',required=True);parser.add_argument('--output',required=True);parser.add_argument('--receipt',required=True)
-    args=parser.parse_args();print(json.dumps(seal(args.runtime,args.output,args.receipt)),flush=True)
+    parser=argparse.ArgumentParser();parser.add_argument('--runtime',required=True);parser.add_argument('--output',required=True);parser.add_argument('--receipt',required=True);parser.add_argument('--allow-external-file-links',action='store_true')
+    args=parser.parse_args();print(json.dumps(seal(args.runtime,args.output,args.receipt,allow_external_file_links=args.allow_external_file_links)),flush=True)
 
 if __name__=='__main__':main()
