@@ -8,7 +8,7 @@ never changes the original checkpoint or any live control.
 """
 from __future__ import annotations
 import argparse,hashlib,json,os,shutil,subprocess,tarfile,tempfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from scripts.coreweave.private_export_guard import CacheBoundedReader
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
@@ -68,22 +68,24 @@ def _host_contract():
 
 
 def copy_closure_blobs(base_closure, store):
-    blobs={}
     def copy_one(item):
         key=(item['path'],item['sha256']);target=store/'closure'/item['sha256']
         return key, {'path':str(target),'identity':verified_recovery_blob(item['path'],target,item['sha256'])}
     # At most four copies and eight queued rows; never buffer payloads in RAM.
     with ThreadPoolExecutor(max_workers=4) as pool:
-        iterator=iter(base_closure); pending=[]
+        iterator=iter(enumerate(base_closure)); pending={}; results={}
         for _ in range(8):
-            item=next(iterator,None)
-            if item is None:break
-            pending.append(pool.submit(copy_one,item))
+            row=next(iterator,None)
+            if row is None:break
+            index,item=row;pending[pool.submit(copy_one,item)]=index
         while pending:
-            future=pending.pop(0);key,value=future.result();blobs[key]=value
-            item=next(iterator,None)
-            if item is not None:pending.append(pool.submit(copy_one,item))
-    return blobs
+            completed,_=wait(pending,return_when=FIRST_COMPLETED)
+            for future in completed:
+                index=pending.pop(future);results[index]=future.result()
+                row=next(iterator,None)
+                if row is not None:
+                    index,item=row;pending[pool.submit(copy_one,item)]=index
+    return dict(results[index] for index in sorted(results))
 
 
 def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, evidence_path, environment_scratch=None):

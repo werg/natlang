@@ -40,3 +40,17 @@ def test_closure_copy_is_bounded_ordered_and_propagates_failure(tmp_path, monkey
     assert 1 < state['peak'] <= 4
     with pytest.raises(ValueError,match='invalid content'):
         q.copy_closure_blobs(rows+[{'path':'bad','sha256':'bad'}],tmp_path)
+
+
+def test_closure_copy_refills_while_first_copy_is_slow(tmp_path, monkeypatch):
+    import threading
+    from scripts.neuralese_data import qualify_local_checkpoint_recovery as q
+    progressed=threading.Event()
+    def copy(source,target,digest):
+        if source=='0':
+            assert progressed.wait(2), 'later work did not advance while first copy waited'
+        if source=='9':progressed.set()
+        return [digest]
+    monkeypatch.setattr(q,'verified_recovery_blob',copy)
+    rows=[{'path':str(i),'sha256':str(i)} for i in range(12)]
+    assert len(q.copy_closure_blobs(rows,tmp_path))==12
