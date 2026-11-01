@@ -772,8 +772,8 @@ def test_interrupted_update_telemetry_checks_exact_order_and_finite_progress(tmp
             _interrupted_update_telemetry(train_ref, progress_ref, 64, 67)
 
 
-@pytest.mark.parametrize('tamper', ['none', 'checkpoint', 'snapshot', 'source', 'journal', 'capacity', 'step'])
-def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry(tmp_path, tamper):
+@pytest.mark.parametrize('tamper', ['none', 'checkpoint', 'snapshot', 'both-snapshots', 'source', 'journal', 'capacity', 'step'])
+def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry(tmp_path, tamper, monkeypatch):
     from natlang_neuralese.rl.native_direct_sft_recovery import _rolling_intermediate_window
     def file(name, data, *, raw=False):
         p = tmp_path/name; p.parent.mkdir(parents=True, exist_ok=True)
@@ -785,10 +785,19 @@ def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry
     snapshot = {'schema':'natlang.rolling-sft-parent-custody-snapshot/1', 'checkpoint':middle,
                 'global_step':67, 'optimizer_present':True, 'rng_present':True,
                 'model_config_sha256':'a'*64, 'sft_frames':{'full':{'actual':'state'}}}
+    actual = copy.deepcopy(snapshot); actual['checkpoint']['path'] = retained['path']
+    if tamper == 'both-snapshots': snapshot['sft_frames']['full']['actual'] = 'forged'
     original = file('snapshot.json', snapshot)
     extracted = copy.deepcopy(snapshot); extracted['checkpoint']['path'] = retained['path']
     if tamper == 'snapshot': extracted['sft_frames']['full']['actual'] = 'forged'
     extracted_ref = file('extracted.json', extracted)
+    calls = []
+    def derive(checkpoint, sha256, directory):
+        calls.append((str(checkpoint), sha256))
+        path = Path(directory)/'derived.json'
+        path.write_text(json.dumps(actual, sort_keys=True))
+        return binding(path)
+    monkeypatch.setattr('natlang_neuralese.rl.native_supervised._rolling_parent_custody_snapshot', derive)
     rows = [{'schema':'natlang.native-training-progress/1', 'kind':'native', 'global_step':n,
              'loss':1., 'graphs':2, 'forward_tokens':3, 'supervised_tokens':1,
              'communication_exposure':{'graph_visits':n}} for n in (65, 66, 67)]
@@ -829,3 +838,5 @@ def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry
         assert result['intermediate_updates']==3 and result['intermediate_checkpoint_bytes_verified_currently'] is True
     else:
         with pytest.raises(ValueError): _rolling_intermediate_window(*args)
+    if tamper != 'checkpoint':
+        assert calls == [(retained['path'], retained['sha256'])]

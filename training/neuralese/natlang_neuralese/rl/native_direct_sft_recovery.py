@@ -115,6 +115,18 @@ def _interrupted_update_telemetry(train_ref, progress_ref, parent_step, saved_st
             'scope': 'recorded update telemetry only; checkpoint custody and launch require independent proof'}
 
 
+def _derive_interrupted_checkpoint_snapshot(checkpoint, sha256):
+    """Derive custody from the authenticated retained checkpoint in this invocation."""
+    import tempfile
+    from .native_supervised import _rolling_parent_custody_snapshot
+    # Use a fresh directory: an existing JSON file is never accepted as proof
+    # of derivation. The snapshotter loads the actual full state using mmap,
+    # checks its file identity around extraction and enforces the storage floor.
+    with tempfile.TemporaryDirectory(prefix='natlang-interrupted-sft-custody-') as directory:
+        derived_ref = _rolling_parent_custody_snapshot(checkpoint, sha256, directory)
+        return json.loads(_verify_historical_file_ref(derived_ref).read_text())
+
+
 def _interrupted_rolling_window(declaration, transition, parent, child, receipt, *, state_parent=None,
                                 historical_previous_path=None):
     """Authenticate an interrupted saved window without claiming a completed report."""
@@ -139,9 +151,18 @@ def _interrupted_rolling_window(declaration, transition, parent, child, receipt,
     capacity, capacity_proof = read('capacity'), read('capacity_proof')
     _verify_historical_file_ref(refs['capacity_request'])
     retained_path = _verify_historical_file_ref(refs['retained_checkpoint'])
+    # Derive before loading the large recorded frames to keep peak memory
+    # bounded. In particular, two matching caller-supplied JSON files are not
+    # evidence of the state actually serialized in the retained checkpoint.
+    derived = _derive_interrupted_checkpoint_snapshot(retained_path, refs['retained_checkpoint']['sha256'])
+    extracted = read('extracted_snapshot')
+    for key in ('schema', 'checkpoint', 'global_step', 'optimizer_present', 'rng_present',
+                'model_config_sha256', 'sft_frames'):
+        if derived.get(key) != extracted.get(key):
+            raise ValueError('interrupted SFT retained checkpoint derivation differs from extracted snapshot')
+    del derived
     original_ref = transition.get('custody_snapshot')
     original = json.loads(_verify_historical_file_ref(original_ref).read_text())
-    extracted = read('extracted_snapshot')
     old_path = Path(historical_previous_path if historical_previous_path is not None
                     else transition.get('previous_checkpoint_path', '')).resolve()
     rolling = Path(transition.get('checkpoint_path', '')).resolve()
@@ -231,7 +252,7 @@ def _interrupted_rolling_window(declaration, transition, parent, child, receipt,
             'intermediate_updates':middle_step-parent['global_step'], 'telemetry':telemetry,
             'preflight':'not-observed',
             'intermediate_checkpoint_bytes_verified_currently':True,
-            'scope':'retained full checkpoint and extracted state with actual launch and finite telemetry; no completed report or evaluation'}
+            'scope':'fresh retained checkpoint state derivation with actual launch and finite telemetry; no completed report or evaluation'}
 
 
 def _interrupted_segment_custody(endpoint, intermediate_proof, parent, child):
