@@ -1,5 +1,26 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Honest stops, bounded efficiency and live escalation (owner, 2026-11-01)
+
+Correct task completion remains the strongest outcome signal. A genuinely
+blocked stop is correct only when the task oracle verifies the expected terminal
+status, honest stop and its evidence; self-reported difficulty alone earns no
+success credit. Preserve raw results and historical scores when repairing a
+derived classification, and never silently discard earned optimizer updates.
+
+New whole-graph RL scoring includes bounded execution-efficiency cost by default:
+at most 0.05 for observed calls, generated tokens and unchanged repeated actions.
+Normalize task outcomes separately; do not amplify tiny cost differences through
+standardization or teach all-failed groups to prefer cheap failure. Missing token
+counts remain unknown. Historical bound rounds retain their recorded cost policy.
+
+Inference escalation continues the actual live invocation through explicitly
+configured model profiles. Preserve scope, completed effects, authority, graph
+ancestry, remaining limits and actual per-turn actor identity. Never restart a
+task merely to hand it off, reset budgets, or reuse another model's native state
+or adapters as though compatible. Learning must reject unsupported mixed-actor
+likelihood attribution. No paid generation is implied by configuring this machinery.
+
 ## Source continuations and asynchronous checkpoints (engineering, 2026-11-01)
 
 Qualify the publication path alongside a source continuation, before spending

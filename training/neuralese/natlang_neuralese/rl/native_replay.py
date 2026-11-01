@@ -1167,6 +1167,28 @@ def _require_scored_training_episode(rollout, identity,*,actors=None):
     bonus = rollout['reward'].get('neuralese_bonus')
     if bonus is not None and (type(bonus) not in (int, float) or not 0 < bonus <= 1 or quality != 1):
         raise ValueError('native RL Neuralese-use bonus belongs only to correct episodes and lies in (0, 1]')
+    efficiency = rollout['reward'].get('execution_efficiency')
+    if efficiency is not None:
+        from .rollout_math import execution_efficiency_cost, execution_efficiency_counters
+        if (not isinstance(efficiency, dict) or type(efficiency.get('model_calls')) is not int
+                or efficiency['model_calls'] != len(rollout.get('turns') or [])
+                or (efficiency.get('generated_tokens') is not None and
+                    (type(efficiency['generated_tokens']) is not int or efficiency['generated_tokens'] < 0))
+                or type(efficiency.get('repeated_actions')) is not int or efficiency['repeated_actions'] < 0
+                or type(efficiency.get('weight')) not in (int, float)
+                or not math.isfinite(efficiency['weight']) or not 0 <= efficiency['weight'] <= 1
+                or type(efficiency.get('cost')) not in (int, float)
+                or not math.isfinite(efficiency['cost']) or not 0 <= efficiency['cost'] <= .05):
+            raise ValueError('native RL execution-efficiency telemetry is malformed or exceeds its cost cap')
+        expected_cost = execution_efficiency_cost(model_calls=efficiency['model_calls'],
+            generated_tokens=efficiency['generated_tokens'], repeated_actions=efficiency['repeated_actions'],
+            weight=efficiency['weight'])
+        if not math.isclose(efficiency['cost'], expected_cost, rel_tol=0, abs_tol=1e-12):
+            raise ValueError('native RL execution-efficiency cost differs from its captured counters')
+        observed = execution_efficiency_counters(rollout.get('turns') or [])
+        if any(efficiency[field] != observed[field]
+               for field in ('model_calls', 'generated_tokens', 'repeated_actions')):
+            raise ValueError('native RL execution-efficiency counters differ from captured whole-graph turns')
     if not rollout.get('task_id') or not rollout.get('turns') or any(
             not (turn.get('replay') or {}).get('raw_calls_retained') for turn in rollout['turns']):
         raise ValueError('native RL episode lacks task identity or exact raw-call replay')
@@ -1225,20 +1247,36 @@ def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
 def group_episode_advantages(members, *, jolt, mode):
     """Advantages of one scored group, or None when std-normalized GRPO has nothing to learn from it.
 
-    Centering uses the task outcome (``quality``) only: JOLT+ subtracts the group mean, GRPO normalizes by the
-    group std. The success-gated Neuralese-use bonus (``reward.neuralese_bonus``) is then added to the qualifying
-    episode's own advantage, so a groupmate's bonus never lowers a correct episode's advantage and never changes
-    a failed episode's advantage."""
+    Centering uses binary task outcome (``quality``) only: JOLT+ subtracts the group mean, GRPO normalizes by the
+    group std. Success-gated Neuralese reward and bounded execution cost are then applied to the episode that earned
+    them. Mixed-outcome groups receive bounded raw costs after outcome standardization. All-success groups can learn
+    from centered raw cost differences; those differences are never standardized. All-failed groups receive no
+    cost-only gradient. Historical rollouts without efficiency telemetry keep their old reward.
+
+    Correct-versus-failed ordering is preserved: binary GRPO advantages differ by at least 2 because a binary
+    group's standard deviation is at most 0.5; JOLT+'s raw centered advantages differ by 1. Neuralese bonus is
+    nonnegative and only applies to correct episodes; the efficiency cost can reduce that gap by at most 0.05, so
+    even the JOLT+ minimum gap remains at least 0.95."""
     from .rollout_math import group_advantages
     qualities = [row['reward']['quality'] for row in members]
     bonuses = [float(row['reward'].get('neuralese_bonus') or 0.) for row in members]
     advantages, stats = group_advantages(qualities)
+    efficiency_costs = [float((row['reward'].get('execution_efficiency') or {}).get('cost') or 0.)
+                        for row in members]
+    success_only = bool(qualities) and all(quality == 1 for quality in qualities)
+    efficiency_varies = len(set(efficiency_costs)) > 1
     if jolt:
         mean = sum(qualities) / len(qualities)
         advantages = [quality - mean if len(qualities) > 1 else 0. for quality in qualities]
-    elif mode == 'grpo' and not stats['spread'] and not any(bonuses):
+    elif mode == 'grpo' and not stats['spread'] and not any(bonuses) and not (
+            success_only and efficiency_varies):
         return None
-    return [None if advantage is None else advantage + bonus for advantage, bonus in zip(advantages, bonuses)]
+    mean_cost = sum(efficiency_costs) / len(efficiency_costs) if efficiency_costs else 0.
+    cost_terms = ([-cost for cost in efficiency_costs] if stats['spread'] and mode == 'grpo' else
+                  [mean_cost - cost for cost in efficiency_costs]
+                  if success_only and efficiency_varies and mode == 'grpo' else [0.] * len(members))
+    return [None if advantage is None else advantage + bonus + cost_term
+            for advantage, bonus, cost_term in zip(advantages, bonuses, cost_terms)]
 
 
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,

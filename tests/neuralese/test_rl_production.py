@@ -483,6 +483,40 @@ def test_learner_parameters_bind_at_update_launch_not_round_start(tmp_path, monk
     assert recorded == state['update_learner_parameters']
 
 
+def test_all_success_efficiency_spread_selects_policy_gradient_update(tmp_path, monkeypatch):
+    """Efficiency-only spread reaches production's GRPO learner path without relabeling task outcomes."""
+    from natlang_neuralese.rl.policy_math import default_policy_loss
+    from natlang_neuralese.rl import native_raw_policy
+    monkeypatch.setattr(native_raw_policy, 'prepare_raw_policy', lambda *a, **kw: {'tokenizer': 'bound-parent'})
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps({'id': f't{i}', 'split': 'train'}) + '\n' for i in range(2)))
+    checkpoint = tmp_path / 'parent.pt'; checkpoint.write_bytes(b'full state')
+    out = tmp_path / 'production'; config = tmp_path / 'config.json'
+    config.write_text(json.dumps({'out': str(out), 'checkpoint': str(checkpoint), 'cases': str(source),
+        'endpoints': ['http://unused'], 'rows_per_round': 2, 'group': 2,
+        'learner_command': ['learn', '--rl-policy-loss', '{rl_policy_loss}', '--jolt-cases', '{cases}'],
+        'after_update': ['publish'], 'native_state': True, 'base': 'unused',
+        'policy_loss': default_policy_loss()}))
+    def collect(**kwargs):
+        kwargs['out'].mkdir(parents=True, exist_ok=True)
+        (kwargs['out'] / 'rollouts.jsonl').write_text(''.join(json.dumps({'task_id': f't{i}', 'split': 'train',
+            'reward': {'quality': 1}, 'turns': [{}]}) + '\n' for i in range(2)))
+        return {'groups_with_spread': 0, 'groups_with_efficiency_spread': 1,
+                'rollouts': 2, 'scored': 2, 'successes': 2}
+    monkeypatch.setattr(production, 'collect', collect)
+    class Stop(Exception):
+        pass
+    seen = {}
+    def command(argv, values):
+        seen['mode'] = values['mode']
+        raise Stop
+    monkeypatch.setattr(production, 'run_command', command)
+    with pytest.raises(Stop):
+        production.run(config, rounds=1)
+    assert seen['mode'] == 'grpo'
+    assert json.loads((out / 'state.json').read_text())['update_mode'] == 'grpo'
+
+
 def test_collection_binding_treats_removed_null_semantic_adapter_field_as_absent():
     from natlang_neuralese.rl.production import _legacy_collection_binding
     old = {'cases_sha256': 'a', 'expected_native_actor': {'checkpoint': 'c', 'semantic_adapter_sha256': None}}

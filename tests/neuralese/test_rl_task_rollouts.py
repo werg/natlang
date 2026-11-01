@@ -217,7 +217,8 @@ def test_scored_model_budget_prefix_reconstructs_exact_whole_graph(tmp_path):
     score(tmp_path, emit=emitted)
     row = json.loads(emitted.read_text().splitlines()[0])
     assert row["outcome"] == "budget_exhaustion"
-    assert row["reward"] == {"quality": 0.0}
+    assert row["reward"]["quality"] == 0.0
+    assert row["reward"]["execution_efficiency"]["model_calls"] == len(row["turns"])
     assert len(row["turns"]) == 1 and row["turns"][0]["replay"]["raw_calls_retained"]
     assert row["turns"][0]["target"]["tool_calls"] == [{"id": "call-1", "type": "function", "function": {
         "name": "eval", "arguments": json.dumps({"code": "return_result({status:'failed'});"})}}]
@@ -467,11 +468,10 @@ def test_neuralese_bonus_only_for_correct_episodes_with_a_real_producer_consumer
     ])
     assert [row["outcome"] for row in rows] == ["task_success", "model_incomplete", "task_success",
                                                 "task_success", "task_success"]
-    assert rows[0]["reward"] == {"quality": 1.0, "neuralese_bonus": 0.1}
-    assert rows[1]["reward"] == {"quality": 0.0}
-    assert rows[2]["reward"] == {"quality": 1.0}
-    assert rows[3]["reward"] == {"quality": 1.0}
-    assert rows[4]["reward"] == {"quality": 1.0}
+    assert rows[0]["reward"]["quality"] == 1.0 and rows[0]["reward"]["neuralese_bonus"] == .1
+    assert rows[1]["reward"]["quality"] == 0.0
+    assert all(row["reward"]["quality"] == 1.0 for row in rows[2:])
+    assert all("execution_efficiency" in row["reward"] for row in rows)
     assert [rollout_return(row) for row in rows] == [1.1, 0.0, 1.0, 1.0, 1.0]
     metrics = report["neuralese"]
     assert metrics["bonus"] == 0.1 and metrics["bonus_episodes"] == 1 and metrics["bonus_total"] == 0.1
@@ -483,10 +483,85 @@ def test_neuralese_bonus_only_for_correct_episodes_with_a_real_producer_consumer
 
 def test_neuralese_bonus_opt_out_and_teacher_attempts_get_none(tmp_path):
     report, rows = _score_results(tmp_path / "off", [_neuralese_result(accepted=True)] * 2, neuralese_bonus=0)
-    assert all(row["reward"] == {"quality": 1.0} for row in rows) and report["neuralese"]["bonus_episodes"] == 0
+    assert all(row["reward"]["quality"] == 1.0 and "neuralese_bonus" not in row["reward"]
+               for row in rows) and report["neuralese"]["bonus_episodes"] == 0
     assert report["neuralese"]["correct_using_neuralese"] == 2
     report, rows = _score_results(tmp_path / "teacher", [_neuralese_result(accepted=True)] * 2,
                                   roles=[None, "teacher"])
-    assert rows[0]["reward"] == {"quality": 1.0, "neuralese_bonus": 0.1} and rows[1]["reward"] == {"quality": 1.0}
+    assert rows[0]["reward"]["quality"] == 1.0 and rows[0]["reward"]["neuralese_bonus"] == .1
+    assert rows[1]["reward"]["quality"] == 1.0 and "neuralese_bonus" not in rows[1]["reward"]
     with pytest.raises(ValueError, match="neuralese_use_bonus"):
         _score_results(tmp_path / "bad", [_neuralese_result(accepted=True)] * 2, neuralese_bonus=-0.1)
+
+
+def test_execution_efficiency_uses_observed_whole_graph_counters_and_is_bounded():
+    from natlang_neuralese.rl.task_rollouts import execution_efficiency
+    action = {"function": {"name": "eval", "arguments": '{"code":"return 1;"}'}}
+    measured = execution_efficiency({'turns': [
+        {'invocation_id': 'i', 'usage': {'completion_tokens': 1000}, 'messages': [],
+         'target': {'tool_calls': [{**action, 'id': 'a'}]}},
+        {'invocation_id': 'i', 'usage': {'completion_tokens': 1000},
+         'messages': [{'role': 'tool', 'tool_call_id': 'a', 'content': 'same'}],
+         'target': {'tool_calls': [{**action, 'id': 'b'}]}},
+        {'invocation_id': 'i', 'usage': {'completion_tokens': 1000},
+         'messages': [{'role': 'tool', 'tool_call_id': 'a', 'content': 'same'},
+                      {'role': 'tool', 'tool_call_id': 'b', 'content': 'same'}],
+         'target': {'tool_calls': [{**action, 'id': 'c'}]}},
+    ]})
+    assert measured == {'model_calls': 3, 'generated_tokens': 3000, 'repeated_actions': 1,
+                        'cost': pytest.approx(.025625), 'weight': 1.0}
+    assert measured['cost'] <= .05
+    # The same sampled retry after a changed exact tool response is not evidence of no progress.
+    progressed = execution_efficiency({'turns': [
+        {'invocation_id': 'i', 'target': {'tool_calls': [{**action, 'id': 'a'}]}},
+        {'invocation_id': 'i', 'messages': [{'role': 'tool', 'tool_call_id': 'a', 'content': 'same'}],
+         'target': {'tool_calls': [{**action, 'id': 'b'}]}},
+        {'invocation_id': 'i', 'messages': [{'role': 'tool', 'tool_call_id': 'a', 'content': 'same'},
+                                            {'role': 'tool', 'tool_call_id': 'b', 'content': 'changed'}],
+         'target': {'tool_calls': [{**action, 'id': 'c'}]}},
+    ]})
+    assert progressed['repeated_actions'] == 0
+    unknown = execution_efficiency({'turns': [{'target': {'tool_calls': [action]}}]})
+    assert unknown['model_calls'] == 1 and unknown['generated_tokens'] is None
+    assert unknown['cost'] == pytest.approx(.001875)  # call evidence remains usable; token count stays unknown
+    opted_out = execution_efficiency({'turns': [{'target': {'tool_calls': [action]}}]}, weight=0)
+    assert opted_out['cost'] == 0 and opted_out['model_calls'] == 1
+
+
+def test_score_efficiency_ignores_wall_clock_and_reports_unknown_tokens(tmp_path):
+    first = {'trajectory': [{'phase': 'action', 'context': [{'role': 'user', 'content': 'x'}],
+                            'assistant': {'content': 'ok', 'calls': []}, 'model_response': {'raw_calls': []}}],
+             'outcome': {'status': 'done', 'accepted': True}}
+    second = {'outcome': {'status': 'done', 'accepted': True}}
+    report, rows = _score_results(tmp_path, [first, second])
+    telemetry = rows[0]['reward']['execution_efficiency']
+    assert telemetry['model_calls'] == 1 and telemetry['generated_tokens'] is None
+    assert report['execution_efficiency']['generated_tokens'] is None
+    assert report['execution_efficiency']['model_calls'] == 1
+
+
+def test_all_success_efficiency_spread_routes_to_policy_gradient_update(tmp_path):
+    def action(tokens):
+        return {'phase': 'action', 'context': [{'role': 'user', 'content': 'q'}],
+                'assistant': {'content': 'done', 'calls': []},
+                'model_response': {'raw_calls': [], 'completion_tokens': tokens}}
+    results = [
+        {'trajectory': [action(1)], 'outcome': {'status': 'done', 'accepted': True}},
+        {'trajectory': [action(32), action(32)], 'outcome': {'status': 'done', 'accepted': True}},
+    ]
+    report, rows = _score_results(tmp_path, results)
+    group = report['groups'][0]
+    assert all(row['reward']['quality'] == 1 for row in rows)
+    assert group['spread'] is False and group['efficiency_spread'] is True
+    assert group['route'] == 'grpo'
+    assert report['groups_with_quality_spread'] == 0
+    assert report['groups_with_efficiency_spread'] == 1
+    # Outcome spread stays semantically separate; production reads the explicit efficiency signal too.
+    assert report['groups_with_spread'] == 0
+
+
+def test_rollout_turns_keep_collector_completion_token_counter():
+    from natlang_neuralese.rl.task_rollouts import rollout_turns
+    result = {'trajectory': [{'phase': 'action', 'context': [], 'assistant': {'content': '', 'calls': []},
+                             'model_response': {'raw_calls': [], 'completion_tokens': 17}}]}
+    assert rollout_turns(result)[0]['usage'] == {'completion_tokens': 17}

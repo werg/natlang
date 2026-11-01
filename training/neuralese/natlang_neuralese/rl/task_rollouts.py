@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from ..eval.task_packet import classify_case, read_jsonl
-from .rollout_math import group_advantages
+from .rollout_math import (DEFAULT_EXECUTION_EFFICIENCY_WEIGHT, group_advantages,
+                           execution_efficiency_cost, execution_efficiency_counters)
 from ..common.task_roots import student_root_row, authored_root_row
 
 UNSCORED_OUTCOMES = {"infrastructure_error", "unresolved"}
@@ -156,6 +157,10 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                       "invocation_id": step.get("invocation_id"),
                       **({'response_tools':copy.deepcopy(step['response_tools']), 'native_xml_turn':copy.deepcopy(step)} if native_xml else {}),
                       **({'sampling': copy.deepcopy(response['rl_sampling'])} if response.get('rl_sampling') else {}),
+                      **({'usage': copy.deepcopy(response['usage'])} if isinstance(response.get('usage'), dict) else
+                         {'usage': {'completion_tokens': response['completion_tokens']}}
+                         if type(response.get('completion_tokens')) is int else
+                         {'usage': copy.deepcopy(step['usage'])} if isinstance(step.get('usage'), dict) else {}),
                       **({'native_state_imports': copy.deepcopy(response['native_state_imports'])}
                          if response.get('native_state_imports') else {}),
                       "replay": {"raw_calls_retained": "raw_calls" in response,
@@ -163,6 +168,19 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                                  "request_sha256": step.get("request_sha256"),
                                  "raw_response_sha256": step.get("raw_response_sha256")}})
     return turns
+
+
+def execution_efficiency(rollout: dict[str, Any], weight: float | None = None) -> dict[str, Any]:
+    """Summarize observed model work and repeated sampled actions for one whole graph.
+
+    Generated-token count stays null unless every policy turn has a captured completion count or an exact native
+    sampling-token list. No count is inferred from text length. Wall time, provider latency, and prompt length are
+    never part of the cost.
+    """
+    weight = DEFAULT_EXECUTION_EFFICIENCY_WEIGHT if weight is None else weight
+    counters = execution_efficiency_counters(rollout.get('turns') or [])
+    cost = execution_efficiency_cost(**counters, weight=weight)
+    return {**counters, 'cost': cost, 'weight': float(weight)}
 
 
 def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finish: dict[str, Any] | None,
@@ -456,13 +474,17 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
-          neuralese_bonus: float | None = None) -> dict[str, Any]:
+          neuralese_bonus: float | None = None,
+          efficiency_weight: float | None = None) -> dict[str, Any]:
     """Classify every rollout; with `emit`, also write `natlang.rollout/1` records for `grpo.py round`.
 
     ``neuralese_bonus`` (None: DEFAULT_NEURALESE_USE_BONUS; 0 opts out) is added as ``reward.neuralese_bonus`` to a
     successful student episode with at least one real between-call Neuralese edge (`neuralese_exchanges`). The
     ``quality`` field stays the binary task outcome; learners use ``rollout_math.rollout_return``."""
     bonus = neuralese_use_bonus(neuralese_bonus)
+    efficiency_weight = (DEFAULT_EXECUTION_EFFICIENCY_WEIGHT if efficiency_weight is None else efficiency_weight)
+    # Validate at the boundary, including score runs with only unscored infrastructure outcomes.
+    execution_efficiency_cost(model_calls=0, generated_tokens=None, repeated_actions=0, weight=efficiency_weight)
     run_dir = run_dir.resolve()
     emitted: list[dict[str, Any]] = []
     packet_path = run_dir / "packet.jsonl"
@@ -511,6 +533,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
         execution_graph = budget_prefix["execution_graph"] if budget_prefix else \
             copy.deepcopy(((result or {}).get("outcome") or {}).get("execution_graph") or [])
         exchanges = neuralese_exchanges({"turns": turns, "execution_graph": execution_graph}) if turns else 0
+        efficiency = execution_efficiency({'turns': turns}, efficiency_weight)
         student = entry.get("jolt_role", "student") == "student"
         # Privileged JOLT+ teacher attempts import harness-placed guidance; only the student policy's own
         # between-call state passing is rewarded.
@@ -538,7 +561,8 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                             "turns": turns, "execution_graph": execution_graph,
                             "outcome": outcome,
                             "reward": None if training_reward is None else {"quality": training_reward,
-                                **({"neuralese_bonus": episode_bonus} if episode_bonus else {})},
+                                **({"neuralese_bonus": episode_bonus} if episode_bonus else {}),
+                                "execution_efficiency": efficiency},
                             "unscored": ("budget_prefix_capture_unavailable" if result is None and reward is not None and
                                          budget_prefix is None else outcome if reward is None else None),
                             **({"budget_termination_evidence": budget_prefix["evidence"]} if budget_prefix else {})})
@@ -547,6 +571,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                          "reward": reward, "detail": detail if isinstance(detail, str) else None,
                          "finish_status": (finishes.get(entry["key"]) or {}).get("status"),
                          "neuralese_exchanges": exchanges,
+                         "execution_efficiency": efficiency,
                          **({"neuralese_bonus": episode_bonus} if episode_bonus else {}),
                          **({"jolt_role": entry["jolt_role"]} if "jolt_role" in entry else {})})
     groups = []
@@ -557,7 +582,11 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
         for member, advantage in zip(members, advantages):
             member["advantage"] = advantage
         scored = [r["reward"] for r in members if r["reward"] is not None]
-        if stats["spread"]:
+        efficiency_costs = [r['execution_efficiency']['cost'] for r in members if r['reward'] is not None]
+        efficiency_spread = bool(scored) and all(reward == 1.0 for reward in scored) \
+            and len(set(efficiency_costs)) > 1
+        learning_signal = stats['spread'] or efficiency_spread
+        if learning_signal:
             route = "grpo"
         elif not scored:
             route = "unscored"
@@ -566,6 +595,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
         else:
             route = "rejection-sampling"
         groups.append({"task_id": task["id"], "route": route, **stats,
+                       "efficiency_spread": efficiency_spread,
                        "outcomes": sorted(r["outcome"] for r in members)})
     counts: dict[str, int] = {}
     for r in rollouts:
@@ -575,7 +605,10 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
               "scored": sum(r["reward"] is not None for r in rollouts),
               "successes": sum(r["reward"] == 1.0 for r in rollouts),
               "groups_with_spread": sum(g["spread"] for g in groups),
-              "neuralese": neuralese_metrics(rollouts, bonus), "groups": groups}
+              "groups_with_quality_spread": sum(g["spread"] for g in groups),
+              "groups_with_efficiency_spread": sum(g["efficiency_spread"] for g in groups),
+              "neuralese": neuralese_metrics(rollouts, bonus),
+              "execution_efficiency": efficiency_metrics(rollouts, efficiency_weight), "groups": groups}
     (run_dir / "rewards.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rollouts), encoding="utf-8")
     if emit is not None:
         emit.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in emitted), encoding="utf-8")
@@ -597,6 +630,19 @@ def neuralese_metrics(rollouts: list[dict[str, Any]], bonus: float) -> dict[str,
             "correct_episodes": len(correct), "correct_using_neuralese": len(correct_using),
             "correct_neuralese_rate": len(correct_using) / len(correct) if correct else 0.,
             "exchanges": sum(r.get("neuralese_exchanges", 0) for r in scored)}
+
+
+def efficiency_metrics(rollouts: list[dict[str, Any]], weight: float) -> dict[str, Any]:
+    """Public accounting for shaped cost and observed counters; unknown token totals stay unknown."""
+    values = [r['execution_efficiency'] for r in rollouts if r.get('reward') is not None]
+    known_tokens = [row['generated_tokens'] for row in values if row['generated_tokens'] is not None]
+    return {'weight': float(weight), 'max_cost': 0.05, 'scored_episodes': len(values),
+            'total_cost': sum(row['cost'] for row in values),
+            'mean_cost': sum(row['cost'] for row in values) / len(values) if values else 0.,
+            'model_calls': sum(row['model_calls'] for row in values),
+            'generated_tokens': sum(known_tokens) if len(known_tokens) == len(values) else None,
+            'generated_tokens_known_episodes': len(known_tokens),
+            'repeated_actions': sum(row['repeated_actions'] for row in values)}
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -625,9 +671,12 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--neuralese-use-bonus", type=float, default=None,
                    help=f"bonus for correct episodes that pass Neuralese state between calls "
                         f"(default {DEFAULT_NEURALESE_USE_BONUS}; 0 opts out)")
+    s.add_argument("--efficiency-weight", type=float, default=None,
+                   help=f"bounded whole-graph execution-efficiency cost weight (default "
+                        f"{DEFAULT_EXECUTION_EFFICIENCY_WEIGHT}; 0 opts out)")
     args = parser.parse_args(argv)
     result = prepare(args) if args.command == "prepare" else score(args.run_dir, args.emit_rollouts, args.round,
-                                                                   args.neuralese_use_bonus)
+                                                                   args.neuralese_use_bonus, args.efficiency_weight)
     print(json.dumps(result, indent=2))
 
 

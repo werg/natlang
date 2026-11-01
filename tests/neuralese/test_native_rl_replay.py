@@ -302,6 +302,57 @@ def test_neuralese_bonus_is_added_after_outcome_centering_never_to_groupmates():
     assert group_episode_advantages(rows([plain, plain]), jolt=False, mode='grpo') is None  # nothing to learn
 
 
+def test_efficiency_cost_is_bounded_and_never_teaches_all_failed_groups():
+    from natlang_neuralese.rl.native_replay import group_episode_advantages
+    def row(quality, cost, bonus=0.):
+        reward = {'quality': quality, 'execution_efficiency': {'cost': cost}}
+        if bonus:
+            reward['neuralese_bonus'] = bonus
+        return {'reward': reward}
+    # All failures have no GRPO signal; JOLT+ centers outcome to zero and must not invent a cost-only signal.
+    failed = [row(0, 0), row(0, .05)]
+    assert group_episode_advantages(failed, jolt=False, mode='grpo') is None
+    assert group_episode_advantages(failed, jolt=True, mode='grpo') == [0., 0.]
+    # Across both objective families, even the highest allowed correct-only bonus and maximum cost leave
+    # a correct completion above the cheapest failure by at least the JOLT+ outcome gap minus .05.
+    for jolt in (False, True):
+        values = group_episode_advantages([row(1, .05, 1.), row(0, 0)], jolt=jolt, mode='grpo')
+        assert values[0] > values[1]
+        assert values[0] - values[1] >= .95
+
+
+def test_all_success_groups_use_only_small_centered_unscaled_efficiency_differences():
+    from natlang_neuralese.rl.native_replay import group_episode_advantages
+    rows = [{'reward': {'quality': 1, 'execution_efficiency': {'cost': cost}}} for cost in (0., .05)]
+    # Operational JOLT+ is mode='grpo' with jolt=True, as set by prepare_objective.
+    for jolt in (False, True):
+        advantages = group_episode_advantages(rows, jolt=jolt, mode='grpo')
+        assert advantages == [.025, -.025]
+        assert max(advantages) - min(advantages) == .05  # tiny cost spread was not standardized to unit scale
+
+
+@pytest.mark.parametrize('generated_tokens,repeated_actions', [(17, 0), (0, 1)])
+def test_efficiency_validator_recomputes_claimed_counters_from_turns(generated_tokens, repeated_actions):
+    from natlang_neuralese.rl.native_replay import _require_scored_training_episode
+    from natlang_neuralese.rl.rollout_math import execution_efficiency_cost
+    cost = execution_efficiency_cost(model_calls=0, generated_tokens=generated_tokens,
+                                     repeated_actions=repeated_actions, weight=1.)
+    rollout = {'split': 'train', 'task_id': 'counter-check', 'policy': {'checkpoint_sha256': 'a' * 64},
+        'reward': {'quality': 1, 'execution_efficiency': {'model_calls': 0,
+            'generated_tokens': generated_tokens, 'repeated_actions': repeated_actions, 'cost': cost, 'weight': 1.}},
+        'turns': []}
+    with pytest.raises(ValueError, match='counters differ from captured whole-graph turns'):
+        _require_scored_training_episode(rollout, {'checkpoint_sha256': 'a' * 64})
+
+
+def test_historical_rollouts_without_efficiency_keep_recorded_advantages():
+    from natlang_neuralese.rl.native_replay import group_episode_advantages
+    from natlang_neuralese.rl.rollout_math import group_advantages
+    rows = [{'reward': {'quality': quality}} for quality in (1, 1, 0, 0)]
+    expected, _ = group_advantages([1, 1, 0, 0])
+    assert group_episode_advantages(rows, jolt=False, mode='grpo') == expected
+
+
 def test_grpo_objective_records_bonus_after_outcome_centering():
     from natlang_neuralese.rl.native_replay import prepare_objective
     from natlang_neuralese.rl.rollout_math import group_advantages

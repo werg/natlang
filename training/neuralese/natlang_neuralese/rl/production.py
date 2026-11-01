@@ -1644,7 +1644,8 @@ def run(config_path, *, rounds=None, stop=None):
                     write_json_durable(state_path, state)
                     return state
                 mode = 'rft'
-            elif report['groups_with_spread'] or (policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1'):
+            elif (report['groups_with_spread'] or report.get('groups_with_efficiency_spread', 0)
+                  or (policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1')):
                 mode = 'grpo'  # JOLT+'s dense self-teaching term learns from every scored group
             else:
                 if successes:
