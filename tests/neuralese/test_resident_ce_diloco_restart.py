@@ -119,6 +119,8 @@ def test_real_same_source_ce_http_commit_crash_resume(tmp_path, monkeypatch):
         assert resident.current(directory)
         checkpoint = torch.load(out / 'checkpoint.pt', weights_only=False, map_location='cpu')
         assert checkpoint['training']['global_step'] == 1
+        # Crash recovery resumes the earned slot, never the superseded seed.
+        argv[argv.index('--continue-from')+1] = str(out/'checkpoint.pt')
         original_update = trainer.native_training_update
         resumed = []
         def observe_update(model, optimizer, batch, **kwargs):

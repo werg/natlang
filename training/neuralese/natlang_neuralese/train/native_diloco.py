@@ -41,7 +41,7 @@ from pathlib import Path
 
 import torch
 
-from ..common.hashing import sha256_file_hex_cached
+from ..common.hashing import sha256_file_hex_cached, canonical_json_sha256_hex
 from .diloco.coordinator import global_ema, global_masters, initialize_coordinator, read_manifest
 from .diloco.protocol import TensorSurface
 from .diloco.worker import DilocoLearner, DilocoSettings
@@ -137,6 +137,36 @@ def identity(parent_checkpoint, argv, settings):
             'trainer_argv': trainer_argv(argv), 'diloco': settings.identity()}
 
 
+def rolling_resume_identity(current, original, *, args, saved_state, manifest):
+    """A checked rolling resume retains the distributed run's original seed.
+
+    The executing parent advances each save; the coordinator seed does not.
+    Normalize only that launch argument after checking the saved coordinator
+    fingerprint and actual rolling bytes. All other fixed arguments stay strict.
+    """
+    if original.get('schema') != IDENTITY_SCHEMA:
+        return current
+    if (saved_state.get('fingerprint') != manifest.get('fingerprint') or
+            canonical_json_sha256_hex({k:v for k,v in manifest.items() if k!='fingerprint'})
+            != manifest.get('fingerprint')):
+        raise ValueError('rolling checkpoint belongs to another coordinator')
+    slot=Path(args.out)/'checkpoint.pt'
+    if (not slot.is_file() or
+            sha256_file_hex_cached(args.continue_from)!=sha256_file_hex_cached(slot)):
+        raise ValueError('distributed resume must bind the actual rolling checkpoint')
+    def parent_argument(argv):
+        matches=[i for i,value in enumerate(argv) if value=='--continue-from' or value.startswith('--continue-from=')]
+        if len(matches)!=1:raise ValueError('distributed identity requires one continuation parent')
+        i=matches[0]
+        return i,argv[i].split('=',1)[1] if '=' in argv[i] else argv[i+1]
+    _,seed=parent_argument(original['trainer_argv'])
+    argv=list(current['trainer_argv']);i,_=parent_argument(argv)
+    if '=' in argv[i]:argv[i]='--continue-from='+seed
+    else:argv[i+1]=seed
+    return {**current,'parent_checkpoint_sha256':original['parent_checkpoint_sha256'],
+            'trainer_argv':argv}
+
+
 
 # These arguments name authenticated data/recipe inputs, not the distributed
 # optimizer surface or transport layout. A change still requires an actual
@@ -227,6 +257,26 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
     settings = DilocoSettings.from_dict(json.loads(args.diloco))
     current_identity=identity(args.continue_from,sys.argv[1:] if argv is None else argv,settings)
     transition=None;transport=None;effective=current_identity
+    if saved_state is not None and not parent_continuation and not new_outer:
+        from .diloco.worker import patient, transport_from_env
+        transport=transport_from_env(settings)
+        manifest=patient(lambda:transport.json('GET','/v1/manifest'),what='manifest')
+        from .diloco.role_contract import SCHEMA as HETERO_SCHEMA
+        if manifest['identity'].get('schema')==HETERO_SCHEMA:
+            worker=settings.resolved_worker_id
+            authority=patient(lambda:transport.json('GET',f'/v1/role-contracts?worker={worker}'),what='role-contracts')
+            candidates=[]
+            for role in authority['roles'][str(worker)]:
+                candidate=rolling_resume_identity(current_identity,role['identity'],args=args,
+                    saved_state=saved_state,manifest=manifest)
+                if candidate==role['identity']:candidates.append(candidate)
+            if len(candidates)!=1:
+                raise ValueError('rolling resume does not identify one exact allowed role contract')
+            current_identity=candidates[0]
+        else:
+            current_identity=rolling_resume_identity(current_identity,manifest['identity'],args=args,
+                saved_state=saved_state,manifest=manifest)
+        effective=current_identity
     if source_transition is not None and not new_outer:
         if parent_continuation or saved_state is None:
             raise ValueError('source identity transition requires an earned DiLoCo checkpoint')

@@ -246,6 +246,7 @@ def test_real_diloco_full_checkpoint_withdrawal_and_append_keeps_coordinator_ide
         withdrawal=tmp_path/'withdrawal.json';withdrawal.write_text(json.dumps({'schema':'natlang.native-graph-withdrawal/1','model_id':config['architecture']+':'+config['base_inventory_sha256'],
             'evidence':{'path':'audit.json','sha256':sha(evidence)},'rows':[{'id':'bad','binding':prior['source_row_bindings']['bad'],'source_sha256':sha(old),'reason':'rejected'}]}))
         resumed=list(argv);resumed[resumed.index('--native-graphs')+1]=str(new);resumed[resumed.index('--continued-native-graphs')+1]=str(old);resumed += ['--withdrawn-native-graphs',str(withdrawal)]
+        resumed[resumed.index('--continue-from')+1]=str(out/'checkpoint.pt')
         assert trainer.main(resumed)==0
         result=torch.load(out/'checkpoint.pt',weights_only=False)['training']
         assert result['global_step']>prior['global_step'] and result['exposure_counts']=={'good':1,'extra':1}
@@ -341,6 +342,7 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
         fork_source=tmp_path/'fork-source.jsonl';fork_source.write_text(new.read_text()+json.dumps(dict(graph('extra2'),tokenizer_fingerprint=fp))+'\n')
         fork=list(argv);n=fork.index('--diloco');del fork[n:n+2]
         fork[fork.index('--native-graphs')+1]=str(fork_source);fork[fork.index('--continued-native-graphs')+1]=str(old);fork[fork.index('--out')+1]=str(forkout)
+        fork[fork.index('--continue-from')+1]=str(forkout/'checkpoint.pt')
         fork += ['--withdrawn-native-graphs',str(withdrawal),'--standalone-diloco-parent',str(pin),'--pending-rotation-anchor','extra2','--no-ordinary-cohort-fairness']
         observed=[];original_update=trainer.native_training_update
         def observe(*args,**kwargs):
@@ -379,6 +381,7 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
         resumed=list(argv);n=resumed.index('--diloco');del resumed[n:n+2]
         resumed[resumed.index('--native-graphs')+1]=str(new)
         resumed[resumed.index('--continued-native-graphs')+1]=str(old)
+        resumed[resumed.index('--continue-from')+1]=str(out/'checkpoint.pt')
         resumed += ['--withdrawn-native-graphs',str(withdrawal),'--standalone-diloco-parent',str(pin)]
         assert trainer.main(resumed)==0
         result=torch.load(out/'checkpoint.pt',weights_only=False)['training']
@@ -427,6 +430,7 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
             assert final['diloco'] and final['options']['standalone_diloco_rejoin']['outer_history']=='new'
             assert final['options']['standalone_diloco_history'][0]['checkpoint']['sha256']==sha(pin)
             assert final['global_step']>result['global_step'] and final['exposure_counts']['rejoin']==1
+            rejoin[rejoin.index('--continue-from')+1]=str(new_out/'checkpoint.pt')
             assert trainer.main(rejoin)==0  # Existing worker resumes with committed rejoin custody.
             later2=tmp_path/'rejoin-append.jsonl';later2.write_text(later.read_text()+json.dumps(dict(graph('rejoin-later'),tokenizer_fingerprint=fp))+'\n')
             follow=list(rejoin);follow[follow.index('--native-graphs')+1]=str(later2);follow[follow.index('--continued-native-graphs')+1]=str(later)
