@@ -2059,11 +2059,10 @@ def _main(argv=None, *, requested_refresh):
         # exact immediate checkpoint separately for publication custody.
         operation_parent_path=(Path(args.continue_from) if args.continue_from and not policy.slot.exists()
                                else policy.slot)
-        operation_parent_state=resume or shared_resume or {}
         checkpoint_options['operation_parent']={
             'path':str(operation_parent_path.resolve()),
             'sha256':sha256_file_hex_cached(operation_parent_path),
-            'global_step':int(operation_parent_state.get('global_step',operation_parent_state.get('step',0))),
+            'global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
         }
     checkpoint_options['native_snapshot_ancestors'] = snapshot_ancestors
     checkpoint_options['foundation_declaration_recovery_history'] = list(
