@@ -39,11 +39,15 @@ def _binding(path: Path):
 
 
 def _runtime_row_digest(runtime: Path, row: dict, decision_receipt: dict) -> str:
-    module = Path(runtime).resolve(strict=True) / "dist/teacher/native-materializer.js"
-    expected = (decision_receipt.get("identity", {}).get("runtime") or {}).get(
-        "ts-host/dist/teacher/native-materializer.js")
-    if not isinstance(expected, str) or sha256_file_hex(module) != expected:
-        raise ValueError("decision cache materializer differs from the campaign's exact frozen runtime")
+    root = Path(runtime).resolve(strict=True)
+    module = root / "dist/teacher/native-materializer.js"
+    if not module.is_file():
+        module = root / "ts-host/dist/teacher/native-materializer.js"
+    assets = (decision_receipt.get("identity", {}).get("runtime") or {})
+    expected_matches = [digest for name, digest in assets.items()
+                        if str(name).endswith("dist/teacher/native-materializer.js")]
+    if len(expected_matches) != 1 or sha256_file_hex(module) != expected_matches[0]:
+        raise ValueError("decision cache materializer differs from its separately bound runtime")
     node = node_executable()
     code = ('import fs from "node:fs";'
             'const {nativeRowDigest}=await import(process.argv[1]);'
@@ -59,7 +63,7 @@ def _runtime_row_digest(runtime: Path, row: dict, decision_receipt: dict) -> str
 
 def build(*, provider_source: Path, plan_path: Path, decisions_path: Path,
           decision_receipt_path: Path, protection_path: Path, task_id: str,
-          output_dir: Path):
+          output_dir: Path, decision_materializer_runtime: Path | None = None):
     provider_source = Path(provider_source).resolve(strict=True)
     declaration = json.loads(provider_source.read_bytes())
     plan_path = Path(plan_path).resolve(strict=True)
@@ -118,7 +122,47 @@ def build(*, provider_source: Path, plan_path: Path, decisions_path: Path,
             or cache_receipt.get("summary", {}).get("rejected_rows") != 0
             or cache_receipt.get("summary", {}).get("eligible_decisions", 0) < 1):
         raise ValueError("decision cache lacks a complete successful materialization receipt")
-    row_sha = _runtime_row_digest(Path(plan["runtime"]), raw, cache_receipt)
+    campaign_runtime = Path(plan["runtime"]).resolve(strict=True)
+    campaign_materializer = campaign_runtime / "dist/teacher/native-materializer.js"
+    if not campaign_materializer.is_file():
+        campaign_materializer = campaign_runtime / "ts-host/dist/teacher/native-materializer.js"
+    receipt_runtime = cache_receipt.get("identity", {}).get("runtime") or {}
+    campaign_runtime_match = campaign_materializer.is_file() and any(
+        str(name).endswith("dist/teacher/native-materializer.js") and
+        digest == sha256_file_hex(campaign_materializer) for name, digest in receipt_runtime.items())
+    conversion_runtime_binding = None
+    if decision_materializer_runtime is None:
+        if not campaign_runtime_match:
+            raise ValueError("decision cache uses a different runtime; bind it explicitly as a conversion runtime")
+        row_digest_runtime = campaign_runtime
+    else:
+        row_digest_runtime = Path(decision_materializer_runtime).resolve(strict=True)
+        frozen_receipt = row_digest_runtime / "frozen-runtime.json"
+        if not frozen_receipt.is_file():
+            raise ValueError("separate decision materializer must be an immutable frozen runtime")
+        frozen_files = json.loads(frozen_receipt.read_bytes()).get("files") or {}
+        if not isinstance(frozen_files, dict) or not frozen_files:
+            raise ValueError("separate decision materializer frozen runtime has no exact file inventory")
+        host_root = row_digest_runtime if (row_digest_runtime / "dist/teacher/native-materializer.js").is_file() \
+            else row_digest_runtime / "ts-host"
+        if not (host_root / "dist/teacher/native-materializer.js").is_file():
+            raise ValueError("separate conversion runtime lacks its native materializer")
+        materializer_module_sha = sha256_file_hex(host_root / "dist/teacher/native-materializer.js")
+        bound_assets = {}
+        for relative, expected in receipt_runtime.items():
+            asset = row_digest_runtime / relative
+            if not asset.is_file() and relative.startswith("ts-host/"):
+                asset = row_digest_runtime / relative.removeprefix("ts-host/")
+            frozen_key = relative.removeprefix("ts-host/")
+            if (frozen_files.get(frozen_key, frozen_files.get(relative)) != expected
+                    or not asset.is_file() or sha256_file_hex(asset) != expected):
+                raise ValueError(f"decision materializer asset differs from frozen conversion runtime: {relative}")
+            bound_assets[relative] = expected
+        conversion_runtime_binding = {"path": str(row_digest_runtime),
+            "frozen_runtime_sha256": sha256_file_hex(frozen_receipt),
+            "materializer_sha256": materializer_module_sha,
+            "materializer_assets": bound_assets}
+    row_sha = _runtime_row_digest(row_digest_runtime, raw, cache_receipt)
     raw_trajectory = raw.get("trajectory") or []
     cached = [row for row in _rows(decisions_path)
               if (row.get("source_ref") or {}).get("trajectory_id") == task_id]
@@ -200,6 +244,7 @@ def build(*, provider_source: Path, plan_path: Path, decisions_path: Path,
     decisions_out.write_bytes(decision_data)
     repo_code = [
         Path(__file__).resolve(),
+        ROOT / "scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py",
         ROOT / "scripts/neuralese_data/capture_luna_native_episode.py",
         ROOT / "training/neuralese/natlang_neuralese/data/provider_teacher_source.py",
         ROOT / "training/neuralese/natlang_neuralese/data/provider_native_graph.py",
@@ -220,6 +265,8 @@ def build(*, provider_source: Path, plan_path: Path, decisions_path: Path,
         "decision_cache": _binding(decisions_path),
         "decision_cache_receipt": _binding(decision_receipt_path),
         "decision_cache_output_sha256": cache_receipt["output_sha256"],
+        **({"decision_materializer_runtime": conversion_runtime_binding}
+           if conversion_runtime_binding is not None else {}),
         "protection": _binding(protection_path),
         "conversion_builder": _binding(Path(__file__)),
         "source_code": [{"path": _binding(path)["path"], "sha256": _binding(path)["sha256"]}
@@ -247,10 +294,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("provider-source", "plan", "decisions", "decision-receipt", "protection", "task-id", "output-dir"):
         parser.add_argument("--" + name, required=True)
+    parser.add_argument("--decision-materializer-runtime",
+        help="explicit current frozen conversion runtime when replaying decisions from a historical campaign")
     args = parser.parse_args()
     result = build(provider_source=Path(args.provider_source), plan_path=Path(args.plan),
         decisions_path=Path(args.decisions), decision_receipt_path=Path(args.decision_receipt),
-        protection_path=Path(args.protection), task_id=args.task_id, output_dir=Path(args.output_dir))
+        protection_path=Path(args.protection), task_id=args.task_id, output_dir=Path(args.output_dir),
+        decision_materializer_runtime=(Path(args.decision_materializer_runtime)
+            if args.decision_materializer_runtime else None))
     print(json.dumps(result, indent=2))
 
 

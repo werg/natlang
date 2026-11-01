@@ -1827,6 +1827,108 @@ test('materialization preserves same-call provider-expanded read provenance with
     .find(item => item.block.id === noteId), undefined, 'eval-return body must match the graph write digest');
 });
 
+test('teacher-text eval-finish typed JSON is linked only through its exact writer and consumer read edges', () => {
+  const row = nativeRow('teacher-text-eval-json-read');
+  const producer = 'typed-json-producer', consumer = 'typed-json-consumer';
+  const blockId = `nzt1_${'q'.repeat(52)}`;
+  const type = 'Neuralese<TemplateHypothesis>';
+  const body = '{"interpretation":"insufficient-evidence","sourceLineIds":[292]}';
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  const producerTurn = `${producer}#turn1`, writerNode = `${producer}#8`;
+  const consumerTurn = `${consumer}#turn1`, readNode = `${consumer}#5`;
+  const producerArgs = { code: 'return { interpretation: "insufficient-evidence", sourceLineIds: [292] };', finish: true };
+  const consumerArgs = { code: 'const hypothesis = await services.neuralese.read(ref); return hypothesis;', finish: true };
+  const ref = { type: 'neuralese', id: blockId };
+  const block = { id: blockId, type, body, body_sha256: sha(body), producer_call_id: producer,
+    writer_node: writerNode, format: 'teacher-text', teacher_text: true, learned_vectors: false,
+    tokenizer_ids: false };
+  const evalSchema = { type: 'function', function: { name: 'eval', parameters: { type: 'object',
+    properties: { code: { type: 'string' }, finish: { type: 'boolean' } } } } };
+  const writeSchema = { type: 'function', function: { name: 'write', parameters: { type: 'object', properties: {} } } };
+  const makeStep = ({ invocation, args, request, response, calls, rawCalls, context, transport }) => ({
+    phase: 'action', invocation_id: invocation, context, tools_offered: [evalSchema, writeSchema],
+    assistant: { content: '', reasoning: 'Use the source evidence and complete the typed action.',
+      calls: [{ tool: calls[0][0], source_tool: calls[0][0], arguments: args, call_id: null }] },
+    model_response: { calls, raw_calls: rawCalls, transport_provenance: transport },
+    request_sha256: request, raw_response_sha256: response,
+  });
+  const producerTransport = { schema: 'natlang.teacher-text-neuralese-transport/1', mode: 'teacher-text/1',
+    learned_vectors: false, qualification_certificate: false, training_admission: false,
+    raw_request_sha256: '1'.repeat(64), rendered_request_sha256: '2'.repeat(64), raw_response_sha256: '4'.repeat(64),
+    expanded_input_blocks: [], marker_outputs: [] };
+  const consumerTransport = { schema: 'natlang.teacher-text-neuralese-transport/1', mode: 'teacher-text/1',
+    learned_vectors: false, qualification_certificate: false, training_admission: false,
+    raw_request_sha256: '5'.repeat(64), rendered_request_sha256: '6'.repeat(64), raw_response_sha256: '8'.repeat(64),
+    expanded_input_blocks: [block], marker_outputs: [] };
+  const consumerContext = [system, { role: 'user', content: [
+    { type: 'text', text: 'Review the typed hypothesis.' }, { type: 'neuralese', id: blockId },
+  ] }];
+  row.provenance.trace_sha256 = '9'.repeat(64);
+  row.outcome.execution_graph = [
+    { kind: 'model_turn', seq: 5, call_id: producer, node: producerTurn, turn: 1, calls: ['eval'],
+      inputs: [{ node: `call:${producer}`, port: 'invocation' }] },
+    { kind: 'block_write', seq: 8, call_id: producer, node: writerNode, block: blockId, turn: producerTurn,
+      producer: 'teacher-text-emulation', format: 'teacher-text', source_kind: 'typed-json-result',
+      source: 'eval-finish', marker_context: 'return-result', result_type: type,
+      text_body_sha256: block.body_sha256, learned_vectors: false, tokenizer_ids: false, training_admission: false,
+      truncated: false, inputs: [{ node: producerTurn, port: 'result-source' }] },
+    { kind: 'block_read', seq: 5, call_id: consumer, node: readNode, block: blockId, turn: consumerTurn,
+      format: 'teacher-text', producer: 'teacher-text-emulation', result_type: type,
+      text_body_sha256: block.body_sha256, learned_vectors: false, tokenizer_ids: false,
+      inputs: [{ node: writerNode, block: blockId, port: 'block' }] },
+    { kind: 'model_turn', seq: 6, call_id: consumer, node: consumerTurn, turn: 1, calls: ['eval'],
+      inputs: [{ node: `call:${consumer}`, port: 'invocation' }, { node: readNode, block: blockId, port: 'read' }] },
+  ];
+  row.outcome.action_ledger = [
+    { seq: 12, call_id: producer, tool_call_id: 'typed-json-eval', name: 'eval', arguments: producerArgs,
+      outcome: 'ok', result_text: 'Completed the typed JSON evaluation.' },
+    { seq: 12, call_id: consumer, name: 'eval', arguments: consumerArgs,
+      outcome: 'ok', result_text: 'Read the hypothesis.' },
+  ];
+  row.outcome.invocation_ledger = [
+    { invocation_id: producer, parent_invocation_id: 'root', completion_status: 'done',
+      completion_source: 'execution_graph', host_result: { kind: 'host_capture', capture_kind: 'invocation_output',
+        call_id: producer, complete: true, result_type: type, value: { $neuralese: { id: blockId, type,
+        teacher_text: true, source_occurrence: writerNode } }, value_sha256: 'a'.repeat(64), terminal_action_seq: 12 } },
+    { invocation_id: consumer, parent_invocation_id: 'root' },
+  ];
+  row.trajectory = [
+    makeStep({ invocation: producer, args: producerArgs, request: '3'.repeat(64), response: '4'.repeat(64),
+      calls: [['eval', producerArgs]], rawCalls: [{ function: { name: 'eval', arguments: JSON.stringify(producerArgs) } }],
+      context: [system, opening], transport: producerTransport }),
+    makeStep({ invocation: consumer, args: consumerArgs, request: '7'.repeat(64), response: '8'.repeat(64),
+      calls: [['eval', consumerArgs]], rawCalls: [{ function: { name: 'eval', arguments: JSON.stringify(consumerArgs) } }],
+      context: consumerContext, transport: consumerTransport }),
+  ];
+
+  const result = materializeNativeRows([row]);
+  assert.equal(result.acceptedRows, 1);
+  const producerWrites = result.turns[0].decision.assistant.calls[0].outcome.typed_result_writes;
+  assert.equal(producerWrites.length, 1, 'the exact eval-finish action carries authenticated writer supervision');
+  assert.equal(producerWrites[0].writer_node, writerNode);
+  assert.equal(producerWrites[0].body_source, undefined,
+    'host-produced JSON is an authenticated output reference, never rewritten as sampled literal text');
+  assert.equal(producerWrites[0].body_source_basis, 'authenticated-final-host-output-reference');
+  const reads = result.turns[1].source_ref.provider_expanded_read_contexts;
+  assert.equal(reads.length, 1);
+  assert.equal(reads[0].origin, 'same-run-producer');
+  assert.equal(reads[0].writer_source_class, 'teacher-text-executed-eval-finish-typed-json');
+  assert.equal(reads[0].writer_witness.kind, 'teacher-text-executed-eval-finish-typed-json/1');
+  assert.equal(reads[0].producer_write.node, writerNode);
+  assert.equal(reads[0].block_read.node, readNode);
+  assert.equal(reads[0].block.body, body);
+  assert.equal(reads[0].learned_vectors, false);
+
+  const wrongWriter = structuredClone(row);
+  wrongWriter.outcome.execution_graph.find(event => event.kind === 'block_read').inputs[0].node = `${producer}#wrong`;
+  assert.equal(materializeNativeRows([wrongWriter]).turns[1].source_ref.provider_expanded_read_contexts,
+    undefined, 'a consumer edge to a different writer occurrence cannot be repaired from the matching block ID');
+  const wrongHost = structuredClone(row);
+  wrongHost.outcome.invocation_ledger[0].host_result.value.$neuralese.source_occurrence = `${producer}#wrong`;
+  assert.equal(materializeNativeRows([wrongHost]).turns[1].source_ref.provider_expanded_read_contexts,
+    undefined, 'the actual host-captured reference must cite the writer occurrence');
+});
+
 for (const quality of ['quality_pending_partial_files', 'quality_pending_partial_agreement']) {
   test(`exact reviewed child of ${quality} cannot release accepted-parent siblings`, () => {
     const row = nativeRow('partial-parent-' + quality);

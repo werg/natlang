@@ -959,9 +959,10 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
   const ambiguousPaths = new Set<string>();
   for (const write of writes) {
     const block = write.block, node = write.node, type = write.result_type, bodySha = write.text_body_sha256;
-    const teacherTextWrite = write.format === 'teacher-text' && write.producer === 'teacher-text-emulation' &&
-      write.learned_vectors === false && write.tokenizer_ids === false && write.training_admission === false;
-    if (typeof block !== 'string' || !(stateId(block) || teacherTextWrite && /^nzt1_[a-z2-7]{52}$/.test(block)) || typeof node !== 'string' ||
+    const teacherTextEnvelope = write.format === 'teacher-text' && write.producer === 'teacher-text-emulation' &&
+      write.learned_vectors === false && write.tokenizer_ids === false &&
+      (write.training_admission === false || write.training_admission === undefined);
+    if (typeof block !== 'string' || !(stateId(block) || teacherTextEnvelope && /^nzt1_[a-z2-7]{52}$/.test(block)) || typeof node !== 'string' ||
         typeof type !== 'string' || !type.startsWith('Neuralese<') || typeof bodySha !== 'string' ||
         !/^[0-9a-f]{64}$/.test(bodySha) || write.truncated !== false || !Number.isSafeInteger(write.seq) ||
         !Number.isSafeInteger(actionEvent.seq) || Number(write.seq) >= Number(actionEvent.seq)) continue;
@@ -981,6 +982,27 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
     const precedingTurns = graph.filter(event => event.kind === 'model_turn' && event.call_id === invocationId &&
       Number.isSafeInteger(event.seq) && Number(event.seq) < Number(write.seq)).sort((a, b) => Number(a.seq) - Number(b.seq));
     if (precedingTurns.at(-1)?.node !== sourceNodes[0]) continue;
+    const sourceSteps = (row.trajectory as Dict[]).filter(step => step.invocation_id === invocationId);
+    const sourceStep = sourceSteps[(Number(sourceTurns[0]!.turn) || 0) - 1];
+    const sourceResponse = sourceStep?.model_response && typeof sourceStep.model_response === 'object' ?
+      sourceStep.model_response as Dict : {};
+    const transport = sourceResponse.transport_provenance && typeof sourceResponse.transport_provenance === 'object' ?
+      sourceResponse.transport_provenance as Dict : {};
+    const sourceRawCalls = Array.isArray(sourceResponse.raw_calls) ? sourceResponse.raw_calls as Dict[] : [];
+    const exactRawEval = sourceRawCalls.filter(raw => {
+      const fn = raw.function && typeof raw.function === 'object' ? raw.function as Dict : {};
+      if (fn.name !== 'eval' || typeof fn.arguments !== 'string') return false;
+      try { return canonical(JSON.parse(fn.arguments)) === canonical(model); } catch { return false; }
+    });
+    const historicalTeacherJsonWrite = teacherTextEnvelope && write.training_admission === undefined &&
+      actionEvent.name === 'eval' && write.source_kind === 'typed-json-result' && write.source === 'eval-finish' &&
+      transport.schema === 'natlang.teacher-text-neuralese-transport/1' && transport.mode === 'teacher-text/1' &&
+      transport.learned_vectors === false && transport.qualification_certificate === false &&
+      transport.training_admission === false && transport.raw_response_sha256 === sourceStep?.raw_response_sha256 &&
+      sourceStep?.raw_response_sha256 === rawResponseSha256 && exactRawEval.length === 1;
+    const teacherTextWrite = teacherTextEnvelope &&
+      (write.training_admission === false || historicalTeacherJsonWrite);
+    if (!stateId(block) && !teacherTextWrite) continue;
     let body: string | undefined;
     let bodyBasis = 'authenticated-final-host-output-reference';
     const exactRawValue = actionEvent.name === 'return_result' &&
@@ -1439,6 +1461,76 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
           host_result_call_id: event.call_id, host_result_type: block.type, writer_node: event.node,
           body_sha256: block.body_sha256, host_result_value_sha256: host.value_sha256,
           raw_response_sha256: sourceStep.raw_response_sha256,
+          transport_provenance_sha256: hexDigest(canonical(transport)),
+          raw_eval_call_sha256: hexDigest(canonical(rawCalls[0])),
+        } };
+      }
+      // Historical teacher-text episodes can finish an eval with a structured
+      // Neuralese<T> object. In that path the runtime writes canonical JSON
+      // from the evaluated value (rather than a provider-authored string
+      // marker). Authenticate the result-source edge, exact raw eval action,
+      // completed host reference, and provider transport identity separately;
+      // the consumer's block_read edge is checked below against this writer.
+      if (event.format === 'teacher-text' && event.producer === 'teacher-text-emulation' &&
+          event.block === blockId && event.result_type === block.type &&
+          event.text_body_sha256 === block.body_sha256 && event.source === 'eval-finish' &&
+          event.source_kind === 'typed-json-result' && event.marker_context === 'return-result' &&
+          event.learned_vectors === false && event.tokenizer_ids === false &&
+          (event.training_admission === undefined || event.training_admission === false) &&
+          typeof event.call_id === 'string' &&
+          typeof event.node === 'string' && typeof block.body === 'string') {
+        const ledger = Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger as Dict[] : [];
+        const entries = ledger.filter(item => item.invocation_id === event.call_id);
+        const steps = (row.trajectory as Dict[]).filter(step => step.invocation_id === event.call_id);
+        const resultSourceInputs = Array.isArray(event.inputs) ? (event.inputs as Dict[]).filter(input =>
+          input.port === 'result-source' && typeof input.node === 'string') : [];
+        const sourceTurns = resultSourceInputs.length === 1 ? graph.filter(candidate =>
+          candidate.kind === 'model_turn' && candidate.call_id === event.call_id &&
+          candidate.node === resultSourceInputs[0]!.node && Number.isSafeInteger(candidate.turn)) : [];
+        const sourceStep = sourceTurns.length === 1 ? steps[Number(sourceTurns[0]!.turn) - 1] : undefined;
+        const response = sourceStep?.model_response && typeof sourceStep.model_response === 'object' ?
+          sourceStep.model_response as Dict : {};
+        const transport = response.transport_provenance && typeof response.transport_provenance === 'object' ?
+          response.transport_provenance as Dict : {};
+        const rawCalls = Array.isArray(response.raw_calls) ? response.raw_calls as Dict[] : [];
+        const calls = Array.isArray(response.calls) ? response.calls.filter(Array.isArray) as unknown[][] : [];
+        const rawEval = rawCalls.filter(raw => {
+          const fn = raw.function && typeof raw.function === 'object' ? raw.function as Dict : {};
+          if (fn.name !== 'eval' || typeof fn.arguments !== 'string') return false;
+          try { return canonical(JSON.parse(fn.arguments)) === canonical(calls[0]?.[1]); }
+          catch { return false; }
+        });
+        const entry = entries[0];
+        const host = entry?.host_result && typeof entry.host_result === 'object' ? entry.host_result as Dict : {};
+        const hostRef = host.value && typeof host.value === 'object' ? neuraleseReference(host.value) : undefined;
+        const idWrites = graph.filter(candidate => candidate.kind === 'block_write' &&
+          candidate.producer === 'teacher-text-emulation' && candidate.format === 'teacher-text' &&
+          candidate.block === blockId);
+        let canonicalJsonBody = false;
+        try {
+          const parsed = JSON.parse(block.body);
+          canonicalJsonBody = canonical(parsed) === block.body;
+        } catch { /* malformed/non-canonical body is not a typed JSON result */ }
+        if (entries.length !== 1 || steps.length < Number(sourceTurns[0]?.turn ?? 0) ||
+            sourceTurns.length !== 1 || event.turn !== sourceTurns[0]!.node || rawCalls.length !== 1 ||
+            calls.length !== 1 || calls[0]?.[0] !== 'eval' || rawEval.length !== 1 || !canonicalJsonBody ||
+            idWrites.length !== 1 || transport.schema !== 'natlang.teacher-text-neuralese-transport/1' ||
+            transport.mode !== 'teacher-text/1' || transport.learned_vectors !== false ||
+            transport.qualification_certificate !== false || transport.training_admission !== false ||
+            (transport.raw_response_sha256 !== undefined &&
+              transport.raw_response_sha256 !== sourceStep?.raw_response_sha256) ||
+            typeof sourceStep?.raw_response_sha256 !== 'string' ||
+            entry?.completion_status !== 'done' || entry.completion_source !== 'execution_graph' ||
+            host.kind !== 'host_capture' || host.capture_kind !== 'invocation_output' || host.call_id !== event.call_id ||
+            host.complete !== true || host.result_type !== block.type || hostRef?.id !== blockId ||
+            hostRef.type !== block.type || hostRef.teacher_text !== true || hostRef.source_occurrence !== event.node ||
+            typeof host.value_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(host.value_sha256)) return;
+        return { writerSourceClass: 'teacher-text-executed-eval-finish-typed-json', witness: {
+          kind: 'teacher-text-executed-eval-finish-typed-json/1', source: 'eval-finish',
+          source_kind: 'typed-json-result', transport_schema: transport.schema,
+          transport_mode: transport.mode, host_result_call_id: event.call_id,
+          host_result_type: block.type, writer_node: event.node, body_sha256: block.body_sha256,
+          host_result_value_sha256: host.value_sha256, raw_response_sha256: sourceStep.raw_response_sha256,
           transport_provenance_sha256: hexDigest(canonical(transport)),
           raw_eval_call_sha256: hexDigest(canonical(rawCalls[0])),
         } };

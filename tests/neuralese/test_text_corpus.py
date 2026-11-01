@@ -370,7 +370,10 @@ def test_provider_expanded_soft_read_is_crisp_and_provenance_bound_to_existing_w
 
 
 def test_teacher_text_nzt1_receipts_reencode_exact_native_text_and_preserve_producer_reader_edge():
-    from natlang_neuralese.data.text_corpus import _direct_result_event_name
+    import pytest
+    from natlang_neuralese.data.text_corpus import (_attested_provider_expanded_reads,
+                                                   _is_teacher_text_typed_json_write,
+                                                   _direct_result_event_name)
 
     block_id = "nzt1_" + "e" * 52
     body = "Inspection history: verified visit, score unresolved."
@@ -481,6 +484,72 @@ def test_teacher_text_nzt1_receipts_reencode_exact_native_text_and_preserve_prod
     forged["source_ref"]["provider_expanded_read_contexts"][0]["block_read"]["inputs"][0]["node"] = "orphan-writer"
     _, _, rejected, _ = gold_text_rows([writer, forged, anchor], [], tokenizer=_Tokenizer())
     assert any(item["id"] == "teacher-text-reader" for item in rejected)
+
+    # Legacy teacher-text/1 can produce a structured Neuralese<T> by evaluating
+    # an exact eval action. Its body must come from the authenticated read
+    # receipt; the writer target and typed-result receipt are not body text.
+    typed_json_writer, typed_json_reader = copy.deepcopy(writer), copy.deepcopy(reader)
+    typed_json_body = '{"basis":"prior verified visit","confidence":"bounded","score":null}'
+    typed_json_sha = _sha(typed_json_body)
+    typed_json_type = "Neuralese<MovementInterpretation>"
+    typed_json_block = block_id[:-52] + "f" * 52
+    typed_json_node = "inspection-writer-call#typed-json-write"
+    typed_json_write = typed_json_writer["decision"]["assistant"]["typed_result_writes"][0]
+    typed_json_write.update({"writer_node": typed_json_node, "block_id": typed_json_block,
+        "source_kind": "typed-json-result", "source": "eval-finish", "result_type": typed_json_type,
+        "body_sha256": typed_json_sha, "body_source_basis": "authenticated-final-host-output-reference",
+        "raw_model_value_sha256": "7" * 64})
+    typed_json_write.pop("body_source")
+    typed_json_write.pop("body_source_basis", None)
+    typed_json_write["body_source_basis"] = "authenticated-final-host-output-reference"
+    typed_json_write["source_occurrence"] = typed_json_node
+    assert _is_teacher_text_typed_json_write(typed_json_write), typed_json_write
+    typed_json_writer["decision"]["assistant"]["calls"] = [{"outcome": {"typed_result_writes": [typed_json_write]}}]
+    typed_json_writer["decision"]["assistant"]["typed_result_writes"] = []
+    typed_json_event = typed_json_reader["source_ref"]["provider_expanded_read_contexts"][0]["producer_write"]
+    typed_json_event.update({"node": typed_json_node, "block": typed_json_block,
+        "source_kind": "typed-json-result", "source": "eval-finish", "result_type": typed_json_type,
+        "text_body_sha256": typed_json_sha})
+    typed_json_event.pop("training_admission", None)
+    typed_json_witness = {"kind": "teacher-text-executed-eval-finish-typed-json/1", "source": "eval-finish",
+        "source_kind": "typed-json-result", "transport_schema": "natlang.teacher-text-neuralese-transport/1",
+        "transport_mode": "teacher-text/1", "host_result_call_id": writer_call,
+        "host_result_type": typed_json_type, "writer_node": typed_json_node, "body_sha256": typed_json_sha,
+        "host_result_value_sha256": "8" * 64, "raw_response_sha256": response_sha,
+        "transport_provenance_sha256": transport_sha, "raw_eval_call_sha256": "9" * 64}
+    typed_json_provider = typed_json_reader["source_ref"]["provider_expanded_read_contexts"][0]
+    typed_json_reader["source_ref"]["source_row_sha256"] = writer_row_sha
+    typed_json_provider["source_row_sha256"] = writer_row_sha
+    typed_json_provider["block"].update({"id": typed_json_block, "type": typed_json_type,
+        "body": typed_json_body, "body_sha256": typed_json_sha, "writer_node": typed_json_node})
+    typed_json_provider["producer_write"] = typed_json_event
+    typed_json_provider["writer_source_class"] = "teacher-text-executed-eval-finish-typed-json"
+    typed_json_provider["writer_witness"] = typed_json_witness
+    typed_json_provider["block_read"].update({"block": typed_json_block, "result_type": typed_json_type,
+        "text_body_sha256": typed_json_sha, "inputs": [{"node": typed_json_node,
+            "block": typed_json_block, "port": "block"}]})
+    typed_json_provider["model_turn"]["inputs"] = [{"node": read_node, "port": "read", "block": typed_json_block}]
+    typed_json_metadata = typed_json_reader["neuralese_conversion"]["external_context_inputs"][0]
+    typed_json_metadata.update({"block_id": typed_json_block, "type": typed_json_type,
+        "body_sha256": typed_json_sha, "writer_source_class": typed_json_provider["writer_source_class"],
+        "writer_witness": typed_json_witness, "producer_write_node": typed_json_node,
+        "source_row_sha256": writer_row_sha})
+    typed_json_metadata.pop("target_write_name", None)
+    typed_json_reader["messages"][0]["content"][1].update({"id": typed_json_block,
+        "value_type": typed_json_type, "source_occurrence": typed_json_node})
+    _, sources = authenticated_context_writer_sources([typed_json_writer, typed_json_reader])
+    assert typed_json_block in sources
+    assert sources[typed_json_block][0]["body"] == typed_json_body
+    attestations = _attested_provider_expanded_reads(typed_json_reader, sources,
+        split="train", source_groups=group)
+    assert len(attestations) == 1
+    assert attestations[0]["writer_write_node"] == typed_json_node
+    assert attestations[0]["body"] == typed_json_body
+    forged_json = copy.deepcopy(typed_json_reader)
+    forged_json["source_ref"]["provider_expanded_read_contexts"][0]["writer_witness"][
+        "body_sha256"] = "f" * 64
+    with pytest.raises(ValueError):
+        _attested_provider_expanded_reads(forged_json, sources, split="train", source_groups=group)
 
 
 def test_provider_expanded_context_only_read_hydrates_without_selected_writer_target():

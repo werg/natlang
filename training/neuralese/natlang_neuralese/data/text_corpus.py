@@ -43,6 +43,37 @@ def _is_teacher_text_write(receipt: Any) -> bool:
             and _sha256_hex(receipt.get("raw_response_sha256")))
 
 
+def _is_teacher_text_typed_json_write(receipt: Any) -> bool:
+    """Recognize a host-evaluated structured result as a writer reference, not CE text.
+
+    The JSON body is deliberately absent from this receipt. It is recoverable only
+    from the exact same-run provider-expanded consumer receipt below; the model's
+    supervised target remains its original eval action.
+    """
+    return (isinstance(receipt, dict)
+            and receipt.get("format") == "teacher-text"
+            and receipt.get("producer") == "teacher-text-emulation"
+            and receipt.get("teacher_text") is True
+            and receipt.get("learned_vectors") is False
+            and receipt.get("tokenizer_ids") is False
+            and receipt.get("training_admission") is False
+            and isinstance(receipt.get("block_id"), str)
+            and re.fullmatch(r"nzt1_[a-z2-7]{52}", receipt["block_id"]) is not None
+            and receipt.get("source_occurrence") == receipt.get("writer_node")
+            and receipt.get("stop_gradient") is None
+            and receipt.get("source_kind") == "typed-json-result"
+            and receipt.get("source") == "eval-finish"
+            and receipt.get("body_source") is None
+            and receipt.get("body_source_basis") == "authenticated-final-host-output-reference"
+            and isinstance(receipt.get("result_type"), str)
+            and receipt["result_type"].startswith("Neuralese<")
+            and receipt["result_type"] != "Neuralese<string>"
+            and receipt.get("result_path") == ["return"]
+            and _sha256_hex(receipt.get("request_sha256"))
+            and _sha256_hex(receipt.get("raw_response_sha256"))
+            and _sha256_hex(receipt.get("raw_model_value_sha256")))
+
+
 def _protected_target_sidecar_equivalence(record, receipt, metadata):
     """Validate the one historical converter sidecar excluded by the current target digest."""
     from ..train.inline_instructions import validate_inline_instruction_code
@@ -677,21 +708,30 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False,
             typed_writes.extend((call.get("outcome") or {}).get("typed_result_writes") or [])
         for receipt in typed_writes:
             teacher_text_write = _is_teacher_text_write(receipt)
+            teacher_text_typed_json_write = _is_teacher_text_typed_json_write(receipt)
             if (not isinstance(receipt, dict)
                         or receipt.get("schema") != "natlang.typed-result-write/1"
                         or receipt.get("invocation_id") != source_ref.get("invocation_id")
                         or receipt.get("source_row_sha256") != source_ref.get("source_row_sha256")
-                        or receipt.get("source_kind") not in {"typed-text-result", "typed-text-result-field"}
-                        or receipt.get("result_type") != "Neuralese<string>"
+                        or (receipt.get("source_kind") not in {"typed-text-result", "typed-text-result-field"}
+                            and not teacher_text_typed_json_write)
+                        or (receipt.get("result_type") != "Neuralese<string>" and not teacher_text_typed_json_write)
                         or not isinstance(receipt.get("writer_node"), str)
                         or not isinstance(receipt.get("block_id"), str)
-                        or not (receipt["block_id"].startswith("nz1_") or teacher_text_write)
-                        or (receipt["block_id"].startswith("nzt1_") and not teacher_text_write)
-                        or not isinstance(receipt.get("body_source"), str)
+                        or not (receipt["block_id"].startswith("nz1_") or teacher_text_write or
+                                teacher_text_typed_json_write)
+                        or (receipt["block_id"].startswith("nzt1_") and
+                            not (teacher_text_write or teacher_text_typed_json_write))
+                        or (not teacher_text_typed_json_write and not isinstance(receipt.get("body_source"), str))
                         or not isinstance(receipt.get("body_sha256"), str)
-                        or _sha(receipt["body_source"].encode("utf-8")) != receipt["body_sha256"]
+                        or (not teacher_text_typed_json_write and
+                            _sha(receipt["body_source"].encode("utf-8")) != receipt["body_sha256"])
                         or not isinstance(receipt.get("result_path"), list)
                         or not receipt["result_path"] or receipt["result_path"][0] != "return"):
+                continue
+            if teacher_text_typed_json_write:
+                # Do not derive writer content from the target or receipt. The
+                # exact same-run consumer receipt is the only permitted body source.
                 continue
             if receipt.get("source") == "assistant-text-return":
                 raw_assistant = assistant_decision.get("content", "")
@@ -886,6 +926,29 @@ def _provider_expanded_writer_source_valid(source_class, write, witness, block_t
         and witness.get("learned_vectors") is False
         and witness.get("qualification_certificate") is False
         and witness.get("training_admission") is False
+        and witness.get("host_result_call_id") == write.get("call_id")
+        and witness.get("host_result_type") == block_type
+        and witness.get("writer_node") == write.get("node")
+        and witness.get("body_sha256") == write.get("text_body_sha256")
+        and _sha256_hex(witness.get("host_result_value_sha256"))
+        and _sha256_hex(witness.get("raw_response_sha256"))
+        and _sha256_hex(witness.get("transport_provenance_sha256"))
+        and _sha256_hex(witness.get("raw_eval_call_sha256"))
+    ) or (
+        source_class == "teacher-text-executed-eval-finish-typed-json"
+        and write.get("producer") == "teacher-text-emulation"
+        and write.get("format") == "teacher-text"
+        and write.get("source_kind") == "typed-json-result"
+        and write.get("source") == "eval-finish"
+        and write.get("marker_context") == "return-result"
+        and write.get("learned_vectors") is False
+        and write.get("tokenizer_ids") is False
+        and write.get("training_admission") in (None, False)
+        and witness.get("kind") == "teacher-text-executed-eval-finish-typed-json/1"
+        and witness.get("source") == "eval-finish"
+        and witness.get("source_kind") == "typed-json-result"
+        and witness.get("transport_schema") == "natlang.teacher-text-neuralese-transport/1"
+        and witness.get("transport_mode") == "teacher-text/1"
         and witness.get("host_result_call_id") == write.get("call_id")
         and witness.get("host_result_type") == block_type
         and witness.get("writer_node") == write.get("node")

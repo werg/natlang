@@ -218,6 +218,35 @@ def load_verified_luna_teacher_turn(audit_path, record_id, *, replay_messages, r
                     or decision_receipt.get("output_sha256") != audit.get("decision_cache_output_sha256")
                     or _sha(decision_data) != decision_receipt.get("output_sha256")):
                 raise ValueError("exact audit decision cache differs from its materializer receipt")
+            conversion_runtime = audit.get("decision_materializer_runtime")
+            if conversion_runtime is not None:
+                runtime_root = Path(conversion_runtime.get("path", "")).resolve(strict=True)
+                frozen_path = runtime_root / "frozen-runtime.json"
+                frozen_bytes = frozen_path.read_bytes()
+                frozen_runtime = json.loads(frozen_bytes)
+                frozen_files = frozen_runtime.get("files") or {}
+                if (_sha(frozen_bytes) != conversion_runtime.get("frozen_runtime_sha256")
+                        or not isinstance(frozen_files, dict)
+                        or not isinstance(conversion_runtime.get("materializer_assets"), dict)
+                        or not conversion_runtime["materializer_assets"]
+                        or conversion_runtime.get("materializer_sha256") is None):
+                    raise ValueError("separate decision materializer runtime receipt is incomplete")
+                receipt_assets = (decision_receipt.get("identity") or {}).get("runtime") or {}
+                if receipt_assets != conversion_runtime["materializer_assets"]:
+                    raise ValueError("decision materializer asset manifest differs from its runtime receipt")
+                for relative, expected_sha in conversion_runtime["materializer_assets"].items():
+                    frozen_key = str(relative).removeprefix("ts-host/")
+                    asset = runtime_root / relative
+                    if not asset.is_file() and str(relative).startswith("ts-host/"):
+                        asset = runtime_root / str(relative).removeprefix("ts-host/")
+                    if (frozen_files.get(frozen_key, frozen_files.get(str(relative))) != expected_sha
+                            or not asset.is_file() or _sha(asset.read_bytes()) != expected_sha):
+                        raise ValueError(f"separate decision materializer asset hash mismatch: {relative}")
+                module_candidates = [runtime_root / "dist/teacher/native-materializer.js",
+                    runtime_root / "ts-host/dist/teacher/native-materializer.js"]
+                module = next((path for path in module_candidates if path.is_file()), None)
+                if (module is None or _sha(module.read_bytes()) != conversion_runtime.get("materializer_sha256")):
+                    raise ValueError("separate decision materializer module differs from its runtime receipt")
             protection_ref = audit.get("protection") or {}
             protection = json.loads(_read_bound(protection_ref.get("path"), protection_ref.get("sha256")))
             if (protection.get("schema") != "natlang.training-protection-projection/1"

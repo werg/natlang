@@ -801,9 +801,15 @@ def teacher_decision_admissions(source, source_sha256, *, decision_review=None, 
         raise ValueError('teacher decision source differs from its immutable SHA-256')
     repo = (Path(materializer_root).resolve(strict=True) if materializer_root is not None
             else Path(__file__).resolve().parents[2])
-    cli = repo / 'ts-host/scripts/materialize-native-teacher.mjs'
-    assets = [cli, repo / 'ts-host/scripts/jsonl-stream.mjs',
-              *sorted((repo / 'ts-host/dist').rglob('*.js'))]
+    # A frozen teacher/runtime bundle is rooted at ts-host itself, whereas the
+    # source checkout has a ts-host/ child. Support both explicitly and bind
+    # the selected layout in the materialization receipt's runtime file map.
+    host_root = repo / 'ts-host' if (repo / 'ts-host/scripts/materialize-native-teacher.mjs').is_file() else repo
+    cli = host_root / 'scripts/materialize-native-teacher.mjs'
+    if not cli.is_file() or not (host_root / 'dist/teacher/native-materializer.js').is_file():
+        raise ValueError('teacher decision materializer root lacks its CLI and compiled native materializer')
+    assets = [cli, host_root / 'scripts/jsonl-stream.mjs',
+              *sorted((host_root / 'dist').rglob('*.js'))]
     if not any(path.name == 'native-materializer.js' for path in assets):
         raise ValueError('build the native teacher materializer before converting teacher graphs')
     runtime = {str(path.relative_to(repo)): sha256_file(path) for path in assets}
