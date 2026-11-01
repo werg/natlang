@@ -520,3 +520,20 @@ def test_live_gate_measures_one_actual_dominator_and_records_all_requested(tmp_p
     assert len(record['candidate_groups'])==1 and len(record['requested_candidate_groups'])==3
     assert [c['measured_index'] for c in record['requested_group_coverage']]==[0,0,0]
     assert len(capacity.load_oversize_capacity_frontier([{'proof':ref}]))==1
+
+
+def test_capacity_dominance_requires_padded_attention_and_node_layout():
+    from natlang_neuralese.train.native_packed_capacity import _one_group_dominates
+    def group(tokens,slots,workspace,nodes,targets=1):
+        graph={'id':'g','forward_tokens':tokens,'kv_slots':slots,
+               'attention_workspace_rows':workspace,'node_shapes':nodes,
+               'target_positions':targets,'decision_count':0}
+        return {'graphs':[graph],'forward_tokens':tokens,'kv_slots':slots,'graph_count':1}
+    measured=group(1000,1200,1024,[(1000,1200,1,1,0)],20)
+    assert _one_group_dominates(measured,group(900,1000,1024,[(900,1000,1,1,0)],10))
+    assert not _one_group_dominates(measured,group(900,1000,1152,[(900,1000,1,1,0)],10))
+    assert not _one_group_dominates(measured,group(900,1000,1024,[(450,500,1,1,0),(450,500,1,1,0)],10))
+    assert not _one_group_dominates(measured,group(900,1000,1024,[(900,1000,1,1,0)],21))
+    legacy=group(1000,1200,1024,[(1000,1200,1,1,0)],20)
+    del legacy['graphs'][0]['node_shapes']
+    assert not _one_group_dominates(legacy,group(900,1000,1024,[(900,1000,1,1,0)],10))

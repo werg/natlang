@@ -271,8 +271,20 @@ def _oversize_shape(batches):
     """Describe whole-group geometry without combining maxima from different groups."""
     groups=[]
     for batch in batches:
-        graphs=[{'id':example.id,'forward_tokens':int(example.plan.token_count),
-                 'kv_slots':len(example.plan.slot_sources)} for example in batch]
+        graphs=[]
+        for example in batch:
+            plan=example.plan
+            shape={'id':example.id,'forward_tokens':int(plan.token_count),
+                   'kv_slots':len(plan.slot_sources)}
+            if hasattr(plan,'invocations') and hasattr(plan,'sequences'):
+                nodes=[]
+                for node, sequence in zip(plan.invocations,plan.sequences,strict=True):
+                    nodes.append((len(node.token_ids),len(sequence),len(node.imports),
+                                  len(node.producing),len(getattr(node,'logical_producing',()))))
+                shape.update({'attention_workspace_rows':int(plan.attention_workspace_rows),
+                    'node_shapes':nodes,'target_positions':sum(1 for w in getattr(example,'target_weights',()) if w>0),
+                    'decision_count':len(getattr(example,'decisions',()) or ())})
+            graphs.append(shape)
         groups.append({'graphs':graphs,'forward_tokens':sum(g['forward_tokens'] for g in graphs),
                        'kv_slots':sum(g['kv_slots'] for g in graphs),'graph_count':len(graphs)})
     return groups
@@ -289,7 +301,27 @@ def _one_group_dominates(measured, candidate):
     # comparison independent of source order while preventing crossed maxima.
     old=sorted(((g['forward_tokens'],g['kv_slots']) for g in measured['graphs']), reverse=True)
     new=sorted(((g['forward_tokens'],g['kv_slots']) for g in candidate['graphs']), reverse=True)
-    return all(t <= old[i][0] and k <= old[i][1] for i,(t,k) in enumerate(new))
+    if not all(t <= old[i][0] and k <= old[i][1] for i,(t,k) in enumerate(new)):
+        return False
+    measured_graphs=sorted(measured['graphs'],key=lambda g:(g['forward_tokens'],g['kv_slots']),reverse=True)
+    candidate_graphs=sorted(candidate['graphs'],key=lambda g:(g['forward_tokens'],g['kv_slots']),reverse=True)
+    for actual, bound in zip(candidate_graphs,measured_graphs):
+        # Historical proofs lack the richer attention/target layout and must
+        # not cover a new graph whose padding and loss allocations are known.
+        if 'node_shapes' not in actual:
+            continue
+        if 'node_shapes' not in bound:
+            return False
+        if any(actual[key]>bound[key] for key in ('attention_workspace_rows','target_positions','decision_count')):
+            return False
+        if len(actual['node_shapes'])!=len(bound['node_shapes']):
+            return False
+        # Preserve each invocation's coupled dimensions; a large total cannot
+        # stand in for a larger individually padded attention workspace.
+        for node,limit in zip(actual['node_shapes'],bound['node_shapes']):
+            if len(node)!=len(limit) or any(a>b for a,b in zip(node,limit)):
+                return False
+    return True
 
 
 def _nondominated_group_indices(groups):
