@@ -1,3 +1,55 @@
+## Live supervision update, 2026-11-01 17:24 CET
+
+- Pop's instruction baseline finished6298seconds of evaluation:8 successes,
+  five semantic mismatches,one invalid action and two unresolved observations.
+  `complete:false`, `eligible:false`; do not report a complete16-case success rate.
+  Local receipt `ops/pop-baseline0-dev16-completed-1101.json`. The first automatic
+  handoff stopped because it demanded a complete score. Root corrected that
+  operational gate: a terminal baseline with unresolved cases still permits a
+  useful matching run, retaining explicit unresolved pairs and their rerun needs.
+- Exact64 transport transfer completed:3457813283 bytes total artifacts. Pop's
+  actual64 actor loaded, attested original source identity and began the matched
+  sixteen-program evaluation under `pop-dev16-trained64-0f8a-1101.service`.
+  It uses the same0f8a code, full prompt, task indices, engine, prefill/cache,
+  budgets and one-worker execution as baseline0. The tensor-exact transported
+  view preserves logical identity64; it is not a production resume checkpoint.
+  No trained score or capability lift claimed yet. Preparation details:
+  `ops/pop64-matched-eval-preparation-1101.json`; remote sequential launch receipt
+  `natlang-independent-recovery-20261031/matched64-launch-after-baseline-1101.json`.
+- Actual70 actor remains collecting current-policy round13, with completed raw
+  result files and active GPU use; no round13 optimizer credit yet. Its next SFT
+  draft now targets newly frozen `runtime-next-marker-d5bc-1101`, incorporating
+  I/O priority, source-output identity and inventory fixes. The sealed runtime
+  protected union is unchanged. Finalization/preflight still bind actual next RL
+  parent; draft70 is not authorization to restart from70 after newer earned SGD.
+- Checked actual marker storage: base vocab128000 already covers role IDs125033–
+  125036, so the provisioner's expansion-only mean-initialization branch did not
+  run. Rows are nearly identical base padding rows, norm0.4328 versus sampled
+  ordinary-row mean1.0784 and EOS1.0817. Earned70 producer-close row delta norm
+  0.01990 proves it changed; this is not a universally frozen-row defect.
+  `ops/marker-row-initialization70-observation-1101.json` contains exact read-only
+  measurements. The earlier sealed marker-transition v1 incorrectly inferred
+  the expansion branch; its exact bound bytes remain historical. Corrected
+  `marker-learning-transition-v2.json` records the actual branch. No embedding
+  reinitialization occurred. Next marker LR1e-3 remains an unproven adaptation.
+- Corrected complete acquired inventory snapshot now5203 committed exports,
+  321 pending,zero errors. Additional D13 positives1735 and D14 positives174
+  must be deduplicated against already admitted sources; counts are not new rows.
+  Both D20 exports were reprocessed separately. New-family inventory has45785
+  positive train graphs with zero inventory errors. Full output verification and
+  current-union screening is live; semantic/tool-contract audit, source/CE/recipe/
+  geometry admission and actual optimizer exposure still remain.
+- Recovery I/O repairs apply to actual live actor/collector PIDs (BE0), recovery
+  owner2886063 (BE2) and bulk descendants (idle), not just future defaults.
+  Point-in-time receipt `ops/live-io-priority-repair-1101.json`. Latest independent
+  rolling export67 is verified, SHA256
+  `8217e886d87076f2a73b0880acdb1ccd14ce8df19f1721cfbf345e18515a65a1`;
+  newer69/70 exports are not yet claimed independently recoverable. Runtime837a
+  archival with independent member readback is live as
+  `archive-runtime70-independent-1101`; full data/environment/control closure
+  and isolated restore qualification remain distinct obligations.
+- Main changes pushed throughd5bc50ea4; paid teacher generation remains paused.
+
 ## Live supervision update, 2026-11-01 17:12 CET
 
 - SFT66→70 completed four actual optimizer updates,134 graph visits, preserving
