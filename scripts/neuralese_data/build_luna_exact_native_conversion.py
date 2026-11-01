@@ -10,12 +10,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-import os
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "training/neuralese"))
+
+from scripts.neuralese_data.portable_paths import node_executable
 
 from natlang_neuralese.common.hashing import sha256_file_hex, sha256_hex
 from natlang_neuralese.common.jsonio import canonical_json_bytes
@@ -42,7 +44,7 @@ def _runtime_row_digest(runtime: Path, row: dict, decision_receipt: dict) -> str
         "ts-host/dist/teacher/native-materializer.js")
     if not isinstance(expected, str) or sha256_file_hex(module) != expected:
         raise ValueError("decision cache materializer differs from the campaign's exact frozen runtime")
-    node = os.environ.get("NATLANG_NODE") or "/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin/node"
+    node = node_executable()
     code = ('import fs from "node:fs";'
             'const {nativeRowDigest}=await import(process.argv[1]);'
             'process.stdout.write(nativeRowDigest(JSON.parse(fs.readFileSync(0,"utf8"))));')

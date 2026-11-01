@@ -16,12 +16,15 @@ from natlang_neuralese.common.custody import ProtectedWorlds, REGISTRY
 from natlang_neuralese.common.hashing import sha256_file_hex
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 if str(REPO_ROOT / 'scripts') not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / 'scripts'))
 from scripts.run_reviewed_luna_dispatcher import (
     _verify_ledger_events, _verify_ledger_identity, digest,
     tree_identity, verify_luna_source_inventory,
 )
+from scripts.neuralese_data.portable_paths import node_executable
 
 SCHEMA = 'natlang.historical-provider-source-continuity/1'
 
@@ -61,7 +64,7 @@ def _native_row_digest(runtime: Path, runtime_manifest: dict, row: dict) -> tupl
     actual = sha256_file_hex(module)
     if not isinstance(expected, str) or actual != expected:
         raise ValueError('historical runtime materializer differs from its frozen file inventory')
-    node = '/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin/node'
+    node = node_executable()
     code = ('import fs from "node:fs";'
             'const {nativeRowDigest}=await import(process.argv[1]);'
             'process.stdout.write(nativeRowDigest(JSON.parse(fs.readFileSync(0,"utf8"))));')

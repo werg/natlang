@@ -14,8 +14,10 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "training/neuralese"))
 
+from natlang_neuralese.common.paths import resolve as machine_path
 from natlang_neuralese.common.custody import ProtectedWorlds
 from natlang_neuralese.common.hashing import canonical_json_bytes, sha256_file_hex, sha256_hex
 from natlang_neuralese.common.jsonio import write_json_durable
@@ -25,9 +27,16 @@ from natlang_neuralese.data.text_corpus import native_gold_packet, tokenizer_fin
 
 SCHEMA = "natlang.historical-luna-full-episode-graphs/1"
 EXPECTED_TOKENIZER = "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3"
-DEFAULT_BASE_TOKENIZER = Path(
-    "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/"
-    "40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd")
+from scripts.neuralese_data.student_tokenizers import STUDENTS
+
+DEFAULT_BASE_TOKENIZER = Path(STUDENTS["lfm3"]["path"])
+
+
+def prior_geometry_path() -> Path:
+    return machine_path(
+        "data_nvme", "loghub-graph-successor-20261031", "terra-ce-stage",
+        "telecom-v27-plus1", "packed-capacity-geometry",
+        "fe23368e8588bcf585030d5d62c4b2b9a90ba74bef0ba824907f999aecc9e35b.json")
 
 
 def read(path: Path):
@@ -196,8 +205,7 @@ def build(*, continuity_path: Path, recovery_path: Path, selected_path: Path,
     from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision
     from natlang_neuralese.data.native_graph_schema import communication_classification
 
-    prior_geometry = read(Path("/home/werg/data/loghub-graph-successor-20261031/terra-ce-stage/telecom-v27-plus1/packed-capacity-geometry") /
-        "fe23368e8588bcf585030d5d62c4b2b9a90ba74bef0ba824907f999aecc9e35b.json")
+    prior_geometry = read(prior_geometry_path())
     expected_tokenizer = prior_geometry["identity"]["tokenizer"]
     tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_path), trust_remote_code=False, local_files_only=True)
     provision(tokenizer)
