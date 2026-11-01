@@ -221,8 +221,7 @@ def load_positive_rows(screen_path, expected_protection, filtered_path, source_t
                 selected_by_source[origin["source_domain"]] += 1
                 selected_forward_tokens += len(token_ids)
                 selected_raw_positive_weight_positions += sum(weight > 0 for weight in example.target_weights)
-                source_supervision = (graph.get("conversion", {}).get("acquired_session", {})
-                    .get("supervision_policy") or {})
+                source_supervision = graph.get("conversion", {}).get("supervision_policy") or {}
                 selected_assistant_target_tokens += source_supervision.get("assistant_target_tokens", 0)
                 selected_failed_masked_tokens += source_supervision.get("failed_assistant_tokens_masked", 0)
                 selected_context_audit["graphs_with_user_task_context"] += 1
