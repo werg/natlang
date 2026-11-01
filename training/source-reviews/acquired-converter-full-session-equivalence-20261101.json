@@ -10,7 +10,8 @@
       },
       "current": {
         "path": "scripts/neuralese_data/build_acquired_full_session_graphs.py",
-        "sha256": "ee2b8452e678975e2802e0da9b1b1279ff4a326f1d856305a09c4cac0bc23581"
+        "sha256": "ee2b8452e678975e2802e0da9b1b1279ff4a326f1d856305a09c4cac0bc23581",
+        "retained_path": "training/source-reviews/acquired-reviewed-builder-ee2b8452.py"
       }
     },
     "conversion": {

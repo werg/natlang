@@ -180,6 +180,10 @@ def receipt_protection_digest(receipt):
 
 def predecessor_collision_count(screen, predecessor, old_rows):
     """Authenticate explicitly retained predecessor versions, never rename collisions."""
+    if screen.get('pending_partition'):
+        from scripts.neuralese_data.partition_acquired_context_pending import verify_partition
+        original, _ = verify_partition(screen, predecessor)
+        return predecessor_collision_count(original, predecessor, old_rows)
     reference = screen.get('predecessor_collision_filter')
     if reference is None:
         if screen.get('accounting', {}).get('predecessor_collisions', 0):
@@ -221,6 +225,9 @@ def prepare_source_stage(predecessor_receipt, screen_receipt, output, *, paralle
     predecessor_path, screen_path = (Path(p).resolve(strict=True) for p in (predecessor_receipt, screen_receipt))
     predecessor_identity, screen_identity = bind(predecessor_path), bind(screen_path)
     previous, screen = read(predecessor_path), read(screen_path)
+    if screen.get('pending_partition'):
+        from scripts.neuralese_data.partition_acquired_context_pending import verify_partition
+        verify_partition(screen, predecessor_path)
     output = Path(output).resolve()
     if output.exists():
         raise ValueError('source preparation output must be a fresh immutable directory')
@@ -533,6 +540,13 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     predecessor_path, screen_path, census_path = map(lambda p: Path(p).resolve(strict=True),
         (predecessor_receipt, screen_receipt, census_receipt))
     previous, screen, census = map(read, (predecessor_path, screen_path, census_path))
+    pending_count = 0
+    if screen.get('pending_partition'):
+        from scripts.neuralese_data.partition_acquired_context_pending import verify_partition, verify_partition_census
+        _, pending_count = verify_partition(screen, predecessor_path)
+        verify_partition_census(screen, census)
+    elif census.get('pending_partition'):
+        raise ValueError('pending census lacks its partitioned screen')
     output = Path(output).resolve()
     if output.exists():
         raise ValueError('successor output must be a fresh immutable directory')
@@ -585,7 +599,7 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     excluded = screen.get('excluded_current_protection')
     if (not isinstance(excluded, list) or accounting.get('train_graphs_before_current_check') != train_count
             or accounting.get('current_protected_exclusions') != len(excluded)
-            or train_count - len(excluded) - collision_count != screen['output']['rows']
+            or train_count - len(excluded) - collision_count - pending_count != screen['output']['rows']
             or accounting.get('eligible_train_graphs') != screen['output']['rows']):
         raise ValueError('screened graph counts do not reconcile with receipt inventory and protection exclusions')
     format_custody = verify_conversion_custody(coverage, screen, screen_program)

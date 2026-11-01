@@ -39,7 +39,13 @@ def review(root, registry=None):
     for key in ('builder', 'conversion'):
         refs = value['files'][key]; old = checked(refs['historical'], 'historical converter source')
         current_ref = {**refs['current'], 'path': str(root/refs['current']['path'])}
-        current = checked(current_ref, 'reviewed current converter source')
+        try:
+            current = checked(current_ref, 'reviewed current converter source')
+        except (OSError, ValueError):
+            retained = refs['current'].get('retained_path')
+            if not isinstance(retained, str):
+                raise
+            current = checked({**current_ref, 'path': str(root/retained)}, 'retained reviewed converter source')
         files[key] = {'historical': bind(old), 'current': bind(current)}
         trees[key] = (ast.parse(old.read_text()), ast.parse(current.read_text()))
     a, b = [_function(tree, 'session_graphs') for tree in trees['builder']]
