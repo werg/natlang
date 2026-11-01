@@ -31,6 +31,7 @@ def test_reuses_matching_fixture_without_rewriting_and_rejects_extra_module(tmp_
     extract_archive(archive,dest)
     assert module.stat().st_ino==before.st_ino
     assert module.stat().st_mtime_ns==before.st_mtime_ns
+    assert module.stat().st_ctime_ns==before.st_ctime_ns
     (dest/'runtime/unbound.py').write_text('extra code')
     with pytest.raises(ValueError,match='unbound member'):
         extract_archive(archive,dest)

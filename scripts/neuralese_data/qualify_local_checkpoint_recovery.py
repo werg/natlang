@@ -47,7 +47,9 @@ def extract_archive(archive_path, destination, *, environment=False):
                         for block in iter(lambda:incoming.read(1024*1024),b''):digest.update(block)
                     if file_sha256(path)!=digest.hexdigest():
                         raise ValueError('existing recovery fixture differs from archive: '+member.name)
-                    os.chmod(path,filtered.mode & 0o7777)
+                    wanted_mode=filtered.mode & 0o7777
+                    if path.stat().st_mode & 0o7777 != wanted_mode:
+                        os.chmod(path,wanted_mode)
                 else:
                     archive.extract(member,destination,filter=allow)
                 if member.issym():observed[member.name]={'name':member.name,'link':member.linkname}
