@@ -133,7 +133,10 @@ def test_actual_tiny_stop_append_resume_keeps_optimizer_rng_and_all_row_visits(t
     with monkeypatch.context() as patch:
         patch.setattr(trainer,'native_training_update',update)
         assert trainer.main(continued)==0
-    assert observed[:3]==['lfm:foundation-2','lfm:foundation-3','ordinary-0']
+    assert observed[:2]==['lfm:foundation-2','lfm:foundation-3']
+    # The resumed four-fast/one-debt phase may serve newly appended native
+    # work next. The fixed foundation still leads and ordinary debt is bounded.
+    assert 'ordinary-0' in observed[:5]
     final=torch.load(out/'checkpoint.pt',weights_only=False)['training']
     transition=final['options']['ordinary_cohort_fairness_history'][-1]
     assert transition['from'] is False and transition['to'] is True and transition['at_global_step']==2

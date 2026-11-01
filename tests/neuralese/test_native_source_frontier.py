@@ -72,3 +72,13 @@ def test_frontier_interleave_keeps_explicit_focus_and_mixed_batches_ahead():
     assert [batch for batch in actual if any(entries[i]['id'] in frontier for i in batch[1])
             and batch is not batches[2]] == [batches[6],batches[7]]
     assert sorted(index for _,indices,_ in actual for index in indices)==list(range(32))
+
+
+@pytest.mark.parametrize('offset',range(5))
+def test_frontier_does_not_demote_already_scheduled_native_or_urgent_work(offset):
+    entries=[{'id':'native','communication':True},
+             {'id':'urgent','training_priority':2}, {'id':'backlog'}]
+    batches=[(0,[i],False) for i in range(3)]
+    actual=interleave_batches(batches,entries,{'native','urgent'},schedule_offset=offset)
+    assert actual==batches
+    assert all(a is b for a,b in zip(actual,batches))

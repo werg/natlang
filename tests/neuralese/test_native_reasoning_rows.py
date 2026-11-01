@@ -163,6 +163,9 @@ def test_actual_old_checkpoint_upgrade_shared_trainer_resume_and_serve_roundtrip
     assert portable.token_override_ids==(54,55)
     with torch.no_grad():assert_exact(portable.logits(portable(plan)['h_final']),live.logits(live(plan)['h_final']),'portable learned rows')
     before=copy.deepcopy(updated['training']['optimizer'])
+    # A retry names the earned rolling parent, rather than silently ignoring
+    # the original pre-upgrade checkpoint in favor of a different local slot.
+    argv[argv.index('--continue-from')+1]=str(joint_path)
     assert trainer.main(argv)==0
     resumed=torch.load(tmp_path/'new/checkpoint.pt',map_location='cpu',weights_only=False)
     assert_exact(resumed['training']['optimizer'],before,'noop resumed optimizer')
