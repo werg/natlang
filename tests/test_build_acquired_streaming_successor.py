@@ -18,6 +18,40 @@ def test_sealed_successor_protection_binding_is_usable_and_conflicts_fail_closed
             receipt_protection_digest(receipt)
 
 
+def test_repeated_mass_admission_recovers_sealed_append_and_rejects_unearned_mass(tmp_path,monkeypatch):
+    from scripts.neuralese_data import build_acquired_streaming_successor as module
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    monkeypatch.setattr(module,'policy_objective',lambda policy:policy['objective'])
+    def write(name,value):
+        path=tmp_path/name;path.write_text(json.dumps(value));return module.bind(path)
+    objective={'name':'own-outputs/1','family_balance':{'scales':{'coding':1}}}
+    base_source={'sha256':'a'*64};current_source={'sha256':'b'*64}
+    unscaled_policy=write('unscaled.json',{'objective':{**objective,'family_balance':None}})
+    policy=write('policy.json',{'objective':objective});family=write('family.json',{})
+    census_ref=write('base-census.json',{'schema':'natlang.own-output-mass-census/1',
+        'objective_without_family_scales':True,'manifest':base_source,'rows':2,'policy':unscaled_policy,
+        'families':{'coding':{'rows':2,'unscaled_mass':20.}},'unscaled_mass_total':20.})
+    receipt=write('base-mass-receipt.json',{'census':census_ref,'map':family})
+    base=write('base.json',{'source':base_source,'rows':2,'ce_policy':policy,'family_map':family,
+        'objective_census':census_ref,'objective_census_receipt':receipt})
+    screen=write('screen.json',{})
+    delta=write('delta.json',{'schema':'natlang.acquired-effective-learning-census/1',
+        'screen':screen,'ce_policy':policy,'objective_sha256':canonical_json_sha256_hex(objective),
+        'rows':1,'category_mass':{'context':0.,'assistant_context':0.,'reply':5.}})
+    previous={'schema':module.SCHEMA,'source':current_source,'rows':3,'new_rows':1,
+        'predecessor':base,'predecessor_source':base_source,'effective_loss_census':delta,
+        'source_screen':screen,'new_family':'general-agent',
+        'family_balance':{'unscaled_mass':{'coding':20.,'general-agent':5.}}}
+    path=tmp_path/'previous.json';path.write_text(json.dumps(previous))
+    census,proof=module.predecessor_mass_census(previous,path,objective)
+    assert census['rows']==3 and census['unscaled_mass_total']==25.
+    assert census['families']['general-agent']=={'rows':1,'unscaled_mass':5.}
+    assert proof['delta']==delta and proof['predecessor_mass']['census']==census_ref
+    previous['family_balance']['unscaled_mass']['general-agent']=500.
+    with pytest.raises(ValueError,match='declared family mass'):
+        module.predecessor_mass_census(previous,path,objective)
+
+
 def test_capacity_descriptor_matches_strict_runtime_contract():
     from scripts.neuralese_data.build_acquired_streaming_successor import sft_capacity_descriptor
     source={'path': '/source', 'sha256': 'a'*64}

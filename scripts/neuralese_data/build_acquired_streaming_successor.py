@@ -432,6 +432,69 @@ def verify_conversion_custody(coverage, screen, screen_program):
         'scope': 'bound converter emits one text node and no decision readouts; screen reports an input-only filter'}
 
 
+def predecessor_mass_census(previous, predecessor_path, objective, *, seen=()):
+    """Resolve measured mass or a checked append of measured contributions."""
+    predecessor_path = Path(predecessor_path).resolve(strict=True)
+    if predecessor_path in seen:
+        raise ValueError('predecessor mass custody contains a cycle')
+    unscaled = copy.deepcopy(objective); unscaled['family_balance'] = None
+    if previous.get('objective_census') and previous.get('objective_census_receipt'):
+        census_path = checked(previous['objective_census'], 'predecessor objective census')
+        receipt_path = checked(previous['objective_census_receipt'], 'predecessor objective census receipt')
+        census, receipt = read(census_path), read(receipt_path)
+        policy = policy_objective(read(checked(census['policy'], 'predecessor census policy')))
+        if (census.get('schema') != 'natlang.own-output-mass-census/1'
+                or census.get('objective_without_family_scales') is not True
+                or census.get('manifest', {}).get('sha256') != previous['source']['sha256']
+                or census.get('rows') != previous['rows']
+                or receipt.get('census', {}).get('sha256') != previous['objective_census']['sha256']
+                or receipt.get('map', {}).get('sha256') != previous['family_map']['sha256']
+                or policy != unscaled):
+            raise ValueError('predecessor objective mass census does not bind its actual source and objective')
+        return census, {'census': bind(census_path), 'receipt': bind(receipt_path)}
+    if previous.get('schema') != SCHEMA:
+        raise ValueError('predecessor lacks measured mass custody')
+    parent_path = checked(previous['predecessor'], 'mass predecessor receipt')
+    parent = read(parent_path)
+    parent_objective = policy_objective(read(checked(parent['ce_policy'], 'mass predecessor policy')))
+    parent_unscaled = copy.deepcopy(parent_objective); parent_unscaled['family_balance'] = None
+    if parent_unscaled != unscaled:
+        raise ValueError('unscaled loss objective changed across mass continuation')
+    prior, prior_proof = predecessor_mass_census(parent, parent_path, parent_objective,
+                                                seen=(*seen, predecessor_path))
+    delta_path = checked(previous['effective_loss_census'], 'appended measured loss census')
+    delta = read(delta_path)
+    if (delta.get('schema') != 'natlang.acquired-effective-learning-census/1'
+            or delta.get('screen') != previous.get('source_screen')
+            or delta.get('ce_policy') != parent['ce_policy']
+            or delta.get('objective_sha256') != canonical_json_sha256_hex(parent_objective)
+            or delta.get('rows') != previous['new_rows']
+            or parent['rows'] + delta['rows'] != previous['rows']
+            or previous.get('predecessor_source') != parent['source']
+            or delta.get('category_mass', {}).get('context', 0) != 0
+            or delta.get('category_mass', {}).get('assistant_context', 0) != 0):
+        raise ValueError('appended mass census does not bind the predecessor objective and source')
+    mass = sum(delta['category_mass'].values())
+    if not math.isfinite(mass) or mass <= 0:
+        raise ValueError('appended census has invalid measured loss mass')
+    families = copy.deepcopy(prior['families']); name = previous['new_family']
+    entry = families.setdefault(name, {'rows': 0, 'unscaled_mass': 0.})
+    entry['rows'] += delta['rows']; entry['unscaled_mass'] += mass
+    declared = previous['family_balance']['unscaled_mass']
+    if (set(families) != set(declared)
+            or any(not math.isclose(row['unscaled_mass'], declared[name], rel_tol=1e-10, abs_tol=1e-6)
+                   for name, row in families.items())
+            or sum(row['rows'] for row in families.values()) != previous['rows']):
+        raise ValueError('declared family mass differs from measured append custody')
+    total = sum(row['unscaled_mass'] for row in families.values())
+    return {'schema': 'natlang.own-output-mass-census/1', 'manifest': previous['source'],
+            'rows': previous['rows'], 'families': families, 'unscaled_mass_total': total,
+            'objective_without_family_scales': True}, {
+        'schema': 'natlang.measured-mass-append-custody/1', 'predecessor': bind(parent_path),
+        'predecessor_mass': prior_proof, 'delta': bind(delta_path),
+        'current_source': previous['source'], 'unscaled_objective': unscaled}
+
+
 def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=0.07, prepared_source_receipt=None,
           diagnosis_verification=None, diagnosis_program=None, family=FAMILY, screen_program=None):
     predecessor_path, screen_path, census_path = map(lambda p: Path(p).resolve(strict=True),
@@ -452,8 +515,6 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     geometry_path = checked(previous.get('geometry'), 'predecessor geometry')
     ce_path = checked(previous.get('ce_policy'), 'predecessor CE policy')
     recipe_path = checked(previous.get('recipe'), 'predecessor recipe')
-    prior_census_path = checked(previous.get('objective_census'), 'predecessor objective census')
-    prior_census_receipt_path = checked(previous.get('objective_census_receipt'), 'predecessor objective census receipt')
     checked(census.get('screen'), 'census screen'); checked(census.get('ce_policy'), 'census CE policy')
     census_builder = checked(census.get('builder'), 'census builder')
     if census_builder != (ROOT / 'scripts/neuralese_data/audit_acquired_learning_signal.py').resolve(strict=True):
@@ -465,18 +526,7 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     objective = policy_objective(old_policy)
     if census.get('objective_sha256') != canonical_json_sha256_hex(objective):
         raise ValueError('census used a different effective loss objective')
-    prior_census, prior_receipt = read(prior_census_path), read(prior_census_receipt_path)
-    census_policy_path = checked(prior_census.get('policy'), 'predecessor census policy')
-    census_objective = policy_objective(read(census_policy_path))
-    objective_without_family = copy.deepcopy(objective); objective_without_family['family_balance'] = None
-    if (prior_census.get('schema') != 'natlang.own-output-mass-census/1'
-            or prior_census.get('objective_without_family_scales') is not True
-            or prior_census.get('manifest', {}).get('sha256') != previous['source']['sha256']
-            or prior_census.get('rows') != previous.get('rows')
-            or prior_receipt.get('census', {}).get('sha256') != previous['objective_census']['sha256']
-            or prior_receipt.get('map', {}).get('sha256') != previous['family_map']['sha256']
-            or census_objective != objective_without_family):
-        raise ValueError('predecessor objective mass census does not bind its actual source and objective')
+    prior_census, mass_custody = predecessor_mass_census(previous, predecessor_path, objective)
     balance = objective.get('family_balance') or {}
     if (objective.get('name') != 'own-outputs/1' or objective.get('mass') != 'token'
             or balance.get('key') != 'logical-family' or balance.get('normalization') != 'declared/1'
@@ -611,6 +661,21 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     policy['source_contract']['active_source_count'] = len(policy['source_contract']['active_sources'])
     new_ce_path = output / 'ce-policy.json'; write_json_durable(new_ce_path, policy)
     prepared_policy = prepare_policy(load_policy(bind(new_ce_path)), new_source)
+    unscaled_policy = copy.deepcopy(policy); unscaled_policy['objective']['family_balance'] = None
+    unscaled_policy_path = output / 'unscaled-ce-policy.json'; write_json_durable(unscaled_policy_path, unscaled_policy)
+    all_family_counts = Counter(row['family'] for row in old_map['rows'] + additions)
+    mass_census_path = output / 'objective-census.json'
+    write_json_durable(mass_census_path, {'schema': 'natlang.own-output-mass-census/1',
+        'manifest': bind(new_source_path), 'policy': bind(unscaled_policy_path), 'rows': len(new_source.entries),
+        'objective_without_family_scales': True,
+        'families': {name: {'rows': count, 'unscaled_mass': family_plan['unscaled_mass'][name]}
+                     for name, count in sorted(all_family_counts.items())},
+        'unscaled_mass_total': family_plan['total_unscaled_mass'],
+        'predecessor_mass_custody': mass_custody, 'delta_census': bind(census_path),
+        'scope': 'Exact sum of measured predecessor and appended unscaled masses; no repeated full-corpus scan.'})
+    mass_receipt_path = output / 'objective-census-receipt.json'
+    write_json_durable(mass_receipt_path, {'schema': 'natlang.measured-mass-append-receipt/1',
+        'census': bind(mass_census_path), 'map': bind(new_map_path), 'builder': bind(Path(__file__))})
     descriptor = output / 'sft-capacity-descriptor.json'
     geometry_summary = {'max_forward_tokens': max(entry['forward_tokens'] for entry in new_source.entries),
         'max_kv_slots': max(geometry_values), 'forward_tokens_over_262144':
@@ -650,6 +715,7 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         'coverage_audit': bind(coverage_path), 'effective_loss_census': bind(census_path), 'row_signals': bind(signals_path),
         'source': bind(new_source_path), 'appended_graphs': {'path': str(graph_path), 'sha256': graph_ref['sha256'], 'bytes': graph_ref['bytes']},
         'family_map': bind(new_map_path), 'ce_policy': bind(new_ce_path), 'recipe': bind(new_recipe_path),
+        'objective_census': bind(mass_census_path), 'objective_census_receipt': bind(mass_receipt_path),
         'geometry': geometry_ref, 'capacity_descriptor': bind(descriptor), 'observed_geometry': geometry_summary, 'rows': len(new_source.entries),
         'predecessor_rows': previous['rows'], 'new_rows': len(rows), 'new_family': family,
         'counts': counts, 'category_mass': masses, 'source_stores': stores, 'family_balance': family_plan,
