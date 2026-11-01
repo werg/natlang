@@ -255,6 +255,12 @@ def main():
     census_policy = json.loads(json.dumps(ce))
     census_policy['objective'].pop('family_balance', None)
     (out / 'census-policy.json').write_text(json.dumps(census_policy, indent=1, sort_keys=True) + '\n')
+    # The worker initializer installs the objective in child processes, but the final
+    # factor-custody report is assembled here in the parent after the scan. Keep the
+    # same exact policy object available in both places.
+    from natlang_neuralese.train.own_output_supervision import policy_objective
+    global _OBJECTIVE
+    _OBJECTIVE = policy_objective(census_policy)
     # Leaf paths are relative to the manifest's directory unless absolute.
     leaves = [{**s, 'path': str(manifest_path.parent / s['path'])}
               for s in json.loads(manifest_path.read_text())['sources']]
