@@ -228,18 +228,35 @@ def part_urls(run, digest):
 def put_local(run, path):
     """DGX file -> blob (a seed), part by part; a committed part is never sent again."""
     path = Path(path)
+    def stamp():
+        stat = path.stat()
+        return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+    before = stamp()
+    def unchanged():
+        try:
+            actual = stamp()
+        except OSError as error:
+            raise RuntimeError(f'{path} disappeared during upload') from error
+        if actual != before:
+            raise RuntimeError(f'{path} changed during upload')
     digest, parts = sandbox.digest_parts(path)
-    size = path.stat().st_size
+    unchanged()
+    size = before[2]
     todo = missing_parts(run, digest, size, parts)
     started = time.time()
     for part in todo:
         target = upload_urls(run, [part['name']])[part['name']]
+        unchanged()
         if not sandbox.put_part(target['url'], target['headers'], path, part['offset'], part['bytes'],
                                 {'name': part['name'], 'path': str(path)}):
             raise RuntimeError(f'upload of {part["name"]} ({path}) failed')
+        unchanged()
         commit_parts(run, digest, size, parts, [part['name']])
-    if todo and sandbox.digest_parts(path)[0] != digest:
-        raise RuntimeError(f'{path} changed during upload')
+    # The initial complete digest plus unchanged inode/size/mtime/ctime binds
+    # every read. A second whole-file pass only repeats slow external-disk I/O.
+    # This is source custody, not remote readback: exporters still GET and hash
+    # independently before granting a durable recovery claim.
+    unchanged()
     seconds = time.time() - started
     print(json.dumps({'event': 'blob_put', 'path': str(path), 'sha256': digest, 'bytes': size, 'parts': len(parts),
                       'sent_parts': len(todo), 'seconds': round(seconds, 1),
