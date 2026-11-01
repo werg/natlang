@@ -85,6 +85,13 @@ class CheckpointPolicy:
         # Bests are selection/export copies (direct, QAT conversion): weights-only once offloaded (owner 2026-10-13).
         self.prune_best = prune_best
         self.on_saved = on_saved
+        self.recovery_plan = self.out / 'checkpoint-recovery-plan.json'
+        self.recovery_queue = None
+        if self.recovery_plan.exists():
+            from .checkpoint_offload import recovery_queue_for
+            self.recovery_queue = recovery_queue_for(self.slot, self.recovery_plan)
+        elif os.environ.get('NATLANG_REQUIRE_FULL_RECOVERY') == '1':
+            raise ValueError('full recovery is required but its controller plan is missing')
         if type(async_checkpoint) is not bool:
             raise TypeError('async checkpoint policy must be an explicit boolean')
         self.async_checkpoint = async_checkpoint
@@ -99,8 +106,16 @@ class CheckpointPolicy:
                 self.best_metric = json.loads(meta.read_text()).get("best_metric")
             except ValueError:
                 pass
-        # A missing or truncated NVMe slot of a mirrored run resumes from its verified external mirror.
-        self.recovered = recover_latest(self.slot)
+        # A strong recovery plan must never fall back to the legacy mutable mirror.
+        if self.recovery_queue is not None:
+            from .checkpoint_offload import truncated
+            if self.slot.is_symlink() or (self.slot.exists() and truncated(self.slot)):
+                raise ValueError('strong recovery slot is invalid; restore a verified full-state export explicitly')
+            if not self.slot.exists() and self.recovery_queue.state.get('latest_verified'):
+                raise ValueError('strong recovery slot is missing; restore a verified full-state export explicitly')
+            self.recovered=None
+        else:
+            self.recovered = recover_latest(self.slot)
         update_policy_record(self.out, offload=policy_record(self.out))
 
     def write_best_metric(self, metric: float | None) -> None:
@@ -245,6 +260,11 @@ class CheckpointPolicy:
                 'mode':mode, **admission}
 
     def _after_save(self, state, event, *, metric, higher_is_better):
+        if self.recovery_queue is not None:
+            from .checkpoint_offload import recovery_queue_for
+            self.recovery_queue = recovery_queue_for(self.slot, self.recovery_plan)
+            self.recovery_queue.submit(self.slot, state, event)
+            event['full_recovery'] = 'queued-not-yet-independently-verified'
         if self.on_saved is not None:
             self.on_saved(self.slot, state, event)
         self.last_saved_monotonic = time.monotonic()

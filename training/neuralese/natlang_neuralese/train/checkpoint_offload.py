@@ -39,6 +39,7 @@ import json
 import os
 import platform
 import shutil
+import re
 import subprocess
 import sys
 import threading
@@ -785,9 +786,16 @@ def offloader() -> CheckpointOffloader:
         return _OFFLOADER
 
 
+_RECOVERY_QUEUES: dict[str, 'RecoveryExportQueue'] = {}
+_RECOVERY_QUEUES_GUARD = threading.Lock()
+
+
 def after_write(path, role: str | None = None, prune=False) -> None:
     """The hook every checkpoint writer calls after a successful write or best publication. Never raises."""
     try:
+        with _RECOVERY_QUEUES_GUARD:
+            if str(Path(path).resolve()) in _RECOVERY_QUEUES:
+                return
         settings = _OFFLOADER.settings if _OFFLOADER is not None else OffloadSettings.from_env()
         if mirror_unavailable(path, settings) is None:
             offloader().submit(path, role, prune)
@@ -808,3 +816,540 @@ def policy_record(out) -> dict:
 if __name__ == '__main__' and len(sys.argv) == 4 and sys.argv[1] in ('copy', 'prune', 'prune-auto'):
     mode = {'copy': False, 'prune': True, 'prune-auto': 'auto'}[sys.argv[1]]
     print(json.dumps(local_copy(sys.argv[2], sys.argv[3], prune=mode)), flush=True)
+
+
+def recovery_training_custody(state):
+    """Compact the exact saved exposure/source metadata for independent readback."""
+    from ..common.hashing import canonical_json_sha256_hex
+    training=state.get('training') if isinstance(state,dict) else None
+    if not isinstance(training,dict) or not training.get('optimizer') or not training.get('rng'):
+        raise ValueError('recovery export requires full optimizer and RNG state')
+    step=training.get('global_step')
+    if type(step) is not int:
+        raise ValueError('recovery export requires an earned global step')
+    from .native_continuation import collect_sft_progress
+    fields=('source_row_bindings','source_row_order','held_row_bindings','exposure_counts','required_visits')
+    options=('withdrawal_history','pending_focus_history','fresh_source_frontier_history',
+             '_required_visits','_objective_required_visits')
+    frames=collect_sft_progress(training,borrow_frames=True)
+    frame_custody={}
+    for name,frame in frames.items():
+        selected={key:frame.get(key) for key in fields}
+        selected['options']={key:(frame.get('options') or {}).get(key) for key in options}
+        frame_custody[name]=canonical_json_sha256_hex(selected)
+    return {'global_step':step,'optimizer_present':True,'rng_present':True,
+            'custody_sha256':{key:canonical_json_sha256_hex(training.get(key)) for key in fields},
+            'sft_frames_sha256':frame_custody,
+            'source_roots':[{key:ref.get(key) for key in ('path','sha256')} for ref in (training.get('source_receipts') or [])[:2]],
+            'ce':(training.get('options') or {}).get('ce_supervision_policy_binding')}
+
+
+def validate_full_recovery_checkpoint(path, expected):
+    """Decode the independently copied checkpoint and compare its actual custody."""
+    from .checkpoint_policy import CheckpointPolicy
+    state=CheckpointPolicy.load(path)
+    if recovery_training_custody(state)!=expected:
+        raise ValueError('independent checkpoint full-state custody differs')
+
+
+def validate_recovery_plan_shape(plan):
+    if not isinstance(plan,dict) or plan.get('schema')!='natlang.local-full-recovery-plan/1':
+        raise ValueError('invalid full recovery plan schema')
+    session=plan.get('session')
+    if (not isinstance(session,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}',session)
+            or session in ('.','..')):
+        raise ValueError('recovery plan needs exact session identity')
+    for key in ('destination','journal_directory'):
+        if not isinstance(plan.get(key),str) or not Path(plan[key]).is_absolute():
+            raise ValueError('recovery plan paths must be absolute')
+    closure=plan.get('closure')
+    if not isinstance(closure,list) or not closure:
+        raise ValueError('recovery plan needs the sealed recovery closure')
+    for item in closure:
+        if (not isinstance(item,dict) or set(item)!={'role','path','sha256'}
+                or not isinstance(item['role'],str) or not item['role']
+                or not isinstance(item['path'],str) or not Path(item['path']).is_absolute()
+                or not isinstance(item['sha256'],str) or not re.fullmatch(r'[0-9a-f]{64}',item['sha256'])):
+            raise ValueError('invalid recovery closure binding')
+    if not {'runtime','environment','tokenizer','task-assets','controls','sources'} <= {item['role'] for item in closure}:
+        raise ValueError('recovery closure lacks a required runtime, environment, tokenizer, task asset, control or source role')
+    inputs=plan.get('inputs')
+    if not isinstance(inputs,dict) or set(inputs)!={'train','foundation','held','ce'}:
+        raise ValueError('recovery plan needs exact train, foundation, held and CE bindings')
+    for ref in inputs.values():
+        if (not isinstance(ref,dict) or set(ref)!={'path','sha256'} or not isinstance(ref['path'],str)
+                or not Path(ref['path']).is_absolute() or not isinstance(ref['sha256'],str)
+                or not re.fullmatch(r'[0-9a-f]{64}',ref['sha256'])):
+            raise ValueError('invalid recovery input binding')
+    qualification=plan.get('restore_qualification')
+    if (not isinstance(qualification,dict) or set(qualification)!={'path','sha256'}
+            or not isinstance(qualification['path'],str) or not Path(qualification['path']).is_absolute()
+            or not isinstance(qualification['sha256'],str) or not re.fullmatch(r'[0-9a-f]{64}',qualification['sha256'])
+            or not any(item['role']=='controls' and item['path']==qualification['path']
+                       and item['sha256']==qualification['sha256'] for item in closure)):
+        raise ValueError('recovery plan needs an exact restore qualification binding')
+    controller=plan.get('controller')
+    if (not isinstance(controller,dict) or set(controller)!={'state_path','config'}
+            or not isinstance(controller['state_path'],str) or not Path(controller['state_path']).is_absolute()
+            or not isinstance(controller['config'],dict) or set(controller['config'])!={'path','sha256'}):
+        raise ValueError('recovery plan needs exact controller state and config bindings')
+    if not any(item['role']=='controls' and item['path']==controller['config']['path']
+               and item['sha256']==controller['config']['sha256'] for item in closure):
+        raise ValueError('recovery closure omits the actual controller config')
+
+
+def recovery_closure_identity(plan):
+    from ..common.hashing import canonical_json_sha256_hex
+    qualification=plan['restore_qualification']
+    values=[item for item in plan['closure'] if not (item['role']=='controls' and item['path']==qualification['path'] and item['sha256']==qualification['sha256'])]
+    return canonical_json_sha256_hex(sorted(values,key=lambda x:(x['role'],x['path'],x['sha256'])))
+
+
+def validate_restore_qualification(plan):
+    reference=plan['restore_qualification'];path=Path(reference['path']).resolve(strict=True)
+    if file_sha256(path)!=reference['sha256']:
+        raise ValueError('recovery restore qualification binding changed')
+    value=json.loads(path.read_text());checks=value.get('checks') or {}
+    required=('all_payloads_reread','source_closure_resolved','environment_imports','tokenizer_loaded',
+              'checkpoint_full_state_loaded','node_collector_imported')
+    evidence=value.get('evidence') or {}
+    available={(item['path'],item['sha256']) for item in plan['closure'] if item['role']=='controls'}
+    if (value.get('schema')!='natlang.local-recovery-restore-qualification/1'
+            or value.get('status')!='passed' or value.get('inputs')!=plan['inputs']
+            or value.get('closure_identity')!=recovery_closure_identity(plan)
+            or set(evidence)!=set(required) or any(checks.get(key) is not True for key in required)):
+        raise ValueError('recovery restore qualification does not bind the complete closure')
+    for ref in evidence.values():
+        if (not isinstance(ref,dict) or set(ref)!={'path','sha256'}
+                or (ref['path'],ref['sha256']) not in available
+                or file_sha256(Path(ref['path']).resolve(strict=True))!=ref['sha256']):
+            raise ValueError('recovery restore qualification evidence changed or is not retained')
+
+
+def validate_recovery_plan_dependencies(plan):
+    """Check current recipe's transitive graph and CE dependencies once per plan."""
+    from .recipe import native_source_dependencies
+    from .native_supervision import ce_policy_dependencies
+    from ..common.hashing import sha256_file_hex_cached
+    inputs=plan.get('inputs') or {}
+    available={(str(Path(item['path']).resolve()),item['sha256']) for item in plan.get('closure',[])}
+    required=set()
+    for role in ('train','foundation','held'):
+        ref=inputs[role];path=Path(ref['path']).resolve(strict=True)
+        if sha256_file_hex_cached(path)!=ref['sha256']:
+            raise ValueError('recovery input source digest changed')
+        required.add((str(path),ref['sha256']))
+        required.update((item['path'],item['sha256']) for item in native_source_dependencies(path))
+    required.update((item['path'],item['sha256']) for item in ce_policy_dependencies(inputs['ce']))
+    missing=required-available
+    if missing:
+        raise ValueError('recovery plan omits transitive source or CE dependencies: '+str(sorted(missing)[:3]))
+    validate_restore_qualification(plan)
+
+
+class RecoveryExportQueue:
+    """Journaled, single-pin full-state exporter for an explicitly bound recovery plan.
+
+    The plan names already-qualified immutable closure archives.  One slot inode
+    is pinned while copying; newer commits are coalesced as an inode identity and
+    pinned only after the current export is verified.  This object deliberately
+    never prunes independent exports or an unverified pin.
+    """
+    def __init__(self, slot, plan, *, copier=verified_copy, start_worker=True, plan_validator=validate_recovery_plan_dependencies, checkpoint_validator=validate_full_recovery_checkpoint):
+        import fcntl
+        from ..common.jsonio import write_json_durable
+        self.slot = Path(slot).resolve()
+        self.plan = dict(plan)
+        validate_recovery_plan_shape(self.plan)
+        self.inputs=self.plan['inputs']
+        self.plan_validator=plan_validator
+        self.plan_validator(self.plan)
+        self.destination = Path(self.plan['destination']).resolve()
+        self.directory = Path(self.plan['journal_directory']).resolve()
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.destination.mkdir(parents=True, exist_ok=True)
+        if self.directory.stat().st_dev != self.slot.parent.stat().st_dev:
+            raise ValueError('recovery journal and slot must share a filesystem for inode pinning')
+        if self.destination.stat().st_dev == self.slot.parent.stat().st_dev:
+            raise ValueError('independent recovery destination must use a separate filesystem')
+        self.plan_sha256 = hashlib.sha256(json.dumps(self.plan, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        self.state_path = self.directory/'recovery-export-journal.json'
+        self.pin = self.directory/'inflight-checkpoint.pt'
+        self._owner = (self.directory/'recovery-export-owner.lock').open('a+b')
+        fcntl.flock(self._owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self._write_json = write_json_durable
+        self.copier = copier
+        self.checkpoint_validator = checkpoint_validator
+        self.cond = threading.Condition()
+        self.closed = False
+        self.thread = None
+        if self.state_path.exists():
+            self.state = json.loads(self.state_path.read_text())
+            if (self.state.get('schema') != 'natlang.local-full-recovery-journal/1'
+                    or self.state.get('session') != self.plan['session']
+                    or self.state.get('slot') != str(self.slot)):
+                raise ValueError('recovery journal belongs to another session or slot')
+        else:
+            if self.pin.exists():
+                raise ValueError('unowned recovery pin requires reconciliation')
+            self.state = {'schema':'natlang.local-full-recovery-journal/1', 'session':self.plan['session'],
+                          'slot':str(self.slot), 'plan_sha256':self.plan_sha256, 'inflight':None, 'candidate':None, 'latest_verified':None, 'closure_cache':{}}
+            self._persist()
+        for record in (self.state.get('inflight'),self.state.get('candidate')):
+            if record and record.get('plan_sha256') != self._plan_digest(record.get('plan')):
+                raise ValueError('recovery journal plan snapshot changed')
+        if self.state['inflight']:
+            if self.state['inflight'].get('verified_receipt') and not self.pin.exists():
+                self._verify_verified_receipt(self.state['inflight'])
+                self.state['inflight']=None
+                self._persist()
+            else:
+                self._validate_pin(self.state['inflight'])
+        elif self.pin.exists():
+            candidate=self.state.get('candidate')
+            if candidate is None:
+                raise ValueError('recovery pin has no journal custody')
+            self._validate_pin(candidate)
+            self.state['inflight']=candidate
+            self.state['candidate']=None
+            self._persist()
+        self.state['latest_verified_status']=self._latest_status(self.state.get('latest_verified'))
+        self._persist()
+        if start_worker:
+            self.thread = threading.Thread(target=self._run, name='checkpoint-recovery-export', daemon=True)
+            self.thread.start()
+
+    @staticmethod
+    def _plan_digest(plan):
+        return hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+    def update_plan(self, plan):
+        """Install the controller-qualified next source closure without changing an in-flight copy."""
+        plan=json.loads(json.dumps(plan))
+        validate_recovery_plan_shape(plan)
+        if (plan.get('schema')!='natlang.local-full-recovery-plan/1'
+                or any(plan.get(k)!=self.plan.get(k) for k in ('session','destination','journal_directory'))
+                or plan['controller']['state_path']!=self.plan['controller']['state_path']
+                or not isinstance(plan.get('inputs'),dict) or set(plan['inputs'])!={'train','foundation','held','ce'}
+                or not {'runtime','environment','tokenizer','task-assets','controls','sources'} <= {x.get('role') for x in plan.get('closure',[]) if isinstance(x,dict)}):
+            raise ValueError('invalid recovery plan transition')
+        self.plan_validator(plan)
+        with self.cond:
+            self.plan=plan
+            self.inputs=plan['inputs']
+            self.plan_sha256=self._plan_digest(plan)
+            self.state['plan_sha256']=self.plan_sha256
+            self._persist()
+
+    def _persist(self):
+        self._write_json(self.state_path, self.state)
+
+    @staticmethod
+    def _stat5(path):
+        st=Path(path).stat()
+        return [st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
+
+    @staticmethod
+    def _stat(path):
+        st = Path(path).stat()
+        return {'device':st.st_dev, 'inode':st.st_ino, 'size':st.st_size, 'mtime_ns':st.st_mtime_ns}
+
+    def _latest_status(self, reference):
+        if not reference:return 'none'
+        try:
+            path=Path(reference['path']).resolve(strict=True)
+            if file_sha256(path)!=reference['sha256']:return 'unavailable'
+            receipt=json.loads(path.read_text())
+            if (receipt.get('schema')!='natlang.local-full-recovery-export/1'
+                    or receipt.get('full_state') is not True or receipt.get('independent_readback') is not True
+                    or self._plan_digest(receipt.get('plan'))!=receipt.get('plan_sha256')
+                    or receipt.get('checkpoint',{}).get('sha256')!=reference['checkpoint_sha256']):
+                return 'unavailable'
+            expected={(x['role'],str(Path(x['path']).resolve()),x['sha256']) for x in receipt['plan']['closure']}
+            controller=receipt['controller_state']
+            expected.add(('controller-state',str(Path(controller['path']).resolve()),controller['sha256']))
+            if {(x.get('role'),x.get('source'),x.get('sha256')) for x in receipt['closure']}!=expected:
+                return 'unavailable'
+            items=[receipt['checkpoint'],*receipt['closure']]
+            for item in items:
+                target=Path(item['path']).resolve(strict=True)
+                before=self._stat5(target)
+                if before!=item.get('file_identity'):
+                    if file_sha256(target)!=item['sha256'] or self._stat5(target)!=before:
+                        return 'unavailable'
+            return 'verified-current-identity'
+        except (OSError,ValueError,KeyError,TypeError):
+            return 'unavailable'
+
+    def _verify_verified_receipt(self, record):
+        reference=record['verified_receipt']
+        receipt_path=Path(reference['path']).resolve(strict=True)
+        if file_sha256(receipt_path)!=reference['sha256']:
+            raise ValueError('verified recovery receipt changed')
+        receipt=json.loads(receipt_path.read_text())
+        checkpoint=receipt.get('checkpoint') or {}
+        if (receipt.get('schema')!='natlang.local-full-recovery-export/1'
+                or receipt.get('session')!=self.plan['session']
+                or receipt.get('global_step')!=record['global_step']
+                or receipt.get('plan_sha256')!=record['plan_sha256']
+                or self._plan_digest(receipt.get('plan'))!=record['plan_sha256']
+                or receipt.get('full_state') is not True or receipt.get('independent_readback') is not True
+                or receipt.get('training_custody')!=record.get('custody')
+                or receipt.get('controller_state')!=record.get('controller_state')
+                or receipt.get('source_identity')!=record['identity']
+                or checkpoint.get('sha256')!=reference['checkpoint_sha256']
+                or checkpoint.get('sha256')!=record['checkpoint_sha256']
+                or file_sha256(Path(checkpoint.get('path','')).resolve(strict=True))!=checkpoint.get('sha256')):
+            raise ValueError('verified recovery receipt does not bind this export')
+        observed=receipt.get('closure')
+        expected={(x['role'],str(Path(x['path']).resolve()),x['sha256']) for x in record['plan']['closure']}
+        controller=record['controller_state']
+        expected.add(('controller-state',str(Path(controller['path']).resolve()),controller['sha256']))
+        if (not isinstance(observed,list) or {(x.get('role'),x.get('source'),x.get('sha256')) for x in observed}!=expected
+                or any(file_sha256(Path(x['path']).resolve(strict=True))!=x['sha256'] for x in observed)):
+            raise ValueError('verified recovery closure is missing or changed')
+
+    def _validate_pin(self, record):
+        if self.pin.is_symlink() or not self.pin.is_file() or self._stat(self.pin) != record['identity']:
+            raise ValueError('recovery pin inode or bytes identity changed')
+
+    def _pin_candidate(self):
+        candidate = self.state.get('candidate')
+        if not candidate:
+            return
+        if not self.slot.is_file() or self._stat(self.slot) != candidate['identity']:
+            self.state['candidate'] = None
+            self._persist()
+            return
+        os.link(self.slot, self.pin)
+        _fsync_dir(self.directory)
+        try:
+            self._validate_pin(candidate)
+            if self._stat(self.slot) != candidate['identity']:
+                raise ValueError('rolling checkpoint changed while creating recovery pin')
+            self.state['inflight'] = candidate
+            self.state['candidate'] = None
+            self._persist()
+        except BaseException:
+            self.pin.unlink(missing_ok=True)
+            _fsync_dir(self.directory)
+            raise
+
+    def _capture_controller(self, plan=None):
+        from ..common.jsonio import write_bytes_durable
+        path=Path((plan or self.plan)['controller']['state_path']).resolve(strict=True)
+        before=self._stat5(path);data=path.read_bytes()
+        if self._stat5(path)!=before:
+            raise ValueError('controller state changed during recovery capture')
+        value=json.loads(data)
+        if not isinstance(value,dict) or any(key not in value for key in ('phase','checkpoint','round','offset','trained_rounds')):
+            raise ValueError('controller recovery state lacks operational custody')
+        digest=hashlib.sha256(data).hexdigest()
+        target=self.directory/'controller-states'/f'{digest}.json'
+        target.parent.mkdir(parents=True,exist_ok=True)
+        if target.exists():
+            if file_sha256(target)!=digest:raise ValueError('cached controller snapshot differs')
+        else:write_bytes_durable(target,data)
+        return {'path':str(target),'sha256':digest,'observed_path':str(path),'phase':value['phase'],
+                'round':value['round'],'offset':value['offset'],'trained_rounds':value['trained_rounds']}
+
+    def submit(self, path, state, event):
+        if Path(path).resolve() != self.slot or not event.get('previous_preserved_until_replace'):
+            raise ValueError('recovery submission is not this committed rolling checkpoint')
+        with self.cond:
+            active_plan=json.loads(json.dumps(self.plan))
+            active_plan_sha=self.plan_sha256
+        inputs=active_plan['inputs']
+        custody=recovery_training_custody(state)
+        training = state.get('training') or {}
+        if not training.get('optimizer') or not training.get('rng'):
+            raise ValueError('recovery export requires full optimizer and RNG state')
+        receipts=training.get('source_receipts')
+        options=training.get('options') or {}
+        if not isinstance(receipts,list) or len(receipts)<2:
+            raise ValueError('recovery checkpoint lacks actual source receipts')
+        for index,role in enumerate(('train','held')):
+            expected=inputs[role]
+            actual=receipts[index]
+            if any(actual.get(key)!=expected[key] for key in ('path','sha256')):
+                raise ValueError('recovery checkpoint source binding differs from plan')
+        if options.get('ce_supervision_policy_binding') != inputs['ce']:
+            raise ValueError('recovery checkpoint CE binding differs from plan')
+        for key,role in (('native_graphs','train'),('foundation_native_graphs','foundation'),('held_native_graphs','held')):
+            if options.get(key)!=inputs[role]['path']:
+                raise ValueError('recovery checkpoint source role differs from plan')
+        available={(item.get('path'),item.get('sha256')) for item in active_plan['closure']}
+        required={(ref['path'],ref['sha256']) for ref in inputs.values()}
+        for receipt in receipts[:2]:
+            leaves=receipt.get('sources')
+            if not isinstance(leaves,list):
+                raise ValueError('recovery checkpoint lacks source leaf inventory')
+            required.update((item.get('path'),item.get('sha256')) for item in leaves)
+        if not required <= available:
+            raise ValueError('recovery closure omits actual source or CE dependencies')
+        step = training.get('global_step')
+        if type(step) is not int:
+            raise ValueError('recovery export requires an earned global step')
+        controller_state=self._capture_controller(active_plan)
+        from ..common.checkpoint_digest import verified_checkpoint_digest
+        source_before=self._stat5(self.slot)
+        checkpoint_sha256=verified_checkpoint_digest(self.slot)
+        if self._stat5(self.slot)!=source_before:
+            raise ValueError('committed checkpoint changed during recovery binding')
+        with self.cond:
+            if self.plan_sha256!=active_plan_sha:
+                raise ValueError('recovery plan changed while binding checkpoint')
+            prior=[x['global_step'] for x in (self.state.get('candidate'),self.state.get('inflight'),self.state.get('latest_verified')) if x]
+            if prior and step < max(prior):
+                raise ValueError('recovery checkpoint steps must advance')
+            self.state['candidate'] = {'identity':self._stat(self.slot), 'global_step':step,
+                                       'plan':active_plan, 'plan_sha256':active_plan_sha, 'custody':custody,
+                                       'checkpoint_sha256':checkpoint_sha256,'controller_state':controller_state}
+            self._persist()
+            if self.state['inflight'] is None:
+                self._pin_candidate()
+            self.cond.notify_all()
+
+    def _copy_closure(self, plan, controller_state=None):
+        result=[]
+        closure=list(plan['closure'])
+        if controller_state:
+            closure.append({'role':'controller-state','path':controller_state['path'],'sha256':controller_state['sha256']})
+        for item in closure:
+            if set(item) != {'role','path','sha256'} or not isinstance(item['role'], str):
+                raise ValueError('invalid recovery closure binding')
+            source=Path(item['path']).resolve(strict=True)
+            digest=item['sha256']
+            if not isinstance(digest,str) or len(digest)!=64 or any(x not in '0123456789abcdef' for x in digest):
+                raise ValueError('invalid recovery closure digest')
+            target=self.destination/'closure'/digest
+            cache=self.state.setdefault('closure_cache',{})
+            if target.exists():
+                st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
+                if cache.get(digest)!=identity and file_sha256(target)!=digest:
+                    raise ValueError('existing independent recovery closure differs')
+            else:
+                target.parent.mkdir(parents=True,exist_ok=True)
+                copied=self.copier(source,target)
+                if copied['sha256'] != digest:
+                    raise ValueError('recovery closure source differs from declared identity')
+                st=target.stat();identity=[st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns]
+            with self.cond:
+                cache[digest]=identity
+                self._persist()
+            result.append({'role':item['role'],'source':str(source),'sha256':digest,'path':str(target),'file_identity':identity})
+        return result
+
+    def _leased(self, record):
+        from scripts.coreweave.retention_leases import leased_roles
+        leases=self.directory/'standalone-retention-consumer-leases.json'
+        role=f"local-recovery-pin:{self.plan['session']}:{record['global_step']}:{record['identity']['device']}:{record['identity']['inode']}"
+        return role in leased_roles(leases)
+
+    def _export_one(self):
+        import fcntl
+        with self.cond:
+            if self.state['inflight'] is None:
+                self._pin_candidate()
+            record=self.state['inflight']
+        if record is None:
+            return False
+        self._validate_pin(record)
+        if record.get('plan_sha256') != self._plan_digest(record.get('plan')):
+            raise ValueError('recovery export plan snapshot changed')
+        closure=self._copy_closure(record['plan'],record['controller_state'])
+        stage=self.destination/'checkpoints'/f"{self.plan['session']}-{record['global_step']}-{record['identity']['device']}-{record['identity']['inode']}"
+        stage.mkdir(parents=True,exist_ok=True)
+        target=stage/'checkpoint.pt'
+        if target.exists():
+            actual=file_sha256(target)
+            if actual != file_sha256(self.pin):
+                raise ValueError('existing recovery checkpoint differs')
+            copied={'sha256':actual,'bytes':target.stat().st_size}
+        else:
+            copied=self.copier(self.pin,target)
+        self._validate_pin(record)
+        if copied['sha256']!=record['checkpoint_sha256']:
+            raise ValueError('independent recovery bytes differ from committed checkpoint digest')
+        self.checkpoint_validator(target, record['custody'])
+        target_identity=self._stat5(target)
+        if file_sha256(target)!=copied['sha256'] or self._stat5(target)!=target_identity:
+            raise ValueError('independent checkpoint changed before retirement admission')
+        receipt={'schema':'natlang.local-full-recovery-export/1','session':self.plan['session'],
+                 'global_step':record['global_step'],'source_identity':record['identity'],'training_custody':record['custody'],
+                 'controller_state':record['controller_state'],
+                 'checkpoint':{'path':str(target),'sha256':copied['sha256'],'bytes':copied['bytes'],'file_identity':target_identity},
+                 'closure':closure,'plan':record['plan'],'plan_sha256':record['plan_sha256'],'inputs':record['plan']['inputs'],'full_state':True,'independent_readback':True}
+        receipt_path=stage/'receipt.json'
+        self._write_json(receipt_path,receipt)
+        checked={str(target):target_identity,str(receipt_path):self._stat5(receipt_path)}
+        checked.update({item['path']:item['file_identity'] for item in closure})
+        # Registration and retirement share the same lock used by managed consumers.
+        with (self.directory/'standalone-cloud-retention.lock').open('a+b') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX)
+            if any(self._stat5(path)!=identity for path,identity in checked.items()):
+                raise RuntimeError('recovery dependency changed during retirement admission')
+            if self._leased(record):
+                raise RuntimeError('recovery pin has an active consumer lease')
+            retirement_path=self.directory/'local-recovery-retirement.json'
+            retirement=(json.loads(retirement_path.read_text()) if retirement_path.exists()
+                        else {'retired_roles':[],'operations':[]})
+            role=f"local-recovery-pin:{self.plan['session']}:{record['global_step']}:{record['identity']['device']}:{record['identity']['inode']}"
+            if role not in retirement['retired_roles']:
+                retirement['retired_roles'].append(role)
+                self._write_json(retirement_path,retirement)
+            with self.cond:
+                self._validate_pin(record)
+                self.state['previous_verified']=self.state.get('latest_verified')
+                self.state['latest_verified']={'path':str(receipt_path),'sha256':file_sha256(receipt_path),
+                                                'checkpoint_sha256':copied['sha256'],'global_step':record['global_step']}
+                self.state['latest_verified_status']='verified-current-identity'
+                self.state['inflight']['verified_receipt']=self.state['latest_verified']
+                self._persist()
+                self.pin.unlink()
+                _fsync_dir(self.directory)
+                self.state['inflight']=None
+                self._persist()
+                self._pin_candidate()
+        return True
+
+    def _run(self):
+        while True:
+            with self.cond:
+                while not self.closed and not self.state['inflight'] and not self.state['candidate']:
+                    self.cond.wait()
+                if self.closed:
+                    return
+            try:
+                self._export_one()
+            except Exception as error:
+                with self.cond:
+                    self.state['last_error']={'type':type(error).__name__,'message':str(error)[:500]}
+                    self._persist()
+                    self.cond.wait(timeout=30)
+
+    def close(self):
+        with self.cond:
+            self.closed=True
+            self.cond.notify_all()
+        if self.thread is not None:
+            self.thread.join()
+        self._owner.close()
+
+
+def recovery_queue_for(slot, plan_path):
+    """Share the default recovery owner across policies in the same process."""
+    path=Path(plan_path).resolve(strict=True)
+    before=path.stat();data=path.read_bytes();after=path.stat()
+    if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns):
+        raise ValueError('recovery plan changed while reading')
+    plan=json.loads(data)
+    key=str(Path(slot).resolve())
+    with _RECOVERY_QUEUES_GUARD:
+        queue=_RECOVERY_QUEUES.get(key)
+        if queue is None:
+            queue=RecoveryExportQueue(slot,plan,copier=child_copy)
+            _RECOVERY_QUEUES[key]=queue
+        elif queue.plan_sha256!=queue._plan_digest(plan):
+            queue.update_plan(plan)
+        return queue
