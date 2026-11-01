@@ -133,8 +133,10 @@ def test_explicit_preference_capacity_survives_emitted_command_and_prepared_requ
                   **({'objective_spec':'objective'}if kind=='native_offline_preference'else{})},
         'parameters':{'epochs':1,'checkpoint_every':4,'eval_every':4,'memory_qualification':qualification}}
     recipe=tmp_path/'recipe.json';recipe.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1',
-        'id':'qualification-forwarding','input_bindings':{name:resident.binding(path)for name,path in
-            [('train',train),('held',held),('objective',objective_path)]},'stages':[stage]}))
+        'id':'qualification-forwarding','identity_qualification':'native_state_runtime_qualified',
+        'input_bindings':{name:resident.binding(path)for name,path in
+            [('train',train),('held',held),*([('objective',objective_path)]
+                if kind=='native_offline_preference' else [])]},'stages':[stage]}))
     config={'native_state':True,'production_recipe':str(recipe),'production_stage':stage['id'],
         'recipe_lineage_sha256':'a'*64,'seed_command':['python','-m','natlang_neuralese.train.native_state_sft',
             '--native-graphs','{seed_native_graphs}','--out','{learner_out}','{seed_trainer_args}']}

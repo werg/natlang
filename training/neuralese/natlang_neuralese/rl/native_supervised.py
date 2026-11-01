@@ -468,6 +468,8 @@ def execute(config,state,state_path,control):
                 and (retry.get('communication_foundation') or {}).get('complete')
                 and retry.get('foundation_ready') is not True):
             return state
+    from .native_supervised_resident import ensure_plan
+    ensure_plan(config)
     directory=Path(config['out'])/'learner'
     report_path=directory/'report.json'
     selected_parent, rolling = rolling_resume_parent(config, state, directory)
