@@ -4,6 +4,38 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Recovery, real guidance and data quality, November 1, 01:38 CET
+
+Full checkpoint56 export is now independently read back on the external
+filesystem:15,295,417,890bytes, SHA423eca8466e554b62456335e1c98462d31e36a708a4b17bb69de1a2740ec1e63.
+Receipt: `ops/checkpoint56-external-export-1101.json`. After checking no active
+process/container/consumer lease depended on peer checkpoint53, its superseded
+15.3GB copy was retired; peer54/55 and goodSD52 remain. A resumable56 transfer
+to Pop is now active (`checkpoint56-peer-export-1101`), with final peer readback
+still required. Cold file sharing completed across26 inactive runtime snapshots;
+paths/content remain, internal free space is about56GiB. Receipt:
+`ops/cold-runtime-file-sharing-1101.json`.
+
+Actual terminal capture inspection exposed why earlier updates were outcome-only:
+backbone production explicitly set its guidance writer to `off`, and the six
+active checkpoint55 objective episodes all recorded refusal `the actor recorded
+no guidance for this episode`. Request fields alone did not establish captured
+guidance. Commit8a1a71738 enables the existing native writer for both roles while
+retaining crisp selection; role controls and frozen Node guidance tests passed.
+Retry3 uses that runtime and is generating fresh checkpoint56 trajectories.
+Do not credit privileged JOLT+ until actual authored blocks survive conversion
+and the learner computes its privileged terms. No new SGD beyond56 is claimed.
+
+Luna sourcev25 completed27 sampled action turns with17 named invocations and two
+authenticated typed `FaultDiagnosis` teacher-text writes/11reads. Two authorized
+repairs succeeded and fresh reads verified active SIM/5G; independent Sol
+judgment accepted. Manual review found its final diagnosis still recommended
+the already-completed SIM repair. The successful operational trace is preserved,
+not admitted wholesale as positive SFT. Sourcev26 refreshes diagnosis using
+post-effect observations and is undergoing intake before a fresh sampled run.
+Teacher-text provenance remains explicit; conversion must establish native
+producer/consumer training custody rather than relabeling the teacher native.
+
 ## Supervision and integration, November 1, 01:25 CET
 
 The matched-current-prompt Pop54 case32 check completed with an incorrect empty
