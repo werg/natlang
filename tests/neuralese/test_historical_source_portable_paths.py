@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -52,11 +53,25 @@ def test_node_uses_explicit_setting_or_path_and_has_no_machine_fallback(tmp_path
 
 
 def test_changed_helpers_contain_no_workstation_specific_executable_or_storage_paths():
+    machine_data_path = re.compile(
+        r'(?<![A-Za-z0-9._~-])/(?:home|Users|mnt|media|Volumes|data|scratch)/'
+        r'[A-Za-z0-9._~-]+(?:/|(?=[\s\'\"),;]))'
+    )
+    for path in (
+        '/home/alice/project/file.py',
+        '/Users/bob/project/file.py',
+        '/mnt/datasets/project/file.py',
+        '/Volumes/archive/project/file.py',
+        '/scratch/job-42/output.json',
+    ):
+        assert machine_data_path.search(path)
+    for portable in ('#!/usr/bin/env python3', 'https://example.org/data/file', 'training/neuralese/file.py'):
+        assert not machine_data_path.search(portable)
+
     for name in (
         'build_historical_luna_full_episode_graphs.py',
         'build_luna_exact_native_conversion.py',
         'historical_provider_source.py',
     ):
         source = (ROOT / 'scripts' / 'neuralese_data' / name).read_text()
-        assert '/home/werg/' not in source
-        assert '/mnt/external/' not in source
+        assert not machine_data_path.search(source), f'{name} contains a machine-specific user or storage path'
