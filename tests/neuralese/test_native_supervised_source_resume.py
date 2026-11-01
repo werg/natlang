@@ -164,3 +164,20 @@ def test_actual_partial_trainer_retry_updates_once_and_retains_exact_source_cred
 
 # Written for one optimizer update per packed batch; accumulation is tested in test_native_update_accumulation.py.
 pytestmark = pytest.mark.usefixtures('per_batch_native_updates')
+
+
+@pytest.mark.parametrize('new_source',[False,True])
+def test_rl_resume_uses_exact_carried_sft_receipts_without_credit_or_parent_changes(tmp_path,new_source):
+    config,values,directory,state,targets=fixture(tmp_path)
+    carried=copy.deepcopy(state['training'])
+    state['training'].update(options={'stage_id':'outcome-learning'},identity={'objective':{'kind':'native-policy'}},
+        source_receipts=[binding(p) for p in targets[2:]],sft_progress={'full':carried})
+    torch.save(state,directory/'checkpoint.pt');raw=(directory/'checkpoint.pt').read_bytes()
+    if new_source:config['seed_native_graphs']=str(targets[2])
+    command,reuse=supervised._resume_source_arguments(config,directory,values)
+    assert reuse['source_frame']=='carried-sft-progress'
+    assert set(reuse['already_current_sources'])==({'continued_held_native_graphs'} if new_source else
+        {'continued_native_graphs','continued_held_native_graphs'})
+    assert ('--continued-native-graphs' in command) is new_source
+    assert (directory/'checkpoint.pt').read_bytes()==raw
+    assert carried['exposure_counts']=={'row':17}

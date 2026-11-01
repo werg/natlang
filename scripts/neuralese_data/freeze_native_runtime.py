@@ -67,6 +67,8 @@ def main():
                         help='JSON list of exact source, control and prompt fixture path/SHA bindings')
     parser.add_argument('--node-dependencies', type=Path, default=Path('node_modules'),
                         help='installed Node dependency closure used by the frozen collector')
+    parser.add_argument('--file-pool', type=Path,
+                        help='alternate immutable pool; use an isolated pool while existing snapshots have checked readers')
     args=parser.parse_args()
     bindings=json.loads(args.control_bindings.read_text())
     if not isinstance(bindings,list) or not bindings:
@@ -87,7 +89,7 @@ def main():
     receipt['node_build'] = node_build
     receipt['commit']=subprocess.check_output(['git','rev-parse',args.commit],text=True).strip()
     (args.out/'runtime-input-closure.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
-    storage=seal_runtime_tree(args.out)
+    storage=seal_runtime_tree(args.out,pool=args.file_pool)
     storage_receipt=args.out.with_name(args.out.name+'.storage.json')
     storage_receipt.write_text(json.dumps(storage,indent=2,sort_keys=True)+'\n')
     print(json.dumps({'runtime':str(args.out.resolve()),'receipt':str((args.out/'runtime-input-closure.json').resolve()),

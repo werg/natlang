@@ -202,9 +202,18 @@ def _resume_source_arguments(config,directory,values,*,parameters=None):
     training=require_raw_training(saved)
     parameters=config['trainer_parameters'] if parameters is None else parameters
     stage=parameters.get('stage_id',config['production_stage'])
+    source_frame='current-training'
     if ((training.get('options') or {}).get('stage_id')!=stage
             or (training.get('identity') or {}).get('objective') is not None):
-        return command,None
+        # Outcome learning wraps, but does not replace, the outstanding SFT
+        # stage. Its own rollout receipts cannot describe that stage's sources.
+        carried=(training.get('sft_progress') or {}).get(stage)
+        if (not isinstance(carried,dict)
+                or (carried.get('options') or {}).get('stage_id')!=stage
+                or (carried.get('identity') or {}).get('objective') is not None):
+            return command,None
+        training=carried
+        source_frame='carried-sft-progress'
     receipts=training.get('source_receipts') or []
     if len(receipts)<2:raise ValueError('supervised retry checkpoint lost its actual source receipts')
     resident_directory=parameters.get('resident_data_directory',config.get('resident_data_directory'))
@@ -228,7 +237,8 @@ def _resume_source_arguments(config,directory,values,*,parameters=None):
         omitted[role]=target
     if binding(checkpoint)!=reference:raise ValueError('supervised retry checkpoint changed during source verification')
     if not omitted:return command,None
-    return command,{'checkpoint':reference,'stage_id':stage,'already_current_sources':omitted}
+    return command,{'checkpoint':reference,'stage_id':stage,'source_frame':source_frame,
+                    'already_current_sources':omitted}
 
 
 def prepare_seed_command(config,directory,values,state,state_path,*,parameters=None):
