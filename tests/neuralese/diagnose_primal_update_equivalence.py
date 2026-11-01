@@ -58,7 +58,8 @@ def run(kind):
           'post_accumulate_events':differences(events[1],events[0],'gradients'),
           'cpu_rng_equal':torch.equal(torch.get_rng_state(),cpu_after),
           'cuda_rng_equal':torch.equal(torch.cuda.get_rng_state(),gpu_after),
-          'physical_tokens':[ref.get('packed_physical_tokens'),shared.get('packed_physical_tokens')]})
+          'physical_tokens':[[item.get('packed_physical_tokens') for item in details]
+                             for details in (ref,shared)]})
     for h in handles:h.remove()
     return steps
 
