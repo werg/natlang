@@ -2,6 +2,7 @@
 """Compile a complete authenticated Luna episode into a native training graph, without model execution."""
 import argparse,json,os,sys
 from pathlib import Path
+sys.dont_write_bytecode=True
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT));sys.path.insert(0,str(ROOT/'training/neuralese'))
 
