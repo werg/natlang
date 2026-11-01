@@ -289,6 +289,14 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None, verification_ro
     spool_root = Path(plan.get('journal_spool_root', default_spool_root)).expanduser().resolve(strict=False)
     if spool_root != default_spool_root:
         raise ValueError('journal_spool_root must be the campaign-specific directory under configured data_nvme/natlang-teacher-journal-spool')
+    expected_spool_policy = {'schema': 'natlang.teacher_journal_spool_policy/1',
+        'per_case_bytes': JOURNAL_SPOOL_CASE_BYTES,
+        'active_case_credits': JOURNAL_SPOOL_ACTIVE_CASE_LIMIT,
+        'aggregate_bytes': JOURNAL_SPOOL_CASE_BYTES * JOURNAL_SPOOL_ACTIVE_CASE_LIMIT,
+        'free_floor_bytes': JOURNAL_SPOOL_FREE_FLOOR_BYTES,
+        'publication': 'fsync+sha256-verified into external jobs directory before local retirement'}
+    if plan.get('journal_spool_policy') != expected_spool_policy:
+        raise ValueError('teacher plan must pin the current bounded hot-journal spool policy')
     if plan.get('provider') != 'openai-codex' or plan.get('model_id') != 'gpt-6-luna':
         raise ValueError('This dispatcher is limited to reviewed Luna requests')
     if plan.get('model_concurrency') != 1:

@@ -508,6 +508,16 @@ def build_plan(*, source: Path, verification: Path, runtime: Path, authority: Pa
             'campaign_resume': 'explicit only for unclaimed cases; uncertain claims are terminalized',
         },
         'prompt_rendering': 'full', 'text_neuralese_emulation': True,
+        'journal_spool_root': str(dispatcher.machine_resolve(
+            'data_nvme', 'natlang-teacher-journal-spool', campaign_id).expanduser().resolve(strict=False)),
+        'journal_spool_policy': {
+            'schema': 'natlang.teacher_journal_spool_policy/1',
+            'per_case_bytes': dispatcher.JOURNAL_SPOOL_CASE_BYTES,
+            'active_case_credits': dispatcher.JOURNAL_SPOOL_ACTIVE_CASE_LIMIT,
+            'aggregate_bytes': dispatcher.JOURNAL_SPOOL_CASE_BYTES * dispatcher.JOURNAL_SPOOL_ACTIVE_CASE_LIMIT,
+            'free_floor_bytes': dispatcher.JOURNAL_SPOOL_FREE_FLOOR_BYTES,
+            'publication': 'fsync+sha256-verified into external jobs directory before local retirement',
+        },
         'max_transport_retries': 1, 'max_turns': max_turns, 'max_model_requests': max_model_requests,
         # Hosted teachers author text-backed Neuralese. Native student KV is
         # reconstructed during graph conversion/training, never claimed here.

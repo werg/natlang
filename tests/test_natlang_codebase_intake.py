@@ -466,6 +466,11 @@ def test_plan_builder_emits_unapproved_full_prompt_plan_and_pins_inventory(tmp_p
     assert (plan['max_turns'], plan['max_model_requests'], plan['case_seconds']) == (12, 24, 300)
     assert plan['resource_policy']['resumable'] is False
     assert plan['resource_policy']['backfill'] is False
+    assert plan['journal_spool_root'] == str(dispatcher.machine_resolve(
+        'data_nvme', 'natlang-teacher-journal-spool', 'test-codebase-plan-v1').resolve())
+    assert plan['journal_spool_policy']['per_case_bytes'] == 256 * 1024 * 1024
+    assert plan['journal_spool_policy']['active_case_credits'] == 6
+    assert plan['journal_spool_policy']['free_floor_bytes'] == 40 * 1024 * 1024 * 1024
     assert '--no-resumable' in report['dispatch_command_after_review']
     assert len(plan['cases']) == 2 and len(calls) == len(rows)
     assert plan['source_inventory']['sha256']

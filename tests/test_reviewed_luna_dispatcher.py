@@ -36,6 +36,14 @@ def reviewed_plan(tmp_path):
         'root_approved': True,
         'campaign_id': 'dispatch-test-v1',
         'journal_spool_root': str(dispatcher.machine_resolve('data_nvme', 'natlang-teacher-journal-spool', 'dispatch-test-v1')),
+        'journal_spool_policy': {
+            'schema': 'natlang.teacher_journal_spool_policy/1',
+            'per_case_bytes': dispatcher.JOURNAL_SPOOL_CASE_BYTES,
+            'active_case_credits': dispatcher.JOURNAL_SPOOL_ACTIVE_CASE_LIMIT,
+            'aggregate_bytes': dispatcher.JOURNAL_SPOOL_CASE_BYTES * dispatcher.JOURNAL_SPOOL_ACTIVE_CASE_LIMIT,
+            'free_floor_bytes': dispatcher.JOURNAL_SPOOL_FREE_FLOOR_BYTES,
+            'publication': 'fsync+sha256-verified into external jobs directory before local retirement',
+        },
         'cwd': str(ROOT),
         'supervisor': str(dispatcher.RUNNER),
         'dispatcher_sha256': dispatcher.digest(dispatcher.DISPATCHER),
@@ -106,6 +114,14 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
     entry, *_ = dispatcher._claim_queue(plan, identity, 1, identity['cases'][0])
     assert entry['prompt_rendering'] == 'full'
     assert entry['campaign_id'] == plan['campaign_id']
+
+
+def test_reviewed_plan_requires_the_current_hot_spool_policy(reviewed_plan):
+    path, _, _, plan = reviewed_plan
+    plan['journal_spool_policy']['per_case_bytes'] -= 1
+    path.write_text(json.dumps(plan, sort_keys=True))
+    with pytest.raises(ValueError, match='bounded hot-journal spool policy'):
+        dispatcher.validate_plan(path, dispatcher.digest(path))
 
 
 @pytest.mark.parametrize('policy', [None, {},
