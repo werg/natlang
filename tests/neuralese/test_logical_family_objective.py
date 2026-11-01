@@ -7,6 +7,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'neural
 from build_logical_family_objective import family_of  # noqa: E402
 
 
+def test_new_factor_census_preserves_actual_role_boundaries_by_default():
+    from build_logical_family_objective import prepare_factor_boundaries
+    import pytest
+    factor = {'row_kind':'source_pairing', 'node_name':'producer', 'target_sha256':'a'*64, 'scale':.01}
+    ce = {'objective':{'decision_factors':[factor]}, 'decision_factor_evidence':{'factors':[{'spec':factor}]}}
+    result = prepare_factor_boundaries(ce, (60,61,62,63))
+    assert result['objective']['decision_factors'][0]['native_role_ids'] == [60,61,62,63]
+    assert result['decision_factor_evidence']['factors'][0]['spec'] == result['objective']['decision_factors'][0]
+    assert ce['objective']['decision_factors'][0] == factor
+    assert prepare_factor_boundaries(ce, (60,61,62,63), preserve=False) == ce
+    with pytest.raises(ValueError, match='boundary IDs differ'):
+        prepare_factor_boundaries(result, (64,65,66,67))
+
+
 def test_cohort_leaves_map_to_logical_families():
     assert family_of(Path('c/t1-communication-03.jsonl.zst')) == 'native-communication'
     assert family_of(Path('c/t5-broad-00.jsonl.zst')) == 'coding'

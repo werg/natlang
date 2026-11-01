@@ -241,6 +241,55 @@ def test_exact_source_pairing_decision_factor_reduces_only_the_bound_target_span
                                      'target_sha256': producer_sig, 'scale': 0.}])
 
 
+def test_versioned_factor_preserves_only_eligible_native_boundaries_and_reports_actual_mass():
+    native = [60, 61, 62, 63]
+    producer = turn(USER, [40]) + turn(ASSISTANT, [60, 41, 61, 42])
+    begin = len(producer)-5
+    raw = [0.] * begin + [1.] * 5
+    host = turn(USER, [40]) + turn(ASSISTANT, [60, 43, 61])
+    row = {'schema': SCHEMA, 'id': 'factor-native', 'split': 'train', 'source_groups': ['group'],
+           'tokenizer_fingerprint': FP, 'source_pairing': {'edge_id': 'bound'}, 'nodes': [
+               {'name': 'producer', 'token_ids': producer, 'target_weights': raw},
+               {'name': 'host', 'token_ids': host, 'target_weights': [0.] * len(host)}]}
+    sig, _ = own._raw_target_span_signature(producer, raw)
+    factor = {'row_kind': 'source_pairing', 'node_name': 'producer', 'target_sha256': sig, 'scale': .01}
+    baseline, _ = own.graph_weights(row, objective(mass='token'))
+    legacy, _ = own.graph_weights(row, objective(mass='token', decision_factors=[factor]))
+    spec = {**factor, 'native_boundary_policy': 'preserve-native-role-boundaries/1', 'native_role_ids': native}
+    report = {}
+    actual, _ = own.graph_weights(row, objective(mass='token', decision_factors=[spec]), factor_report=report)
+    for i, token in enumerate(producer):
+        assert actual[i] == pytest.approx(baseline[i] if token in native else baseline[i] * .01)
+        assert legacy[i] == pytest.approx(baseline[i] * .01)
+    assert all(value == 0 for value in actual[len(producer):])
+    summary = next(iter(report.values()))
+    assert summary['own_output_mass_after'] == pytest.approx(sum(actual[:len(producer)]))
+    assert summary['own_output_mass_after'] > summary['own_output_mass_before'] * .01
+    import importlib.util
+    from pathlib import Path
+    spec_path = Path(__file__).resolve().parents[2] / 'scripts/neuralese_data/build_logical_family_objective.py'
+    module_spec = importlib.util.spec_from_file_location('factor_census_builder', spec_path)
+    builder = importlib.util.module_from_spec(module_spec); module_spec.loader.exec_module(builder)
+    mass = {'native': sum(actual), 'ordinary': 20.}
+    scales, _ = builder.capped_scales({'native': .4, 'ordinary': .6}, mass, 8.)
+    assert max(scales.values()) <= 8.
+    assert sum(scales[key] * mass[key] for key in mass) == pytest.approx(sum(mass.values()))
+    with pytest.raises(ValueError, match='native boundary policy'):
+        objective(decision_factors=[{**spec, 'native_role_ids': [60, 60, 62, 63]}])
+
+
+def test_source_rejects_preserved_boundaries_for_wrong_model_roles():
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    source = NativeGraphSource.__new__(NativeGraphSource)
+    source.role_ids = (60, 61, 62, 63)
+    factor = {'row_kind':'source_pairing', 'node_name':'producer', 'target_sha256':'a'*64, 'scale':.01,
+              'native_boundary_policy':'preserve-native-role-boundaries/1', 'native_role_ids':[60,61,62,63]}
+    source.set_ce_policy({'objective':objective(decision_factors=[factor])})
+    source.role_ids = (64, 65, 66, 67)
+    with pytest.raises(ValueError, match='role IDs differ'):
+        source.set_ce_policy({'objective':objective(decision_factors=[factor])})
+
+
 def test_family_scales_equalize_families_with_a_bound_and_unit_mean():
     entries = [{'id': f'a{i}', 'groups': ['fam:a:x']} for i in range(8)] + \
               [{'id': 'b0', 'groups': ['fam:b:y']}, {'id': 'c0', 'groups': ['other']}]

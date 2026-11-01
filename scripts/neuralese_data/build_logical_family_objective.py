@@ -213,6 +213,24 @@ def _large_leaf_mass(index, source, policy_path, workers):
     if sha256_file_hex(path)!=source['sha256']:raise ValueError(f'leaf changed while scanning: {path}')
     return index,result
 
+def prepare_factor_boundaries(ce, role_ids, *, preserve=True):
+    """Make this new objective explicit; old recorded policies remain unchanged."""
+    result = json.loads(json.dumps(ce))
+    ids = list(role_ids)
+    if len(ids) != 4 or any(type(token) is not int or token < 0 for token in ids) or len(set(ids)) != 4:
+        raise ValueError('factor census requires four distinct actual native role IDs')
+    specs = result.get('objective', {}).get('decision_factors', [])
+    evidence = result.get('decision_factor_evidence', {}).get('factors', [])
+    for factor in [*specs, *(entry['spec'] for entry in evidence)]:
+        existing = factor.get('native_boundary_policy')
+        if existing is not None:
+            if existing != 'preserve-native-role-boundaries/1' or factor.get('native_role_ids') != ids:
+                raise ValueError('decision factor boundary IDs differ from actual native role IDs')
+        elif preserve:
+            factor.update(native_boundary_policy='preserve-native-role-boundaries/1', native_role_ids=ids)
+    return result
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--train', required=True, help='mixture train-sources.json')
@@ -221,6 +239,8 @@ def main():
     ap.add_argument('--targets', required=True, help='mixture policy declaring objective.logical_family_targets')
     ap.add_argument('--fingerprint', required=True)
     ap.add_argument('--role-ids', type=int, nargs='+', required=True)
+    ap.add_argument('--legacy-decision-factor-boundaries', action='store_true',
+                    help='retain old multiply-all decision factors for historical reconstruction')
     ap.add_argument('--family-map', help='full source-bound natlang.logical-family-map/1 for non-cohort leaves')
     ap.add_argument('--out', required=True)
     ap.add_argument('--workers', type=int, default=6)
@@ -251,7 +271,8 @@ def main():
                                                     'source_sha256': train.file_sha256, 'rows': rows},
                                                    separators=(',', ':')).encode())
     # Census: the CE objective without family scales (the scales are what this computes).
-    ce = json.loads(Path(args.ce_policy).read_text())
+    ce = prepare_factor_boundaries(json.loads(Path(args.ce_policy).read_text()), args.role_ids,
+                                   preserve=not args.legacy_decision_factor_boundaries)
     census_policy = json.loads(json.dumps(ce))
     census_policy['objective'].pop('family_balance', None)
     (out / 'census-policy.json').write_text(json.dumps(census_policy, indent=1, sort_keys=True) + '\n')

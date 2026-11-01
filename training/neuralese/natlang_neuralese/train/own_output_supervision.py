@@ -201,13 +201,21 @@ def _decision_factors(value):
         raise ValueError('decision_factors must be a list')
     result, seen = [], set()
     for item in value:
-        if (not isinstance(item, dict) or set(item) != {'row_kind', 'node_name', 'target_sha256', 'scale'}
+        base = {'row_kind', 'node_name', 'target_sha256', 'scale'}
+        boundary = {'native_boundary_policy', 'native_role_ids'}
+        if (not isinstance(item, dict) or set(item) not in (base, base | boundary)
                 or item['row_kind'] not in ('source_pairing', 'source_chain', 'ordinary')
                 or not isinstance(item['node_name'], str) or not item['node_name']
                 or not isinstance(item['target_sha256'], str) or not _SHA.fullmatch(item['target_sha256'])
                 or type(item['scale']) not in (int, float) or not math.isfinite(item['scale'])
                 or not 0 < item['scale'] <= 1):
             raise ValueError('decision factor needs row_kind, node_name, exact target SHA-256, and scale in (0, 1]')
+        if boundary <= set(item):
+            ids = item['native_role_ids']
+            if (item['native_boundary_policy'] != 'preserve-native-role-boundaries/1'
+                    or not isinstance(ids, list) or len(ids) != 4
+                    or any(type(token) is not int or token < 0 for token in ids) or len(set(ids)) != 4):
+                raise ValueError('decision factor native boundary policy requires four distinct declared role IDs')
         key = (item['row_kind'], item['node_name'], item['target_sha256'])
         if key in seen:
             raise ValueError('decision factors repeat an exact row/node/target binding')
@@ -520,7 +528,7 @@ def graph_weights(row, objective, *, factor_report=None):
     row_kind = ('source_pairing' if row.get('source_pairing') else
                 'source_chain' if row.get('source_chain') else
                 'ordinary' if ordinary else None)
-    decision_factors = {(item['row_kind'], item['node_name'], item['target_sha256']): item['scale']
+    decision_factors = {(item['row_kind'], item['node_name'], item['target_sha256']): item
                         for item in objective.get('decision_factors', [])}
     weights, categories = [], []
     for index, (node, raw, suffix) in enumerate(zip(nodes, raw_nodes, suffixes)):
@@ -544,14 +552,17 @@ def graph_weights(row, objective, *, factor_report=None):
             think_ids=think, mass=objective.get('mass', 'invocation'))
         if row_kind is not None and decision_factors:
             signature, spans = _raw_target_span_signature(ids, raw)
-            factor = decision_factors.get((row_kind, node.get('name'), signature))
-            if factor is not None:
+            factor_spec = decision_factors.get((row_kind, node.get('name'), signature))
+            if factor_spec is not None:
+                factor = factor_spec['scale']
+                boundaries = set(factor_spec.get('native_role_ids', ()))
                 before = sum(sum(node_weights[begin:end]) for begin, end in spans)
                 if before <= 0:
                     raise ValueError('decision factor matched a raw target span with no effective own-output mass')
                 for begin, end in spans:
                     for position in range(begin, end):
-                        node_weights[position] *= factor
+                        if ids[position] not in boundaries:
+                            node_weights[position] *= factor
                 if factor_report is not None:
                     key = f'{row_kind}/{node.get("name")}/{signature}'
                     item = factor_report.setdefault(key, {'decisions': 0, 'target_positions': 0,
@@ -560,7 +571,7 @@ def graph_weights(row, objective, *, factor_report=None):
                     item['decisions'] += 1
                     item['target_positions'] += sum(end - begin for begin, end in spans)
                     item['own_output_mass_before'] += before
-                    item['own_output_mass_after'] += before * factor
+                    item['own_output_mass_after'] += sum(sum(node_weights[begin:end]) for begin, end in spans)
         weights.extend(node_weights)
         categories.extend(node_categories)
     return weights, categories

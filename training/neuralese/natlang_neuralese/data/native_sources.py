@@ -192,6 +192,11 @@ class NativeGraphSource:
 
     def set_ce_policy(self, policy):
         """Select an explicit objective without changing raw indexes/credits."""
+        if policy is not None:
+            from ..train.own_output_supervision import policy_objective
+            for factor in policy_objective(policy).get('decision_factors', ()):
+                if 'native_role_ids' in factor and tuple(factor['native_role_ids']) != self.role_ids:
+                    raise ValueError('decision factor native role IDs differ from actual source/model role IDs')
         self.ce_policy = policy
         for child in getattr(self, 'children', ()):
             child.set_ce_policy(policy)
