@@ -80,3 +80,27 @@ def test_rowwise_norm_higher_order_with_frozen_input_or_weight(monkeypatch, trai
         actual2, = torch.autograd.grad(actual.float().sum(), x)
         expected2, = torch.autograd.grad(expected.float().sum(), x)
         torch.testing.assert_close(actual2, expected2, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize('rows,selected', [(128, False), (129, True), (511, True), (1024, True), (1025, False)])
+def test_batched_lfm3_adjoint_dispatch_and_exact_gradient(monkeypatch, rows, selected):
+    from natlang_neuralese.model import native_parameter_precision as precision
+    monkeypatch.setattr(torch.Tensor, 'is_cuda', property(lambda _: True))
+    torch.manual_seed(rows)
+    layer = Lfm3RMSNorm()
+    x = torch.randn(rows, 8, dtype=torch.bfloat16, requires_grad=True)
+    g = torch.randn_like(x) + torch.randn_like(x)
+    calls = []
+    original = precision._batched_lfm3_norm_adjoint
+    def counted(*args):
+        calls.append(True)
+        return original(*args)
+    monkeypatch.setattr(precision, '_batched_lfm3_norm_adjoint', counted)
+    output = precision._RowwiseNormAdjoint.apply(x, layer.weight, layer.forward)
+    dx, dw = torch.autograd.grad(output, (x, layer.weight), g)
+    assert bool(calls) is selected
+    reference_input = x.detach().clone().requires_grad_(True)
+    reference_output = precision.rowwise_norm_forward(layer.forward, reference_input)
+    ref_dx, ref_dw = torch.autograd.grad(reference_output, (reference_input, layer.weight), g)
+    torch.testing.assert_close(dx, ref_dx, rtol=0, atol=0)
+    torch.testing.assert_close(dw, ref_dw, rtol=0, atol=0)

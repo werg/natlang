@@ -38,6 +38,30 @@ def rowwise_norm_forward(original_forward, x):
 
 
 
+def _batched_lfm3_norm_adjoint(x, weight, gradient, eps):
+    """Batch independent 128-row adjoints while retaining BF16 gain fan-in order."""
+    import torch.nn.functional as F
+    rows = x.reshape(-1, x.shape[-1])
+    grads = gradient.reshape_as(rows)
+    count = rows.shape[0]
+    padding = (-count) % 128
+    if padding:
+        rows = F.pad(rows, (0, 0, 0, padding))
+        grads = F.pad(grads, (0, 0, 0, padding))
+    rows = rows.reshape(-1, 128, rows.shape[-1]).detach().requires_grad_(True)
+    gains = weight.detach().expand(rows.shape[0], -1).clone().requires_grad_(True)
+    with torch.enable_grad():
+        value = rows.float()
+        normalized = (value * torch.rsqrt(value.square().mean(-1, keepdim=True) + eps)).to(rows.dtype)
+        output = gains[:, None, :] * normalized
+        dx, gain_parts = torch.autograd.grad(output, (rows, gains), grads.reshape_as(rows))
+    # Match the original custom adjoint's reverse-creation BF16 accumulation.
+    dweight = gain_parts[-1]
+    for i in range(gain_parts.shape[0] - 2, -1, -1):
+        dweight = dweight + gain_parts[i]
+    return dx.reshape(-1, x.shape[-1])[:count].reshape_as(x), dweight
+
+
 class _RowwiseNormAdjoint(torch.autograd.Function):
     """Replay each norm chunk locally, avoiding full-input slice scatters."""
     @staticmethod
@@ -60,6 +84,14 @@ class _RowwiseNormAdjoint(torch.autograd.Function):
                 dx = next(values) if x.requires_grad else None
                 dweight = next(values) if weight.requires_grad else None
                 return dx, dweight, None
+        owner = getattr(original, '__self__', None)
+        row_count = x.numel() // x.shape[-1] if x.ndim and x.shape[-1] else 0
+        if (type(owner).__name__ == 'Lfm3RMSNorm' and x.is_cuda
+                and x.dtype == gradient.dtype == weight.dtype == torch.bfloat16
+                and x.requires_grad and weight.requires_grad and 129 <= row_count <= 1024
+                and hasattr(owner, 'variance_epsilon')):
+            dx, dweight = _batched_lfm3_norm_adjoint(x, weight, gradient, owner.variance_epsilon)
+            return dx, dweight, None
         rows = x.reshape(-1, x.shape[-1])
         grads = gradient.reshape(-1, gradient.shape[-1])
         parts = []
