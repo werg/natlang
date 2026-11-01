@@ -1483,6 +1483,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             **({"target_binding_adapter": receipt.get("target_binding_adapter")}
                if receipt.get("target_binding_adapter") is not None else {}),
             "body_sha256": body_sha256, "body": body,
+            "context_occurrences": receipt_context_occurrences,
             "source_kind": "provider-expanded-context-only-same-run-read"})
     return attestations
 

@@ -673,6 +673,7 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
     assert repeated_text.count(body) >= 2, "both authenticated input occurrences hydrate from the same exact body"
     repeated_attests = next(row for row in repeated_provenance if row["id"] == reader["id"])[
         "neuralese_context_attestations"]
+    assert any(item.get("context_occurrences") == 2 for item in repeated_attests)
     assert any(item.get("writer_record_id") is None and item.get("writer_target_selected") is False
                for item in repeated_attests), "the added occurrence stays context-only, with no selected writer target"
 
