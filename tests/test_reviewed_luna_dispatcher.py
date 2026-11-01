@@ -46,6 +46,8 @@ def reviewed_plan(tmp_path):
         'artifact_hashes': {
             str(dispatcher.DISPATCHER): dispatcher.digest(dispatcher.DISPATCHER),
             str(dispatcher.RUNNER): dispatcher.digest(dispatcher.RUNNER),
+            str(ROOT / 'scripts/rl_tasks/execution_adapter.py'):
+                dispatcher.digest(ROOT / 'scripts/rl_tasks/execution_adapter.py'),
             str(source): dispatcher.digest(source),
             str(receipt): dispatcher.digest(receipt),
         },
