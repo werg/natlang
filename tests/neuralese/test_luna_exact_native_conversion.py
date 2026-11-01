@@ -31,6 +31,21 @@ def test_materializer_row_digest_uses_exact_separately_bound_runtime_asset(tmp_p
         _runtime_row_digest(tmp_path, {"id": "source-bound-row"}, receipt)
 
 
+def test_training_frozen_runtime_is_not_accepted_as_loader_native_closure(tmp_path):
+    runtime = tmp_path / "teacher-runtime"
+    module = runtime / "dist/teacher/native-materializer.js"
+    module.parent.mkdir(parents=True)
+    module.write_text('export function nativeRowDigest(_row) { return "a".repeat(64); }\n')
+    (runtime / "frozen-runtime.json").write_text(__import__("json").dumps({
+        "schema": "natlang.frozen-training-runtime/1",
+        "files": {"dist/teacher/native-materializer.js": hashlib.sha256(module.read_bytes()).hexdigest()},
+    }))
+    receipt_runtime = {"dist/teacher/native-materializer.js": hashlib.sha256(module.read_bytes()).hexdigest()}
+
+    with pytest.raises(ValueError, match="native closure required by its loader"):
+        _protected_runtime_binding(runtime, receipt_runtime)
+
+
 def test_protected_runtime_input_closure_requires_complete_pool_seal(tmp_path):
     runtime = tmp_path / "teacher-runtime"
     module = runtime / "dist/teacher/native-materializer.js"

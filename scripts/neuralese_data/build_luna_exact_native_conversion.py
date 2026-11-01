@@ -62,30 +62,24 @@ def _runtime_row_digest(runtime: Path, row: dict, decision_receipt: dict) -> str
 
 
 def _protected_runtime_binding(runtime: Path, receipt_runtime: dict) -> dict:
-    """Authenticate either supported immutable runtime closure format.
+    """Authenticate the materializer closure supported by the downstream loader.
 
-    Native-runtime freezes use a protected input-closure receipt plus a sibling
-    immutable-file-pool receipt. Verify the complete snapshot is actually
-    sealed into that pool before accepting its materializer as a conversion
-    authority; do not synthesize or rename a frozen-runtime receipt.
+    The exact-source loader consumes ``immutable_native_runtime_tree``. A
+    training ``frozen-runtime.json`` is not a substitute for that native
+    closure, even when it inventories the materializer bytes. Reject it here
+    instead of emitting an ingestion audit that cannot be loaded later.
     """
     runtime = Path(runtime).resolve(strict=True)
-    frozen_receipt = runtime / "frozen-runtime.json"
-    if frozen_receipt.is_file():
-        frozen_files = json.loads(frozen_receipt.read_bytes()).get("files") or {}
-        if not isinstance(frozen_files, dict) or not frozen_files:
-            raise ValueError("separate decision materializer frozen runtime has no exact file inventory")
-        receipt_sha = sha256_file_hex(frozen_receipt)
-        closure_binding = {"kind": "frozen-runtime", "receipt_sha256": receipt_sha}
-    else:
-        from natlang_neuralese.common.runtime_inventory import immutable_native_runtime_tree
-        tree = immutable_native_runtime_tree(runtime)
-        frozen_files = tree["files"]
-        closure_binding = {"kind": tree["schema"], "closure_sha256": tree["closure_sha256"],
-            "storage_receipt_sha256": tree["storage_receipt_sha256"],
-            "tree_sha256": tree["tree_sha256"], "file_count": tree["file_count"],
-            "logical_bytes": tree["logical_bytes"], "pool_verified": tree["pool_verified"],
-            "commit": tree["commit"]}
+    if not (runtime / "runtime-input-closure.json").is_file():
+        raise ValueError("separate decision materializer runtime lacks the native closure required by its loader")
+    from natlang_neuralese.common.runtime_inventory import immutable_native_runtime_tree
+    tree = immutable_native_runtime_tree(runtime)
+    frozen_files = tree["files"]
+    closure_binding = {"kind": tree["schema"], "closure_sha256": tree["closure_sha256"],
+        "storage_receipt_sha256": tree["storage_receipt_sha256"],
+        "tree_sha256": tree["tree_sha256"], "file_count": tree["file_count"],
+        "logical_bytes": tree["logical_bytes"], "pool_verified": tree["pool_verified"],
+        "commit": tree["commit"]}
     host_root = runtime if (runtime / "dist/teacher/native-materializer.js").is_file() else runtime / "ts-host"
     if not (host_root / "dist/teacher/native-materializer.js").is_file():
         raise ValueError("separate conversion runtime lacks its native materializer")
