@@ -151,6 +151,14 @@ def prepare_parallel_leaf(graph_path, graph_ref, tokenizer, roles, old_ids, outp
     return observed, bind(proof_path)
 
 
+def receipt_protection_digest(receipt):
+    """Read the union binding, including already sealed successor receipts."""
+    values = [receipt[key] for key in ('protection_digest', 'current_protection_digest') if key in receipt]
+    if not values or any(value != values[0] for value in values):
+        raise ValueError('source receipt has missing or conflicting protection union bindings')
+    return values[0]
+
+
 def prepare_source_stage(predecessor_receipt, screen_receipt, output, *, parallel_workers=2):
     """Index only the immutable successor and extend authenticated geometry before census completion."""
     predecessor_path, screen_path = (Path(p).resolve(strict=True) for p in (predecessor_receipt, screen_receipt))
@@ -165,7 +173,7 @@ def prepare_source_stage(predecessor_receipt, screen_receipt, output, *, paralle
     geometry_path = checked(previous.get('geometry'), 'predecessor geometry')
     protection = ProtectedWorlds.load()
     if (screen.get('schema') != 'natlang.acquired-current-protection-screen/1'
-            or previous.get('protection_digest') != protection.digest
+            or receipt_protection_digest(previous) != protection.digest
             or screen.get('protected_worlds', {}).get('identity_set_sha256') != protection.digest
             or screen.get('protected_worlds', {}).get('matches_expected') is not True):
         raise ValueError('source preparation does not bind the current complete protection union')
@@ -437,7 +445,7 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
             or balance.get('max_scale') != 8 or identity(objective) != previous['objective_transition']['to']):
         raise ValueError('predecessor objective is not the exact declared token-mass continuation')
     protection = ProtectedWorlds.load()
-    if (previous.get('protection_digest') != protection.digest
+    if (receipt_protection_digest(previous) != protection.digest
             or screen.get('protected_worlds', {}).get('identity_set_sha256') != protection.digest
             or screen.get('protected_worlds', {}).get('matches_expected') is not True):
         raise ValueError('current full protected-world union differs from source custody')

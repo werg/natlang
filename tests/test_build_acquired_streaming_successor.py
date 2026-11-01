@@ -7,6 +7,17 @@ import pytest
 from scripts.neuralese_data.build_acquired_streaming_successor import FAMILY, appended_manifest, load_signals, scales_for_append, verify_diagnosis_proof
 
 
+def test_sealed_successor_protection_binding_is_usable_and_conflicts_fail_closed():
+    from scripts.neuralese_data.build_acquired_streaming_successor import receipt_protection_digest
+    digest='a'*64
+    assert receipt_protection_digest({'protection_digest':digest})==digest
+    assert receipt_protection_digest({'current_protection_digest':digest})==digest
+    assert receipt_protection_digest({'protection_digest':digest,'current_protection_digest':digest})==digest
+    for receipt in ({}, {'protection_digest':digest,'current_protection_digest':'b'*64}):
+        with pytest.raises(ValueError,match='protection union'):
+            receipt_protection_digest(receipt)
+
+
 def test_capacity_descriptor_matches_strict_runtime_contract():
     from scripts.neuralese_data.build_acquired_streaming_successor import sft_capacity_descriptor
     source={'path': '/source', 'sha256': 'a'*64}
