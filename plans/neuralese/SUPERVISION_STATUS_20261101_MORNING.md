@@ -1,3 +1,44 @@
+## Live supervision update, 2026-11-01 19:56 CET
+
+- Previous goal turn was progress: production reward/escalation integration,
+  finite-stop resume fix and learner launch. This turn fixed two actual source
+  continuation controls: capacity descriptor had unsupported observed_geometry
+  metadata, and operational parameters retained predecessor packed geometry.
+  v4 launch failed before SGD; its controls and original package remain evidence.
+  c8f1a7aaa and7208a3d08 fix future builder output and recipe wiring.11 builder
+  tests and3 real descriptor qualification tests pass. Historical builder bytes
+  preserved with exact original hash in ops/acquired-builder-original-1101.
+- Corrected controls W/ops/acquired-live353731-after75-v5-1101 launched as
+  lfm3-acquired353731-from75-v2-1101. Actual source append353731/45785 and restored
+  optimizer confirmed. Actual largest-graph and packed-batch capacity checks all
+  passed; first optimizer update entered from global75. No global76 checkpoint
+  or new earned exposure claimed yet. Runtime is frozen3f445d0bb.
+- Its exact runtime archive completed:703907840bytes, SHA256
+  54d977b8bdea2f6f263b8a43101fe3fce5e9501b3c4c77133c6cee927f3cbbca;
+ 32618 entries independently reread. Actual75 full-state export also completed,
+  f93905f4d2c5ad000b9375732b4b89dfe74d490e3c2cbc0c4912067731b2e815.
+- Recovery qualifier previously loaded original checkpoint bytes alongside staged
+  dependencies.3ff506712 now copies/verifies an independent checkpoint inode and
+  loads that copy, rejecting corrupt contents and hardlink aliases;9 tests pass.
+  Actual strengthened recovery70 qualification is running as
+  qualify-recovery70-independent-bytes-1101. It is not yet qualified. Verified
+  reusable extracted fixture retained. Old70 sole-link input remains untouched.
+- Recovered15.319GB internal space by freshly hashing the existing external72
+  full state then atomically linking its historical path. Exact receipt:
+  ops/relocate-verified72-off-nvme-1101.json. Free68GiB internal at19:56.
+  Recovery was briefly frozen to finish that readback first and has been thawed;
+  temporary safety timers stopped. New learner and all full states retained.
+- Pop longer-wall rerun finished: baseline0 two budget exhaustions; trained64
+  one semantic mismatch and one budget exhaustion, zero successes each. No new
+  transport timeout or unresolved outcome. Separate summary-only export:
+  ops/pop-unresolved-pairs-longwall-completed-1101.json. Original14 comparable
+  pairs remain8 vs11 successes; longer7200-second reruns are separately bound.
+  Remote unit terminal and GPU idle; next useful evaluator should use newer
+  actual checkpoint once an earned inference view is prepared.
+- Committed conversion inventory running as inventory-acquired-completed1943-1101;
+  raised this bounded read-only scan from idle toBE4 after observed starvation.
+  Bulk conversion and port replay continue; paid teacher generation stays paused.
+
 ## Live supervision update, 2026-11-01 19:40 CET
 
 - Bounded whole-graph efficiency rewards and live inference escalation are on
