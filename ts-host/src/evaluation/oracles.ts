@@ -272,12 +272,14 @@ function words(value: unknown, qa = false): string[] {
     .toLocaleLowerCase('en-US').match(/[\p{L}\p{N}]+/gu) ?? [];
   return qa ? tokens.filter(word => !['a', 'an', 'the'].includes(word)) : tokens;
 }
+function qaNumbers(value: unknown): string[] {
+  return String(value).match(/[+-]?\d+(?:\.\d+)?/g)?.map(token =>
+    decimalForms(token)?.exact ?? token).sort() ?? [];
+}
 /** Multiset token F1; repeated words count only when they occur on both sides. */
 export function spanF1(actual: unknown, expected: unknown, qa = false): number {
   if (qa) {
-    const numbers = (value: unknown) => String(value).match(/[+-]?\d+(?:\.\d+)?/g)?.map(token =>
-      decimalForms(token)?.exact ?? token).sort() ?? [];
-    const goldNumbers = numbers(expected), gotNumbers = numbers(actual);
+    const goldNumbers = qaNumbers(expected), gotNumbers = qaNumbers(actual);
     if (goldNumbers.length && canonical(goldNumbers) !== canonical(gotNumbers)) return 0;
   }
   const left = words(actual, qa), right = words(expected, qa);
@@ -911,6 +913,14 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
       ...(best.failed.length ? { verdict: `keys below threshold: ${best.failed.join(', ')}` } : {}) };
   }
   const registered = level === 'normalized' ? recordComparator(spec.normalization) : undefined;
+  if (level === 'normalized' && spec.normalization === 'qa') {
+    // Explicit scalar QA normalization was advertised but previously fell
+    // through to generic text equality, rejecting articles and punctuation.
+    const same = (candidate: unknown) => typeof actual === 'string' && typeof candidate === 'string' &&
+      qaAnswerText(candidate).length > 0 && qaAnswerText(actual) === qaAnswerText(candidate) &&
+      canonical(qaNumbers(actual)) === canonical(qaNumbers(candidate));
+    return { accepted: candidates.some(same), level, comparison_version: 'qa-scalar-exact/1' };
+  }
   if (registered) return { accepted: candidates.some(candidate => registered.equal(actual, candidate)), level };
   if (level === 'normalized') assertKnownComparator('normalization', spec.normalization, BUILTIN_NORMALIZATIONS);
   if (level === 'normalized') return { accepted: candidates.some(candidate => normalized(actual) === normalized(candidate)), level };

@@ -22,7 +22,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ..eval.task_packet import classify_case, read_jsonl
+from ..eval.task_packet import classify_case, classification_binding, read_jsonl
 from .rollout_math import (DEFAULT_EXECUTION_EFFICIENCY_WEIGHT, group_advantages,
                            execution_efficiency_cost, execution_efficiency_counters)
 from ..common.task_roots import student_root_row, authored_root_row
@@ -601,6 +601,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
     for r in rollouts:
         counts[r["outcome"]] = counts.get(r["outcome"], 0) + 1
     report = {"schema": "natlang.s7-task-rollout-score/1", "root_mode": root_mode,
+              "classification": classification_binding(),
               "rollouts": len(rollouts), "outcome_counts": counts,
               "scored": sum(r["reward"] is not None for r in rollouts),
               "successes": sum(r["reward"] == 1.0 for r in rollouts),

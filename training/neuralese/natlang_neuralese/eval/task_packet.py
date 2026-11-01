@@ -7,10 +7,21 @@ import json
 import os
 from pathlib import Path
 import re
+import unicodedata
 from typing import Any
 
 from ..common.hashing import sha256_file_hex
 from ..common.jsonio import read_jsonl
+
+_CLASSIFIER_SOURCE = Path(__file__).resolve()
+_CLASSIFIER_SHA256 = hashlib.sha256(_CLASSIFIER_SOURCE.read_bytes()).hexdigest()
+
+
+def classification_binding():
+    if hashlib.sha256(_CLASSIFIER_SOURCE.read_bytes()).hexdigest() != _CLASSIFIER_SHA256:
+        raise ValueError('outcome classifier changed after import; restart from a frozen runtime')
+    return {'version': 'verified-terminal-babi-article/2', 'path': str(_CLASSIFIER_SOURCE),
+            'sha256': _CLASSIFIER_SHA256}
 
 TASK_OUTCOMES = (
     "task_success",
@@ -84,6 +95,47 @@ def _accepted_terminal(outcome: dict[str, Any], finish: dict[str, Any] | None) -
             and all(value is True for value in checks.values()))
 
 
+def accepted_babi_article_answer(result, finish=None):
+    """Repair the historical bAbI location article alias, retaining every other check.
+
+    This is deliberately narrower than general QA normalization: archived task
+    packets declared only generic normalization. Never waive a world/effect,
+    terminal-status or non-answer failure, or infer facts from model prose.
+    """
+    if not isinstance(result, dict):
+        return False
+    task = result.get('task')
+    if not isinstance(task, dict) or not isinstance(task.get('program_ir'), dict):
+        return False
+    program = task['program_ir']
+    semantics, outcome = program.get('semantics'), result.get('outcome')
+    if not isinstance(semantics, dict) or not isinstance(outcome, dict):
+        return False
+    checks = outcome.get('checks')
+    if not isinstance(checks, dict) or not isinstance(program.get('source_ids'), list):
+        return False
+    if (program.get('source') != 'external-rl:babi'
+            or not re.fullmatch(r'ext_babi_task\d{2}', str(program.get('family', '')))
+            or not any(str(x).startswith('facebook/babi_qa:') for x in program.get('source_ids', []))
+            or semantics.get('oracle') != 'normalized'
+            or outcome.get('status') != 'done'
+            or outcome.get('accepted') is not False
+            or set(outcome.get('rejection_reasons') or []) != {'answer'}
+            or checks.get('answer') is not False or not checks
+            or any(value is not True for key, value in checks.items() if key != 'answer')
+            or (finish and (finish.get('status') != 'complete' or finish.get('resource_limit_reason')))
+            or outcome.get('resource_limit_reason') or outcome.get('resource_limit')):
+        return False
+    expected, actual = semantics.get('expected'), outcome.get('value')
+    if not isinstance(expected, str) or not isinstance(actual, str):
+        return False
+    def normalize(value):
+        return ' '.join(unicodedata.normalize('NFKC', value).lower().split())
+    expected, actual = normalize(expected), normalize(actual)
+    # Only the redundant leading definite article is proved by this repair.
+    return bool(expected) and actual == 'the ' + expected and not expected.startswith('the ')
+
+
 def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) -> str:
     """Use explicit terminal evidence; repeated action-shape counts alone are not a failure label."""
     if finish and finish.get('status') == 'repetition' and finish.get('resource_limit_reason') == 'identical_turn_limit':
@@ -123,6 +175,8 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
 
     outcome = result.get("outcome") if isinstance(result.get("outcome"), dict) else {}
     if _accepted_terminal(outcome, finish):
+        return "task_success"
+    if accepted_babi_article_answer(result, finish):
         return "task_success"
 
     if finish and (finish.get("resource_limit_reason") == "case_wall_budget"

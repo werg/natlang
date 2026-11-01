@@ -2,6 +2,7 @@
 from __future__ import annotations
 import copy
 import json
+import math
 from pathlib import Path
 
 from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex
@@ -39,8 +40,10 @@ def projected_rows(out, original):
         amended = copy.deepcopy(row)
         if outcome != row['outcome']:
             actual = (raw[0].get('outcome') or {}) if raw else {}
-            if (outcome != 'task_success' or actual.get('status') not in {'quiesced', 'failed'}
-                    or not task_packet._accepted_terminal(actual, finishes.get(entry['key']))):
+            accepted_stop = (actual.get('status') in {'quiesced', 'failed'}
+                             and task_packet._accepted_terminal(actual, finishes.get(entry['key'])))
+            accepted_qa = bool(raw and task_packet.accepted_babi_article_answer(raw[0], finishes.get(entry['key'])))
+            if outcome != 'task_success' or not (accepted_stop or accepted_qa):
                 raise ValueError('classification changed outside the verified accepted-stop repair')
             from .task_rollouts import neuralese_exchanges
             exchanges = neuralese_exchanges(row)
@@ -81,11 +84,19 @@ def projected_report(original, rows, path):
                           and r.get('jolt_role', 'student') == 'student'), key=lambda r: r['sample'])
         _, stats = group_advantages([reward_of(row['outcome']) for row in members])
         mean = stats.get('mean', 0.)
+        costs = [(row.get('reward') or {}).get('execution_efficiency', {}).get('cost')
+                 for row in members if reward_of(row['outcome']) is not None]
+        valid_costs = all(type(cost) in (int, float) and math.isfinite(cost) and cost >= 0 for cost in costs)
+        efficiency_spread = bool(members) and all(reward_of(row['outcome']) == 1 for row in members) \
+            and valid_costs and len(set(costs)) > 1
         groups.append({'task_id': old_group['task_id'], **stats,
+                       'efficiency_spread': efficiency_spread,
                        'outcomes': [r['outcome'] for r in members],
-                       'route': 'grpo' if stats['spread'] else 'retire' if mean >= 1. else 'rejection-sampling'})
+                       'route': 'grpo' if stats['spread'] or efficiency_spread else 'retire' if mean >= 1. else 'rejection-sampling'})
     report['groups'] = groups
     report['groups_with_spread'] = sum(g['spread'] for g in groups)
+    report['groups_with_quality_spread'] = sum(g['spread'] for g in groups)
+    report['groups_with_efficiency_spread'] = sum(g['efficiency_spread'] for g in groups)
     report['neuralese'] = neuralese_metrics(metrics, original.get('neuralese', {}).get('bonus', .1))
     return report
 
