@@ -19,7 +19,8 @@ from test_native_state_sft import graph
 from test_shared_state import tiny
 
 
-def test_bf16_capacity_reports_actual_shared_forward_and_slot_geometry(tmp_path, monkeypatch):
+@pytest.mark.parametrize('cotangent_backend,expected_mode',[('plain','plain'),('cpu_file','vjp')])
+def test_bf16_capacity_reports_actual_shared_forward_and_slot_geometry(tmp_path, monkeypatch,cotangent_backend,expected_mode):
     from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
     path = tmp_path/'train.jsonl'
     path.write_text(json.dumps(graph('a'))+'\n'+json.dumps(graph('b'))+'\n')
@@ -34,7 +35,8 @@ def test_bf16_capacity_reports_actual_shared_forward_and_slot_geometry(tmp_path,
         calls.append((batches, kwargs))
         return {'passed':True, 'scope':'layout unit test; no GPU capacity claim'}
     monkeypatch.setattr(native_memory, 'qualify_capacity', capacity)
-    args = SimpleNamespace(out=tmp_path/'measurement', checkpoint_layers=True, chunk_tokens=3)
+    args = SimpleNamespace(out=tmp_path/'measurement', checkpoint_layers=True, chunk_tokens=3,
+                           cotangent_accumulator_backend=cotangent_backend)
     _, initial_geometry, _ = geometry_for_source(train, args.out, allow_build=True)
     reference = qualify_pending(model, SimpleNamespace(_native_named_parameters=[]), train,
         [(0,[0,1],False)], args, backend=None, checkpoint_sha256='a'*64, global_step=17,
@@ -43,6 +45,7 @@ def test_bf16_capacity_reports_actual_shared_forward_and_slot_geometry(tmp_path,
     assert proof['physical_geometry'] == [{'forward_tokens':expected.token_count,
                                            'kv_slots':len(expected.slot_sources)}]
     assert calls[0][1]['production_packing'] is True
+    assert calls[0][1]['cotangent_mode'] == expected_mode
 
 
 def test_cold_source_preparation_seals_geometry_without_second_parse(tmp_path, monkeypatch):
@@ -79,7 +82,8 @@ def test_geometry_builder_cli_seals_cold_index_in_same_pass(tmp_path):
 
 
 @pytest.mark.parametrize('device',['cpu','cuda'])
-def test_actual_packed_maximum_runs_full_backward_and_matches_graph_mean(tmp_path, monkeypatch,device):
+@pytest.mark.parametrize('cotangent_backend,expected_mode',[('plain','plain'),('cpu_file','vjp')])
+def test_actual_packed_maximum_runs_full_backward_and_matches_graph_mean(tmp_path, monkeypatch,device,cotangent_backend,expected_mode):
     if device=='cuda' and not torch.cuda.is_available(): pytest.skip('CUDA unavailable')
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'indexes'))
     path=tmp_path/'train.jsonl'
@@ -99,7 +103,8 @@ def test_actual_packed_maximum_runs_full_backward_and_matches_graph_mean(tmp_pat
     def measure(*args,**kwargs):
         return real(*args,**kwargs,gradient_observer=lambda name,g:observed.__setitem__(name,g.detach().clone()))
     monkeypatch.setattr(native_memory,'qualify_capacity',measure)
-    args=SimpleNamespace(out=tmp_path/'out',checkpoint_layers=True,chunk_tokens=3)
+    args=SimpleNamespace(out=tmp_path/'out',checkpoint_layers=True,chunk_tokens=3,
+                         cotangent_accumulator_backend=cotangent_backend)
     _,initial,_=geometry_for_source(source,args.out,allow_build=True)
     before=copy.deepcopy(model.state_dict());rng=torch.get_rng_state().clone()
     cuda_rng=torch.cuda.get_rng_state().clone() if device=='cuda' else None
@@ -107,6 +112,7 @@ def test_actual_packed_maximum_runs_full_backward_and_matches_graph_mean(tmp_pat
         backend=None,checkpoint_sha256='a'*64,global_step=7,prior_geometry=initial)
     proof=json.loads(open(result['proof']['path']).read())
     assert proof['passed'] and proof['optimizer_updates']==proof['earned_exposure']==0
+    assert proof['capacity']['cotangent_mode']==expected_mode
     assert proof['groups'][0][0]['id']=='a' and proof['groups'][0][1]['id']=='b'
     case=proof['capacity']['cases'][0]
     assert case['example_ids']==['a','b'] and case['forward_tokens']==6 and case['kv_slots']==6

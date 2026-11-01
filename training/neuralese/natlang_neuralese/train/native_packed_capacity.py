@@ -187,7 +187,8 @@ def qualify_pending(model, optimizer, train, pending_batches, args, *, backend, 
         report = qualify_capacity(model,optimizer,batches,backend=backend,
             checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
             checkpoint_sha256=checkpoint_sha256,source_binding=binding(train.path),production_packing=True,
-            retained_gradients=getattr(args,'accumulate_batches',1)>1)
+            retained_gradients=getattr(args,'accumulate_batches',1)>1,
+            cotangent_mode='plain' if getattr(args,'cotangent_accumulator_backend',None)=='plain' else 'vjp')
     finally:
         for parameter,gradient in prior_gradients.values():
             parameter.grad=gradient
