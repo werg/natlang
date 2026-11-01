@@ -59,8 +59,14 @@ def partial(tmp_path):
     return report, parent, certificate
 
 
-def test_partial_finite_progress_grants_no_readiness(partial):
-    report, checkpoint, _ = partial
+@pytest.mark.parametrize('reason', ['shared qualification request pending',
+    'operational stop; qualification deferred until resume',
+    'semantic refresh; qualification deferred until resume'])
+def test_partial_finite_progress_grants_no_readiness(partial, reason):
+    report, checkpoint, certificate = partial
+    value=json.loads(certificate.read_text());value['reason']=reason
+    certificate.write_text(json.dumps(value))
+    report['runtime_certificate']={**binding(certificate),'passed':False}
     original = copy.deepcopy(report)
     assert supervised_progress_numerics_ok(report, checkpoint)
     assert report == original and not any(report[k] for k in ('completed', 'qualified', 'foundation_ready'))
@@ -85,7 +91,7 @@ def test_actual_failed_runtime_is_not_a_deferred_check(partial, fault):
     value = json.loads(path.read_text())
     if fault == 'error': value['error'] = 'actual forward/gradient mismatch'
     elif fault == 'not-deferred': value['deferred'] = False
-    elif fault == 'wrong-reason': value['reason'] = 'operational stop; qualification deferred until resume'
+    elif fault == 'wrong-reason': value['reason'] = 'unexplained runtime qualification failure'
     else: value['checkpoint_sha256'] = '0' * 64
     path.write_text(json.dumps(value)); report['runtime_certificate'] = {**binding(path), 'passed': False}
     assert not supervised_progress_numerics_ok(report, checkpoint)
@@ -109,7 +115,10 @@ def test_new_nonfinite_evidence_cannot_hide_behind_older_qualified_flag(partial)
     assert not supervised_progress_numerics_ok(report, checkpoint)
 
 
-def test_supervised_dispatch_keeps_finite_partial_work_unqualified(tmp_path, monkeypatch):
+@pytest.mark.parametrize('reason', ['shared qualification request pending',
+    'operational stop; qualification deferred until resume',
+    'semantic refresh; qualification deferred until resume'])
+def test_supervised_dispatch_keeps_finite_partial_work_unqualified(tmp_path, monkeypatch, reason):
     from natlang_neuralese.rl import production
     parent = tmp_path / 'parent.pt'; parent.write_bytes(b'original parent')
     config = {'native_state': True, 'mandatory_sft_only': True, 'out': str(tmp_path / 'job'),
@@ -123,7 +132,7 @@ def test_supervised_dispatch_keeps_finite_partial_work_unqualified(tmp_path, mon
         torch.save({'model': model.state_dict(), 'optimizer': optimizer.state_dict()}, checkpoint)
         ref = binding(checkpoint); certificate = out / 'runtime.json'
         certificate.write_text(json.dumps({'passed': False, 'deferred': True,
-            'reason': 'shared qualification request pending', 'checkpoint_sha256': ref['sha256']}))
+            'reason': reason, 'checkpoint_sha256': ref['sha256']}))
         report = {'completed': False, 'qualified': False, 'foundation_ready': False,
             'numerics_ok': False, 'progress_numerics': finite_training_state_receipt(model, optimizer, ref['sha256']),
             'runtime_certificate': {**binding(certificate), 'passed': False},

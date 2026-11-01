@@ -328,7 +328,11 @@ def supervised_progress_numerics_ok(report, checkpoint):
     certificate = json.loads(_bound({key: reference[key] for key in ('path', 'sha256')}).read_text())
     return (certificate.get('passed') is False
             and certificate.get('deferred') is True
-            and certificate.get('reason') == 'shared qualification request pending'
+            and certificate.get('reason') in {
+                'shared qualification request pending',
+                'operational stop; qualification deferred until resume',
+                'semantic refresh; qualification deferred until resume',
+            }
             and certificate.get('checkpoint_sha256') == checkpoint['sha256']
             and not certificate.get('error'))
 
