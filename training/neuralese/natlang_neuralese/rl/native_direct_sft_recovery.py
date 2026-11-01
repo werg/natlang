@@ -625,6 +625,26 @@ def recover(state_path, *, report_ref, receipt_ref, custody_ref, qualification_r
         return result
 
 
+def _completed_refresh_obligations(custody, parent):
+    """Accept preserved quotas or an explicitly verified zero-exposure replacement."""
+    if custody.get('old_bindings_and_quotas_preserved') is True:return True
+    record=custody.get('unearned_replacement') or {}
+    if (custody.get('old_obligations_transition')!='unearned-sft-supersession-verified'
+        or record.get('schema')!='natlang.unearned-sft-source-replacement/1'
+        or record.get('parent_sha256')!=parent.get('sha256') or record.get('old_graph_visits')!=0
+        or record.get('weights_optimizer_rng_rl_exposure')!='preserved'):
+        return False
+    try:
+        from ..train.native_continuation import checked_policy_history
+        checked_policy_history(record)
+        proof=_bound({'path':record['proof_path'],'sha256':record['proof_sha256']})
+        source=json.loads(proof.read_text())
+        return (source.get('parent_sha256')==parent['sha256'] and source.get('old_stage')==record.get('old_stage')
+            and source.get('old_source_sha256')==record.get('old_source_sha256')
+            and source.get('new_source_sha256')==record.get('new_source_sha256'))
+    except (KeyError,TypeError,ValueError,OSError):return False
+
+
 def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
     """Publish a qualified finite SFT refresh without claiming stage completion."""
     from .native_raw_rounds import _published_checkpoint_state
@@ -652,7 +672,7 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
         if (state.get('phase')!='awaiting_semantic_refresh' or not parent_matches
                 or Path(state.get('pending_native_checkpoint','')).resolve()!=child_path
                 or custody.get('schema')!='natlang.earned-sft-checkpoint-custody/1'
-                or custody.get('old_bindings_and_quotas_preserved') is not True
+                or not _completed_refresh_obligations(custody,parent)
                 or custody.get('old_exposure_not_decreased') is not True
                 or type(updates) is not int or updates<1
                 or child['global_step']!=parent['global_step']+updates

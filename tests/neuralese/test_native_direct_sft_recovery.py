@@ -339,3 +339,14 @@ def test_completed_direct_sft_refresh_requires_exact_multiupdate_delta(tmp_path)
     boundary['new_optimizer_updates']=4; report=file('multi-report',{'numerics_ok':True,'checkpoint_sha256':child['sha256'],'continuation_boundary':boundary})
     publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=tmp_path/'multi-out')
     result=json.loads(state.read_text());assert result['checkpoint']==child['path'] and result['trained_rounds']==11
+
+
+def test_completed_refresh_accepts_only_bound_unearned_stage_replacement(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import _completed_refresh_obligations
+    parent={'sha256':'a'*64};history=tmp_path/'policy.json';history.write_text(json.dumps({'schema':'natlang.cumulative-policy-exposure-custody/1','status':'verified','through_checkpoint':parent}))
+    policy=binding(history);proof=tmp_path/'replacement.json';proof.write_text(json.dumps({'parent_sha256':parent['sha256'],'old_stage':'old','old_source_sha256':'b'*64,'new_source_sha256':'c'*64}));proof_ref=binding(proof)
+    record={'schema':'natlang.unearned-sft-source-replacement/1','parent_sha256':parent['sha256'],'old_stage':'old','old_source_sha256':'b'*64,'new_source_sha256':'c'*64,'old_graph_visits':0,'weights_optimizer_rng_rl_exposure':'preserved','cumulative_policy_history':policy,'proof_path':proof_ref['path'],'proof_sha256':proof_ref['sha256']}
+    custody={'old_obligations_transition':'unearned-sft-supersession-verified','unearned_replacement':record}
+    assert _completed_refresh_obligations(custody,parent)
+    record['old_graph_visits']=1
+    assert not _completed_refresh_obligations(custody,parent)
