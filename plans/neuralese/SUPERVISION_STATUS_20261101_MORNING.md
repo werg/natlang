@@ -1,4 +1,4 @@
-## Live supervision update, 2026-11-01 15:03 CET
+## Live supervision update, 2026-11-01 15:18 CET
 
 This update supersedes the earlier instantaneous observations below.
 
@@ -19,10 +19,18 @@ This update supersedes the earlier instantaneous observations below.
   Root atomically adopted63 into the rolling slot under the controller lock,
   independently hashing both parents and retaining61 as a local fallback.
   The full trainer CPU continuation preflight passed at63 (28GiB peak).
-  `lfm3-joint-sft63-307946-1101.service` launched at15:01 with frozen
-  `runtime-sft63-307946-28a-1101`, HIGH76GiB ledger and one-update refresh.
-  Verifier passed; actual trainer PID3328751 is initializing. Full-model capacity
-  qualification and a new optimizer update are not yet established.
+  The first continuation passed actual full-model capacity, then root requested
+  SIGUSR2 before any SGD: the first-visit scheduling pass incorrectly demoted
+  already prioritized new native/urgent rows behind ordinary backlog.
+  Fix0f8a60d41 retains the original joint priority while promoting overdue fresh
+  rows. Actual foundation/append and all-five-phase tests pass. Exact no-update
+  archive and cutover receipt: `ops/refresh63-frontier-cutover-1101.json`.
+  Original63 weights, optimizer/RNG and all420 visits were retained; no source
+  exposure was earned during the interruption. The expected controller refresh
+  gate rejected a zero-update publication; root recorded the no-SGD cutover.
+  Replacement `lfm3-joint-sft63-frontierfix-1101.service` launched at15:12:58
+  from exact frozen0f8a runtime, HIGH76GiB and one-update refresh. Its verifier
+  passed; actual trainer PID3394780 is running capacity checks. No new SGD yet.
 - Paid teacher generation is paused: live process/service/timer checks found no
   active generation. The last one-case Luna run exposed an oracle contradiction
   and supplied no admitted positive data; raw evidence is preserved. Repair and
@@ -40,6 +48,20 @@ This update supersedes the earlier instantaneous observations below.
 - A targeted stop test injected its checkpoint stop into the initial zero-update
   recovery save. It now targets an earned checkpoint explicitly; all four stop
   scenarios pass. Broader check-main failures remain under investigation.
+- Distributed resume also had conflicting parent requirements: the executing
+  checkpoint must advance, while the coordinator's original seed remains fixed.
+  Fix05a3f202e authenticates actual rolling bytes and saved coordinator fingerprint,
+  preserves the declared seed, and retains strict fixed arguments/role selection.
+  Actual withdrawal/append, standalone/rejoin, resident CE HTTP crash recovery and
+  wrong-checkpoint/coordinator negatives passed targeted checks. This code is on
+  main for future distributed launches; the current standalone frozen runtime
+  does not execute that distributed path.
+- Actual eight-update54–61 telemetry contains101 positive-weight producer-open
+  and101 producer-close targets (97.9 target weight each), across420 graph visits
+  including87 communication visits. This disproves blanket missing producer-end
+  labels, but does not establish successful authoring. Exact observation is
+  `ops/earned54-61-boundary-teaching-observation-1101.json`; it is not a full-corpus
+  census or an RL gradient audit. Consumer input markers need not be predictions.
 
 ## Earlier live supervision update, 2026-11-01 13:02 CET
 
