@@ -53,3 +53,47 @@ def test_recovered_feature_inputs_use_the_bound_source_map(tmp_path):
     overrides, bindings = feature_overrides(manifest)
     assert overrides == {'actual-row':'coding'}
     assert bindings[0]['path'] == str(payload) and bindings[0]['sha256'] == digest
+
+
+def test_exact_family_map_binds_manifest_and_every_ordered_row(tmp_path):
+    import hashlib
+    import json
+    from types import SimpleNamespace
+    from build_logical_family_objective import exact_family_rows
+
+    source = SimpleNamespace(file_sha256='a' * 64, entries=[
+        {'id': 'row-a', 'binding': '1' * 64},
+        {'id': 'row-b', 'binding': '2' * 64},
+    ])
+    path = tmp_path / 'families.json'
+    value = {'schema': 'natlang.logical-family-map/1', 'source_sha256': source.file_sha256,
+             'rows': [{'id': 'row-a', 'binding': '1' * 64, 'family': 'native-communication'},
+                      {'id': 'row-b', 'binding': '2' * 64, 'family': 'natlang'}]}
+    path.write_text(json.dumps(value))
+    families, binding = exact_family_rows(path, source, {'native-communication', 'natlang'})
+    assert families == ['native-communication', 'natlang']
+    assert binding == {'path': str(path.resolve()), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+
+    value['rows'].reverse()
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match='source row 0'):
+        exact_family_rows(path, source, {'native-communication', 'natlang'})
+
+
+def test_exact_family_map_rejects_manifest_and_family_mismatches(tmp_path):
+    import json
+    from types import SimpleNamespace
+    from build_logical_family_objective import exact_family_rows
+
+    source = SimpleNamespace(file_sha256='a' * 64, entries=[{'id': 'row', 'binding': '1' * 64}])
+    path = tmp_path / 'families.json'
+    value = {'schema': 'natlang.logical-family-map/1', 'source_sha256': 'b' * 64,
+             'rows': [{'id': 'row', 'binding': '1' * 64, 'family': 'natlang'}]}
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match='complete selected source'):
+        exact_family_rows(path, source, {'natlang'})
+    value['source_sha256'] = source.file_sha256
+    value['rows'][0]['family'] = 'invented'
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match='source row 0'):
+        exact_family_rows(path, source, {'natlang'})

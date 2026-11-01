@@ -14,12 +14,14 @@ rechunked (AGENTS.md, 2026-10-29). This replaces it with the exact logical-famil
               into a copy of the CE policy with family_balance {key: logical-family, map, scales}.
 
   build_logical_family_objective.py --train MANIFEST --ce-policy CE --targets MIXPOLICY --out DIR [--workers N]
+      [--family-map EXACT_MAP]
   -> DIR/{families.json, census.json, ce-policy.json, receipt.json}
 """
 from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 from concurrent.futures import ProcessPoolExecutor
 from collections import deque
 import io
@@ -81,6 +83,38 @@ def feature_overrides(manifest_path):
                     raise ValueError('logical family features repeat a classified row')
                 result[row['id']] = family
     return result, bindings
+
+
+def exact_family_rows(reference, train, allowed_families):
+    """Load an already-authenticated row family map for non-cohort source leaves.
+
+    Physical filenames are only a fallback for the original curated cohort layout. A recovery or
+    continuation manifest may contain semantically classified rows from leaves whose filenames do
+    not encode a family. In that case accept a full map only when it binds this exact manifest and
+    every row, in order, by both ID and row binding.
+    """
+    path = Path(reference).resolve(strict=True)
+    before = path.stat()
+    payload = path.read_bytes()
+    after = path.stat()
+    fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+    if (tuple(getattr(before, name) for name in fields) != tuple(getattr(after, name) for name in fields)
+            or len(payload) != after.st_size):
+        raise ValueError('exact logical-family map changed while it was read')
+    value = json.loads(payload)
+    if (value.get('schema') != 'natlang.logical-family-map/1'
+            or value.get('source_sha256') != train.file_sha256
+            or not isinstance(value.get('rows'), list)
+            or len(value['rows']) != len(train.entries)):
+        raise ValueError('exact logical-family map must bind the complete selected source manifest')
+    families = []
+    for index, (row, entry) in enumerate(zip(value['rows'], train.entries, strict=True)):
+        if (not isinstance(row, dict) or set(row) != {'id', 'binding', 'family'}
+                or row.get('id') != entry['id'] or row.get('binding') != entry['binding']
+                or not isinstance(row.get('family'), str) or row['family'] not in allowed_families):
+            raise ValueError(f'exact logical-family map differs from source row {index}')
+        families.append(row['family'])
+    return families, {'path': str(path), 'sha256': hashlib.sha256(payload).hexdigest()}
 
 
 def leaf_paths(source) -> list[Path]:
@@ -185,6 +219,7 @@ def main():
     ap.add_argument('--targets', required=True, help='mixture policy declaring objective.logical_family_targets')
     ap.add_argument('--fingerprint', required=True)
     ap.add_argument('--role-ids', type=int, nargs='+', required=True)
+    ap.add_argument('--family-map', help='full source-bound natlang.logical-family-map/1 for non-cohort leaves')
     ap.add_argument('--out', required=True)
     ap.add_argument('--workers', type=int, default=6)
     args = ap.parse_args()
@@ -197,13 +232,18 @@ def main():
     if abs(sum(targets.values()) - 1) > 1e-9:
         raise ValueError(f'logical family targets do not sum to 1: {targets}')
     train = NativeGraphSource(manifest_path, args.fingerprint, required_split='train', role_ids=args.role_ids)
-    overrides, feature_bindings = feature_overrides(manifest_path)
-    train_ids = {entry['id'] for entry in train.entries}
-    if set(overrides) - train_ids:
-        raise ValueError('logical family features name rows absent from the exact train source')
-    families = [('native-communication' if entry.get('communication') else
-                 overrides[entry['id']] if entry['id'] in overrides else family_of(path))
-                for entry, path in zip(train.entries, leaf_paths(train))]
+    family_map_input = None
+    if args.family_map:
+        families, family_map_input = exact_family_rows(args.family_map, train, set(targets))
+        overrides, feature_bindings = {}, []
+    else:
+        overrides, feature_bindings = feature_overrides(manifest_path)
+        train_ids = {entry['id'] for entry in train.entries}
+        if set(overrides) - train_ids:
+            raise ValueError('logical family features name rows absent from the exact train source')
+        families = [('native-communication' if entry.get('communication') else
+                     overrides[entry['id']] if entry['id'] in overrides else family_of(path))
+                    for entry, path in zip(train.entries, leaf_paths(train))]
     rows = [{'id': e['id'], 'binding': e['binding'], 'family': f} for e, f in zip(train.entries, families)]
     (out / 'families.json').write_bytes(json.dumps({'schema': 'natlang.logical-family-map/1',
                                                     'source_sha256': train.file_sha256, 'rows': rows},
@@ -260,7 +300,8 @@ def main():
                'target_shares': targets, 'absent_families': missing, 'capped_families': capped, 'max_scale': cap, 'map': bind(out / 'families.json'),
                'census': bind(out / 'census.json'), 'ce_policy': bind(out / 'ce-policy.json'), 'scales': scales,
                'effective_shares': {f: scales[f] * mass[f] / total for f in scales},
-               'rule': [[p.pattern, f] for p, f in FAMILY_RULES],
+               'rule': None if family_map_input else [[p.pattern, f] for p, f in FAMILY_RULES],
+               'family_map_input': family_map_input,
                'feature_inputs': feature_bindings, 'feature_classified_rows': len(overrides)}
     (out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
     print(json.dumps({k: receipt[k] for k in ('scales', 'effective_shares', 'absent_families', 'capped_families')},
