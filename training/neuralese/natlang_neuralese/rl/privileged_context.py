@@ -349,8 +349,14 @@ def case_facts(case, *, custody, teacher_trajectories=(), attempt_feedback=()):
         add('expected_files', f'After a correct run, file {name} contains:\n{content}')
     for service, effect in sorted((semantics.get('effects') or {}).items()):
         add('expected_effects', f'Required effect on {service}: {_text(effect)}')
-    for failure in reference.get('failures') or []:
-        add('reference_failure', f'A verified wrong attempt to avoid: {_text(failure)}')
+    failures = reference.get('failures')
+    if type(failures) is int and failures >= 0:
+        add('reference_failure_count', f'The reference execution recorded {failures} failure' + ('.' if failures == 1 else 's.'))
+    elif failures is None or isinstance(failures, list):
+        for failure in failures or []:
+            add('reference_failure', f'A verified wrong attempt to avoid: {_text(failure)}')
+    else:
+        raise ValueError('reference failures must be a nonnegative count or a list of attempts')
     if reference.get('root'):
         add('reference_solution', 'A verified reference solution:\n' + _action_text(reference['root']))
     for child in reference.get('children') or []:

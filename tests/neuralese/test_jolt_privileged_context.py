@@ -576,3 +576,13 @@ def test_a_child_answer_guides_only_a_child_whose_declared_result_it_fits():
     assert answer_fits('The verified outcome of this call is return_result with status "blocked": x.', untyped)
     assert parse_type('Record<string, Decision>') == ('record', ('alias', 'Decision'))
     assert parse_type('Array<{ a: number }') is None
+
+
+def test_reference_failure_count_is_not_an_attempt_list():
+    case = train_case()
+    case.setdefault('curriculum', {}).setdefault('reference', {})['failures'] = 1
+    _, facts = case_facts(case, custody=custody())
+    assert any(f.kind == 'reference_failure_count' and '1 failure.' in f.text for f in facts)
+    case['curriculum']['reference']['failures'] = -1
+    with pytest.raises(ValueError, match='nonnegative count'):
+        case_facts(case, custody=custody())
