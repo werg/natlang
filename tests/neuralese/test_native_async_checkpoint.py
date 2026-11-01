@@ -461,3 +461,17 @@ def test_async_admission_reserves_measured_future_device_growth(monkeypatch):
     monkeypatch.setattr(trajectory_state, 'available_system_memory_bytes',
                         lambda: result['required_headroom_bytes'] - 1)
     assert not native_async_snapshot_headroom(state, optimizer)['eligible']
+
+
+def test_async_admission_preserves_lifetime_reserved_peak_across_step_peak_reset(monkeypatch):
+    from natlang_neuralese.train import trajectory_state
+    from natlang_neuralese.train.checkpoint_safety import native_async_snapshot_headroom
+    monkeypatch.setattr(torch.cuda, 'is_initialized', lambda: True)
+    monkeypatch.setattr(torch.cuda, 'max_memory_reserved', lambda: 1000)
+    monkeypatch.setattr(torch.cuda, 'memory_reserved', lambda: 500)
+    optimizer=torch.optim.AdamW([torch.nn.Parameter(torch.ones(2))])
+    state={'model':torch.ones(2),'training':{'options':{'_cuda_lifetime_peak_reserved_bytes':2000}}}
+    monkeypatch.setattr(trajectory_state,'available_system_memory_bytes',lambda:1<<40)
+    result=native_async_snapshot_headroom(state,optimizer)
+    assert result['device_peak_reserved_bytes']==2000
+    assert result['future_device_growth_allowance_bytes']==2000

@@ -4070,9 +4070,17 @@ def _main(argv=None, *, requested_refresh):
                 step_peak = torch.cuda.max_memory_allocated(args.device)
                 lifetime_peak = max(step_peak, getattr(args, '_cuda_lifetime_peak', 0))
                 args._cuda_lifetime_peak = lifetime_peak
+                step_reserved_peak = torch.cuda.max_memory_reserved(args.device)
+                lifetime_reserved_peak = max(step_reserved_peak,
+                    getattr(args, '_cuda_lifetime_peak_reserved', 0),
+                    int(checkpoint_options.get('_cuda_lifetime_peak_reserved_bytes') or 0))
+                args._cuda_lifetime_peak_reserved = lifetime_reserved_peak
+                checkpoint_options['_cuda_lifetime_peak_reserved_bytes'] = lifetime_reserved_peak
                 progress['cuda_memory_bytes'] = {'allocated': torch.cuda.memory_allocated(args.device),
                     'reserved': torch.cuda.memory_reserved(args.device),
-                    'step_peak_allocated': step_peak, 'lifetime_peak_allocated': lifetime_peak}
+                    'step_peak_allocated': step_peak, 'lifetime_peak_allocated': lifetime_peak,
+                    'step_peak_reserved': step_reserved_peak,
+                    'lifetime_peak_reserved': lifetime_reserved_peak}
                 torch.cuda.reset_peak_memory_stats(args.device)
             with (args.out / 'train.jsonl').open('a') as log:
                 log.write(json.dumps(progress, sort_keys=True) + '\n')

@@ -571,6 +571,13 @@ def native_async_snapshot_headroom(state, optimizer, *, margin=1.15, available_m
     device_peak = device_reserved = device_growth = 0
     if torch.cuda.is_initialized():
         device_peak = int(torch.cuda.max_memory_reserved())
+        try:
+            options=((state.get('training') or {}).get('options') or {})
+            lifetime_peak=options.get('_cuda_lifetime_peak_reserved_bytes',0)
+            if type(lifetime_peak) is int and lifetime_peak>=0:
+                device_peak=max(device_peak,lifetime_peak)
+        except AttributeError:
+            pass
         device_reserved = int(torch.cuda.memory_reserved())
         if device_peak <= 0:
             return {'eligible': False, 'reason': 'device_peak_unmeasured',
