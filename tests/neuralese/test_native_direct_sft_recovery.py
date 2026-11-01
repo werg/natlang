@@ -43,19 +43,112 @@ def test_completed_direct_sft_refresh_publishes_only_qualified_pending_child(tmp
     assert (s['round'],s['offset'],s['trained_rounds'])==(12,57,12)
 
 
-def test_completed_refresh_accepts_authenticated_same_rolling_slot(tmp_path):
+def _same_slot_publication_fixture(tmp_path):
     from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    tmp_path.mkdir(parents=True,exist_ok=True)
     def file(name, data):
         p=tmp_path/name;p.write_text(json.dumps(data));return binding(p)
-    parent=file('parent-pin',{'old':True});child=file('rolling',{'new':True})
-    prior=file('prior',{'schema':'natlang.direct-sft-refresh-publication/1','parent':{'sha256':'older'},'checkpoint':{'path':child['path'],'sha256':parent['sha256']}})
-    state=tmp_path/'state.json';state.write_text(json.dumps({'phase':'awaiting_semantic_refresh','checkpoint':child['path'],'pending_native_checkpoint':child['path'],'direct_sft_refresh_history':[prior]}))
+    rolling=tmp_path/'rolling';rolling.write_text(json.dumps({'step':57,'old':True}))
+    old_parent=file('parent-pin',{'step':56})
+    prior_child=binding(rolling)
+    state=tmp_path/'state.json';state.write_text(json.dumps({'phase':'awaiting_semantic_refresh','checkpoint':old_parent['path'],
+        'pending_native_checkpoint':str(rolling),'round':7,'trained_rounds':6,
+        'trained_task_ids':['already-earned'],'trained_supervised_tokens':123}))
+    common={'optimizer_present':True,'rng_present':True}
+    prior_boundary={'kind':'semantic-refresh','reached':True,'new_optimizer_updates':1,
+        'checkpoint_sha256':prior_child['sha256']}
+    prior_report=file('prior-report',{'numerics_ok':True,'checkpoint_sha256':prior_child['sha256'],
+        'continuation_boundary':prior_boundary})
+    prior_receipt=file('prior-receipt',{'checkpoint':{'sha256':prior_child['sha256']},
+        'continuation':{'checkpoint_sha256':old_parent['sha256']}})
+    prior_custody=file('prior-custody',{'schema':'natlang.earned-sft-checkpoint-custody/1',
+        'parent':old_parent|common|{'global_step':56},'successor':prior_child|common|{'global_step':57},
+        'old_bindings_and_quotas_preserved':True,'old_exposure_not_decreased':True})
+    publish_completed(state,report_ref=prior_report,receipt_ref=prior_receipt,custody_ref=prior_custody,
+        out=tmp_path/'prior-publication')
+    historical_sha=prior_child['sha256']
+    rolling.write_text(json.dumps({'step':58,'new':True}))
+    child=binding(rolling);parent=prior_child|common|{'global_step':57}
+    receipt=file('receipt',{'checkpoint':{'sha256':child['sha256']},
+        'continuation':{'checkpoint_sha256':historical_sha}})
     boundary={'kind':'semantic-refresh','reached':True,'new_optimizer_updates':1,'checkpoint_sha256':child['sha256']}
     report=file('report',{'numerics_ok':True,'checkpoint_sha256':child['sha256'],'continuation_boundary':boundary})
-    receipt=file('receipt',{'checkpoint':{'sha256':child['sha256']},'continuation':{'checkpoint_sha256':'older'}})
-    common={'optimizer_present':True,'rng_present':True};custody=file('custody',{'schema':'natlang.earned-sft-checkpoint-custody/1','parent':parent|common|{'global_step':58},'successor':child|common|{'global_step':59},'old_bindings_and_quotas_preserved':True,'old_exposure_not_decreased':True})
-    publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=tmp_path/'publication')
-    assert json.loads(state.read_text())['checkpoint']==child['path']
+    custody=file('custody',{'schema':'natlang.earned-sft-checkpoint-custody/1','parent':parent,
+        'successor':child|common|{'global_step':58},'old_bindings_and_quotas_preserved':True,
+        'old_exposure_not_decreased':True})
+    saved=json.loads(state.read_text());saved.update({'phase':'awaiting_semantic_refresh',
+        'pending_native_checkpoint':str(rolling)});state.write_text(json.dumps(saved))
+    return {'state':state,'report':report,'receipt':receipt,'custody':custody,
+        'out':tmp_path/'publication','historical_sha':historical_sha,'rolling':rolling,
+        'prior_publication':tmp_path/'prior-publication'}
+
+
+def test_completed_refresh_accepts_authenticated_same_rolling_slot(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    fixture=_same_slot_publication_fixture(tmp_path)
+    before=json.loads(fixture['state'].read_text())
+    result=publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
+        custody_ref=fixture['custody'],out=fixture['out'])
+    assert json.loads(fixture['state'].read_text())['checkpoint']==str(fixture['rolling'].resolve())
+    assert json.loads(fixture['state'].read_text())['round']==before['round']
+    after=json.loads(fixture['state'].read_text())
+    assert after['trained_rounds']==before['trained_rounds']
+    assert after['trained_task_ids']==before['trained_task_ids']
+    assert after['trained_supervised_tokens']==before['trained_supervised_tokens']
+    assert result['stage_completion_granted'] is False
+    assert result['behavioral_qualification_granted'] is False
+    assert result['additional_training_credit']==0
+    assert result['parent']['sha256']==fixture['historical_sha']
+    proof=result['historical_parent_proof']
+    assert proof['bytes_verified_currently'] is False
+    assert proof['identity']=={'path':str(fixture['rolling'].resolve()),
+        'sha256':fixture['historical_sha'],'global_step':57}
+
+
+def test_completed_refresh_rejects_missing_or_nonlast_same_slot_history(tmp_path):
+    import copy
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    fixture=_same_slot_publication_fixture(tmp_path)
+    state=json.loads(fixture['state'].read_text());state['direct_sft_refresh_history']=[]
+    fixture['state'].write_text(json.dumps(state))
+    with pytest.raises(ValueError,match='last authenticated parent'):
+        publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
+            custody_ref=fixture['custody'],out=fixture['out'])
+    state=json.loads(fixture['state'].read_text())
+    stale=tmp_path/'stale-last-publication'
+    stale.write_text(json.dumps({'schema':'natlang.direct-sft-refresh-publication/1',
+        'checkpoint':{'path':str(fixture['rolling'].resolve()),'sha256':'f'*64}}))
+    state['direct_sft_refresh_history'].append(binding(stale));fixture['state'].write_text(json.dumps(state))
+    with pytest.raises(ValueError,match='overwritten parent identity'):
+        publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
+            custody_ref=fixture['custody'],out=fixture['out'])
+
+
+def test_completed_refresh_rejects_tampered_historical_evidence_and_parent_step(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    fixture=_same_slot_publication_fixture(tmp_path)
+    prior=json.loads(fixture['prior_publication'].read_text())
+    Path(prior['receipt']['path']).write_text('{}')
+    with pytest.raises(ValueError,match='exact file binding'):
+        publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
+            custody_ref=fixture['custody'],out=fixture['out'])
+    # A fresh fixture is needed because the tampered prior evidence is immutable.
+    fixture=_same_slot_publication_fixture(tmp_path/'step')
+    custody=json.loads(Path(fixture['custody']['path']).read_text());custody['parent']['global_step']=56
+    Path(fixture['custody']['path']).write_text(json.dumps(custody))
+    fixture['custody']=binding(Path(fixture['custody']['path']))
+    with pytest.raises(ValueError,match='do not prove its saved parent'):
+        publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
+            custody_ref=fixture['custody'],out=fixture['out'])
+
+
+def test_completed_refresh_rejects_same_slot_child_hash_mismatch(tmp_path):
+    from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed
+    fixture=_same_slot_publication_fixture(tmp_path)
+    fixture['rolling'].write_text('changed after receipt')
+    with pytest.raises(ValueError,match='native readiness artifact changed'):
+        publish_completed(fixture['state'],report_ref=fixture['report'],receipt_ref=fixture['receipt'],
+            custody_ref=fixture['custody'],out=fixture['out'])
 
 
 def _session_reconciliation_fixture(tmp_path):
