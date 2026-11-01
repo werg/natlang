@@ -44,6 +44,11 @@ def bind(path):
     return {'path': str(path), 'sha256': sha256_file_hex_cached(path, trust_archive_receipt=False), 'bytes': path.stat().st_size}
 
 
+def sft_capacity_descriptor(source, geometry):
+    """Keep the executable descriptor within the runtime's strict wire schema."""
+    return {'schema': 'natlang.native-sft-capacity-cases/1', 'source': source, 'geometry': geometry}
+
+
 def checked(ref, name):
     if not isinstance(ref, dict) or not isinstance(ref.get('path'), str) or not isinstance(ref.get('sha256'), str):
         raise ValueError(f'{name} lacks an exact binding')
@@ -581,8 +586,7 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
         'new_forward_tokens_over_262144': sum(entry['forward_tokens'] > 262144
             for entry in new_source.entries[previous['rows']:]),
         'scope': 'Untruncated indexed graph geometry; not serving-context or training-position qualification.'}
-    write_json_durable(descriptor, {'schema': 'natlang.native-sft-capacity-cases/1', 'source': bind(new_source_path),
-                                   'geometry': geometry_ref, 'observed_geometry': geometry_summary})
+    write_json_durable(descriptor, sft_capacity_descriptor(bind(new_source_path), geometry_ref))
     if file_signature(signals_path) != signals_before or file_signature(graph_path) != graph_before:
         raise ValueError('source or census changed while staging the continuation')
     result = {'schema': SCHEMA, 'status': 'source-ce-recipe-geometry-qualified-not-published', 'training_admission': False,

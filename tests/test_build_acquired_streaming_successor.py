@@ -7,6 +7,16 @@ import pytest
 from scripts.neuralese_data.build_acquired_streaming_successor import FAMILY, appended_manifest, load_signals, scales_for_append, verify_diagnosis_proof
 
 
+def test_capacity_descriptor_matches_strict_runtime_contract():
+    from scripts.neuralese_data.build_acquired_streaming_successor import sft_capacity_descriptor
+    source={'path': '/source', 'sha256': 'a'*64}
+    geometry={'path': '/geometry', 'sha256': 'b'*64}
+    descriptor=sft_capacity_descriptor(source, geometry)
+    assert set(descriptor)=={'schema', 'source', 'geometry'}
+    assert descriptor['schema']=='natlang.native-sft-capacity-cases/1'
+    assert descriptor['source']==source and descriptor['geometry']==geometry
+
+
 def census():
     return {'families': {'coding': {'unscaled_mass': 153308050.0},
                          'native-communication': {'unscaled_mass': 14715643.0},
