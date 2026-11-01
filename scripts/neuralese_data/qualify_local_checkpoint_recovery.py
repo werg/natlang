@@ -155,7 +155,7 @@ from pathlib import Path
 from natlang_neuralese.model.native_model import load_native_checkpoint
 from natlang_neuralese.data.native_sources import NativeGraphSource
 from natlang_neuralese.data.native_graph_schema import communication_classification
-from natlang_neuralese.train.checkpoint_offload import recovery_training_custody, _plan_matches_checkpoint
+from natlang_neuralese.train.checkpoint_offload import recovery_training_custody, recovery_static_sft_contract, _plan_matches_checkpoint
 from natlang_neuralese.train.recipe import native_source_dependencies
 checkpoint,base,train,held,sample,fingerprint,mapping,plan_path=sys.argv[1:]
 paths=json.loads(Path(mapping).read_text())['paths']
@@ -167,7 +167,10 @@ def route(parent,child):
  raise ValueError('restore source escaped staged closure: '+key)
 train_deps=native_source_dependencies(train,source_route=route);held_deps=native_source_dependencies(held,source_route=route)
 model,tokenizer,roles,config,state=load_native_checkpoint(checkpoint,base=base,device='cpu')
-if not _plan_matches_checkpoint(json.loads(Path(plan_path).read_text()),state):raise ValueError('restored checkpoint source and frame custody differs from recovery plan')
+plan=json.loads(Path(plan_path).read_text())
+if not _plan_matches_checkpoint(plan,state):raise ValueError('restored checkpoint source and frame custody differs from recovery plan')
+if plan.get('require_static_contract') is not True or recovery_static_sft_contract(state['training'])!=plan.get('sft_static_contract'):
+ raise ValueError('restored checkpoint lacks the exact static SFT recovery contract')
 if config['tokenizer_fingerprint']!=fingerprint:raise ValueError('restored tokenizer fingerprint differs')
 source=NativeGraphSource(sample,fingerprint,required_split='train',role_ids=tuple(config['marker_ids']))
 example=next(iter(source));classification=communication_classification(example)
