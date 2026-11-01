@@ -4,6 +4,66 @@ Observation window: 10:43–11:29 CET. Recheck actual processes before acting.
 Primary supervisor: Codex; active goal remains continued capable LFM3 native
 Neuralese/Natlang training, not completion of this status document.
 
+## Actual continuation, source admission and writer diagnosis, November 1, 02:52 CET
+
+The previous supervision turn made concrete progress: obsolete state retirement
+restored checkpoint admission; it was not an idle wait. Local learner
+`lfm3-sft59-telecom-frontier.service` is active. The 59 parent is
+`b7556354c1e4359822572843669d5688367e549e0f38605c3920e07658777a42`.
+All actual capacity gates passed, reservation succeeded, and the optimizer update
+started at02:47:47. Do not credit step60 or new-row exposure before its durable
+checkpoint proves them. Source189390 binds37 genuinely missing design-brief rows
+and one35-node telecom native graph. The new first-visit frontier prevents newly
+appended rows waiting thousands of updates for their first visit; remaining
+quotas, optimizer/RNG and previous exposure remain intact.
+
+Actual SFT58 followed the real privileged text-twin57 update. Checkpoint58 SHA is
+`00952a20f32cfecad1d2441529cc0c8a75fda10e05a8745141eec6a14db81f4c`.
+Its full external export copied all15,295,863,202bytes and is still independently
+reading back. The source pin remains protected until the receipt commits.
+Full56 is independently verified on both external disk and Pop. Runtime/source
+closure exports are separate obligations; the56 closure does not cover later
+source additions. These are recovery facts, not behavioral qualification.
+
+The actual Pop56 native-writer probe on current feedback failed: first reply
+stopped inside a produce span, then repair turns produced reasoning without tool
+calls and exhausted the budget. Four turns were allowed,2048total tokens with
+768per turn. The first launcher failure occurred before a model request and is
+archived separately. Trace and exact build/controls are in
+`/mnt/external/natlang-luna-campaigns/native-writer-feedback-probe56-1101`.
+Clearer feedback alone has not qualified native writing. Early backbone RL keeps
+productive text-twin guidance; joint native SFT remains required. Pop's capture
+actor was confirmed stopped and its consumer lease released after the probe;
+the tunnel was also stopped. Its3 cached states are not live SFT dependencies.
+
+The telecom v27 capture has32decisions,35graph nodes,4055positive CE tokens,
+3 host-encoded typed-text producer nodes and9 native consumer imports. The graph
+is self-contained, and local states are independently verified. Zero direct
+producer-body CE means this does not demonstrate learned student writing.
+Actual scripted receipt preflight now passes27host reads plus two typed callable
+invocations; this checks binding/return shapes, not semantic model compliance.
+A follow-up isolates the call store after an incidental shared SQLite lock.
+
+Superseded55's local aliases were retired only after fresh full Pop SHA readback,
+no consumer lease and no active trainer dependency. Receipt:
+`ops/retire-local55-verified-peer-1101.json`. See
+`STORAGE_RETIREMENT_20261101.md` for the prior cleanup. Reservations and full-state
+pins can still consume headroom immediately; bound the export queue, do not pin
+every update indefinitely. A120-second I/O window temporarily freezes only the
+bulk port replay, with automatic thaw, to accelerate full58 verification. Two
+orphaned metadata crawls were stopped after their sought paths were resolved.
+
+Acquired conversion shard0 was found terminal-failed since01:52 on an authenticated
+runtime-continuation mismatch. LunaA now owns its concrete diagnosis, safe repair,
+tests and resumed conversion. LunaC is preparing a materially different BIRD
+inspection application on current pins after telecom qualification. Existing
+bulk port replay remains useful and must resume after the bounded I/O window.
+
+Main quick checks pass after shared hashing/configurable-root fixes;7plan tests
+and5custody/ratchet tests pass. Full checks are active in the memory ledger;
+completion is not claimed. Newer checkpoints still require actual development
+behavior evaluation.
+
 ## Recovery, real guidance and data quality, November 1, 01:38 CET
 
 Full checkpoint56 export is now independently read back on the external
