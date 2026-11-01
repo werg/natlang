@@ -1,5 +1,24 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Source continuations and asynchronous checkpoints (engineering, 2026-11-01)
+
+Qualify the publication path alongside a source continuation, before spending
+SGD on it. An authenticated target repair changes a row binding; preserve its
+old exposure and quota, record the exact correction, and never claim unchanged
+bindings. Completed SFT publication supports the typed correction custody proof
+in `rl/native_direct_sft_recovery.py`. A carried SFT frame owns its own train/held
+receipts and bindings; a surrounding RL frame describes different data. Keep
+manifest SHA256 and the combined trainer source identity distinct. Stage custody
+preparation before a learner finishes, and cache verified extraction artifacts
+so a corrected review script does not repeatedly decode full checkpoints.
+
+Ordinary updates do not need to hash the rolling checkpoint for an oversize
+capacity proof. When such a proof is needed, a concurrent atomic checkpoint
+replacement requires a fresh checked read, with a bounded retry and writer drain;
+never weaken file-identity checks. Distributed resumes bind the actual earned
+rolling bytes while retaining the coordinator's original seed or exact allowed
+role identity. Changing other fixed controls still requires its proper transition.
+
 ## Native numerical and observation custody (engineering, 2026-10-31 evening)
 
 LFM3 normalization must share canonical row arithmetic in ordinary inference,

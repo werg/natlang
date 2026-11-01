@@ -1,4 +1,4 @@
-## Live supervision update, 2026-11-01 15:18 CET
+## Live supervision update, 2026-11-01 15:47 CET
 
 This update supersedes the earlier instantaneous observations below.
 
@@ -30,7 +30,21 @@ This update supersedes the earlier instantaneous observations below.
   gate rejected a zero-update publication; root recorded the no-SGD cutover.
   Replacement `lfm3-joint-sft63-frontierfix-1101.service` launched at15:12:58
   from exact frozen0f8a runtime, HIGH76GiB and one-update refresh. Its verifier
-  passed; actual trainer PID3394780 is running capacity checks. No new SGD yet.
+  passed. Actual SGD63→64 completed at15:25:29 and full save at15:28:24:
+  SHA256 `6df3598619d4d97c3b9e14b4c62158f06fc8806c33e1bb72532084d782e0ab64`,
+  15333234286 bytes. Forty graph visits include27 communication visits and five
+  newly appended graphs. Totals460 SFT visits and114 communication visits;
+  1048808 required visits remain a full obligation, with1048348 still missing.
+  Full producer-open/end target weights are preserved for26 positions each.
+  Actual physical forward tokens248718;632.75 physical tokens/s including
+  oversize preflight in the update timer. This is not an isolated speed comparison.
+  Source repair exposed a missing publisher transition; mainffca507bc adds
+  explicit authenticated correction custody (26 publisher tests pass). Root
+  reviewed the real parent-path alias and published64 at15:42:40 using
+  `ops/continuation64-307946-v8-1101/publication64.json`. No stage completion or
+  behavioral qualification is granted. Next current-policy RL launched at15:44:30
+  as `lfm3-onpolicy64-307946-1101.service`; round12 collection binding attests64.
+  Exact config/launch: `ops/next64-onpolicy-307946-1101/`.
 - Paid teacher generation is paused: live process/service/timer checks found no
   active generation. The last one-case Luna run exposed an oracle contradiction
   and supplied no admitted positive data; raw evidence is preserved. Repair and
@@ -41,7 +55,10 @@ This update supersedes the earlier instantaneous observations below.
   an active offloader alone does not prove independently recoverable63.
 - NVMe has62GiB free; external volume273GiB free. Keep the40GiB internal floor.
   Three source converters and the offloader are running; none remains frozen.
-  The learner is initializing; no new optimizer advancement is claimed yet.
+  Root retired the15.3GB discarded zero-SGD metadata checkpoint after64 was
+  saved and published, retaining all its reports, source proof and exact63 parent.
+  Its retirement receipt remains in the interruption archive. Internal free
+  space recovered to61GiB; primary61 external recovery remains verified.
   The weekly read-only storage scan had run11 hours and was competing for HDD
   metadata I/O. Root stopped it at15:02; PID2780081 is gone. No data was deleted;
   active storage-floor supervision and checkpoint exports remain in place.
@@ -62,6 +79,19 @@ This update supersedes the earlier instantaneous observations below.
   labels, but does not establish successful authoring. Exact observation is
   `ops/earned54-61-boundary-teaching-observation-1101.json`; it is not a full-corpus
   census or an RL gradient audit. Consumer input markers need not be predictions.
+- Another actual resident/outer recovery test exposed an asynchronous slot-hash
+  race during ordinary updates. Main de2db407d omits the unnecessary read and
+  uses a bounded fresh checked read for real capacity proofs. The targeted
+  oversize and actual resident HTTP outer-recovery checks passed27/27. New SFT
+  continuations must include this fix; current RL does not exercise that SFT path.
+- Pop is live with an idle8GiB RTX4060 Laptop GPU and14GiB host RAM. Root launched
+  a matched16-program baseline there, using full prompt and1200s/64-request/
+  1000-turn case limits, one worker, actual0f8a runtime and in-place baseline0.
+  Unit `pop-dev16-baseline0-0f8a-v2-1101.service`, actor ready15:25:24.
+  The first attempt failed before model launch on Python3.10's missing
+  `hashlib.file_digest`; a streaming hash fixed the runner. No baseline score
+  is claimed yet. Do not transfer a15GB full checkpoint into Pop's18GiB free
+  space; later matched evaluations use a qualified inference-only export.
 
 ## Earlier live supervision update, 2026-11-01 13:02 CET
 
