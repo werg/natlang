@@ -73,11 +73,116 @@ def verify_amended_rollout(reference, *, round_directory, rollout_path):
     if not isinstance(reference,dict):
         raise ValueError('external rollout projection lacks an authenticated amendment')
     proof_path=_bound(reference);proof=json.loads(proof_path.read_text());filtered=proof.get('filtered_rollouts') or {}
-    if (proof.get('schema')!='natlang.amended-collection-continuation/1'
+    if (proof.get('schema') not in {'natlang.amended-collection-continuation/1',
+                                   'natlang.completed-collection-withdrawal/1'}
             or proof.get('out')!=str(round_directory) or _bound(filtered)!=rollout_path
             or filtered.get('bytes')!=rollout_path.stat().st_size):
         raise ValueError('external rollout projection differs from its exact amendment')
     return proof
+
+
+def adopt_completed_collection_withdrawal(state, *, round_directory, report,
+                                          amendment_ref, no_update_evidence):
+    """Replace a failed completed collection's pending rows with its exact safe projection.
+
+    This transition archives the original attempted objective and gives it no
+    optimizer/update credit. It is allowed only before any learner output
+    exists, with an independently recorded zero-update hold and the actual
+    current checkpoint still at the collection's policy parent.
+    """
+    from ..common.hashing import sha256_file_hex_cached
+    from ..train.native_readiness import _bound
+    round_dir = Path(round_directory).resolve(strict=True)
+    proof_path = _bound(amendment_ref)
+    proof = json.loads(proof_path.read_text())
+    if (proof.get('schema') != 'natlang.completed-collection-withdrawal/1'
+            or proof.get('out') != str(round_dir)
+            or report.get('historical_collection_complete') is not True
+            or report.get('collection_complete') is not True
+            or report.get('amendment_proof') != str(proof_path)
+            or report.get('amended_complete_groups') != proof.get('groups')):
+        raise ValueError('completed-collection transition lacks its exact authenticated projection')
+    raw_rollouts = round_dir / 'rollouts.jsonl'
+    old_rollout_ref = (proof.get('files') or {}).get('rollouts.jsonl')
+    if (not isinstance(old_rollout_ref, dict) or _bound(old_rollout_ref) != raw_rollouts.resolve(strict=True)
+            or sha256_file_hex_cached(raw_rollouts) != old_rollout_ref.get('sha256')):
+        raise ValueError('completed-collection transition does not bind the original raw rollout file')
+    projection_ref = proof.get('filtered_rollouts') or {}
+    projection = _bound(projection_ref)
+    if (projection != Path(report.get('amended_rollouts', '')).resolve(strict=True)
+            or projection_ref.get('bytes') != projection.stat().st_size):
+        raise ValueError('completed-collection transition differs from its rollout projection')
+    binding_ref = (proof.get('files') or {}).get('collection-binding.json')
+    if not isinstance(binding_ref, dict):
+        raise ValueError('completed-collection transition omits its immutable collection binding')
+    binding_path = _bound(binding_ref)
+    binding = json.loads(binding_path.read_text())
+    checkpoint = Path(state.get('checkpoint', '')).resolve(strict=True)
+    checkpoint_sha = sha256_file_hex_cached(checkpoint)
+    if (state.get('active_update_round') != str(round_dir)
+            or Path(state.get('update_rollouts', '')).resolve(strict=True) != raw_rollouts
+            or binding.get('policy_id') != checkpoint_sha):
+        # The exact same projection is an idempotent no-op after a successful
+        # prior transition; all other non-raw inputs indicate an unrelated or
+        # already-mutated operation.
+        prior = next((row for row in reversed(state.get('collection_withdrawal_history', []))
+                      if row.get('amendment') == amendment_ref), None)
+        if (prior is not None and state.get('active_update_round') == str(round_dir)
+                and state.get('update_rollouts') == str(projection)
+                and state.get('update_amendment_proof') == amendment_ref
+                and prior.get('original_policy_checkpoint', {}).get('sha256') == checkpoint_sha
+                and not (round_dir / 'learner').exists()):
+            return state
+        raise ValueError('active update does not match the original collection and checkpoint parent')
+    if not state.get('update_mode') or not isinstance(state.get('update_policy_loss'), dict):
+        raise ValueError('completed collection has no preserved pending update objective')
+    # The destination is the only accepted learner output location for this
+    # production path. Its absence plus an exact zero-credit hold establishes
+    # that the sampled update never entered native_stage.
+    learner_dir = round_dir / 'learner'
+    if learner_dir.exists() or any((round_dir / name).exists() for name in
+            ('native-training-receipt.json', 'learner-report.json', 'checkpoint.pt')):
+        raise ValueError('learner outputs already exist; cannot replace its active rollout source')
+    if state.get('pending_native_checkpoint') or state.get('pending_native_round_dir'):
+        raise ValueError('pending native checkpoint prevents collection withdrawal transition')
+    if state.get('last_learner_progress'):
+        progress = state['last_learner_progress']
+        if progress.get('checkpoint_sha256') != checkpoint_sha:
+            raise ValueError('saved learner progress no longer names the current checkpoint parent')
+    guard_path = _bound(no_update_evidence)
+    guard = json.loads(guard_path.read_text())
+    withdrawn_ids = {row.get('task_id') for row in proof.get('withdrawals', [])}
+    if (guard.get('schema') != 'natlang.live-invalid-task-update-hold/1'
+            or guard.get('optimizer_updates_credited') != 0
+            or not guard.get('config_before_sha256') or not guard.get('config_after_sha256')
+            or guard.get('affected_task_id') not in withdrawn_ids):
+        raise ValueError('withdrawal lacks an exact zero-update controller hold for the affected task')
+    transition = {
+        'schema': 'natlang.rl-completed-collection-withdrawal-transition/1',
+        'round_directory': str(round_dir),
+        'original_policy_checkpoint': {'path': str(checkpoint), 'sha256': checkpoint_sha,
+                                       'bytes': checkpoint.stat().st_size},
+        'original_rollouts': {'path': str(raw_rollouts), 'sha256': old_rollout_ref['sha256'],
+                              'bytes': old_rollout_ref['bytes']},
+        'projected_rollouts': {'path': str(projection), 'sha256': projection_ref['sha256'],
+                               'bytes': projection_ref['bytes']},
+        'amendment': amendment_ref,
+        'no_update_evidence': {'path': str(guard_path), 'sha256': sha256_file_hex_cached(guard_path),
+                               'bytes': guard_path.stat().st_size},
+        'preserved_objective': {'mode': state['update_mode'],
+                                'policy_loss': state['update_policy_loss'],
+                                'stages': state.get('update_stages'),
+                                'learner_parameters': state.get('update_learner_parameters')},
+        'optimizer_updates_credited': 0,
+        'retained_rollout_count': report.get('rollouts'),
+        'withdrawals': proof.get('withdrawals'),
+    }
+    history = state.setdefault('collection_withdrawal_history', [])
+    if transition not in history:
+        history.append(transition)
+    state['update_rollouts'] = str(projection)
+    state['update_amendment_proof'] = amendment_ref
+    return state
 
 
 def complete_update_audit(state, *, checkpoint):
@@ -1366,6 +1471,8 @@ def run(config_path, *, rounds=None, stop=None):
             if not config.get('after_update') and not config.get('actor_command'):
                 raise ValueError('configure after_update before learning: every endpoint needs new weights')
             cases = list(read_jsonl(config['cases']))
+            from .task_source import validate_current_materialized_task_contracts
+            validate_current_materialized_task_contracts(cases)
             if any(r.get('split') != 'train' for r in cases):
                 raise ValueError('RL source must contain only train-split tasks')
             if not cases:
@@ -1430,6 +1537,17 @@ def run(config_path, *, rounds=None, stop=None):
                 state.update(phase='stopped_collecting', latest_reward=report)
                 write_json_durable(state_path, state)
                 return state
+            if report.get('historical_collection_complete') is True:
+                round_key = str(round_dir.resolve())
+                amendment_ref = (config.get('amended_collection_continuations') or {}).get(round_key)
+                no_update_ref = (config.get('completed_collection_withdrawal_guards') or {}).get(round_key)
+                if amendment_ref is None or no_update_ref is None:
+                    raise ValueError('completed collection withdrawal requires its exact amendment and zero-update hold bindings')
+                adopt_completed_collection_withdrawal(state, round_directory=round_dir, report=report,
+                    amendment_ref=amendment_ref, no_update_evidence=no_update_ref)
+                # Make the authenticated projection durable before the later
+                # active-update path can select/launch its learner command.
+                write_json_durable(state_path, state)
             amended_groups=report.get('amended_complete_groups')
             amended_offset=None
             if amended_groups is not None:

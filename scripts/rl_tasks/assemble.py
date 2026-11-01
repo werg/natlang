@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 from natlang_neuralese.common.custody import REGISTRY, ProtectedWorlds, world_identities  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex as sha_file  # noqa: E402
+from natlang_neuralese.rl.task_source import validate_current_materialized_task_contracts  # noqa: E402
 
 LEGACY = ROOT / 'runs/natlang-rl-train-curriculum-lfm3-20261030-stop-evidence/cases.jsonl'
 
@@ -163,6 +164,7 @@ def main():
             continue
         report = json.loads(verified.read_text())
         cases = rows_of(verified.parent / 'cases.jsonl')
+        validate_current_materialized_task_contracts(cases)
         if sha_file(verified.parent / 'cases.jsonl') != report['cases_sha256']:
             raise SystemExit(f'{source}: verified cases differ from their verification report')
         shutil.copyfile(verified, out / 'verification' / f'{source}.json')

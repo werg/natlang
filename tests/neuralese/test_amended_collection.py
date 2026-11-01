@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import pytest
 from natlang_neuralese.rl.amended_collection import resume_amended_collection
+from natlang_neuralese.rl.production import adopt_completed_collection_withdrawal
 
 
 def test_interrupted_group_projection_is_authenticated(tmp_path):
@@ -120,3 +121,167 @@ def test_completed_update_accepts_only_exact_amendment_projection(tmp_path):
         verify_amended_rollout(None,round_directory=round_dir,rollout_path=projection)
     projection.write_text('tamper')
     with pytest.raises(ValueError):verify_amended_rollout(ref,round_directory=round_dir,rollout_path=projection)
+
+
+def test_completed_collection_withdrawal_keeps_other_complete_groups_and_binds_stale_toolace(tmp_path):
+    from natlang_neuralese.rl.task_source import _canonical_row_sha256
+    out=tmp_path/'round';out.mkdir();policy='b'*64
+    def bind(path):return {'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size}
+    def write(name,value):
+        path=out/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(value if isinstance(value,str) else json.dumps(value)+'\n');return path
+    retained={'id':'math-task','split':'train','source_ids':['math:1'],'source_groups':['math:1'],
+        'source_revisions':['current'],'curriculum':{'external':{'source':'math'}},'semantics':{}}
+    stale={'id':'toolace-task','split':'train','source_ids':['Team-ACE/ToolACE:3509'],'source_groups':['toolace:3509'],
+        'source_revisions':['natlang.broad_external_rl_tasks/1','Team-ACE/ToolACE@6bda777'],
+        'curriculum':{'external':{'source':'toolace'}},'semantics':{}}
+    cases=tmp_path/'cases.jsonl';cases.write_text(''.join(json.dumps(row)+'\n' for row in [retained,stale]))
+    selected=write('selected-cases.jsonl',''.join(json.dumps(row)+'\n' for row in [retained,stale]))
+    write('packet.jsonl',selected.read_text())
+    binding={'schema':'natlang.rl-collection-binding/1','policy_id':policy,'cases_sha256':bind(cases)['sha256'],
+        'rows':2,'offset':0,'group':2,'root_mode':'student','seed_base':700000,'case_seconds':600,
+        'max_model_requests':128,'max_turns':160,'neuralese_server':False,'temperature':1.,'guided':False,'endpoints':['actor']}
+    write('collection-binding.json',binding)
+    score={'collection_complete':True,'groups':[{'task_id':'math-task','scored':2,'outcomes':['task_success']*2,'spread':True},
+        {'task_id':'toolace-task','scored':2,'outcomes':['task_success']*2,'spread':True}],'actor_receipts':{},'scored':4,'rollouts':4}
+    write('score.json',score)
+    for name in ['journal.jsonl','preparation.json','sampling-config.json']:write(name,{})
+    queue=[];rollouts=[];names=['collection-binding.json','score.json','rollouts.jsonl','packet.jsonl','queue.jsonl',
+        'journal.jsonl','preparation.json','sampling-config.json','selected-cases.jsonl']
+    for group,task_id in enumerate(['math-task','toolace-task']):
+        for sample in range(2):
+            result=write(f'results/{group}-{sample}.json',{})
+            names.append(result.relative_to(out).as_posix())
+            queue.append({'group':group,'sample':sample,'index':group,'task_id':task_id,'output':str(result)})
+            rollouts.append({'group':group,'sample':sample,'task_id':task_id,'policy':{'checkpoint_sha256':policy},
+                'outcome':'task_success','reward':{'quality':1},'turns':[{}]})
+    write('queue.jsonl',''.join(json.dumps(row)+'\n' for row in queue))
+    write('rollouts.jsonl',''.join(json.dumps(row)+'\n' for row in rollouts))
+    filtered=tmp_path/'retained-rollouts.jsonl';filtered.write_text(''.join(json.dumps(row)+'\n' for row in rollouts[:2]))
+    withdrawal={'group':1,'task_id':'toolace-task','row_sha256':_canonical_row_sha256(stale),
+        'reason':'stale-toolace-schema-contract','required_schema_contract':'natlang.toolace-schema-contract/1'}
+    proof=tmp_path/'proof.json';proof.write_text(json.dumps({'schema':'natlang.completed-collection-withdrawal/1',
+        'out':str(out),'groups':[0],'withdrawals':[withdrawal],'files':{name:bind(out/name) for name in names},
+        'source_cases':bind(cases),
+        'filtered_rollouts':bind(filtered)}))
+    request={'out':out,'cases':cases,'policy_id':policy,'rows':2,'group':2,'endpoints':['actor'],'neuralese_server':False}
+    result=resume_amended_collection(bind(proof),request,validate_actors=lambda *a,**kw:None)
+    assert result['collection_complete'] is True and result['historical_collection_complete'] is True
+    assert result['amended_complete_groups']==[0] and result['withdrawn_groups']==[withdrawal]
+    assert result['scored']==2 and result['successes']==2
+    bad=json.loads(proof.read_text());bad['withdrawals'][0]['row_sha256']='0'*64
+    proof.write_text(json.dumps(bad))
+    with pytest.raises(ValueError,match='withdrawal proof'):
+        resume_amended_collection(bind(proof),request,validate_actors=lambda *a,**kw:None)
+
+
+def test_completed_withdrawal_preserves_privileged_rows_and_unknown_native_failure(tmp_path):
+    from natlang_neuralese.rl.task_source import _canonical_row_sha256
+    out=tmp_path/'round';out.mkdir()
+    checkpoint=tmp_path/'checkpoint.pt';checkpoint.write_bytes(b'checkpoint-parent')
+    policy=hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    def bind(path):return {'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size}
+    def write(name,value,raw=False):
+        path=out/name;path.parent.mkdir(parents=True,exist_ok=True)
+        if isinstance(value,bytes):data=value
+        elif raw or isinstance(value,str):data=value.encode()
+        else:data=(json.dumps(value)+'\n').encode()
+        path.write_bytes(data)
+        return path
+    ids=['math-task','toolace-task','kk-task','gsm-task']
+    sources=['math','toolace','knights-knaves','gsm8k']
+    cases_rows=[]
+    for ident,source in zip(ids,sources):
+        revisions=['natlang.broad_external_rl_tasks/1']
+        source_ids=[source+':1']
+        external={'source':source}
+        if source=='toolace':source_ids=['Team-ACE/ToolACE:3509']
+        cases_rows.append({'id':ident,'split':'train','source_ids':source_ids,'source_groups':[source+':1'],
+            'source_revisions':revisions,'curriculum':{'external':external},'semantics':{}})
+    cases=tmp_path/'cases.jsonl';cases.write_text(''.join(json.dumps(row)+'\n' for row in cases_rows))
+    selected=write('selected-cases.jsonl',''.join(json.dumps(row)+'\n' for row in cases_rows))
+    write('packet.jsonl',selected.read_text())
+    binding={'schema':'natlang.rl-collection-binding/1','policy_id':policy,'cases_sha256':bind(cases)['sha256'],
+        'rows':4,'offset':0,'group':4,'jolt_teacher_attempts':1,'root_mode':'student','seed_base':700000,
+        'case_seconds':600,'max_model_requests':128,'max_turns':160,'neuralese_server':False,
+        'temperature':1.,'guided':False,'endpoints':['actor']}
+    write('collection-binding.json',binding)
+    groups=[{'task_id':'math-task','scored':4,'outcomes':['task_success']*4,'spread':False},
+        {'task_id':'toolace-task','scored':4,'outcomes':['invalid_action']+['semantic_mismatch']*3,'spread':False},
+        {'task_id':'kk-task','scored':3,'outcomes':['task_success']*3+['unresolved'],'spread':False},
+        {'task_id':'gsm-task','scored':4,'outcomes':['task_success']*4,'spread':False}]
+    write('score.json',{'collection_complete':True,'groups':groups,'actor_receipts':{},'scored':19,'rollouts':20})
+    write('preparation.json',{});write('sampling-config.json',{})
+    queue=[];rollouts=[];names=['collection-binding.json','score.json','rollouts.jsonl','packet.jsonl','queue.jsonl',
+        'journal.jsonl','preparation.json','sampling-config.json','selected-cases.jsonl']
+    for group,ident in enumerate(ids):
+        for sample in range(5):
+            is_unresolved=(group==2 and sample==0)
+            name=f'row-{group:03}/sample-{sample:02}/results.jsonl'
+            result=write(name,b'',raw=True) if is_unresolved else write(name,'{}\n',raw=True)
+            names.append(result.relative_to(out).as_posix())
+            entry={'group':group,'sample':sample,'index':group,'task_id':ident,'output':str(result),
+                'key':f'task-{group}-{sample}'}
+            if sample==4:entry['jolt_role']='teacher'
+            queue.append(entry)
+            unresolved=is_unresolved
+            outcome=('unresolved' if unresolved else 'invalid_action' if group==1 and sample==0
+                     else 'semantic_mismatch' if group==1 else 'task_success')
+            rollouts.append({'group':group,'sample':sample,'task_id':ident,'policy':{'checkpoint_sha256':policy},
+                'outcome':outcome,'unscored':'unresolved' if unresolved else None,
+                'jolt_role':'teacher' if sample==4 else 'student',
+                'reward':None if unresolved else {'quality':1.0},'turns':[] if unresolved else [{}]})
+    error_text='Error: neuralese-native-grad-invalid: native reader lacks its authenticated in-episode writer'
+    error_path=write('row-002/sample-00/jobs/000002.error.json',{'index':2,'program_ir_sha256':'d'*64,
+        'source_sha256':binding['cases_sha256'],'error':error_text})
+    names.append(error_path.relative_to(out).as_posix())
+    error_ref=bind(error_path)
+    terminal={'path':str(error_path),'sha256':error_ref['sha256'],'error':error_text,
+        'program_ir_sha256':'d'*64,'source_sha256':binding['cases_sha256'],'record_binding_verified':True}
+    journal=write('journal.jsonl',json.dumps({'event':'finish','key':'task-2-0',
+        'output_accounting':{'job_states':[{'terminal_error':terminal}]}})+'\n')
+    write('queue.jsonl',''.join(json.dumps(row)+'\n' for row in queue))
+    write('rollouts.jsonl',''.join(json.dumps(row)+'\n' for row in rollouts))
+    filtered=tmp_path/'retained-rollouts.jsonl'
+    filtered.write_text(''.join(json.dumps(row)+'\n' for row in rollouts if row['group'] in {0,3}))
+    withdrawals=[{'group':1,'task_id':'toolace-task','row_sha256':_canonical_row_sha256(cases_rows[1]),
+        'reason':'stale-toolace-schema-contract','required_schema_contract':'natlang.toolace-schema-contract/1'},
+        {'group':2,'task_id':'kk-task','row_sha256':_canonical_row_sha256(cases_rows[2]),
+         'reason':'incomplete-native-execution-group','unresolved_samples':[{'sample':0,
+            'error_path':'row-002/sample-00/jobs/000002.error.json','error_sha256':error_ref['sha256'],
+            'error':error_text,'program_ir_sha256':'d'*64,'source_sha256':binding['cases_sha256'],
+            'record_binding_verified':True}]}]
+    proof=tmp_path/'proof.json';proof.write_text(json.dumps({'schema':'natlang.completed-collection-withdrawal/1',
+        'out':str(out),'groups':[0,3],'withdrawals':withdrawals,'files':{name:bind(out/name) for name in names},
+        'source_cases':bind(cases),'filtered_rollouts':bind(filtered)}))
+    request={'out':out,'cases':cases,'policy_id':policy,'rows':4,'group':4,'endpoints':['actor'],'neuralese_server':False}
+    result=resume_amended_collection(bind(proof),request,validate_actors=lambda *a,**kw:None)
+    assert result['collection_complete'] is True and result['amended_complete_groups']==[0,3]
+    assert result['scored']==10 and result['successes']==10 and len(result['groups'])==2
+    assert len(result['withdrawn_groups'])==2
+
+    guard=tmp_path/'hold.json'
+    guard.write_text(json.dumps({'schema':'natlang.live-invalid-task-update-hold/1',
+        'optimizer_updates_credited':0,'config_before_sha256':'a'*64,'config_after_sha256':'b'*64,
+        'affected_task_id':'toolace-task'}))
+    state={'round':10,'phase':'updating','active_update_round':str(out),
+        'checkpoint':str(checkpoint),'update_rollouts':str(out/'rollouts.jsonl'),
+        'update_mode':'grpo','update_policy_loss':{'schema':'jolt-plus/1'},
+        'update_stages':['all'],'last_learner_progress':{'checkpoint_sha256':policy}}
+    reference=bind(proof)
+    adopt_completed_collection_withdrawal(state,round_directory=out,report=result,
+        amendment_ref=reference,no_update_evidence=bind(guard))
+    assert state['update_rollouts']==str(filtered.resolve())
+    assert state['update_amendment_proof']==reference
+    assert state['update_mode']=='grpo' and state['update_policy_loss']=={'schema':'jolt-plus/1'}
+    assert state['collection_withdrawal_history'][0]['optimizer_updates_credited']==0
+    assert state['collection_withdrawal_history'][0]['original_rollouts']['bytes']==(out/'rollouts.jsonl').stat().st_size
+    before=len(state['collection_withdrawal_history'])
+    adopt_completed_collection_withdrawal(state,round_directory=out,report=result,
+        amendment_ref=reference,no_update_evidence=bind(guard))
+    assert len(state['collection_withdrawal_history'])==before
+
+    blocked={**state,'update_rollouts':str(out/'rollouts.jsonl'),'collection_withdrawal_history':[]}
+    (out/'learner').mkdir()
+    with pytest.raises(ValueError,match='learner outputs'):
+        adopt_completed_collection_withdrawal(blocked,round_directory=out,report=result,
+            amendment_ref=reference,no_update_evidence=bind(guard))

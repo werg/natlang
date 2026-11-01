@@ -7,7 +7,8 @@ import shutil
 import pytest
 
 from natlang_neuralese.rl.curriculum import metadata
-from natlang_neuralese.rl.task_source import _ill_posed_port_record_continuation, resolve_task_source
+from natlang_neuralese.rl.task_source import (_ill_posed_port_record_continuation,
+    resolve_task_source, validate_current_materialized_task_contract)
 from scripts.neuralese_data.build_rl_task_source_correction import build as build_correction
 
 
@@ -15,6 +16,24 @@ ROOT = Path(__file__).resolve().parents[2]
 V1 = ROOT / 'runs/decision-rich-train-20261016-v1'
 V2 = ROOT / 'runs/decision-rich-train-20261016-v2-curriculum'
 V2_CORRECTED = ROOT / 'runs/decision-rich-train-20261016-v2-curriculum-corrected'
+
+
+def test_stale_toolace_materialization_is_rejected_and_current_schema_contract_passes():
+    from natlang_neuralese.rl.task_source import TOOLACE_SCHEMA_CONTRACT
+    row={'id':'toolace-stale','source_ids':['Team-ACE/ToolACE:3509'],
+         'source_revisions':['natlang.broad_external_rl_tasks/1'],
+         'curriculum':{'external':{'source':'toolace'}},
+         'semantics':{'services':{'api':'export function old(args: { sequences: any }): string { return ""; }'}}}
+    with pytest.raises(ValueError,match='stale ToolACE materialization'):
+        validate_current_materialized_task_contract(row)
+    current=json.loads(json.dumps(row))
+    current['source_revisions'].append(TOOLACE_SCHEMA_CONTRACT)
+    current['curriculum']['external']['tool_schema_sha256']='a'*64
+    current['semantics']['services']['api']='/** Parameters JSON Schema: {"type":"object"} */\nexport function f(args: { nested: { id: string } }): string { return ""; }'
+    validate_current_materialized_task_contract(current)
+    current['semantics']['services']['api']='export function f(args: { nested: any }): string { return ""; }'
+    with pytest.raises(ValueError,match='preserved API JSON Schema'):
+        validate_current_materialized_task_contract(current)
 def read_rows(path):
     with path.open(encoding='utf-8') as stream:
         return [json.loads(line) for line in stream if line.strip()]

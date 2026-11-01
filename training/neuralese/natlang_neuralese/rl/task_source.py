@@ -13,6 +13,40 @@ _QUARANTINE_SCHEMA = 'natlang.rl-task-source-correction/1'
 _PORT_CONTINUATION_PREFIX = 'Continue this session with its next assistant message.'
 # v2: one continuation item makes a task ill-posed (v1 required every item to be one).
 PORT_CONTINUATION_PREDICATE = 'port-record-next-assistant-turn-unprovided-v2'
+TOOLACE_SCHEMA_CONTRACT = 'natlang.toolace-schema-contract/1'
+
+
+def validate_current_materialized_task_contract(row):
+    """Refuse ToolACE rows materialized by the old lossy schema converter.
+
+    This is a narrow version gate for already-materialized rows. The current
+    source converter preserves the upstream JSON Schema and records both its
+    contract revision and schema digest; row IDs alone are not a version pin.
+    """
+    if not isinstance(row, dict):
+        raise ValueError('materialized task must be an object')
+    external=((row.get('curriculum') or {}).get('external') or {})
+    is_toolace=(external.get('source')=='toolace' or
+        any(isinstance(source_id,str) and source_id.startswith('Team-ACE/ToolACE:')
+            for source_id in row.get('source_ids',[])))
+    if not is_toolace:
+        return
+    revisions=row.get('source_revisions')
+    schema_sha=external.get('tool_schema_sha256')
+    if (not isinstance(revisions,list) or TOOLACE_SCHEMA_CONTRACT not in revisions
+            or not isinstance(schema_sha,str) or len(schema_sha)!=64
+            or any(char not in '0123456789abcdef' for char in schema_sha)):
+        raise ValueError(f"{row.get('id','ToolACE task')}: stale ToolACE materialization; rebuild with "
+                         f'{TOOLACE_SCHEMA_CONTRACT} before collection or admission')
+    services=(row.get('semantics') or {}).get('services') or {}
+    api=services.get('api')
+    if (not isinstance(api,str) or not api.strip() or 'Parameters JSON Schema:' not in api):
+        raise ValueError(f"{row.get('id','ToolACE task')}: current ToolACE contract lacks preserved API JSON Schema")
+
+
+def validate_current_materialized_task_contracts(rows):
+    for row in rows:
+        validate_current_materialized_task_contract(row)
 
 
 def _ill_posed_port_record_continuation(row):
@@ -125,6 +159,7 @@ def _resolve_corrected_task_source(manifest_path, manifest, oracle_runtime):
     if cases.read_bytes() != expected_bytes:
         raise ValueError('RL corrected cases are not the byte-preserving retained source rows in original order')
     actual_rows = [row for _, row in iter_jsonl_rows(cases)]
+    validate_current_materialized_task_contracts(actual_rows)
     parent_declaration = json.loads(parent_manifest.read_text())
     if (manifest.get('schema') != _QUARANTINE_SCHEMA or manifest.get('split') != parent_declaration.get('split')
             or manifest.get('rows') != len(expected_retained)
@@ -206,6 +241,7 @@ def resolve_task_source(manifest_path, *, as_correction_parent=False, oracle_run
         source_ids = set()
         for _, row in iter_jsonl_rows(source_cases):
             source_count += 1
+            validate_current_materialized_task_contract(row)
             task_id = row.get('id')
             if row.get('split') != manifest.get('split') or not isinstance(task_id, str) or not task_id or task_id in source_ids:
                 raise ValueError('RL task source additional rows are not unique train tasks')
@@ -246,6 +282,7 @@ def resolve_task_source(manifest_path, *, as_correction_parent=False, oracle_run
     row_sha256_by_id = {}
     for _, row in iter_jsonl_rows(cases):
         count += 1
+        validate_current_materialized_task_contract(row)
         if row.get('split') != manifest.get('split'):
             raise ValueError('RL task source includes a row outside its declared split')
         if not as_correction_parent and _ill_posed_port_record_continuation(row):
