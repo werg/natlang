@@ -1123,6 +1123,17 @@ def _retain_current_held_coverage(metrics, training, held):
             metrics[key]=copy.deepcopy(coverage)
 
 
+def _same_slot_policy_to_sft_parent(args, training):
+    """An explicit same-slot RL→SFT continuation restores the carried SFT frame."""
+    if (args.continue_from is None or not args.objective_continuation
+            or args.objective_spec is not None or not args.stage_id or not isinstance(training, dict)):
+        return False
+    identity = training.get('identity') or {}
+    return (identity.get('objective') is not None
+            and isinstance((training.get('sft_progress') or {}).get(args.stage_id), dict)
+            and bool(training.get('optimizer')) and bool(training.get('rng')))
+
+
 def _validate_rolling_checkpoint_parent(slot, continue_from):
     """Reject an explicit parent that rolling-slot precedence would ignore."""
     if continue_from is None or not slot.exists():
@@ -1826,6 +1837,10 @@ def _main(argv=None, *, requested_refresh):
         if state.get('schema') != CHECKPOINT_SCHEMA:
             raise ValueError('rolling slot is not a native-state checkpoint')
         resume = state.get('training')
+        # A policy checkpoint can be deliberately installed as the rolling
+        # slot. Explicit RL→SFT continuation must restore its saved SFT frame
+        # just as it would when the identical parent lives at another path.
+        parent_continuation = _same_slot_policy_to_sft_parent(args, resume)
     else:
         if args.base is None:
             raise ValueError('fresh native SFT needs --base')
