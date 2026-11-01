@@ -322,9 +322,9 @@ def test_completed_refresh_rejects_unregistered_or_mismatched_rolling_alias(tmp_
         publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=tmp_path/'publication')
 
 
-@pytest.mark.parametrize('tamper',['none','missing-archive','wrong-intermediate','forged-report','wrong-controller-parent',
+@pytest.mark.parametrize('tamper',['none','interrupted','interrupted-changed-binding','interrupted-decreased-exposure','missing-archive','wrong-intermediate','forged-report','wrong-controller-parent',
                                    'changed-binding','decreased-exposure','changed-quota','missing-endpoint'])
-def test_two_earned_windows_require_exact_archived_intermediate_and_full_endpoint_custody(tmp_path,tamper):
+def test_two_earned_windows_require_exact_archived_intermediate_and_full_endpoint_custody(tmp_path,tamper,monkeypatch):
     from natlang_neuralese.rl.native_direct_sft_recovery import publish_completed, _authenticated_refresh_publication
     def file(name,value):
         path=tmp_path/name;path.parent.mkdir(parents=True,exist_ok=True)
@@ -372,23 +372,41 @@ def test_two_earned_windows_require_exact_archived_intermediate_and_full_endpoin
             'sft_frames':{'full':frames}})
     old_snapshot=snapshot('old-snapshot.json',parent,72,frame)
     new_snapshot=snapshot('new-snapshot.json',child,79,new_frame)
+    if tamper.startswith('interrupted'):
+        middle_frame=copy.deepcopy(frame)
+        if tamper=='interrupted-changed-binding': middle_frame['source_row_bindings']['a']='forged'
+        if tamper=='interrupted-decreased-exposure': middle_frame['exposure_counts']['a']=0
+        middle_snapshot=snapshot('middle-snapshot.json',middle,75,middle_frame)
+        transition['custody_snapshot']=middle_snapshot
+        def interrupted(declaration, selected, old, new, actual_receipt, **kwargs):
+            return {'schema':'natlang.rolling-sft-intermediate-window-proof/1','kind':'interrupted-saved-window',
+                'registered_transition':selected,'resolved_previous_checkpoint_path':parent['path'],
+                'intermediate':{'path':str(slot),'sha256':middle['sha256'],'global_step':75},
+                'intermediate_updates':3,'intermediate_checkpoint_bytes_verified_currently':True}
+        monkeypatch.setattr('natlang_neuralese.rl.native_direct_sft_recovery._interrupted_rolling_window',interrupted)
+        state.write_text(json.dumps({'phase':'awaiting_semantic_refresh','checkpoint':parent['path'],
+            'pending_native_checkpoint':str(slot),'rolling_sft_resume_history':[transition]}))
     custody_data={'schema':'natlang.earned-sft-checkpoint-custody/1','parent':parent|common|{'global_step':72},
         'successor':child|common|{'global_step':79},'old_bindings_and_quotas_preserved':True,
         'old_exposure_not_decreased':True,'rolling_intermediate_window':{
             'schema':'natlang.rolling-sft-intermediate-window/1','evidence':archive},
         'rolling_endpoint_snapshots':{'schema':'natlang.rolling-sft-endpoint-snapshots/1',
                                       'parent':old_snapshot,'successor':new_snapshot}}
+    if tamper.startswith('interrupted'):
+        custody_data['rolling_intermediate_window']['schema']='natlang.interrupted-sft-intermediate-window/1'
     if tamper=='missing-archive':custody_data['rolling_intermediate_window']['evidence']['sha256']='0'*64
     if tamper=='missing-endpoint':del custody_data['rolling_endpoint_snapshots']
     custody=file('custody.json',custody_data);out=tmp_path/'publication.json'
-    if tamper!='none':
+    if tamper not in ('none','interrupted'):
         with pytest.raises(ValueError):publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=out)
         assert json.loads(state.read_text())['checkpoint']==parent['path']
         return
     result=publish_completed(state,report_ref=report,receipt_ref=receipt,custody_ref=custody,out=out)
     proof=result['rolling_intermediate_proof']
     assert proof['intermediate']['sha256']==middle['sha256'] and proof['intermediate']['global_step']==75
-    assert proof['intermediate_updates']==3 and proof['intermediate_checkpoint_bytes_verified_currently'] is False
+    assert proof['intermediate_updates']==3 and proof['intermediate_checkpoint_bytes_verified_currently'] is (tamper=='interrupted')
+    if tamper=='interrupted':
+        assert set(result['rolling_endpoint_custody_proof']['interrupted_segments']) == {'parent_to_intermediate','intermediate_to_successor'}
     assert result['rolling_endpoint_custody_proof']['stages']['full']['old_graph_visits']==1
     assert result['parent']['sha256']==parent['sha256'] and result['checkpoint']['sha256']==child['sha256']
     assert _authenticated_refresh_publication(binding(out))['publication']==result
@@ -728,7 +746,7 @@ def test_completed_refresh_accepts_only_bound_source_correction(tmp_path,defect)
     assert _completed_refresh_obligations(custody,parent,child) is (defect is None)
 
 
-@pytest.mark.parametrize('tamper', ['none', 'missing', 'duplicate', 'nan', 'regressed', 'progress', 'changed-file'])
+@pytest.mark.parametrize('tamper', ['none', 'missing', 'duplicate', 'nan', 'nested-nan', 'regressed', 'progress', 'changed-file'])
 def test_interrupted_update_telemetry_checks_exact_order_and_finite_progress(tmp_path, tamper):
     from natlang_neuralese.rl.native_direct_sft_recovery import _interrupted_update_telemetry
     rows = [{'schema': 'natlang.native-training-progress/1', 'kind': 'native',
@@ -738,6 +756,7 @@ def test_interrupted_update_telemetry_checks_exact_order_and_finite_progress(tmp
     if tamper == 'missing': rows.pop(1)
     if tamper == 'duplicate': rows.insert(1, copy.deepcopy(rows[0]))
     if tamper == 'nan': rows[1]['loss'] = float('nan')
+    if tamper == 'nested-nan': rows[1]['learning_rates'] = {'backbone': float('nan')}
     if tamper == 'regressed': rows[1]['communication_exposure']['graph_visits'] = 0
     train = tmp_path / 'train.jsonl'
     train.write_text(''.join(json.dumps(row) + '\n' for row in rows))
@@ -751,3 +770,62 @@ def test_interrupted_update_telemetry_checks_exact_order_and_finite_progress(tmp
     else:
         with pytest.raises(ValueError):
             _interrupted_update_telemetry(train_ref, progress_ref, 64, 67)
+
+
+@pytest.mark.parametrize('tamper', ['none', 'checkpoint', 'snapshot', 'source', 'journal', 'capacity', 'step'])
+def test_interrupted_rolling_window_binds_retained_snapshot_launch_and_telemetry(tmp_path, tamper):
+    from natlang_neuralese.rl.native_direct_sft_recovery import _rolling_intermediate_window
+    def file(name, data, *, raw=False):
+        p = tmp_path/name; p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(data if raw else json.dumps(data, sort_keys=True)); return binding(p)
+    parent = file('parent.pt', 'parent', raw=True) | {'global_step': 64}
+    slot = tmp_path/'learner/checkpoint.pt'; slot.parent.mkdir()
+    retained = file('retained.pt', 'saved-full-state', raw=True)
+    middle = {'path': str(slot), 'sha256': retained['sha256'], 'bytes': Path(retained['path']).stat().st_size}
+    snapshot = {'schema':'natlang.rolling-sft-parent-custody-snapshot/1', 'checkpoint':middle,
+                'global_step':67, 'optimizer_present':True, 'rng_present':True,
+                'model_config_sha256':'a'*64, 'sft_frames':{'full':{'actual':'state'}}}
+    original = file('snapshot.json', snapshot)
+    extracted = copy.deepcopy(snapshot); extracted['checkpoint']['path'] = retained['path']
+    if tamper == 'snapshot': extracted['sft_frames']['full']['actual'] = 'forged'
+    extracted_ref = file('extracted.json', extracted)
+    rows = [{'schema':'natlang.native-training-progress/1', 'kind':'native', 'global_step':n,
+             'loss':1., 'graphs':2, 'forward_tokens':3, 'supervised_tokens':1,
+             'communication_exposure':{'graph_visits':n}} for n in (65, 66, 67)]
+    train=file('train.jsonl',''.join(json.dumps(row)+'\n' for row in rows),raw=True)
+    progress=file('progress.json',rows[-1]);config=file('config.json',{});recipe=file('recipe.json',{})
+    runtime=file('runtime/closure.json',{});launch=file('launch.sh',f"{Path(runtime['path']).parent} NATLANG_BF16_REDUCTION=fp32-accumulate {config['path']}",raw=True)
+    request=file('request.json',{}); proof=file('proof.json',{'schema':'natlang.native-memory-qualification/1',
+        'passed':True,'optimizer_updates':0,'parent_checkpoint_sha256':parent['sha256'],'request':request})
+    capacity=file('capacity.json',{'passed':tamper!='capacity','optimizer_updates':0,
+        'parent_checkpoint_sha256':parent['sha256'],'proof':proof,'request':request})
+    roles={k:file(k+'.json',{'role':k}) for k in ('native_graphs','continued_native_graphs',
+        'foundation_native_graphs','held_native_graphs','ce_supervision_policy')}
+    manifest=file('manifest.json',{'schema':'natlang.behavior-selected-lineage-continuation/1',
+        'parent':parent,'config':config,'recipe':recipe,'runtime_receipt':runtime,'roles':roles})
+    argv=['python','-m','natlang_neuralese.train.native_state_sft','--continue-from',parent['path'],
+          '--out',str(slot.parent),'--recipe-binding',json.dumps({'sha256':recipe['sha256']})]
+    for role,flag in [('native_graphs','--native-graphs'),('continued_native_graphs','--continued-native-graphs'),
+        ('foundation_native_graphs','--foundation-native-graphs'),('held_native_graphs','--held-native-graphs'),
+        ('ce_supervision_policy','--ce-supervision-policy')]: argv += [flag,roles[role]['path']]
+    if tamper == 'journal': argv[argv.index('--continue-from')+1] = 'wrong'
+    journal=file('journal.txt',f"subprocess.CalledProcessError: Command '{argv!r}' died with signal 11.\n",raw=True)
+    if tamper == 'source': Path(roles['native_graphs']['path']).write_text('forged')
+    if tamper == 'checkpoint': Path(retained['path']).write_text('forged')
+    refs={'manifest':manifest,'config':config,'recipe':recipe,'runtime':runtime,'launch':launch,
+          'capacity':capacity,'capacity_request':request,'capacity_proof':proof,'journal':journal,
+          'train':train,'progress':progress,'retained_checkpoint':retained,'extracted_snapshot':extracted_ref,
+          'source_controls':roles}
+    evidence=file('evidence.json',{'schema':'natlang.interrupted-sft-window-evidence/1','preflight':'not-observed','artifacts':refs})
+    transition={'schema':'natlang.rolling-sft-resume/1','previous_checkpoint_path':parent['path'],
+        'previous_checkpoint_sha256':parent['sha256'],'checkpoint_path':str(slot),
+        'checkpoint_sha256':retained['sha256'],'custody_snapshot':original}
+    receipt={'operation_parent':{'path':str(slot),'sha256':retained['sha256'],
+                                 'global_step':68 if tamper == 'step' else 67}}
+    args=({'schema':'natlang.interrupted-sft-intermediate-window/1','evidence':evidence},transition,
+          parent,{'path':str(slot)},receipt)
+    if tamper == 'none':
+        result=_rolling_intermediate_window(*args)
+        assert result['intermediate_updates']==3 and result['intermediate_checkpoint_bytes_verified_currently'] is True
+    else:
+        with pytest.raises(ValueError): _rolling_intermediate_window(*args)

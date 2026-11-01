@@ -93,11 +93,15 @@ def _interrupted_update_telemetry(train_ref, progress_ref, parent_step, saved_st
         raise ValueError('interrupted SFT update telemetry is missing, duplicated or unordered')
     if not selected or progress != selected[-1]:
         raise ValueError('interrupted SFT final progress differs from update telemetry')
+    def finite(value):
+        if isinstance(value, dict): return all(finite(item) for item in value.values())
+        if isinstance(value, list): return all(finite(item) for item in value)
+        return type(value) is not float or math.isfinite(value)
     previous_visits = None
     for row in selected:
         loss = row.get('loss')
         visits = (row.get('communication_exposure') or {}).get('graph_visits')
-        if (row.get('schema') != 'natlang.native-training-progress/1' or row.get('kind') != 'native'
+        if (not finite(row) or row.get('schema') != 'natlang.native-training-progress/1' or row.get('kind') != 'native'
                 or type(loss) not in (int, float) or not math.isfinite(loss)
                 or any(type(row.get(key)) is not int or row[key] <= 0
                        for key in ('graphs', 'forward_tokens', 'supervised_tokens'))
@@ -111,10 +115,146 @@ def _interrupted_update_telemetry(train_ref, progress_ref, parent_step, saved_st
             'scope': 'recorded update telemetry only; checkpoint custody and launch require independent proof'}
 
 
+def _interrupted_rolling_window(declaration, transition, parent, child, receipt, *, state_parent=None,
+                                historical_previous_path=None):
+    """Authenticate an interrupted saved window without claiming a completed report."""
+    import ast
+    evidence_ref = declaration.get('evidence')
+    evidence = json.loads(_verify_historical_file_ref(evidence_ref).read_text())
+    if (evidence.get('schema') != 'natlang.interrupted-sft-window-evidence/1'
+            or evidence.get('preflight') != 'not-observed'
+            or not isinstance(transition, dict) or transition.get('schema') != 'natlang.rolling-sft-resume/1'):
+        raise ValueError('invalid interrupted SFT window evidence')
+    refs = evidence.get('artifacts')
+    expected = {'manifest', 'config', 'recipe', 'runtime', 'journal', 'train', 'progress',
+                'retained_checkpoint', 'extracted_snapshot', 'source_controls', 'launch',
+                'capacity', 'capacity_proof', 'capacity_request'}
+    if not isinstance(refs, dict) or set(refs) != expected or not isinstance(refs['source_controls'], dict):
+        raise ValueError('interrupted SFT evidence lacks exact launch and full-state artifacts')
+    def read(name):
+        return json.loads(_verify_historical_file_ref(refs[name]).read_text())
+    manifest, config, recipe = read('manifest'), read('config'), read('recipe')
+    _verify_historical_file_ref(refs['runtime'])
+    launch_path = _verify_historical_file_ref(refs['launch'])
+    capacity, capacity_proof = read('capacity'), read('capacity_proof')
+    _verify_historical_file_ref(refs['capacity_request'])
+    retained_path = _verify_historical_file_ref(refs['retained_checkpoint'])
+    original_ref = transition.get('custody_snapshot')
+    original = json.loads(_verify_historical_file_ref(original_ref).read_text())
+    extracted = read('extracted_snapshot')
+    old_path = Path(historical_previous_path if historical_previous_path is not None
+                    else transition.get('previous_checkpoint_path', '')).resolve()
+    rolling = Path(transition.get('checkpoint_path', '')).resolve()
+    middle_sha = transition.get('checkpoint_sha256')
+    middle_step = original.get('global_step')
+    if (state_parent is not None and old_path != Path(state_parent).resolve()
+            or old_path != Path(parent.get('path', '')).resolve()
+            or rolling != Path(child.get('path', '')).resolve()
+            or transition.get('previous_checkpoint_sha256') != parent.get('sha256')
+            or middle_sha != refs['retained_checkpoint'].get('sha256')
+            or type(middle_step) is not int or middle_step <= parent.get('global_step', -1)
+            or (receipt.get('operation_parent') or {}).get('sha256') != middle_sha
+            or (receipt.get('operation_parent') or {}).get('global_step') != middle_step
+            or Path((receipt.get('operation_parent') or {}).get('path', '')).resolve() != rolling):
+        raise ValueError('interrupted SFT transition does not bind its actual earned endpoints')
+    for snapshot, path in ((original, rolling), (extracted, retained_path)):
+        checkpoint = snapshot.get('checkpoint') or {}
+        if (snapshot.get('schema') != 'natlang.rolling-sft-parent-custody-snapshot/1'
+                or Path(checkpoint.get('path', '')).resolve() != path
+                or checkpoint.get('sha256') != middle_sha
+                or checkpoint.get('bytes') != retained_path.stat().st_size
+                or snapshot.get('global_step') != middle_step
+                or snapshot.get('optimizer_present') is not True or snapshot.get('rng_present') is not True):
+            raise ValueError('interrupted SFT snapshot does not bind retained full checkpoint')
+    for key in ('model_config_sha256', 'sft_frames'):
+        if original.get(key) != extracted.get(key):
+            raise ValueError('interrupted SFT extracted checkpoint metadata differs from registered snapshot')
+    telemetry = _interrupted_update_telemetry(refs['train'], refs['progress'], parent['global_step'], middle_step)
+    if (capacity.get('passed') is not True or capacity.get('optimizer_updates') != 0
+            or capacity.get('parent_checkpoint_sha256') != parent['sha256']
+            or (capacity.get('proof') or {}).get('sha256') != refs['capacity_proof'].get('sha256')
+            or (capacity.get('request') or {}).get('sha256') != refs['capacity_request'].get('sha256')
+            or capacity_proof.get('schema') != 'natlang.native-memory-qualification/1'
+            or capacity_proof.get('passed') is not True or capacity_proof.get('optimizer_updates') != 0
+            or capacity_proof.get('parent_checkpoint_sha256') != parent['sha256']
+            or (capacity_proof.get('request') or {}).get('sha256') != refs['capacity_request'].get('sha256')):
+        raise ValueError('interrupted SFT launch capacity evidence differs from actual parent')
+    if (manifest.get('schema') != 'natlang.behavior-selected-lineage-continuation/1'
+            or (manifest.get('parent') or {}).get('sha256') != parent['sha256']
+            or Path((manifest.get('parent') or {}).get('path', '')).resolve() != old_path
+            or (manifest.get('config') or {}).get('sha256') != refs['config'].get('sha256')
+            or (manifest.get('recipe') or {}).get('sha256') != refs['recipe'].get('sha256')
+            or (manifest.get('runtime_receipt') or {}).get('sha256') != refs['runtime'].get('sha256')
+            or not isinstance(config, dict) or not isinstance(recipe, dict)):
+        raise ValueError('interrupted SFT original launch controls differ from manifest')
+    roles = manifest.get('roles') or {}
+    role_options = {'native_graphs': '--native-graphs', 'continued_native_graphs': '--continued-native-graphs',
+                    'foundation_native_graphs': '--foundation-native-graphs', 'held_native_graphs': '--held-native-graphs',
+                    'ce_supervision_policy': '--ce-supervision-policy'}
+    if set(refs['source_controls']) != set(role_options):
+        raise ValueError('interrupted SFT original source controls are incomplete')
+    for role, ref in refs['source_controls'].items():
+        _verify_historical_file_ref(ref)
+        if ref.get('sha256') != (roles.get(role) or {}).get('sha256'):
+            raise ValueError('interrupted SFT source control differs from manifest')
+    launch_text = launch_path.read_text()
+    runtime_original = Path((manifest.get('runtime_receipt') or {}).get('path', '')).parent
+    if (str(runtime_original) not in launch_text or 'NATLANG_BF16_REDUCTION=fp32-accumulate' not in launch_text
+            or str((manifest.get('config') or {}).get('path', '')) not in launch_text):
+        raise ValueError('interrupted SFT launcher does not bind original runtime and config')
+    journal = _verify_historical_file_ref(refs['journal']).read_text()
+    commands = []
+    for line in journal.splitlines():
+        if line.startswith('subprocess.CalledProcessError: Command ') and '[' in line and ']' in line:
+            try: commands.append(ast.literal_eval(line[line.index('['):line.rindex(']')+1]))
+            except (SyntaxError, ValueError): pass
+    def option(argv, key):
+        if argv.count(key) != 1: return None
+        i = argv.index(key)
+        return argv[i+1] if i+1 < len(argv) else None
+    matching = [argv for argv in commands if isinstance(argv, list)
+                and 'natlang_neuralese.train.native_state_sft' in argv
+                and option(argv, '--continue-from') == str(old_path)
+                and option(argv, '--out') == str(rolling.parent)
+                and all(option(argv, flag) == (roles.get(role) or {}).get('path')
+                        for role, flag in role_options.items())]
+    if len(matching) != 1:
+        raise ValueError('interrupted SFT journal does not identify its actual launched parent and sources')
+    try: recipe_binding = json.loads(option(matching[0], '--recipe-binding'))
+    except (TypeError, ValueError): raise ValueError('interrupted SFT journal lacks recipe binding')
+    if recipe_binding.get('sha256') != refs['recipe'].get('sha256'):
+        raise ValueError('interrupted SFT launched recipe differs from manifest')
+    return {'schema':'natlang.rolling-sft-intermediate-window-proof/1', 'kind':'interrupted-saved-window',
+            'evidence':evidence_ref, 'registered_transition':transition,
+            'resolved_previous_checkpoint_path':str(old_path),
+            'intermediate':{'path':str(rolling),'sha256':middle_sha,'global_step':middle_step},
+            'intermediate_updates':middle_step-parent['global_step'], 'telemetry':telemetry,
+            'preflight':'not-observed',
+            'intermediate_checkpoint_bytes_verified_currently':True,
+            'scope':'retained full checkpoint and extracted state with actual launch and finite telemetry; no completed report or evaluation'}
+
+
+def _interrupted_segment_custody(endpoint, intermediate_proof, parent, child):
+    if intermediate_proof.get('kind') != 'interrupted-saved-window':
+        return endpoint
+    middle = intermediate_proof['intermediate']
+    middle_ref = intermediate_proof['registered_transition']['custody_snapshot']
+    for label, before, after, before_ref, after_ref in (
+            ('parent_to_intermediate', parent, middle, endpoint['parent'], middle_ref),
+            ('intermediate_to_successor', middle, child, middle_ref, endpoint['successor'])):
+        proof = _rolling_endpoint_snapshots({'schema':'natlang.rolling-sft-endpoint-snapshots/1',
+            'parent':before_ref, 'successor':after_ref}, before, after, verify_current_endpoints=False)
+        endpoint.setdefault('interrupted_segments', {})[label] = proof['stages']
+    return endpoint
+
+
 def _rolling_intermediate_window(declaration, transition, parent, child, receipt, *, state_parent=None,
                                  historical_previous_path=None):
     """Authenticate a stopped intermediate SFT window without inventing its missing full state."""
     from ..train.native_operation_report import supervised_progress_numerics_ok
+    if isinstance(declaration, dict) and declaration.get('schema') == 'natlang.interrupted-sft-intermediate-window/1':
+        return _interrupted_rolling_window(declaration, transition, parent, child, receipt,
+            state_parent=state_parent, historical_previous_path=historical_previous_path)
     if (not isinstance(declaration,dict) or declaration.get('schema')!='natlang.rolling-sft-intermediate-window/1'
             or not isinstance(transition,dict) or transition.get('schema')!='natlang.rolling-sft-resume/1'):
         raise ValueError('invalid rolling SFT intermediate window declaration')
@@ -272,6 +412,7 @@ def _authenticated_refresh_publication(reference, seen=None):
             raise ValueError('historical rolling intermediate proof changed')
         endpoint=_rolling_endpoint_snapshots(custody.get('rolling_endpoint_snapshots'),custody_parent,successor,
                                               verify_current_endpoints=False)
+        endpoint=_interrupted_segment_custody(endpoint,checked,custody_parent,successor)
         if endpoint!=publication.get('rolling_endpoint_custody_proof'):
             raise ValueError('historical rolling endpoint custody changed')
         operation_parent_matches=True
@@ -1097,6 +1238,8 @@ def publish_completed(state_path, *, report_ref, receipt_ref, custody_ref, out):
             rolling_intermediate_proof=_rolling_intermediate_window(custody['rolling_intermediate_window'],
                 rolling_history[-1],parent,child,receipt,state_parent=state_parent)
             rolling_endpoint_custody_proof=_rolling_endpoint_snapshots(custody.get('rolling_endpoint_snapshots'),parent,child)
+            rolling_endpoint_custody_proof=_interrupted_segment_custody(rolling_endpoint_custody_proof,
+                rolling_intermediate_proof,parent,child)
             operation_parent_matches=True
         receipt_parents={parent['sha256']}
         if rolling_intermediate_proof is not None:
