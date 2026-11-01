@@ -177,6 +177,32 @@ def adopt_completed_collection_withdrawal(state, *, round_directory, report,
         'retained_rollout_count': report.get('rollouts'),
         'withdrawals': proof.get('withdrawals'),
     }
+    # A completed but withdrawn group must not remain an active scheduling
+    # observation.  The rollout projection is the learning input, while these
+    # histories feed future task selection; leaving the stale scores here would
+    # still route a rejected ToolACE task to rejection sampling or retire an
+    # incompletely scored task.  Preserve the exact removed observations in the
+    # immutable transition record before removing only those task IDs.
+    selector_history = state.get('task_curriculum_history')
+    archived_task_history = {}
+    if isinstance(selector_history, dict):
+        for task_id in withdrawn_ids:
+            if task_id in selector_history:
+                archived_task_history[task_id] = selector_history.pop(task_id)
+    archived_group_stats = []
+    group_stats = state.get('group_stats')
+    if isinstance(group_stats, list):
+        retained_group_stats = []
+        for row in group_stats:
+            if isinstance(row, dict) and row.get('task_id') in withdrawn_ids:
+                archived_group_stats.append(row)
+            else:
+                retained_group_stats.append(row)
+        state['group_stats'] = retained_group_stats
+    transition['withdrawn_selector_observations'] = {
+        'task_curriculum_history': archived_task_history,
+        'group_stats': archived_group_stats,
+    }
     history = state.setdefault('collection_withdrawal_history', [])
     if transition not in history:
         history.append(transition)

@@ -266,7 +266,15 @@ def test_completed_withdrawal_preserves_privileged_rows_and_unknown_native_failu
     state={'round':10,'phase':'updating','active_update_round':str(out),
         'checkpoint':str(checkpoint),'update_rollouts':str(out/'rollouts.jsonl'),
         'update_mode':'grpo','update_policy_loss':{'schema':'jolt-plus/1'},
-        'update_stages':['all'],'last_learner_progress':{'checkpoint_sha256':policy}}
+        'update_stages':['all'],'last_learner_progress':{'checkpoint_sha256':policy},
+        'task_curriculum_history':{
+            'math-task':{'task_id':'math-task','route':'retire','scored':4,'observed_round':9},
+            'toolace-task':{'task_id':'toolace-task','route':'rejection-sampling','scored':4,
+                            'outcomes':['invalid_action','semantic_mismatch'],'observed_round':10},
+            'kk-task':{'task_id':'kk-task','route':'retire','scored':3,'outcomes':['task_success']*3+['unresolved'],
+                       'observed_round':10}},
+        'group_stats':[{'task_id':'math-task','scored':4}, {'task_id':'toolace-task','scored':4},
+                       {'task_id':'kk-task','scored':3}]}
     reference=bind(proof)
     adopt_completed_collection_withdrawal(state,round_directory=out,report=result,
         amendment_ref=reference,no_update_evidence=bind(guard))
@@ -275,6 +283,11 @@ def test_completed_withdrawal_preserves_privileged_rows_and_unknown_native_failu
     assert state['update_mode']=='grpo' and state['update_policy_loss']=={'schema':'jolt-plus/1'}
     assert state['collection_withdrawal_history'][0]['optimizer_updates_credited']==0
     assert state['collection_withdrawal_history'][0]['original_rollouts']['bytes']==(out/'rollouts.jsonl').stat().st_size
+    assert set(state['task_curriculum_history']) == {'math-task'}
+    assert [row['task_id'] for row in state['group_stats']] == ['math-task']
+    archived=state['collection_withdrawal_history'][0]['withdrawn_selector_observations']
+    assert set(archived['task_curriculum_history']) == {'toolace-task','kk-task'}
+    assert [row['task_id'] for row in archived['group_stats']] == ['toolace-task','kk-task']
     before=len(state['collection_withdrawal_history'])
     adopt_completed_collection_withdrawal(state,round_directory=out,report=result,
         amendment_ref=reference,no_update_evidence=bind(guard))
