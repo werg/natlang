@@ -1678,7 +1678,7 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
         equal(actual[key], expected[key])
 
 
-@pytest.mark.parametrize('refresh',['checkpoint','relative','signal','stop','complete','complete-relative'])
+@pytest.mark.parametrize('refresh',['checkpoint','relative','relative-interior','signal','stop','complete','complete-relative'])
 def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,refresh):
     import json
     import torch
@@ -1704,8 +1704,11 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
         '--epochs','2','--checkpoint-every','1','--eval-every','1',
         '--task-eval-every','0','--out',str(out),
         '--task-eval',json.dumps({'packet':{'path':'unused','sha256':'s'},'cases':[0]})]
-    if refresh in ('checkpoint','relative'):
+    if refresh in ('checkpoint','relative','relative-interior'):
         argv+=['--refresh-at-checkpoint'] if refresh=='checkpoint' else ['--refresh-after-updates','1']
+        if refresh=='relative-interior':
+            argv[argv.index('--epochs')+1]='3'
+            argv[-1]='2'
         argv+=['--task-eval-every','1']
         monkeypatch.setattr(trainer,'_evaluate_cadence',lambda *a,**k: pytest.fail('held evaluation started at automatic refresh'))
     elif refresh=='complete-relative':argv+=['--refresh-after-updates','2']
@@ -1736,8 +1739,9 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
         assert not calls
         assert report['completed'] is False
         assert report['continuation_boundary']['reached'] is (refresh!='stop')
-        assert report['continuation_boundary']['new_optimizer_updates']==1
-        assert torch.load(out/'checkpoint.pt',weights_only=False)['training']['exposure_counts']=={'train':1}
+        expected_updates=2 if refresh=='relative-interior' else 1
+        assert report['continuation_boundary']['new_optimizer_updates']==expected_updates
+        assert torch.load(out/'checkpoint.pt',weights_only=False)['training']['exposure_counts']=={'train':expected_updates}
         if refresh in ('checkpoint','relative'):
             certificate=json.loads((out/'native-runtime-certificate.json').read_text())
             assert certificate['deferred'] and not certificate['passed']

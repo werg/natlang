@@ -1,5 +1,14 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## One-time entitlement checks (owner request; operational correction, 2026-11-01)
+
+The four-account GPU-whitelist request was a one-time check. Do not restart the
+inherited hourly sandbox-create poller. Its last recorded probes were denied;
+there was no entitled account or pending probe allocation when stopped. This
+does not suspend supervision of actual work. Replace the obsolete fresh-init
+cloud controls with the current qualified recipe and earned-parent recovery
+before launching cloud learners; keep their existing launch hold until then.
+
 ## Exact inference-view transfers (engineering, 2026-11-01)
 
 Use `scripts/coreweave/send_actor_transport.py` for new workstation/Pop actor

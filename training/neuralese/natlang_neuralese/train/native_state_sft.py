@@ -4265,9 +4265,14 @@ def _main(argv=None, *, requested_refresh):
             if policy.signaled or requested_refresh.requested or (automatic_refresh_due and step < total_end):
                 refresh_boundary = refresh_boundary or requested_refresh.requested or automatic_refresh_due
                 break
-            due_task = task_eval is not None and ((step == total_end and not policy_operation) or
+            # A carried absolute SFT step can hit cadence before this relative
+            # optimizer window ends. Defer inline evaluation throughout such
+            # windows; independently scheduled task monitoring remains active.
+            bounded_window = args.refresh_after_updates is not None or args.refresh_at_checkpoint
+            allow_cadence = not bounded_window or step == total_end
+            due_task = allow_cadence and task_eval is not None and ((step == total_end and not policy_operation) or
                         bool(args.task_eval_every and step % args.task_eval_every == 0))
-            due_eval = step % eval_at == 0 or step == total_end or due_task
+            due_eval = allow_cadence and (step % eval_at == 0 or step == total_end or due_task)
             if due_eval:
                 evaluation_rng = capture_training_rng_state(args.device)
                 try:
