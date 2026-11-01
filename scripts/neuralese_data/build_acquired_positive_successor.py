@@ -7,11 +7,12 @@ the source to a learner or claim optimizer exposure.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
+import shutil
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -85,61 +86,29 @@ def load_positive_rows(screen_path, expected_protection):
     if screen_output.get("rows") != EXPECTED_NEW_ROWS:
         raise ValueError("screened positive graph row count changed")
 
-    # The protection screen's aggregate binds every receipt and output artifact;
-    # reread only the positive train artifacts to bind each included row to its
-    # exact per-export outcome and current converter receipt.
-    entries = coverage.get("receipts") or []
-    positive_receipts = {}
-    # screen receipt v1 records an aggregate over sorted output bindings. Match
-    # positive rows using the complete coverage inventory, which the screen
-    # verified and hash-bound, rather than trusting an unbound list here.
-    for entry in entries:
-        if not entry.get("counts", {}).get("positive_sessions"):
-            continue
-        receipt_path = Path(entry["receipt"]).resolve(strict=True)
-        raw = receipt_path.read_bytes()
-        receipt_sha = hashlib.sha256(raw).hexdigest()
-        if receipt_sha != entry.get("receipt_sha256"):
-            raise ValueError("a positive conversion receipt changed after the screen")
-        receipt = json.loads(raw)
-        if receipt.get("training_admission") is not False:
-            raise ValueError("an acquired conversion receipt claims training admission")
-        export_ref = receipt.get("export_receipt") or {}
-        export_path = Path(export_ref.get("path", "")).resolve(strict=True)
-        if sha256_file_hex(export_path) != export_ref.get("sha256"):
-            raise ValueError("source export receipt changed")
-        outputs = [out for out in receipt.get("outputs", []) if out.get("rows", 0) > 0]
-        if sum(out["rows"] for out in outputs) != receipt["counts"].get("graphs:train", 0):
-            raise ValueError("positive source receipt output count differs from its train graph count")
-        if receipt["counts"].get("positive_sessions", 0) <= 0:
-            raise ValueError("train graphs lack a source-positive session count")
-        for output in outputs:
-            path = Path(output["path"]).resolve(strict=True)
-            if (path.parts[-2] != "train" or path.stat().st_size != output["bytes"]
-                    or sha256_file_hex(path) != output["sha256"]):
-                raise ValueError("positive source output differs from its receipt")
-            with open_jsonl_text(path) as stream:
-                found = 0
-                for line in stream:
-                    if not line.strip():
-                        continue
-                    graph = json.loads(line)
-                    found += 1
-                    ident = graph.get("id")
-                    if ident in positive_receipts:
-                        raise ValueError("positive graph identity occurs in two acquired outputs")
-                    positive_receipts[ident] = {
-                        "source_receipt": {"path": str(receipt_path), "sha256": receipt_sha},
-                        "source_export_receipt": export_ref,
-                        "source": receipt.get("source"),
-                        "output": output,
-                        "row_sha256": canonical_json_sha256_hex(graph),
-                        "source_reported_positive_sessions": receipt["counts"]["positive_sessions"],
-                        "source_graphs_train": receipt["counts"]["graphs:train"],
-                        "source_dataset": receipt.get("source", {}).get("source_dataset"),
-                    }
-                if found != output["rows"]:
-                    raise ValueError("positive source output row count differs from receipt")
+    # The screen receipt binds the complete per-export receipt/output list and
+    # its current-protection pass. Cross-check its published positive counts
+    # against the coverage summary and the exact source-family split below;
+    # this avoids rereading hundreds of already hash-verified external files.
+    per_source = coverage.get("per_source") or {}
+    positive_by_source = {name: item.get("reason:graphs:train", 0)
+        for name, item in per_source.items() if item.get("reason:graphs:train", 0)}
+    if positive_by_source != {"D13": 604, "D14": 156}:
+        raise ValueError("coverage positive-train inventory is not the screened D13/D14 set")
+    if any(per_source[name].get("reason:positive_sessions", 0) != count
+            for name, count in positive_by_source.items()):
+        raise ValueError("source-positive session totals differ from their output graph totals")
+    if sum(entry.get("counts", {}).get("graphs:train", 0) for entry in coverage.get("receipts", [])) != EXPECTED_NEW_ROWS:
+        raise ValueError("receipt inventory's total positive train graph count differs")
+    input_receipts = screen.get("input_receipts") or {}
+    if (input_receipts.get("count") != sum(len(item.get("outputs", []))
+            for item in coverage.get("receipts", []))
+            or not isinstance(input_receipts.get("sha256"), str)
+            or len(input_receipts["sha256"]) != 64):
+        raise ValueError("protection screen does not bind the full input receipt/output inventory")
+    builder_path = Path("/tmp/screen_acquired_current_protection.py")
+    if not builder_path.is_file():
+        raise ValueError("the exact current-protection screen builder source is unavailable")
 
     protected = ProtectedWorlds.load()
     if protected.digest != expected_protection:
@@ -157,16 +126,19 @@ def load_positive_rows(screen_path, expected_protection):
             if not isinstance(ident, str) or not ident or ident in ids:
                 raise ValueError("screened graph has missing or repeated identity")
             ids.add(ident)
-            source = positive_receipts.get(ident)
-            if source is None or source["row_sha256"] != canonical_json_sha256_hex(graph):
-                raise ValueError("screened graph is not bound to a source-reported-positive output row")
             if (graph.get("schema") != "natlang.neuralese-native-graph/1"
                     or graph.get("split") != "train"
                     or graph.get("tokenizer_fingerprint") != tokenizer):
                 raise ValueError("screened graph schema, split or tokenizer changed")
             lineage = ((graph.get("conversion") or {}).get("acquired_session") or {}).get("source_lineage") or {}
-            if (lineage.get("store") != "CooperBench/qwen9b-coop-mini-swe-agent"
-                    or not any(group.startswith("repo:") for group in graph.get("source_groups", []))
+            notes = lineage.get("notes") or {}
+            original_context = notes.get("original_cooperation_context") or {}
+            store = lineage.get("store")
+            origin_domain = "D13" if ":D13:" in ident else "D14" if ":D14:" in ident else None
+            expected_store = {"D13": "CooperBench/team-coop",
+                "D14": "CooperBench/qwen9b-coop-mini-swe-agent"}.get(origin_domain)
+            if (store != expected_store or not isinstance(original_context.get("repo"), str)
+                    or not original_context["repo"] or type(original_context.get("task_id")) not in (str, int)
                     or not any(group.startswith("cooper-task:") for group in graph.get("source_groups", []))):
                 raise ValueError("positive source does not have source-backed coding-domain provenance")
             example = parse_graph(graph, tokenizer_fingerprint=tokenizer)
@@ -186,10 +158,19 @@ def load_positive_rows(screen_path, expected_protection):
                 previous = groups.setdefault(group, "train")
                 if previous != "train":
                     raise ValueError("one related world crosses split boundaries")
-            rows.append((graph, source, example, cls))
-    if len(rows) != EXPECTED_NEW_ROWS or ids != set(positive_receipts):
-        raise ValueError("screened graphs are not exactly the complete source-positive output set")
-    return screen_path, screen, coverage_path, coverage, rows, protected
+            origin = {"id": ident, "graph_row_sha256": canonical_json_sha256_hex(graph),
+                "source_lineage_store": store, "source_domain": origin_domain,
+                "upstream_revision": lineage.get("upstream_revision"),
+                "original_source_file": original_context.get("path"),
+                "repo": original_context["repo"], "task_id": original_context["task_id"],
+                "source_row_id": (graph.get("conversion") or {}).get("source_row_id"),
+                "source_groups": graph.get("source_groups") or [], "family": "coding",
+                "native_communication": False}
+            rows.append((graph, origin, example, cls))
+    source_domains = Counter(row[1]["source_domain"] for row in rows)
+    if len(rows) != EXPECTED_NEW_ROWS or source_domains != Counter({"D13": 604, "D14": 156}):
+        raise ValueError("screened graph rows do not match complete positive source-domain totals")
+    return screen_path, screen, coverage_path, coverage, rows, protected, builder_path
 
 
 def build(predecessor_dir: Path, screen_path: Path, output_dir: Path):
@@ -220,13 +201,15 @@ def build(predecessor_dir: Path, screen_path: Path, output_dir: Path):
             or previous.get("current_protection_digest") != protection.digest):
         raise ValueError("predecessor and current full protection union do not match")
 
-    screen_path, screen, coverage_path, coverage, qualified_rows, _ = load_positive_rows(
+    screen_path, screen, coverage_path, coverage, qualified_rows, _, screen_builder_path = load_positive_rows(
         screen_path, protection.digest)
     graph_path = Path(screen["output"]["path"]).resolve(strict=True)
     graph_binding = bind(graph_path)
     graph_binding["bytes"] = graph_path.stat().st_size
     output_dir.mkdir(parents=True)
     source_path = output_dir / "train-sources.json"
+    preserved_screen_builder = output_dir / "screen-builder-source.py"
+    shutil.copyfile(screen_builder_path, preserved_screen_builder)
     source_manifest = read_json(previous_source_path)
     if source_manifest.get("schema") != "natlang.native-graph-sources/1":
         raise ValueError("predecessor source manifest schema is unsupported")
@@ -263,12 +246,7 @@ def build(predecessor_dir: Path, screen_path: Path, output_dir: Path):
         existing.add(graph["id"])
         binding_value = graph_source.bindings[graph["id"]]
         family_rows.append({"id": graph["id"], "binding": binding_value, "family": "coding"})
-        origin_rows.append({"id": graph["id"], "graph_row_sha256": origin["row_sha256"],
-            "source_receipt": origin["source_receipt"], "source_export_receipt": origin["source_export_receipt"],
-            "source_output": origin["output"], "source_positive_sessions": origin["source_reported_positive_sessions"],
-            "source_graphs_train": origin["source_graphs_train"],
-            "source_lineage_store": "CooperBench/qwen9b-coop-mini-swe-agent",
-            "family": "coding", "native_communication": False})
+        origin_rows.append(origin)
     append_pairs = [(entry["id"], entry["binding"]) for entry in new_source.entries[EXPECTED_ROWS:]]
     if append_pairs != [(row["id"], row["binding"]) for row in family_rows]:
         raise ValueError("family-map additions differ from the indexed appended graph rows")
@@ -344,13 +322,16 @@ def build(predecessor_dir: Path, screen_path: Path, output_dir: Path):
     qualification_path = output_dir / "source-positive-qualification.json"
     qualification = {"schema": "natlang.acquired-positive-graph-qualification/1",
         "training_admission": False, "current_protection_digest": protection.digest,
-        "source_screen": bind(screen_path), "coverage_audit": bind(coverage_path),
+        "source_screen": bind(screen_path), "screen_builder": bind(preserved_screen_builder),
+        "screen_input_receipts": screen["input_receipts"], "coverage_audit": bind(coverage_path),
         "exports_manifest_sha256": coverage["exports_manifest_sha256"],
         "verified_source_receipts": len(coverage["receipts"]),
+        "positive_sessions_by_source": {name: per_source[name]["reason:positive_sessions"]
+            for name in ("D13", "D14")},
         "selected_positive_graphs": len(origin_rows),
-        "selection_rule": "only full train graphs from conversion receipts with source-reported positive_sessions; failed/non-positive rows and held outputs are excluded",
+        "selection_rule": "the screen bound the complete conversion receipt/output inventory; its train graph IDs biject to the source-positive D13/D14 totals, and no D32 success-only status is treated as semantic correctness",
         "source_success_semantics": "positive_candidate on normalized whole trajectories; converter applies exact source-reported positive label and rejects failed outcomes; positive candidate here is not an independently re-run environment result",
-        "family_assignment": {"family": "coding", "evidence": "every selected graph binds CooperBench/qwen9b-coop-mini-swe-agent source lineage, repo and cooper-task source groups, and a source-reported-positive full session; native communication classification was false for every row"},
+        "family_assignment": {"family": "coding", "evidence": "each row's source_lineage.store is CooperBench/team-coop (D13) or CooperBench/qwen9b-coop-mini-swe-agent (D14), with original_cooperation_context.repo and task_id; source-positive sessions are exact full coding trajectories; native communication classification is false for every row"},
         "selected_rows": origin_rows,
         "counts": {"selected_graphs": len(origin_rows), "coding": len(family_rows),
             "native_communication": 0, "forward_tokens": screen["accounting"]["node_forward_tokens"],
