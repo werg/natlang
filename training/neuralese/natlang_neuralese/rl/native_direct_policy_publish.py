@@ -34,10 +34,13 @@ def publish(state_path, *, report_ref, receipt_ref, custody_ref, provenance_ref,
         rows=objective.get('rows') or {};values=list(rows.values()) if isinstance(rows,dict) else rows
         if (provenance.get('schema')!='natlang.completed-same-policy-group/1'
                 or provenance.get('checkpoint_sha256')!=parent['sha256'] or len(rollouts)!=6 or len(values)!=6
-                or len({(r.get('group'),r.get('sample')) for r in rollouts})!=6
+                or len({r.get('group') for r in rollouts})!=1
+                or {r.get('sample') for r in rollouts}!=set(range(6))
                 or len({r.get('task_id') for r in rollouts})!=1
                 or any((r.get('policy') or {}).get('checkpoint_sha256')!=parent['sha256'] for r in rollouts)
                 or any(not (v.get('jolt') or {}).get('privileged') for v in values)
+                or {(v.get('task_id'),v.get('sample')) for v in values}
+                   != {(r.get('task_id'),r.get('sample')) for r in rollouts}
                 or len(log)!=1 or log[0].get('global_step')!=child['global_step']):
             raise ValueError('direct policy publication lacks its complete same-policy privileged group')
         details=(log[0].get('objective_details') or {}).get('jolt') or {};opsd=details.get('student_opsd')

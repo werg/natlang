@@ -14,7 +14,7 @@ def test_direct_policy_publication_requires_real_privileged_update_and_preserves
     common={'optimizer_present':True,'rng_present':True};custody=write('custody',{'schema':'natlang.earned-rl-checkpoint-custody/1','parent':parent|common|{'global_step':56},'successor':child|common|{'global_step':57},'sft_source_quota_exposure_unchanged':True})
     task='one-task';p=tmp_path/'rollouts';p.write_text(''.join(json.dumps({'task_id':task,'group':1,'sample':i,'policy':{'checkpoint_sha256':parent['sha256']}})+'\n' for i in range(6)))
     score=write('score',{'groups':[{'task_id':task,'scored':6}]});provenance=write('provenance',{'schema':'natlang.completed-same-policy-group/1','checkpoint_sha256':parent['sha256'],'rollouts':binding(p),'score':score})
-    objective=write('objective',{'rows':{str(i):{'jolt':{'privileged':{'turn':{}}}} for i in range(6)}})
+    objective=write('objective',{'rows':{str(i):{'task_id':task,'sample':i,'jolt':{'privileged':{'turn':{}}}} for i in range(6)}})
     log=tmp_path/'log';log.write_text(json.dumps({'global_step':57,'objective_details':{'jolt':{'privileged_episodes':6,'student_opsd':0,'student_outcome':0}}})+'\n')
     args=dict(report_ref=report,receipt_ref=receipt,custody_ref=custody,provenance_ref=provenance,objective_ref=objective,log_ref=binding(log),out=tmp_path/'publication')
     with pytest.raises(ValueError,match='declared text-twin'):publish(state,**args)
