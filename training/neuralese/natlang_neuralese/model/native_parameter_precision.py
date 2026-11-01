@@ -37,6 +37,49 @@ def rowwise_norm_forward(original_forward, x):
     return torch.cat(pieces, dim=0).reshape(x.shape)
 
 
+
+class _RowwiseNormAdjoint(torch.autograd.Function):
+    """Replay each norm chunk locally, avoiding full-input slice scatters."""
+    @staticmethod
+    def forward(ctx, x, weight, original_forward):
+        ctx.save_for_backward(x, weight)
+        ctx.original_forward = original_forward
+        return rowwise_norm_forward(original_forward, x)
+
+    @staticmethod
+    def backward(ctx, gradient):
+        x, weight = ctx.saved_tensors
+        original = ctx.original_forward
+        if torch.is_grad_enabled():
+            # Preserve the ordinary differentiable path for higher derivatives.
+            with torch.enable_grad():
+                output = rowwise_norm_forward(original, x)
+                return (*torch.autograd.grad(output, (x, weight), gradient,
+                                             create_graph=True, allow_unused=True), None)
+        rows = x.reshape(-1, x.shape[-1])
+        grads = gradient.reshape(-1, gradient.shape[-1])
+        parts = []
+        dweight = None
+        # Autograd visits concatenated pieces in reverse creation order.
+        for start in reversed(range(0, rows.shape[0], 128)):
+            part = rows[start:start + 128].detach().requires_grad_(True)
+            incoming = grads[start:start + 128]
+            count = part.shape[0]
+            with torch.enable_grad():
+                if count < 128:
+                    import torch.nn.functional as F
+                    value = F.pad(part, (0, 0, 0, 128 - count))
+                else:
+                    value = part
+                output = original(value)[:count]
+                targets = (part, weight) if weight.requires_grad else (part,)
+                derivatives = torch.autograd.grad(output, targets, incoming, allow_unused=True)
+            parts.append(derivatives[0])
+            if weight.requires_grad and derivatives[1] is not None:
+                dweight = derivatives[1] if dweight is None else dweight + derivatives[1]
+        dx = torch.cat(list(reversed(parts)), dim=0).reshape(x.shape)
+        return dx, dweight, None
+
 def configure_norm_execution(model, profile=None):
     """Absent legacy declarations retain source constructor/recompute dispatch."""
     selected = 'source-v1' if profile is None else profile
@@ -57,15 +100,7 @@ def configure_norm_execution(model, profile=None):
                 # zero tensor and repeatedly adds those tensors during backward.
                 if (torch.is_grad_enabled() and x.is_cuda and x.dtype == torch.bfloat16
                         and (x.requires_grad or norm.weight.requires_grad)):
-                    from .native_weight_carrier import _TorchStoredRMSNorm
-                    eps = next((getattr(norm, name) for name in
-                                ('variance_epsilon', 'eps', 'epsilon')
-                                if getattr(norm, name, None) is not None), None)
-                    if eps is None:
-                        raise ValueError('native RMSNorm lacks its epsilon')
-                    def canonical(value):
-                        return rowwise_norm_forward(original_forward, value)
-                    return _TorchStoredRMSNorm.apply(x, norm.weight, float(eps), norm, canonical)
+                    return _RowwiseNormAdjoint.apply(x, norm.weight, original_forward)
                 return rowwise_norm_forward(original_forward, x)
             module.forward = forward
             module.native_rowwise_norm = True
