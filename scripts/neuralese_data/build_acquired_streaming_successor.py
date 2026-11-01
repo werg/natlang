@@ -558,10 +558,22 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     policy['source_contract']['active_source_count'] = len(policy['source_contract']['active_sources'])
     new_ce_path = output / 'ce-policy.json'; write_json_durable(new_ce_path, policy)
     prepared_policy = prepare_policy(load_policy(bind(new_ce_path)), new_source)
+    descriptor = output / 'sft-capacity-descriptor.json'
+    geometry_summary = {'max_forward_tokens': max(entry['forward_tokens'] for entry in new_source.entries),
+        'max_kv_slots': max(geometry_values), 'forward_tokens_over_262144':
+            sum(entry['forward_tokens'] > 262144 for entry in new_source.entries),
+        'new_max_forward_tokens': max(entry['forward_tokens'] for entry in new_source.entries[previous['rows']:]),
+        'new_forward_tokens_over_262144': sum(entry['forward_tokens'] > 262144
+            for entry in new_source.entries[previous['rows']:]),
+        'scope': 'Untruncated indexed graph geometry; not serving-context or training-position qualification.'}
+    write_json_durable(descriptor, sft_capacity_descriptor(bind(new_source_path), geometry_ref))
     recipe = read(recipe_path)
     recipe['input_bindings']['v4_previous_train_graphs'] = {k: v for k, v in bind(source_path).items() if k != 'bytes'}
     recipe['input_bindings']['v4_train_graphs'] = {k: v for k, v in bind(new_source_path).items() if k != 'bytes'}
     recipe['input_bindings']['v4_ce_policy'] = {k: v for k, v in bind(new_ce_path).items() if k != 'bytes'}
+    operational_stage = next(item for item in recipe['stages'] if item['id'] == 'native_joint_sft_v4')
+    operational_stage['parameters']['sft_packed_geometry'] = geometry_ref
+    operational_stage['parameters']['memory_qualification'] = {k: v for k, v in bind(descriptor).items() if k != 'bytes'}
     new_recipe_path = output / 'recipe-continuation.json'; write_json_durable(new_recipe_path, recipe)
     old_recipe, new_recipe = load_recipe(recipe_path), load_recipe(new_recipe_path)
     stage = lambda value: next(item for item in value['stages'] if item['id'] == 'native_joint_sft_v4')
@@ -578,15 +590,6 @@ def build(predecessor_receipt, screen_receipt, census_receipt, output, *, share=
     old_index = SimpleNamespace(file_sha256=previous['source']['sha256'], entries=new_source.entries[:previous['rows']])
     extension = extension_policy(old_roles, new_roles, prior_train=old_index, candidate_train=new_source)
     _, transition = continuation_identity({'supervision_objective': previous['objective_transition']['to']}, extension)
-    descriptor = output / 'sft-capacity-descriptor.json'
-    geometry_summary = {'max_forward_tokens': max(entry['forward_tokens'] for entry in new_source.entries),
-        'max_kv_slots': max(geometry_values), 'forward_tokens_over_262144':
-            sum(entry['forward_tokens'] > 262144 for entry in new_source.entries),
-        'new_max_forward_tokens': max(entry['forward_tokens'] for entry in new_source.entries[previous['rows']:]),
-        'new_forward_tokens_over_262144': sum(entry['forward_tokens'] > 262144
-            for entry in new_source.entries[previous['rows']:]),
-        'scope': 'Untruncated indexed graph geometry; not serving-context or training-position qualification.'}
-    write_json_durable(descriptor, sft_capacity_descriptor(bind(new_source_path), geometry_ref))
     if file_signature(signals_path) != signals_before or file_signature(graph_path) != graph_before:
         raise ValueError('source or census changed while staging the continuation')
     result = {'schema': SCHEMA, 'status': 'source-ce-recipe-geometry-qualified-not-published', 'training_admission': False,
