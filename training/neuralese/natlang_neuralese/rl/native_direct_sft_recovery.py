@@ -77,6 +77,40 @@ def _rolling_endpoint_snapshots(declaration, parent, child, *, verify_current_en
         'scope':'recomputed exact retained-parent to actual-successor metadata; no intermediate row state inferred'}
 
 
+def _interrupted_update_telemetry(train_ref, progress_ref, parent_step, saved_step):
+    """Check recorded per-update telemetry; this alone does not prove a checkpoint."""
+    import math
+    if (type(parent_step) is not int or type(saved_step) is not int
+            or parent_step < 0 or saved_step <= parent_step):
+        raise ValueError('interrupted SFT telemetry requires increasing exact steps')
+    train_path = _verify_historical_file_ref(train_ref)
+    progress_path = _verify_historical_file_ref(progress_ref)
+    rows = [json.loads(line) for line in train_path.read_text().splitlines() if line.strip()]
+    progress = json.loads(progress_path.read_text())
+    selected = [row for row in rows if type(row.get('global_step')) is int
+                and parent_step < row['global_step'] <= saved_step]
+    if [row['global_step'] for row in selected] != list(range(parent_step + 1, saved_step + 1)):
+        raise ValueError('interrupted SFT update telemetry is missing, duplicated or unordered')
+    if not selected or progress != selected[-1]:
+        raise ValueError('interrupted SFT final progress differs from update telemetry')
+    previous_visits = None
+    for row in selected:
+        loss = row.get('loss')
+        visits = (row.get('communication_exposure') or {}).get('graph_visits')
+        if (row.get('schema') != 'natlang.native-training-progress/1' or row.get('kind') != 'native'
+                or type(loss) not in (int, float) or not math.isfinite(loss)
+                or any(type(row.get(key)) is not int or row[key] <= 0
+                       for key in ('graphs', 'forward_tokens', 'supervised_tokens'))
+                or type(visits) is not int or visits < 0
+                or previous_visits is not None and visits < previous_visits):
+            raise ValueError('interrupted SFT update telemetry is nonfinite or has invalid exposure')
+        previous_visits = visits
+    return {'schema': 'natlang.interrupted-sft-update-telemetry-proof/1',
+            'train': train_ref, 'progress': progress_ref, 'parent_step': parent_step,
+            'saved_step': saved_step, 'observed_updates': len(selected),
+            'scope': 'recorded update telemetry only; checkpoint custody and launch require independent proof'}
+
+
 def _rolling_intermediate_window(declaration, transition, parent, child, receipt, *, state_parent=None,
                                  historical_previous_path=None):
     """Authenticate a stopped intermediate SFT window without inventing its missing full state."""

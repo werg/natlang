@@ -726,3 +726,28 @@ def test_completed_refresh_accepts_only_bound_source_correction(tmp_path,defect)
             'parent_sha256':parent['sha256'],'successor_sha256':child['sha256'],'proof':proof,
             'verification':save('verification.json',verification)}}
     assert _completed_refresh_obligations(custody,parent,child) is (defect is None)
+
+
+@pytest.mark.parametrize('tamper', ['none', 'missing', 'duplicate', 'nan', 'regressed', 'progress', 'changed-file'])
+def test_interrupted_update_telemetry_checks_exact_order_and_finite_progress(tmp_path, tamper):
+    from natlang_neuralese.rl.native_direct_sft_recovery import _interrupted_update_telemetry
+    rows = [{'schema': 'natlang.native-training-progress/1', 'kind': 'native',
+             'global_step': step, 'loss': 1.0, 'graphs': 2, 'forward_tokens': 8,
+             'supervised_tokens': 4, 'communication_exposure': {'graph_visits': step}}
+            for step in (65, 66, 67)]
+    if tamper == 'missing': rows.pop(1)
+    if tamper == 'duplicate': rows.insert(1, copy.deepcopy(rows[0]))
+    if tamper == 'nan': rows[1]['loss'] = float('nan')
+    if tamper == 'regressed': rows[1]['communication_exposure']['graph_visits'] = 0
+    train = tmp_path / 'train.jsonl'
+    train.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    progress = tmp_path / 'progress.json'
+    progress.write_text(json.dumps({} if tamper == 'progress' else rows[-1]))
+    train_ref, progress_ref = binding(train), binding(progress)
+    if tamper == 'changed-file': train.write_text('{}\n')
+    if tamper == 'none':
+        proof = _interrupted_update_telemetry(train_ref, progress_ref, 64, 67)
+        assert proof['observed_updates'] == 3
+    else:
+        with pytest.raises(ValueError):
+            _interrupted_update_telemetry(train_ref, progress_ref, 64, 67)
