@@ -108,7 +108,52 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
                 correction_doc.get('prior_source', {}).get('sha256') != old.get('native_graphs', {}).get('sha256')
                 or correction_doc.get('current_source', {}).get('sha256') != new.get('native_graphs', {}).get('sha256')):
             raise ValueError('resident source correction does not bind the exact predecessor and successor manifests')
-        if prior_source_correction is None:
+        if (source_correction.get('sha256') != hashlib.sha256(correction_path.read_bytes()).hexdigest()
+                or ('bytes' in source_correction and source_correction['bytes'] != correction_path.stat().st_size)):
+            raise ValueError('resident source correction receipt changed')
+    old_objective,new_objective=a.get('objective'),b.get('objective')
+    declared_transition = ((old_objective or {}).get('family_balance',{}).get('normalization') == 'bounded-mean-one/1' and (new_objective or {}).get('family_balance',{}).get('normalization') == 'declared/1')
+    if same_source and not declared_transition:
+        raise ValueError('same-source CE change requires an explicit measured family-scale transition')
+    if old_objective != new_objective:
+        from .own_output_supervision import identity,policy_objective
+        from .native_logical_families import _verified_bytes,load_map
+        left,right=copy.deepcopy(old_objective),copy.deepcopy(new_objective)
+        old_family=(left or {}).get('family_balance') or {};new_family=(right or {}).get('family_balance') or {}
+        if old_family.get('key')!='logical-family' or new_family.get('key')!='logical-family':
+            raise ValueError('resident CE objective change is not a logical-family map extension')
+        old_map=old_family.pop('map',None);new_map=new_family.pop('map',None)
+        old_factors = left.pop('decision_factors', [])
+        new_factors = right.pop('decision_factors', [])
+        factor_addition = old_factors != new_factors
+        if factor_addition:
+            _validate_decision_factor_evidence(policy, prior, policy, new['native_graphs'])
+            if new_factors[:len(old_factors)] != old_factors:
+                raise ValueError('resident decision factors must be an append-only exact objective extension')
+        elif a.get('decision_factor_evidence') != b.get('decision_factor_evidence'):
+            raise ValueError('resident source append changed historical decision-factor evidence')
+        if same_source and old_map != new_map:
+            raise ValueError('same-source objective transition cannot change family labels')
+        # A declared objective transition may replace row-count balancing with
+        # explicit measured own-output family scales. Keep all other objective
+        # settings and the cap identical; load_policy validates the scales.
+        if old_family.get('normalization') == 'bounded-mean-one/1' and new_family.get('normalization') == 'declared/1':
+            old_family.pop('normalization');new_family.pop('normalization')
+            new_family.pop('scales',None)
+        elif not same_source and old_family.get('normalization') == new_family.get('normalization') == 'declared/1':
+            old_scales=old_family.pop('scales',None);new_scales=new_family.pop('scales',None)
+            if not isinstance(old_scales,dict) or not isinstance(new_scales,dict) or set(old_scales)!=set(new_scales):
+                raise ValueError('resident declared-scale refresh changed the family set')
+        if left!=right or not old_map or not new_map or (b.get('objective_transition') or {}).get('from')!=identity(policy_objective(prior))['sha256']:
+            raise ValueError('resident logical-family extension changed objective law or lacks its exact predecessor')
+        previous=json.loads(_verified_bytes(old_map)[1]);current=json.loads(_verified_bytes(new_map)[1])
+        if (previous.get('schema')!='natlang.logical-family-map/1' or current.get('schema')!='natlang.logical-family-map/1'
+                or previous.get('source_sha256')!=old['native_graphs']['sha256']
+                or current.get('source_sha256')!=new['native_graphs']['sha256']
+                or not isinstance(previous.get('rows'),list) or not isinstance(current.get('rows'),list)
+                or len(current['rows']) < len(previous['rows'])):
+            raise ValueError('resident logical-family extension changed prior source row families')
+        if correction_decl is not None and prior_source_correction is None:
             # The map proof alone is not enough: bind its exposure ledger to
             # the exact in-place row and every graph appended in this source
             # transaction. This prevents an unrelated mask review from
@@ -145,52 +190,6 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
                            for row, entry in zip(added_rows, expected_added, strict=True))
                     or len(ledger) != 1 + len(expected_added)):
                 raise ValueError('resident source correction ledger does not bind the exact mask and appended rows')
-        if (source_correction.get('sha256') != hashlib.sha256(correction_path.read_bytes()).hexdigest()
-                or ('bytes' in source_correction and source_correction['bytes'] != correction_path.stat().st_size)):
-            raise ValueError('resident source correction receipt changed')
-    old_objective,new_objective=a.get('objective'),b.get('objective')
-    declared_transition = ((old_objective or {}).get('family_balance',{}).get('normalization') == 'bounded-mean-one/1' and (new_objective or {}).get('family_balance',{}).get('normalization') == 'declared/1')
-    if same_source and not declared_transition:
-        raise ValueError('same-source CE change requires an explicit measured family-scale transition')
-    if old_objective != new_objective:
-        from .own_output_supervision import identity,policy_objective
-        from .native_logical_families import _verified_bytes,load_map
-        import json
-        left,right=copy.deepcopy(old_objective),copy.deepcopy(new_objective)
-        old_family=(left or {}).get('family_balance') or {};new_family=(right or {}).get('family_balance') or {}
-        if old_family.get('key')!='logical-family' or new_family.get('key')!='logical-family':
-            raise ValueError('resident CE objective change is not a logical-family map extension')
-        old_map=old_family.pop('map',None);new_map=new_family.pop('map',None)
-        old_factors = left.pop('decision_factors', [])
-        new_factors = right.pop('decision_factors', [])
-        factor_addition = old_factors != new_factors
-        if factor_addition:
-            _validate_decision_factor_evidence(policy, prior, policy, new['native_graphs'])
-            if new_factors[:len(old_factors)] != old_factors:
-                raise ValueError('resident decision factors must be an append-only exact objective extension')
-        elif a.get('decision_factor_evidence') != b.get('decision_factor_evidence'):
-            raise ValueError('resident source append changed historical decision-factor evidence')
-        if same_source and old_map != new_map:
-            raise ValueError('same-source objective transition cannot change family labels')
-        # A declared objective transition may replace row-count balancing with
-        # explicit measured own-output family scales. Keep all other objective
-        # settings and the cap identical; load_policy validates the scales.
-        if old_family.get('normalization') == 'bounded-mean-one/1' and new_family.get('normalization') == 'declared/1':
-            old_family.pop('normalization');new_family.pop('normalization')
-            new_family.pop('scales',None)
-        elif not same_source and old_family.get('normalization') == new_family.get('normalization') == 'declared/1':
-            old_scales=old_family.pop('scales',None);new_scales=new_family.pop('scales',None)
-            if not isinstance(old_scales,dict) or not isinstance(new_scales,dict) or set(old_scales)!=set(new_scales):
-                raise ValueError('resident declared-scale refresh changed the family set')
-        if left!=right or not old_map or not new_map or (b.get('objective_transition') or {}).get('from')!=identity(policy_objective(prior))['sha256']:
-            raise ValueError('resident logical-family extension changed objective law or lacks its exact predecessor')
-        previous=json.loads(_verified_bytes(old_map)[1]);current=json.loads(_verified_bytes(new_map)[1])
-        if (previous.get('schema')!='natlang.logical-family-map/1' or current.get('schema')!='natlang.logical-family-map/1'
-                or previous.get('source_sha256')!=old['native_graphs']['sha256']
-                or current.get('source_sha256')!=new['native_graphs']['sha256']
-                or not isinstance(previous.get('rows'),list) or not isinstance(current.get('rows'),list)
-                or len(current['rows']) < len(previous['rows'])):
-            raise ValueError('resident logical-family extension changed prior source row families')
         prior_map_rows = previous['rows']
         current_prefix = current['rows'][:len(prior_map_rows)]
         if current_prefix != prior_map_rows:
@@ -296,7 +295,6 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
         # inventory even though its active contract and family map moved. The
         # exact quarantine receipt must authenticate both source identities;
         # this exception never credits rows or changes the source contract.
-        import json
         if (not isinstance(correction, dict) or correction.get('schema') != 'natlang.resident-ce-prior-inventory-correction/1'
                 or correction.get('prior_policy_sha256') != before['sha256']
                 or len(prior_inventory) != 1
@@ -324,7 +322,6 @@ def extension_policy(old, new, *, prior_train=None, candidate_train=None):
     if historical_observations:
         # Preserve earlier observations only when the same bound quarantine
         # or exact target-mask correction proves each old leaf was replaced.
-        import json
         if correction_decl is not None:
             old_leaf = correction_decl.get('source_leaf_before') or {}
             new_leaf = correction_decl.get('source_leaf_after') or {}

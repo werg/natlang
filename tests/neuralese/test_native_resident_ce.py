@@ -459,3 +459,42 @@ def test_inherited_inventory_repair_remains_history_in_later_append(tmp_path):
     new['stage_inputs']['sft']['ce_supervision_policy']={**resident.binding(paths['new_ce']),'binding':'ce'}
     with pytest.raises(ValueError,match='not applicable'):
         extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft'])
+
+
+def test_target_mask_transition_checks_ledger_after_loading_family_maps(tmp_path, monkeypatch):
+    from natlang_neuralese.train import native_resident_ce as module, recipe, native_source_correction
+    from natlang_neuralese.train.own_output_supervision import identity, policy_objective
+    from test_own_output_supervision import objective
+    old_source={'path':str(tmp_path/'old.json'),'sha256':'1'*64}
+    new_source={'path':str(tmp_path/'new.json'),'sha256':'2'*64}
+    old_map=tmp_path/'old-map.json';new_map=tmp_path/'new-map.json'
+    write_json(old_map,{'schema':'natlang.logical-family-map/1','source_sha256':old_source['sha256'],
+                        'rows':[{'id':'target','binding':'old','family':'ordinary'}]})
+    write_json(new_map,{'schema':'natlang.logical-family-map/1','source_sha256':new_source['sha256'],
+                        'rows':[{'id':'target','binding':'new','family':'ordinary'},
+                                {'id':'added','binding':'added','family':'ordinary'}]})
+    family=lambda path:{'key':'logical-family','max_scale':8.,'normalization':'bounded-mean-one/1','map':resident.binding(path)}
+    prior={'objective':objective(mass='token',family_balance=family(old_map))}
+    current={'objective':objective(mass='token',family_balance=family(new_map)),
+             'objective_transition':{'from':identity(policy_objective(prior))['sha256']}}
+    ledger=tmp_path/'ledger.jsonl';ledger.write_text(json.dumps({'id':'wrong','disposition':'eligibility-decreased'})+'\n')
+    proof=tmp_path/'proof.json';write_json(proof,{'schema':'natlang.native-source-correction/1',
+        'prior_source':{**old_source,'rows':1},'current_source':{**new_source,'rows':2},
+        'row_bindings_path':ledger.name,'target_mask_correction':{'graph_id':'target','binding_before':'old','binding_after':'new'}})
+    current['source_correction']=resident.binding(proof)
+    monkeypatch.setattr(native_source_correction,'source_correction_dependencies',lambda *_:[])
+    monkeypatch.setattr(recipe,'_ce_supervision_input_continuation',lambda *_:True)
+    monkeypatch.setattr(module,'load_policy',lambda ref:prior if ref['sha256']=='a'*64 else current)
+    old={'native_graphs':old_source,'ce_supervision_policy':{'path':'old-ce','sha256':'a'*64}}
+    new={'native_graphs':new_source,'ce_supervision_policy':{'path':'new-ce','sha256':'b'*64}}
+    with pytest.raises(ValueError,match='ledger does not bind'):
+        module.extension_policy(old,new)
+    ledger.write_text('\n'.join(json.dumps(row) for row in [
+        {'id':'target','disposition':'eligibility-decreased','old_binding':'old','new_binding':'new',
+         'old_source_sha256':'1'*64,'new_source_sha256':'2'*64,'old_communication':False},
+        {'id':'added','disposition':'added','new_binding':'added','new_source_sha256':'2'*64}])+'\n')
+    from natlang_neuralese.train import native_logical_families
+    def reached_map_validation(*_): raise RuntimeError('reached validated family map')
+    monkeypatch.setattr(native_logical_families,'load_map',reached_map_validation)
+    with pytest.raises(RuntimeError,match='reached validated family map'):
+        module.extension_policy(old,new,prior_train=object(),candidate_train=object())
