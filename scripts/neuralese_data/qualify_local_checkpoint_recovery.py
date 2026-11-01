@@ -8,6 +8,7 @@ never changes the original checkpoint or any live control.
 """
 from __future__ import annotations
 import argparse,hashlib,json,os,shutil,subprocess,tarfile,tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from scripts.coreweave.private_export_guard import CacheBoundedReader
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
@@ -66,6 +67,25 @@ def _host_contract():
     return result
 
 
+def copy_closure_blobs(base_closure, store):
+    blobs={}
+    def copy_one(item):
+        key=(item['path'],item['sha256']);target=store/'closure'/item['sha256']
+        return key, {'path':str(target),'identity':verified_recovery_blob(item['path'],target,item['sha256'])}
+    # At most four copies and eight queued rows; never buffer payloads in RAM.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        iterator=iter(base_closure); pending=[]
+        for _ in range(8):
+            item=next(iterator,None)
+            if item is None:break
+            pending.append(pool.submit(copy_one,item))
+        while pending:
+            future=pending.pop(0);key,value=future.result();blobs[key]=value
+            item=next(iterator,None)
+            if item is not None:pending.append(pool.submit(copy_one,item))
+    return blobs
+
+
 def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, evidence_path, environment_scratch=None):
     draft=Path(draft).resolve(strict=True);checkpoint=Path(checkpoint).resolve(strict=True)
     output_plan=Path(output_plan).resolve();qualification_path=Path(qualification_path).resolve();evidence_path=Path(evidence_path).resolve()
@@ -79,10 +99,7 @@ def qualify(draft, checkpoint, scratch_parent, output_plan, qualification_path, 
         raise ValueError('recovery qualification scratch must share the independent destination filesystem')
     checkpoint_sha=file_sha256(checkpoint)
     placeholder=plan['restore_qualification'];base_closure=[x for x in plan['closure'] if not (x['role']=='controls' and x['path']==placeholder['path'] and x['sha256']==placeholder['sha256'])]
-    blobs={}
-    for item in base_closure:
-        key=(item['path'],item['sha256']);target=store/'closure'/item['sha256']
-        identity=verified_recovery_blob(item['path'],target,item['sha256']);blobs[key]={'path':str(target),'identity':identity}
+    blobs=copy_closure_blobs(base_closure,store)
     restore=plan.get('restore') or {}
     def find(role,path):
         items=[x for x in base_closure if x['role']==role and x['path']==path]
