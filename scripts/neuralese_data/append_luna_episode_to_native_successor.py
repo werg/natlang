@@ -85,6 +85,13 @@ def _teacher_actor_binding(raw, raw_binding):
 
 
 def _verify_episode(receipt_path, protection, tokenizer):
+    receipt = _read(receipt_path)
+    if receipt.get("schema") == "natlang.luna-static-episode-build/1":
+        return _verify_static_episode(receipt_path, protection, tokenizer)
+    return _verify_captured_episode(receipt_path, protection, tokenizer)
+
+
+def _verify_captured_episode(receipt_path, protection, tokenizer):
     receipt_path = Path(receipt_path).resolve(strict=True)
     receipt_binding = _bind(receipt_path)
     receipt = _read(receipt_path)
@@ -164,6 +171,65 @@ def _verify_episode(receipt_path, protection, tokenizer):
         "parsed": parsed}
 
 
+
+def _verify_static_episode(receipt_path, protection, tokenizer):
+    """Revalidate a complete training-only graph without claiming model capture."""
+    from natlang_neuralese.common.runtime_inventory import immutable_native_runtime_tree
+    from natlang_neuralese.data.provider_teacher_source import load_verified_luna_teacher_turn, _jsonl_by_id, _read_bound
+    receipt_path=Path(receipt_path).resolve(strict=True);receipt=_read(receipt_path)
+    if receipt.get('training_admission') is not False or receipt.get('schema')!='natlang.luna-static-episode-build/1':
+        raise ValueError('static episode receipt is malformed')
+    def checked(ref):
+        path=Path(ref['path']).resolve(strict=True)
+        if sha256_file_hex(path)!=ref.get('sha256'):raise ValueError('static episode bound artifact changed')
+        return path
+    graph_path=checked(receipt['graph']); audit_path=checked(receipt['audit']); audit=_read(audit_path)
+    if audit.get('training_admission') is not False or audit.get('oracle_level')!='exact' or audit.get('exact_oracle_claimed') is not True:
+        raise ValueError('static episode lacks exact reviewed source audit')
+    runtime=receipt.get('runtime') or {}; actual=immutable_native_runtime_tree(runtime.get('root',''))
+    if actual!=runtime:raise ValueError('static compiler execution runtime identity changed')
+    graph_rows=_jsonl(graph_path)
+    if len(graph_rows)!=1:raise ValueError('static receipt must bind one whole graph')
+    graph=graph_rows[0]; provenance=graph.get('static_training_provenance') or {}
+    if (provenance.get('schema')!='natlang.provider-static-native-graph/1' or provenance.get('audit_sha256')!=receipt['audit']['sha256']
+        or provenance.get('execution_runtime')!=runtime or graph.get('student_native_identity') is not None
+        or graph.get('tokenizer_fingerprint')!=tokenizer or graph.get('split')!='train'):
+        raise ValueError('static graph compiler provenance, tokenizer or split differs')
+    raw_path=checked(audit['raw_results']);raw_rows=_jsonl(raw_path)
+    if len(raw_rows)!=1:raise ValueError('static source must bind one complete teacher result')
+    raw=raw_rows[0];outcome=raw.get('outcome') or {};oracle=outcome.get('oracle') or {};program=(raw.get('task') or {}).get('program_ir') or {}
+    if (raw.get('id')!=audit.get('task_id') or outcome.get('status')!='done' or outcome.get('accepted') is not True
+        or oracle.get('accepted') is not True or oracle.get('level')!='exact' or program.get('split')!='train'):
+        raise ValueError('static teacher result is not an exact accepted train task')
+    _teacher_actor_binding(raw,_bind(raw_path));disposition=protection.check(program)
+    if disposition.get('split')!='train' or not (set(program.get('source_groups') or [])|{program.get('id')})<=set(graph.get('source_groups') or []):
+        raise ValueError('static graph differs from current protected train world')
+    ref=audit['python_corpus_conversion'];data=_read_bound(ref['path'],ref['sha256']); rows=[json.loads(line) for line in data.splitlines() if line.strip()]
+    source_receipts=graph.get('teacher_source_receipts') or []
+    if len(rows)!=receipt.get('source_turn_count') or len(rows)!=len(source_receipts) or graph.get('id')!='luna-native-episode:'+raw['id']:
+        raise ValueError('static graph omits part of the actual decision trajectory')
+    actions=(graph.get('nodes') or [])[-len(rows):]
+    for row,saved,node in zip(rows,source_receipts,actions,strict=True):
+        opening=(row.get('native_source_conversion') or {}).get('source_messages')
+        actual_turn=load_verified_luna_teacher_turn(str(audit_path),row['id'],replay_messages=opening,replay_tools=row.get('tools') or [],allow_context_only=True)
+        if actual_turn['source_receipt']!=saved:raise ValueError('static graph source turn receipt changed')
+        positive=any(weight>0 for weight in node.get('target_weights') or [])
+        if positive != saved.get('target_supervision'):raise ValueError('static graph supervised/context disposition changed')
+    parsed=parse_graph(graph,tokenizer_fingerprint=tokenizer);classification=communication_classification(parsed)
+    if (len(parsed.plan.invocations)!=receipt.get('nodes') or sum(len(x.imports) for x in parsed.plan.invocations)!=receipt.get('imports')
+        or sum(w>0 for w in parsed.target_weights)!=receipt.get('supervised_tokens') or not classification['producer_consumer']):
+        raise ValueError('static graph node, positive-target or import census differs')
+    encoders=graph.get('teacher_text_encoder_sources') or [];nodes={n['name']:n for n in graph['nodes']}
+    for item in encoders:
+        node=nodes.get(item.get('producer'))
+        if node is None or item.get('producer_span') not in node.get('producing',[]):raise ValueError('static teacher source producer span differs')
+        if item.get('source_kind')=='authenticated-host-text-encoder' and any(w>0 for w in node['target_weights']):
+            raise ValueError('host text encoder must remain zero CE')
+    return {'kind':'static','receipt_path':str(receipt_path),'receipt_binding':_bind(receipt_path),'receipt':receipt,
+        'graph_path':str(graph_path),'graph_bytes':graph_path.read_bytes(),'graph':graph,'graph_binding':_bind(graph_path),
+        'raw_binding':_bind(raw_path),'audit_binding':_bind(audit_path),'raw':raw,'program':program,
+        'protection_disposition':disposition,'classification':classification,'parsed':parsed}
+
 def build(base_dir, episode_receipt, output_dir):
     base_dir = Path(base_dir).resolve(strict=True)
     output_dir = Path(output_dir).resolve()
@@ -172,14 +238,14 @@ def build(base_dir, episode_receipt, output_dir):
     base_receipt_path = base_dir / "receipt.json"
     base_receipt_binding = _bind(base_receipt_path)
     base_receipt = _read(base_receipt_path)
-    if (base_receipt.get("schema") != "natlang.native-quality-successor/1"
+    if (base_receipt.get("schema") not in {"natlang.native-quality-successor/1", "natlang.luna-native-successor-append/1"}
             or base_receipt.get("training_admission") is not False
             or base_receipt.get("status") != "source-ce-recipe-geometry-qualified-not-published"):
         raise ValueError("base must be the exact reviewed source-only native quality successor")
     source_path = Path(base_receipt["source"]["path"]).resolve(strict=True)
     if _bind(source_path) != base_receipt["source"]:
         raise ValueError("base train-source manifest changed after its quality receipt")
-    row_count = base_receipt.get("rows_after")
+    row_count = base_receipt.get("rows_after", base_receipt.get("rows"))
     if type(row_count) is not int or row_count < 1:
         raise ValueError("base receipt lacks its exact predecessor row count")
     map_path = Path(base_receipt["family_map"]["path"]).resolve(strict=True)
@@ -191,14 +257,14 @@ def build(base_dir, episode_receipt, output_dir):
             or len(prior_map.get("rows") or []) != row_count):
         raise ValueError("base family map does not cover the exact candidate source")
     geometry_path = Path(base_receipt["geometry"]["path"]).resolve(strict=True)
-    if _bind(geometry_path) != base_receipt["geometry"]:
+    if any(_bind(geometry_path).get(key) != value for key,value in base_receipt["geometry"].items()):
         raise ValueError("base packed-capacity geometry changed")
     prior_geometry = _read(geometry_path)
     tokenizer = prior_geometry["identity"]["tokenizer"]
     roles = prior_geometry["identity"]["roles"]
 
     protection = ProtectedWorlds.load()
-    if protection.digest != base_receipt.get("protection_digest"):
+    if protection.digest != base_receipt.get("protection_digest", base_receipt.get("current_protection_digest")):
         raise ValueError("current protection union differs from the reviewed base candidate")
     episode = _verify_episode(episode_receipt, protection, tokenizer)
     old_ce_path = Path(base_receipt["ce_policy"]["path"]).resolve(strict=True)
@@ -310,29 +376,25 @@ def build(base_dir, episode_receipt, output_dir):
         raise ValueError("CE verification did not visit exactly the appended graph")
 
     qualification_path = output_dir / "episode-qualification.json"
+    is_static=episode.get('kind')=='static'
     qualification = {"schema": "natlang.luna-native-append-qualification/1",
         "training_admission": False, "oracle_level": "exact", "exact_oracle_claimed": True,
-        "base_successor": base_receipt_binding,
-        "episode_assembly": episode["receipt_binding"],
-        "episode_audit": episode["audit_binding"], "raw_result": episode["raw_binding"],
-        "graph": graph_binding, "current_protection_digest": protection.digest,
-        "train_disposition": episode["protection_disposition"],
+        "base_successor": base_receipt_binding, "episode_source_kind":'static-training-graph' if is_static else 'captured-native-episode',
+        "episode_assembly": episode["receipt_binding"], "episode_audit": episode["audit_binding"], "raw_result": episode["raw_binding"],
+        "graph": graph_binding, "current_protection_digest": protection.digest, "train_disposition": episode["protection_disposition"],
         "source_groups": episode["graph"]["source_groups"],
         "whole_graph": {"rows": 1, "invocations": len(episode["parsed"].plan.invocations),
             "producer_consumer": episode["classification"]["producer_consumer"],
-            "encoder_count": len(episode["graph"]["teacher_text_encoders"]),
-            "consumer_actions": episode["receipt"]["consumer_action_count"],
-            "supervised_turns": episode["receipt"]["target_supervised_turns"],
-            "supervised_tokens": supervised_tokens,
-            "encoder_target_weights": 0},
-        # The raw collector actor is the teacher.  `actor_runtime_identity` in
-        # the native assembly receipt instead identifies the student-side
-        # encoder that re-encoded the authenticated teacher text.  Keep both
-        # roles explicit; never label the encoder checkpoint as the teacher.
+            "encoder_count": len(episode["graph"].get("teacher_text_encoder_sources",[]) if is_static else episode["graph"]["teacher_text_encoders"]),
+            "consumer_actions": sum(bool(n.get('imports')) for n in episode['graph']['nodes']) if is_static else episode["receipt"]["consumer_action_count"],
+            "supervised_turns": sum(bool(r.get('target_supervision')) for r in episode['graph']['teacher_source_receipts']) if is_static else episode["receipt"]["target_supervised_turns"],
+            "supervised_tokens": supervised_tokens, "encoder_target_weights": 0},
         "teacher_actor": _teacher_actor_binding(episode["raw"], episode["raw_binding"]),
-        "student_encoder": {"checkpoint_sha256": episode["receipt"]["native_checkpoint_sha256"],
+        **({'static_compiler_runtime':episode['receipt']['runtime'], 'tokenizer_fingerprint':tokenizer,
+            'scope':'Training-only token graph; no captured student state or checkpoint is claimed.'} if is_static else
+           {'student_encoder': {"checkpoint_sha256": episode["receipt"]["native_checkpoint_sha256"],
             "tokenizer_fingerprint": episode["receipt"]["tokenizer_fingerprint"],
-            "serving_config_identity_sha256": episode["receipt"]["serving_config_identity_sha256"]}}
+            "serving_config_identity_sha256": episode["receipt"]["serving_config_identity_sha256"]}})}
     write_json_durable(qualification_path, qualification)
 
     source_rows = _read(candidate_source_path).get("sources") or []

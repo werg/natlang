@@ -37,8 +37,10 @@ def bound(reference):
 
 def validated_dispatch_plan(path, expected_sha256):
     from scripts.run_reviewed_luna_dispatcher import digest as original_digest, validate_plan
+    from natlang_neuralese.common.paths import resolve as machine_resolve
+    workspace = machine_resolve('repo').resolve(strict=True)
     try:
-        plan, identity = validate_plan(path, expected_sha256)
+        plan, identity = validate_plan(path, expected_sha256, verification_root=workspace)
     except ValueError as error:
         # Old closed campaigns pin the exact dispatcher and queue code used at
         # collection. Verify those bytes from Git history while still applying
@@ -60,7 +62,7 @@ def validated_dispatch_plan(path, expected_sha256):
                 or not isinstance(commit, str) or len(commit) != 40
                 or not isinstance(artifacts, dict) or not artifacts):
             raise ValueError('historical dispatcher attestation does not bind this frozen plan') from error
-        repo = Path(__file__).resolve().parents[2]
+        repo = workspace
         expected_pins = json.loads(Path(path).read_text()).get('artifact_hashes', {})
         if set(artifacts) - set(expected_pins):
             raise ValueError('historical dispatcher attestation names unpinned artifacts') from error
@@ -84,7 +86,7 @@ def validated_dispatch_plan(path, expected_sha256):
             if absolute in historical:
                 return historical[absolute]
             return original_digest(target)
-        plan, identity = validate_plan(path, expected_sha256, digest_fn=bound_digest)
+        plan, identity = validate_plan(path, expected_sha256, digest_fn=bound_digest, verification_root=workspace)
         identity['dispatch_plan_history_attestation'] = str(attestation_path.resolve())
     identity['identity_sha256'] = hashlib.sha256(json.dumps(
         identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()

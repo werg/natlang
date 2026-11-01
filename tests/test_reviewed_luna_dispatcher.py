@@ -748,3 +748,12 @@ def test_source_inventory_preserves_every_related_world_group(reviewed_plan):
     assert identity['cases'][0]['source_groups']==['world-0-a','world-0-b']
     entry,*_=dispatcher._claim_queue(plan,identity,1,identity['cases'][0])
     assert entry['source_groups']==['world-0-a','world-0-b']
+
+
+def test_offline_plan_validation_uses_bound_original_workspace(reviewed_plan, monkeypatch, tmp_path):
+    path,digest,_,_=reviewed_plan
+    monkeypatch.setattr(dispatcher,'ROOT',tmp_path)
+    with pytest.raises(ValueError,match='canonical checkout'):
+        dispatcher.validate_plan(path,digest)
+    _,identity=dispatcher.validate_plan(path,digest,verification_root=ROOT)
+    assert identity['plan_sha256']==digest

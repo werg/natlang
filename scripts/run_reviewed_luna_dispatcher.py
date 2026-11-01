@@ -53,7 +53,7 @@ def _external_campaign_root():
     return machine_resolve('data_hdd', 'natlang-luna-campaigns').expanduser().resolve(strict=False)
 
 
-def _campaign_storage_root(campaign_root):
+def _campaign_storage_root(campaign_root, *, repo_root=None):
     """Validate an approved campaign root and return its disk-guard path.
 
     Campaign artifacts may live in the repository's runs/ tree or in the one
@@ -62,7 +62,7 @@ def _campaign_storage_root(campaign_root):
     filesystem. Disk checks measure the filesystem that will receive output.
     """
     campaign_root = Path(campaign_root).expanduser().resolve()
-    runs_root = (ROOT / 'runs').resolve()
+    runs_root = ((ROOT if repo_root is None else repo_root) / 'runs').resolve()
     data_hdd_root = machine_resolve('data_hdd').expanduser().resolve(strict=False)
     external_root = _external_campaign_root()
     if runs_root in campaign_root.parents:
@@ -259,8 +259,12 @@ def _required_runtime_semantics_features(rows, cases):
     return sorted(required)
 
 
-def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
+def validate_plan(plan_path, expected_sha256, *, digest_fn=None, verification_root=None):
+    """Validate a plan; an explicit root is for offline custody verification only."""
     digest_fn = digest_fn or digest
+    plan_root = ROOT if verification_root is None else Path(verification_root).resolve(strict=True)
+    plan_runner = (plan_root / 'scripts/run_bonsai_queue.py').resolve()
+    plan_dispatcher = (plan_root / 'scripts/run_reviewed_luna_dispatcher.py').resolve()
     plan_path = Path(plan_path).resolve(strict=True)
     if digest_fn(plan_path) != expected_sha256:
         raise ValueError('Reviewed dispatcher plan SHA-256 mismatch')
@@ -300,10 +304,10 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
         raise ValueError('Reviewed Luna dispatch requires execution plans')
 
     cwd = Path(plan.get('cwd', '')).expanduser().resolve(strict=True)
-    if cwd != ROOT:
+    if cwd != plan_root:
         raise ValueError('Dispatcher must use the canonical checkout')
     supervisor = Path(plan.get('supervisor', '')).expanduser().resolve(strict=True)
-    if supervisor != RUNNER:
+    if supervisor != plan_runner:
         raise ValueError('Dispatcher must reuse scripts/run_bonsai_queue.py')
     source = Path(plan.get('source', '')).expanduser().resolve(strict=True)
     runtime = Path(plan.get('runtime', '')).expanduser().resolve(strict=True)
@@ -311,11 +315,11 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
     pins = plan.get('artifact_hashes')
     if not isinstance(pins, dict):
         raise ValueError('artifact_hashes must pin dispatcher, source, queue supervisor, and runtime receipt')
-    required_pins = {str(DISPATCHER): plan.get('dispatcher_sha256'),
+    required_pins = {str(plan_dispatcher): plan.get('dispatcher_sha256'),
                      str(source): plan.get('source_sha256'),
                      str(supervisor): plan.get('supervisor_sha256'),
-                     str(ROOT / 'scripts/rl_tasks/execution_adapter.py'): pins.get(
-                         str(ROOT / 'scripts/rl_tasks/execution_adapter.py')),
+                     str(plan_root / 'scripts/rl_tasks/execution_adapter.py'): pins.get(
+                         str(plan_root / 'scripts/rl_tasks/execution_adapter.py')),
                      str(receipt): plan.get('runtime_receipt_sha256')}
     for path, expected in required_pins.items():
         if not isinstance(expected, str) or pins.get(path) != expected or digest_fn(path) != expected:
@@ -463,7 +467,7 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
         if not isinstance(plan.get(field), str) or not plan[field]:
             raise ValueError(f'Plan requires {field}')
     campaign_root = Path(plan['campaign_root']).expanduser().resolve()
-    storage_root = _campaign_storage_root(campaign_root)
+    storage_root = _campaign_storage_root(campaign_root, repo_root=plan_root)
     for field in ('claim_ledger', 'launch_record'):
         target = Path(plan[field]).expanduser().resolve()
         if campaign_root not in target.parents:
@@ -490,7 +494,7 @@ def validate_plan(plan_path, expected_sha256, *, digest_fn=None):
             raise ValueError('Provider request config must be pinned in the reviewed plan')
     return plan, {'plan_path': str(plan_path), 'plan_sha256': expected_sha256,
                   'campaign_id': campaign_id, 'source': str(source),
-                  'dispatcher_sha256': required_pins[str(DISPATCHER)],
+                  'dispatcher_sha256': required_pins[str(plan_dispatcher)],
                   'source_sha256': required_pins[str(source)], 'runtime': str(runtime),
                   'runtime_receipt_sha256': required_pins[str(receipt)],
                   'supervisor': str(supervisor), 'supervisor_sha256': required_pins[str(supervisor)],
